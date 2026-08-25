@@ -5,13 +5,17 @@
  * external client's configuration here — the built-in Chat agents are
  * wired automatically by Agent readiness (Settings → Agents).
  */
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useMcpAccess } from '@/features/settings/hooks/useMcpAccess';
 import { CopyIcon, CheckIcon } from '@/common/components/icons';
 import { MCP_SETUP_EXAMPLES_URL, openExternalUrl } from '@/common/lib/externalLink';
 import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
+import { Checkbox } from '@/common/components/ui/checkbox';
+import { Field, FieldLabel } from '@/common/components/ui/field';
 import { StatusMessage } from '@/common/components/ui/status';
+import { SectionDescription, SectionHeading } from '@/common/components/ui/section';
+import { cn } from '@/common/lib/utils';
 
 export function McpAccessPanel() {
   const {
@@ -33,29 +37,40 @@ export function McpAccessPanel() {
 
   return (
     <div>
-      <div className="mb-1 text-base font-semibold">MCP access</div>
-      <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
+      <SectionHeading level={3} className="mb-1">MCP access</SectionHeading>
+      <SectionDescription className="mb-2.5">
         The built-in Chat agents connect automatically during Agent setup. Use
         this page for manual recovery or to give external MCP clients access to
         your StashBase library.
-      </div>
+      </SectionDescription>
 
-      <div className="mt-4 mb-1 text-base font-semibold">Local command</div>
-      <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
+      <SectionHeading level={4} className="mt-4 mb-1">Local command</SectionHeading>
+      <SectionDescription className="mb-2.5">
         Paste this configuration into an external client’s MCP settings, then
         restart that client.{' '}
-        <button
-          type="button"
-          className="cursor-pointer border-0 bg-transparent p-0 text-sm text-accent underline underline-offset-2 hover:no-underline"
+        {/* Inline in the sentence, so the default size is taken for the
+          * type step alone and the height/padding come straight back off.
+          * Accent rather than the link variant's primary, and the
+          * underline inverts on hover, which is this description's
+          * established treatment. */}
+        <Button
+          variant="link"
+          className="h-auto cursor-pointer border-0 p-0 text-accent underline underline-offset-2 hover:no-underline"
           onClick={() => openExternalUrl(MCP_SETUP_EXAMPLES_URL)}
         >
           See setup examples
-        </button>
+        </Button>
         {' '}for Claude Desktop, Codex CLI, Claude Code, and other clients.
-      </div>
+      </SectionDescription>
       <div className="overflow-hidden rounded-lg border border-border bg-muted">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2 text-xs font-semibold tracking-[0.04em] text-muted-foreground uppercase">
-          MCP JSON configuration
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          {/* The caption names the block below it, so it is a heading and
+            * not a bold run of text — the type stays exactly what it was
+            * (the eyebrow step, not the recipe's `text-base`), because the
+            * level is what changed here, never the look. */}
+          <SectionHeading level={5} className="text-xs tracking-wider text-muted-foreground uppercase">
+            MCP JSON configuration
+          </SectionHeading>
           <CopyButton
             copied={copied === 'stdio'}
             onCopy={() => void copyText(config, 'stdio')}
@@ -70,11 +85,11 @@ export function McpAccessPanel() {
         </StatusMessage>
       )}
 
-      <div className="mt-4.5 border-t border-border pt-4.5">
-        <div className="mb-1 text-base font-semibold">Server connection</div>
-        <div className="mb-2.5 text-sm leading-normal text-muted-foreground">
+      <div className="mt-4 border-t border-border pt-4">
+        <SectionHeading level={4} className="mb-1">Server connection</SectionHeading>
+        <SectionDescription className="mb-2.5">
           For server-side MCP clients that cannot launch the local command. Browser pages are not supported.
-        </div>
+        </SectionDescription>
         {http ? (
           <>
             {http.settingsError && (
@@ -88,8 +103,8 @@ export function McpAccessPanel() {
               copied={copied === 'loopback'}
               onCopy={() => void copyText(http.loopbackUrl, 'loopback')}
             />
-            <div className="mt-2.5 flex flex-col gap-1">
-              <label htmlFor="mcp-http-token" className="text-xs font-semibold text-muted-foreground">Bearer token</label>
+            <Field className="mt-2.5 gap-1">
+              <FieldLabel htmlFor="mcp-http-token" className="text-xs text-muted-foreground">Bearer token</FieldLabel>
               <div className="flex min-w-0 items-center gap-1.5">
                 <Input
                   id="mcp-http-token"
@@ -110,28 +125,42 @@ export function McpAccessPanel() {
                   label="token"
                 />
               </div>
-            </div>
+            </Field>
             <div className="mt-3">
               <Button variant="outline" disabled={httpBusy || !http.token} onClick={() => void rotateToken()}>
                 Rotate token…
               </Button>
             </div>
 
-            <div className="mt-4.5 border-t border-border pt-4.5">
-              <div className="mb-1 text-base font-semibold">Advanced</div>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-foreground">
-                <input
-                  type="checkbox"
-                  className="accent-accent"
+            <div className="mt-4 border-t border-border pt-4">
+              <SectionHeading level={5} className="mb-1">Advanced</SectionHeading>
+              {/* The Base UI checkbox, not the UA control: a native
+                * `input[type=checkbox]` beside the primitive gave the app
+                * two checkbox appearances. `htmlFor` targets the
+                * primitive's root, which is a labelable `button`, so the
+                * visible text still toggles it. */}
+              <div className="inline-flex items-center gap-1.5">
+                <Checkbox
+                  id="mcp-http-docker-access"
                   checked={http.dockerAccess}
                   disabled={httpBusy || !!http.settingsError}
-                  onChange={(event) => void setDockerAccess(event.target.checked)}
+                  onCheckedChange={(checked) => { void setDockerAccess(checked); }}
                 />
-                <span>Enable Docker access</span>
-              </label>
-              <div className="mt-2.5 flex flex-col gap-1">
-                <label htmlFor="mcp-http-docker-port" className="text-xs font-semibold text-muted-foreground">Docker port</label>
-                <div className="flex min-w-0 items-center gap-1.5">
+                <FieldLabel htmlFor="mcp-http-docker-access" className="cursor-pointer text-sm font-normal">
+                  Enable Docker access
+                </FieldLabel>
+              </div>
+              <Field className="mt-2.5 gap-1">
+                <FieldLabel htmlFor="mcp-http-docker-port" className="text-xs text-muted-foreground">Docker port</FieldLabel>
+                {/* A field with one confirm action beside it, so it is a
+                  * `form`: Enter in the port box now saves it, which is
+                  * behaviour the row simply did not have. `type="submit"`
+                  * is explicit — Base UI's `useButton` writes
+                  * `type="button"` on every Button. */}
+                <form
+                  className="flex min-w-0 items-center gap-1.5"
+                  onSubmit={(event) => { event.preventDefault(); void saveDockerPort(); }}
+                >
                   <Input
                     id="mcp-http-docker-port"
                     className="h-8 flex-1 font-mono text-sm"
@@ -144,17 +173,17 @@ export function McpAccessPanel() {
                     onChange={(event) => setDockerPortInput(event.target.value)}
                   />
                   <Button
+                    type="submit"
                     variant="outline"
                     disabled={httpBusy || http.dockerAccess || !!http.settingsError || dockerPortInput === String(http.dockerPort)}
-                    onClick={() => void saveDockerPort()}
                   >
                     Save port
                   </Button>
-                </div>
-              </div>
-              <div className="mt-3.5 text-sm leading-normal text-muted-foreground">
+                </form>
+              </Field>
+              <SectionDescription className="mt-3.5">
                 Disabled by default. Enabling opens a separate token-gated MCP-only port on host interfaces; no other StashBase API is exposed. Disable access before changing the port. Docker Desktop or the host firewall must allow that port.
-              </div>
+              </SectionDescription>
               {http.dockerAccess && (
                 <>
                   <McpHttpField
@@ -168,9 +197,9 @@ export function McpAccessPanel() {
                       ? 'Docker listener is active.'
                       : `Docker listener is not active${http.dockerError ? `: ${http.dockerError}` : '.'}`}
                   </div>
-                  <div className="mt-3.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
+                  <SectionDescription className="mt-3.5 [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
                     Native Linux Docker Engine also needs <code>--add-host=host.docker.internal:host-gateway</code> or the equivalent Compose <code>extra_hosts</code> entry.
-                  </div>
+                  </SectionDescription>
                 </>
               )}
             </div>
@@ -193,15 +222,22 @@ export function McpAccessPanel() {
 }
 
 function McpHttpField(props: { label: string; value: string; copied: boolean; onCopy(): void }) {
-  const id = `mcp-http-${props.label.toLowerCase().replace(/\s+/g, '-')}`;
+  const id = useId();
   return (
-    <div className="mt-2.5 flex flex-col gap-1">
-      <label htmlFor={id} className="text-xs font-semibold text-muted-foreground">{props.label}</label>
+    <Field className="mt-2.5 gap-1">
+      <FieldLabel htmlFor={id} className="text-xs text-muted-foreground">{props.label}</FieldLabel>
       <div className="flex min-w-0 items-center gap-1.5">
-        <Input id={id} className="h-8 flex-1 font-mono text-sm" type="text" readOnly spellCheck={false} value={props.value} />
+        <Input
+          id={id}
+          className="h-8 flex-1 font-mono text-sm"
+          type="text"
+          readOnly
+          spellCheck={false}
+          value={props.value}
+        />
         <CopyButton copied={props.copied} onCopy={props.onCopy} label={props.label} />
       </div>
-    </div>
+    </Field>
   );
 }
 
@@ -213,18 +249,20 @@ function CopyButton(props: { copied: boolean; disabled?: boolean; onCopy(): void
       type="button"
       variant="outline"
       size="icon"
-      className={
-        'flex-none '
-        + (props.copied
+      className={cn(
+        'flex-none',
+        props.copied
           ? 'border-accent/40 bg-accent/10 text-accent hover:border-accent/40 hover:bg-accent/10 hover:text-accent'
-          : 'text-muted-foreground hover:border-accent hover:text-accent')
-      }
+          : 'text-muted-foreground hover:border-accent hover:text-accent',
+      )}
       disabled={props.disabled}
       onClick={props.onCopy}
       title={props.copied ? 'Copied' : `Copy ${props.label}`}
       aria-label={props.copied ? 'Copied' : `Copy ${props.label}`}
     >
-      {props.copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+      {/* No icon size here: `size="icon"` is the 32px step, and the recipe
+        * gives its glyph the matching 16px. */}
+      {props.copied ? <CheckIcon /> : <CopyIcon />}
     </Button>
   );
 }

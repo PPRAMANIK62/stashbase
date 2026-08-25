@@ -7,10 +7,11 @@ import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { Button } from '@/common/components/ui/button';
 import { PopupLoadingStatus } from '@/common/components/ui/status';
 
-/* The popover carries react-aria, so it loads at the interaction
- * boundary. The boundary lives here rather than in the feature barrel
- * because this button is the menu's only caller — an export the barrel
- * kept would be public API with nothing outside the feature reading it. */
+/* The popover and its session list load at the interaction boundary
+ * rather than with the window. The boundary lives here rather than in the
+ * feature barrel because this button is the menu's only caller — an export
+ * the barrel kept would be public API with nothing outside the feature
+ * reading it. */
 const SessionHistoryMenu = lazyWithRetry(() =>
   import('@/features/agent-panel/components/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 

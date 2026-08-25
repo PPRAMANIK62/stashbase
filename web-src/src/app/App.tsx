@@ -31,6 +31,7 @@ import {
   COMPACT_WORKSPACE_QUERY,
   resolveWorkspaceLayout,
 } from '@/common/lib/workspaceLayout';
+import { cn } from '@/common/lib/utils';
 
 const LazyContextMenu = lazyWithRetry(() => import('@/app/components/ContextMenu'));
 const LazyImageLightbox = lazyWithRetry(() =>
@@ -127,12 +128,12 @@ function AppBody() {
        *  toggle is always the way back in; the right edge still drags
        *  to resize/collapse, à la VSCode. */}
       <div
-        className={
-          'app'
-          + (state.sidebarCollapsed ? ' sidebar-collapsed' : '')
-          + (state.chatOpen ? ' chat-open' : '')
-          + (workspaceLayout === 'chat-primary' ? ' chat-primary' : '')
-        }
+        className={cn(
+          'app',
+          state.sidebarCollapsed && 'sidebar-collapsed',
+          state.chatOpen && 'chat-open',
+          workspaceLayout === 'chat-primary' && 'chat-primary',
+        )}
         style={{
           '--chat-width': `${state.chatWidth}px`,
           '--sidebar-width': `${state.sidebarWidth}px`,
@@ -160,7 +161,7 @@ function AppBody() {
       <DropVeil hot={veilHot} />
       {state.ctxMenu && (
         <LazyLoadBoundary
-          className="fixed z-1200 rounded-md bg-popover p-2 text-sm text-popover-foreground shadow-elevation"
+          className="fixed z-menu rounded-md bg-popover p-2 text-sm text-popover-foreground shadow-elevation"
           label="context menu"
           resetKey={`${state.ctxMenu.kind}:${state.ctxMenu.target}`}
         >
@@ -176,11 +177,11 @@ function AppBody() {
       <LinkFilePicker />
       {previewImage && (
         <LazyLoadBoundary
-          className="quick-open-blocking fixed inset-0 z-90 bg-scrim text-white"
+          className="quick-open-blocking fixed inset-0 z-modal bg-scrim text-white"
           label="image preview"
           resetKey={previewImage.src}
         >
-          <Suspense fallback={<div className="quick-open-blocking fixed inset-0 z-90 grid place-items-center bg-scrim text-sm text-white/80">Opening image…</div>}>
+          <Suspense fallback={<div className="quick-open-blocking fixed inset-0 z-modal grid place-items-center bg-scrim text-sm text-white/80">Opening image…</div>}>
             <LazyImageLightbox
               src={previewImage.src}
               alt={previewImage.alt}

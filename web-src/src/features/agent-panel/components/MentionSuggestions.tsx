@@ -14,13 +14,14 @@
  * ternary repeated at every row, key, label, and announcement.
  */
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
-import { Button, ListBox, ListBoxItem, VisuallyHidden } from 'react-aria-components';
+import { Button } from '@/common/components/ui/button';
 import { FileGenericIcon, FolderIcon } from '@/common/components/icons';
 import type { FileMeta, FolderMeta } from '@/common/api/api';
 import { basename } from '@/common/lib/paths';
 import type { MentionComposerHandle, MentionQuery } from '@/features/agent-panel/components/MentionComposer';
 import { rankMentionSuggestions } from '@/features/agent-panel/lib/mentionRanking';
 import type { AgentSkill } from '@/features/agent-panel/lib/types';
+import { cn } from '@/common/lib/utils';
 
 /** File/folder listing that feeds `@` mention ranking. For a tab bound to
  * another library folder this is the SESSION folder's listing, not the
@@ -55,19 +56,30 @@ export interface MentionSuggestionsState {
   /** Index into `choices`, already clamped to the current list. */
   activeIndex: number;
   listboxId: string;
-  listRef: RefObject<HTMLDivElement | null>;
+  activeOptionId: string | undefined;
+  listRef: RefObject<HTMLUListElement | null>;
   /** Whether the panel is showing — a `/` query stays open with no rows so
    *  it can explain that the folder advertises no skills. */
   open: boolean;
   /** The listbox id the composer should advertise, or undefined when there
    *  is nothing to point `aria-controls` at. */
   composerListboxId: string | undefined;
+  /** The option the editor's caret is 'on', for aria-activedescendant.
+   * Focus never leaves the composer, so this is the only way a screen
+   * reader learns which row Enter would take. */
+  composerActiveOptionId: string | undefined;
   onQueryChange: (next: MentionQuery) => void;
   move: (direction: 1 | -1) => void;
   /** Accept the active row. Returns whether the key press was consumed. */
   accept: () => boolean;
   dismiss: () => void;
   pick: (key: string) => void;
+}
+
+/** One stable DOM id per option row, so the composer can point
+ * `aria-activedescendant` at the row the caret is on. */
+function mentionOptionId(listboxId: string, key: string): string {
+  return `${listboxId}-${encodeURIComponent(key)}`;
 }
 
 export function useMentionSuggestions({ composerRef, mentions, skills, onSkillPicked }: {
@@ -78,7 +90,7 @@ export function useMentionSuggestions({ composerRef, mentions, skills, onSkillPi
   onSkillPicked: (skill: AgentSkill) => void;
 }): MentionSuggestionsState {
   const listboxId = useId();
-  const listRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const [query, setQuery] = useState<MentionQuery>(null);
   const [requestedIndex, setRequestedIndex] = useState(0);
 
@@ -136,9 +148,13 @@ export function useMentionSuggestions({ composerRef, mentions, skills, onSkillPi
     choices,
     activeIndex,
     listboxId,
+    activeOptionId: choices.length ? mentionOptionId(listboxId, choices[activeIndex].key) : undefined,
     listRef,
     open: Boolean(query && (choices.length > 0 || query.kind === 'skill')),
     composerListboxId: query && choices.length ? listboxId : undefined,
+    composerActiveOptionId: query && choices.length
+      ? mentionOptionId(listboxId, choices[activeIndex].key)
+      : undefined,
     onQueryChange: (next) => {
       setQuery(next);
       setRequestedIndex(0);
@@ -171,44 +187,68 @@ export function MentionSuggestions({ state, skills }: {
   const isSkill = state.query?.kind === 'skill';
   return (
     <div className="agent-mention">
-      <div className="agent-mention-head">
-        <span>{isSkill ? 'Available skills' : 'Files and folders'}</span>
+      <div className="flex justify-between gap-2 px-2 pt-1 pb-1.5 text-2xs text-muted-foreground">
+        <span className="font-semibold text-foreground">{isSkill ? 'Available skills' : 'Files and folders'}</span>
         <span>{choices.length ? '↑↓ navigate · Enter select · Esc dismiss' : 'Esc dismiss'}</span>
       </div>
-      {choices.length > 0 && <VisuallyHidden>
-        <div role="status">{`${choices[activeIndex].name}, ${activeIndex + 1} of ${choices.length}`}</div>
-      </VisuallyHidden>}
+      {choices.length > 0 && (
+        <span className="sr-only" role="status">
+          {`${choices[activeIndex].name}, ${activeIndex + 1} of ${choices.length}`}
+        </span>
+      )}
       {choices.length > 0 ? (
-        <ListBox
+        /* Plain listbox markup, because the keyboard belongs to the EDITOR:
+          * focus stays in CodeMirror and arrow keys move `activeIndex`
+          * there, which is the ARIA combobox pattern. A widget that wants
+          * focus for itself would fight the composer for it. */
+        <ul
           ref={state.listRef}
           id={state.listboxId}
           className="agent-mention-list"
+          role="listbox"
           aria-label={isSkill ? 'Matching available skills' : 'Matching library files and folders'}
-          selectionMode="single"
-          selectedKeys={[choices[activeIndex].key]}
-          onAction={(key) => state.pick(String(key))}
         >
-          {choices.map((choice) => (
-            <ListBoxItem
+          {choices.map((choice, index) => (
+            <li
               key={choice.key}
-              id={choice.key}
-              className={({ isSelected }) => 'agent-mention-item' + (isSelected ? ' active' : '')}
-              textValue={isSkill ? choice.name : choice.key}
+              id={mentionOptionId(state.listboxId, choice.key)}
+              role="option"
+              aria-selected={index === activeIndex}
+              /* `agent-mention-item`/`active` are the keyboard-navigation
+                 querySelector hook (above), not a look. Hover paints only
+                 when the row is NOT the selected one: the two used to be
+                 equal-specificity rules where selection won by source
+                 order, and a plain `hover:` utility would win instead. */
+              className={cn(
+                'agent-mention-item flex w-full cursor-pointer items-start gap-1.5 rounded-md px-2 py-1.5 text-left',
+                index === activeIndex ? 'active bg-active' : 'hover:bg-muted',
+              )}
+              // mousedown, not click: the composer must not lose focus to
+              // the row before the pick lands.
+              onMouseDown={(event) => { event.preventDefault(); state.pick(choice.key); }}
             >
+              {/* 14 is the panel's standing chrome glyph; the 2px lift
+                  seats it on the name's first baseline rather than on the
+                  top of a two-line row. */}
               {choice.icon === 'folder'
-                ? <FolderIcon className="agent-mention-icon" />
-                : <FileGenericIcon className="agent-mention-icon" />}
-              <span className="agent-mention-text">
-                <span className="agent-mention-name">{choice.name}</span>
-                {choice.detail && <span className="agent-mention-path">{choice.detail}</span>}
+                ? <FolderIcon className="mt-0.5 size-3.5 flex-none text-muted-foreground" />
+                : <FileGenericIcon className="mt-0.5 size-3.5 flex-none text-muted-foreground" />}
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="text-sm text-foreground">{choice.name}</span>
+                {choice.detail && <span className="truncate text-xs text-muted-foreground">{choice.detail}</span>}
               </span>
-            </ListBoxItem>
+            </li>
           ))}
-        </ListBox>
+        </ul>
       ) : (
-        <div className="agent-mention-empty" role="status">
+        <div className="flex items-center justify-between gap-2 p-2 text-sm text-muted-foreground" role="status">
+          {/* The `outline` recipe already IS this button — bordered, quiet
+              neutral hover, the global focus halo. Only two of its
+              decisions are wrong here: it fills with `background`, which
+              splits from the popup's `card` surface in dark, and it steps
+              its type down while this row does not. */}
           {skills.state === 'failed'
-            ? <><span>Could not load skills.</span><Button className="agent-mention-retry" onPress={skills.onRefresh}>Retry</Button></>
+            ? <><span>Could not load skills.</span><Button variant="outline" size="xs" className="bg-transparent text-sm" onClick={skills.onRefresh}>Retry</Button></>
             : <span>No skills are available for this folder.</span>}
         </div>
       )}

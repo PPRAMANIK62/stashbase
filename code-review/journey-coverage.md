@@ -143,7 +143,9 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** `pnpm test:config`, `pnpm test:conversion-scheduler`, and
   `pnpm test:python` cover the default-off capture preference, scheduling,
-  format completion, cancellation, freshness, checkpoints, and recovery.
+  format completion, cancellation, PDF/OCR spawn configuration, freshness,
+  checkpoints, and recovery. `pnpm test:package-inputs` locks the static
+  Windows extractor bootloader argument wiring without discarding stderr.
   `pnpm test:electron` locks the focused-window and unclaimed-composer offer
   policy.
 - **Journey E2E:** [preparation capture](../e2e/journeys/preparation-capture.spec.ts)
@@ -154,8 +156,8 @@ aliases, and Journey E2E owns representative composition.
 - **AI Eval:** extraction correctness is format-specific deterministic or
   dataset evidence; no shared product-level quality Eval is currently claimed.
 - **Release Check:** operating-system screenshot capture and representative
-  PDF/OCR/DOCX/media preparation with packaged native helpers remain release
-  evidence.
+  PDF/OCR/DOCX/media preparation with packaged native helpers, including no
+  visible console or focus theft on Windows, remain release evidence.
 - **Gap:** none in the deterministic screenshot-to-current-evidence path.
 
 ## J05: Search

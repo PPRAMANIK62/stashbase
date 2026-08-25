@@ -9,7 +9,8 @@
  * folder", a library chat talks about the whole library.
  */
 import { useEffect, useState } from 'react';
-import { Button } from 'react-aria-components';
+import { Button } from '@/common/components/ui/button';
+import { SectionHeading } from '@/common/components/ui/section';
 import { ArrowInsertIcon } from '@/common/components/icons';
 import { spinnerClass } from '@/features/agent-panel/lib/panelStyles';
 
@@ -164,20 +165,23 @@ export function EmptyChatSuggestion({ onPrefill, libraryScoped }: {
      * composer's content edge. */
     <div className="flex justify-center pt-6 pb-12">
       <Button
-        className="cursor-pointer border-0 bg-transparent p-0 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-        onHoverChange={setHovered}
-        onFocusChange={setFocused}
-        onPress={() => onPrefill(current.prompt)}
+        variant="link"
+        className="h-auto p-0 text-sm text-muted-foreground no-underline hover:text-foreground hover:no-underline focus-visible:text-foreground"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onClick={() => onPrefill(current.prompt)}
       >
         <span
           // Remounting per suggestion restarts the rise-in keyframe.
           key={index}
-          className="inline-flex items-center gap-1.5 transition-[opacity,translate] ease-in-out"
+          className="inline-flex items-center gap-1.5 transition-[opacity,translate] duration-fast ease-out"
           style={{
             opacity: leaving ? 0 : 1,
             translate: leaving ? '0 -8px' : '0 0',
             transitionDuration: `${HINT_FADE_MS}ms`,
-            animation: `chat-hint-rise ${HINT_FADE_MS}ms ease-in-out`,
+            animation: `chat-hint-rise ${HINT_FADE_MS}ms var(--motion-ease-out)`,
           }}
         >
           {current.label}
@@ -201,9 +205,9 @@ export function EmptyChatGreeting({ agentShortName, connecting }: {
 }) {
   return (
     <>
-      <h2 className="m-0 pb-6 text-center text-2xl font-semibold text-foreground">
+      <SectionHeading className="pb-6 text-center text-2xl">
         Your knowledge is here.
-      </h2>
+      </SectionHeading>
       {connecting && (
         <p className="m-0 flex items-center justify-center gap-2 pb-4 text-sm text-muted-foreground" role="status">
           <span className={spinnerClass} aria-hidden="true" />

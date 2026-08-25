@@ -142,6 +142,11 @@ MCP write inside the new project.
   behavior. A programmatic click is not evidence for native pointer handling.
 - Keep assertions at the product or Interface level. Exact fixture events and
   internal intermediate state belong in focused tests.
+- The app's selects are Base UI listboxes, not native `<select>` elements, so
+  `selectOption()` does not apply and `toHaveValue()` reads nothing. Drive one
+  through `chooseSelectOption` in `locators.ts` and assert its current value
+  with `toHaveText` on `selectTrigger`. The popup portals to `<body>`, so it is
+  not inside the dialog that opened it — scope to the listbox.
 
 ## Validation Commands
 
@@ -182,6 +187,13 @@ Ubuntu 24.04 under Xvfb owns authoritative PNG baselines. Fixtures set explicit
 viewport, theme, content, Agent availability, and reduced motion. A missing
 baseline is failure, not approval; masks are narrow, explained, and limited to
 unavoidable dynamic values.
+
+The functional and visual suites share one CI job but not one fate: the visual
+step runs even when the journeys failed. Sequencing them without that let one
+red or flaky journey cancel every visual assertion, and with it the candidate
+baseline patch that is the recovery path for an intentional visual change. Each
+suite's diagnostics are preserved under its own name, because both write to the
+same report paths. Either suite failing still fails the job.
 
 For an intentional visual change:
 

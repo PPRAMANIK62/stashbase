@@ -6,7 +6,7 @@ import { basename } from '@/common/lib/paths';
 import { preparationWaitCopy } from '@/features/documents/lib/preparationCopy';
 import { useWorkspace } from '@/store/contexts/AppContext';
 import { getPreparationFailure } from '@/store/lib/fileReadiness';
-import { emptyStateClass } from '@/common/lib/emptyState';
+import { EmptyState } from '@/common/components/ui/empty-state';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
 
@@ -116,7 +116,7 @@ export function ImagePreview({ name }: { name: string }) {
       {failure && (
         /* Negative top margin cancels the chrome-row padding so the
          * banner sits flush under the tab strip. */
-        <StatusMessage tone="warning" className="z-5 -mt-11 flex w-full items-start gap-2.5 rounded-none border-x-0 border-t-0 px-3.5 py-2">
+        <StatusMessage tone="warning" className="z-chrome -mt-11 flex w-full items-start gap-2.5 rounded-none border-x-0 border-t-0 px-3.5 py-2">
           <span className="min-w-0 flex-1 overflow-auto [overflow-wrap:anywhere] max-h-[4.5em]">
             {retryError
               ? 'Searchable text is unavailable. Reprocess could not start. Try again.'
@@ -134,8 +134,8 @@ export function ImagePreview({ name }: { name: string }) {
         </StatusMessage>
       )}
       {preparationStatus && (
-        <div className="box-border flex min-h-7.5 shrink-0 items-center gap-1.5 border-b border-border bg-background px-3.5 py-1.5 text-sm text-muted-foreground" role="status">
-          <span className="image-preparation-dot size-1.75 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+        <div className="box-border flex min-h-7 shrink-0 items-center gap-1.5 border-b border-border bg-background px-3.5 py-1.5 text-sm text-muted-foreground" role="status">
+          <span className="image-preparation-dot size-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />
           {preparationStatus}
         </div>
       )}
@@ -143,9 +143,9 @@ export function ImagePreview({ name }: { name: string }) {
         * image scrolls here rather than being squeezed to fit. */}
       <div className="min-h-0 flex-1 overflow-auto" ref={scrollRef}>
         {loadError ? (
-          <div className={emptyStateClass}>
+          <EmptyState>
             Couldn’t load this image — the file may have moved or been deleted.
-          </div>
+          </EmptyState>
         ) : (
           /* Grows to at least the viewport so a smaller-than-pane image
            * stays centered, while a larger one expands the stage and the
@@ -170,7 +170,7 @@ export function ImagePreview({ name }: { name: string }) {
       {natural && !loadError && (
         /* Floating zoom controls, pinned to the pane (outside the scroll
          * area so they don't move with the image). */
-        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-border bg-background p-[3px] shadow-elevation">
+        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-border bg-popover p-[3px] shadow-elevation">
           <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom out" onClick={() => { setFitMode(false); setScale((s) => clampScale(s / 1.25)); }}>−</Button>
           <Button variant="ghost" size="xs" className="min-w-12 px-2 font-normal text-muted-foreground tabular-nums" title="Actual size (100%)" onClick={() => { setFitMode(false); setScale(1); }}>
             {Math.round(scale * 100)}%

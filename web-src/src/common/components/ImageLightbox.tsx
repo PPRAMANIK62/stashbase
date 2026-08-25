@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { Button } from '@/common/components/ui/button';
+import { cn } from '@/common/lib/utils';
 
 export function ImageLightbox({ src, alt = '', onClose }: {
   src: string;
@@ -92,20 +94,20 @@ export function ImageLightbox({ src, alt = '', onClose }: {
     /* The dark scrim is a deliberate overlay color, independent of the
      * app theme — the lightbox always reads as a dark stage. The
      * `quick-open-blocking` marker keeps Quick Open from opening on top. */
-    <div className={`quick-open-blocking fixed inset-0 z-90 flex flex-col ${STAGE_SCRIM_CLASS} text-white`} role="dialog" aria-modal="true" aria-label="Image preview">
+    <div className="quick-open-blocking fixed inset-0 z-modal flex flex-col bg-scrim text-white" role="dialog" aria-modal="true" aria-label="Image preview">
       <div
         ref={stageRef}
-        className={
-          'grid min-h-0 flex-1 touch-none place-items-center overflow-hidden' +
-          (scale > 1 ? ' cursor-grab active:cursor-grabbing' : ' cursor-zoom-in')
-        }
+        className={cn(
+          'grid min-h-0 flex-1 touch-none place-items-center overflow-hidden',
+          scale > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in',
+        )}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
         <img
-          className="max-h-[calc(100vh-108px)] max-w-[calc(100vw-64px)] origin-center object-contain shadow-[0_16px_60px_rgba(var(--shadow-color),0.35)] transition-transform duration-fast ease-out select-none"
+          className="max-h-overlay-stage max-w-overlay-stage origin-center object-contain shadow-stage transition-transform duration-fast ease-out select-none"
           src={src}
           alt={alt}
           draggable={false}
@@ -114,22 +116,25 @@ export function ImageLightbox({ src, alt = '', onClose }: {
           }}
         />
       </div>
-      <div className="absolute top-4 right-4 z-1 flex gap-2">
-        <button type="button" className={FLOATING_BTN_CLASS} aria-label="Download image" title="Download" onClick={download}>
+      <div className="absolute top-4 right-4 z-raised flex gap-2">
+        <StageButton label="Download image" title="Download" onClick={download}>
           <LightboxIcon kind="download" />
-        </button>
-        <button type="button" className={FLOATING_BTN_CLASS} aria-label="Close image preview" title="Close" onClick={onClose}>
+        </StageButton>
+        <StageButton label="Close image preview" title="Close" onClick={onClose}>
           <LightboxIcon kind="close" />
-        </button>
+        </StageButton>
       </div>
-      <div className={`absolute bottom-5 left-1/2 z-1 flex -translate-x-1/2 items-center gap-1 rounded-full ${STAGE_TOOLBAR_CLASS} p-1 shadow-elevation`}>
-        <button type="button" className={FLOATING_BTN_CLASS} aria-label="Zoom out" title="Zoom out" onClick={() => zoomBy(1 / 1.2)}>
+      {/* The toolbar's own near-opaque slate: the stage is always dark, so
+        * this is a fixed overlay colour rather than a theme role — no token
+        * names "the chrome that floats on a dark stage". */}
+      <div className="absolute bottom-5 left-1/2 z-raised flex -translate-x-1/2 items-center gap-1 rounded-full bg-[rgba(38,39,42,0.96)] p-1 shadow-elevation">
+        <StageButton label="Zoom out" title="Zoom out" onClick={() => zoomBy(1 / 1.2)}>
           <ZoomGlyph />
-        </button>
+        </StageButton>
         <span className="min-w-[66px] text-center text-base text-white/80 tabular-nums">{Math.round(scale * 100)}%</span>
-        <button type="button" className={FLOATING_BTN_CLASS} aria-label="Zoom in" title="Zoom in" onClick={() => zoomBy(1.2)}>
+        <StageButton label="Zoom in" title="Zoom in" onClick={() => zoomBy(1.2)}>
           <ZoomGlyph plus />
-        </button>
+        </StageButton>
       </div>
     </div>
   );
@@ -139,19 +144,59 @@ export function ImageLightbox({ src, alt = '', onClose }: {
  * theme (light mode must not lighten it). The scrim uses the theme-static
  * `bg-scrim` role (`--scrim` in globals.css); the raised toolbar is a raw
  * lighter step of the same near-black, so the two read as one dark system
- * rather than two unrelated darks. */
-const STAGE_SCRIM_CLASS = 'bg-scrim';
-const STAGE_TOOLBAR_CLASS = 'bg-[rgba(38,39,42,0.96)]';
-
-/** 38px circular white-on-dark control — always styled for the dark
+ * rather than two unrelated darks.
+ *
+ * This is the one floating surface that is NOT `bg-popover`, and the
+ * exception is the point: the toolbar and the circular controls belong to
+ * the dark room, not to the app chrome. Folding them into the chrome roles
+ * would make them flip with the theme on a stage that never flips. The
+ * stage's own drop shadow is theme-static for the same reason — see
+ * `--shadow-stage` in globals.css. */
+/** 40px circular white-on-dark control — always styled for the dark
  *  stage, never the app theme. Stays `no-drag` so the frameless-window
- *  drag region can't swallow clicks near the top edge. */
-const FLOATING_BTN_CLASS =
-  'grid size-9.5 cursor-pointer place-items-center rounded-full border-0 bg-white/10 p-0 text-white [font-family:inherit] hover:bg-white/15 [-webkit-app-region:no-drag]';
+ *  drag region can't swallow clicks near the top edge.
+ *
+ *  This is the `Button` primitive under a theme-static palette, and the
+ *  split is the point: the recipe owns the press scale, the focus ring and
+ *  the transition (this used to re-spell `transition-control` and
+ *  `active:scale-97` by hand, which is exactly what the primitive exists to
+ *  stop duplicating), while the className below carries only what the dark
+ *  stage decides — a circle, a white-on-translucent-white palette that must
+ *  NOT flip with the app theme, and the drag-region opt-out. It stays a
+ *  className rather than a `Button` variant on purpose: nothing else in the
+ *  app is allowed to look like this. It is a component rather than the
+ *  shared class string it used to be because all four stage controls also
+ *  agree on `ghost` and `icon-lg`, and a class string could only carry one
+ *  of the three decisions. */
+function StageButton({ label, title, onClick, children }: {
+  /** Accessible name — the glyph is the only label these controls have. */
+  label: string;
+  /** Hover title. Shorter than the accessible name where the surrounding
+   *  dialog already supplies the noun ("Close", not "Close image
+   *  preview"). */
+  title: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon-lg"
+      className="size-10 cursor-pointer rounded-full border-0 bg-white/10 p-0 text-white hover:bg-white/15 hover:text-white dark:hover:bg-white/15 [font-family:inherit] [-webkit-app-region:no-drag]"
+      aria-label={label}
+      title={title}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
+}
 
 function LightboxIcon({ kind }: { kind: 'download' | 'close' }) {
   const common = {
-    className: 'size-[15px]',
+    /* 16px, the step the 40px stage control takes — the same one
+     * `ZoomGlyph` beside it already uses. 15 was off the 12/14/16 ramp. */
+    className: 'size-4',
     viewBox: '0 0 16 16',
     fill: 'none',
     stroke: 'currentColor',
@@ -168,7 +213,7 @@ function LightboxIcon({ kind }: { kind: 'download' | 'close' }) {
 
 function ZoomGlyph({ plus = false }: { plus?: boolean }) {
   return (
-    <svg className="size-4.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true">
+    <svg className="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true">
       <path d="M3.5 8h9" />
       {plus && <path d="M8 3.5v9" />}
     </svg>

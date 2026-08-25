@@ -7,17 +7,26 @@ import {
 } from 'react';
 import { electronBridge, type ElectronBridge } from '@/common/lib/electronBridge';
 import { StatusMessage } from '@/common/components/ui/status';
+import { cn } from '@/common/lib/utils';
 
-/** One button recipe for both error surfaces. Hand-rolled on purpose:
- *  this is the recovery path, so it must not depend on the primitive
- *  stack that may have just crashed. The surface half is appended per
- *  use (outline vs primary). */
+/** One button recipe for both error surfaces. A SANCTIONED exemption from
+ *  the "every button is the `Button` primitive" rule in
+ *  `code-review/renderer-styling.md`: this is the recovery path, so it must not
+ *  depend on the primitive stack that may have just crashed. Do not
+ *  "modernise" it onto `Button` — a crash screen that cannot render is
+ *  not a crash screen. The surface half is appended per use (outline vs
+ *  primary).
+ *
+ *  It still owes the user the same press feedback every other button in
+ *  the app gives — a control that looks dead is the last thing a crash
+ *  screen should offer — so the scale-on-press is duplicated here rather
+ *  than imported. */
 const ERROR_BUTTON_CLASS =
-  'rounded-md border px-2.5 py-1 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50';
+  'rounded-md border px-2.5 py-1 text-sm font-medium outline-none transition-control focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-97';
 const ERROR_BUTTON_OUTLINE_CLASS =
-  `${ERROR_BUTTON_CLASS} border-border bg-background hover:bg-muted`;
+  cn(ERROR_BUTTON_CLASS, 'border-border bg-background hover:bg-muted');
 const ERROR_BUTTON_PRIMARY_CLASS =
-  `${ERROR_BUTTON_CLASS} border-transparent bg-primary text-primary-foreground hover:bg-primary/80`;
+  cn(ERROR_BUTTON_CLASS, 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80');
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -107,7 +116,7 @@ export class LazyLoadBoundary extends Component<LazyLoadBoundaryProps, LazyLoadB
     return (
       <StatusMessage
         tone="error"
-        className={`${this.props.className} flex min-h-18 items-center justify-center gap-2.5`}
+        className={cn(this.props.className, 'flex min-h-18 items-center justify-center gap-2.5')}
       >
         <span>Could not open {this.props.label}.</span>
         <button
@@ -166,14 +175,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, State> {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="fixed inset-0 z-[10000] grid place-items-center bg-veil p-4">
+      <div className="fixed inset-0 z-modal grid place-items-center bg-veil p-4">
         <StatusMessage
           tone="error"
-          className="grid max-h-[calc(100vh-32px)] w-[min(620px,calc(100vw-32px))] gap-3 overflow-hidden rounded-xl bg-popover p-5 text-popover-foreground shadow-elevation"
+          className="grid max-h-overlay-window w-overlay-xl gap-3 overflow-hidden rounded-xl bg-popover p-5 text-popover-foreground shadow-elevation"
         >
           <h1 className="m-0 text-base font-semibold">Something went wrong</h1>
           <div>{this.state.error.message || 'Unknown error'}</div>
-          <pre className="max-h-[min(48vh,360px)] overflow-auto rounded-md bg-pane p-3 text-xs whitespace-pre-wrap">
+          <pre className="max-h-overlay-sm overflow-auto rounded-md bg-pane p-3 text-xs whitespace-pre-wrap">
             {this.state.error.stack ?? '(no stack)'}
           </pre>
           <div className="flex justify-end gap-2">

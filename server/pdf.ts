@@ -26,7 +26,7 @@ import {
   TransientConversionError,
   type ConversionSpec,
 } from './conversion.ts';
-import { lowerExtractorPriority, spawnOptionsForExtractor, terminateExtractorTree } from './extractor-process.ts';
+import { lowerExtractorPriority, spawnOptionsForPdfOcr, terminateExtractorTree } from './extractor-process.ts';
 import type { ConversionProgress } from './conversion-status.ts';
 import { logger } from './log.ts';
 import {
@@ -144,7 +144,7 @@ function probePdfTextLayer(pdfAbsPath: string, signal: AbortSignal): Promise<boo
       resolve(false);
       return;
     }
-    const proc = spawn(cmd, args, spawnOptionsForExtractor());
+    const proc = spawn(cmd, args, spawnOptionsForPdfOcr());
     lowerExtractorPriority(proc);
     let settled = false;
     let timedOut = false;
@@ -271,7 +271,7 @@ function convertPdf(
     const { cmd, args } = extractorSpawn('pdf', 'pdf_extract.py', [
       pdfAbsPath, notePath, bundleDir,
     ]);
-    const proc = spawn(cmd, args, spawnOptionsForExtractor());
+    const proc = spawn(cmd, args, spawnOptionsForPdfOcr());
     lowerExtractorPriority(proc);
     let stderr = '';
     let stderrLineBuffer = '';

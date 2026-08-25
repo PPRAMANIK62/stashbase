@@ -5,6 +5,7 @@ import {
   DialogTitle,
 } from '@/common/components/ui/dialog';
 import type { ModalShellProps } from '@/common/components/ModalShell';
+import { cn } from '@/common/lib/utils';
 
 export default function ManagedModalShell({
   title,
@@ -14,17 +15,19 @@ export default function ManagedModalShell({
   initialFocus,
   wide,
   narrow,
-  top,
   children,
   isTopmost,
 }: ModalShellProps & {
   isTopmost: boolean;
 }) {
+  // One width role off the overlay scale. `w-overlay-*` already carries
+  // the viewport clamp, and DialogContent no longer ships a competing
+  // responsive 384px cap to beat, so the `max-w-` half is gone.
   const widthClass = wide
-    ? 'w-[min(480px,92vw)]'
+    ? 'w-overlay-lg'
     : narrow
-      ? 'w-[min(376px,90vw)]'
-      : 'w-[min(420px,90vw)]';
+      ? 'w-overlay-sm'
+      : 'w-overlay-md';
   return (
     <Dialog
       open
@@ -34,8 +37,7 @@ export default function ManagedModalShell({
       }}
     >
       <DialogContent
-        className={`${widthClass} !max-w-[92vw] !gap-0 border border-border bg-background px-6 pt-5.5 pb-5 shadow-elevation${top ? ' !z-[10001]' : ''}`}
-        overlayClassName={top ? 'top !z-[10000]' : undefined}
+        className={cn(widthClass, 'border border-border px-6 pt-5 pb-5 shadow-elevation')}
         initialFocus={initialFocus}
         showCloseButton={false}
       >

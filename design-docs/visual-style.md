@@ -45,6 +45,16 @@ type is carried primarily by shape and label rather than a rainbow of colors.
 - Shadows are reserved for transient overlays and the rare standing surface
   that needs a clear anchor. Permanent hierarchy should not depend on heavy
   elevation.
+- Anything that floats sits on the same raised surface, one step above paper.
+  Dialogs, menus, popovers, tooltips, toasts, pickers, the find bar and the
+  floating viewer chrome had drifted across three roles while all claiming the
+  same elevation shadow. In light mode that drift is invisible — base and
+  raised are both white — so it was written without anyone seeing it, and only
+  dark mode showed dialogs floating a full surface step lower than the menus
+  above them. One floating role removes the whole class of error.
+- The image lightbox is the one exception, and it is an exception on purpose:
+  it is a dark room in both themes, so its stage, toolbar, and drop shadow are
+  theme-static and belong to the stage rather than to app chrome.
 - Section hierarchy comes from spacing, alignment, and type weight rather than
   decorative header bands.
 
@@ -54,7 +64,8 @@ type is carried primarily by shape and label rather than a rainbow of colors.
   smaller interaction shape appropriate to their role. Size alone does not
   create a new corner language.
 - Circles and capsules are reserved for semantics that need them, such as
-  identity, status, or a terminal action.
+  identity, status, or a terminal action. A box never becomes a capsule by
+  being short — if the shape appears, it was chosen.
 - List hover and selection are quiet inset surfaces. Accent feedback is
   reserved for states that must be unmistakable, such as an active drop target.
 - Sibling controls align to shared grid lines. Empty states use one deliberate
@@ -63,11 +74,21 @@ type is carried primarily by shape and label rather than a rainbow of colors.
 ## Reading and Interaction
 
 - Reading content follows a comfortable measure and reading-size preference;
-  workbench chrome remains compact.
+  workbench chrome remains compact. The interface-size preference moves text
+  and the space around it together, so a larger setting stays legible instead
+  of crowding denser.
 - Focus is visible without shifting layout. Hover and selection do not move
   surrounding content.
+- Every control that can be pressed visibly accepts the press. A surface that
+  takes a click and shows nothing leaves the user waiting on the result with
+  no sign the app heard them.
+- A panel that belongs to a control appears from that control. Menus,
+  popovers, and tooltips grow out of what opened them; a dialog, which
+  belongs to no single control, arrives in the middle.
 - Motion is brief feedback, never spectacle, and reduced-motion preferences are
-  respected.
+  respected. It is graded by what it is doing — arriving, moving, or merely
+  tinting — rather than by which surface it happens on, and nothing arrives
+  from nothing.
 - Light, dark, and system themes are equal product states. A visual change is
   incomplete if hierarchy or legibility works in only one.
 
@@ -79,7 +100,7 @@ A visual contribution should:
 - reuse semantic roles and managed primitives instead of inventing one-off
   literals or behaviors;
 - remain clear at supported UI and reading sizes, compact layouts, and reduced
-  motion;
+  motion, and stay operable from the keyboard alone;
 - change this document only when the visual language itself changes, and change
   the Renderer Styling contract when implementation mechanics or validation
   change.

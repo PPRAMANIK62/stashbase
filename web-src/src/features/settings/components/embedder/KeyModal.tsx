@@ -4,7 +4,7 @@
  * before writing config.
  * `mode='change'` only swaps the title + button text.
  */
-import { useRef, useState } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import type { EmbedderProvider } from '@/common/api/api';
 import { errorMessage } from '@/common/api/api';
 import { ModalShell } from '@/common/components/ModalShell';
@@ -32,7 +32,8 @@ export function KeyModal({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  async function submit() {
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     const trimmed = key.trim();
     if (!trimmed) { setError('Key required'); return; }
     setBusy(true);
@@ -57,33 +58,40 @@ export function KeyModal({
       initialFocus={inputRef}
       onCancel={onCancel}
     >
-      <Input
-        ref={inputRef}
-        type="password"
-        className="font-mono text-sm"
-        placeholder={placeholder}
-        autoComplete="off"
-        value={key}
-        onChange={(e) => setKey(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); void submit(); }
-        }}
-      />
-      {error && (
-        <StatusMessage tone="error" className="mt-2.5 max-h-[min(180px,32vh)] overflow-y-auto wrap-anywhere">
-          {error}
-        </StatusMessage>
-      )}
-      <div className="mt-3.5 flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          onClick={submit}
-          disabled={busy}
-        >{busy ? 'Validating…' : (mode === 'change' ? 'Save' : 'Continue')}</Button>
-      </div>
+      {/* One field and one confirm action is exactly the shape a `form`
+        * exists for: Enter now submits through the browser's implicit
+        * submission rather than through a keydown branch that had to spell
+        * its own preventDefault. `type="submit"` is explicit because Base
+        * UI's `useButton` writes `type="button"` on every Button, so the
+        * confirm action would otherwise sit in the form doing nothing.
+        * There is no visible label — the dialog title names the field —
+        * so `aria-label` carries the name. */}
+      <form onSubmit={submit}>
+        <Input
+          ref={inputRef}
+          type="password"
+          className="font-mono text-sm"
+          aria-label={mode === 'change' ? 'New API key' : `${providerLabel(provider)} API key`}
+          placeholder={placeholder}
+          autoComplete="off"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+        />
+        {error && (
+          <StatusMessage tone="error" className="mt-2.5 max-h-overlay-xs overflow-y-auto wrap-anywhere">
+            {error}
+          </StatusMessage>
+        )}
+        <div className="mt-3.5 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={busy}
+          >{busy ? 'Validating…' : (mode === 'change' ? 'Save' : 'Continue')}</Button>
+        </div>
+      </form>
     </ModalShell>
   );
 }

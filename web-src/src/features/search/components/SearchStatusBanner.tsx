@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button } from '@/common/components/ui/button';
+import { SectionHeading } from '@/common/components/ui/section';
 import { StatusMessage } from '@/common/components/ui/status';
 import { openSettings } from '@/common/lib/settingsTrigger';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
@@ -13,9 +14,9 @@ function SearchBanner({ tone, title, detail, actions }: {
   actions?: ReactNode;
 }) {
   return (
-    <StatusMessage tone={tone} className="mx-3 mb-2 flex items-start justify-between gap-2.5 px-2.25 py-2">
+    <StatusMessage tone={tone} className="mx-3 mb-2 flex items-start justify-between gap-2.5 px-2.5 py-2">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="font-semibold">{title}</div>
+        <SectionHeading className="text-sm">{title}</SectionHeading>
         <div className="leading-snug opacity-90">{detail}</div>
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}

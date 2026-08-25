@@ -30,8 +30,10 @@ import { useOutlineDefaultExpansion } from '@/app/hooks/useOutlineDefaultExpansi
 import { useDocumentOutline } from '@/common/components/DocumentOutlineContext';
 import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { Button } from '@/common/components/ui/button';
+import { SectionHeading } from '@/common/components/ui/section';
 import { FILE_MIME } from '@/common/lib/dragMime';
 import { Suspense, useCallback, useState, type DragEvent } from 'react';
+import { cn } from '@/common/lib/utils';
 
 const DocumentOutline = lazyWithRetry(() =>
   import('@/common/components/DocumentOutline').then((mod) => ({ default: mod.DocumentOutline })));
@@ -69,7 +71,12 @@ export function Sidebar() {
 }
 
 /* Header action icons stay invisible until the pointer is over the
- * sidebar, mirroring VS Code's quiet explorer toolbar. */
+ * sidebar, mirroring VS Code's quiet explorer toolbar. Stays a class
+ * string: it is a reveal rule on ONE cluster in this file, and the cluster
+ * swaps it for a plain `flex gap-0.5` whenever a menu is open (icons must
+ * not vanish under an open menu). A component would have to take that
+ * override as a prop and forward it, which is the class string again with
+ * an element around it. */
 const sideActionsClass =
   'flex gap-0.5 opacity-0 transition-opacity duration-fast group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100';
 
@@ -77,17 +84,20 @@ const sideActionsClass =
  * the same 16px leading slot the pill rows use, so the header text lines
  * up with the row text gutter below it. Rotation lives on the chevron slot
  * (not `[&_svg]` on the button) so other glyphs in the header stay put —
- * callers rotate the slot from the same state that drives aria-expanded. */
+ * callers rotate the slot from the same state that drives aria-expanded.
+ *
+ * A sanctioned exemption from the `Button` primitive: this control is the
+ * full width of its own tinted strip, and the strip is what says "header".
+ * The `ghost` recipe paints `aria-expanded:bg-muted`, which every expanded
+ * section here would wear permanently as a second background on top of the
+ * strip it already sits on — so adopting the primitive starts by cancelling
+ * the one variant rule that reacts to this button's own state, and goes on
+ * to cancel its height, padding, weight, justification and hover fill. The
+ * header answers the pointer by changing its ink and swapping its glyph for
+ * a fold chevron; it is a disclosure heading, not a control chip. */
 const sectionToggleClass =
   'inline-flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left '
   + 'text-muted-foreground hover:text-foreground focus-visible:text-foreground';
-
-/* text-base — the SAME size as the rows: with the app-wide icons beside
- * them, a smaller label reads shrunken rather than subordinate. Regular
- * weight, not medium: these labels sit on their own tinted strip, and
- * that band already says "header" — adding weight on top only made the
- * bottom dock's three lines the heaviest ink in a quiet sidebar. */
-const sectionTitleClass = 'min-w-0 truncate text-base text-muted-foreground';
 
 /** The Explorer view. The active folder zone (current folder header +
  * file tree) and the active Markdown document outline share this one
@@ -136,15 +146,30 @@ function FilesPanel() {
         <section className="mt-auto flex flex-none flex-col overflow-hidden border-t border-border">
           {/* Same narrow tinted strip as the Library header below. */}
           <div className="group/outline flex min-h-[26px] items-center justify-between gap-1.5 bg-muted/45 pr-2 pl-3.5">
+            {/* A disclosure HEADING, which is what this strip has always
+              * been — so the heading element wraps the toggle rather than
+              * the label being a bold-ish span inside it, and the sidebar
+              * finally has an outline a screen reader can skim. `font-normal`
+              * holds the deliberate look below: the tinted band is what says
+              * "header" here, and weight on top made the bottom dock the
+              * heaviest ink in a quiet sidebar. */}
+            <SectionHeading level={2} className="flex min-w-0 flex-1 font-normal">
             <button type="button" className={sectionToggleClass} aria-expanded={outlineExpanded} aria-controls="sidebar-outline-section" onClick={() => setOutlineExpanded((expanded) => !expanded)}>
               {/* Same treatment as the Library header: glyph at rest,
                 * fold chevron under the pointer. */}
               <span className="inline-flex size-4 flex-none items-center justify-center">
                 <OutlineIcon className="size-3.5 group-hover/outline:hidden" />
-                <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/outline:inline-flex [&_svg]:size-3.5' + (outlineExpanded ? '' : ' -rotate-90')}><ChevronDownIcon /></span>
+                <span className={cn('hidden items-center justify-center transition-transform duration-fast group-hover/outline:inline-flex [&_svg]:size-3.5', !outlineExpanded && '-rotate-90')}><ChevronDownIcon /></span>
               </span>
-              <span className={sectionTitleClass + ' flex-1'}>Document Outline</span>
+              {/* text-base — the SAME size as the rows: with the app-wide
+                * icons beside them, a smaller label reads shrunken rather
+                * than subordinate. Regular weight, not medium: this label
+                * sits on its own tinted strip, and that band already says
+                * "header" — weight on top made the bottom dock's lines the
+                * heaviest ink in a quiet sidebar. */}
+              <span className="min-w-0 flex-1 truncate text-base text-muted-foreground">Document Outline</span>
             </button>
+            </SectionHeading>
           </div>
           {/* FIXED height (VS Code's outline view), not a content cap:
             * an expanded outline is always the same block, so switching
@@ -432,14 +457,14 @@ function ActiveFolderHeader({
   return (
     <div
       id="sideHead"
-      className={
+      className={cn(
         /* pr-0.5 (not pr-1): with the row's mx-1.5 that lands the action
          * cluster on the same 8px right inset as the Library header and
          * its rows, so every action icon in the sidebar shares one
          * column. */
-        'side-head group/head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-0.5 pl-2 hover:bg-muted'
-        + (sideHeadDrop ? ' drop-target' : '')
-      }
+        'side-head group/head mx-1.5 flex min-h-7 flex-none items-center gap-1 rounded-md py-0.5 pr-0.5 pl-2 hover:bg-muted',
+        sideHeadDrop && 'drop-target',
+      )}
       onDragOver={onSideHeadDragOver}
       onDragLeave={onSideHeadDragLeave}
       onDrop={onSideHeadDrop}
@@ -457,7 +482,7 @@ function ActiveFolderHeader({
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}
         >
           <FolderIcon className="size-3.5 group-hover/head:hidden" />
-          <span className={'hidden items-center justify-center transition-transform duration-fast group-hover/head:inline-flex [&_svg]:size-3.5' + (state.folderCollapsed ? ' -rotate-90' : '')}><ChevronDownIcon /></span>
+          <span className={cn('hidden items-center justify-center transition-transform duration-fast group-hover/head:inline-flex [&_svg]:size-3.5', state.folderCollapsed && '-rotate-90')}><ChevronDownIcon /></span>
         </Button>
         <Button
           type="button"
@@ -468,7 +493,15 @@ function ActiveFolderHeader({
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'ACTIVE_FOLDER', path: '' }); }}
         >{name}</Button>
         {favorite && (
-          <StarIcon className="size-3 shrink-0 fill-current text-muted-foreground" aria-label="Favorite" />
+          /* The label goes on a `role="img"` wrapper, not on the icon: every
+            * glyph in `icons.tsx` takes `className` alone and hardcodes
+            * `aria-hidden="true"`, so the `aria-label` this used to pass was
+            * dropped on the floor and the star announced nothing. TypeScript
+            * could not catch it either — it skips excess-property checks on
+            * hyphenated JSX attribute names. */
+          <span role="img" aria-label="Favorite" className="inline-flex shrink-0">
+            <StarIcon className="size-3 fill-current text-muted-foreground" />
+          </span>
         )}
       </span>
       {/* Only the high-frequency actions stay on the row — new note,

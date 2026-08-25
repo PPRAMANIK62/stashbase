@@ -41,6 +41,9 @@ before its metadata and payloads coexist.
 - Each platform builds the pinned transcription sidecar for its target. Native
   archives may use declared mirrors only when the accepted bytes match the
   pinned digest.
+- The packaged PDF/OCR extractor keeps its console-enabled stderr channel for
+  progress and failure reporting, while its Windows bootloader hides consoles
+  owned by both the entry process and frozen multiprocessing workers.
 - Packaging rejects missing/empty binaries, licenses, or notices; wrong binary
   formats; version/build-option drift; unacceptable FFmpeg licensing/features;
   and target ABI or minimum-OS drift.

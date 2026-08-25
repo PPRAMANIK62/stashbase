@@ -6,11 +6,12 @@ import { FolderSwitcher } from '@/features/workspace';
 import { openLibrarySearch } from '@/common/lib/librarySearchTrigger';
 import { TooltipButton } from '@/common/components/TooltipButton';
 
-/* [&_svg]:size-3.5 — the app-wide 14px icon size (one scale everywhere;
- * hierarchy comes from colour/weight/text, never glyph size). */
-const controlButtonClass =
-  'flex size-7 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 '
-  + 'text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-3.5';
+/* The `TooltipButton` default (ghost / icon-sm) already IS this control:
+ * a 28px transparent square that tints on hover. All that is left to say
+ * is the resting ink and the glyph size — [&_svg]:size-3.5 is the app-wide
+ * 14px icon size (one scale everywhere; hierarchy comes from
+ * colour/weight/text, never glyph size). */
+const controlButtonClass = 'cursor-pointer text-muted-foreground [&_svg]:size-3.5';
 
 /**
  * Cursor-style window-top controls in the titlebar band: sidebar toggle

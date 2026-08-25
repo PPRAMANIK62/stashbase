@@ -10,6 +10,7 @@ import { useLibraryMembership } from '@/features/workspace/hooks/useLibraryMembe
 import { refreshLibraryMembership } from '@/features/workspace/lib/libraryMembership';
 import { useOpenFolderWatchdog } from '@/features/workspace/hooks/useOpenFolderWatchdog';
 import { Menu, type MenuItem } from '@/common/components/Menu';
+import { Button } from '@/common/components/ui/button';
 
 export function FolderSwitcher() {
   const state = useWorkspace();
@@ -81,17 +82,22 @@ export function FolderSwitcher() {
 
   return (
     <>
-      <button
+      <Button
         ref={triggerRef}
-        type="button"
+        variant="ghost"
+        size="sm"
         /* Regular weight on the quiet titlebar — medium next to the muted
          * icon cluster read heavy; identity is carried by being the only
          * TEXT in the band. Separation from the search icon comes from
          * the cluster's hairline (TitlebarControls), not a margin here.
          * Explicit no-drag: the band doubles as the window drag region,
          * and the global button carve-out must not be this control's
-         * only cover. */
-        className="flex h-7 min-w-0 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 text-base text-foreground hover:bg-muted aria-expanded:bg-active disabled:cursor-default disabled:opacity-60 [-webkit-app-region:no-drag]"
+         * only cover.
+         * `size="sm"` is the 28px row this always was. The overrides are
+         * the titlebar deltas: regular weight, the selected surface a
+         * menu anchor takes while its menu is up, and a disabled state
+         * that stays hoverable so the "Opening …" title still appears. */
+        className="min-w-0 gap-1 px-1.5 text-base font-normal text-foreground aria-expanded:bg-active aria-expanded:text-foreground disabled:pointer-events-auto disabled:cursor-default disabled:opacity-60 [-webkit-app-region:no-drag]"
         aria-label="Switch folder"
         aria-haspopup="menu"
         aria-expanded={anchor !== null}
@@ -104,7 +110,7 @@ export function FolderSwitcher() {
       >
         <span className="max-w-44 truncate">{label}</span>
         <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
-      </button>
+      </Button>
       {anchor && (
         <Menu
           anchor={{ rect: anchor, align: 'left' }}

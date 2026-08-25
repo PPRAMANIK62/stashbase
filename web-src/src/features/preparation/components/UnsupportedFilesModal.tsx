@@ -38,7 +38,7 @@ export function UnsupportedFilesModal({ unsupportedFiles, onClose }: {
     // Combined Modal
     const extList = formatExtensions(otherExtensions);
     return (
-      <ModalShell title="Some files in this folder aren't supported" onCancel={onClose} top>
+      <ModalShell title="Some files in this folder aren't supported" onCancel={onClose}>
         {/* No description slot here (a list can't nest in its <p>), so the
           * list takes the description's top offset itself. */}
         <ul className="m-0 mt-2 list-disc space-y-2 pl-5 text-base leading-normal text-muted-foreground">
@@ -62,7 +62,6 @@ export function UnsupportedFilesModal({ unsupportedFiles, onClose }: {
         title="Source code files aren't supported"
         description={<>StashBase found <strong>{sourceCode} source-code and project files</strong> in this folder.</>}
         onCancel={onClose}
-        top
       >
         <p className="m-0 text-base leading-normal text-muted-foreground">
           StashBase currently shows and indexes supported documents and media, not source code. {REMAIN_ON_DISK_COPY}
@@ -80,7 +79,6 @@ export function UnsupportedFilesModal({ unsupportedFiles, onClose }: {
         title="Some file formats aren't supported yet"
         description={<>StashBase found <strong>{other} files in unsupported formats</strong>: {extList}.</>}
         onCancel={onClose}
-        top
       >
         <p className="m-0 text-base leading-normal text-muted-foreground">{REMAIN_ON_DISK_COPY}</p>
         {footer}

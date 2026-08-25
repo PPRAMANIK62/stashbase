@@ -6,14 +6,13 @@ import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { openLibrarySearch } from '@/common/lib/librarySearchTrigger';
 import { openSettings } from '@/common/lib/settingsTrigger';
 import {
-  PICKER_EMPTY_ROW_CLASS,
   PICKER_LABEL_CLASS,
   PICKER_RESULTS_CLASS,
-  PICKER_ROW_CLASS,
-  PICKER_ROW_DETAIL_CLASS,
   PICKER_VEIL_CLASS,
   pickerPanelClass,
 } from '@/common/lib/pickerChrome';
+import { PickerEmptyRow, PickerRow } from '@/common/components/PickerRow';
+import { cn } from '@/common/lib/utils';
 
 let recentCommandIdsMemory: string[] = [];
 
@@ -84,17 +83,27 @@ export default function ManagedQuickOpen({
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  return <div className={`quick-open-veil ${PICKER_VEIL_CLASS}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+  return <div className={cn('quick-open-veil', PICKER_VEIL_CLASS)} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
     <div className={pickerPanelClass('wide')} role="dialog" aria-label={route.provider === 'commands' ? 'Command Palette' : 'Quick Open'}>
-      <input ref={inputRef} className="w-full border-0 border-b border-solid border-border bg-transparent px-3.75 py-3.25 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder" role="combobox" aria-autocomplete="list" aria-controls="quick-open-results" aria-expanded="true" aria-activedescendant={itemCount ? `quick-open-${active}` : undefined} placeholder={route.provider === 'commands' ? 'Type a command' : 'Search files by name or path'} value={query}
+      {/* Deliberately NOT the `Input` primitive. `Input` is the box role —
+        * its own fill, border, `rounded-lg` corner, and h-9 step — and the
+        * palette query field is the opposite: a seam across the top of the
+        * panel, which is itself the box. Converting would mean neutralising
+        * six of the primitive's decisions and then suppressing all three of
+        * its focus cues, because the panel is the focus affordance here and
+        * its `overflow-hidden` corners clip a ring into a stray bar. See the
+        * `.quick-open-veil input:focus-visible` rule in
+        * `web-src/src/styles/globals.css`, which is unlayered precisely so it
+        * beats the global focus outline. */}
+      <input ref={inputRef} className="w-full border-0 border-b border-solid border-border bg-transparent px-3.5 py-3.5 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder" role="combobox" aria-autocomplete="list" aria-controls="quick-open-results" aria-expanded="true" aria-activedescendant={itemCount ? `quick-open-${active}` : undefined} placeholder={route.provider === 'commands' ? 'Type a command' : 'Search files by name or path'} value={query}
         onChange={(event) => { setQuery(event.target.value); setActive(0); }}
         onKeyDown={onKeyDown} />
       <div className={PICKER_LABEL_CLASS}>{route.provider === 'files' ? (route.query.trim() ? 'Files' : 'Recent editors') : route.provider === 'commands' ? 'Commands' : 'Quick Access'}</div>
       <ul id="quick-open-results" className={PICKER_RESULTS_CLASS} role="listbox" aria-label="Quick Open results">
-        {route.provider === 'files' && fileItems.map((item, index) => <li key={item.path} id={`quick-open-${index}`} role="option" aria-selected={index === active} className={PICKER_ROW_CLASS} onMouseMove={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); accept(item.path); }}><span>{item.basename}</span><small className={PICKER_ROW_DETAIL_CLASS}>{item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Active Library'}</small></li>)}
-        {route.provider === 'files' && fileItems.length === 0 && <li className={PICKER_EMPTY_ROW_CLASS} role="option" aria-disabled="true">{route.query.trim() ? 'No matching source files' : 'No recently used editors'}</li>}
-        {route.provider === 'commands' && commands.map((command, index) => <li key={command.id} id={`quick-open-${index}`} role="option" aria-selected={index === active} className={PICKER_ROW_CLASS} onMouseMove={() => setActive(index)} onMouseDown={(event) => { event.preventDefault(); runCommand(command.id); }}><span>{command.label}</span><small className={PICKER_ROW_DETAIL_CLASS}>{command.shortcut ?? command.category}</small></li>)}
-        {route.provider === 'commands' && commands.length === 0 && <li className={PICKER_EMPTY_ROW_CLASS} role="option" aria-disabled="true">No matching available commands</li>}
+        {route.provider === 'files' && fileItems.map((item, index) => <PickerRow key={item.path} id={`quick-open-${index}`} selected={index === active} label={item.basename} detail={item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Active Library'} onHover={() => setActive(index)} onPick={() => accept(item.path)} />)}
+        {route.provider === 'files' && fileItems.length === 0 && <PickerEmptyRow>{route.query.trim() ? 'No matching source files' : 'No recently used editors'}</PickerEmptyRow>}
+        {route.provider === 'commands' && commands.map((command, index) => <PickerRow key={command.id} id={`quick-open-${index}`} selected={index === active} label={command.label} detail={command.shortcut ?? command.category} onHover={() => setActive(index)} onPick={() => runCommand(command.id)} />)}
+        {route.provider === 'commands' && commands.length === 0 && <PickerEmptyRow>No matching available commands</PickerEmptyRow>}
       </ul>
       {route.provider === 'help' && <div className="px-2.5 py-3.5 leading-normal text-muted-foreground [&_kbd]:[font-family:inherit] [&_kbd]:font-semibold [&_kbd]:text-foreground" role="note">Type a file name to open a source file, or <kbd>&gt;</kbd> to run a command. Cmd/Ctrl+Shift+P and F1 open commands directly.</div>}
     </div>

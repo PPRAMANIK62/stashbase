@@ -658,7 +658,14 @@ test('conflict resolution callbacks apply correct edits and state transitions', 
 type DomGlobals = Record<string, PropertyDescriptor | undefined>;
 
 function installDomGlobals(window: Window): DomGlobals {
-  const names = ['window', 'document', 'navigator', 'MutationObserver', 'ResizeObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'IS_REACT_ACT_ENVIRONMENT'] as const;
+  // The DOM interface constructors matter as much as `document`: Base UI's
+  // useButton reaches floating-ui's `isHTMLElement`, which tests the BARE
+  // global rather than `window.HTMLElement`. Without them any Base UI
+  // control mounted here throws `HTMLElement is not defined` — which reads
+  // like a component bug and is really a hole in this fixture. The shared
+  // `common/__tests__/domEnvironment.ts` installs the full set; this file
+  // builds a window per test so it repeats the ones it needs.
+  const names = ['window', 'document', 'navigator', 'MutationObserver', 'ResizeObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle', 'Element', 'Node', 'HTMLElement', 'HTMLButtonElement', 'HTMLInputElement', 'IS_REACT_ACT_ENVIRONMENT'] as const;
   const previous: DomGlobals = {};
   const values: Record<(typeof names)[number], unknown> = {
     window,
@@ -668,6 +675,12 @@ function installDomGlobals(window: Window): DomGlobals {
     ResizeObserver: window.ResizeObserver,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    Element: window.Element,
+    Node: window.Node,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    HTMLInputElement: window.HTMLInputElement,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   for (const name of names) {

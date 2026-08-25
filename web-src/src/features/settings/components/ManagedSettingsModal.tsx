@@ -10,6 +10,7 @@ import { McpAccessPanel } from '@/features/settings/components/McpAccessPanel';
 import { TranscriptionPanel } from '@/features/settings/components/TranscriptionPanel';
 import { Button } from '@/common/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/common/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/common/components/ui/tabs';
 
 const SECTIONS: { id: SettingsSection; label: string; render: () => ReactNode }[] = [
   { id: 'general', label: 'General', render: () => <GeneralPanel /> },
@@ -26,7 +27,6 @@ export default function ManagedSettingsModal({
   onClose,
 }: SettingsModalProps) {
   const [current, setCurrent] = useState<SettingsSection>(initialSection);
-  const active = SECTIONS.find((section) => section.id === current) ?? SECTIONS[0];
 
   return (
     <Dialog
@@ -37,7 +37,7 @@ export default function ManagedSettingsModal({
       }}
     >
       <DialogContent
-        className="flex h-[min(78vh,640px)] w-[min(760px,94vw)] !max-w-[94vw] flex-col !gap-0 overflow-hidden border border-border bg-background p-0 shadow-elevation"
+        className="flex h-[min(78vh,640px)] w-overlay-2xl flex-col overflow-hidden border border-border p-0 shadow-elevation"
         showCloseButton={false}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
@@ -53,25 +53,35 @@ export default function ManagedSettingsModal({
             <CloseIcon aria-hidden="true" />
           </Button>
         </div>
-        <div className="grid min-h-0 flex-1 grid-cols-[180px_1fr]">
-          <nav className="flex flex-col gap-0.5 border-r border-border bg-pane px-2 py-3" role="tablist" aria-orientation="vertical">
+        {/* Base UI owns roving focus and arrow-key movement between
+          * sections, plus the aria-controls/aria-labelledby pairing. The
+          * hand-rolled tablist this replaces had none of them: the section
+          * list announced itself as tabs and then could not be operated as
+          * tabs. Inactive panels stay unmounted (Panel's default), which is
+          * load-bearing here — each one fetches on mount. */}
+        <Tabs
+          value={current}
+          onValueChange={(value) => { setCurrent(value as SettingsSection); }}
+          orientation="vertical"
+          className="grid min-h-0 flex-1 grid-cols-[180px_1fr]"
+        >
+          <TabsList className="border-r border-border bg-pane px-2 py-3">
             {SECTIONS.map((section) => (
-              <button
-                key={section.id}
-                type="button"
-                role="tab"
-                aria-selected={section.id === current}
-                className="cursor-pointer rounded-md border-0 bg-transparent px-3 py-1.75 text-left text-base text-foreground transition-colors duration-fast hover:bg-muted aria-selected:bg-active aria-selected:hover:bg-active"
-                onClick={() => setCurrent(section.id)}
-              >
+              <TabsTrigger key={section.id} value={section.id}>
                 {section.label}
-              </button>
+              </TabsTrigger>
             ))}
-          </nav>
-          <div className="min-w-0 overflow-y-auto px-6 py-5" role="tabpanel">
-            {active.render()}
-          </div>
-        </div>
+          </TabsList>
+          {SECTIONS.map((section) => (
+            <TabsContent
+              key={section.id}
+              value={section.id}
+              className="overflow-y-auto px-6 py-5"
+            >
+              {section.render()}
+            </TabsContent>
+          ))}
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

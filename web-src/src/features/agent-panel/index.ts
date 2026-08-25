@@ -4,9 +4,8 @@
  * `ChatPane` carries the agent runtime, which is the whole reason it
  * loads at its interaction boundary — the feature owns that boundary
  * here so a consumer cannot accidentally make it eager. The session
- * history popover has its own react-aria boundary, but it now lives
- * beside its only caller (`ScopeHistoryButton`) rather than in this
- * barrel.
+ * history popover has its own boundary, but it now lives beside its only
+ * caller (`ScopeHistoryButton`) rather than in this barrel.
  *
  * The two sidebar entry points are eager on purpose: `NewChatButton` is
  * the shell's one chat-creation row and `ScopeHistoryButton` sits on

@@ -41,6 +41,10 @@
 - Chat-primary and docked layouts retain the same mounted session, composer,
   draft, transcript, streaming state, attachments, scroll position, and
   remembered side-panel width.
+- The composer holds one width across empty chat and full transcript, and the
+  transcript's reading column matches that card. Sending the first message
+  changes the composer's vertical placement and resting height, never its
+  measure.
 - Opening a document docks Chat. Closing the last document expands an open
   Chat. Compact view may prioritize a newly opened document, but a subsequent
   explicit Chat reveal wins until the user changes visibility again.
@@ -50,10 +54,18 @@
 ## Composer and Controls
 
 - The sidebar New Chat split button is the only creation/Agent-selection
-  surface. Its chevron changes preference without creating a chat.
+  surface. Its agent picker — the named agent and its chevron form one
+  control — changes preference without creating a chat. The row carries no
+  hover surface of its own: each target in it highlights only its own box,
+  and a rule separates the New Chat/agent pair from chat history.
 - The scope picker is available before session binding and remains visible but
   locked after binding. Model and effort come from runtime capabilities;
-  Default remains an omitted override. Locked controls stay legible and inert.
+  Default remains an omitted override. Locked controls stay legible and inert —
+  the locked PILL goes inert and says why, rather than opening onto a dimmed
+  list.
+- One session setting is one pill over one menu. Model, mode, and effort are
+  independent, so none of them shares another's popup or appends its value to
+  another's trigger label; a pill names only the setting it changes.
 - CodeMirror owns composer text, selection, undo, and `@`/`/` key handoff. The
   UI remains a capped-height chat input, not an editor workbench.
 - Suggestions only prefill a draft; they never send. Their rotation pauses

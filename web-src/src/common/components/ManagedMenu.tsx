@@ -9,6 +9,8 @@ import {
   MenuPositioner,
   MenuSeparator,
 } from '@/common/components/ui/menu';
+import { MenuSectionLabel } from '@/common/components/ui/menu-radio';
+import { cn } from '@/common/lib/utils';
 
 export default function ManagedMenu({
   anchor,
@@ -60,7 +62,7 @@ export default function ManagedMenu({
              * switcher's add-folder actions, ending in the one hairline)
              * stay put above it, so the escape-hatch actions never
              * scroll away and the hairline reads as the scroll edge. */
-            className="flex max-h-[min(440px,70vh)] max-w-[min(400px,calc(100vw-24px))] flex-col"
+            className="flex max-h-overlay-md max-w-overlay-md flex-col"
             style={{ minWidth }}
           >
             {pinnedItems && pinnedItems.length > 0 && (
@@ -84,13 +86,7 @@ function renderMenuItems(
               item.separator
                 ? <MenuSeparator key={`separator-${index}`} />
                 : 'heading' in item && item.heading !== undefined
-                ? (
-                  /* Same quiet section-label recipe as the composer pill
-                   * menus (pillMenuStyles.menuSectionClass). */
-                  <div key={`heading-${index}`} className="px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground" role="presentation">
-                    {item.heading}
-                  </div>
-                )
+                ? <MenuSectionLabel key={`heading-${index}`}>{item.heading}</MenuSectionLabel>
                 : (
                   <MenuPrimitiveItem
                     key={`${item.label}-${index}`}
@@ -117,18 +113,19 @@ function renderMenuItems(
                           <span
                             className="size-1.5 shrink-0 rounded-full bg-status-danger/80"
                             title="Needs attention"
+                            role="img"
                             aria-label="Needs attention"
                           />
                         )}
                       </span>
                       {item.detail && (
-                        <span className={`truncate text-xs text-muted-foreground ${item.icon ? 'pl-6' : ''}`}>
+                        <span className={cn('truncate text-xs text-muted-foreground', item.icon && 'pl-6')}>
                           {item.detail}
                         </span>
                       )}
                     </span>
                     {item.shortcut && (
-                      <span className="shrink-0 text-xs tracking-[0.04em] text-muted-foreground">
+                      <span className="shrink-0 text-xs tracking-wider text-muted-foreground">
                         {item.shortcut}
                       </span>
                     )}

@@ -3,6 +3,11 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 
 import { cn } from "@/common/lib/utils"
 
+/* The grouping and single-choice parts live in `menu-radio.tsx`. They are
+ * one primitive conceptually, but this module is reachable from the eager
+ * sidebar while those parts are only ever used behind an interaction
+ * boundary — keeping them in a sibling file is what stops them being
+ * charged to the initial chunk (scripts/check-renderer-chunks.mjs). */
 function Menu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="menu" {...props} />
 }
@@ -19,11 +24,12 @@ function MenuPositioner({ className, ...props }: MenuPrimitive.Positioner.Props)
   return (
     <MenuPrimitive.Positioner
       data-slot="menu-positioner"
-      // Above the modal veils (z-1200): the menu portals to <body>, so a
+      // Above the modal veils (z-menu): the menu portals to <body>, so a
       // lower value leaves it stacked BEHIND whatever opened it whenever
       // the trigger lives inside a veil — the search popup's scope pill
-      // did exactly that. Only the crash overlay (10000) outranks it.
-      className={cn("z-1300", className)}
+      // did exactly that. Tooltips and toasts sit above it; see the layer
+      // ramp in globals.css.
+      className={cn("z-menu", className)}
       {...props}
     />
   )
@@ -34,7 +40,18 @@ function MenuPopup({ className, ...props }: MenuPrimitive.Popup.Props) {
     <MenuPrimitive.Popup
       data-slot="menu-popup"
       className={cn(
-        "flex min-w-44 flex-col gap-px rounded-xl border border-border bg-card p-1 text-base text-foreground shadow-elevation outline-none transition-[opacity,transform] duration-fast ease-ui data-[starting-style]:-translate-y-0.5 data-[starting-style]:opacity-0 data-[ending-style]:-translate-y-0.5 data-[ending-style]:opacity-0",
+        // Origin-aware: Base UI resolves --transform-origin to the corner the
+        // popup actually landed on after collision handling, so the menu
+        // grows out of the control that opened it instead of inflating from
+        // its own middle. It starts at 96%, never at 0 — nothing in the
+        // world appears from nothing, and a menu that does reads as a glitch.
+        //
+        // The exit is one role step QUICKER than the entrance (fast 120ms in,
+        // instant 100ms out). Opening is the app answering a request and can
+        // afford to be seen; closing is the request already granted, and a
+        // symmetric exit leaves the menu hanging over whatever the user
+        // pressed next.
+        "flex min-w-44 flex-col gap-px rounded-xl border border-border bg-popover p-1 text-base text-popover-foreground shadow-elevation outline-none origin-anchor transition-surface data-[starting-style]:scale-96 data-[starting-style]:opacity-0 data-[ending-style]:scale-96 data-[ending-style]:opacity-0 data-[ending-style]:duration-instant",
         className
       )}
       {...props}
@@ -67,10 +84,10 @@ function MenuSeparator({ className, ...props }: MenuPrimitive.Separator.Props) {
 
 export {
   Menu,
-  MenuTrigger,
   MenuItem,
   MenuPopup,
   MenuPortal,
   MenuPositioner,
   MenuSeparator,
+  MenuTrigger,
 }

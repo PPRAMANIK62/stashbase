@@ -48,6 +48,7 @@ function catalogProcess(
     skillsListError?: string;
     threadModel?: string;
     selectedTurnError?: string;
+    interruptError?: string;
     turnIds?: string[];
   } = {},
 ): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
@@ -70,6 +71,8 @@ function catalogProcess(
     } else if (request.method === 'turn/start' && options.selectedTurnError && request.params.model && !rejected) {
       rejected = true;
       proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.selectedTurnError } })}\n`);
+    } else if (request.method === 'turn/interrupt' && options.interruptError) {
+      proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.interruptError } })}\n`);
     } else {
       proc.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
     }
@@ -898,7 +901,7 @@ test('Codex Session failed turn completed with message preserves it', async (t) 
   session.dispose();
 });
 
-test('Codex Session preserves native warnings as non-fatal notices', async (t) => {
+test('Codex Session suppresses successful automatic approval reviews but preserves actionable native warnings', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-notice-'));
   runWithWindowId('notice-window', () => setCurrentFolder(folder));
   t.after(() => {
@@ -917,11 +920,43 @@ test('Codex Session preserves native warnings as non-fatal notices', async (t) =
   session.begin();
   await settle();
 
+  assert.deepEqual(
+    (native.requests.find((request) => request.method === 'initialize')?.params.capabilities as Record<string, unknown>)
+      ?.optOutNotificationMethods,
+    ['guardianWarning'],
+    'the structured auto-review event replaces the duplicate prose summary',
+  );
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'item/autoApprovalReview/completed',
+    params: {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      review: {
+        status: 'approved',
+        riskLevel: 'low',
+        userAuthorization: 'high',
+        rationale: 'The user explicitly requested this reversible documentation edit.',
+      },
+    },
+  })}\n`);
+  native.proc.stdout.write(`${JSON.stringify({
+    method: 'item/autoApprovalReview/completed',
+    params: {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      review: {
+        status: 'denied',
+        riskLevel: 'high',
+        userAuthorization: 'low',
+        rationale: 'The requested action could remove unrelated files.',
+      },
+    },
+  })}\n`);
   native.proc.stdout.write(`${JSON.stringify({
     method: 'guardianWarning',
     params: {
       threadId: 'thread-1',
-      message: 'Automatic approval review approved (risk: low, authorization: high).',
+      message: 'Legacy automatic approval review denied an unsafe action.',
     },
   })}\n`);
   native.proc.stdout.write(`${JSON.stringify({
@@ -942,7 +977,8 @@ test('Codex Session preserves native warnings as non-fatal notices', async (t) =
 
   const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
   assert.deepEqual(events.filter((event) => event.t === 'notice'), [
-    { t: 'notice', message: 'Automatic approval review approved (risk: low, authorization: high).' },
+    { t: 'notice', message: 'Automatic approval blocked an action.\n\nThe requested action could remove unrelated files.' },
+    { t: 'notice', message: 'Legacy automatic approval review denied an unsafe action.' },
     { t: 'notice', message: 'Skill descriptions were shortened to fit the skills context budget.' },
     { t: 'notice', message: 'Configuration needs attention.\n\nOne setting was ignored.' },
   ]);
@@ -1251,5 +1287,74 @@ test('Codex Session user interruption stays non-error across terminal notificati
     { t: 'turn-end', isError: false },
   ]);
 
+  session.dispose();
+});
+
+test('Codex Session treats an already-idle interrupt rejection as a completed stop', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-already-idle-'));
+  runWithWindowId('already-idle-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('already-idle-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { interruptError: 'no active turn to interrupt' });
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'already-idle-window',
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  ws.sent = [];
+
+  ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string; isError?: boolean });
+  assert.deepEqual(events.filter((event) => event.t === 'error'), []);
+  assert.deepEqual(events.filter((event) => event.t === 'turn-end'), [{ t: 'turn-end', isError: false }]);
+  const runtime = session as unknown as { busy: boolean; activeTurnId: string | null };
+  assert.equal(runtime.busy, false);
+  assert.equal(runtime.activeTurnId, null);
+  session.dispose();
+});
+
+test('Codex Session keeps other interrupt rejections visible', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-interrupt-failure-'));
+  runWithWindowId('interrupt-failure-window', () => setCurrentFolder(folder));
+  t.after(() => {
+    runWithWindowId('interrupt-failure-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  const ws = new FakeWebSocket();
+  const native = catalogProcess(undefined, { interruptError: 'interrupt transport unavailable' });
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'interrupt-failure-window',
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  ws.sent = [];
+
+  ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  await settle();
+
+  const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
+  assert.deepEqual(events.filter((event) => event.t === 'error'), [
+    { t: 'error', message: 'interrupt transport unavailable' },
+  ]);
+  assert.deepEqual(events.filter((event) => event.t === 'turn-end'), []);
+  assert.equal((session as unknown as { busy: boolean }).busy, true);
   session.dispose();
 });

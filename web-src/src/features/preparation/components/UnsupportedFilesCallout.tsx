@@ -1,4 +1,6 @@
 import { useReducer } from 'react';
+import { Button } from '@/common/components/ui/button';
+import { SectionHeading } from '@/common/components/ui/section';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 
 const DISMISS_KEY = 'stashbase.unsupported-callout-dismissed';
@@ -80,31 +82,35 @@ export default function UnsupportedFilesCallout() {
 
   return (
     <div className="relative mx-1.5 mb-2 rounded-lg border border-border bg-muted/45 py-2 pr-7 pl-2.5 text-xs leading-snug text-muted-foreground">
-      <div className="font-semibold text-foreground">{title}</div>
+      <SectionHeading className="text-xs">{title}</SectionHeading>
       <div className="mt-0.5">
         {detail}{' '}
-        <button
-          type="button"
-          className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent underline underline-offset-2"
+        {/* Inline in the sentence, so `size="xs"` is taken for the type step
+          * alone and the height/padding come straight back off. */}
+        <Button
+          variant="link"
+          size="xs"
+          className="h-auto cursor-pointer border-0 p-0 font-semibold text-accent underline underline-offset-2"
           onClick={() => dispatch({ type: 'UNSUPPORTED_MODAL', open: true })}
-        >Details</button>
+        >Details</Button>
       </div>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon-xs"
         aria-label="Dismiss"
-        /* bg-active on hover, not bg-muted: nested inside a surface that
-         * is already muted-tinted, so it needs the one-step-darker state
-         * to read (same rule as the New Chat chevron). */
-        className={
-          'absolute top-1 right-1 inline-flex size-5 cursor-pointer items-center justify-center rounded-sm border-0 '
-          + 'bg-transparent text-muted-foreground hover:bg-active hover:text-foreground'
-        }
+        /* Held at 20px rather than the icon-xs 24, so it keeps the
+         * sub-24px control corner (`rounded-sm`) the corner rule assigns.
+         * bg-active on hover, not the ghost variant's bg-muted: nested
+         * inside a surface that is already muted-tinted, so it needs the
+         * one-step-darker state to read (same rule as the New Chat
+         * chevron). */
+        className="absolute top-1 right-1 size-5 cursor-pointer rounded-sm border-0 text-muted-foreground hover:bg-active hover:text-foreground"
         onClick={() => { rememberDismissed(folderPath, signature); bumpDismissals(); }}
       >
         <svg viewBox="0 0 16 16" className="size-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
           <path d="M4 4l8 8M12 4l-8 8" />
         </svg>
-      </button>
+      </Button>
     </div>
   );
 }

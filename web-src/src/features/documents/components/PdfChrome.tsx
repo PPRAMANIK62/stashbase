@@ -3,11 +3,15 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/common/components/ui/button';
 import { Input } from '@/common/components/ui/input';
 import type { PdfPreparationStatus } from '@/features/documents/hooks/usePdfPreparation';
+import { cn } from '@/common/lib/utils';
 
 /** Every control in the PDF chrome row. Normal weight because a toolbar
  *  of numbers reads as data, not as labels, and quiet until pointed at:
  *  these sit bare on the chrome band, so a resting background on each one
- *  would put a row of boxes where the band's whole job is to disappear. */
+ *  would put a row of boxes where the band's whole job is to disappear.
+ *  Three utilities handed to `Button`, which already owns the control; the
+ *  five call sites each add their own width, ink step, or pressed state on
+ *  top, so there is no one element for a component to hold. */
 const PDF_TOOL_ITEM = 'font-normal text-muted-foreground hover:text-foreground';
 
 /** Render the PDF chrome (zoom controls + page count) into the
@@ -80,25 +84,30 @@ export function PdfChromePortal({
         * message lands, or the status arrives silently. Empty is empty —
         * no transparent placeholder text holding the row open. */}
       <div
-        className={
-          'flex min-w-0 flex-1 items-center gap-1.5 leading-tight' +
-          (status?.kind === 'error' ? ' text-destructive' : ' text-muted-foreground')
-        }
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-1.5 leading-tight',
+          status?.kind === 'error' ? 'text-destructive' : 'text-muted-foreground',
+        )}
         role="status"
       >
         {status?.kind === 'working' && (
-          <span className="image-preparation-dot size-1.75 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+          <span className="image-preparation-dot size-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />
         )}
         <span className="truncate">{status?.text ?? ''}</span>
         {status?.kind === 'error' && onRetry && (
-          <button
-            type="button"
-            className="shrink-0 cursor-pointer border-0 bg-transparent p-0 [font:inherit] text-inherit underline underline-offset-2 disabled:cursor-progress disabled:opacity-60"
+          <Button
+            variant="link"
+            /* Inline in the status sentence, so it takes the row's own size
+             * and colour rather than the link variant's primary: the row is
+             * already destructive-tinted when this renders. `pointer-events`
+             * is handed back while disabled on purpose — the progress cursor
+             * is the only feedback that the reprocess is under way. */
+            className="h-auto shrink-0 cursor-pointer border-0 p-0 font-normal text-inherit underline underline-offset-2 disabled:pointer-events-auto disabled:cursor-progress disabled:opacity-60"
             disabled={retryPending}
             onClick={() => { void onRetry(); }}
           >
             {retryPending ? 'Reprocessing…' : 'Reprocess'}
-          </button>
+          </Button>
         )}
       </div>
       {/* No container: the row sits on the viewer's own canvas, and the
@@ -109,7 +118,7 @@ export function PdfChromePortal({
         <Button
           variant="ghost"
           size="icon-xs"
-          className={PDF_TOOL_ITEM + ' text-lg'}
+          className={cn(PDF_TOOL_ITEM, 'text-lg')}
           title="Zoom out"
           aria-label="Zoom out"
           disabled={!canZoomOut}
@@ -122,7 +131,7 @@ export function PdfChromePortal({
         <Button
           variant="ghost"
           size="xs"
-          className={PDF_TOOL_ITEM + ' min-w-10 px-1 tabular-nums'}
+          className={cn(PDF_TOOL_ITEM, 'min-w-10 px-1 tabular-nums')}
           title="Actual size (100%)"
           aria-label="Actual size"
           onClick={onActualSize}
@@ -132,7 +141,7 @@ export function PdfChromePortal({
         <Button
           variant="ghost"
           size="icon-xs"
-          className={PDF_TOOL_ITEM + ' text-lg'}
+          className={cn(PDF_TOOL_ITEM, 'text-lg')}
           title="Zoom in"
           aria-label="Zoom in"
           disabled={!canZoomIn}
@@ -148,11 +157,11 @@ export function PdfChromePortal({
         <Button
           variant="ghost"
           size="xs"
-          className={
-            PDF_TOOL_ITEM
-            + ' ml-0.5 px-2'
-            + ' aria-pressed:bg-active aria-pressed:text-foreground aria-pressed:hover:bg-active'
-          }
+          className={cn(
+            PDF_TOOL_ITEM,
+            'ml-0.5 px-2',
+            'aria-pressed:bg-active aria-pressed:text-foreground aria-pressed:hover:bg-active',
+          )}
           title="Fit to width"
           aria-pressed={autoFit}
           onClick={onFit}
@@ -188,7 +197,7 @@ export function PdfChromePortal({
               <Button
                 variant="ghost"
                 size="xs"
-                className={PDF_TOOL_ITEM + ' px-2 tabular-nums'}
+                className={cn(PDF_TOOL_ITEM, 'px-2 tabular-nums')}
                 title="Jump to page"
                 aria-label={`Page ${currentPage} of ${numPages} — jump to page`}
                 onClick={() => {
