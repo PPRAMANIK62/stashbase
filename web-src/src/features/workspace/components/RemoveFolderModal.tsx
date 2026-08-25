@@ -33,7 +33,10 @@ export function RemoveFolderModal({
       }
       onCancel={removing ? () => { /* wait for removal */ } : onCancel}
     >
-      <div className="mt-2 truncate text-sm text-muted-foreground" title={path}>
+      {/* A filesystem path is DATA, not prose: it speaks the mono voice
+        * on a quiet chip (xs radius — the inline-run tier), so the exact
+        * location being removed reads apart from the sentence above. */}
+      <div className="mt-2 inline-block max-w-full truncate rounded-xs bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground" title={path}>
         {parentLabel}
       </div>
       <div className="mt-4 flex justify-end gap-2">
