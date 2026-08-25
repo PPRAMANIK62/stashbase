@@ -2,6 +2,10 @@ export interface RankedQueryResult {
   id: string;
   query: string;
   relevant: readonly string[];
+  /** Distinct source paths in rank order. Retrieval ranks CHUNKS, so the
+   *  caller must collapse chunks to their source before scoring; otherwise
+   *  one multi-chunk document silently consumes several of the K slots and
+   *  Recall@K stops meaning "in the top K documents". */
   ranked: readonly string[];
   exactRanked?: readonly string[];
 }
@@ -23,9 +27,12 @@ export function scoreRankedQueries(results: readonly RankedQueryResult[], topK: 
 
   const queries = results.map((result): ScoredQuery => {
     if (result.relevant.length === 0) throw new Error(`${result.id}: relevant must not be empty`);
+    if (new Set(result.ranked).size !== result.ranked.length) {
+      throw new Error(`${result.id}: ranked results must be collapsed to distinct sources before scoring`);
+    }
     const relevant = new Set(result.relevant);
     const top = result.ranked.slice(0, topK);
-    const relevantRetrieved = new Set(top.filter((source) => relevant.has(source))).size;
+    const relevantRetrieved = top.filter((source) => relevant.has(source)).length;
     const rankIndex = top.findIndex((source) => relevant.has(source));
     const firstRelevantRank = rankIndex < 0 ? null : rankIndex + 1;
     return {

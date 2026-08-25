@@ -26,3 +26,12 @@ test('semantic eval rejects empty judgments and invalid K', () => {
     /topK must be a positive integer/,
   );
 });
+
+test('semantic eval refuses chunk-level rankings that repeat a source', () => {
+  // Retrieval ranks chunks; a repeated source means the caller forgot to
+  // collapse them and K would no longer count distinct documents.
+  assert.throws(
+    () => scoreRankedQueries([{ id: 'dup', query: 'q', relevant: ['a'], ranked: ['b', 'b', 'a'] }], 3),
+    /collapsed to distinct sources/,
+  );
+});
