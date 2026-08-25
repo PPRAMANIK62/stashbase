@@ -23,8 +23,12 @@ manager, or a primary graph-navigation tool.
   folder or installs an Agent runtime.
 - On first launch with a brand-new empty default folder home, StashBase seeds
   the ordinary local **👋 Start Here** folder and adds it to the library
-  without automatically opening it. An existing folder home is never modified,
-  and deleting the seeded folder does not recreate it.
+  without automatically opening it. Its concise Welcome is the human entry;
+  detailed user-owned Markdown makes grounded product, workflow, capability,
+  comparison, and recovery context available to Library-scoped Agent
+  retrieval. An existing folder home is never modified, deleting the seeded
+  folder does not recreate it, and application updates never overwrite the
+  user's copy.
 - Files exposes Chat, the active folder tree, and account utilities without
   making sign-in a condition of local work. With no active folder, the
   workspace distinguishes an empty library from an existing library awaiting

@@ -238,6 +238,23 @@
 
   em.term { font-style: italic; }
 
+  .prompts {
+    list-style: none;
+    margin: 1.6rem 0 2rem;
+    padding: 0;
+  }
+  .prompts li {
+    margin: 0 0 0.75rem;
+    padding: 0.78rem 0.95rem;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--hair);
+    font-family: ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: var(--accent-ink);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .letter { animation: none; }
     .letterhead .mark path,
@@ -274,26 +291,36 @@
     </div>
 
     <header>
-      <h1>Welcome to StashBase</h1>
-      <p class="sub">A short letter from the team.</p>
+      <h1>Start here</h1>
+      <p class="sub">Your local files, ready for you and your Agents.</p>
     </header>
 
-    <p class="opening">StashBase is a workspace for knowledge you keep as ordinary files. Add a folder you already use, or create a new one. StashBase works with it in place instead of moving your content into a proprietary database.</p>
+    <p class="opening">StashBase turns local files into Agent-ready context. Add a folder you already use, or create a new one. Your files stay where they are and remain the source of truth.</p>
 
-    <p>You can read documents, find evidence across your library, and work with Claude Code or Codex against an explicit scope. The source files remain the durable result of that work.</p>
+    <p>StashBase helps you browse those files, prepare difficult formats, find source evidence, and work with Claude Code, Codex, or another MCP client against an explicit scope.</p>
 
-    <p class="lead">Your files stay the source of truth.<br><span class="rest">StashBase makes them easier to use.</span></p>
+    <p class="lead">Local files &rarr; prepared evidence &rarr; retrieval &rarr; Agents.<br><span class="rest">Reviewed results return to ordinary files.</span></p>
 
-    <p>Four principles shape the product:</p>
+    <p class="turn">You do not need to read a manual.</p>
 
-    <ul class="beliefs">
-      <li><b>Your files are yours.</b> They stay in ordinary folders on your disk. Prepared text and AI Index data are rebuildable support data, never replacements for the source.</li>
-      <li><b>You choose the boundary.</b> StashBase works only inside folders you add. Background preparation and indexing stay within that authorized library.</li>
-      <li><b>Local work comes first.</b> Browsing, preview, editing, and exact search do not require a StashBase account or AI Index.</li>
-      <li><b>Agents work under your direction.</b> You choose the Agent, its scope, and what it may change. StashBase does not ask an Agent to organize files in the background.</li>
+    <p>The Chat that opened with StashBase can use the detailed guides in this folder. Try asking:</p>
+
+    <ul class="prompts">
+      <li>How do I use StashBase?</li>
+      <li>What works without AI Index or an account?</li>
+      <li>How is StashBase different from NotebookLM or Obsidian?</li>
     </ul>
 
-    <p>This Start Here folder is made from the same ordinary files. Explore it, search it, or delete it when you no longer need it.</p>
+    <p>Or begin on your own:</p>
+
+    <ul class="beliefs">
+      <li><b>Choose useful context.</b> Open this folder from the Library menu, or use <b>Add Folder&hellip;</b> for one of your own local folders.</li>
+      <li><b>Reach a local first result.</b> Open a source or use Exact Search. Browsing, preview, editing, and Exact Search need neither an account nor AI Index.</li>
+      <li><b>Add AI only when it helps.</b> AI Index adds meaning-based Similar Search. A scoped Chat adds an Agent. Both are optional and have their own setup.</li>
+      <li><b>Keep the result.</b> Ask an Agent to write only accepted conclusions into an ordinary file, then review and save it.</li>
+    </ul>
+
+    <p>The other files in this folder give Agents detailed, current-at-installation answers about workflows, formats, privacy, limitations, troubleshooting, and product comparisons. This folder is ordinary user-owned content too: keep it, change it, remove it from the Library, or delete it from disk when you no longer need it.</p>
 
     <div class="signoff">
       <p class="closing">Yours,</p>

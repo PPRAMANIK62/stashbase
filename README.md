@@ -82,15 +82,19 @@ The first window opens with no folder selected and one reusable blank Chat.
    AI Index for now**; exact text search and local file work remain available.
 2. **Ask how StashBase works**: In the Chat that is already open, ask **“How do
    I use StashBase?”** It starts against the whole Library, including Start
-   Here. StashBase uses a supported system Claude Code or Codex runtime when
-   available; if it is missing, installation waits for **Install and
-   continue**. Agent provider login is separate from StashBase sign-in and AI
-   Index configuration.
+   Here's detailed Agent-readable product, workflow, capability, comparison,
+   and troubleshooting guides. You can also ask why StashBase differs from
+   direct Agent file access, NotebookLM, or Obsidian. StashBase uses a supported
+   system Claude Code or Codex runtime when available; if it is missing,
+   installation waits for **Install and continue**. Agent provider login is
+   separate from StashBase sign-in and AI Index configuration.
 3. **Open source files when you need them**: On a brand-new empty default
    folder home, StashBase adds **👋 Start Here** to the Library without opening
    it automatically. Open it from the titlebar's **Library** menu, or use **Add
-   Folder…** to work with one of your own local folders. Selecting a source
-   brings it alongside the same conversation.
+   Folder…** to work with one of your own local folders. Start Here's short
+   Welcome is the human entry; its other ordinary Markdown files are detailed
+   context for Chat and remain readable when needed. Selecting a source brings
+   it alongside the same conversation.
 
 StashBase processes only folders in its Library. Apart from the bundled Start
 Here introduction, folders join only when you explicitly add or open them. You
