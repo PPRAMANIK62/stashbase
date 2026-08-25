@@ -124,6 +124,7 @@ aliases, and Journey E2E owns representative composition.
   decisions, format detection, content-write boundaries, and their
   failure/confirmation paths.
 - **Journey E2E:** [document editing smoke](../e2e/smoke/document-editing.spec.ts),
+  [workspace navigation depth](../e2e/journeys/navigation-depth.spec.ts),
   [Markdown and JSON](../e2e/journeys/markdown-json.spec.ts),
   [outline and Find](../e2e/journeys/markdown-outline-find.spec.ts),
   [library mutations](../e2e/journeys/library-mutations.spec.ts), and

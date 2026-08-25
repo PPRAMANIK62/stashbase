@@ -166,6 +166,8 @@ An authorized folder contains a source listed in the
 ### Required Observable Results
 
 - The visible source file remains the identity behind every view and save.
+- Repeated or concurrent navigation to that source resolves to one persistent
+  tab; a same-named source in another Library folder remains distinct.
 - Preview-only formats never expose a content-editing affordance. Workbench
   content editing, Agent/MCP content writes, and file-level rename/move/delete
   remain distinguishable capabilities.

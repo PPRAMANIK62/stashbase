@@ -91,6 +91,9 @@ manager, or a primary graph-navigation tool.
   user's existing configuration for recovery.
 - Source and derived state remain distinguishable. The tree and tabs show
   source files, not generated representations.
+- Repeated or concurrent navigation to one source focuses its existing
+  persistent tab. The same relative path in different Library folders remains
+  a distinct source.
 - Chat visibility is explicit after initialization. Closing the last document
   expands an open Chat; hiding Chat stays respected until the user reopens it.
 - Keyboard focus, overlay dismissal, splitters, and reduced-motion behavior are

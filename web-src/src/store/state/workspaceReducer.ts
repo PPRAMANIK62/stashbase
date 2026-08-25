@@ -24,12 +24,20 @@ import {
   remapOnePath,
   toNameSet,
 } from './stateHelpers';
+import { folderRefsEqual } from '../lib/folderPath';
 
 /** The sidebar's focused row for a tab — '' for an out-of-folder tab, whose
  *  rel name would otherwise highlight an unrelated same-named row of the
  *  ACTIVE folder's tree. */
 function selectablePath(tab: Tab | null | undefined): string {
   return tab?.file && !tab.file.folder ? tab.file.name : '';
+}
+
+function sameSourceFile(left: OpenFile, right: OpenFile): boolean {
+  return left.name === right.name && (
+    left.folder === right.folder
+    || (left.folder != null && right.folder != null && folderRefsEqual(left.folder, right.folder))
+  );
 }
 
 /**
@@ -40,10 +48,10 @@ function selectablePath(tab: Tab | null | undefined): string {
  * never the tree's focused row, never in the folder-local recents, where
  * Quick Open would resolve the rel name against the wrong folder.
  *
- * New-tab mode (the normal sidebar open, or `+` then a click) creates a fresh
- * tab and loads into it. Without `newTab` the file replaces the active tab's
- * file (blank-tab reuse, back/forward, anchor nav); an open click with no
- * active tab at all implicitly creates one.
+ * New-tab mode (the normal sidebar open, or `+` then a click) activates the
+ * source's existing tab or creates a fresh one. Without `newTab` the file
+ * replaces the active tab's file (blank-tab reuse, back/forward, anchor nav);
+ * an open click with no active tab at all implicitly creates one.
  */
 function openFile(w: WorkspaceSlice, a: Extract<Action, { type: 'FILE_OPEN' }>): WorkspaceSlice {
   const file: OpenFile = {
@@ -59,6 +67,23 @@ function openFile(w: WorkspaceSlice, a: Extract<Action, { type: 'FILE_OPEN' }>):
     ? w.recentFilePaths
     : rememberRecentFile(w.recentFilePaths, file.name);
   const selectedPath = outOfFolder ? '' : file.name;
+
+  // Async navigation preflights cannot own uniqueness: two quick opens can
+  // both start before either file read commits. Resolve that race at the
+  // reducer's atomic state boundary. A new-tab open is navigation, not a
+  // reload, so preserve any live buffer already held by the source's tab.
+  if (a.newTab) {
+    const existing = w.tabs.find((tab) => tab.file && sameSourceFile(tab.file, file));
+    if (existing) {
+      return {
+        ...w,
+        recentFilePaths,
+        editorHistory: rememberActivatedTab(w.editorHistory, existing.id),
+        activeTabId: existing.id,
+        selectedPath,
+      };
+    }
+  }
 
   if (a.newTab || w.activeTabId == null || !getActiveTab(w)) {
     const tab = makeTab();
