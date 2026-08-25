@@ -259,7 +259,7 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
   const documentsCss = read('web-src/src/features/documents/documents.css');
   // Reading gutters follow the PANE, not the window.
   assert.match(documentsCss, /\.crepe-shell \{[^}]*container-type: inline-size/s);
-  assert.match(documentsCss, /clamp\(20px, 6cqi, 48px\)/);
+  assert.match(documentsCss, /clamp\(24px, 6cqi, 48px\)/);
   // THREE-class selector on purpose: Crepe's packaged stylesheet ships
   // `.milkdown .ProseMirror { padding: 60px 120px }` in a LATER-loaded
   // chunk — equal specificity would hand the gutters back to the package.
@@ -269,8 +269,9 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
   assert.match(documentsCss, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown \.ProseMirror \{[^}]*padding-inline: 48px/s);
   assert.match(documentsCss, /\.crepe-shell:not\(\.crepe-readonly\) \.milkdown-block-handle \.operation-item:first-child \{[^}]*display: none/s);
   // Crepe names the handle `milkdown-block-handle`; a `crepe-`-prefixed
-  // selector silently matches nothing.
-  assert.match(documentsCss, /\.crepe-readonly \.milkdown-block-handle \{ display: none; \}/);
+  // selector silently matches nothing. The scoped selector must also outrank
+  // Crepe's later-loaded `.milkdown .milkdown-block-handle` display rule.
+  assert.match(documentsCss, /\.crepe-shell\.crepe-readonly \.milkdown \.milkdown-block-handle \{ display: none; \}/);
   assert.doesNotMatch(documentsCss, /crepe-block-handle/);
 });
 

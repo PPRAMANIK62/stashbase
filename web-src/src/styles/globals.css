@@ -79,8 +79,8 @@
        * down, not the radii — change one without the other and the shape
        * goes flat. */
       --radius-xs: 4px;      /* inline runs: code spans, mentions, marks */
-      --radius-control: 6px; /* sub-24px icon buttons */
-      --radius-ui: 10px;     /* items inside a box: rows, menu items, buttons */
+      --radius-control: 6px; /* sub-24px icon buttons; inline row inputs (rename/create) */
+      --radius-ui: 10px;     /* action items inside a box: menu items, buttons */
       /* Every bordered or filled BOX: the composer, transcript cards, code
        * blocks, inputs, cards, panels, menus, popovers, dialogs.
        *

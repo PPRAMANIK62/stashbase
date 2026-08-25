@@ -68,7 +68,8 @@ export function DocumentOutline({
         const isCollapsed = collapsed.has(heading.id);
         /* Base indent 10, not 4: depth-0 labels must line up with the
          * section header's label — header 14(pl-3.5)+16(slot)+8(gap)=38;
-         * row 6(px-1.5)+2(border)+10+16(chev)+4(gap)=38. */
+         * row 8(rail border)+10+16(chev)+4(gap)=38 (the full-bleed row
+         * carries the px-1.5 rail inside its transparent border). */
         return <li key={heading.id} className={cn('tree-row', activeId === heading.id && 'active', isCollapsed && 'collapsed')} style={{ paddingLeft: Math.min(depth, 4) * 14 + 10 } as React.CSSProperties}>
           {hasChildren ? <button type="button" className="chev cursor-pointer border-0 bg-transparent p-0" aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${label}`} aria-expanded={!isCollapsed} onClick={() => setCollapsed((previous) => {
             const next = new Set(previous);
