@@ -181,6 +181,9 @@ export async function parseSemanticEvalDataset(value: unknown, datasetRoot: stri
     if (!Array.isArray(item.relevant) || item.relevant.length === 0) throw new Error(`${id}: relevant must not be empty`);
     const relevant = item.relevant.map((source, relevantIndex) => nonEmptyString(source, `${id}.relevant[${relevantIndex}]`));
     if (new Set(relevant).size !== relevant.length) throw new Error(`${id}: relevance judgments must be unique`);
+    // More acceptable sources than slots makes Recall@K unreachable, which
+    // would silently cap the aggregate below any threshold a reviewer sets.
+    if (relevant.length > topK) throw new Error(`${id}: relevant must not exceed topK (${topK})`);
     for (const source of relevant) {
       resolveDatasetPath(datasetRoot, source, `${id}.relevant`);
       if (!documentPaths.has(source)) throw new Error(`${id}: relevant source is not in the corpus: ${source}`);
