@@ -245,25 +245,9 @@
   overflow-wrap: anywhere;
 }
 
-/* [3] Working shimmer (Cursor register): a soft light band sweeps through
- * a meta label while the agent is actively thinking or running.
- * background-clip:text needs no extra elements, and children that
- * paint their own background (the accent Dot) are unaffected. The
- * global reduced-motion rule zeroes the keyframe, leaving a static
- * muted label. A gradient painted through glyphs plus its keyframe is
- * not something the utility layer generates. */
-.agent-shimmer {
-  background: linear-gradient(90deg, var(--muted) 40%, var(--fg) 50%, var(--muted) 60%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: agent-shimmer 2s linear infinite;
-}
-@keyframes agent-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
-}
+/* The working shimmer lives in styles/globals.css as `.working-shimmer`
+ * — it is the app-wide "actively working" voice (thinking/tool labels
+ * here, the account sign-in wait), not an agent-panel possession. */
 
 /* [4] Inline diff — the One-Dark add/del palette. These stay literal on
  * purpose: a diff is CONTENT, rendered in the editor's own colour world

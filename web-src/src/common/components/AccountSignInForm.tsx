@@ -64,7 +64,10 @@ export function AccountSignInForm({
          * click here, so the button yields to a status line and returns
          * as the retry affordance on failure. */}
         {busy ? (
-          <span className="px-2 text-xs text-muted-foreground" role="status">
+          // The app-wide working voice (globals.css .working-shimmer):
+          // the sweep marks this line as live and makes it the dialog's
+          // focal point without a spinner or a fake-disabled button.
+          <span className="working-shimmer px-2 text-xs" role="status">
             {browserOpened ? 'Waiting for Google in your browser…' : 'Opening Google sign-in…'}
           </span>
         ) : (

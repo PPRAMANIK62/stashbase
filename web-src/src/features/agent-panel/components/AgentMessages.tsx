@@ -158,7 +158,7 @@ export function MessageList({
         // and an awaiting permission card means the agent is waiting on the
         // USER, where "is working…" would be a lie.
         <div className="flex items-center gap-1.5 p-0.5 text-sm text-muted-foreground">
-          <Dot /><span className="agent-shimmer">{agentShortName} is working…</span>
+          <Dot /><span className="working-shimmer">{agentShortName} is working…</span>
         </div>
       )}
       {showJump && (
@@ -456,7 +456,7 @@ function ThinkingView({ text, active }: { text: string; active?: boolean }) {
         <ChevronDownIcon className={cn('size-3 transition-transform duration-fast ease-out', !open && '-rotate-90')} />
         {/* Shimmers while this is the stream's live block — the label
           * itself signals "working" (Cursor register). */}
-        <span className={active ? 'agent-shimmer' : undefined}>Thinking</span>
+        <span className={active ? 'working-shimmer' : undefined}>Thinking</span>
       </Button>
       {/* Only the opened body carries the quote bar that marks it as
         * sidetracked prose. The 4/2/10 inset is derived, not eyeballed:

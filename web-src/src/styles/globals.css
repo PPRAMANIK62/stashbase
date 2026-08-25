@@ -617,6 +617,27 @@
       scrollbar-color: var(--scrollbar-thumb) transparent;
     }
 
+    /* Working shimmer (Cursor register): a soft light band sweeps through
+     * a meta label while the app is actively working on something — the
+     * agent's thinking/tool labels, the account sign-in wait. THE one
+     * working-state voice: reach for this, not a spinner.
+     * background-clip:text needs no extra elements, and children that
+     * paint their own background (the agent panel's accent Dot) are
+     * unaffected. The global reduced-motion rule zeroes the keyframe,
+     * leaving a static muted label. */
+    .working-shimmer {
+      background: linear-gradient(90deg, var(--muted) 40%, var(--fg) 50%, var(--muted) 60%);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: working-shimmer 2s linear infinite;
+    }
+    @keyframes working-shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
