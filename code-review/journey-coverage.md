@@ -69,6 +69,8 @@ aliases, and Journey E2E owns representative composition.
 - **Contract Test:** renderer initialization, Settings state, workspace
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
   `pnpm test:config`, `pnpm test:updates`, and `pnpm test:electron:smoke`.
+  Account identity fixtures cover profile normalization, migration, privacy,
+  and UI fallbacks.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
   library membership, so a failed or pending membership load cannot claim the
   library is empty.
@@ -166,7 +168,7 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** `pnpm test:retrieval` and the data, scope, credential,
   and renderer suites cover exact filtering, semantic mechanics, source
-  remapping, access boundaries, and failure presentation.
+  remapping, access boundaries, account identity, and failure presentation.
 - **Journey E2E:** [semantic search UI](../e2e/journeys/semantic-search-ui.spec.ts)
   covers mode, scope, readiness, result presentation, and source navigation.
 - **AI Eval:** Gap. Current deterministic tests do not prove that representative

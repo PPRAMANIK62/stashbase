@@ -1,5 +1,6 @@
 import { electronBridge } from '@/common/lib/electronBridge';
 import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '@/common/components/icons';
+import { AccountAvatar, accountDisplayLabel } from '@/common/components/AccountIdentity';
 import { useHostedAccount } from '@/features/account/hooks/useHostedAccount';
 import { DISCORD_INVITE_URL, openExternalUrl } from '@/common/lib/externalLink';
 import { openSettings } from '@/common/lib/settingsTrigger';
@@ -27,8 +28,8 @@ export function SidebarAccountRow() {
   const { account, signingIn, signInError, refresh, signIn, signOut } = useHostedAccount();
 
   const email = account?.signedIn ? account.email ?? '' : '';
-  const label = email || 'Anonymous';
-  const monogram = email ? email.slice(0, 2).toUpperCase() : '';
+  const label = account?.signedIn ? accountDisplayLabel(account) : 'Anonymous';
+  const accessibleLabel = account?.signedIn && email && label !== email ? `${label} (${email})` : label;
   const quota = account?.quota;
   const remainingPercent = quota ? hostedQuotaRemainingPercent(quota) : null;
 
@@ -43,14 +44,19 @@ export function SidebarAccountRow() {
           <MenuTrigger
             className="group/account flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-base text-muted-foreground hover:text-foreground"
             title="Account"
-            aria-label={`Account: ${label}`}
+            aria-label={`Account: ${accessibleLabel}`}
           >
-            <span className="relative inline-flex size-4 flex-none items-center justify-center">
-              <span className="absolute inset-[-3px] rounded-full bg-muted" aria-hidden="true" />
-              {monogram
-                ? <span className="relative text-2xs font-semibold text-foreground">{monogram}</span>
-                : <UserIcon className="relative size-3.5" />}
-            </span>
+            {account?.signedIn
+              ? <AccountAvatar account={account} className="size-4" initialsClassName="text-2xs" />
+              : (
+                // Preserve the long-standing anonymous affordance. Hosted
+                // identity owns the new avatar/initial fallback only after
+                // sign-in, so an account feature does not restyle local mode.
+                <span className="relative inline-flex size-4 flex-none items-center justify-center">
+                  <span className="absolute inset-[-3px] rounded-full bg-muted" aria-hidden="true" />
+                  <UserIcon className="relative size-3.5" />
+                </span>
+              )}
             <span className={cn('min-w-0 truncate transition-tint', email ? 'text-muted-foreground' : 'text-placeholder group-hover/account:text-muted-foreground')}>
               {label}
             </span>
@@ -61,10 +67,10 @@ export function SidebarAccountRow() {
                 {account?.signedIn ? (
                   <>
                     <div className="flex items-center gap-2.5 px-4 py-3">
-                      <span className="flex size-8 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">{monogram}</span>
+                      <AccountAvatar account={account} />
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold">{email.split('@')[0]}</div>
-                        <div className="truncate text-xs text-muted-foreground">{email}</div>
+                        <div className="truncate text-sm font-semibold">{label}</div>
+                        {label !== email && <div className="truncate text-xs text-muted-foreground">{email}</div>}
                       </div>
                     </div>
                     <MenuSeparator className="m-0" />

@@ -6,7 +6,7 @@
  * `EmbedderRequireKeyGate` so it fires whether or not Settings is open.
  */
 import { useState } from 'react';
-import { type EmbedderProvider } from '@/common/api/apiTypes';
+import { type EmbedderProvider, type HostedAccountState } from '@/common/api/apiTypes';
 import { useEmbedderSettings } from '@/features/settings/hooks/useEmbedderSettings';
 import { EmbeddingAuthChoice } from '@/features/settings/components/embedder/EmbeddingAuthChoice';
 import { KeyModal } from '@/features/settings/components/embedder/KeyModal';
@@ -20,6 +20,8 @@ import { AccountSignInForm } from '@/common/components/AccountSignInForm';
 import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/common/lib/hostedQuota';
 import { SectionDescription, SectionHeading } from '@/common/components/ui/section';
 import { Card } from '@/common/components/ui/card';
+import { AccountAvatar, accountDisplayLabel } from '@/common/components/AccountIdentity';
+import { cn } from '@/common/lib/utils';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string; costHint: string }> = {
   openai: {
@@ -37,6 +39,34 @@ const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeh
 };
 
 const PROVIDER_ORDER: EmbedderProvider[] = ['openai', 'openrouter'];
+
+function AccountSummary({
+  account,
+  labelPrefix,
+  description,
+  heading = false,
+}: {
+  account: HostedAccountState;
+  labelPrefix?: string;
+  description: string;
+  heading?: boolean;
+}) {
+  const label = `${labelPrefix ?? ''}${accountDisplayLabel(account)}`;
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <AccountAvatar account={account} />
+      <div className="min-w-0">
+        {heading
+          ? <SectionHeading level={4} className="truncate">{label}</SectionHeading>
+          : <div className="truncate text-sm font-medium">{label}</div>}
+        {account.displayName && account.email && (
+          <div className="truncate text-xs text-muted-foreground">{account.email}</div>
+        )}
+        <div className={cn('text-xs text-muted-foreground', heading && 'mt-0.5')}>{description}</div>
+      </div>
+    </div>
+  );
+}
 
 export function EmbeddingPanel() {
   const {
@@ -102,13 +132,14 @@ export function EmbeddingPanel() {
           {showingHostedSummary && (
             <Card surface="raised" className="p-4">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  {/* The card's own title, so a heading rather than a bold
-                    * line: level 4 sits under the panel's level 3, which in
-                    * turn sits under the Settings dialog title's h2. */}
-                  <SectionHeading level={4} className="truncate">{state.account.email}</SectionHeading>
-                  <div className="mt-0.5 text-xs text-muted-foreground">Using the StashBase account allowance</div>
-                </div>
+                {/* The card's own title, so a heading rather than a bold
+                  * line: level 4 sits under the panel's level 3, which in
+                  * turn sits under the Settings dialog title's h2. */}
+                <AccountSummary
+                  account={state.account}
+                  description="Using the StashBase account allowance"
+                  heading
+                />
                 {state.account.quota && (
                   <div className="text-right">
                     <div className="text-base font-semibold">{hostedQuotaRemainingPercent(state.account.quota)}%</div>
@@ -157,10 +188,11 @@ export function EmbeddingPanel() {
           )}
           {state.account.signedIn && !hostedActive && !signInFormOpen && (
             <Card surface="raised" className="mb-3 flex items-center justify-between gap-3 px-3 py-2.5">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">Signed in as {state.account.email}</div>
-                <div className="text-xs text-muted-foreground">Your own API key is currently active.</div>
-              </div>
+              <AccountSummary
+                account={state.account}
+                labelPrefix="Signed in as "
+                description="Your own API key is currently active."
+              />
               <Button
                 variant="outline"
                 size="sm"
