@@ -61,13 +61,20 @@
 - The scope picker is available before session binding and remains visible but
   locked after binding. Model and effort come from runtime capabilities, and
   Default remains an omitted override. An idle Codex conversation applies a
-  model choice to its next turn on the same thread; its picker is disabled only
+  model choice to its next turn on the same thread; its row is disabled only
   during an active turn. A populated Claude conversation keeps its model fixed.
-  Locked controls stay legible and inert — the locked pill goes inert and says
-  why, rather than opening onto a dimmed list.
-- One session setting is one pill over one menu. Model, mode, and effort are
-  independent, so none of them shares another's popup or appends its value to
-  another's trigger label; a pill names only the setting it changes.
+  Locked controls stay legible and inert at the smallest surface that cannot
+  act: a pinned setting dims its own row — still naming its value and why —
+  while sibling settings stay adjustable, and a pill goes inert only when
+  everything behind it is pinned.
+- Mode is its own pill: permission state must read without opening a menu, and
+  the Shift-Tab cycle has to land somewhere visible. Model and effort share
+  the settings pill over a two-level menu — the parent holds one value row per
+  setting and each row opens a single-list flyout, so no card ever stacks two
+  headed lists. The trigger names the model and appends effort only when
+  explicitly overridden; a default or inherited effort claims no bar space.
+  When a runtime advertises only one of the two settings, the pill opens that
+  list directly.
 - CodeMirror owns composer text, selection, undo, and `@`/`/` key handoff. The
   UI remains a capped-height chat input, not an editor workbench.
 - Suggestions only prefill a draft; they never send. Their rotation pauses

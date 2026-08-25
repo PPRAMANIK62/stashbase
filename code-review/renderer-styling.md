@@ -300,8 +300,8 @@ this file records the mechanics a change must respect.
    `pill` and `menu-option` are one idiom in two halves — a quiet
    "pick a value" trigger and the choice rows it opens onto — and they
    arrived by absorbing a shared module of twelve exported class strings
-   that the composer's model/mode pills and the search popup's scope pill
-   both had to spell in the same order. A recipe that has to be spelled is
+   that the composer's settings/mode pills and the search popup's scope
+   pill both had to spell in the same order. A recipe that has to be spelled is
    a recipe that can be spelled half: `Pill` carries `min-w-0` AND the
    label's `truncate` because the two are one decision (a flex item's
    default `min-width: auto` refuses to shrink below its content, so a long
@@ -317,7 +317,7 @@ this file records the mechanics a change must respect.
    caller's business. `MenuSectionLabel` joined `menu-radio` rather than
    `menu`, by that file's own rule — it is a grouping part and both callers
    sit behind an interaction boundary, so it costs the initial chunk
-   nothing. It is a muted grouping line rather than a `MenuSeparator`,
+   nothing; `menu-submenu` holds the nested-menu parts under the same rule. It is a muted grouping line rather than a `MenuSeparator`,
    because a hairline directly under the default row cuts a menu in half
    and reads as two.
 
@@ -330,8 +330,8 @@ this file records the mechanics a change must respect.
    replaced by "Could not open chat session." the moment a pill was
    clicked. Either put the label inside the `MenuRadioGroup`/`MenuGroup`,
    or use `MenuSectionLabel`, which needs no group. Guarded by
-   `agent-composer-pills.test.ts`, which opens each pill and reads the
-   group's name back.
+   `agent-composer-pills.test.ts`, which opens each pill's lists and reads
+   the group names back.
 
    The agent panel's `AttachmentChip` is the same absorption one layer out,
    and it deliberately stayed a feature component rather than moving here:

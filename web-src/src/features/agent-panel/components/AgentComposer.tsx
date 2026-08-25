@@ -3,8 +3,9 @@
  * action, and the bar of session pills under it.
  *
  * The two self-contained widgets it hosts live beside it — the `@`/`/`
- * suggestion popup in `MentionSuggestions.tsx` and the model/mode/effort
- * menus in `ComposerPills.tsx` — so what remains here is the composer's own
+ * suggestion popup in `MentionSuggestions.tsx` and the session pills
+ * (model/effort settings and permission mode) in `ComposerPills.tsx` — so
+ * what remains here is the composer's own
  * state (draft, selected skill, attachment preview) and the one rule that
  * decides whether that state can be sent.
  */
@@ -21,7 +22,7 @@ import {
 import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { MentionComposer, type MentionComposerHandle } from '@/features/agent-panel/components/MentionComposer';
 import {
-  EffortMenu, ModelMenu, ModeMenu, nextPermMode,
+  ModelEffortMenu, ModeMenu, nextPermMode,
   type ComposerEffortControl, type ComposerModeControl, type ComposerModelControl,
 } from '@/features/agent-panel/components/ComposerPills';
 import {
@@ -310,9 +311,8 @@ export function AgentComposer({
             onSetScope={scope.onSet}
           />
           <span className="flex-1" />
-          {model.show && <ModelMenu model={model} disabled={disabled} />}
+          {(model.show || effort.show) && <ModelEffortMenu model={model} effort={effort} disabled={disabled} />}
           {mode.show && <ModeMenu mode={mode} disabled={disabled} />}
-          {effort.show && <EffortMenu effort={effort} disabled={disabled} />}
           <SendButton
             turnActive={turnActive}
             disabled={!canSend(text)}
