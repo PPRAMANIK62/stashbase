@@ -41,6 +41,10 @@ manager, or a primary graph-navigation tool.
   hides that announcement only — a newer release, or a download becoming ready
   to install, announces again, and Settings remains the standing update and
   preference surface.
+- A signed-in account is recognizable by its Google display name and avatar in
+  Files, with the full email retained in the account menu. Missing or failed
+  profile display data falls back without changing account controls; signed
+  out remains the complete Anonymous local-workspace state.
 - Users can open or create a local folder, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
   A created folder is an ordinary directory. Removing membership clears only

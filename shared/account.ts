@@ -23,6 +23,9 @@ export interface HostedAccountState {
   signedIn: boolean;
   active: boolean;
   email?: string;
+  displayName?: string;
+  /** Same-origin renderer endpoint; the provider URL remains Node-only. */
+  avatarUrl?: string;
   quota?: HostedQuota;
   /** Signed in, but the hosted service could not be reached to report
    *  usage. Distinct from having no allowance left. */
