@@ -130,7 +130,7 @@ the standard configuration or connection details.
 
 Keep the StashBase app running while an external MCP client uses it. The client
 receives bounded operations over Library folders, not general host filesystem
-access. See `Capabilities and Boundaries.md` before making claims about which
+access. See `03 Capabilities and Boundaries.md` before making claims about which
 formats an external client can read or edit.
 
 ## Returning Later

@@ -8,14 +8,14 @@ differ, and when another product may be a better fit.
 
 Read the narrowest relevant guide:
 
-- `Product and Mental Model.md` for product identity, ownership, scope, privacy,
+- `01 Getting Started and Workflows.md` for first launch and end-to-end tasks.
+- `02 Product and Mental Model.md` for product identity, ownership, scope, privacy,
   durable work, and non-goals.
-- `Getting Started and Workflows.md` for first launch and end-to-end tasks.
-- `Capabilities and Boundaries.md` for formats, search, Preparation, AI Index,
+- `03 Capabilities and Boundaries.md` for formats, search, Preparation, AI Index,
   built-in Chat, and external MCP.
-- `FAQ and Comparisons.md` for objections, alternatives, and dated product
+- `04 FAQ and Comparisons.md` for objections, alternatives, and dated product
   comparisons.
-- `Troubleshooting and Reference.md` for recovery, support, and links to current
+- `05 Troubleshooting and Reference.md` for recovery, support, and links to current
   online information.
 
 ## Broad First-Use Questions

@@ -78,7 +78,7 @@ Open its owning folder in another window for full editing.
 ## An Agent Cannot Read or Edit a File
 
 Previewability does not imply Agent readability or content editing. Consult
-`Capabilities and Boundaries.md` for the exact surface:
+`03 Capabilities and Boundaries.md` for the exact surface:
 
 - external MCP reads current prepared text for PDF, DOCX, audio, and video;
 - external MCP does not receive image bytes through `read_file`;
