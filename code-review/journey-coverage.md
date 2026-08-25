@@ -175,12 +175,23 @@ aliases, and Journey E2E owns representative composition.
   remapping, access boundaries, account identity, and failure presentation.
 - **Journey E2E:** [semantic search UI](../e2e/journeys/semantic-search-ui.spec.ts)
   covers mode, scope, readiness, result presentation, and source navigation.
-- **AI Eval:** Gap. Current deterministic tests do not prove that representative
-  meaning-based queries retrieve relevant evidence when wording differs.
-- **Release Check:** credentialed hosted and bring-your-own-key provider
-  behavior remains lower-layer or release evidence.
-- **Gap:** library-wide readiness is not yet Shipping, and semantic relevance
-  lacks a first-class Eval dataset and threshold. The Eval work is tracked in
+- **AI Eval:** `pnpm eval:semantic-retrieval` runs the versioned, synthetic
+  [semantic retrieval dataset](../evals/semantic-retrieval/README.md) through
+  the production index and Retrieval interfaces. It reports provider, model,
+  dataset version, Recall@3, MRR, missed evidence, unexpected top results, and
+  selected Exact Search comparisons against predeclared thresholds. It remains
+  calibration evidence until three retained runs exist for both supported BYOK
+  providers; the runner makes that gate state explicit. Ranking is scored over
+  distinct sources, not chunks, and the corpus includes multi-chunk sources so
+  chunking changes are actually observable.
+- **Release Check:** the semantic AI Eval is credentialed BYOK release evidence,
+  not required or scheduled CI, because it makes paid provider requests and
+  allows bounded ranking variability. Hosted account behavior remains
+  lower-layer or release evidence.
+- **Gap:** library-wide readiness is not yet Shipping. The semantic Eval is
+  present but still in calibration: no baseline run is retained, so no
+  semantic-quality gate is active yet. Completing the baselines and activating
+  the thresholds is tracked in
   [GitHub issue #176](https://github.com/liliu-z/stashbase/issues/176).
 
 ## J06: Agent

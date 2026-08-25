@@ -123,6 +123,16 @@ applicable platforms. That checklist covers native, packaged, credentialed,
 clipboard, real-media, and N→N+1 updater seams; it does not repeat automated
 journeys.
 
+When a release changes retrieval ranking, chunking, embedding models, or
+provider integration, run `pnpm eval:semantic-retrieval --out <path>` for every
+configured supported BYOK provider before publication. Retain each complete
+text report with the release evidence; it must identify the commit, dataset,
+provider, and model, and must not be marked as produced from a dirty working
+tree. A report marked `ACTIVE` must meet both thresholds. A
+report marked `CALIBRATION` contributes only baseline evidence and cannot be
+described as a passing semantic-quality gate. Required source CI remains
+credential-free and does not run this probabilistic check.
+
 ## Implementation Map
 
 | Role | Stable entry points |
@@ -133,7 +143,7 @@ journeys.
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
 | Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs` and platform release verifiers |
-| Focused evidence | `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, and the N→N+1 release check |
+| Focused evidence | `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
 
 ## Release Runbook
 
@@ -160,6 +170,12 @@ choice:
    files and generated sidecars, and the tap update, then perform the
    residual packaged UI sanity checks, including a real N→N+1 update on every
    platform before calling the update path verified.
+8. If retrieval ranking, chunking, an embedding model, or provider integration
+   changed, run and retain the J05 semantic retrieval report for OpenAI and
+   OpenRouter as routed by the residual checklist. During calibration, collect
+   the dataset's minimum run count for each provider. Stop publication on an
+   `ACTIVE` threshold failure; label `CALIBRATION` results only as baseline
+   evidence.
 
 Release notes state that macOS is arm64-only, Developer ID-signed, and
 notarized. The macOS workflow requires the signing certificate secrets

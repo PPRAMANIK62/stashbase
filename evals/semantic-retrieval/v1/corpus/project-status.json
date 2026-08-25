@@ -1,0 +1,6 @@
+{
+  "initiative": "Atlas mobile launch",
+  "state": "blocked",
+  "dependency": "The external accessibility audit firm must deliver its final report before the release candidate can be approved.",
+  "owner": "Mobile team"
+}

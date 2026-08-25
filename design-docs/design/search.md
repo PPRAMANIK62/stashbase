@@ -60,6 +60,9 @@ user-managed results.
   source is selected.
 - In-app and MCP retrieval share source identity and access rules. MCP also
   supports validated source-type categories.
+- Representative semantic retrieval quality is measured by a versioned,
+  synthetic corpus with paraphrased queries. It is credentialed release
+  evidence rather than deterministic source-CI evidence.
 
 ## Experience Contract
 

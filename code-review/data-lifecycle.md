@@ -173,7 +173,7 @@ of the resource tradeoff.
 | Daemon Adapter | `server/mfs-daemon.ts` ↔ `python/stashbase_daemon.py` |
 | Retrieval Interface | `server/retrieval/index.ts`, with keyword, semantic, and evidence Modules beside it |
 | Format owners | PDF, OCR, DOCX, and audio Modules under `server/` plus their native/Python Adapters |
-| Focused evidence | `server/conversion-scheduler.test.ts`, `server/conversion.test.ts`, `server/conversion-status.test.ts`, `server/extractor-process.test.ts`, `server/semantic-workload.test.ts`, `server/index-status.test.ts`, `server/indexer-mfs-path.test.ts`, `server/audio-transcription.test.ts`, `server/retrieval/index.test.ts`, and `python/stashbase_daemon_test.py` |
+| Focused evidence | `server/conversion-scheduler.test.ts`, `server/conversion.test.ts`, `server/conversion-status.test.ts`, `server/extractor-process.test.ts`, `server/semantic-workload.test.ts`, `server/index-status.test.ts`, `server/indexer-mfs-path.test.ts`, `server/audio-transcription.test.ts`, `server/retrieval/index.test.ts`, `scripts/semantic-retrieval-metrics.test.ts`, `scripts/semantic-retrieval-dataset.test.ts`, `scripts/semantic-retrieval-runner.test.ts`, the versioned `evals/semantic-retrieval/` AI Eval, and `python/stashbase_daemon_test.py` |
 
 ## Review Checklist
 
@@ -198,6 +198,14 @@ pnpm test:conversion-scheduler
 pnpm test:retrieval
 pnpm test:python
 ```
+
+Run `pnpm eval:semantic-retrieval` as a credentialed release check when a
+change can affect semantic ranking, chunking, or the embedding provider. This
+probabilistic Eval is not a substitute for the deterministic commands above.
+Retain the full report (`--out <path>`) and do not treat thresholds as gating
+while it reports `CALIBRATION`; activation requires the baseline policy
+documented with the versioned dataset. `pnpm test:retrieval` validates the
+dataset manifest against its fixtures without credentials.
 
 Add `pnpm test:library-files` for mutation/reconcile changes and
 `pnpm test:electron:smoke` when native process or store retirement changes.
