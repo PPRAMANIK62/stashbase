@@ -8,143 +8,274 @@
   },
   "baselinePolicy": {
     "minimumRunsPerProvider": 3,
-    "providers": ["openai", "openrouter"]
+    "providers": [
+      "openai",
+      "openrouter"
+    ]
   },
   "baselineRuns": [],
   "documents": [
-    { "path": "corpus/incident-playbook.md", "kind": "direct" },
-    { "path": "corpus/customer-research.html", "kind": "direct" },
-    { "path": "corpus/project-status.json", "kind": "direct" },
+    {
+      "path": "corpus/incident-playbook.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/customer-research.html",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/project-status.json",
+      "kind": "direct"
+    },
     {
       "path": "corpus/field-guide.pdf",
       "kind": "prepared",
       "preparedText": "prepared/field-guide.md"
     },
-    { "path": "corpus/security-notes.md", "kind": "direct" },
-    { "path": "corpus/meal-plan.md", "kind": "direct" },
-    { "path": "corpus/offline-sync.md", "kind": "direct" },
-    { "path": "corpus/usability-study.html", "kind": "direct" },
-    { "path": "corpus/release-board.json", "kind": "direct" },
+    {
+      "path": "corpus/security-notes.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/meal-plan.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/offline-sync.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/usability-study.html",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/release-board.json",
+      "kind": "direct"
+    },
     {
       "path": "corpus/winter-guide.pdf",
       "kind": "prepared",
       "preparedText": "prepared/winter-guide.md"
     },
-    { "path": "corpus/database-maintenance.md", "kind": "direct" },
-    { "path": "corpus/hiring-plan.md", "kind": "direct" },
-    { "path": "corpus/marketing-notes.html", "kind": "direct" },
-    { "path": "corpus/office-inventory.json", "kind": "direct" },
-    { "path": "corpus/garden-guide.md", "kind": "direct" },
-    { "path": "corpus/travel-policy.md", "kind": "direct" },
-    { "path": "corpus/design-review.html", "kind": "direct" },
-    { "path": "corpus/support-rotation.json", "kind": "direct" },
-    { "path": "corpus/network-handbook.md", "kind": "direct" },
-    { "path": "corpus/budget-notes.md", "kind": "direct" }
+    {
+      "path": "corpus/database-maintenance.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/hiring-plan.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/marketing-notes.html",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/office-inventory.json",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/garden-guide.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/travel-policy.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/design-review.html",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/support-rotation.json",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/network-handbook.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/budget-notes.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/facilities-handbook.md",
+      "kind": "direct"
+    },
+    {
+      "path": "corpus/onboarding-handbook.md",
+      "kind": "direct"
+    }
   ],
   "queries": [
     {
       "id": "restore-service-after-bad-release",
       "text": "How do we recover when a new release breaks production?",
-      "relevant": ["corpus/incident-playbook.md"],
+      "relevant": [
+        "corpus/incident-playbook.md"
+      ],
       "compareExact": true
     },
     {
       "id": "undo-faulty-deployment",
       "text": "What is the safest response to a software rollout that causes an outage?",
-      "relevant": ["corpus/incident-playbook.md"],
+      "relevant": [
+        "corpus/incident-playbook.md"
+      ],
       "compareExact": true
     },
     {
       "id": "buyers-abandon-signup",
       "text": "Why are prospective customers giving up during registration?",
-      "relevant": ["corpus/customer-research.html"],
+      "relevant": [
+        "corpus/customer-research.html"
+      ],
       "compareExact": true
     },
     {
       "id": "registration-friction",
       "text": "Where do trial users lose momentum before they experience the product?",
-      "relevant": ["corpus/customer-research.html"],
+      "relevant": [
+        "corpus/customer-research.html"
+      ],
       "compareExact": true
     },
     {
       "id": "delivery-blocked-by-vendor",
       "text": "Which initiative cannot ship until an outside supplier responds?",
-      "relevant": ["corpus/project-status.json"],
+      "relevant": [
+        "corpus/project-status.json"
+      ],
       "compareExact": true
     },
     {
       "id": "outside-approval-dependency",
-      "text": "What work is waiting for a third party before final approval?",
-      "relevant": ["corpus/project-status.json"],
+      "text": "Which launch is on hold until an independent reviewer finishes its assessment?",
+      "relevant": [
+        "corpus/project-status.json"
+      ],
       "compareExact": true
     },
     {
       "id": "protect-electronics-in-humid-weather",
       "text": "How should equipment be kept dry during a wet expedition?",
-      "relevant": ["corpus/field-guide.pdf"]
+      "relevant": [
+        "corpus/field-guide.pdf"
+      ]
     },
     {
       "id": "keep-cameras-free-of-moisture",
       "text": "What packing method prevents damp conditions from damaging cameras and batteries?",
-      "relevant": ["corpus/field-guide.pdf"]
+      "relevant": [
+        "corpus/field-guide.pdf"
+      ]
     },
     {
       "id": "respond-to-stolen-credentials",
       "text": "What should we do after discovering that a password may be compromised?",
-      "relevant": ["corpus/security-notes.md"],
+      "relevant": [
+        "corpus/security-notes.md"
+      ],
       "compareExact": true
     },
     {
       "id": "invalidate-leaked-secret",
       "text": "How should access be contained when login details might have leaked?",
-      "relevant": ["corpus/security-notes.md"],
+      "relevant": [
+        "corpus/security-notes.md"
+      ],
       "compareExact": true
     },
     {
       "id": "work-without-connectivity",
       "text": "Can edits continue on a flight and reconcile after the internet returns?",
-      "relevant": ["corpus/offline-sync.md"],
+      "relevant": [
+        "corpus/offline-sync.md"
+      ],
       "compareExact": true
     },
     {
       "id": "merge-disconnected-changes",
       "text": "How are local updates handled after a device reconnects?",
-      "relevant": ["corpus/offline-sync.md"],
+      "relevant": [
+        "corpus/offline-sync.md"
+      ],
       "compareExact": true
     },
     {
       "id": "mobile-testers-miss-primary-action",
       "text": "Why could phone participants not find the button that advances the task?",
-      "relevant": ["corpus/usability-study.html"],
+      "relevant": [
+        "corpus/usability-study.html"
+      ],
       "compareExact": true
     },
     {
       "id": "small-screen-navigation-confusion",
       "text": "Which interface control was overlooked on narrow displays?",
-      "relevant": ["corpus/usability-study.html"],
+      "relevant": [
+        "corpus/usability-study.html"
+      ],
       "compareExact": true
     },
     {
       "id": "release-waits-for-legal",
-      "text": "Which planned shipment is held until counsel approves the license wording?",
-      "relevant": ["corpus/release-board.json"],
+      "text": "Which planned deliverable cannot be distributed until the wording of an agreement is signed off?",
+      "relevant": [
+        "corpus/release-board.json"
+      ],
       "compareExact": true
     },
     {
       "id": "blocked-desktop-milestone",
-      "text": "What deliverable cannot proceed because a compliance review is unfinished?",
-      "relevant": ["corpus/release-board.json"],
+      "text": "Which packaged deliverable is waiting for its licensing terms to be cleared?",
+      "relevant": [
+        "corpus/release-board.json"
+      ],
       "compareExact": true
     },
     {
       "id": "avoid-cold-injury",
       "text": "How should exposed skin and clothing be managed during freezing field work?",
-      "relevant": ["corpus/winter-guide.pdf"]
+      "relevant": [
+        "corpus/winter-guide.pdf"
+      ]
     },
     {
       "id": "layering-for-subzero-trip",
       "text": "What clothing strategy keeps a traveler warm without trapping sweat?",
-      "relevant": ["corpus/winter-guide.pdf"]
+      "relevant": [
+        "corpus/winter-guide.pdf"
+      ]
+    },
+    {
+      "id": "evacuate-on-alarm",
+      "text": "Where do people gather after leaving the office during an emergency?",
+      "relevant": [
+        "corpus/facilities-handbook.md"
+      ],
+      "compareExact": true
+    },
+    {
+      "id": "fire-alarm-procedure",
+      "text": "What should staff avoid doing when a continuous siren sounds in the building?",
+      "relevant": [
+        "corpus/facilities-handbook.md"
+      ]
+    },
+    {
+      "id": "book-annual-leave",
+      "text": "How does a new employee arrange a fortnight of holiday?",
+      "relevant": [
+        "corpus/onboarding-handbook.md"
+      ],
+      "compareExact": true
+    },
+    {
+      "id": "extended-absence-approval",
+      "text": "Who else has to agree when someone wants a long stretch of time off?",
+      "relevant": [
+        "corpus/onboarding-handbook.md"
+      ]
     }
   ]
 }
