@@ -1,5 +1,5 @@
 import { electronBridge } from '@/common/lib/electronBridge';
-import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon } from '@/common/components/icons';
+import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '@/common/components/icons';
 import { AccountAvatar, accountDisplayLabel } from '@/common/components/AccountIdentity';
 import { useHostedAccount } from '@/features/account/hooks/useHostedAccount';
 import { DISCORD_INVITE_URL, openExternalUrl } from '@/common/lib/externalLink';
@@ -46,7 +46,17 @@ export function SidebarAccountRow() {
             title="Account"
             aria-label={`Account: ${accessibleLabel}`}
           >
-            <AccountAvatar account={account?.signedIn ? account : {}} className="size-4" initialsClassName="text-2xs" />
+            {account?.signedIn
+              ? <AccountAvatar account={account} className="size-4" initialsClassName="text-2xs" />
+              : (
+                // Preserve the long-standing anonymous affordance. Hosted
+                // identity owns the new avatar/initial fallback only after
+                // sign-in, so an account feature does not restyle local mode.
+                <span className="relative inline-flex size-4 flex-none items-center justify-center">
+                  <span className="absolute inset-[-3px] rounded-full bg-muted" aria-hidden="true" />
+                  <UserIcon className="relative size-3.5" />
+                </span>
+              )}
             <span className={cn('min-w-0 truncate transition-tint', email ? 'text-muted-foreground' : 'text-placeholder group-hover/account:text-muted-foreground')}>
               {label}
             </span>
