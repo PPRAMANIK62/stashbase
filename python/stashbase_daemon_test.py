@@ -269,6 +269,69 @@ class StashbaseDaemonTests(unittest.TestCase):
             },
         )
 
+    def test_local_embedder_builds_via_onnx_provider_without_api_key(self) -> None:
+        class FakeOnnxProvider:
+            model_name = "gpahal/bge-m3-onnx-int8"
+            dimension = 1024
+            def embed(self, texts):
+                return [[0.0] * self.dimension for _ in texts]
+        calls = []
+        def fake_get_provider(name, **kwargs):
+            calls.append((name, kwargs))
+            return FakeOnnxProvider()
+        fake_mfs_embedder = types.SimpleNamespace(get_provider=fake_get_provider)
+        previous = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = fake_mfs_embedder
+        try:
+            embedder = stashbase_daemon.make_embedder("local")
+        finally:
+            if previous is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous
+        self.assertEqual(embedder.provider, "local")
+        self.assertEqual(embedder.model_name, "gpahal/bge-m3-onnx-int8")
+        self.assertEqual(embedder.dimension, 1024)
+        self.assertEqual(embedder.embed(["hi"]), [[0.0] * 1024])
+        self.assertEqual(calls, [("onnx", {})])
+
+    def test_collection_name_separates_local_from_openai_at_same_dimension(self) -> None:
+        self.assertEqual(stashbase_daemon._collection_name(1536), "vectors_openai_1536")
+        self.assertEqual(stashbase_daemon._collection_name(1536, "openai"), "vectors_openai_1536")
+        self.assertEqual(stashbase_daemon._collection_name(1536, "openrouter"), "vectors_openai_1536")
+        self.assertEqual(stashbase_daemon._collection_name(1536, "stashbase"), "vectors_openai_1536")
+        self.assertEqual(stashbase_daemon._collection_name(1536, "local"), "vectors_local_1536")
+        self.assertNotEqual(
+            stashbase_daemon._collection_name(1536, "openai"),
+            stashbase_daemon._collection_name(1536, "local"),
+        )
+
+    def test_no_key_local_bind_still_builds_an_embedder(self) -> None:
+        # Unlike other providers, "local" needs no API key to build an
+        # embedder — the no-key branch that only reopens an existing store
+        # for other providers must not swallow a local bind.
+        class FakeOnnxProvider:
+            model_name = "m"
+            dimension = 8
+            def embed(self, texts):
+                return []
+        fake_mfs_embedder = types.SimpleNamespace(get_provider=lambda name, **kw: FakeOnnxProvider())
+        previous = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = fake_mfs_embedder
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                svc = stashbase_daemon.StashbaseStore(tmp)
+                with mock.patch.object(svc, "_ensure_store") as ensure:
+                    svc.bind_root("/library", "local", root_identity="/library")
+                ensure.assert_called_once()
+                built_embedder = ensure.call_args[0][0]
+                self.assertEqual(built_embedder.provider, "local")
+        finally:
+            if previous is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous
+
     def test_stashbase_embedder_marks_query_purpose_for_loopback_broker(self) -> None:
         captured = {}
 

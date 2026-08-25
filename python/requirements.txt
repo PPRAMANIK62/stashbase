@@ -5,8 +5,11 @@
 # pyyaml, filelock, tree-sitter, numpy etc.) so we only have to add the bits
 # the sidecar uses directly:
 #   - openai:       OpenAI-compatible embedding client for the fixed
-#                   text-embedding-3-small family. No local model —
-#                   onnxruntime/tokenizers stay out of the default sidecar.
+#                   text-embedding-3-small family. A local, offline
+#                   alternative also exists (see requirements-local-embed.txt
+#                   below) but stays out of the default sidecar — its
+#                   onnxruntime/tokenizers/model weights are a heavy,
+#                   opt-in payload.
 #   - numpy:        vector handling (also pulled transitively by pymilvus).
 #   - blake3:       content + chunk-id hashing (faster + streaming-
 #                   friendly than SHA256; mfs's Scanner is patched to
@@ -16,6 +19,11 @@
 # `requirements-extract.txt`. Keep them out of the default venv and
 # packaged sidecar so normal setup/release avoids PyMuPDF, OpenCV and
 # ONNXRuntime weight.
+#
+# Optional local (offline) AI Index embedding dependencies live in
+# `requirements-local-embed.txt` — see stashbase_daemon.py:_LocalEmbedder.
+# Also kept out of the default flow; installing it is the only extra step
+# needed to embed without any API key or cloud call.
 mfs-cli>=0.1.0
 openai>=1.0
 numpy>=1.26

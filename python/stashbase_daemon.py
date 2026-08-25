@@ -117,13 +117,15 @@ print(json.dumps({"event": "starting", "pid": os.getpid()}), flush=True)
 # an API key; the daemon may have zero embedders loaded at idle.
 
 def make_embedder(provider: str = "openai", *, model=None, api_key=None, dimension=None, base_url=None):
-    """Build an OpenAI-compatible embedding provider satisfying MFS's protocol
+    """Build an embedding provider satisfying MFS's protocol
     (`.embed(texts) -> list[list[float]]`, `.dimension`, `.model_name`).
 
-    Rolled in-house — see `_OpenAIEmbedder`. ``provider`` is accepted for
-    protocol compatibility and is intentionally limited to OpenAI/OpenRouter
-    plus the loopback-only StashBase account broker.
+    ``provider`` accepts OpenAI/OpenRouter and the loopback-only StashBase
+    account broker (all rolled in-house — see `_OpenAIEmbedder`), or
+    ``"local"`` for a CPU-only, no-API-key embedder (see `_LocalEmbedder`).
     """
+    if provider == "local":
+        return _LocalEmbedder(model=model)
     if provider not in ("openai", "openrouter", "stashbase"):
         raise ValueError(f"unsupported embedder provider {provider!r}")
     if not api_key:
@@ -140,6 +142,33 @@ def make_embedder(provider: str = "openai", *, model=None, api_key=None, dimensi
         dimension=dimension,
         base_url=base_url,
     )
+
+
+class _LocalEmbedder:
+    """CPU-only local embedding via mfs-cli's bundled ONNX provider — no API
+    key, and no network needed once the model is cached locally.
+    Wraps the raw `mfs.embedder` provider (which only exposes `.embed()`,
+    `.dimension`, `.model_name`) to add a `.provider` attribute, since
+    `_collection_name()` reads it to keep local vectors in a separate
+    collection from OpenAI's — the same dimension does not mean the same
+    embedding space, and mixing them would corrupt search.
+    Requires the optional `mfs-cli[onnx]` extra
+    (``pip install "mfs-cli[onnx]"``); raises mfs.embedder's own
+    ImportError with install instructions if it isn't installed.
+    """
+    provider = "local"
+    def __init__(self, *, model: str | None = None) -> None:
+        from mfs.embedder import get_provider
+        kwargs = {"model": model} if model else {}
+        self._inner = get_provider("onnx", **kwargs)
+    @property
+    def model_name(self) -> str:
+        return self._inner.model_name
+    @property
+    def dimension(self) -> int:
+        return self._inner.dimension
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return self._inner.embed(texts)
 
 
 class _OpenAIEmbedder:
@@ -586,12 +615,18 @@ def op_set_rules(svc: StashbaseStore, args: dict) -> dict:
     }
 
 
-def _collection_name(dim: int) -> str:
-    """The single collection's name. Encodes dim so a `text-embedding-3-
-    large` (3072) config wouldn't collide with the default small (1536);
-    the default keeps the historical `vectors_openai_1536` name so
-    already-indexed KBs aren't orphaned."""
-    return f"vectors_openai_{dim}"
+def _collection_name(dim: int, provider: str = "openai") -> str:
+    """The collection name for a given (dimension, provider) pair. Encodes
+    dim so a `text-embedding-3-large` (3072) config wouldn't collide with
+    the default small (1536); the default keeps the historical
+    `vectors_openai_1536` name so already-indexed KBs aren't orphaned.
+    Also encodes provider identity so a differently-sourced embedder (e.g.
+    a local model) can never silently share a collection with an
+    OpenAI-family one at the same dimension — same vector length does not
+    mean the same embedding space, and mixing them would corrupt search."""
+    if provider in ("openai", "openrouter", "stashbase"):
+        return f"vectors_openai_{dim}"
+    return f"vectors_{provider}_{dim}"
 
 
 def _norm_root(root: str) -> str:
@@ -688,7 +723,10 @@ class StashbaseStore:
         from mfs.store import MilvusStore
         from mfs.config import MilvusConfig
         os.environ["MFS_HOME"] = str(self._db_path.parent)
-        config = MilvusConfig(uri=str(self._db_path), collection_name=_collection_name(dim))
+        collection_provider = getattr(embedder, "provider", None) or "openai"
+        config = MilvusConfig(
+            uri=str(self._db_path), collection_name=_collection_name(dim, collection_provider),
+        )
         store = MilvusStore(config, dim)
         _patch_inverted_index_skip()
         _patch_milvus_manifest_windows_replace()
@@ -748,7 +786,7 @@ class StashbaseStore:
         # A keyed bind attaches the embedder. A no-key bind still reopens an
         # existing collection for delete/list/status cleanup; it never creates
         # a new database merely because semantic indexing is disabled.
-        if api_key and self._embedder is None:
+        if (api_key or provider == "local") and self._embedder is None:
             embedder = make_embedder(
                 provider,
                 model=model,
@@ -767,7 +805,10 @@ class StashbaseStore:
             "provider": getattr(self._embedder, "provider", provider),
             "model": getattr(self._embedder, "model_name", None),
             "dim": self._dim,
-            "collection": _collection_name(self._dim) if self._dim else None,
+            "collection": (
+                _collection_name(self._dim, getattr(self._embedder, "provider", None) or "openai")
+                if self._dim else None
+            ),
         }
 
     def unbind_root(self, root: str, *, root_identity: str | None = None) -> dict:
