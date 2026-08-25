@@ -33,11 +33,17 @@ function selectablePath(tab: Tab | null | undefined): string {
   return tab?.file && !tab.file.folder ? tab.file.name : '';
 }
 
-function sameSourceFile(left: OpenFile, right: OpenFile): boolean {
-  return left.name === right.name && (
-    left.folder === right.folder
-    || (left.folder != null && right.folder != null && folderRefsEqual(left.folder, right.folder))
-  );
+function activateTab(w: WorkspaceSlice, tab: Tab): WorkspaceSlice {
+  if (w.activeTabId === tab.id) return w;
+  return {
+    ...w,
+    activeTabId: tab.id,
+    recentFilePaths: tab.file && !tab.file.folder
+      ? rememberRecentFile(w.recentFilePaths, tab.file.name)
+      : w.recentFilePaths,
+    editorHistory: rememberActivatedTab(w.editorHistory, tab.id),
+    selectedPath: selectablePath(tab),
+  };
 }
 
 /**
@@ -73,16 +79,9 @@ function openFile(w: WorkspaceSlice, a: Extract<Action, { type: 'FILE_OPEN' }>):
   // reducer's atomic state boundary. A new-tab open is navigation, not a
   // reload, so preserve any live buffer already held by the source's tab.
   if (a.newTab) {
-    const existing = w.tabs.find((tab) => tab.file && sameSourceFile(tab.file, file));
-    if (existing) {
-      return {
-        ...w,
-        recentFilePaths,
-        editorHistory: rememberActivatedTab(w.editorHistory, existing.id),
-        activeTabId: existing.id,
-        selectedPath,
-      };
-    }
+    const existing = w.tabs.find(({ file: open }) => open?.name === file.name
+      && folderRefsEqual(open.folder ?? '', file.folder ?? ''));
+    if (existing) return activateTab(w, existing);
   }
 
   if (a.newTab || w.activeTabId == null || !getActiveTab(w)) {
@@ -293,18 +292,8 @@ export function workspaceReducer(w: WorkspaceSlice, a: Action): WorkspaceSlice |
     case 'CLOSE_TAB':
       return closeTab(w, a.id);
     case 'ACTIVATE_TAB': {
-      if (w.activeTabId === a.id) return w;
       const target = w.tabs.find((t) => t.id === a.id);
-      if (!target) return w;
-      return {
-        ...w,
-        activeTabId: a.id,
-        recentFilePaths: target.file && !target.file.folder
-          ? rememberRecentFile(w.recentFilePaths, target.file.name)
-          : w.recentFilePaths,
-        editorHistory: rememberActivatedTab(w.editorHistory, a.id),
-        selectedPath: selectablePath(target),
-      };
+      return target ? activateTab(w, target) : w;
     }
     case 'TABS_RESET':
       return { ...w, tabs: [], recentFilePaths: [], editorHistory: [], activeTabId: null, selectedPath: '' };
