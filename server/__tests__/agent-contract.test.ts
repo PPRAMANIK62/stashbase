@@ -84,7 +84,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'exit', reason: 'scope-removed', folder: '/Users/me/Projects/Research' },
   ];
   assert.equal(clientEvents.length, 7);
-  assert.equal(events.length, 18);
+  assert.equal(events.length, 19);
 });
 
 test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {
