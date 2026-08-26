@@ -21,8 +21,11 @@ export type MenuItem =
       shortcut?: string;
       danger?: boolean;
       disabled?: boolean;
-      /** Trailing accent check — marks the current choice in picker-style
-       *  menus (the app's selection idiom: neutral surface + accent mark). */
+      /** Marks the current choice in picker-style menus. Defining it (true
+       *  OR false) turns the row into a `menuitemradio` carrying
+       *  `aria-checked`, so give it to every row of a picker, not just the
+       *  current one; the checked row also wears the trailing accent check
+       *  (the app's selection idiom: neutral surface + accent mark). */
       checked?: boolean;
       /** Quiet needs-attention dot after the label (e.g. a library folder
        *  whose preparation failed) — a signal, never a color wash. */

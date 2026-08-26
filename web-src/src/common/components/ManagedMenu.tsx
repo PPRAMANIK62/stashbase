@@ -93,6 +93,17 @@ function renderMenuItems(
                     label={item.label}
                     disabled={item.disabled}
                     title={item.title}
+                    /* Rows carrying `checked` are a single-select picker
+                     * (the folder switcher marks exactly one row current),
+                     * so they announce as `menuitemradio` with a real
+                     * `aria-checked` instead of leaving the check glyph as
+                     * the only, purely visual, signal. Spread rather than
+                     * plain props: an explicit `role={undefined}` would
+                     * override — and erase — the primitive's own
+                     * `menuitem` role on command rows. */
+                    {...(item.checked !== undefined
+                      ? { role: 'menuitemradio' as const, 'aria-checked': item.checked }
+                      : undefined)}
                     className={item.danger
                       ? 'text-danger data-highlighted:bg-destructive/10'
                       : undefined}

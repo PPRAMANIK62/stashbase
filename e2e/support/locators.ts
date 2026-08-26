@@ -30,11 +30,13 @@ export async function closeFolderSwitcher(page: Page): Promise<void> {
   await switcherMenu(page).waitFor({ state: 'hidden' });
 }
 
-/** A library member row inside the OPEN switcher menu. The menuitem's
- *  accessible name is the folder basename followed by its shortened
- *  path detail, so match on the leading basename only. */
+/** A library member row inside the OPEN switcher menu. Member rows are
+ *  `menuitemradio` (the switcher is a single-select picker, and the
+ *  current folder reads back as `aria-checked`). The row's accessible
+ *  name is the folder basename followed by its shortened path detail,
+ *  so match on the leading basename only. */
 export function switcherFolderItem(page: Page, name: string): Locator {
-  return page.getByRole('menuitem', { name: new RegExp(`^${escapeForRegExp(name)}`) });
+  return page.getByRole('menuitemradio', { name: new RegExp(`^${escapeForRegExp(name)}`) });
 }
 
 /** Switch this window's folder in place through the titlebar switcher. */

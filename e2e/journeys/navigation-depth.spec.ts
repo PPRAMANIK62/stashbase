@@ -149,7 +149,7 @@ test('Favorites pin above recents and removing the active folder returns to Home
     await openFolderSwitcher(app.page);
     await expect(switcherFolderItem(app.page, 'project-beta')).toBeVisible();
     const entries = await app.page.getByRole('menu')
-      .locator('[role="presentation"], [role="menuitem"]').allInnerTexts();
+      .locator('[role="presentation"], [role="menuitem"], [role="menuitemradio"]').allInnerTexts();
     const indexOf = (prefix: string) => entries.findIndex((text) => text.trim().startsWith(prefix));
     expect(indexOf('Favorites')).toBeGreaterThan(-1);
     expect(indexOf('project-beta')).toBeGreaterThan(indexOf('Favorites'));
@@ -202,10 +202,10 @@ test('the active-folder header switcher lists the library and swaps the window f
     // membership rows below, the current folder carrying the check.
     await app.page.getByRole('button', { name: 'Switch folder' }).click();
     await expect(app.page.getByRole('menuitem', { name: 'Open Folder…' })).toBeVisible();
-    await expect(app.page.getByRole('menuitem', { name: /project-alpha/ })).toBeVisible();
+    await expect(app.page.getByRole('menuitemradio', { name: /project-alpha/ })).toBeVisible();
 
     // Selecting another member switches THIS window's folder in place.
-    await app.page.getByRole('menuitem', { name: /project-beta/ }).click();
+    await app.page.getByRole('menuitemradio', { name: /project-beta/ }).click();
     await expect(app.page).toHaveTitle('project-beta — StashBase');
     await expect(fileTreeRow(app.page, 'Notes.md')).toBeVisible();
     app.errors.assertNone();

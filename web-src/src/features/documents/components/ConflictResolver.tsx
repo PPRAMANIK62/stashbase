@@ -71,35 +71,54 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
       {/* Comparison diff view */}
       <div className="flex-1 overflow-auto font-mono text-xs select-text">
         <table className="w-full border-collapse table-fixed min-w-[800px]">
+          <caption className="sr-only">
+            Line-by-line comparison of the newer file on disk and your unsaved editor changes
+          </caption>
           <thead>
             <tr className="sticky top-0 bg-muted/20 border-b border-muted font-sans font-semibold text-muted-foreground text-2xs uppercase tracking-wider select-none">
-              <th className="w-12 border-r border-muted/30 py-1.5 bg-background"></th>
-              <th className="w-[calc(50%-24px)] text-left pl-3 py-1.5 bg-background">On Disk (Newer)</th>
-              <th className="w-12 border-l border-muted border-r border-muted/30 py-1.5 bg-background"></th>
-              <th className="w-[calc(50%-24px)] text-left pl-3 py-1.5 bg-background">Your Changes (Editor)</th>
+              <th scope="col" className="w-12 border-r border-muted/30 py-1.5 bg-background"><span className="sr-only">Disk line number</span></th>
+              <th scope="col" className="w-[calc(50%-24px)] text-left pl-3 py-1.5 bg-background">On Disk (Newer)</th>
+              <th scope="col" className="w-12 border-l border-muted border-r border-muted/30 py-1.5 bg-background"><span className="sr-only">Editor line number</span></th>
+              <th scope="col" className="w-[calc(50%-24px)] text-left pl-3 py-1.5 bg-background">Your Changes (Editor)</th>
             </tr>
           </thead>
           <tbody>
             {diffRows.map((row, idx) => {
+              /* Change kind is carried three ways so it never rests on the
+               * tint alone: the background/ink pair, a diff-convention
+               * marker glyph in the affected cell (+ added, − removed,
+               * ± modified), and screen-reader-only row text. */
               let leftBg = '';
               let rightBg = '';
+              let leftMark = '';
+              let rightMark = '';
+              let changeLabel = '';
               if (row.type === 'delete') {
                 rightBg = 'bg-green-500/10 text-green-500';
+                rightMark = '+';
+                changeLabel = 'Line only in your changes';
               } else if (row.type === 'insert') {
                 leftBg = 'bg-red-500/10 text-red-500';
+                leftMark = '−';
+                changeLabel = 'Line only on disk';
               } else if (row.type === 'modify') {
                 leftBg = 'bg-amber-500/10 text-amber-500';
                 rightBg = 'bg-amber-500/10 text-amber-500';
+                leftMark = '±';
+                rightMark = '±';
+                changeLabel = 'Modified line';
               }
 
               return (
                 <tr key={idx} className="border-b border-muted/10 hover:bg-muted/5 leading-relaxed">
                   {/* Left Line Num */}
                   <td className="w-12 select-none border-r border-muted/30 text-right pr-2 text-2xs text-muted-foreground/60 py-0.5 font-light align-top bg-muted/5">
+                    {changeLabel && <span className="sr-only">{changeLabel}. </span>}
                     {row.diskLineNumber ?? ''}
                   </td>
                   {/* Left Content (Disk Version) */}
-                  <td className={cn('pl-3 pr-2 py-0.5 whitespace-pre-wrap break-all align-top', leftBg)}>
+                  <td className={cn('relative pl-6 pr-2 py-0.5 whitespace-pre-wrap break-all align-top', leftBg)}>
+                    <span className="absolute left-1.5 select-none" aria-hidden="true">{leftMark}</span>
                     {row.diskText ?? ''}
                   </td>
                   {/* Right Line Num */}
@@ -107,7 +126,8 @@ export function ConflictResolver({ tabId }: { tabId: string }) {
                     {row.editorLineNumber ?? ''}
                   </td>
                   {/* Right Content (Editor/Your Version) */}
-                  <td className={cn('pl-3 pr-2 py-0.5 whitespace-pre-wrap break-all align-top', rightBg)}>
+                  <td className={cn('relative pl-6 pr-2 py-0.5 whitespace-pre-wrap break-all align-top', rightBg)}>
+                    <span className="absolute left-1.5 select-none" aria-hidden="true">{rightMark}</span>
                     {row.editorText ?? ''}
                   </td>
                 </tr>

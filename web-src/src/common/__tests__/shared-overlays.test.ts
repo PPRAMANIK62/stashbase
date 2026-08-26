@@ -366,6 +366,65 @@ test('menus are Base UI popups positioned from the anchor, not hand-measured', a
   });
 });
 
+test('picker rows carrying `checked` are radio items with real checked state', async () => {
+  // The folder switcher marks the current member with an accent check. The
+  // glyph alone is a sighted-only signal: rows that define `checked` must
+  // announce as `menuitemradio` with `aria-checked`, while command rows in
+  // the same menu stay plain menu items.
+  await withDom(async (dom) => {
+    await dom.render(h(Menu, {
+      anchor: { x: 0, y: 0 },
+      items: [
+        { label: 'alpha', checked: true, onSelect: () => {} },
+        { label: 'beta', checked: false, onSelect: () => {} },
+        { label: 'Open Folder…', onSelect: () => {} },
+      ],
+      onClose: () => {},
+    }));
+    const radios = dom.byRole('menuitemradio');
+    assert.deepEqual(
+      radios.map((row) => [row.textContent, row.getAttribute('aria-checked')]),
+      [['alpha', 'true'], ['beta', 'false']],
+    );
+    assert.deepEqual(dom.byRole('menuitem').map((row) => row.textContent), ['Open Folder…']);
+    // The visual idiom survives: the checked row alone carries the accent
+    // check, and the glyph stays out of the accessibility tree.
+    assert.ok(radios[0].querySelector('svg[aria-hidden="true"]'), 'checked row keeps its check glyph');
+    assert.equal(radios[1].querySelector('svg'), null, 'unchecked row draws no check');
+  });
+});
+
+test('the scope picker is one radio group named by its visible heading', async () => {
+  await withDom(async (dom) => {
+    await dom.render(h(ScopeMenu, {
+      scope: { kind: 'folder', path: '/home/u/notes' } as never,
+      entries: [{ path: '/home/u/notes' }, { path: '/home/u/work' }] as never,
+      homeDir: '/home/u',
+      heading: 'Search scope',
+      libraryDetail: 'Search every folder',
+      onSetScope: () => {},
+    }));
+    await dom.fire(dom.byLabel('Search scope')[0], new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await dom.flush();
+    const popup = dom.query('[role="menu"]');
+    assert.ok(popup, 'the scope popup opens');
+    // The popup and the radio group are both named by the one visible
+    // heading, and the current choice reads back as aria-checked rather
+    // than as an active-surface class only sighted users get.
+    const headingId = popup.getAttribute('aria-labelledby');
+    assert.ok(headingId, 'popup is named by its visible heading');
+    assert.equal(document.getElementById(headingId!)?.textContent, 'Search scope');
+    const group = dom.query('[role="group"]');
+    assert.equal(group?.getAttribute('aria-labelledby'), headingId);
+    const rows = dom.byRole('menuitemradio');
+    assert.deepEqual(
+      rows.map((row) => [row.textContent?.startsWith('Library') ? 'Library' : row.querySelector('span span')?.textContent, row.getAttribute('aria-checked')]),
+      [['Library', 'false'], ['notes', 'true'], ['work', 'false']],
+    );
+    assert.equal(dom.byRole('menuitem').length, 0, 'no plain menuitem rows remain in the picker');
+  });
+});
+
 test('the toast viewport is a Base UI region that ships with the shell', async () => {
   await withDom(async (dom) => {
     await dom.render(h(Toasts));

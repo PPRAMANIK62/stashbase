@@ -63,9 +63,16 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * a required dynamic entry below) stays lazy; the always-mounted gate
  * that owns the open event is eager by the same shell-UI rule as Quick
  * Open's and Link-to-file's gates, measured at ~1 KB of initial JS.
+ * 429 → 433 for the HTML-semantics pass across the eager shell: the
+ * shared focus trap the always-mounted overlays now run (FindBar's veils,
+ * lightbox, crash card), ARIA state on menus/tabs/trees (aria-checked,
+ * aria-owns, posinset), live regions on previously silent status text,
+ * and the keyboard equivalents for pointer-only gestures (Delete-to-close,
+ * tab reorder, keyboard context-menu anchoring) — ~3.7 KB of eager code
+ * that is contract, not feature, and cannot move to a dynamic entry.
  * Raise it only for shell UI that must load with the window — anything a
  * user can open on demand belongs in a dynamic entry above. */
-const initialJsBudgetBytes = 429 * 1024;
+const initialJsBudgetBytes = 433 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
