@@ -9,7 +9,9 @@
  *  blue) and it made the sidebar the loudest surface in the app — a hue per
  *  row is exactly the repeated-element case the colour budget rules out.
  *  The silhouette and its letterform carry the format instead. */
-export type FileGlyphFormat = 'md' | 'html' | 'json' | 'pdf' | 'image' | 'docx' | 'audio';
+import type { ViewerFormat } from '@shared/file-formats';
+
+export type FileGlyphFormat = ViewerFormat;
 
 export function FileTypeIcon({ format }: { format: FileGlyphFormat }) {
   if (format === 'image') {
@@ -25,6 +27,11 @@ export function FileTypeIcon({ format }: { format: FileGlyphFormat }) {
   if (format === 'html') {
     return (
       <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M44,128H212a4,4,0,0,0,4-4V88a8,8,0,0,0-2.34-5.66l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40v84A4,4,0,0,0,44,128ZM152,44l44,44H152ZM68,160v48a8,8,0,0,1-16,0V192H32v16a8,8,0,0,1-16,0V160a8,8,0,0,1,16,0v16H52V160a8,8,0,0,1,16,0Zm56,0a8,8,0,0,1-8,8h-8v40a8,8,0,0,1-16,0V168H84a8,8,0,0,1,0-16h32A8,8,0,0,1,124,160Zm72,0v48a8,8,0,0,1-16,0V184l-9.6,12.8a8,8,0,0,1-12.8,0L148,184v24a8,8,0,0,1-16,0V160a8,8,0,0,1,14.4-4.8L164,178.67l17.6-23.47A8,8,0,0,1,196,160Zm56,48a8,8,0,0,1-8,8H216a8,8,0,0,1-8-8V160a8,8,0,0,1,16,0v40h20A8,8,0,0,1,252,208Z"/></svg>
+    );
+  }
+  if (format === 'txt') {
+    return (
+      <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM152,44l44,44H152Zm16,148H88a8,8,0,0,1,0-16h80a8,8,0,0,1,0,16Zm0-32H88a8,8,0,0,1,0-16h80a8,8,0,0,1,0,16Zm-32-32H88a8,8,0,0,1,0-16h48a8,8,0,0,1,0,16Z"/></svg>
     );
   }
   if (format === 'json') {

@@ -90,7 +90,7 @@ function fakeDeps(
   const deps: CreateProjectDeps = {
     folderHome: () => HOME,
     memberRoots: () => [MEMBER],
-    register: (abs) => log.registered.push(abs),
+    register: (abs) => { log.registered.push(abs); },
     ensureAgentsFile: (abs) => { log.agentsFiles.push(abs); return true; },
     noteTreeChanged: () => { log.treeChanges += 1; },
     syncFolder: async (abs) => { log.synced.push(abs); },

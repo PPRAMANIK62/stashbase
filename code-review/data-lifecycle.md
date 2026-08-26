@@ -18,8 +18,10 @@
 
 ## Format Completion
 
-- Markdown, HTML, and JSON use source-owned text paths. JSON validity is not an
-  admission gate and JSON never joins note bundles or legacy-derived hiding.
+- Markdown, HTML, JSON, and UTF-8 TXT use source-owned text paths. JSON validity
+  is not an admission gate and JSON/TXT never join note bundles or legacy-
+  derived hiding. Invalid UTF-8 TXT is not indexed; reconcile removes any stale
+  semantic row and reports the decode failure.
 - Image OCR is complete only when current, searchable derived text carries its
   completion marker. Empty OCR is a failure, not success.
 - PDF text is complete only when current derived Markdown has the terminal

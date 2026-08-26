@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { memberFolderRoots, runWithFolderRoot } from './folder.ts';
+import { memberFolderRootsAsync, runWithFolderRoot } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { listImmediateDirectory } from './files.ts';
+import { listImmediateDirectoryAsync } from './files.ts';
 import {
   normalizeLibraryDirectoryPath,
   routeError,
@@ -9,11 +9,11 @@ import {
 } from './library-file-access.ts';
 
 export async function listLibraryDirectory(rawPath: unknown): Promise<{ path: string; entries: LibraryDirectoryEntry[] }> {
-  const target = normalizeLibraryDirectoryPath(rawPath);
+  const target = await normalizeLibraryDirectoryPath(rawPath);
   if (!target.folderRoot) {
     return {
       path: '',
-      entries: memberFolderRoots()
+      entries: (await memberFolderRootsAsync())
         .map((root) => ({ name: path.basename(root), path: root, type: 'directory' as const }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     };
@@ -21,8 +21,8 @@ export async function listLibraryDirectory(rawPath: unknown): Promise<{ path: st
   const folderRoot = target.folderRoot;
   return runWithFolderRoot(folderRoot, async () => {
     const prefix = target.folderRel ? target.folderRel.replace(/\/+$/, '') : '';
-    let entries: ReturnType<typeof listImmediateDirectory>;
-    try { entries = listImmediateDirectory(prefix); }
+    let entries: Awaited<ReturnType<typeof listImmediateDirectoryAsync>>;
+    try { entries = await listImmediateDirectoryAsync(prefix); }
     catch { throw routeError('directory not found', 404); }
     return {
       path: target.abs ?? folderRoot,

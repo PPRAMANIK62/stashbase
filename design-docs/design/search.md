@@ -20,7 +20,9 @@ user-managed results.
 - Exact text search works without AI Index over the direct source or current
   prepared representation declared by the
   [Documents format matrix](documents.md#format-capability-matrix), including
-  raw JSON and current prepared text. Whole-token search applies its result cap
+  raw JSON, valid UTF-8 plain text, and current prepared text. Plain-text files
+  with unsupported encodings are excluded from exact and semantic evidence
+  rather than decoded lossily. Whole-token search applies its result cap
   after token filtering, so substring-heavy files do not hide later eligible
   evidence.
 - AI Index provides meaning-based retrieval when an embedding source is

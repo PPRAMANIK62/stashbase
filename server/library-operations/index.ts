@@ -5,7 +5,7 @@
  * source identity, library membership, preparation readiness, and operation
  * errors; transports only parse and serialize requests.
  */
-import { memberFolderRoots } from '../folder.ts';
+import { memberFolderRootsAsync } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import {
   normalizeLibrarySearchScope,
@@ -89,7 +89,7 @@ export interface LibraryOperationsDependencies {
   retrieval: Retrieval;
   reindexFolder: (folder: string) => Promise<SyncResult>;
   indexStatus: (folderRoot?: string) => Promise<IndexerStatus>;
-  memberFolderRoots: () => string[];
+  memberFolderRoots: () => string[] | Promise<string[]>;
   createProject: typeof createProjectFolder;
   listDirectory: typeof listLibraryDirectory;
   read: typeof readLibraryFile;
@@ -105,7 +105,7 @@ const productionDependencies: LibraryOperationsDependencies = {
   retrieval: createRetrieval(),
   reindexFolder: (folder) => syncFolderNow(folder, { reason: 'mcp reindex' }),
   indexStatus: (folderRoot) => indexer.status(folderRoot),
-  memberFolderRoots,
+  memberFolderRoots: memberFolderRootsAsync,
   createProject: createProjectFolder,
   listDirectory: listLibraryDirectory,
   read: readLibraryFile,
@@ -126,7 +126,7 @@ export function createLibraryOperations(
     async search({ query, topK = 8, folder, pathPrefix, types, mode = 'semantic', caseStrict, wholeWord }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
-      const scope = deps.normalizeSearchScope(folder, pathPrefix);
+      const scope = await deps.normalizeSearchScope(folder, pathPrefix);
       // Keyword retrieval walks one member subtree, so a whole-library call
       // must choose a folder or a prefix whose owning member can be derived.
       if (mode === 'keyword' && !scope.folderRoot) {
@@ -165,8 +165,8 @@ export function createLibraryOperations(
     async keywordSearch({ query, caseStrict, wholeWord, folder, pathPrefix }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
-      const scope = deps.normalizeSearchScope(folder, pathPrefix);
-      const roots = scope.folderRoot ? [scope.folderRoot] : deps.memberFolderRoots();
+      const scope = await deps.normalizeSearchScope(folder, pathPrefix);
+      const roots = scope.folderRoot ? [scope.folderRoot] : await deps.memberFolderRoots();
       let lastError: unknown = null;
       const perFolder = await mapWithConcurrency(roots, KEYWORD_FOLDER_CONCURRENCY, async (root) => {
         try {
@@ -203,7 +203,7 @@ export function createLibraryOperations(
           // Nested member folders: the deeper member's own sweep answers for
           // its files — drop them from the ancestor's sweep so a hit never
           // appears twice under two folder identities.
-          if (roots.length > 1 && !deepestOwnerIs(outcome.root, file.path, roots)) continue;
+          if (roots.length > 1 && !(await deepestOwnerIs(outcome.root, file.path, roots))) continue;
           // One shared cap on delivered matches across folders so a broad
           // query cannot multiply the single-folder payload bound by the
           // library size. `totalMatches` keeps counting every remaining
@@ -226,9 +226,9 @@ export function createLibraryOperations(
     },
 
     async reindex({ folder } = {}) {
-      const folderRoot = requireLibraryStatusFolder(folder);
+      const folderRoot = await requireLibraryStatusFolder(folder);
       const folders: Array<Record<string, unknown>> = [];
-      for (const target of folderRoot ? [folderRoot] : deps.memberFolderRoots()) {
+      for (const target of folderRoot ? [folderRoot] : await deps.memberFolderRoots()) {
         try {
           folders.push({ folder: target, ...await deps.reindexFolder(target) });
         } catch (err: unknown) {
@@ -264,12 +264,16 @@ export function createLibraryOperations(
 
 /** True when `sweepRoot` is the DEEPEST member root containing the file —
  * i.e. this sweep, not a nested member's own sweep, owns the hit. */
-function deepestOwnerIs(sweepRoot: string, relPath: string, roots: readonly string[]): boolean {
+async function deepestOwnerIs(
+  sweepRoot: string,
+  relPath: string,
+  roots: readonly string[],
+): Promise<boolean> {
   const abs = filesystemPath.join(sweepRoot, relPath);
   let owner = sweepRoot;
   for (const candidate of roots) {
     if (candidate.length <= owner.length) continue;
-    if (filesystemPath.relative(candidate, abs) != null) owner = candidate;
+    if (await filesystemPath.relativeAsync(candidate, abs) != null) owner = candidate;
   }
   return owner === sweepRoot;
 }

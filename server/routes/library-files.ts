@@ -104,7 +104,7 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
   // MCP's `reindex` reports after a sweep.
   app.get('/api/library/index-status', async (req, res) => {
     try {
-      const folderRoot = requireLibraryStatusFolder(req.query.folder);
+      const folderRoot = await requireLibraryStatusFolder(req.query.folder);
       const status = await indexer.status(folderRoot);
       // Recently-indexed slice: intersect the indexed file set with
       // their on-disk mtime, return top N. Helps an agent answer "what
@@ -116,7 +116,7 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
         const enriched: Array<{ path: string; mtimeMs: number }> = [];
         for (const abs of Object.keys(indexed)) {
           try {
-            const st = fs.statSync(abs);
+            const st = await fs.promises.stat(abs);
             enriched.push({ path: abs, mtimeMs: st.mtimeMs });
           } catch { /* file vanished — drop from list */ }
         }

@@ -46,6 +46,9 @@ uses a hosted service only as its metered model provider.
 - Runtime capabilities determine model, permission, and effort controls without
   rewriting global CLI defaults. New sessions start in Auto, where the agent
   decides when an action needs approval; Ask is an explicit per-session pick.
+  A fresh Codex chat shows Default until its native thread reports the model it
+  actually started with; the catalog's suggested default is not presented as
+  live session state.
   An idle Codex conversation can change the model used by its next turn without
   replacing its native thread; the picker pauses while a turn is active. Claude
   keeps its selected model fixed after the conversation has content.

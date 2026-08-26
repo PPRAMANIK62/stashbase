@@ -31,6 +31,7 @@ import { deleteDerivedForSource, knownDerivedSourcesUnderFolder } from './derive
 import { filesystemPath } from './filesystem-path.ts';
 import { estimateSemanticWorkload, type SemanticWorkloadEstimate } from './semantic-workload.ts';
 import type { SyncResult } from '../shared/sync.ts';
+import { decodeDirectTextBytes } from './text-decoding.ts';
 
 export type { SyncResult } from '../shared/sync.ts';
 
@@ -86,7 +87,7 @@ async function assertSyncConverged(
 function readTextAt(root: string, abs: string): string | null {
   const rel = filesystemPath.relative(root, abs);
   if (rel == null || rel === '') return null;
-  try { return fs.readFileSync(abs, 'utf8'); } catch { return null; }
+  try { return decodeDirectTextBytes(rel, fs.readFileSync(abs)); } catch { return null; }
 }
 
 export interface SyncOptions {
@@ -500,7 +501,8 @@ async function indexOne(
   }
   const content = readTextAt(root, sourcePath);
   if (content == null) {
-    failed.push({ name: sourcePath, error: 'read returned null' });
+    try { await indexer.deleteFile(sourcePath); } catch { /* best-effort stale cleanup */ }
+    failed.push({ name: sourcePath, error: 'source text could not be decoded safely' });
     return 0;
   }
   try {

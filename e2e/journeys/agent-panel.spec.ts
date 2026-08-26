@@ -68,6 +68,8 @@ test('removing a chat folder preserves started work and opens a fresh Library ch
     await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
+    await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+    await app.page.getByRole('menuitem', { name: 'Codex' }).click();
     await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
     let panel = activeAgentPanel(app.page);
     let composer = panel.locator('[aria-label="Message agent"]');
@@ -80,19 +82,26 @@ test('removing a chat folder preserves started work and opens a fresh Library ch
     await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
 
-    const startedTab = app.page.getByRole('tab', { name: /math reply/i });
+    const activeStartedTab = app.page.getByRole('tab', { selected: true });
+    const startedPanelId = await activeStartedTab.getAttribute('aria-controls');
+    if (!startedPanelId) throw new Error('started chat tab did not expose its controlled panel');
+    const startedTab = app.page.locator(`[role="tab"][aria-controls="${startedPanelId}"]`);
     await app.page.getByRole('button', { name: 'More actions for project-alpha' }).click();
     await app.page.getByRole('menuitem', { name: 'Remove from Library' }).click();
     const removal = app.page.getByRole('dialog', { name: 'Remove from Library?' });
     await removal.getByRole('button', { name: 'Remove' }).click();
 
+    await expect(removal).toBeHidden();
+    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
+    await expect(startedTab).toBeVisible();
+    await startedTab.click();
+    await expect(startedTab).toHaveAttribute('aria-selected', 'true');
     panel = activeAgentPanel(app.page);
     await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
     await expect(panel.getByText('project-alpha was removed from Library')).toBeVisible();
     await expect(panel.getByText('This chat is still available, but it can’t continue in that folder.')).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Reconnect' })).toHaveCount(0);
     await expect(panel.getByRole('alert')).toHaveCount(0);
-    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
 
     // Browse another member after the removal. The retired conversation
     // remains pinned to its old scope, and its action must still create an
@@ -143,7 +152,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
     let composer = panel.locator('[aria-label="Message agent"]');
     await expect(composer).toHaveAttribute('contenteditable', 'true');
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Model and effort: Fake Codex Model, Default' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Model and effort: Default, Default' })).toBeVisible();
 
     await composer.fill('approval turn');
     await panel.getByRole('button', { name: 'Send message' }).click();
@@ -154,6 +163,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
 
     await panel.getByRole('button', { name: 'Allow', exact: true }).click();
     await expect(panel.getByText('Deterministic approval completed.')).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Model and effort: Fake Codex Model, Default' })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
     await expect.poll(() => protocolRecords(protocolLog).find((entry) => entry.event === 'approval-response')?.decision)
       .toBe('accept');

@@ -73,7 +73,9 @@
   locked after binding. Model and effort come from runtime capabilities, and
   Default remains an omitted override. An idle Codex conversation applies a
   model choice to its next turn on the same thread; its row is disabled only
-  during an active turn. A populated Claude conversation keeps its model fixed.
+  during an active turn. Before a fresh Codex thread reports its actual model,
+  the control says Default rather than speculating from catalog metadata. A
+  populated Claude conversation keeps its model fixed.
   Locked controls stay legible and inert at the smallest surface that cannot
   act: a pinned setting dims its own row — still naming its value and why —
   while sibling settings stay adjustable, and a pill goes inert only when

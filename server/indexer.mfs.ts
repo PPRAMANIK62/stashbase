@@ -11,8 +11,8 @@
  * `server/html.ts:analyzeHtml`) so its markdown chunker keeps respecting
  * heading boundaries even though it has no HTML parser. The on-disk
  * file extension stays `.html` — only what we send to the indexer is
- * rewritten. JSON is passed through byte-for-text unchanged with `.json` so
- * the generic text chunker handles it without parsing or serialization.
+ * rewritten. JSON and UTF-8 TXT are passed through byte-for-text unchanged so
+ * the generic text chunker handles them without parsing or serialization.
  */
 import { blake3 } from '@noble/hashes/blake3.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -107,7 +107,7 @@ export function prepareForIndex(filePath: string, content: string): {
     const { plaintext } = analyzeHtml(content);
     return { text: plaintext, ext: '.md', fileHash };
   }
-  // Markdown and JSON already are the directly readable source of truth.
+  // Markdown, JSON, and TXT already are the directly readable source of truth.
   return {
     text: content,
     ext: path.extname(filePath).toLowerCase() || '.md',

@@ -65,10 +65,11 @@ function openFile(w: WorkspaceSlice, a: Extract<Action, { type: 'FILE_OPEN' }>):
     format: a.body.format,
     content: a.body.content,
     version: a.body.version,
+    error: a.body.error,
     ...(a.libraryFolder ? { folder: a.libraryFolder } : {}),
   };
   const outOfFolder = Boolean(a.libraryFolder);
-  const liveEditing = file.format === 'md' && !outOfFolder;
+  const liveEditing = file.format === 'md' && !outOfFolder && !file.error;
   const recentFilePaths = outOfFolder
     ? w.recentFilePaths
     : rememberRecentFile(w.recentFilePaths, file.name);
@@ -302,7 +303,7 @@ export function workspaceReducer(w: WorkspaceSlice, a: Action): WorkspaceSlice |
       if (!tab) return w;
       // Out-of-folder tabs are read-only: their save path would write a
       // same-named file into the ACTIVE folder.
-      if (a.on && tab.file?.folder) return w;
+      if (a.on && (tab.file?.folder || tab.file?.error)) return w;
       return patchActiveTab(w, {
         editMode: a.on,
         saveStatus: a.on ? tab.saveStatus : { text: '', cls: '' },

@@ -307,14 +307,14 @@ export function useFileActions(
       }
       dispatch({ type: 'SAVE_STATUS', status: { text: 'Renaming…', cls: '' } });
     }
-    dispatch({ type: 'REMAP_PATHS', from: oldName, to: newName, kind: 'file' });
     dispatch({ type: 'RENAMING', renaming: null });
     try {
       const j = await api.renameFile(oldName, newName, { cascade, asyncIndex: true });
       if (stateRef.current.workspace.folderPath !== targetFolderPath) return;
-      if (j.name !== newName) {
-        dispatch({ type: 'REMAP_PATHS', from: newName, to: j.name, kind: 'file' });
-      }
+      // Commit the visible path only after the disk rename succeeds. An
+      // optimistic tab remap makes the active-document loader request the
+      // not-yet-created target while async path resolution is still running.
+      dispatch({ type: 'REMAP_PATHS', from: oldName, to: j.name, kind: 'file' });
       if (wasActive && activeFile) {
         dispatch({ type: 'SAVE_STATUS', status: { text: 'Saved', cls: 'saved' } });
       }
@@ -326,7 +326,6 @@ export function useFileActions(
       }
     } catch (e: unknown) {
       if (stateRef.current.workspace.folderPath !== targetFolderPath) return;
-      dispatch({ type: 'REMAP_PATHS', from: newName, to: oldName, kind: 'file' });
       const msg = e instanceof Error ? e.message : String(e);
       toast('Rename failed: ' + msg, { level: 'error' });
       if (wasActive) {

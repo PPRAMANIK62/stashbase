@@ -2,6 +2,7 @@ import { useMemo, type MouseEvent } from 'react';
 import '@/common/styles/tree.css';
 import '@/features/workspace/workspace.css';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
+import type { ViewerFormat } from '@shared/file-formats';
 import { BotIcon, CancelledIcon, ChevronDownIcon, ClaudeIcon, WarningIcon } from '@/common/components/icons';
 import { useTreeRowDrag } from '@/features/workspace/hooks/useTreeRowDrag';
 import { TreeRovingContext, useTreeRoving, useTreeRow } from '@/features/workspace/hooks/useTreeRoving';
@@ -244,7 +245,7 @@ function FileRow({
   setSize,
 }: {
   path: string;
-  format: 'md' | 'html' | 'json' | 'pdf' | 'image' | 'docx' | 'audio';
+  format: ViewerFormat;
   depth: number;
   paddingLeft: number;
   parent: string;

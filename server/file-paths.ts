@@ -41,6 +41,33 @@ export function resolveSafe(
   return filesystemPath.resolveUnder(folderRoot(), safe, { access, label });
 }
 
+/** Async request-path equivalent of `resolveSafe()`. Keep synchronous callers
+ * for bounded background work and tests; HTTP/MCP adapters must use this seam
+ * before touching an existing or creatable filesystem target. */
+export function resolveSafeAsync(
+  rel: string,
+  access: PathAccess = 'lexical',
+  label = 'path',
+  options: FolderRelativePathOptions = {},
+): Promise<string> {
+  const safe = normalizeFolderRelativePath(rel, { allowQuotes: true, ...options });
+  return filesystemPath.resolveUnderAsync(folderRoot(), safe, { access, label });
+}
+
+export async function isSameExistingPathAsync(oldRel: string, newRel: string): Promise<boolean> {
+  let oldAbs: string;
+  let newAbs: string;
+  try {
+    [oldAbs, newAbs] = await Promise.all([
+      resolveSafeAsync(oldRel),
+      resolveSafeAsync(newRel),
+    ]);
+  } catch {
+    return false;
+  }
+  return filesystemPath.sameExistingPathAsync(oldAbs, newAbs);
+}
+
 function caseOnlySameEntryRename(from: string, to: string): boolean {
   return from !== to
     && filesystemPath.sameExistingPath(from, to);
@@ -56,6 +83,20 @@ function uniqueRenameHop(target: string): string {
   throw new Error('could not reserve temporary rename path');
 }
 
+async function uniqueRenameHopAsync(target: string): Promise<string> {
+  const dir = path.dirname(target);
+  const base = path.basename(target);
+  for (let i = 0; i < 100; i += 1) {
+    const candidate = path.join(dir, `.${base}.stashbase-rename-${process.pid}-${Date.now()}-${i}`);
+    try {
+      await fs.promises.access(candidate);
+    } catch {
+      return candidate;
+    }
+  }
+  throw new Error('could not reserve temporary rename path');
+}
+
 export function renameAbsPreservingCase(from: string, to: string): void {
   if (!caseOnlySameEntryRename(from, to)) {
     fs.renameSync(from, to);
@@ -67,6 +108,21 @@ export function renameAbsPreservingCase(from: string, to: string): void {
     fs.renameSync(hop, to);
   } catch (err) {
     try { fs.renameSync(hop, from); } catch { /* preserve original error */ }
+    throw err;
+  }
+}
+
+export async function renameAbsPreservingCaseAsync(from: string, to: string): Promise<void> {
+  if (from === to || !(await filesystemPath.sameExistingPathAsync(from, to))) {
+    await fs.promises.rename(from, to);
+    return;
+  }
+  const hop = await uniqueRenameHopAsync(to);
+  await fs.promises.rename(from, hop);
+  try {
+    await fs.promises.rename(hop, to);
+  } catch (err) {
+    try { await fs.promises.rename(hop, from); } catch { /* preserve original error */ }
     throw err;
   }
 }

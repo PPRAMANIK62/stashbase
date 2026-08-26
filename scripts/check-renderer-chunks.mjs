@@ -72,14 +72,18 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * and the keyboard equivalents for pointer-only gestures (Delete-to-close,
  * tab reorder, keyboard context-menu anchoring) — ~3.7 KB of eager code
  * that is contract, not feature, and cannot move to a dynamic entry.
+ * 434 → 435 adds first-class TXT routing and its distinct tree glyph; the
+ * editor, decode-error state, and conflict surface remain together behind
+ * the required `PlainTextViewerPane` dynamic entry below.
  * Raise it only for shell UI that must load with the window — anything a
  * user can open on demand belongs in a dynamic entry above. */
-const initialJsBudgetBytes = 434 * 1024;
+const initialJsBudgetBytes = 435 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
   'src/features/documents/components/CrepeDocument.tsx',
   'src/features/documents/components/JsonDocument.tsx',
+  'src/features/documents/components/PlainTextViewerPane.tsx',
   'src/features/documents/components/json/JsonTreeView.tsx',
   'src/features/documents/components/PdfViewerPane.tsx',
   'src/features/documents/components/DocxPreview.tsx',
