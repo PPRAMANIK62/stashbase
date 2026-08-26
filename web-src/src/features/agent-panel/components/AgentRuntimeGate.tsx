@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button } from '@/common/components/ui/button';
+import { Progress, ProgressIndicator, ProgressTrack } from '@/common/components/ui/progress';
 import { SectionHeading } from '@/common/components/ui/section';
 import { runtimeFailurePresentation } from '@/features/agent-panel/lib/runtimeFailurePresentation';
 import type { Agent } from '@/common/api/api';
@@ -31,7 +32,11 @@ function RuntimeCard({ role, live, title, copy, actions, children }: {
   return (
     <div className="grid min-h-45 flex-1 place-items-center px-3 py-6" role={role} aria-live={live}>
       <div className="w-measure-sm rounded-xl border border-border bg-card p-4 text-foreground">
-        <SectionHeading className="font-medium">{title}</SectionHeading>
+        {/* Level 2, stated: a pane-level state card is the top of the chat
+          * pane's own outline (the pane has no h1 of its own), the same
+          * depth the empty-chat greeting and the whole-pane fatal card
+          * take. Transcript-inline cards sit one step down at h3. */}
+        <SectionHeading level={2} className="font-medium">{title}</SectionHeading>
         <p className="mt-2 mb-3 text-base leading-normal text-muted-foreground">{copy}</p>
         {children}
         {actions && <div className="mt-3 flex justify-end gap-2">{actions}</div>}
@@ -75,12 +80,22 @@ function AgentRuntimeProgress({ runtime, fallbackName }: { runtime: Agent; fallb
   const progress = typeof status?.progress === 'number' ? Math.max(0, Math.min(1, status.progress)) : null;
   return (
     <RuntimeCard role="status" live="polite" title={<>Preparing {name}</>} copy={status?.message ?? `Installing ${name}…`}>
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn('h-full rounded-full bg-accent transition-[width] duration-standard', progress == null && 'w-1/3 animate-pulse')}
-          style={progress == null ? undefined : { width: `${Math.round(progress * 100)}%` }}
-        />
-      </div>
+      {/* The Progress primitive, not a styled div pair: Root carries
+        * role="progressbar" with aria-valuenow/min/max (or an explicit
+        * indeterminate state when the installer reports no fraction), so
+        * the install reports a number rather than a coloured rectangle
+        * only sighted users can read. */}
+      <Progress
+        className="block"
+        aria-label={`Preparing ${name}`}
+        value={progress == null ? null : Math.round(progress * 100)}
+      >
+        <ProgressTrack className="h-1.5 w-full">
+          <ProgressIndicator
+            className={cn('bg-accent', progress == null && 'w-1/3 animate-pulse')}
+          />
+        </ProgressTrack>
+      </Progress>
       <p className="mt-2 mb-0 text-xs text-muted-foreground">You can keep browsing while this finishes.</p>
     </RuntimeCard>
   );
