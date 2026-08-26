@@ -6,6 +6,7 @@ import { basename } from '@/common/lib/paths';
 import { cn } from '@/common/lib/utils';
 import { EmptyState } from '@/common/components/ui/empty-state';
 import { fileGlyphFormat } from '@/common/lib/fileGlyphFormat';
+import { useFocusTrap } from '@/common/hooks/useFocusTrap';
 import { folderMenuEntries } from '@/common/lib/libraryScope';
 import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { FileTypeIcon } from '@/common/components/FileTypeIcon';
@@ -70,6 +71,9 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
     hasLibrary, librarySpansFolders, onQueryChange, setSearchMode, setSearchScope,
     activateEntry, rowProps,
   } = useLibrarySearchController({ prefill, onClose });
+  // `aria-modal` promises the rest of the app is inert; the trap makes it
+  // true — Tab cycles the panel's controls and closing restores focus.
+  const panelRef = useFocusTrap<HTMLDivElement>();
 
   const isKeyword = mode === 'keyword';
   const trimmedQuery = query.trim();
@@ -78,23 +82,30 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
   const folderEntries = folderMenuEntries(state.recent, state.folderPath);
 
   /** Muted centered notice filling the results area (loading, errors,
-   *  no matches); `flex-col items-center` keeps multi-line copy stacked. */
+   *  no matches); `flex-col items-center` keeps multi-line copy stacked.
+   *  A disabled option rather than a bare `<div>`, because it renders
+   *  inside the `role="listbox"` scroller — same reasoning as
+   *  `PickerEmptyRow`, which owns this shape for the `<ul>` pickers. */
   function renderEmpty(children: ReactNode) {
-    return <EmptyState className="flex-col items-center">{children}</EmptyState>;
+    return (
+      <EmptyState role="option" aria-disabled="true" aria-selected={false} className="flex-col items-center">
+        {children}
+      </EmptyState>
+    );
   }
 
   function renderKeywordResults(): ReactNode {
     if (searching && !keywordResult) return renderEmpty('Searching…');
     if (!keywordResult || keywordResult.files.length === 0) return renderEmpty('No matches');
     return (
-      <div className={HIT_LIST_CLASS}>
+      <div className={HIT_LIST_CLASS} role="presentation">
         {keywordGroups.map((folderGroup) => (
-          <div key={folderGroup.folder}>
+          <div key={folderGroup.folder} role="group" aria-label={folderBasename(folderGroup.folder)}>
             {librarySpansFolders && (
-              <div className={FOLDER_HEADER_CLASS}>{folderBasename(folderGroup.folder)}</div>
+              <div className={FOLDER_HEADER_CLASS} role="presentation">{folderBasename(folderGroup.folder)}</div>
             )}
             {folderGroup.files.map((group) => (
-              <div className="mb-1.5" key={`${group.file.folder}::${group.file.path}`}>
+              <div className="mb-1.5" role="presentation" key={`${group.file.folder}::${group.file.path}`}>
                 <div
                   className={cn(
                     'flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 hover:bg-muted',
@@ -131,7 +142,9 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
                   </div>
                 ))}
                 {group.hiddenCount > 0 && (
-                  <div className="cursor-default py-0.5 pr-2.5 pl-4 text-xs text-muted-foreground">+ {group.hiddenCount} more in this file</div>
+                  /* Presentation, not an option: it cannot be selected or
+                   * activated, so the listbox must not count it. */
+                  <div className="cursor-default py-0.5 pr-2.5 pl-4 text-xs text-muted-foreground" role="presentation">+ {group.hiddenCount} more in this file</div>
                 )}
               </div>
             ))}
@@ -145,11 +158,11 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
     if (searching && !semanticHits) return renderEmpty('Searching…');
     if (!semanticView || semanticView.total === 0) return renderEmpty('No matches');
     return (
-      <div className={HIT_LIST_CLASS}>
+      <div className={HIT_LIST_CLASS} role="presentation">
         {semanticView.groups.map((group) => (
-          <div key={group.folder}>
+          <div key={group.folder} role="group" aria-label={folderBasename(group.folder)}>
             {librarySpansFolders && (
-              <div className={FOLDER_HEADER_CLASS}>{folderBasename(group.folder)}</div>
+              <div className={FOLDER_HEADER_CLASS} role="presentation">{folderBasename(group.folder)}</div>
             )}
             {group.rows.map(({ hit, index }) => (
               <SemanticHitRow
@@ -213,7 +226,7 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
         * count as the user types, and a panel that resizes under the
         * pointer makes the list impossible to aim at. The list scrolls
         * inside instead. */}
-      <div className={cn(pickerPanelClass('wide'), 'flex h-[min(480px,calc(100vh-64px))] flex-col')} role="dialog" aria-modal="true" aria-label="Search library">
+      <div ref={panelRef} className={cn(pickerPanelClass('wide'), 'flex h-[min(480px,calc(100vh-64px))] flex-col')} role="dialog" aria-modal="true" aria-label="Search library">
         {/* Query and the two search settings share ONE row: the settings
           * belong to the query being typed, and a separate toolbar band
           * under the field spent a whole row on two short controls. The
@@ -234,6 +247,10 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
                muted line reads as typed text and the empty popup looks
                pre-filled. */
             className="min-w-0 flex-1 border-0 bg-transparent px-3.5 py-3.5 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder"
+            /* The placeholder names the live scope and changes with it — a
+             * stable accessible name on top of it, so the field is never
+             * named only by hint text. */
+            aria-label="Search library"
             role="combobox"
             aria-autocomplete="list"
             aria-controls="library-search-results"

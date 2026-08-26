@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { commandDefinitions, rankCommandPalette, routeQuickAccess } from '@/features/search/lib/commandPalette';
 import { rankQuickOpen } from '@/common/lib/quickOpen';
+import { useFocusTrap } from '@/common/hooks/useFocusTrap';
 import { usePickerListNav } from '@/common/hooks/usePickerListNav';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { openLibrarySearch } from '@/common/lib/librarySearchTrigger';
@@ -83,8 +84,12 @@ export default function ManagedQuickOpen({
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // Makes `aria-modal` true rather than aspirational: Tab stays on the
+  // query field and closing restores focus to whatever opened the palette.
+  const panelRef = useFocusTrap<HTMLDivElement>();
+
   return <div className={cn('quick-open-veil', PICKER_VEIL_CLASS)} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-    <div className={pickerPanelClass('wide')} role="dialog" aria-label={route.provider === 'commands' ? 'Command Palette' : 'Quick Open'}>
+    <div ref={panelRef} className={pickerPanelClass('wide')} role="dialog" aria-modal="true" aria-label={route.provider === 'commands' ? 'Command Palette' : 'Quick Open'}>
       {/* Deliberately NOT the `Input` primitive. `Input` is the box role —
         * its own fill, border, `rounded-lg` corner, and h-9 step — and the
         * palette query field is the opposite: a seam across the top of the
@@ -95,7 +100,7 @@ export default function ManagedQuickOpen({
         * `.quick-open-veil input:focus-visible` rule in
         * `web-src/src/styles/globals.css`, which is unlayered precisely so it
         * beats the global focus outline. */}
-      <input ref={inputRef} className="w-full border-0 border-b border-solid border-border bg-transparent px-3.5 py-3.5 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder" role="combobox" aria-autocomplete="list" aria-controls="quick-open-results" aria-expanded="true" aria-activedescendant={itemCount ? `quick-open-${active}` : undefined} placeholder={route.provider === 'commands' ? 'Type a command' : 'Search files by name or path'} value={query}
+      <input ref={inputRef} className="w-full border-0 border-b border-solid border-border bg-transparent px-3.5 py-3.5 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder" aria-label={route.provider === 'commands' ? 'Command Palette' : 'Quick Open'} role="combobox" aria-autocomplete="list" aria-controls="quick-open-results" aria-expanded="true" aria-activedescendant={itemCount ? `quick-open-${active}` : undefined} placeholder={route.provider === 'commands' ? 'Type a command' : 'Search files by name or path'} value={query}
         onChange={(event) => { setQuery(event.target.value); setActive(0); }}
         onKeyDown={onKeyDown} />
       <div className={PICKER_LABEL_CLASS}>{route.provider === 'files' ? (route.query.trim() ? 'Files' : 'Recent editors') : route.provider === 'commands' ? 'Commands' : 'Quick Access'}</div>
