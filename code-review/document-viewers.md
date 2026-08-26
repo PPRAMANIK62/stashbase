@@ -84,6 +84,10 @@ forwarding, and script confinement.
   a matching Tree node; an unrepresentable source range switches to the visible
   Source editor before selection. Both views save through
   [File Transactions](file-transactions.md).
+- TXT uses a lazy literal CodeMirror surface with no Markdown, HTML, JSON, or
+  link rendering. Valid UTF-8 sources share Find, highlights, versioned saves,
+  and conflict recovery with other editors. A decode failure keeps the named
+  tab visible, disables editing, and never substitutes replacement characters.
 
 ## Implementation Map
 
@@ -91,11 +95,11 @@ forwarding, and script confinement.
 |---|---|
 | Shared format vocabulary | `shared/file-formats.ts` and dispatch policy in `server/format.ts` |
 | Viewer dispatch | `web-src/src/app/components/MainPane.tsx`, `web-src/src/features/documents/components/DocumentViewer.tsx` |
-| Primary viewers | `web-src/src/features/documents/components/PdfViewerPane.tsx` (the PDF dynamic entry, composing preparation policy onto the viewer) over `PdfPreview.tsx` with its `PdfChrome.tsx` / `PdfPage.tsx` presenters, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx`, the lazy `json/JsonTreeView.tsx` controller, and the shared `web-src/src/common/components/ImageLightbox.tsx` |
+| Primary viewers | `web-src/src/features/documents/components/PdfViewerPane.tsx` (the PDF dynamic entry, composing preparation policy onto the viewer) over `PdfPreview.tsx` with its `PdfChrome.tsx` / `PdfPage.tsx` presenters, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx`, the lazy `json/JsonTreeView.tsx` controller, lazy `PlainTextViewerPane.tsx` over `PlainTextDocument.tsx`, and the shared `web-src/src/common/components/ImageLightbox.tsx` |
 | Preview-control Modules | `web-src/src/features/documents/hooks/usePdfDocument.ts`, `usePdfZoom.ts`, `usePdfPageTracking.ts`, `usePdfFindRegistration.ts`, `usePdfPreparation.ts`, `useFileReprocess.ts` (the Reprocess command and its stale-reply guard, shared by the PDF chrome row and the image and DOCX banners), `useAudioFallbackController.ts`, `useAudioTranscriptController.ts`, `web-src/src/features/documents/lib/audioPlayback.ts`, `audioTranscript.ts`, `findIframe.ts`, `previewChunkHighlight.ts`, `pdfText.ts`, `pdfFindController.ts`, `previewIframe.ts`, and `previewMessages.ts` |
 | Worker/Sanitizer Seam | `web-src/src/features/documents/workers/docxPreview.worker.ts`, `shared/html-sanitization.ts` |
 | Server asset/preparation Adapters | `/asset` and `/derived-asset` routes, `server/docx.ts`, media preparation Modules |
-| Focused evidence | `web-src/src/features/documents/__tests__/pdf-viewer.test.ts`, `pdf-text.test.ts`, `audio-playback.test.ts`, `audio-transcript.test.ts`, `json-document.test.ts`, `json-source-model.test.ts`, plus `e2e/journeys/formats-media.spec.ts` and `markdown-json.spec.ts` |
+| Focused evidence | `web-src/src/features/documents/__tests__/pdf-viewer.test.ts`, `pdf-text.test.ts`, `audio-playback.test.ts`, `audio-transcript.test.ts`, `json-document.test.ts`, `json-source-model.test.ts`, `plain-text-document.test.ts`, plus `e2e/journeys/formats-media.spec.ts` and `markdown-json.spec.ts` |
 
 ## Validation
 

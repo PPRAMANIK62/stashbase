@@ -107,6 +107,17 @@ export function indexableFileSizeError(absPath: string): string | null {
   return null;
 }
 
+export async function indexableFileSizeErrorAsync(absPath: string): Promise<string | null> {
+  let st: fs.Stats;
+  try { st = await fs.promises.stat(absPath); } catch { return 'file is not readable'; }
+  if (!st.isFile()) return 'path is not a file';
+  if (st.size === 0) return 'empty file';
+  if (st.size > MAX_INDEXABLE_BYTES) {
+    return `file is too large to index (${formatBytes(st.size)} > ${formatBytes(MAX_INDEXABLE_BYTES)})`;
+  }
+  return null;
+}
+
 /** True when the file's *extractable* text is empty even though the
  *  file itself is not — a bundler-format HTML that is one giant
  *  `<script>` with no prose, or a whitespace-only note. Such files can

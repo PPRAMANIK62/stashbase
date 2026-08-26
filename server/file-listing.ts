@@ -6,8 +6,9 @@ import { onSwitch } from './folder.ts';
 import { detectFormat, detectViewerFormat, isDerivedNoteName, type FileFormat, type ViewerFormat } from './format.ts';
 import { isCloudPlaceholderName, isHiddenDirName, isIndexExcludedDirName, MAX_INDEXABLE_BYTES, shouldIndexFilePath } from './indexable.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
-import { folderRoot, resolveSafe } from './file-paths.ts';
+import { folderRoot, resolveSafe, resolveSafeAsync } from './file-paths.ts';
 import type { UnsupportedFileSummary } from '../shared/library-files.ts';
+import { decodeDirectTextBytes, decodeDirectTextPreview } from './text-decoding.ts';
 
 export type { UnsupportedFileSummary } from '../shared/library-files.ts';
 
@@ -174,7 +175,7 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
           entry = { heading: '', snippet: '', imported_at };
         } else {
           let content: string;
-          try { content = readTextPrefix(full, st.size); }
+          try { content = readTextPrefix(full, st.size, format); }
           catch { continue; }
           const { heading, snippet } = preview(content, format);
           const imported_at = st.mtime.toISOString();
@@ -206,6 +207,97 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
     folders,
     unsupportedFiles,
   };
+}
+
+async function scanDirectoryAsync(dir: string, prefix: string): Promise<ScanResult> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch {
+    return emptyScanResult(false);
+  }
+
+  const acceptedEntries = visibleDirectoryEntries(entries);
+  if (acceptedEntries.length === 0) {
+    return {
+      ...emptyScanResult(true),
+      folders: prefix ? [{ path: prefix }] : [],
+    };
+  }
+
+  const files: FileEntry[] = [];
+  const folders: FolderEntry[] = [];
+  const unsupportedFiles: UnsupportedInfo = { sourceCode: 0, other: 0, otherExtensions: {} };
+  let hasSupportedInSubtree = false;
+  let hasKeptSubfolder = false;
+
+  for (const entry of acceptedEntries) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const subResult = await scanDirectoryAsync(full, rel);
+      if (subResult.isKept) {
+        hasKeptSubfolder = true;
+        files.push(...subResult.files);
+        folders.push(...subResult.folders);
+      }
+      mergeUnsupported(unsupportedFiles, subResult.unsupportedFiles);
+      continue;
+    }
+    if (!entry.isFile() || entry.name.endsWith('.tmp')) continue;
+    const format = detectViewerFormat(entry.name);
+    if (!format) {
+      const classification = classifyUnsupportedFile(entry.name);
+      if (classification === 'source') unsupportedFiles.sourceCode++;
+      else {
+        unsupportedFiles.other++;
+        const ext = getNormalizedExtension(entry.name);
+        unsupportedFiles.otherExtensions[ext] = (unsupportedFiles.otherExtensions[ext] ?? 0) + 1;
+      }
+      continue;
+    }
+    hasSupportedInSubtree = true;
+    let st: fs.Stats;
+    try { st = await fs.promises.stat(full); } catch { continue; }
+    const cached = previewCache.get(full);
+    let previewEntry: Pick<FileEntry, 'heading' | 'snippet' | 'imported_at'>;
+    if (cached && cached.mtimeMs === st.mtimeMs) {
+      previewEntry = { heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
+    } else if (format === 'pdf' || format === 'image' || format === 'docx' || format === 'audio') {
+      const imported_at = st.mtime.toISOString();
+      previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at });
+      previewEntry = { heading: '', snippet: '', imported_at };
+    } else {
+      let content: string;
+      try { content = await readTextPrefixAsync(full, st.size, format); } catch { continue; }
+      const { heading, snippet } = preview(content, format);
+      const imported_at = st.mtime.toISOString();
+      previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at });
+      previewEntry = { heading, snippet, imported_at };
+    }
+    files.push({ name: rel, format, size: st.size, ...previewEntry });
+  }
+
+  const isKept = hasSupportedInSubtree || hasKeptSubfolder;
+  if (isKept && prefix) folders.push({ path: prefix });
+  return { isKept, files, folders, unsupportedFiles };
+}
+
+function emptyScanResult(isKept: boolean): ScanResult {
+  return {
+    isKept,
+    files: [],
+    folders: [],
+    unsupportedFiles: { sourceCode: 0, other: 0, otherExtensions: {} },
+  };
+}
+
+function mergeUnsupported(target: UnsupportedInfo, source: UnsupportedInfo): void {
+  target.sourceCode += source.sourceCode;
+  target.other += source.other;
+  for (const [ext, count] of Object.entries(source.otherExtensions)) {
+    target.otherExtensions[ext] = (target.otherExtensions[ext] ?? 0) + count;
+  }
 }
 
 export function listFilesAndFolders(): FolderListing {
@@ -243,8 +335,39 @@ export function listFilesAndFolders(): FolderListing {
   };
 }
 
+export async function listFilesAndFoldersAsync(): Promise<FolderListing> {
+  const root = folderRoot();
+  const scanResult = await scanDirectoryAsync(root, '');
+  return finalizeFolderListing(root, scanResult);
+}
+
+function finalizeFolderListing(root: string, scanResult: ScanResult): FolderListing {
+  const otherExtensions = Object.entries(scanResult.unsupportedFiles.otherExtensions)
+    .map(([extension, count]) => ({ extension, count }))
+    .sort((a, b) => a.count !== b.count ? b.count - a.count : a.extension.localeCompare(b.extension));
+  const seen = new Set(scanResult.files.map((file) => path.join(root, file.name)));
+  for (const key of previewCache.keys()) {
+    if (!seen.has(key)) previewCache.delete(key);
+  }
+  scanResult.files.sort((a, b) => (a.name < b.name ? -1 : 1));
+  scanResult.folders.sort((a, b) => (a.path < b.path ? -1 : 1));
+  return {
+    files: scanResult.files,
+    folders: scanResult.folders,
+    unsupportedFiles: {
+      sourceCode: scanResult.unsupportedFiles.sourceCode,
+      other: scanResult.unsupportedFiles.other,
+      otherExtensions,
+    },
+  };
+}
+
 export function listFiles(): FileEntry[] {
   return listFilesAndFolders().files;
+}
+
+export async function listFilesAsync(): Promise<FileEntry[]> {
+  return (await listFilesAndFoldersAsync()).files;
 }
 
 export function listFolders(): FolderEntry[] {
@@ -273,6 +396,32 @@ export function listImmediateDirectory(relPrefix = ''): ImmediateDirectoryEntry[
     if (!format) continue;
     try {
       out.push({ name: entry.name, path: rel, type: 'file', format, size: fs.statSync(full).size });
+    } catch { /* raced with an external filesystem mutation */ }
+  }
+  return out.sort((a, b) =>
+    a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1,
+  );
+}
+
+export async function listImmediateDirectoryAsync(relPrefix = ''): Promise<ImmediateDirectoryEntry[]> {
+  const prefix = relPrefix ? normalizeFolderRelativePath(relPrefix, { allowQuotes: true }) : '';
+  const dir = prefix ? await resolveSafeAsync(prefix, 'existing', 'directory') : folderRoot();
+  const st = await fs.promises.stat(dir);
+  if (!st.isDirectory()) throw new Error('directory not found');
+  const entries = visibleDirectoryEntries(await fs.promises.readdir(dir, { withFileTypes: true }));
+  const out: ImmediateDirectoryEntry[] = [];
+  for (const entry of entries) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (await directoryTreeIsVisibleAsync(full)) out.push({ name: entry.name, path: rel, type: 'directory' });
+      continue;
+    }
+    if (!entry.isFile() || entry.name.endsWith('.tmp')) continue;
+    const format = detectViewerFormat(entry.name);
+    if (!format) continue;
+    try {
+      out.push({ name: entry.name, path: rel, type: 'file', format, size: (await fs.promises.stat(full)).size });
     } catch { /* raced with an external filesystem mutation */ }
   }
   return out.sort((a, b) =>
@@ -312,6 +461,18 @@ function directoryTreeIsVisible(dir: string): boolean {
   return false;
 }
 
+async function directoryTreeIsVisibleAsync(dir: string): Promise<boolean> {
+  let entries: fs.Dirent[];
+  try { entries = visibleDirectoryEntries(await fs.promises.readdir(dir, { withFileTypes: true })); }
+  catch { return false; }
+  if (entries.length === 0) return true;
+  for (const entry of entries) {
+    if (entry.isFile() && !entry.name.endsWith('.tmp') && detectViewerFormat(entry.name)) return true;
+    if (entry.isDirectory() && await directoryTreeIsVisibleAsync(path.join(dir, entry.name))) return true;
+  }
+  return false;
+}
+
 /** Text files that should be carried through a folder-level index rename.
  *  Includes legacy hidden derived notes if they still exist on disk. */
 export function listIndexableTextFilesUnder(relPrefix: string): Array<{ name: string; content: string }> {
@@ -324,21 +485,51 @@ export function listIndexableTextFilesUnder(relPrefix: string): Array<{ name: st
     if (!shouldIndexFilePath(rel)) return;
     try {
       if (fs.statSync(full).size > MAX_INDEXABLE_BYTES) return;
-      out.push({ name: rel, content: fs.readFileSync(full, 'utf8') });
+      out.push({ name: rel, content: decodeDirectTextBytes(rel, fs.readFileSync(full)) });
     } catch { /* unreadable files are skipped; sync can surface them later */ }
   }, { includeDerivedNotes: true });
   out.sort((a, b) => (a.name < b.name ? -1 : 1));
   return out;
 }
 
-function readTextPrefix(full: string, size: number): string {
+export async function listIndexableTextFilesUnderAsync(
+  relPrefix: string,
+): Promise<Array<{ name: string; content: string }>> {
+  const safePrefix = normalizeFolderRelativePath(relPrefix, { allowQuotes: true });
+  const start = await resolveSafeAsync(safePrefix, 'existing', 'folder');
+  const out: Array<{ name: string; content: string }> = [];
+  await walkAsync(start, safePrefix, async (rel, full, entry) => {
+    if (!entry.isFile() || !detectFormat(entry.name) || !shouldIndexFilePath(rel)) return;
+    try {
+      if ((await fs.promises.stat(full)).size > MAX_INDEXABLE_BYTES) return;
+      out.push({ name: rel, content: decodeDirectTextBytes(rel, await fs.promises.readFile(full)) });
+    } catch { /* unreadable files are skipped; sync can surface them later */ }
+  }, { includeDerivedNotes: true });
+  out.sort((a, b) => (a.name < b.name ? -1 : 1));
+  return out;
+}
+
+function readTextPrefix(full: string, size: number, format: FileFormat): string {
   const fd = fs.openSync(full, 'r');
   try {
     const buffer = Buffer.alloc(Math.min(TEXT_PREVIEW_BYTES, size));
     const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
-    return buffer.subarray(0, bytesRead).toString('utf8');
+    const prefix = buffer.subarray(0, bytesRead);
+    return format === 'txt' ? decodeDirectTextPreview(full, prefix) : prefix.toString('utf8');
   } finally {
     fs.closeSync(fd);
+  }
+}
+
+async function readTextPrefixAsync(full: string, size: number, format: FileFormat): Promise<string> {
+  const handle = await fs.promises.open(full, 'r');
+  try {
+    const buffer = Buffer.alloc(Math.min(TEXT_PREVIEW_BYTES, size));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const prefix = buffer.subarray(0, bytesRead);
+    return format === 'txt' ? decodeDirectTextPreview(full, prefix) : prefix.toString('utf8');
+  } finally {
+    await handle.close();
   }
 }
 
@@ -386,6 +577,46 @@ function walk(
     const full = path.join(dir, e.name);
     fn(rel, full, e);
     if (e.isDirectory()) walk(full, rel, fn, opts);
+  }
+}
+
+async function walkAsync(
+  dir: string,
+  prefix: string,
+  fn: (rel: string, full: string, ent: fs.Dirent) => Promise<void>,
+  opts: { includeDerivedNotes?: boolean } = {},
+): Promise<void> {
+  let entries: fs.Dirent[];
+  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); }
+  catch { return; }
+  const noteStems = new Set<string>();
+  const legacyDerivedStems = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const match = entry.name.match(/^(.+)\.(md|markdown|html|htm|pdf)$/i);
+    if (match) noteStems.add(match[1]);
+    const source = entry.name.match(LEGACY_DERIVED_SOURCE_RE);
+    if (source) legacyDerivedStems.add(source[1]);
+  }
+  for (const entry of entries) {
+    if (isCloudPlaceholderName(entry.name)) continue;
+    if (entry.isDirectory() && isHiddenDirName(entry.name)) continue;
+    if (entry.isFile() && HIDDEN_DOT_FILES.has(entry.name)) continue;
+    if (entry.isDirectory() && isIndexExcludedDirName(entry.name)) continue;
+    if (entry.isFile() && entry.name.startsWith('.')) {
+      if (isDerivedScratchName(entry.name)) continue;
+      if (!opts.includeDerivedNotes && isDerivedNoteName(entry.name)) continue;
+      if (!opts.includeDerivedNotes && isLegacyDerivedNoteName(entry.name, legacyDerivedStems)) continue;
+    }
+    if (entry.isDirectory() && entry.name.endsWith('_files')) {
+      const stem = entry.name.slice(0, -'_files'.length);
+      if (noteStems.has(stem) || stem.startsWith('.')) continue;
+    }
+    if (entry.isDirectory() && isDerivedScratchName(entry.name)) continue;
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const full = path.join(dir, entry.name);
+    await fn(rel, full, entry);
+    if (entry.isDirectory()) await walkAsync(full, rel, fn, opts);
   }
 }
 

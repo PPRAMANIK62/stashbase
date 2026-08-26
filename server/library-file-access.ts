@@ -1,9 +1,9 @@
 import { errorMessage } from './log.ts';
 import {
-  exactMemberFolderRoot,
+  exactMemberFolderRootAsync,
   getFolderHome,
-  memberRootForAbs,
-  resolveFolderRoot,
+  memberRootForAbsAsync,
+  resolveFolderRootAsync,
 } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
@@ -18,49 +18,52 @@ export interface LibrarySearchScope {
   /** Absolute path prefix to narrow to, or undefined. */
   pathPrefix?: string;
 }
-function requireMemberFolderRoot(ref: string): string {
-  const root = resolveFolderRoot(ref);
-  const memberRoot = exactMemberFolderRoot(root);
+async function requireMemberFolderRoot(ref: string): Promise<string> {
+  const root = await resolveFolderRootAsync(ref);
+  const memberRoot = await exactMemberFolderRootAsync(root);
   if (!memberRoot) {
     throw routeError('folder is not in your folders', 404, 'FOLDER_NOT_FOUND');
   }
   return memberRoot;
 }
 
-export function normalizeLibrarySearchScope(folderRaw: unknown, pathPrefixRaw: unknown): LibrarySearchScope {
+export async function normalizeLibrarySearchScope(folderRaw: unknown, pathPrefixRaw: unknown): Promise<LibrarySearchScope> {
   const folderRef = typeof folderRaw === 'string' && folderRaw.trim() ? folderRaw.trim() : undefined;
-  const folderRoot = folderRef ? requireMemberFolderRoot(folderRef) : undefined;
+  const folderRoot = folderRef ? await requireMemberFolderRoot(folderRef) : undefined;
   const pathPrefix = typeof pathPrefixRaw === 'string' && pathPrefixRaw.trim()
-    ? normalizeLibraryPathPrefix(pathPrefixRaw.trim())
+    ? await normalizeLibraryPathPrefix(pathPrefixRaw.trim())
     : undefined;
   // A prefix outside the requested folder would be dropped downstream and
   // silently widen the search to the whole folder — reject the pair instead.
-  if (folderRoot && pathPrefix && filesystemPath.relative(folderRoot, pathPrefix) == null) {
+  if (folderRoot && pathPrefix && await filesystemPath.relativeAsync(folderRoot, pathPrefix) == null) {
     throw routeError('path_prefix must live under folder', 400);
   }
   // A normalized prefix is already known to live under a library member.
   // Return that owner when the caller omitted `folder` so folder-walking
   // retrieval can honor a prefix-only scope without widening or rejecting it.
-  return { folderRoot: folderRoot ?? (pathPrefix ? memberRootForAbs(pathPrefix) ?? undefined : undefined), pathPrefix };
+  return {
+    folderRoot: folderRoot ?? (pathPrefix ? await memberRootForAbsAsync(pathPrefix) ?? undefined : undefined),
+    pathPrefix,
+  };
 }
 
-export function requireLibraryStatusFolder(folderRaw: unknown): string | undefined {
+export async function requireLibraryStatusFolder(folderRaw: unknown): Promise<string | undefined> {
   const folderRef = typeof folderRaw === 'string' && folderRaw.trim() ? folderRaw.trim() : undefined;
   return folderRef ? requireMemberFolderRoot(folderRef) : undefined;
 }
 
-function normalizeLibraryPathPrefix(value: string): string {
+async function normalizeLibraryPathPrefix(value: string): Promise<string> {
   // Resolve to an absolute prefix and require it to live under a member folder.
   // Absolute paths are the normal API; non-absolute values are compatibility
   // refs under the default folder home.
   const requestedAbs = resolveLibraryAbs(value, { allowEmpty: false });
-  const folderRoot = memberRootForAbs(requestedAbs);
+  const folderRoot = await memberRootForAbsAsync(requestedAbs);
   if (!folderRoot) {
     throw routeError('path_prefix must live under one of your folders', 400);
   }
-  const requestedRel = filesystemPath.relative(folderRoot, requestedAbs);
+  const requestedRel = await filesystemPath.relativeAsync(folderRoot, requestedAbs);
   if (requestedRel == null) throw routeError('path_prefix must live under one of your folders', 400);
-  return filesystemPath.join(folderRoot, filesystemPath.canonicalRelative(folderRoot, requestedRel));
+  return filesystemPath.join(folderRoot, await filesystemPath.canonicalRelativeAsync(folderRoot, requestedRel));
 }
 
 export interface LibraryPath {
@@ -98,16 +101,16 @@ export function resolveLibraryAbs(raw: unknown, opts: { allowEmpty: boolean }): 
   return filesystemPath.absolute(value, getFolderHome());
 }
 
-export function normalizeLibraryFilePath(raw: unknown): LibraryPath {
+export async function normalizeLibraryFilePath(raw: unknown): Promise<LibraryPath> {
   const requestedAbs = resolveLibraryAbs(raw, { allowEmpty: false });
-  const folderRoot = memberRootForAbs(requestedAbs);
+  const folderRoot = await memberRootForAbsAsync(requestedAbs);
   if (!folderRoot) {
     throw routeError('path must live under one of your folders (call library_info to list them)', 400);
   }
-  const requestedRel = filesystemPath.relative(folderRoot, requestedAbs);
+  const requestedRel = await filesystemPath.relativeAsync(folderRoot, requestedAbs);
   const folderRel = requestedRel == null
     ? null
-    : filesystemPath.canonicalRelative(folderRoot, requestedRel);
+    : await filesystemPath.canonicalRelativeAsync(folderRoot, requestedRel);
   if (folderRel == null || folderRel === '') {
     throw routeError('path must include a file path, not just the folder root', 400);
   }
@@ -117,17 +120,19 @@ export function normalizeLibraryFilePath(raw: unknown): LibraryPath {
   return { abs: filesystemPath.join(folderRoot, folderRel), folderRoot, folderRel };
 }
 
-export function normalizeLibraryDirectoryPath(raw: unknown): { abs?: string; folderRoot?: string; folderRel?: string } {
+export async function normalizeLibraryDirectoryPath(
+  raw: unknown,
+): Promise<{ abs?: string; folderRoot?: string; folderRel?: string }> {
   const requestedAbs = resolveLibraryAbs(raw, { allowEmpty: true });
   if (!requestedAbs) return {};
-  const folderRoot = memberRootForAbs(requestedAbs);
+  const folderRoot = await memberRootForAbsAsync(requestedAbs);
   if (!folderRoot) {
     throw routeError('path must live under one of your folders (call library_info to list them)', 400);
   }
-  const requestedRel = filesystemPath.relative(folderRoot, requestedAbs);
+  const requestedRel = await filesystemPath.relativeAsync(folderRoot, requestedAbs);
   const folderRel = requestedRel == null
     ? null
-    : filesystemPath.canonicalRelative(folderRoot, requestedRel);
+    : await filesystemPath.canonicalRelativeAsync(folderRoot, requestedRel);
   if (folderRel == null) throw routeError('path must live under one of your folders', 400);
   return { abs: filesystemPath.join(folderRoot, folderRel), folderRoot, folderRel };
 }

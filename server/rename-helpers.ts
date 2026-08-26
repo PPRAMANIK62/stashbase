@@ -9,7 +9,7 @@
  *     cascade needs to rewrite external pointers into the bundle.
  */
 import express from 'express';
-import { pathExists } from './files.ts';
+import { pathExists, pathExistsAsync } from './files.ts';
 import type { RenameEntry } from './links.ts';
 import { logger, errorMessage } from './log.ts';
 import { sendError } from './http.ts';
@@ -24,8 +24,8 @@ export async function renameWithRollback(opts: {
   from: string;
   to: string;
   res: express.Response;
-  doDisk: () => void;
-  undoDisk: () => void;
+  doDisk: () => void | Promise<void>;
+  undoDisk: () => void | Promise<void>;
   doIndex: () => Promise<void>;
   /** Lazy so callers can include values computed inside `doIndex`
    *  (e.g. the file rename returns a `linksUpdated` count that the
@@ -34,7 +34,7 @@ export async function renameWithRollback(opts: {
 }): Promise<void> {
   const { kind, from, to, res, doDisk, undoDisk, doIndex, okResponse } = opts;
   try {
-    doDisk();
+    await doDisk();
   } catch (err: unknown) {
     sendError(res, err);
     return;
@@ -45,7 +45,7 @@ export async function renameWithRollback(opts: {
   } catch (err: unknown) {
     log.warn(`${kind} rename: index update failed for ${from} → ${to}: ${errorMessage(err)}`);
     try {
-      undoDisk();
+      await undoDisk();
     } catch (rb: unknown) {
       log.warn(
         `${kind} rename: rollback failed; disk is at ${to} but index still references ${from}. ` +
@@ -81,5 +81,21 @@ export function bundleRenameEntry(
   const newBundle = newStem + '_files';
   const probe = present === 'pre' ? oldBundle : newBundle;
   if (!pathExists(probe)) return null;
+  return { kind: 'folder', old: oldBundle, new: newBundle };
+}
+
+export async function bundleRenameEntryAsync(
+  oldName: string,
+  newName: string,
+  present: 'pre' | 'post',
+): Promise<RenameEntry | null> {
+  const stemRe = /\.(md|markdown|html|htm)$/i;
+  const oldStem = oldName.replace(stemRe, '');
+  const newStem = newName.replace(stemRe, '');
+  if (oldStem === newStem) return null;
+  const oldBundle = oldStem + '_files';
+  const newBundle = newStem + '_files';
+  const probe = present === 'pre' ? oldBundle : newBundle;
+  if (!(await pathExistsAsync(probe))) return null;
   return { kind: 'folder', old: oldBundle, new: newBundle };
 }

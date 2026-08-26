@@ -159,7 +159,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         </div>
       )}
       <FindBar />
-      {cur && (cur.format === 'md' || cur.format === 'json') && !cur.folder && !activeTab?.conflict && (
+      {cur && (cur.format === 'md' || cur.format === 'json' || cur.format === 'txt') && !cur.folder && !cur.error && !activeTab?.conflict && (
         /* Floating actions in the main pane's top-right — sits below the
          * tab strip (unconditionally present whenever there's an open
          * file, so a fixed offset is safe). The edit toggle lives here on

@@ -130,6 +130,7 @@ export interface OpenFile {
   /** Opaque server-side file version used to reject stale autosaves
    *  when another window or external editor changed the same file. */
   version?: string;
+  error?: import('@shared/library-files').FileBody['error'];
   /** Absolute member-folder root when this file lives OUTSIDE the window's
    *  active folder (an "out-of-folder" tab, opened from a library-wide
    *  search hit). Such tabs are strictly read-only, never enter the tree's

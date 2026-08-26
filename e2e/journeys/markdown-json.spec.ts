@@ -14,7 +14,7 @@ import {
   openLibraryFolder,
   saveStatus,
 } from '../support/locators.ts';
-import { JOURNEY_JSON, JOURNEY_MARKDOWN, seedJourneyWorkspaces } from '../fixtures/journey-workspaces.ts';
+import { JOURNEY_JSON, JOURNEY_MARKDOWN, JOURNEY_TEXT, seedJourneyWorkspaces } from '../fixtures/journey-workspaces.ts';
 import { openedExternalUrls, stubExternalBrowser } from './journey-helpers.ts';
 
 const FRONTMATTER = '---\ntitle: Journey fixture\ntags:\n  - regression\n---\n';
@@ -205,6 +205,47 @@ test('JSON opens as a source-preserving tree and invalid source remains editable
     await app.page.getByRole('button', { name: 'Switch to Reading View' }).click();
     await expect(source).toHaveAttribute('contenteditable', 'false');
     await expect(source).toContainText('malformed tail');
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
+test('TXT stays literal, appears in Quick Open, and preserves source bytes through editing', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  seedJourneyWorkspaces(fixture);
+  const sourceFile = path.join(fixture.workspaces.projectA, JOURNEY_TEXT);
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await dismissEmbeddingKeyPrompt(app.page);
+
+    await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+O' : 'Control+O');
+    const quickOpen = app.page.getByRole('dialog', { name: 'Quick Open' });
+    await quickOpen.getByRole('combobox').fill('literal-source');
+    await quickOpen.getByRole('option', { name: new RegExp(JOURNEY_TEXT, 'i') }).click();
+
+    const region = app.page.getByRole('region', { name: 'Plain text document' });
+    const source = region.getByRole('textbox', { name: 'Plain text source' });
+    await expect(source).toContainText('# Literal heading');
+    await expect(source).toContainText('<strong>not HTML</strong>');
+    await expect(region.locator('h1, strong, a')).toHaveCount(0);
+    await expect(source).toHaveAttribute('contenteditable', 'false');
+
+    await app.page.getByRole('button', { name: 'Switch to Live Editing' }).click();
+    await expect(source).toHaveAttribute('contenteditable', 'true');
+    await source.click();
+    await app.page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End');
+    await app.page.keyboard.press('ArrowLeft');
+    await app.page.keyboard.insertText('Edited literally.');
+    await expect(saveStatus(app.page)).toBeVisible();
+    await expect.poll(() => fs.readFileSync(sourceFile, 'utf8')).toContain('Edited literally.');
+    const saved = fs.readFileSync(sourceFile, 'utf8');
+    expect(saved.startsWith('\uFEFF')).toBe(true);
+    expect(saved).toContain('\r\n');
+    expect(saved.endsWith('\r\n')).toBe(true);
     app.errors.assertNone();
   } finally {
     await app?.close();

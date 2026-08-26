@@ -15,20 +15,103 @@ import { detectViewerFormat, isConvertibleSource } from './format.ts';
 import { runWithFolderRoot } from './folder.ts';
 import {
   createFolder,
+  createTextExclusiveAsync,
+  deleteFileAsync,
   deleteFile,
   fileVersion,
+  fileVersionAsync,
   isSameExistingPath,
   listFiles,
+  listFilesAndFoldersAsync,
   listFolders,
   listIndexableTextFilesUnder,
+  listIndexableTextFilesUnderAsync,
   listImmediateDirectory,
   MAX_TEXT_READ_BYTES,
   readText,
+  readTextAsync,
   renameFolder,
   renameOnDisk,
+  renameOnDiskAsync,
   saveText,
   sanitizeFilename,
 } from './files.ts';
+
+test('async request-path file operations preserve create, read, list, rename, and delete behavior', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-async-files-'));
+  try {
+    await runWithFolderRoot(root, async () => {
+      assert.equal(await createTextExclusiveAsync('note.md', 'hello'), true);
+      assert.equal(await createTextExclusiveAsync('note.md', 'duplicate'), false);
+      assert.equal(await readTextAsync('note.md'), 'hello');
+      assert.match((await fileVersionAsync('note.md')) ?? '', /^sha256:/);
+      assert.deepEqual((await listFilesAndFoldersAsync()).files.map((entry) => entry.name), ['note.md']);
+      await renameOnDiskAsync('note.md', 'renamed.md');
+      assert.equal(await readTextAsync('renamed.md'), 'hello');
+      assert.equal(await deleteFileAsync('renamed.md'), true);
+      assert.equal(await readTextAsync('renamed.md'), null);
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('invalid UTF-8 TXT is rejected explicitly and never rewritten through the save path', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-invalid-txt-'));
+  const sourcePath = path.join(root, 'broken.txt');
+  const invalid = Buffer.from([0x66, 0x6f, 0x80, 0x6f]);
+  fs.writeFileSync(sourcePath, invalid);
+  try {
+    await runWithFolderRoot(root, async () => {
+      await assert.rejects(
+        () => readTextAsync('broken.txt'),
+        (err: Error & { code?: string; status?: number }) =>
+          err.code === 'UNSUPPORTED_ENCODING' && err.status === 415,
+      );
+      const version = await fileVersionAsync('broken.txt');
+      await assert.rejects(
+        () => saveFileContent('broken.txt', 'replacement text', { baseVersion: version ?? undefined }),
+        (err: Error & { code?: string }) => err.code === 'UNSUPPORTED_ENCODING',
+      );
+    });
+    assert.deepEqual(fs.readFileSync(sourcePath), invalid);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('TXT saves preserve UTF-8 BOM, line endings, and trailing-newline state', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-txt-format-'));
+  try {
+    fs.writeFileSync(path.join(root, 'bom-crlf.txt'), '\uFEFFone\r\ntwo\r\n', 'utf8');
+    fs.writeFileSync(path.join(root, 'lf-no-final.txt'), 'one\ntwo', 'utf8');
+    await runWithFolderRoot(root, async () => {
+      await saveFileContent(
+        'bom-crlf.txt',
+        '\uFEFFone\ntwo edited\n',
+        { baseVersion: (await fileVersionAsync('bom-crlf.txt')) ?? undefined },
+      );
+      assert.equal(await readTextAsync('bom-crlf.txt'), '\uFEFFone\r\ntwo edited\r\n');
+
+      await saveFileContent(
+        'lf-no-final.txt',
+        'one\ntwo edited',
+        { baseVersion: (await fileVersionAsync('lf-no-final.txt')) ?? undefined },
+      );
+      assert.equal(await readTextAsync('lf-no-final.txt'), 'one\ntwo edited');
+
+      const staleVersion = await fileVersionAsync('bom-crlf.txt');
+      fs.writeFileSync(path.join(root, 'bom-crlf.txt'), '\uFEFFexternal\r\nchange\r\n', 'utf8');
+      await assert.rejects(
+        () => saveFileContent('bom-crlf.txt', 'stale editor\nchange\n', { baseVersion: staleVersion ?? undefined }),
+        (err: Error & { code?: string }) => err.code === 'FILE_CHANGED',
+      );
+      assert.equal(fs.readFileSync(path.join(root, 'bom-crlf.txt'), 'utf8'), '\uFEFFexternal\r\nchange\r\n');
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('text reads reject files above the bounded response limit', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-bounded-read-'));
@@ -228,11 +311,17 @@ test('folder rename scan includes legacy derived notes for stale index cleanup',
     fs.writeFileSync(path.join(root, 'Research', 'paper.pdf'), 'pdf bytes');
     fs.writeFileSync(path.join(root, 'Research', '.paper.md'), 'legacy stem text');
     fs.writeFileSync(path.join(root, 'Research', '.paper.pdf.md'), 'legacy basename text');
+    fs.writeFileSync(path.join(root, 'Research', 'plain.TXT'), 'literal text');
+    fs.writeFileSync(path.join(root, 'Research', 'broken.txt'), Buffer.from([0x62, 0x61, 0x80, 0x64]));
 
-    await runWithFolderRoot(root, () => {
+    await runWithFolderRoot(root, async () => {
       assert.deepEqual(
         listIndexableTextFilesUnder('Research').map((entry) => entry.name),
-        ['Research/.paper.md', 'Research/.paper.pdf.md'],
+        ['Research/.paper.md', 'Research/.paper.pdf.md', 'Research/plain.TXT'],
+      );
+      assert.deepEqual(
+        (await listIndexableTextFilesUnderAsync('Research')).map((entry) => entry.name),
+        ['Research/.paper.md', 'Research/.paper.pdf.md', 'Research/plain.TXT'],
       );
     });
   } finally {

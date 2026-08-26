@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -105,6 +106,44 @@ test('Windows existing resolution restores actual component spelling', (t) => {
     paths.resolveUnder('C:/Users/Alice', 'docs/report.docx', { access: 'existing' }),
     'C:/Users/Alice/Docs/Report.docx',
   );
+});
+
+test('Windows async existing resolution restores actual component spelling without sync I/O', async (t) => {
+  const originalReaddir = fs.promises.readdir;
+  const originalRealpath = fs.realpath.native;
+  const originalReaddirSync = fs.readdirSync;
+  const originalRealpathSync = fs.realpathSync.native;
+  fs.promises.readdir = (async (cursor: fs.PathLike) => {
+    const normalized = String(cursor).replace(/\\/g, '/').toLowerCase();
+    if (normalized === 'c:/users/alice') return ['Docs'];
+    if (normalized === 'c:/users/alice/docs') return ['Report.docx'];
+    return [];
+  }) as typeof fs.promises.readdir;
+  fs.realpath.native = ((value: fs.PathLike, callback: (error: NodeJS.ErrnoException | null, path?: string) => void) => {
+    callback(null, String(value));
+  }) as typeof fs.realpath.native;
+  fs.readdirSync = (() => {
+    throw new Error('async resolution called readdirSync');
+  }) as typeof fs.readdirSync;
+  fs.realpathSync.native = (() => {
+    throw new Error('async resolution called realpathSync');
+  }) as typeof fs.realpathSync.native;
+  t.after(() => {
+    fs.promises.readdir = originalReaddir;
+    fs.realpath.native = originalRealpath;
+    fs.readdirSync = originalReaddirSync;
+    fs.realpathSync.native = originalRealpathSync;
+  });
+
+  const paths = createFilesystemPath({ platform: 'win32', cwd: 'C:\\workspace' });
+  assert.equal(
+    await paths.resolveUnderAsync('C:/Users/Alice', 'docs/report.docx', { access: 'existing' }),
+    'C:/Users/Alice/Docs/Report.docx',
+  );
+  assert.equal(await paths.equalAsync('C:/Users/Alice', 'c:/users/alice'), true);
+  assert.equal(await paths.containsAsync('C:/Users/Alice', 'c:/users/alice/Docs/Report.docx'), true);
+  assert.equal(await paths.relativeAsync('C:/Users/Alice', 'c:/users/alice/Docs/Report.docx'), 'Docs/Report.docx');
+  assert.equal(await paths.canonicalRelativeAsync('C:/Users/Alice', 'docs/report.docx'), 'Docs/Report.docx');
 });
 
 test('Windows UNC and extended-length spellings normalize without losing share roots', () => {
@@ -222,4 +261,114 @@ test('resolveUnderAsync matches resolveUnder for symlink or junction escapes', a
       filesystemPath.resolveUnder(root, 'inside.md', { access }),
     );
   }
+});
+
+test('resolveUnderAsync never reaches synchronous filesystem primitives under macOS semantics', async (t) => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-path-async-liveness-'));
+  const root = path.join(temp, 'root');
+  fs.mkdirSync(root);
+  fs.writeFileSync(path.join(root, 'inside.md'), 'inside');
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+
+  const paths = createFilesystemPath({ platform: 'darwin', cwd: temp });
+  const originalStatSync = fs.statSync;
+  const originalReaddirSync = fs.readdirSync;
+  let syncCalls = 0;
+  (fs as { statSync: typeof fs.statSync }).statSync = ((...args: Parameters<typeof fs.statSync>) => {
+    syncCalls += 1;
+    return originalStatSync(...args);
+  }) as typeof fs.statSync;
+  fs.readdirSync = ((...args: Parameters<typeof fs.readdirSync>) => {
+    syncCalls += 1;
+    return originalReaddirSync(...args);
+  }) as typeof fs.readdirSync;
+  t.after(() => {
+    (fs as { statSync: typeof fs.statSync }).statSync = originalStatSync;
+    fs.readdirSync = originalReaddirSync;
+  });
+
+  assert.equal(
+    await paths.resolveUnderAsync(root, 'inside.md', { access: 'existing' }),
+    paths.absolute(path.join(root, 'inside.md')),
+  );
+  assert.equal(await paths.equalAsync(root, root), true);
+  assert.equal(await paths.containsAsync(root, path.join(root, 'inside.md')), true);
+  assert.equal(await paths.relativeAsync(root, path.join(root, 'inside.md')), 'inside.md');
+  assert.equal(await paths.canonicalRelativeAsync(root, 'inside.md'), 'inside.md');
+  assert.equal(syncCalls, 0, `async resolution reached ${syncCalls} synchronous filesystem calls`);
+});
+
+test('slow async realpath resolution leaves unrelated event-loop work live', async (t) => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-path-async-concurrency-'));
+  const root = path.join(temp, 'root');
+  fs.mkdirSync(root);
+  fs.writeFileSync(path.join(root, 'inside.md'), 'inside');
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+
+  const originalRealpath = fs.realpath.native;
+  fs.realpath.native = ((value: fs.PathLike, callback: (error: NodeJS.ErrnoException | null, path?: string) => void) => {
+    setTimeout(() => originalRealpath(value, callback), 40);
+  }) as typeof fs.realpath.native;
+  t.after(() => { fs.realpath.native = originalRealpath; });
+
+  let resolutionFinished = false;
+  const resolution = filesystemPath.resolveUnderAsync(root, 'inside.md', { access: 'existing' })
+    .then(() => { resolutionFinished = true; });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(resolutionFinished, false, 'artificially slow realpath should still be pending');
+  await resolution;
+});
+
+test('a request waiting on async realpath does not delay an unrelated request', async (t) => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-path-http-concurrency-'));
+  const root = path.join(temp, 'root');
+  fs.mkdirSync(root);
+  fs.writeFileSync(path.join(root, 'inside.md'), 'inside');
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+
+  const originalRealpath = fs.realpath.native;
+  let releaseFirstRealpath: (() => void) | undefined;
+  let firstRealpathReleased = false;
+  fs.realpath.native = ((value: fs.PathLike, callback: (error: NodeJS.ErrnoException | null, path?: string) => void) => {
+    if (!releaseFirstRealpath) {
+      releaseFirstRealpath = () => {
+        if (firstRealpathReleased) return;
+        firstRealpathReleased = true;
+        originalRealpath(value, callback);
+      };
+      return;
+    }
+    originalRealpath(value, callback);
+  }) as typeof fs.realpath.native;
+  t.after(() => {
+    releaseFirstRealpath?.();
+    fs.realpath.native = originalRealpath;
+  });
+
+  let markSlowStarted: (() => void) | undefined;
+  const slowStarted = new Promise<void>((resolve) => { markSlowStarted = resolve; });
+  const server = http.createServer(async (req, res) => {
+    if (req.url === '/slow') {
+      markSlowStarted?.();
+      await filesystemPath.resolveUnderAsync(root, 'inside.md', { access: 'existing' });
+      res.end('slow');
+      return;
+    }
+    res.end('fast');
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const base = `http://127.0.0.1:${address.port}`;
+
+  const slowResponse = fetch(`${base}/slow`);
+  await slowStarted;
+  assert.equal(await (await fetch(`${base}/fast`)).text(), 'fast');
+  assert.ok(releaseFirstRealpath, 'slow request reached the artificial filesystem gate');
+  releaseFirstRealpath();
+  assert.equal(await (await slowResponse).text(), 'slow');
 });

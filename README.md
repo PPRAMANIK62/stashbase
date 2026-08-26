@@ -191,7 +191,7 @@ access is not required. Exact search needs neither option.
 
 StashBase builds its AI Index and exact text search over:
 
-- Markdown, HTML, and raw JSON text
+- Markdown, valid UTF-8 plain text, HTML, and raw JSON text
 - PDF-derived Markdown
 - DOCX-derived HTML
 - OCR text from images
@@ -388,7 +388,7 @@ Community-supported:
 Reasonably stable:
 
 - Local folder library model
-- Markdown, HTML, JSON, PDF, and image preview
+- Markdown, literal plain text, HTML, JSON, PDF, and image preview
 - PDF extraction, image OCR, and local audio and video transcription, with persisted failures and retry
 - AI Index and exact text search
 - MCP access for built-in and externally configured clients

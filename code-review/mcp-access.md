@@ -39,9 +39,10 @@ clients and are not a general host-filesystem API.
   consuming unbounded server memory.
 - Format capability follows the
   [Documents matrix](../design-docs/design/documents.md#format-capability-matrix):
-  `read_file` returns direct Markdown, HTML, or JSON source text and current
-  prepared PDF, DOCX, or media text; it does not return image bytes.
-  `write_file` and `edit_file` accept Markdown, HTML, and JSON source text only.
+  `read_file` returns direct Markdown, HTML, JSON, or valid UTF-8 TXT source
+  text and current prepared PDF, DOCX, or media text; it does not return image
+  bytes. `write_file` and `edit_file` accept those four direct-text families.
+  Invalid UTF-8 TXT fails explicitly and is never rewritten.
   Previewability or built-in image attachment support must not be generalized
   into external MCP text-read capability.
 - `create_project` creates only beneath the default folder home or an already
@@ -50,15 +51,6 @@ clients and are not a general host-filesystem API.
   seeds missing Agent instructions create-only and registers the folder.
   Session rebind requires trusted live-session attribution; ambiguous or
   external callers only create and register.
-
-## Known Gap — JSON Tool Description
-
-Shipping `write_file` and `edit_file` operations accept JSON through the same
-versioned text transaction used by Markdown and HTML, and focused mutation
-tests exercise that behavior. Their current MCP tool descriptions name only
-Markdown/HTML, so clients may underuse a real capability. Until the tool
-metadata is corrected and locked by focused evidence, treat the operation and
-the product matrix as implementation truth rather than the narrower copy.
 
 ## Transports and Credentials
 

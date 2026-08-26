@@ -5,12 +5,12 @@ import { deleteDerivedForSource } from './derived-store.ts';
 import { prepareFileOperation } from './file-operation-guard.ts';
 import { saveFileContent } from './file-save.ts';
 import {
-  deleteFile,
+  deleteFileAsync,
   derivedArtifactsForSource,
-  isSameExistingPath,
-  pathExists,
-  readText,
-  renameOnDisk,
+  isSameExistingPathAsync,
+  pathExistsAsync,
+  readTextAsync,
+  renameOnDiskAsync,
 } from './files.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { runWithFolderRoot } from './folder.ts';
@@ -23,9 +23,9 @@ import {
   validateLibraryWritableFolderRel,
 } from './library-file-access.ts';
 import { readLibraryFile } from './library-file-reader.ts';
-import { applyRenamePlan, planRenameLinks, type RenameEntry } from './links.ts';
+import { applyRenamePlanAsync, planRenameLinksAsync, type RenameEntry } from './links.ts';
 import { errorMessage, logger } from './log.ts';
-import { bundleRenameEntry } from './rename-helpers.ts';
+import { bundleRenameEntryAsync } from './rename-helpers.ts';
 import { indexer } from './state.ts';
 import { noteTreeChanged } from './watcher.ts';
 
@@ -55,7 +55,7 @@ export async function writeLibraryFile(
   content: string,
   opts: { baseVersion?: string } = {},
 ): Promise<{ path: string; version?: string; indexWarning?: string }> {
-  const target = normalizeLibraryFilePath(rawPath);
+  const target = await normalizeLibraryFilePath(rawPath);
   validateLibraryWritableFolderRel(target.folderRel);
   validateLibraryTextMutation(content);
   return runWithFolderRoot(target.folderRoot, async () => {
@@ -73,7 +73,7 @@ export async function editLibraryFile(
   if (!oldText) throw routeError('old_text must not be empty', 400);
   const current = await readLibraryFile(rawPath);
   if (current.derived) {
-    throw routeError('edit_file cannot edit derived PDF/DOCX/audio text; create or edit a Markdown/HTML source file instead', 415, 'UNSUPPORTED_FORMAT');
+    throw routeError('edit_file cannot edit derived PDF/DOCX/audio text; create or edit a Markdown, HTML, JSON, or UTF-8 plain-text source file instead', 415, 'UNSUPPORTED_FORMAT');
   }
   const count = countOccurrences(current.content, oldText);
   if (count === 0) throw routeError('old_text not found', 409, 'EDIT_MISMATCH');
@@ -103,9 +103,11 @@ export async function moveLibraryFile(
   rawNewPath: unknown,
   opts: { cascade?: boolean } = {},
 ): Promise<{ path: string; oldPath: string; linksUpdated: number; indexWarning?: string }> {
-  const oldTarget = normalizeLibraryFilePath(rawPath);
-  const newTarget = normalizeLibraryFilePath(rawNewPath);
-  if (!filesystemPath.equal(oldTarget.folderRoot, newTarget.folderRoot)) {
+  const [oldTarget, newTarget] = await Promise.all([
+    normalizeLibraryFilePath(rawPath),
+    normalizeLibraryFilePath(rawNewPath),
+  ]);
+  if (!(await filesystemPath.equalAsync(oldTarget.folderRoot, newTarget.folderRoot))) {
     throw routeError('move_file currently supports moves within the same folder only', 400);
   }
   validateLibraryWritableFolderRel(newTarget.folderRel);
@@ -118,25 +120,23 @@ export async function moveLibraryFile(
       throw routeError(`new_path must keep a ${oldFormat} extension`, 400);
     }
     const viewerOnly = !oldStructuredFormat && isConvertibleSource(oldTarget.folderRel);
-    const content = viewerOnly ? null : readText(oldTarget.folderRel);
-    if (!viewerOnly && content == null) throw routeError('not found', 404);
-    if (viewerOnly && !pathExists(oldTarget.folderRel)) throw routeError('not found', 404);
-    if (pathExists(newTarget.folderRel) && !isSameExistingPath(oldTarget.folderRel, newTarget.folderRel)) {
+    if (!(await pathExistsAsync(oldTarget.folderRel))) throw routeError('not found', 404);
+    if ((await pathExistsAsync(newTarget.folderRel)) && !(await isSameExistingPathAsync(oldTarget.folderRel, newTarget.folderRel))) {
       throw routeError('target exists', 409);
     }
     await prepareFileOperation(oldTarget.folderRel);
 
     const oldDerivedArtifacts = derivedArtifactsForSource(oldTarget.folderRel);
     const renames: RenameEntry[] = [{ kind: 'file', old: oldTarget.folderRel, new: newTarget.folderRel }];
-    const bundleEntry = bundleRenameEntry(oldTarget.folderRel, newTarget.folderRel, 'pre');
+    const bundleEntry = await bundleRenameEntryAsync(oldTarget.folderRel, newTarget.folderRel, 'pre');
     if (bundleEntry) renames.push(bundleEntry);
     const cascadeOn = oldStructuredFormat !== 'json' && opts.cascade !== false;
-    const linkPlan = cascadeOn ? planRenameLinks(renames) : [];
-    renameOnDisk(oldTarget.folderRel, newTarget.folderRel);
-    const applied = cascadeOn ? applyRenamePlan(linkPlan) : null;
+    const linkPlan = cascadeOn ? await planRenameLinksAsync(renames) : [];
+    await renameOnDiskAsync(oldTarget.folderRel, newTarget.folderRel);
+    const applied = cascadeOn ? await applyRenamePlanAsync(linkPlan) : null;
     if (applied?.failed.length) {
-      applied.rollback();
-      renameOnDisk(newTarget.folderRel, oldTarget.folderRel);
+      await applied.rollback();
+      await renameOnDiskAsync(newTarget.folderRel, oldTarget.folderRel);
       throw routeError(`failed to update links in ${applied.failed.map((failure) => failure.name).join(', ')}`, 500);
     }
     noteTreeChanged();
@@ -177,7 +177,7 @@ export async function moveLibraryFile(
         await indexer.deleteFile(oldTarget.abs);
         indexWarning = 'AI Index was not updated because it is not set up.';
       } else {
-        const movedContent = readText(newTarget.folderRel) ?? content ?? '';
+        const movedContent = (await readTextAsync(newTarget.folderRel)) ?? '';
         const tooLarge = contentSizeError(movedContent);
         if (tooLarge) {
           await indexer.deleteFile(oldTarget.abs).catch((err) => {
@@ -191,7 +191,7 @@ export async function moveLibraryFile(
       for (const updated of applied?.updated ?? []) {
         if (!isEmbeddingAvailable()) break;
         if (updated.name === newTarget.folderRel) continue;
-        const body = readText(updated.name);
+        const body = await readTextAsync(updated.name);
         if (body != null) await indexer.upsertFile(filesystemPath.join(oldTarget.folderRoot, updated.name), body);
       }
     } catch (err) {
@@ -212,11 +212,11 @@ export async function moveLibraryFile(
 }
 
 export async function deleteLibraryFile(rawPath: unknown): Promise<{ path: string; alreadyGone: boolean; indexWarning?: string }> {
-  const target = normalizeLibraryFilePath(rawPath);
+  const target = await normalizeLibraryFilePath(rawPath);
   return runWithFolderRoot(target.folderRoot, async () => {
     await prepareFileOperation(target.folderRel);
     const derivedArtifacts = derivedArtifactsForSource(target.folderRel);
-    const removed = deleteFile(target.folderRel);
+    const removed = await deleteFileAsync(target.folderRel);
     try { deleteDerivedForSource(target.abs); }
     catch (err: unknown) { log.warn(`library delete: derived cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
     try { clearRecord(target.abs); }

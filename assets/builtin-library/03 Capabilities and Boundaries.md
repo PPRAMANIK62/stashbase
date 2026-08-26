@@ -1,7 +1,7 @@
 # Capabilities and Boundaries
 
 This is the detailed product-facing capability reference bundled on
-2026-08-25. Use the narrow capability names below: preview, Workbench content
+2026-08-26. Use the narrow capability names below: preview, Workbench content
 editing, retrieval text, Agent/MCP access, and file mutation are not
 interchangeable.
 
@@ -10,6 +10,7 @@ interchangeable.
 | Source family | Workbench surface | Workbench content editing | Retrieval text | Agent and external MCP file access |
 |---|---|---|---|---|
 | Markdown (`.md`, `.markdown`) | Writer Mode and Reading View | New and existing Markdown is content-editable | Direct source text | `read_file`, `write_file`, and `edit_file` use source text |
+| Plain text (`.txt`) | Literal source editor | Existing valid UTF-8 sources are content-editable; New Note creates Markdown | Direct UTF-8 source text; unsupported encodings are excluded | `read_file`, `write_file`, and `edit_file` use valid UTF-8 source text |
 | JSON (`.json`) | Source-preserving Tree and Source views | Existing JSON is content-editable; New Note creates Markdown | Direct raw source text | `read_file`, `write_file`, and `edit_file` use source text |
 | HTML (`.html`, `.htm`) | Compatibility preview | Preview-only in the Workbench | Clean text derived in memory from the source | MCP file helpers use raw HTML source text |
 | PDF (`.pdf`) | Source PDF preview | Preview-only | Prepared Markdown | `read_file` returns current prepared Markdown; content writes are rejected |
@@ -42,7 +43,7 @@ opened as lossy text.
 
 Preparation creates the representation needed for retrieval or Agent reading:
 
-- Markdown and JSON use source text directly.
+- Markdown, valid UTF-8 plain text, and JSON use source text directly.
 - HTML provides clean in-memory retrieval text without a durable prepared file.
 - PDF produces Markdown.
 - DOCX produces HTML.

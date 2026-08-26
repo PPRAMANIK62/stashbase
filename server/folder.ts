@@ -20,6 +20,7 @@ import { isIndexExcludedDirName } from './indexable.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import {
   readAppConfig as readConfig,
+  readAppConfigAsync as readConfigAsync,
   readAppConfigStrict as readConfigStrict,
   writeAppConfigStrict as writeConfigStrict,
   type RecentFolder,
@@ -93,7 +94,7 @@ export async function runWithFolderRoot<T>(
   absRoot: string,
   fn: () => T | Promise<T>,
 ): Promise<T> {
-  const root = resolveFolderRoot(absRoot);
+  const root = await resolveFolderRootAsync(absRoot);
   return runWithWindowId(`__folder:${root}`, async () => {
     const windowId = currentWindowId();
     syntheticFolderRefs.set(windowId, (syntheticFolderRefs.get(windowId) ?? 0) + 1);
@@ -122,6 +123,10 @@ export function memberFolderRoots(): string[] {
   return getRecentFolders().map((r) => filesystemPath.absolute(r.path));
 }
 
+export async function memberFolderRootsAsync(): Promise<string[]> {
+  return (await getRecentFoldersAsync()).map((r) => filesystemPath.absolute(r.path));
+}
+
 /** Config JSON is external durable input. Keep malformed/legacy empty path
  * values from reaching the strict filesystem-path API; valid path semantics
  * still come exclusively from that module. */
@@ -130,12 +135,26 @@ function storedFolderPathEquals(value: unknown, target: string): boolean {
   try { return filesystemPath.equal(value, target); } catch { return false; }
 }
 
+async function storedFolderPathEqualsAsync(value: unknown, target: string): Promise<boolean> {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try { return await filesystemPath.equalAsync(value, target); } catch { return false; }
+}
+
 /** Return the stored spelling of an exact library-member root. Windows callers
  * may supply drive, separator, or component case variants; downstream path-
  * keyed stores must continue from the one spelling kept in membership. */
 export function exactMemberFolderRoot(abs: string): string | null {
   const target = filesystemPath.absolute(abs);
   return memberFolderRoots().find((root) => filesystemPath.equal(root, target)) ?? null;
+}
+
+/** Async request-path equivalent of `exactMemberFolderRoot()`. */
+export async function exactMemberFolderRootAsync(abs: string): Promise<string | null> {
+  const target = filesystemPath.absolute(abs);
+  for (const root of await memberFolderRootsAsync()) {
+    if (await filesystemPath.equalAsync(root, target)) return root;
+  }
+  return null;
 }
 
 /** The member folder (longest-prefix) that contains `abs`, or null when
@@ -147,6 +166,20 @@ export function memberRootForAbs(abs: string): string | null {
   for (const root of memberFolderRoots()) {
     if (filesystemPath.contains(root, target)) {
       if (!best || filesystemPath.identity(root).length > filesystemPath.identity(best).length) best = root;
+    }
+  }
+  return best;
+}
+
+/** Async request-path equivalent of `memberRootForAbs()`. */
+export async function memberRootForAbsAsync(abs: string): Promise<string | null> {
+  const target = filesystemPath.absolute(abs);
+  let best: string | null = null;
+  for (const root of await memberFolderRootsAsync()) {
+    if (await filesystemPath.containsAsync(root, target)) {
+      if (!best || (await filesystemPath.identityAsync(root)).length > (await filesystemPath.identityAsync(best)).length) {
+        best = root;
+      }
     }
   }
   return best;
@@ -165,6 +198,24 @@ export function resolveFolderRoot(ref: string): string {
   const root = filesystemPath.absolute(ref, getFolderHome());
   try {
     if (fs.statSync(root).isDirectory()) return root;
+  } catch {
+    /* fall through to the not-found error */
+  }
+  const err = new Error('folder not found');
+  (err as any).code = 'FOLDER_NOT_FOUND';
+  throw err;
+}
+
+/** Async request-path equivalent of `resolveFolderRoot()`. */
+export async function resolveFolderRootAsync(ref: string): Promise<string> {
+  if (typeof ref !== 'string' || !ref.trim()) {
+    const err = new Error('folder reference required');
+    (err as any).code = 'FOLDER_NOT_FOUND';
+    throw err;
+  }
+  const root = filesystemPath.absolute(ref, getFolderHome());
+  try {
+    if ((await fs.promises.stat(root)).isDirectory()) return root;
   } catch {
     /* fall through to the not-found error */
   }
@@ -488,6 +539,13 @@ export function clearFolderPath(absPath: string): void {
   }
 }
 
+/** Async request-path equivalent of `clearFolderPath()`. */
+export async function clearFolderPathAsync(absPath: string): Promise<void> {
+  for (const [windowId, value] of [...currentFolders.entries()]) {
+    if (await filesystemPath.equalAsync(value, absPath)) clearCurrentFolder(windowId);
+  }
+}
+
 /** Subscribe to folder switches. The listener receives the absolute path
  *  of the newly-current folder; fires after the switch is in place. */
 export function onSwitch(fn: (newRoot: string, windowId: string) => void): void {
@@ -520,6 +578,15 @@ export function getRecentFolders(): RecentFolder[] {
   return all.filter((v) => {
     try { return fs.statSync(v.path).isDirectory(); } catch { return false; }
   });
+}
+
+export async function getRecentFoldersAsync(): Promise<RecentFolder[]> {
+  const all = ((await readConfigAsync()).recentFolders ?? []).map(currentRecentFolder);
+  const checks = await Promise.all(all.map(async (value) => {
+    try { return (await fs.promises.stat(value.path)).isDirectory(); }
+    catch { return false; }
+  }));
+  return all.filter((_, index) => checks[index]);
 }
 
 function pushRecent(absPath: string): void {
@@ -567,6 +634,46 @@ export function registerLibraryFolder(absPath: string): void {
   pushRecent(normalized);
 }
 
+/** Async project-creation registration path. Identity and directory probes
+ * yield before the final synchronous config commit. */
+export async function registerLibraryFolderAsync(absPath: string): Promise<void> {
+  const normalized = filesystemPath.absolute(absPath);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const snapshot = readConfigStrict();
+    const revision = JSON.stringify(snapshot);
+    const list = (snapshot.recentFolders ?? []).map(currentRecentFolder);
+    const matches = await Promise.all(list.map((value) => storedFolderPathEqualsAsync(value.path, normalized)));
+    const directoryChecks = await Promise.all(list.map(async (value) => {
+      try { return (await fs.promises.stat(value.path)).isDirectory(); }
+      catch { return false; }
+    }));
+    const existingIndex = matches.findIndex(Boolean);
+    const retainedPath = existingIndex >= 0
+      ? filesystemPath.absolute(list[existingIndex].path)
+      : normalized;
+    const filtered = list.filter((_, index) => !matches[index] && directoryChecks[index]);
+    filtered.unshift({
+      path: retainedPath,
+      openedAt: new Date().toISOString(),
+      ...(existingIndex >= 0 && list[existingIndex].favorite === true ? { favorite: true } : {}),
+    });
+    // Re-check removal and config truth after every awaited probe. The final
+    // read/compare/write sequence has no yield, so concurrent settings or
+    // membership mutations make this operation retry instead of losing data.
+    await assertLibraryFolderAvailableAsync(normalized);
+    const current = readConfigStrict();
+    if (JSON.stringify(current) !== revision) continue;
+    current.recentFolders = filtered;
+    delete current.recentVaults;
+    writeConfigStrict(current);
+    return;
+  }
+  const err = new Error('library membership changed repeatedly; try again');
+  (err as any).code = 'CONFIG_BUSY';
+  (err as any).status = 409;
+  throw err;
+}
+
 /** Hold a process-local removal intent while a member's conversions, derived
  * artifacts, index rows, and runtime state are retired. Open/register calls
  * fail during the interval so a concurrent request cannot resurrect
@@ -574,6 +681,20 @@ export function registerLibraryFolder(absPath: string): void {
 export function beginLibraryFolderRemoval(absPath: string): () => void {
   const source = filesystemPath.absolute(absPath);
   const key = filesystemPath.identity(source);
+  if (removingFolders.has(key)) {
+    const err = new Error('folder removal is already in progress');
+    (err as any).code = 'FOLDER_REMOVING';
+    (err as any).status = 409;
+    throw err;
+  }
+  removingFolders.set(key, source);
+  return () => { removingFolders.delete(key); };
+}
+
+/** Async request-path equivalent of `beginLibraryFolderRemoval()`. */
+export async function beginLibraryFolderRemovalAsync(absPath: string): Promise<() => void> {
+  const source = filesystemPath.absolute(absPath);
+  const key = await filesystemPath.identityAsync(source);
   if (removingFolders.has(key)) {
     const err = new Error('folder removal is already in progress');
     (err as any).code = 'FOLDER_REMOVING';
@@ -596,6 +717,19 @@ export function assertLibraryFolderAvailable(absPath: string): void {
   throw err;
 }
 
+/** Async request-path equivalent of `assertLibraryFolderAvailable()`. */
+export async function assertLibraryFolderAvailableAsync(absPath: string): Promise<void> {
+  const requested = filesystemPath.absolute(absPath);
+  for (const root of removingFolders.values()) {
+    if (await filesystemPath.containsAsync(root, requested)) {
+      const err = new Error('folder removal is in progress');
+      (err as any).code = 'FOLDER_REMOVING';
+      (err as any).status = 409;
+      throw err;
+    }
+  }
+}
+
 /** Remove a folder from the membership list ("Your Folders"). Does NOT
  *  touch the folder on disk — removal only forgets it from the knowledge
  *  base; the caller clears its index rows separately. No-op if absent. */
@@ -607,6 +741,28 @@ export function removeRecent(absPath: string): void {
   if (filtered.length === list.length) return;
   cfg.recentFolders = filtered;
   writeConfigStrict(cfg);
+}
+
+/** Async request-path equivalent of `removeRecent()`. */
+export async function removeRecentAsync(absPath: string): Promise<void> {
+  const target = filesystemPath.absolute(absPath);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const snapshot = readConfigStrict();
+    const revision = JSON.stringify(snapshot);
+    const list = (snapshot.recentFolders ?? []).map(currentRecentFolder);
+    const matches = await Promise.all(list.map((value) => storedFolderPathEqualsAsync(value.path, target)));
+    const current = readConfigStrict();
+    if (JSON.stringify(current) !== revision) continue;
+    const filtered = list.filter((_, index) => !matches[index]);
+    if (filtered.length === list.length) return;
+    current.recentFolders = filtered;
+    writeConfigStrict(current);
+    return;
+  }
+  const err = new Error('library membership changed repeatedly; try again');
+  (err as any).code = 'CONFIG_BUSY';
+  (err as any).status = 409;
+  throw err;
 }
 
 /** Star / unstar a member folder in the library list. Returns false when

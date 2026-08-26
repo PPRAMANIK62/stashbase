@@ -5,17 +5,16 @@
  */
 import express from 'express';
 import {
-  createFolder,
-  deleteFolder,
-  listIndexableTextFilesUnder,
-  listFiles,
-  isSameExistingPath,
-  pathExists,
-  readText,
-  renameFolder,
+  createFolderAsync,
+  deleteFolderAsync,
+  listIndexableTextFilesUnderAsync,
+  isSameExistingPathAsync,
+  pathExistsAsync,
+  readTextAsync,
+  renameFolderAsync,
   sanitizeFilename,
 } from '../files.ts';
-import { applyRenamePlan, planRenameLinks } from '../links.ts';
+import { applyRenamePlanAsync, planRenameLinksAsync } from '../links.ts';
 import { toSourcePath } from '../folder.ts';
 import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { errorMessage, logger } from '../log.ts';
@@ -42,12 +41,12 @@ function scheduleConversionRediscovery(sourcePrefix: string, displayPath: string
 }
 
 export function mount(app: express.Express): void {
-  app.post('/api/folders', (req, res) => {
+  app.post('/api/folders', async (req, res) => {
     const requested = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
     if (!requested) return res.status(400).json({ error: 'path required' });
     try {
       const folderPath = sanitizeFilename(requested);
-      if (!createFolder(folderPath)) return res.status(409).json({ error: 'folder exists' });
+      if (!(await createFolderAsync(folderPath))) return res.status(409).json({ error: 'folder exists' });
       noteTreeChanged();
       res.json({ path: folderPath });
     } catch (err: unknown) {
@@ -66,7 +65,7 @@ export function mount(app: express.Express): void {
       // the old semantic prefix has also been removed.
       try { deleteDerivedUnderFolder(sourcePrefix); }
       catch (err: unknown) { log.warn(`delete_prefix: derived cleanup failed for ${p}: ${errorMessage(err)}`); }
-      const removed = deleteFolder(p);
+      const removed = await deleteFolderAsync(p);
       if (removed) {
         noteTreeChanged();
         try { removeFileOrderPath(p, 'folder'); }
@@ -97,31 +96,33 @@ export function mount(app: express.Express): void {
     const parent = lastSlash >= 0 ? oldPath.slice(0, lastSlash + 1) : '';
     const newPath = sanitizeFilename(parent + requested);
     if (newPath === oldPath) return res.json({ path: oldPath });
-    if (!pathExists(oldPath)) return res.status(404).json({ error: 'source folder not found' });
-    if (pathExists(newPath) && !isSameExistingPath(oldPath, newPath)) {
+    if (!(await pathExistsAsync(oldPath))) return res.status(404).json({ error: 'source folder not found' });
+    if ((await pathExistsAsync(newPath)) && !(await isSameExistingPathAsync(oldPath, newPath))) {
       return res.status(409).json({ error: 'target already exists' });
     }
     const oldSourcePrefix = toSourcePath(oldPath);
     const newSourcePrefix = toSourcePath(newPath);
     await cancelConversionsUnderAndWait(oldSourcePrefix);
     const cascadeOn = req.body?.cascade !== false;
-    const linkPlan = cascadeOn ? planRenameLinks([{ kind: 'folder', old: oldPath, new: newPath }]) : [];
+    const linkPlan = cascadeOn
+      ? await planRenameLinksAsync([{ kind: 'folder', old: oldPath, new: newPath }])
+      : [];
 
     await renameWithRollback({
       kind: 'folder',
       from: oldPath,
       to: newPath,
       res,
-      doDisk: () => renameFolder(oldPath, newPath),
-      undoDisk: () => {
-        renameFolder(newPath, oldPath);
+      doDisk: () => renameFolderAsync(oldPath, newPath),
+      undoDisk: async () => {
+        await renameFolderAsync(newPath, oldPath);
         // A queued task may have observed the source missing while the index
         // update was in progress and retired its old identity. Re-scan the
         // restored prefix so rollback restores background work as well as disk.
         scheduleConversionRediscovery(oldSourcePrefix, oldPath);
       },
       doIndex: async () => {
-        const applied = cascadeOn ? applyRenamePlan(linkPlan) : null;
+        const applied = cascadeOn ? await applyRenamePlanAsync(linkPlan) : null;
         try {
           if (applied?.failed.length) {
             throw new Error(`failed to update links in ${applied.failed.map((f) => f.name).join(', ')}`);
@@ -137,7 +138,7 @@ export function mount(app: express.Express): void {
           // Re-collect bodies from the new locations (cascade may have
           // rewritten some). renamePathPrefix's contract takes OLD-keyed
           // entries, so we map new → old names.
-          const filesUnder = listIndexableTextFilesUnder(newPath)
+          const filesUnder = (await listIndexableTextFilesUnderAsync(newPath))
             .map((f) => ({
               // Indexer's renamePathPrefix takes OLD-keyed absolute paths.
               path: toSourcePath(oldPath + f.name.slice(newPath.length)),
@@ -150,12 +151,12 @@ export function mount(app: express.Express): void {
           // under oldPath.
           for (const u of applied?.updated ?? []) {
             if (u.name === newPath || u.name.startsWith(newPath + '/')) continue;
-            const body = readText(u.name);
+            const body = await readTextAsync(u.name);
             if (body == null) continue;
             await indexer.upsertFile(toSourcePath(u.name), body);
           }
         } catch (err) {
-          applied?.rollback();
+          await applied?.rollback();
           throw err;
         }
       },

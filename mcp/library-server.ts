@@ -271,7 +271,7 @@ const BUILTIN_TOOLS = [
       name: 'read_file',
       description:
         'Read a file from StashBase by absolute path ' +
-        '(for example `/Users/me/notes/topic/note.md`). Markdown and HTML return source text. ' +
+        '(for example `/Users/me/notes/topic/note.md`). Markdown, HTML, JSON, and UTF-8 plain text return source text. ' +
         'PDFs return extracted Markdown when conversion has completed. Images are visible in ' +
         '`list_directory` and searchable through OCR evidence, but are not returned as bytes. ' +
         'One response is limited to 8 MiB; split oversized text before reading it through this tool.',
@@ -286,7 +286,7 @@ const BUILTIN_TOOLS = [
     {
       name: 'write_file',
       description:
-        'Create or overwrite a Markdown/HTML text file. Creates parent folders as ' +
+        'Create or overwrite a Markdown, HTML, JSON, or UTF-8 plain-text file. Creates parent folders as ' +
         'needed, writes atomically, and updates AI Index when an API key is configured.',
       inputSchema: {
         type: 'object',
@@ -301,7 +301,7 @@ const BUILTIN_TOOLS = [
     {
       name: 'edit_file',
       description:
-        'Patch a Markdown/HTML text file by exact string replacement. By default ' +
+        'Patch a Markdown, HTML, JSON, or UTF-8 plain-text file by exact string replacement. By default ' +
         '`old_text` must match exactly once; set `replace_all` for global replacement.',
       inputSchema: {
         type: 'object',

@@ -22,6 +22,7 @@ import {
   type KeywordScanResult,
 } from './search-display.ts';
 import type { SearchTypeCategory } from '../shared/search-types.ts';
+import { decodeDirectTextBytes } from './text-decoding.ts';
 
 const RG_PER_FILE_CAP = 50;
 const RG_TOTAL_CAP = 500;
@@ -98,7 +99,7 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
       child.kill();
     }, RG_TIMEOUT_MS);
 
-    const finish = (error?: Error) => {
+    const finish = async (error?: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
@@ -106,7 +107,18 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
         reject(error);
         return;
       }
-      const files = Array.from(byFile.values()).sort((a, b) => a.path.localeCompare(b.path));
+      const candidates = Array.from(byFile.values()).sort((a, b) => a.path.localeCompare(b.path));
+      const validity = await Promise.all(candidates.map(async (file) => {
+        if (!/\.txt$/iu.test(file.path)) return true;
+        try {
+          decodeDirectTextBytes(file.path, await fs.promises.readFile(path.join(cwd, file.path)));
+          return true;
+        } catch {
+          return false;
+        }
+      }));
+      const files = candidates.filter((_, index) => validity[index]);
+      total = files.reduce((sum, file) => sum + file.totalMatches, 0);
       resolve({ files, totalMatches: total, truncated });
     };
     const consumeLine = (line: string) => {
@@ -151,13 +163,13 @@ function runRipgrep(query: string, cwd: string, opts: KeywordSearchOpts): Promis
       lines.forEach(consumeLine);
     });
     child.stderr.resume();
-    child.on('error', (err) => finish(new Error(`ripgrep failed: ${err.message}`)));
+    child.on('error', (err) => { void finish(new Error(`ripgrep failed: ${err.message}`)); });
     child.on('close', (code) => {
       if (stdoutRemainder) consumeLine(stdoutRemainder);
-      if (timedOut) return finish(new Error(`ripgrep failed (timeout after ${RG_TIMEOUT_MS}ms)`));
-      if (code === 0 || code === 1) return finish();
-      if (code === 2) return finish(new Error(`invalid query: ${query}`));
-      return finish(new Error(`ripgrep failed (code ${String(code ?? '')})`));
+      if (timedOut) return void finish(new Error(`ripgrep failed (timeout after ${RG_TIMEOUT_MS}ms)`));
+      if (code === 0 || code === 1) return void finish();
+      if (code === 2) return void finish(new Error(`invalid query: ${query}`));
+      return void finish(new Error(`ripgrep failed (code ${String(code ?? '')})`));
     });
   });
 }

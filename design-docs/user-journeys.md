@@ -159,7 +159,7 @@ An authorized folder contains a source listed in the
 
 1. Open the source in a persistent tab and receive only the preview or editing
    capabilities declared for that format.
-2. For content-editable Markdown or JSON, enter the appropriate editing state
+2. For content-editable Markdown, JSON, or UTF-8 plain text, enter the appropriate editing state
    and save through the shared durability path.
 3. Navigate with tabs, Quick Open, outlines, Find, local links, or search
    results.
@@ -174,8 +174,10 @@ An authorized folder contains a source listed in the
 - Preview-only formats never expose a content-editing affordance. Workbench
   content editing, Agent/MCP content writes, and file-level rename/move/delete
   remain distinguishable capabilities.
-- Writer/reader and JSON Tree/Source transitions preserve the same source
-  content rather than creating a second document model.
+- Writer/reader, JSON Tree/Source, and literal plain-text transitions preserve
+  the same source content rather than creating a second document model.
+- Unsupported plain-text encoding keeps the source identifiable, read-only,
+  and byte-unchanged; it never enters retrieval as replacement-character text.
 - Navigation, window retirement, and product-owned renderer recovery do not
   silently discard a live edit.
 - Parse, preview, or unsupported-format failure keeps the source identifiable
@@ -527,6 +529,8 @@ Agent.
   original source.
 - The user can distinguish exploration from the accepted durable result.
 - The written result re-enters ordinary browsing, search, and Agent context.
+- Direct-text project evidence, including valid UTF-8 plain text, remains the
+  same visible source across Workbench, retrieval, and Agent/MCP access.
 - Losing semantic or Agent availability does not make existing source work or
   durable results inaccessible.
 

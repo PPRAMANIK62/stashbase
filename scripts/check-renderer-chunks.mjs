@@ -61,13 +61,16 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * Raise it only for shell UI that must load with the window — anything a
  * user can open on demand belongs in a dynamic entry above. 428 → 429 adds
  * the always-visible third runtime metadata and included-Agent recovery
- * action. */
-const initialJsBudgetBytes = 429 * 1024;
+ * action. 429 → 430 adds first-class TXT routing and its distinct tree glyph;
+ * the editor, decode-error state, and conflict surface remain together behind
+ * the required `PlainTextViewerPane` dynamic entry below. */
+const initialJsBudgetBytes = 430 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
   'src/features/documents/components/CrepeDocument.tsx',
   'src/features/documents/components/JsonDocument.tsx',
+  'src/features/documents/components/PlainTextViewerPane.tsx',
   'src/features/documents/components/json/JsonTreeView.tsx',
   'src/features/documents/components/PdfViewerPane.tsx',
   'src/features/documents/components/DocxPreview.tsx',

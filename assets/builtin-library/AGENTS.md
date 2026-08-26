@@ -52,7 +52,7 @@ For a Library-scoped first-use question, a good answer shape is:
 >   plan, or review;
 > - research across papers, slides, recordings, and notes, then write a report;
 > - find and reuse knowledge from an archive of documents, images, and media;
-> - work with documents and project data, such as Markdown and JSON, in the
+> - work with documents and project data, such as Markdown, plain text, and JSON, in the
 >   same folder.
 >
 > Your files stay in their original folders. Pick a folder you already use and

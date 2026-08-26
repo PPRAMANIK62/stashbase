@@ -56,6 +56,9 @@ semantic readiness.
 - JSON Tree/Source mode, expansion, selected path, and tree query are retained
   per recent tab. Only the active JSON tab owns Find/editor registration, and
   the bounded tree entry remains lazy.
+- TXT tabs retain literal source identity and share the active-tab Find/save
+  authority. Only valid in-folder UTF-8 sources can enter edit mode;
+  out-of-folder and decode-error tabs stay read-only.
 - Polling, timers, controllers, and native subscriptions retire when their
   generation or window context ends. Late results cannot repopulate reset
   state.
@@ -66,7 +69,7 @@ semantic readiness.
 
 The initial renderer contains only window chrome and the minimum workspace
 shell. Feature surfaces that open on demand remain dynamic entries. The
-authoritative budget is `418 KiB` of initial static JavaScript, and the current
+authoritative budget is `430 KiB` of initial static JavaScript, and the current
 required dynamic-entry set lives in `scripts/check-renderer-chunks.mjs`.
 Change that list or budget only when the ownership of eager shell behavior
 changes, never to make an accidental dependency pass.
