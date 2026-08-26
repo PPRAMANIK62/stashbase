@@ -332,6 +332,132 @@ class StashbaseDaemonTests(unittest.TestCase):
             else:
                 sys.modules["mfs.embedder"] = previous
 
+    def _fake_openai_module(self):
+        class FakeEmbeddingsResp:
+            def __init__(self, n):
+                self.data = [types.SimpleNamespace(embedding=[0.1] * 1536) for _ in range(n)]
+        class FakeEmbeddings:
+            def create(self, model, input, **kw):
+                return FakeEmbeddingsResp(len(input))
+        class FakeOpenAIClient:
+            def __init__(self, **kwargs):
+                self.embeddings = FakeEmbeddings()
+        return types.SimpleNamespace(
+            OpenAI=FakeOpenAIClient,
+            APITimeoutError=RuntimeError,
+            APIConnectionError=RuntimeError,
+            RateLimitError=RuntimeError,
+            InternalServerError=RuntimeError,
+        )
+
+    def _fake_mfs_embedder_module(self):
+        class FakeOnnxProvider:
+            model_name = "gpahal/bge-m3-onnx-int8"
+            dimension = 1024
+            def embed(self, texts):
+                return [[0.0] * self.dimension for _ in texts]
+        return types.SimpleNamespace(get_provider=lambda name, **kw: FakeOnnxProvider())
+
+    def test_local_bind_after_no_key_reopen_switches_collection_not_attaches(self) -> None:
+        # Regression test: a no-key reopen (leaving _embedder at None) used
+        # to let a following local bind attach without ever rechecking
+        # collection identity, silently landing local vectors in the
+        # OpenAI collection whenever dimensions happened to match.
+        try:
+            import milvus_lite  # noqa: F401
+        except ImportError:
+            self.skipTest("milvus_lite is not installed")
+        previous_openai = sys.modules.get("openai")
+        sys.modules["openai"] = self._fake_openai_module()
+        previous_mfs = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = self._fake_mfs_embedder_module()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                setup = stashbase_daemon.StashbaseStore(tmp)
+                setup.bind_root("/library", "openai", root_identity="/library", api_key="sk-fake-test-key")
+                setup.close_all(clear_bindings=False)
+
+                svc = stashbase_daemon.StashbaseStore(tmp)
+                svc.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                self.assertIsNone(svc._embedder)
+
+                svc.bind_root("/library", "local", root_identity="/library")
+                self.assertEqual(svc._embedder.provider, "local")
+                collection = getattr(getattr(svc._store, "_config", None), "collection_name", None)
+                self.assertEqual(collection, "vectors_local_1024")
+        finally:
+            if previous_openai is None:
+                sys.modules.pop("openai", None)
+            else:
+                sys.modules["openai"] = previous_openai
+            if previous_mfs is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous_mfs
+
+    def test_no_key_reopen_discovers_the_real_local_collection(self) -> None:
+        # Regression test: a credential-less reopen used to always default
+        # to the OpenAI collection name, silently opening a different,
+        # empty collection for a library indexed with the local provider --
+        # list/delete would report zero rows while the real ones sat
+        # orphaned in the actual collection.
+        try:
+            import milvus_lite  # noqa: F401
+        except ImportError:
+            self.skipTest("milvus_lite is not installed")
+        previous_mfs = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = self._fake_mfs_embedder_module()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                setup = stashbase_daemon.StashbaseStore(tmp)
+                setup.bind_root("/library", "local", root_identity="/library")
+                setup.close_all(clear_bindings=False)
+
+                cleanup = stashbase_daemon.StashbaseStore(tmp)
+                cleanup.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                collection = getattr(getattr(cleanup._store, "_config", None), "collection_name", None)
+                self.assertEqual(collection, "vectors_local_1024")
+        finally:
+            if previous_mfs is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous_mfs
+
+    def test_no_key_reopen_raises_when_multiple_collections_exist(self) -> None:
+        # If a library has been indexed with more than one provider
+        # historically, nothing records which one is "active" -- reopening
+        # without a credential must fail loudly rather than silently guess.
+        try:
+            import milvus_lite  # noqa: F401
+        except ImportError:
+            self.skipTest("milvus_lite is not installed")
+        previous_openai = sys.modules.get("openai")
+        sys.modules["openai"] = self._fake_openai_module()
+        previous_mfs = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = self._fake_mfs_embedder_module()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                setup1 = stashbase_daemon.StashbaseStore(tmp)
+                setup1.bind_root("/library", "openai", root_identity="/library", api_key="sk-fake-test-key")
+                setup1.close_all(clear_bindings=False)
+
+                setup2 = stashbase_daemon.StashbaseStore(tmp)
+                setup2.bind_root("/library", "local", root_identity="/library")
+                setup2.close_all(clear_bindings=False)
+
+                ambiguous = stashbase_daemon.StashbaseStore(tmp)
+                with self.assertRaises(RuntimeError):
+                    ambiguous.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+        finally:
+            if previous_openai is None:
+                sys.modules.pop("openai", None)
+            else:
+                sys.modules["openai"] = previous_openai
+            if previous_mfs is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous_mfs
+
     def test_stashbase_embedder_marks_query_purpose_for_loopback_broker(self) -> None:
         captured = {}
 

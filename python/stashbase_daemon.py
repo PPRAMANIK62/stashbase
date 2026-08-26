@@ -89,6 +89,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -629,6 +630,41 @@ def _collection_name(dim: int, provider: str = "openai") -> str:
     return f"vectors_{provider}_{dim}"
 
 
+_COLLECTION_NAME_RE = re.compile(r"^vectors_([a-zA-Z0-9]+)_(\d+)$")
+
+
+def _discover_collection(db_path) -> tuple[str, int] | None:
+    """Find the single ``vectors_<provider>_<dim>`` collection already on
+    disk, with no embedder and no credential. Nothing else records which
+    provider an existing collection belongs to, so this is the only
+    reliable way to reopen one for credential-less cleanup (list/delete) --
+    guessing a default would risk silently opening the wrong, empty
+    collection while the real rows sit unreachable in another one.
+    Returns (provider, dim), or None if nothing indexed yet. Raises if
+    more than one collection exists, since which one the caller meant is
+    genuinely ambiguous without a credential to disambiguate."""
+    from pymilvus import MilvusClient
+    client = MilvusClient(uri=str(db_path))
+    try:
+        names = client.list_collections()
+    finally:
+        client.close()
+    matches = []
+    for name in names:
+        m = _COLLECTION_NAME_RE.match(name)
+        if m:
+            matches.append((m.group(1), int(m.group(2))))
+    if not matches:
+        return None
+    if len(matches) > 1:
+        found = ", ".join(f"{p}_{d}" for p, d in matches)
+        raise RuntimeError(
+            f"multiple embedding collections exist on disk ({found}); "
+            f"cannot reopen without a credential to disambiguate which one is active"
+        )
+    return matches[0]
+
+
 def _norm_root(root: str) -> str:
     """Normalize an absolute POSIX-spelled source without destroying a
     filesystem root. ``/``, Windows drive roots such as ``C:/``, and UNC
@@ -712,10 +748,17 @@ class StashbaseStore:
     def _ensure_store_for_dimension(self, dim: int, embedder=None):
         """Open the collection for reads/deletes, optionally attaching an
         embedder. An existing database must remain cleanable after the user
-        removes credentials; cleanup operations do not require embeddings."""
+        removes credentials; cleanup operations do not require embeddings.
+
+        With no embedder (the credential-less cleanup path), `dim` is not
+        trusted as a hint: nothing persists which provider an existing
+        collection belongs to, so the real collection is discovered from
+        disk instead of guessed -- see `_discover_collection`."""
         if self._store is not None:
             if embedder is not None:
-                if self._dim != dim:
+                wanted = _collection_name(dim, getattr(embedder, "provider", None) or "openai")
+                current = getattr(getattr(self._store, "_config", None), "collection_name", None)
+                if current != wanted:
                     self.close_all(clear_bindings=False)
                     return self._ensure_store_for_dimension(dim, embedder)
                 self._embedder = embedder
@@ -723,11 +766,18 @@ class StashbaseStore:
         from mfs.store import MilvusStore
         from mfs.config import MilvusConfig
         os.environ["MFS_HOME"] = str(self._db_path.parent)
-        collection_provider = getattr(embedder, "provider", None) or "openai"
+        if embedder is not None:
+            collection_provider = getattr(embedder, "provider", None) or "openai"
+            resolved_dim = dim
+        else:
+            discovered = _discover_collection(self._db_path)
+            if discovered is None:
+                return None
+            collection_provider, resolved_dim = discovered
         config = MilvusConfig(
-            uri=str(self._db_path), collection_name=_collection_name(dim, collection_provider),
+            uri=str(self._db_path), collection_name=_collection_name(resolved_dim, collection_provider),
         )
-        store = MilvusStore(config, dim)
+        store = MilvusStore(config, resolved_dim)
         _patch_inverted_index_skip()
         _patch_milvus_manifest_windows_replace()
         _patch_mfs_local_query_snapshot()
@@ -769,7 +819,7 @@ class StashbaseStore:
             print(f"[stashbase] load_collection warn: {err}", file=sys.stderr)
         self._embedder = embedder
         self._store = store
-        self._dim = dim
+        self._dim = resolved_dim
         return store
 
     def bind_root(
@@ -805,10 +855,7 @@ class StashbaseStore:
             "provider": getattr(self._embedder, "provider", provider),
             "model": getattr(self._embedder, "model_name", None),
             "dim": self._dim,
-            "collection": (
-                _collection_name(self._dim, getattr(self._embedder, "provider", None) or "openai")
-                if self._dim else None
-            ),
+            "collection": getattr(getattr(self._store, "_config", None), "collection_name", None),
         }
 
     def unbind_root(self, root: str, *, root_identity: str | None = None) -> dict:
@@ -853,7 +900,8 @@ class StashbaseStore:
         sites can unpack uniformly."""
         if self._store is None:
             return []
-        return [(f"openai_{self._dim}", self._embedder, self._store)]
+        provider_key = getattr(self._embedder, "provider", None) or "openai"
+        return [(f"{provider_key}_{self._dim}", self._embedder, self._store)]
 
     def bound_roots(self) -> list[str]:
         """Absolute folder roots Node has registered, sorted. Used by
