@@ -374,17 +374,22 @@ class StashbaseDaemonTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 setup = stashbase_daemon.StashbaseStore(tmp)
-                setup.bind_root("/library", "openai", root_identity="/library", api_key="sk-fake-test-key")
-                setup.close_all(clear_bindings=False)
+                try:
+                    setup.bind_root("/library", "openai", root_identity="/library", api_key="sk-fake-test-key")
+                finally:
+                    setup.close_all()
 
                 svc = stashbase_daemon.StashbaseStore(tmp)
-                svc.bind_root("/library", "openai", root_identity="/library", dimension=1536)
-                self.assertIsNone(svc._embedder)
+                try:
+                    svc.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                    self.assertIsNone(svc._embedder)
 
-                svc.bind_root("/library", "local", root_identity="/library")
-                self.assertEqual(svc._embedder.provider, "local")
-                collection = getattr(getattr(svc._store, "_config", None), "collection_name", None)
-                self.assertEqual(collection, "vectors_local_1024")
+                    svc.bind_root("/library", "local", root_identity="/library")
+                    self.assertEqual(svc._embedder.provider, "local")
+                    collection = getattr(getattr(svc._store, "_config", None), "collection_name", None)
+                    self.assertEqual(collection, "vectors_local_1024")
+                finally:
+                    svc.close_all()
         finally:
             if previous_openai is None:
                 sys.modules.pop("openai", None)
@@ -410,13 +415,18 @@ class StashbaseDaemonTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 setup = stashbase_daemon.StashbaseStore(tmp)
-                setup.bind_root("/library", "local", root_identity="/library")
-                setup.close_all(clear_bindings=False)
+                try:
+                    setup.bind_root("/library", "local", root_identity="/library")
+                finally:
+                    setup.close_all()
 
                 cleanup = stashbase_daemon.StashbaseStore(tmp)
-                cleanup.bind_root("/library", "openai", root_identity="/library", dimension=1536)
-                collection = getattr(getattr(cleanup._store, "_config", None), "collection_name", None)
-                self.assertEqual(collection, "vectors_local_1024")
+                try:
+                    cleanup.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                    collection = getattr(getattr(cleanup._store, "_config", None), "collection_name", None)
+                    self.assertEqual(collection, "vectors_local_1024")
+                finally:
+                    cleanup.close_all()
         finally:
             if previous_mfs is None:
                 sys.modules.pop("mfs.embedder", None)
@@ -438,16 +448,23 @@ class StashbaseDaemonTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 setup1 = stashbase_daemon.StashbaseStore(tmp)
-                setup1.bind_root("/library", "openai", root_identity="/library", api_key="sk-fake-test-key")
-                setup1.close_all(clear_bindings=False)
+                try:
+                    setup1.bind_root("/library", "openai", root_identity="/library", api_key="sk-fake-test-key")
+                finally:
+                    setup1.close_all()
 
                 setup2 = stashbase_daemon.StashbaseStore(tmp)
-                setup2.bind_root("/library", "local", root_identity="/library")
-                setup2.close_all(clear_bindings=False)
+                try:
+                    setup2.bind_root("/library", "local", root_identity="/library")
+                finally:
+                    setup2.close_all()
 
                 ambiguous = stashbase_daemon.StashbaseStore(tmp)
-                with self.assertRaises(RuntimeError):
-                    ambiguous.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                try:
+                    with self.assertRaises(RuntimeError):
+                        ambiguous.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                finally:
+                    ambiguous.close_all()
         finally:
             if previous_openai is None:
                 sys.modules.pop("openai", None)
