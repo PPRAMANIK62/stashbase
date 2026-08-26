@@ -92,6 +92,11 @@ quota response stops the remainder of a batch. Pending work remains
 reconcilable and resumes after a quota refresh/reset or an available source
 switch.
 
+Daemon retirement is single-flight across shutdown, credential/quota reset,
+and recovery callers. A replacement generation waits until the retiring child
+has exited and released the store lock; a late event from an older generation
+cannot clear the current readiness latch or reject current operations.
+
 Large semantic workloads use the same authoritative content-hash diff. Known
 stale rows become unavailable before a durable awaiting/paused decision is
 published. A pause never delays browsing, preparation, editing, or exact

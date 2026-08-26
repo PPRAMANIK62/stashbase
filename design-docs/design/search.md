@@ -50,6 +50,9 @@ user-managed results.
   skip is local to the current window context and remains reversible. The
   observable setup sequence lives in
   [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-value).
+- AI Index runtime refreshes after account, quota, or key changes remain
+  background work. Overlapping refresh and folder-removal activity does not
+  interrupt local browsing or surface native process errors as user actions.
 - Hosted indexing and meaning-based queries draw from one token allowance.
   The account menu and AI Index Settings show the provider display name and
   avatar when available, retain the full email for account identification, and

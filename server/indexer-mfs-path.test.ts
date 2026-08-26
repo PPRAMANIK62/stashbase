@@ -77,3 +77,54 @@ test('daemon readiness includes rules and binding replay after every spawn', asy
   const status = await daemon.call<{ operations: string[] }>('status', {});
   assert.deepEqual(status.operations, ['set_rules', 'bind_folder', 'status']);
 });
+
+test('concurrent daemon closes share one retirement barrier before respawn', async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-fake-mfs-close-'));
+  const fixture = path.join(scratch, 'fake-daemon.mjs');
+  const lock = path.join(scratch, 'daemon.lock');
+  const launches = path.join(scratch, 'launches.log');
+  fs.writeFileSync(fixture, `
+    import fs from 'node:fs';
+    import readline from 'node:readline';
+    const [lock, launches] = process.argv.slice(2);
+    fs.appendFileSync(launches, 'start\\n');
+    let lockFd;
+    try {
+      lockFd = fs.openSync(lock, 'wx');
+    } catch {
+      process.stdout.write(JSON.stringify({ event: 'error', phase: 'daemon_lock', error: 'already held' }) + '\\n');
+      process.exit(1);
+    }
+    process.stdout.write(JSON.stringify({ event: 'ready', db: 'fake' }) + '\\n');
+    const lines = readline.createInterface({ input: process.stdin });
+    lines.on('line', (line) => {
+      const request = JSON.parse(line);
+      process.stdout.write(JSON.stringify({ id: request.id, ok: true, result: {} }) + '\\n');
+    });
+    lines.on('close', () => {
+      setTimeout(() => {
+        fs.closeSync(lockFd);
+        fs.rmSync(lock, { force: true });
+        process.exit(0);
+      }, 150);
+    });
+  `, 'utf8');
+  const daemon = new MfsDaemon(() => ({
+    command: process.execPath,
+    args: [fixture, lock, launches],
+    cwd: scratch,
+  }));
+  t.after(async () => {
+    await daemon.close();
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+
+  await daemon.call('status', {});
+  const firstClose = daemon.close();
+  const overlappingClose = daemon.close();
+  const duringRetirement = daemon.call('status', {});
+  await Promise.all([firstClose, overlappingClose, duringRetirement]);
+  await daemon.call('status', {});
+
+  assert.equal(fs.readFileSync(launches, 'utf8').trim().split('\n').length, 2);
+});

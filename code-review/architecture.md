@@ -95,6 +95,9 @@ surface.
 - The server is the only owner allowed to bind folders into the daemon. Callers
   use folder-explicit operations instead of temporarily changing global
   context.
+- The server serializes daemon generations: concurrent reset callers share one
+  retirement barrier, and callbacks from an older child cannot mutate the
+  current generation's process or request state.
 - Application quit is an authenticated owner-to-server shutdown handshake.
   Signals are timeout fallbacks, not the normal cleanup path.
 - The shutdown ladder closes hosted-broker listening, active, and idle sockets
