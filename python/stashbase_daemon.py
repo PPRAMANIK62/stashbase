@@ -86,6 +86,7 @@ filesystem-path seam.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import datetime
 import json
 import os
@@ -163,10 +164,35 @@ class _OnnxEmbedder:
     ImportError with install instructions if it isn't installed.
     """
     provider = "onnx"
+
+    # mfs's get_provider("onnx", ...) does real network I/O (a first-use
+    # model download, ~570MB) and model loading synchronously. The daemon
+    # processes requests one at a time on a single thread, so an unbounded
+    # call here would freeze every other request -- search, status, delete,
+    # other binds -- for as long as it takes. A dead network already fails
+    # fast on its own (huggingface_hub's etag_timeout=10s), but a reachable-
+    # yet-stalled or very slow connection is not otherwise bounded. Run it
+    # in a worker thread with a wall-clock cap instead: downloads resume
+    # (HTTP Range + a `.incomplete` file) rather than restart, so a timeout
+    # here doesn't waste progress -- it just keeps this bind's failure
+    # bounded and lets the daemon stay responsive for everything else.
+    _INIT_TIMEOUT_SECONDS = 120
+
     def __init__(self, *, model: str | None = None) -> None:
         from mfs.embedder import get_provider
         kwargs = {"model": model} if model else {}
-        self._inner = get_provider("onnx", **kwargs)
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(get_provider, "onnx", **kwargs)
+        try:
+            self._inner = future.result(timeout=self._INIT_TIMEOUT_SECONDS)
+        except TimeoutError as err:
+            raise RuntimeError(
+                f"local embedding model did not become ready within "
+                f"{self._INIT_TIMEOUT_SECONDS}s (first-use download or a "
+                f"slow/unavailable network); the download resumes on retry"
+            ) from err
+        finally:
+            executor.shutdown(wait=False)
     @property
     def model_name(self) -> str:
         return self._inner.model_name

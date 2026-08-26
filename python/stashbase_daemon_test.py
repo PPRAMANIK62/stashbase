@@ -4,6 +4,7 @@ import io
 import json
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -294,6 +295,32 @@ class StashbaseDaemonTests(unittest.TestCase):
         self.assertEqual(embedder.dimension, 1024)
         self.assertEqual(embedder.embed(["hi"]), [[0.0] * 1024])
         self.assertEqual(calls, [("onnx", {})])
+
+    def test_onnx_embedder_bounds_a_hanging_download_with_a_timeout(self) -> None:
+        # Regression test: get_provider("onnx", ...) does real network I/O
+        # synchronously, and the daemon processes one request at a time --
+        # a hanging call must not freeze it indefinitely. Patches the
+        # timeout down to keep this test fast rather than waiting out the
+        # real 120s bound.
+        def hanging_get_provider(name, **kwargs):
+            time.sleep(5)
+            raise AssertionError("should have timed out before returning")
+        fake_mfs_embedder = types.SimpleNamespace(get_provider=hanging_get_provider)
+        previous = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = fake_mfs_embedder
+        try:
+            with mock.patch.object(stashbase_daemon._OnnxEmbedder, "_INIT_TIMEOUT_SECONDS", 0.2):
+                start = time.monotonic()
+                with self.assertRaises(RuntimeError) as ctx:
+                    stashbase_daemon.make_embedder("onnx")
+                elapsed = time.monotonic() - start
+            self.assertLess(elapsed, 2.0, "should fail near the timeout bound, not hang")
+            self.assertIn("did not become ready within", str(ctx.exception))
+        finally:
+            if previous is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous
 
     def test_collection_name_separates_local_from_openai_at_same_dimension(self) -> None:
         self.assertEqual(stashbase_daemon._collection_name(1536), "vectors_openai_1536")
