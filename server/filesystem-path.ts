@@ -8,6 +8,11 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { promisify } from 'node:util';
+
+// fs.promises.realpath() has no `.native` counterpart (unlike the sync and
+// callback APIs), so promisify the callback-style native binding directly.
+const realpathNativeAsync = promisify(fs.realpath.native);
 
 export type FilesystemPlatform = 'win32' | 'darwin' | 'posix';
 export type PathAccess = 'lexical' | 'existing' | 'creatable';
@@ -37,6 +42,11 @@ export interface FilesystemPathModule {
   canonicalRelative(root: string, relative: string): string;
   /** Resolve a folder-relative path and optionally enforce realpath safety. */
   resolveUnder(root: string, relative: string, options?: ResolveUnderOptions): string;
+  /** Promise-based equivalent of `resolveUnder()` for staged migration of
+   *  request-handling callers. Canonicalization and realpath checks use async
+   *  filesystem APIs; platform identity/containment still shares the sync
+   *  implementation where noted by the File Transactions known gap. */
+  resolveUnderAsync(root: string, relative: string, options?: ResolveUnderOptions): Promise<string>;
 }
 
 interface CreateFilesystemPathOptions {
@@ -275,6 +285,87 @@ export function createFilesystemPath(
     return targetSource;
   }
 
+  // --- Async mirrors for the request-handling path -------------------------
+  // These duplicate the sync functions above one-for-one using async
+  // filesystem APIs for canonicalization and realpath work. They establish a
+  // migration path for request handlers; platform identity/containment still
+  // shares sync helpers until the File Transactions known gap is closed.
+  // Kept as separate functions, rather than a sync/async flag on the
+  // existing ones, so neither implementation has to guard against `await`
+  // inside a hot, already-audited sync path.
+
+  async function canonicalRelativeAsync(root: string, relativePath: string): Promise<string> {
+    const rel = normalizeRelative(relativePath, platform);
+    if (platform === 'posix' || !rel) return rel;
+    const canonical: string[] = [];
+    let cursor = toNative(absolute(root), platform);
+    for (const segment of rel.split('/')) {
+      let spelling = segment;
+      try {
+        const found = await matchingExistingEntryAsync(cursor, segment, platform === 'darwin');
+        if (found) spelling = found;
+      } catch {
+        // A create target may have a missing suffix. Preserve caller spelling.
+      }
+      canonical.push(spelling);
+      cursor = pathApi.join(cursor, spelling);
+    }
+    return canonical.join('/');
+  }
+
+  async function canonicalCreatableRelativeAsync(root: string, relativePath: string): Promise<string> {
+    const rel = normalizeRelative(relativePath, platform);
+    const lastSlash = rel.lastIndexOf('/');
+    if (lastSlash < 0) return rel;
+    const parent = await canonicalRelativeAsync(root, rel.slice(0, lastSlash));
+    return parent ? `${parent}/${rel.slice(lastSlash + 1)}` : rel.slice(lastSlash + 1);
+  }
+
+  async function resolveUnderAsync(
+    root: string,
+    relativePath: string,
+    options: ResolveUnderOptions = {},
+  ): Promise<string> {
+    const access = options.access ?? 'lexical';
+    const label = options.label ?? 'path';
+    const rootSource = absolute(root);
+    const resolvedRelative = access === 'lexical'
+      ? relativePath
+      : access === 'creatable'
+        ? await canonicalCreatableRelativeAsync(rootSource, relativePath)
+        : await canonicalRelativeAsync(rootSource, relativePath);
+    const targetSource = join(rootSource, resolvedRelative);
+    const rootNative = toNative(rootSource, platform);
+    const targetNative = toNative(targetSource, platform);
+    if (access === 'lexical') return targetSource;
+
+    const rootReal = await realpathNativeAsync(rootNative);
+    if (access === 'existing') {
+      const targetReal = await realpathNativeAsync(targetNative);
+      if (!contains(rootReal, targetReal)) {
+        throw new Error(`${label} escapes folder through symlink`);
+      }
+      return targetSource;
+    }
+
+    // Start at the target itself. If it already exists as a symlink, checking
+    // only its parent would approve a subsequent write that follows outside
+    // the folder. Missing suffixes naturally walk up to their first existing
+    // ancestor.
+    let probe = targetNative;
+    while (!(await existsAsync(probe))) {
+      const parent = pathApi.dirname(probe);
+      if (parent === probe) break;
+      probe = parent;
+    }
+    if (!contains(rootNative, probe)) throw new Error(`${label} escapes folder`);
+    const probeReal = await realpathNativeAsync(probe);
+    if (!contains(rootReal, probeReal)) {
+      throw new Error(`${label} escapes folder through symlink`);
+    }
+    return targetSource;
+  }
+
   return {
     platform,
     absolute,
@@ -288,6 +379,7 @@ export function createFilesystemPath(
     join,
     canonicalRelative,
     resolveUnder,
+    resolveUnderAsync,
   };
 }
 
@@ -398,6 +490,46 @@ function matchingExistingEntry(cursor: string, segment: string, verifyAlias: boo
   if (!alias) return undefined;
   if (!verifyAlias) return alias;
   return sameFilesystemEntry(path.posix.join(cursor, segment), path.posix.join(cursor, alias))
+    ? alias
+    : undefined;
+}
+
+async function existsAsync(target: string): Promise<boolean> {
+  try {
+    await fs.promises.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function sameFilesystemEntryAsync(a: string, b: string): Promise<boolean> {
+  try {
+    const [aStat, bStat] = await Promise.all([fs.promises.stat(a), fs.promises.stat(b)]);
+    return aStat.dev === bStat.dev && aStat.ino === bStat.ino;
+  } catch {
+    return false;
+  }
+}
+
+async function matchingExistingEntryAsync(
+  cursor: string,
+  segment: string,
+  verifyAlias: boolean,
+): Promise<string | undefined> {
+  let entries: string[];
+  try {
+    entries = await fs.promises.readdir(cursor);
+  } catch {
+    return undefined;
+  }
+  const exact = entries.find((entry) => entry === segment);
+  if (exact) return exact;
+  const folded = segment.normalize('NFC').toLowerCase();
+  const alias = entries.find((entry) => entry.normalize('NFC').toLowerCase() === folded);
+  if (!alias) return undefined;
+  if (!verifyAlias) return alias;
+  return (await sameFilesystemEntryAsync(path.posix.join(cursor, segment), path.posix.join(cursor, alias)))
     ? alias
     : undefined;
 }
