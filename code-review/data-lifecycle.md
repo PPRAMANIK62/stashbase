@@ -121,6 +121,23 @@ search; only explicit Start clears it.
 - Closing or failing to open the store releases the client, shared pymilvus
   connection, and local Milvus server before cleanup returns.
 
+## Known Gap -- Credential-less Reopen With Multiple Collections
+
+Shipping credential-less reopen (`_ensure_store_for_dimension` with no
+embedder) discovers the real on-disk collection via
+`MilvusClient.list_collections()` in `_discover_collection()` and reopens it
+directly, closing the prior gap where a default guess could silently open
+the wrong, empty collection while real rows sat orphaned elsewhere. When a
+library has been indexed with more than one embedding provider historically
+(for example, switched from a hosted/BYOK source to the local `onnx`
+provider, or the reverse), more than one `vectors_<provider>_<dim>`
+collection can exist on disk. Nothing currently records which one is
+"active," so `_discover_collection()` raises rather than guessing in that
+case -- list/delete cleanup is not possible without a credential to
+disambiguate which collection to reopen, until provider identity is
+durably tracked per-root instead of inferred from what happens to exist on
+disk.
+
 ## Cleanup and Recovery
 
 - Library removal cancels all work under the member root, removes index rows,
