@@ -44,7 +44,10 @@ forwarding, and script confinement.
 
 ## Format-specific Behavior
 
-- PDF uses source bytes and retains page position across tab activation. A
+- PDF uses source bytes and retains page position across tab activation. Each
+  page pairs its canvas with the pdf.js text layer, so page text is selectable,
+  copyable, and readable by assistive technology; the text layer swaps in with
+  the bitmap at every zoom level and is torn down with its page. A
   programmatic smooth jump owns its requested page until the viewport reaches
   it, so intermediate animation frames cannot overwrite the saved position; an
   instant jump claims nothing and persists its page without waiting for the
