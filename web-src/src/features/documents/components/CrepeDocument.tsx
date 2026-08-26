@@ -26,6 +26,7 @@ import { uploadLocalImage } from '@/features/documents/milkdown/imageUpload';
 import { insertLinkText } from '@/features/documents/milkdown/linkInsertion';
 import { linkFileInsertionText } from '@/features/documents/milkdown/linkFileInsertion';
 import { openLinkFilePicker } from '@/features/documents/milkdown/linkFilePickerTrigger';
+import { imagePreviewFeature } from '@/features/documents/milkdown/imagePreview';
 import { splitLeadingYamlFrontmatter } from '@/features/documents/milkdown/frontmatter';
 import { planIncomingMarkdownSync, startCrepeCreation } from '@/features/documents/milkdown/crepeLifecycle';
 import { resolveLocalImageUrl } from '@/features/documents/milkdown/imageUrls';
@@ -201,7 +202,10 @@ export function CrepeDocument({ tabId, name, content, readOnly, active, dirty, f
       .addFeature(toolbar)
       .addFeature(table)
       .addFeature(codeMirror, { languages, copyText: 'Copy code' })
-      .addFeature(latex);
+      .addFeature(latex)
+      // Keyboard twin of the host click listener below: Enter on a selected
+      // image node posts the same preview message the click path posts.
+      .addFeature(imagePreviewFeature);
 
     const updateHeadings = () => {
       const view = currentEditorView(editor);
