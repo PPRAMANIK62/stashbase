@@ -123,10 +123,10 @@ def make_embedder(provider: str = "openai", *, model=None, api_key=None, dimensi
 
     ``provider`` accepts OpenAI/OpenRouter and the loopback-only StashBase
     account broker (all rolled in-house — see `_OpenAIEmbedder`), or
-    ``"local"`` for a CPU-only, no-API-key embedder (see `_LocalEmbedder`).
+    ``"onnx"`` for a CPU-only, no-API-key embedder (see `_OnnxEmbedder`).
     """
-    if provider == "local":
-        return _LocalEmbedder(model=model)
+    if provider == "onnx":
+        return _OnnxEmbedder(model=model)
     if provider not in ("openai", "openrouter", "stashbase"):
         raise ValueError(f"unsupported embedder provider {provider!r}")
     if not api_key:
@@ -145,7 +145,7 @@ def make_embedder(provider: str = "openai", *, model=None, api_key=None, dimensi
     )
 
 
-class _LocalEmbedder:
+class _OnnxEmbedder:
     """CPU-only local embedding via mfs-cli's bundled ONNX provider — no API
     key, and no network needed once the model is cached locally.
     Wraps the raw `mfs.embedder` provider (which only exposes `.embed()`,
@@ -153,11 +153,16 @@ class _LocalEmbedder:
     `_collection_name()` reads it to keep local vectors in a separate
     collection from OpenAI's — the same dimension does not mean the same
     embedding space, and mixing them would corrupt search.
+    Named after the actual mfs provider it wraps ("onnx"), not the more
+    general "local" -- mfs also ships a *different* provider literally
+    named "local" (mfs.embedder.local.LocalEmbedding, sentence-transformers
+    based). Since vectors_<provider>_<dim> is disk-persisted and can't be
+    migrated later, "onnx" is the safer identifier to commit to.
     Requires the optional `mfs-cli[onnx]` extra
     (``pip install "mfs-cli[onnx]"``); raises mfs.embedder's own
     ImportError with install instructions if it isn't installed.
     """
-    provider = "local"
+    provider = "onnx"
     def __init__(self, *, model: str | None = None) -> None:
         from mfs.embedder import get_provider
         kwargs = {"model": model} if model else {}
@@ -836,7 +841,7 @@ class StashbaseStore:
         # A keyed bind attaches the embedder. A no-key bind still reopens an
         # existing collection for delete/list/status cleanup; it never creates
         # a new database merely because semantic indexing is disabled.
-        if (api_key or provider == "local") and self._embedder is None:
+        if (api_key or provider == "onnx") and self._embedder is None:
             embedder = make_embedder(
                 provider,
                 model=model,

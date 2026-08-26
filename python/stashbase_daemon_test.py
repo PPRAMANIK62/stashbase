@@ -283,13 +283,13 @@ class StashbaseDaemonTests(unittest.TestCase):
         previous = sys.modules.get("mfs.embedder")
         sys.modules["mfs.embedder"] = fake_mfs_embedder
         try:
-            embedder = stashbase_daemon.make_embedder("local")
+            embedder = stashbase_daemon.make_embedder("onnx")
         finally:
             if previous is None:
                 sys.modules.pop("mfs.embedder", None)
             else:
                 sys.modules["mfs.embedder"] = previous
-        self.assertEqual(embedder.provider, "local")
+        self.assertEqual(embedder.provider, "onnx")
         self.assertEqual(embedder.model_name, "gpahal/bge-m3-onnx-int8")
         self.assertEqual(embedder.dimension, 1024)
         self.assertEqual(embedder.embed(["hi"]), [[0.0] * 1024])
@@ -300,14 +300,14 @@ class StashbaseDaemonTests(unittest.TestCase):
         self.assertEqual(stashbase_daemon._collection_name(1536, "openai"), "vectors_openai_1536")
         self.assertEqual(stashbase_daemon._collection_name(1536, "openrouter"), "vectors_openai_1536")
         self.assertEqual(stashbase_daemon._collection_name(1536, "stashbase"), "vectors_openai_1536")
-        self.assertEqual(stashbase_daemon._collection_name(1536, "local"), "vectors_local_1536")
+        self.assertEqual(stashbase_daemon._collection_name(1536, "onnx"), "vectors_onnx_1536")
         self.assertNotEqual(
             stashbase_daemon._collection_name(1536, "openai"),
-            stashbase_daemon._collection_name(1536, "local"),
+            stashbase_daemon._collection_name(1536, "onnx"),
         )
 
     def test_no_key_local_bind_still_builds_an_embedder(self) -> None:
-        # Unlike other providers, "local" needs no API key to build an
+        # Unlike other providers, "onnx" needs no API key to build an
         # embedder — the no-key branch that only reopens an existing store
         # for other providers must not swallow a local bind.
         class FakeOnnxProvider:
@@ -322,10 +322,10 @@ class StashbaseDaemonTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 svc = stashbase_daemon.StashbaseStore(tmp)
                 with mock.patch.object(svc, "_ensure_store") as ensure:
-                    svc.bind_root("/library", "local", root_identity="/library")
+                    svc.bind_root("/library", "onnx", root_identity="/library")
                 ensure.assert_called_once()
                 built_embedder = ensure.call_args[0][0]
-                self.assertEqual(built_embedder.provider, "local")
+                self.assertEqual(built_embedder.provider, "onnx")
         finally:
             if previous is None:
                 sys.modules.pop("mfs.embedder", None)
@@ -384,10 +384,10 @@ class StashbaseDaemonTests(unittest.TestCase):
                     svc.bind_root("/library", "openai", root_identity="/library", dimension=1536)
                     self.assertIsNone(svc._embedder)
 
-                    svc.bind_root("/library", "local", root_identity="/library")
-                    self.assertEqual(svc._embedder.provider, "local")
+                    svc.bind_root("/library", "onnx", root_identity="/library")
+                    self.assertEqual(svc._embedder.provider, "onnx")
                     collection = getattr(getattr(svc._store, "_config", None), "collection_name", None)
-                    self.assertEqual(collection, "vectors_local_1024")
+                    self.assertEqual(collection, "vectors_onnx_1024")
                 finally:
                     svc.close_all()
         finally:
@@ -416,7 +416,7 @@ class StashbaseDaemonTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 setup = stashbase_daemon.StashbaseStore(tmp)
                 try:
-                    setup.bind_root("/library", "local", root_identity="/library")
+                    setup.bind_root("/library", "onnx", root_identity="/library")
                 finally:
                     setup.close_all()
 
@@ -424,7 +424,7 @@ class StashbaseDaemonTests(unittest.TestCase):
                 try:
                     cleanup.bind_root("/library", "openai", root_identity="/library", dimension=1536)
                     collection = getattr(getattr(cleanup._store, "_config", None), "collection_name", None)
-                    self.assertEqual(collection, "vectors_local_1024")
+                    self.assertEqual(collection, "vectors_onnx_1024")
                 finally:
                     cleanup.close_all()
         finally:
@@ -455,7 +455,7 @@ class StashbaseDaemonTests(unittest.TestCase):
 
                 setup2 = stashbase_daemon.StashbaseStore(tmp)
                 try:
-                    setup2.bind_root("/library", "local", root_identity="/library")
+                    setup2.bind_root("/library", "onnx", root_identity="/library")
                 finally:
                     setup2.close_all()
 
