@@ -219,6 +219,7 @@ export function useAgentControlState({
     sessionScope,
     changeScope,
     hasDraftText,
+    hasDraftTextRef,
     handleDraftChange,
   };
 }

@@ -62,6 +62,9 @@ manager, or a primary graph-navigation tool.
 - Folder switches reset folder-scoped documents but preserve library search
   state and scope-pinned chats. A blank welcome chat may follow the new folder;
   started work and unsent drafts never silently rebind.
+- Removing a member preserves Chat tabs. A completely blank Chat returns to
+  Library without interruption; a Chat containing user work stays readable in
+  its retired folder scope and offers a separate **New Library Chat**.
 - Files declared previewable in the
   [Documents format matrix](documents.md#format-capability-matrix) open in
   persistent tabs with Quick Open, Command Palette, history, and
@@ -72,9 +75,11 @@ manager, or a primary graph-navigation tool.
 - File create, rename, move, import, and delete are explicit. Organization
   gestures are not pointer-only: moving a file works by drag or through the
   file row's **Move to…** folder picker, and document tabs reorder by drag or
-  by keyboard. Destructive operations confirm intent. Agent instruction files remain visible and
-  user-owned; hidden tool infrastructure and derived data do not surface as
-  workspace content.
+  by keyboard. Destructive operations confirm intent. Library-removal
+  confirmation names the complete
+  home-shortened member path that remains on disk. Agent instruction files
+  remain visible and user-owned; hidden tool infrastructure and derived data
+  do not surface as workspace content.
 - Durable folder purpose, organization guidance, and Agent working rules live
   in the visible, user-owned `AGENTS.md`, not separate Library metadata.
 - Current folder entry makes one create-only exception to explicit mutation:
@@ -86,11 +91,16 @@ manager, or a primary graph-navigation tool.
 ## Experience Contract
 
 - Folder entry is navigation first; listing, preparation, and indexing continue
-  in the background.
+  in the background. Code-heavy project infrastructure that cannot surface in
+  the Workbench does not make those background scans hold navigation closed.
 - Closing a window either makes its live edit durable or leaves the window open
   with an actionable failure. Closing one window never tears down another.
-- Folder removal never deletes user files. Every affected window saves first,
-  leaves the removed folder, and cannot silently re-add it during recovery.
+- Folder removal never deletes user files. Every affected window saves first
+  and leaves the removed folder, and recovery cannot silently re-add it.
+  Unfinished indexing is retired without holding the confirmation or removal
+  flow open. Folder-loss and 412 recovery clear document/readiness state but
+  never clear Chat tabs; the Agent lifecycle retires only sessions bound to the
+  removed member.
   StashBase commits membership removal only after preparation, derived data,
   index rows, ordering, and folder-bound runtime state have finished cleanup.
 - Folder membership and favorites never replace unreadable settings with

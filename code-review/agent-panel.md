@@ -14,6 +14,12 @@
   required. Otherwise it creates a new tab. No started tab is hijacked.
 - A blank tab may follow a window folder switch. Draft or attachments freeze
   the scope visible to the user; content and resumed history remain pinned.
+- A structured `scope-removed` exit retires only Chats bound to that member. A
+  completely blank tab reconnects in place with an explicit Library scope. A
+  tab containing any user work preserves its tab, draft, attachments,
+  transcript, queued follow-ups, and history identity in a closed neutral
+  state; **New Library Chat** creates a separate tab whose first connection is
+  Library-scoped even when the window is browsing another folder.
 - A scope-specific History selection records one pending handoff. The active
   suitable blank tab consumes it exactly once before reconnecting.
 - Runtime readiness gates Chat before transport connection. Failed gates use
@@ -130,6 +136,10 @@
   summary into a terminal error.
 - OpenCode native file Diffs enter the same settled file-change surface, and
   OpenCode tool names are already normalized before renderer state sees them.
+- Scope retirement is not a fatal transport state. Running or
+  permission-waiting tools and queued follow-ups become cancelled history;
+  settled content remains unchanged, no generic Retry/Reconnect appears, and
+  a raw socket close still follows the ordinary failure path.
 - Permission requests and recovery actions never enter collapsed activity.
 - Every settled reply exposes one standing Copy Reply control — always
   visible, never hover- or menu-gated — carrying the untouched assistant

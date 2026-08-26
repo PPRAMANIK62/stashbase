@@ -29,17 +29,20 @@ import { MessageList } from '@/features/agent-panel/components/AgentMessages';
 import { useAgentAttachments } from '@/features/agent-panel/hooks/useAgentAttachments';
 import { useAgentSession } from '@/features/agent-panel/hooks/useAgentSession';
 import { openSettings } from '@/common/lib/settingsTrigger';
+import type { LibraryScope } from '@/common/lib/libraryScope';
 
 export function AgentView({
   active,
   id,
   title,
   agent = 'claude',
+  initialScope,
 }: {
   active: boolean;
   id: string;
   title: string;
   agent?: AgentKind;
+  initialScope?: LibraryScope;
 }) {
   const workspace = useWorkspace();
   const chat = useChat();
@@ -62,6 +65,7 @@ export function AgentView({
     attachmentsRef: attach.attachmentsRef,
     clearComposerAttachments: attach.clearComposerAttachments,
     discardAttachmentsForReset: attach.discardAttachmentsForReset,
+    initialScope,
   });
   // The session groups its state by owner; destructure the namespaces once
   // so the JSX below reads as composition rather than prop threading.
@@ -183,6 +187,7 @@ export function AgentView({
             phase={transcript.phase}
             fatal={transcript.fatal}
             fatalRecoveryLabel={transcript.fatalRecoveryLabel}
+            scopeRetired={transcript.scopeRetired}
             agentKind={agent}
             agentShortName={session.meta.shortName}
             onTurnFailureAction={transcript.handleTurnFailureAction}
@@ -191,10 +196,11 @@ export function AgentView({
             onCopyUserMessage={transcript.copyUserMessage}
             onResendUserMessage={queue.resend}
             onRetry={transcript.reconnectAfterFatal}
+            onStartLibraryChat={transcript.startLibraryChat}
             onOpenArtifact={transcript.openArtifactLink}
           />
         )}
-        {transcript.phase === 'closed' && !transcript.fatal && (
+        {transcript.phase === 'closed' && !transcript.fatal && !transcript.scopeRetired && (
           <div className="flex items-center justify-between gap-2.5 border-t border-border px-3 py-2 text-sm text-muted-foreground">
             <span>Session ended.</span>
             <Button variant="outline" size="sm" onClick={transcript.reconnect}>Reconnect</Button>
@@ -209,6 +215,7 @@ export function AgentView({
         active={active}
         agentShortName={session.meta.shortName}
         prefill={transcript.prefill}
+        closedPlaceholder={transcript.scopeRetired ? 'Folder removed — start a Library chat to continue…' : undefined}
         mode={{ show: runtime.capabilities?.modes === true, value: controls.mode, onSet: controls.changeMode }}
         effort={{
           show: runtime.capabilities?.effort === true,

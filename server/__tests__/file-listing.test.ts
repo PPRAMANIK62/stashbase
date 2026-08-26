@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { runWithFolderRoot } from '../folder.ts';
-import { listFilesAndFolders } from '../file-listing.ts';
+import { listFilesAndFolders, listFilesAndFoldersAsync } from '../file-listing.ts';
 
 test('file-listing scan and classification', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-listing-test-'));
@@ -65,7 +65,19 @@ test('file-listing scan and classification', async () => {
     fs.writeFileSync(path.join(folderDotOnly, '.DS_Store'), '');
 
     // Run listing scan
-    const result = await runWithFolderRoot(tempDir, () => listFilesAndFolders());
+    const { result, asyncResult } = await runWithFolderRoot(tempDir, async () => {
+      const result = listFilesAndFolders();
+      const originalReaddirSync = fs.readdirSync;
+      fs.readdirSync = (() => {
+        throw new Error('async HTTP listing used synchronous directory I/O');
+      }) as typeof fs.readdirSync;
+      try {
+        return { result, asyncResult: await listFilesAndFoldersAsync() };
+      } finally {
+        fs.readdirSync = originalReaddirSync;
+      }
+    });
+    assert.deepEqual(asyncResult, result, 'async HTTP listing must preserve sidebar classification');
 
     // Verify folders list (pruning validation)
     // - Should keep 'docs', 'mixed', and 'empty-dir'

@@ -32,11 +32,9 @@ const log = logger('routes/folders');
 
 function scheduleConversionRediscovery(sourcePrefix: string, displayPath: string): void {
   setImmediate(() => {
-    try {
-      discoverConvertibleSources(sourcePrefix);
-    } catch (err: unknown) {
+    void discoverConvertibleSources(sourcePrefix).catch((err: unknown) => {
       log.warn(`rename_folder: conversion rediscovery failed for ${displayPath}: ${errorMessage(err)}`);
-    }
+    });
   });
 }
 

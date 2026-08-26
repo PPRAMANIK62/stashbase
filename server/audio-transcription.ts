@@ -22,6 +22,7 @@ import { getTranscriptionPreferences } from './app-config.ts';
 import { isAudioFile } from './format.ts';
 import {
   derivedIsFresh,
+  discoverCandidateSources,
   discoverNewSources,
   getScheduledConversion,
   indexFreshDerived,
@@ -432,11 +433,15 @@ export async function cancelAudioPreparation(sourceAbs: string): Promise<boolean
   return shouldRemainStopped;
 }
 
-export function discoverNewAudio(folderAbs: string): void {
+export async function discoverNewAudio(folderAbs: string, candidates?: readonly string[]): Promise<void> {
   const configured = configuredTranscription();
   if (!configured) return;
   const spec = audioSpec(configured.provider, configured.model, configured.language);
-  discoverNewSources(folderAbs, spec, (abs) => { maybeConvertAudio(abs); });
+  if (candidates) {
+    await discoverCandidateSources(candidates, spec, (abs) => { maybeConvertAudio(abs); });
+    return;
+  }
+  await discoverNewSources(folderAbs, spec, (abs) => { maybeConvertAudio(abs); });
 }
 
 /** Incomplete audio that cannot enter the scheduler because the selected

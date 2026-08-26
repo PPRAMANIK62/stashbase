@@ -31,7 +31,7 @@ import {
 } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { errorMessage, logger } from '../log.ts';
-import { deleteFolderRuntimeState, indexer } from '../state.ts';
+import { cancelFolderSyncsAndWait, deleteFolderRuntimeState, indexer } from '../state.ts';
 import { clearRecordsUnder } from '../conversion-status.ts';
 import { cancelConversionsUnderAndWait } from '../conversion.ts';
 import { noteTreeChanged } from '../watcher.ts';
@@ -63,6 +63,11 @@ async function cleanupDerivedForFolder(folderAbs: string): Promise<DerivedCleanu
 }
 
 async function cleanupRemovedLibraryFolder(abs: string): Promise<void> {
+  // A large semantic `scan_diff` runs inside the single-threaded Python
+  // daemon and otherwise serializes every cleanup request behind it. Retire
+  // that reconcile first so Remove cannot sit in a half-cleared window state
+  // until the daemon's global ten-minute watchdog fires.
+  await cancelFolderSyncsAndWait(abs);
   const cancelled = await cancelConversionsUnderAndWait(abs);
   if (cancelled.length) {
     log.info(`folder remove: cancelled ${cancelled.length} queued/running conversion(s) under ${abs}`);
@@ -194,14 +199,17 @@ export function mount(app: express.Express): void {
       }
       const finishRemoval = await beginLibraryFolderRemovalAsync(abs);
       try {
-        // Tear down any live window bound to it FIRST (kills terminal sessions
-        // whose cwd is inside this folder).
-        await clearFolderPathAsync(abs);
         // Built-in Agent sessions are folder-pinned and survive window folder
         // switches, so removal must also end the sessions BOUND to this folder
-        // — including ones in windows currently showing another folder.
+        // — including ones in windows currently showing another folder. Do
+        // this BEFORE releasing window folder contexts: that release invokes
+        // the generic window-close teardown, whose raw socket close would
+        // otherwise erase the structured scope-retirement reason.
         stopAgentRuntimeForFolder('claude', abs);
         stopAgentRuntimeForFolder('codex', abs);
+        // Tear down every live window bound to the member after its affected
+        // Agent sessions have received the precise retirement event.
+        await clearFolderPathAsync(abs);
         // Membership is the commit record. Keep it until every cleanup owner
         // has acknowledged completion; a failure leaves the member recoverable
         // and the next reconcile can rebuild any partially-cleared cache.

@@ -11,7 +11,7 @@ import test from 'node:test';
 import { createElement as h, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { App } from '@/app/App';
 import { MainPane } from '@/app/components/MainPane';
-import { Sidebar } from '@/app/components/Sidebar';
+import { removalDialogTarget, Sidebar } from '@/app/components/Sidebar';
 import { TitlebarControls } from '@/app/components/TitlebarControls';
 import { appActions, appState, mountApp, withDom } from '@/common/__tests__/renderHarness';
 import { DocumentOutlineProvider } from '@/common/components/DocumentOutlineContext';
@@ -26,6 +26,11 @@ function sidebar(workspace: Partial<State['workspace']> = {}) {
     }),
   };
 }
+
+test('the library-removal confirmation identifies the complete member path', () => {
+  const target = removalDialogTarget('/Users/me/Documents', '/Users/me');
+  assert.equal(target.displayPath, '~/Documents');
+});
 
 test('the sidebar column carries the macOS window drag zone as a non-interactive band', async () => {
   await withDom(async (dom) => {

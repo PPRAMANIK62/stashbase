@@ -25,6 +25,7 @@ import {
   type AgentSkill,
   type AgentClientEvent,
   type AgentServerEvent,
+  type AgentSessionTermination,
 } from './agent-contract.ts';
 import {
   approvalTitle,
@@ -994,8 +995,11 @@ export class CodexSession implements AttributedAgentSession {
     this.dispose();
   }
 
-  dispose(): void {
+  dispose(termination?: AgentSessionTermination): void {
     if (this.closed) return;
+    if (termination?.kind === 'scope-removed') {
+      this.send({ t: 'exit', reason: 'scope-removed', folder: termination.folder });
+    }
     this.closed = true;
     unregisterAttributedAgentSession(this.attributionId);
     this.onDispose?.(this);

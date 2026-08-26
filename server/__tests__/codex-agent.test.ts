@@ -40,6 +40,18 @@ class FakeWebSocket extends EventEmitter {
   }
 }
 
+test('Codex sends a structured scope-retirement exit before closing', () => {
+  const ws = new FakeWebSocket();
+  const session = new CodexSession(ws as unknown as WebSocket, 'scope-retirement-window');
+
+  session.dispose({ kind: 'scope-removed', folder: '/workspace' });
+
+  assert.deepEqual(ws.sent.map((value) => JSON.parse(value)), [
+    { t: 'exit', reason: 'scope-removed', folder: '/workspace' },
+  ]);
+  assert.equal(ws.readyState, 3);
+});
+
 function catalogProcess(
   models: Array<Record<string, unknown>> = [{ id: 'native-model', displayName: 'Native model' }],
   options: {

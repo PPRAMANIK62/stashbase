@@ -40,6 +40,18 @@ class FakeAgentWebSocket extends EventEmitter {
   close(): void { this.readyState = 3; this.emit('close'); }
 }
 
+test('Claude sends a structured scope-retirement exit before closing', () => {
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(ws as unknown as WebSocket, 'scope-retirement-window');
+
+  session.dispose({ kind: 'scope-removed', folder: '/workspace' });
+
+  assert.deepEqual(ws.sent.map((value) => JSON.parse(value)), [
+    { t: 'exit', reason: 'scope-removed', folder: '/workspace' },
+  ]);
+  assert.equal(ws.readyState, 3);
+});
+
 async function settle(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));

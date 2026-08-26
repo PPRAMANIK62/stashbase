@@ -60,7 +60,7 @@ import { buildStashbasePreamble } from './agent-preamble.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeBridgeFile, ensureClaudeFolderTrust } from './agent-rules.ts';
 import { noteTreeChanged } from './watcher.ts';
-import { disposeSessionsBoundToFolder, isAgentAccessMode, reportAgentRuntimeFailure, resolveSessionBinding, type AgentAccessMode } from './agent-contract.ts';
+import { disposeSessionsBoundToFolder, isAgentAccessMode, reportAgentRuntimeFailure, resolveSessionBinding, type AgentAccessMode, type AgentSessionTermination } from './agent-contract.ts';
 import type { AgentClientEvent, AgentModel, AgentServerEvent, AgentSkill } from './agent-contract.ts';
 import {
   registerAttributedAgentSession,
@@ -904,8 +904,11 @@ export class AgentSession implements AttributedAgentSession {
     this.dispose();
   }
 
-  dispose(): void {
+  dispose(termination?: AgentSessionTermination): void {
     if (this.closed) return;
+    if (termination?.kind === 'scope-removed') {
+      this.send({ t: 'exit', reason: 'scope-removed', folder: termination.folder });
+    }
     this.closed = true;
     unregisterAttributedAgentSession(this.attributionId);
     // Closing input prevents another prompt from entering this query. The

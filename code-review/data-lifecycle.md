@@ -71,6 +71,10 @@ completion, and relevant configuration changes.
 For one folder it must:
 
 - discover added, changed, moved, and deleted sources;
+- apply the shared hidden/project-directory exclusions before descending, use
+  one yielding asynchronous directory traversal for all prepared formats, and
+  keep code dependency and build trees from blocking folder navigation or
+  becoming format-specific discovery work;
 - validate current format-specific derived output;
 - preserve durable failure or cancellation gates;
 - schedule missing work without blocking navigation;
@@ -89,6 +93,11 @@ The availability gate is checked before and between embedding calls so one
 quota response stops the remainder of a batch. Pending work remains
 reconcilable and resumes after a quota refresh/reset or an available source
 switch.
+
+Daemon retirement is single-flight across shutdown, credential/quota reset,
+and recovery callers. A replacement generation waits until the retiring child
+has exited and released the store lock; a late event from an older generation
+cannot clear the current readiness latch or reject current operations.
 
 Large semantic workloads use the same authoritative content-hash diff. Known
 stale rows become unavailable before a durable awaiting/paused decision is
@@ -129,7 +138,10 @@ search; only explicit Start clears it.
   derived artifacts, preparation records, ordering, runtime bindings, and
   membership, but never deletes the user folder. A process-local removal intent
   rejects concurrent reopen/register attempts, and durable membership is
-  removed last so an interrupted cleanup remains recoverable by reconcile.
+  removed last so an interrupted cleanup remains recoverable by reconcile. It
+  invalidates queued folder-sync generations before cleanup and interrupts an
+  active single-threaded daemon scan; concurrent status polls treat that short
+  retirement window as transitional instead of surfacing a daemon-close error.
 - Source delete removes its derived text, manifests, resumable work, playback
   preview, attention rows, and index rows.
 - Move/rename retires the old source identity. Direct text may reuse index
@@ -154,6 +166,8 @@ contracts, not because every tuning value belongs in prose:
 - scheduler capacity is two light tasks, one heavy task, and four classifier
   tasks; background work ages after `60 s` but never above active-folder
   urgency;
+- Node folder listing and Preparation discovery yield after at most `2,048`
+  visited directory entries;
 - direct-text semantic admission is capped at `8 MiB` per source in both Node
   and Python;
 - media transcription uses ten-minute durable work units with `1.5 s` overlap;

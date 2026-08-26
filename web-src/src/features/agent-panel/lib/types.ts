@@ -3,7 +3,13 @@ export type PermMode = 'default' | 'acceptEdits' | 'plan' | 'auto';
 /** Opaque reasoning-effort identifier advertised by the active runtime. */
 export type EffortLevel = string;
 
-export type ToolStatus = 'running' | 'awaiting' | 'done' | 'error' | 'denied';
+export type ToolStatus = 'running' | 'awaiting' | 'done' | 'error' | 'denied' | 'cancelled';
+
+/** An expected terminal state: the member folder that owned this Chat was
+ * removed from Library. This is neither a runtime failure nor a reconnectable
+ * disconnect; the transcript stays readable while continuation moves to a
+ * fresh Library Chat. */
+export interface RetiredAgentScope { folder: string }
 
 /** A context file attached to the composer. Image uploads use a renderer-local
  * object URL while composing; restored sessions use a constrained local

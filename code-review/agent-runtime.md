@@ -203,8 +203,11 @@ it is not a third scope.
   Claude's `CLAUDE.md` bridge is create-only. Both remain visible user files.
 - Window folder switching does not tear down or rebind started sessions.
 - Folder removal ends every session bound to that member across windows but
-  does not end library sessions. Window close ends that window's sessions;
-  app quit ends all sessions through the cleanup ladder.
+  does not end library sessions. Before closing each affected transport, the
+  Adapter emits the structured `scope-removed` exit with the retired member
+  path; renderer behavior must not depend on membership refresh timing or a
+  raw close. Window close ends that window's sessions; app quit ends all
+  sessions through the cleanup ladder.
 - `create_project` may migrate only the attributed live library session.
   Persist the session-to-folder override before emitting the scope change so
   history never lists the session in both scopes. Preserve native session
@@ -254,6 +257,10 @@ assumed CLI versions.
 - Runtime errors settle only the matching active turn once. Retry-in-progress
   signals do not become permanent failures; repeated or late terminal events
   are ignored.
+- Expected scope retirement is a structured terminal event, distinct from
+  normal exit, runtime error, and unclassified transport closure. Both native
+  Adapters send it before disposal; the renderer uses its reason and folder
+  fields directly and never classifies close timing or message prose.
 - Turn interruption is idempotent at the Adapter boundary. Codex currently
   exposes its already-idle interrupt race only through the stable
   `no active turn to interrupt` invalid-request message, without structured

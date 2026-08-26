@@ -15,7 +15,7 @@ import {
   maybeConvertAudio,
   resetAudioTranscription,
 } from './audio-transcription.ts';
-import { promoteConversion } from './conversion.ts';
+import { collectSourceCandidates, promoteConversion } from './conversion.ts';
 import { clearRecord } from './conversion-status.ts';
 import { currentDerivedTextPathForDocx, currentDerivedTextPathForDocxAsync, derivedHtmlPathForDocx, discoverNewDocx, indexFreshDocx, maybeConvertDocx } from './docx.ts';
 import { filesystemPath } from './filesystem-path.ts';
@@ -37,7 +37,7 @@ export type ConvertibleReprocessResult =
 interface ConvertibleFormatAdapter {
   matches(path: string): boolean;
   queue(sourceAbs: string, options: ConvertibleOptions): void;
-  discover(folderAbs: string): void;
+  discover(folderAbs: string, candidates?: readonly string[]): Promise<void>;
   indexFresh(sourceAbs: string): Promise<boolean>;
   reset(sourceAbs: string): void;
   interactive: boolean;
@@ -135,8 +135,9 @@ export function prepareConvertibleSource(sourceAbs: string, displayName = source
   return true;
 }
 
-export function discoverConvertibleSources(folderAbs: string): void {
-  for (const format of FORMATS) format.discover(folderAbs);
+export async function discoverConvertibleSources(folderAbs: string): Promise<void> {
+  const candidates = await collectSourceCandidates(folderAbs, (candidate) => findFormat(candidate) != null);
+  for (const format of FORMATS) await format.discover(folderAbs, candidates);
 }
 
 export function indexFreshConvertibleSource(sourceAbs: string, displayName = sourceAbs): Promise<boolean> {

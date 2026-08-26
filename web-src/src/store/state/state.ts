@@ -386,8 +386,7 @@ export interface ChatSlice {
    *  five reducer cases that maintain it cannot drift apart. */
   chatTabRecencyByAgent: Record<string, string[]>;
   /** Un-consumed sidebar History resume request, if any. See
-   *  `PendingChatResume`; a new request replaces an unconsumed one, and
-   *  losing the window's folder context (CHAT_TABS_RESET) clears it. */
+   *  `PendingChatResume`; a new request replaces an unconsumed one. */
   pendingResume: PendingChatResume | null;
 }
 
@@ -555,7 +554,6 @@ export type Action =
   | { type: 'CHAT_RESUME_REQUEST'; resume: PendingChatResume }
   /** The target AgentView took ownership of the pending resume. */
   | { type: 'CHAT_RESUME_CONSUMED' }
-  | { type: 'CHAT_TABS_RESET' }
   | { type: 'ACTIVE_FOLDER'; path: string }
   /** Move the sidebar's single focus to `path`. Pure visual highlight
    *  — does not touch expand state, activeFolder, or the open file. */

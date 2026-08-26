@@ -4,6 +4,7 @@ import {
   folderScopedPreparationResetActions,
   folderScopedResetActions,
 } from '@/store/lib/folderScopedReset';
+import { api } from '@/common/api/api';
 import { recoverLostFolderContext } from '@/store/hooks/useSearchActions';
 import { reducer } from '@/store/state/stateReducer';
 import { initialState, type Action, type State } from '@/store/state/state';
@@ -30,7 +31,7 @@ function applyAll(state: State, actions: ReturnType<typeof folderScopedResetActi
 
 test('chat tabs and their sessions survive a window folder switch', () => {
   const plan = folderScopedResetActions('switch');
-  assert.equal(plan.some((action) => action.type === 'CHAT_TABS_RESET'), false);
+  assert.equal(plan.some((action) => String(action.type) === 'CHAT_TABS_RESET'), false);
   // Document tabs still reset on a switch — only chat state survives.
   assert.equal(plan.some((action) => action.type === 'TABS_RESET'), true);
 
@@ -40,23 +41,20 @@ test('chat tabs and their sessions survive a window folder switch', () => {
   assert.equal(after.chat.chatOpen, true);
 });
 
-test('losing the window folder context still resets chat tabs', () => {
+test('losing the window folder context preserves chat tabs for scope-aware retirement', () => {
   const plan = folderScopedResetActions('folder-lost');
-  assert.equal(plan.some((action) => action.type === 'CHAT_TABS_RESET'), true);
+  assert.equal(plan.some((action) => String(action.type) === 'CHAT_TABS_RESET'), false);
 
   const after = applyAll(stateWithChatTabs(), plan);
-  assert.deepEqual(after.chat.chatTabs, []);
-  assert.equal(after.chat.activeChatTabId, null);
-  assert.equal(after.chat.chatOpen, false);
+  assert.deepEqual(after.chat.chatTabs.map((tab) => tab.id), ['tab-claude', 'tab-codex']);
+  assert.equal(after.chat.activeChatTabId, 'tab-claude');
+  assert.equal(after.chat.chatOpen, true);
 });
 
 test('both transitions clear the same folder-scoped preparation state', () => {
   const switchTypes = folderScopedResetActions('switch').map((action) => action.type);
   const lostTypes = folderScopedResetActions('folder-lost').map((action) => action.type);
-  assert.deepEqual(
-    lostTypes.filter((type) => type !== 'CHAT_TABS_RESET'),
-    switchTypes,
-  );
+  assert.deepEqual(lostTypes, switchTypes);
 });
 
 /** The workspace half of a folder-context reset. Both sites dispatch these
@@ -65,7 +63,6 @@ test('both transitions clear the same folder-scoped preparation state', () => {
  *  preparation-indicator set. */
 const WORKSPACE_RESET_TYPES = new Set([
   'TABS_RESET',
-  'CHAT_TABS_RESET',
   'ACTIVE_FOLDER',
   'FILE_ORDER_LOADED',
 ]);
@@ -110,6 +107,40 @@ test('the 412 recovery ladder clears exactly the shared folder-scoped preparatio
       .filter((type) => !WORKSPACE_RESET_TYPES.has(type)),
     shared,
   );
+});
+
+test('the 412 removed-folder recovery preserves chat tabs for scope-aware retirement', async (t) => {
+  const dispatched: Action[] = [];
+  const state = stateWithChatTabs();
+  state.workspace = {
+    ...state.workspace,
+    folder: 'workspace',
+    folderPath: '/workspace',
+    recent: [],
+  };
+  t.mock.method(api, 'getFolder', async () => ({ current: null, recent: [] }));
+
+  const outcome = await recoverLostFolderContext({
+    folderPathAtStart: '/workspace',
+    openGenAtStart: 0,
+    refs: {
+      stateRef: { current: state },
+      folderContextPath: { current: '/workspace' },
+      lastTreeVersion: { current: 7 },
+      syncGeneration: { current: 0 },
+      openGeneration: { current: 0 },
+    },
+    dispatch: (action) => { dispatched.push(action); },
+    loadFilesFromServer: async () => null,
+    schedulePoll: () => {},
+  });
+
+  assert.equal(outcome, 'reset');
+  assert.equal(dispatched.some((action) => String(action.type) === 'CHAT_TABS_RESET'), false);
+  const after = dispatched.reduce((current, action) => reducer(current, action), state);
+  assert.deepEqual(after.chat.chatTabs.map((tab) => tab.id), ['tab-claude', 'tab-codex']);
+  assert.equal(after.chat.activeChatTabId, 'tab-claude');
+  assert.equal(after.chat.chatOpen, true);
 });
 
 test('the shared preparation reset returns every folder-scoped indicator to its initial value', () => {

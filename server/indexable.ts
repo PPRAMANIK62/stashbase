@@ -32,6 +32,10 @@ export const INDEX_EXCLUDED_DIRS = new Set<string>([
   'vendor',
 ]);
 
+/** Large recursive scans yield after this many entries so folder entry and
+ * reconcile cannot monopolize the shared Node event loop on flat code trees. */
+export const FILESYSTEM_SCAN_YIELD_EVERY = 2_048;
+
 /** Hard ceiling for a single source text that we will send to the daemon.
  *  It must be large enough for book-length PDF/OCR derived markdown,
  *  while still catching accidental bundled app dumps or source trees. */

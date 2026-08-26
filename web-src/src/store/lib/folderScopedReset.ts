@@ -16,9 +16,10 @@
  *   unbound empty tabs follow the new window folder on their next
  *   connect.
  * - `'folder-lost'` — the window loses its folder context entirely
- *   (library removal, another window closing the folder). Chat tabs
- *   reset too: the server ends the affected sessions, and panels must
- *   not keep rendering against a folder that is gone.
+ *   (library removal, another window closing the folder). Chat tabs still
+ *   survive: the server sends a structured scope-retirement event to only
+ *   the sessions bound to the removed member. Blank tabs restart against
+ *   Library; tabs holding user work keep their content in a retired state.
  */
 import type { Action } from '@/store/state/state';
 
@@ -39,7 +40,7 @@ export type FolderResetReason = 'switch' | 'folder-lost';
  * a divergent inline ladder instead.
  *
  * The two sites do NOT share the workspace half (`TABS_RESET`,
- * `CHAT_TABS_RESET`, `ACTIVE_FOLDER`, `FILE_ORDER_LOADED`): the plan below
+ * `ACTIVE_FOLDER`, `FILE_ORDER_LOADED`): the plan below
  * runs it around this block, while the recovery ladder runs it after and only
  * when a folder was visibly open. Both orders are observable, so neither is
  * bent to fit the other.
@@ -57,10 +58,9 @@ export function folderScopedPreparationResetActions(): Action[] {
   ];
 }
 
-export function folderScopedResetActions(reason: FolderResetReason): Action[] {
+export function folderScopedResetActions(_reason: FolderResetReason): Action[] {
   return [
     { type: 'TABS_RESET' },
-    ...(reason === 'folder-lost' ? [{ type: 'CHAT_TABS_RESET' } as Action] : []),
     { type: 'ACTIVE_FOLDER', path: '' },
     ...folderScopedPreparationResetActions(),
     { type: 'FILE_ORDER_LOADED', order: {} },

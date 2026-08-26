@@ -88,4 +88,9 @@ export type AgentServerEvent =
   /** `failure` is present only when the adapter classified the message into
    * a turn-failure kind; unclassified errors keep the bare shape. */
   | { t: 'error'; message: string; failure?: AgentTurnFailure }
-  | { t: 'exit'; message?: string };
+  /** A normal/native exit may carry diagnostic prose. Folder removal is an
+   * expected scope-retirement event instead: it carries a structured reason
+   * and the retired member path so the renderer never has to classify a raw
+   * socket close or parse an error message. */
+  | { t: 'exit'; message?: string; reason?: undefined; folder?: undefined }
+  | { t: 'exit'; reason: 'scope-removed'; folder: string; message?: undefined };

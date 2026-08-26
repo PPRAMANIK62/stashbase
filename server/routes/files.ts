@@ -94,16 +94,15 @@ export function mount(app: express.Express): void {
         if (!member) {
           return res.status(400).json({ error: 'folder is not a registered library folder' });
         }
-        void runWithFolderRoot(member, async () => ({
+        const result = await runWithFolderRoot(member, async () => ({
           folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
           files: await listFilesAndFoldersAsync(),
-        }))
-          .then((result) => res.json({
-            folder: result.folder,
-            files: result.files.files,
-            folders: result.files.folders,
-          }))
-          .catch((err: unknown) => sendError(res, err));
+        }));
+        res.json({
+          folder: result.folder,
+          files: result.files.files,
+          folders: result.files.folders,
+        });
         return;
       }
       const listing = await listFilesAndFoldersAsync();

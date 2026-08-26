@@ -46,6 +46,10 @@ artifacts.
 
 - Preparation can improve a source but never replace it or make basic browsing
   depend on it.
+- Background discovery follows the same project-directory exclusions as the
+  local index and shares one folder traversal across prepared formats.
+  Dependency caches and generated build trees do not become Preparation work
+  merely because the user opens a code-heavy folder.
 - A direct-text readable format never becomes dependent on durable Preparation.
   A prepared-text readable format never exposes its derived representation as
   an editable source.

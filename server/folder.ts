@@ -705,6 +705,12 @@ export async function beginLibraryFolderRemovalAsync(absPath: string): Promise<(
   return () => { removingFolders.delete(key); };
 }
 
+/** Read-only removal gate for background owners. A reconcile scheduled from a
+ * stale library snapshot must not restart work after removal has begun. */
+export function isLibraryFolderRemovalInProgress(absPath: string): boolean {
+  return removingFolders.has(filesystemPath.identity(filesystemPath.absolute(absPath)));
+}
+
 export function assertLibraryFolderAvailable(absPath: string): void {
   const requested = filesystemPath.absolute(absPath);
   const blocked = [...removingFolders.values()].some((root) => (
