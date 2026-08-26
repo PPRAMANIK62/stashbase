@@ -2,7 +2,7 @@ import type { AgentKind, AgentTurnFailureKind } from '@/features/agent-panel/lib
 
 export const AGENT_TURN_FAILED_MESSAGE = 'The Agent turn failed before returning a response.';
 
-export type TurnFailureActionId = 'codex-sign-in' | 'reconnect' | 'resend';
+export type TurnFailureActionId = 'codex-sign-in' | 'reconnect' | 'resend' | 'open-agent-settings';
 
 export interface TurnFailureGuidance {
   title: string;
@@ -22,6 +22,7 @@ export interface TurnFailureGuidance {
 /** Map a classified turn failure to its truthful recovery. The renderer
  * switches on the adapter-assigned kind only — never on message prose. */
 export function turnFailureGuidance(kind: AgentTurnFailureKind, agent: AgentKind): TurnFailureGuidance {
+  const runtimeName = agent === 'stashbase' ? 'StashBase Agent' : agent === 'codex' ? 'Codex' : 'Claude';
   switch (kind) {
     case 'rate-limit':
       return {
@@ -32,11 +33,31 @@ export function turnFailureGuidance(kind: AgentTurnFailureKind, agent: AgentKind
     case 'quota':
       return {
         title: 'Usage limit reached',
-        guidance: `Your ${agent === 'codex' ? 'ChatGPT' : 'Claude'} plan’s usage is used up for now. Wait for the provider’s reset or upgrade the plan, then try again.`,
+        guidance: agent === 'stashbase'
+          ? 'StashBase Agent reached a provider usage limit. Wait for the provider’s reset or choose another Agent, then try again.'
+          : `Your ${agent === 'codex' ? 'ChatGPT' : 'Claude'} plan’s usage is used up for now. Wait for the provider’s reset or upgrade the plan, then try again.`,
         action: { id: 'resend', label: 'Try again' },
       };
+    case 'allowance-exhausted':
+      return {
+        title: '7-day Agent allowance used',
+        guidance: 'Wait for the current 7-day window to reset, choose your own Codex or Claude Code runtime, or review Agent usage in Settings.',
+        action: { id: 'open-agent-settings', label: 'Open Agent settings' },
+      };
+    case 'access-restricted':
+      return {
+        title: 'Hosted Agent access restricted',
+        guidance: 'This account cannot use hosted Agent capacity. Review Agent Settings for alternatives or contact StashBase support.',
+        action: { id: 'open-agent-settings', label: 'Open Agent settings' },
+      };
     case 'auth-expired':
-      return agent === 'codex'
+      return agent === 'stashbase'
+        ? {
+            title: 'StashBase sign-in expired',
+            guidance: 'Sign in to StashBase again from Agent Settings to continue with the included allowance.',
+            action: { id: 'open-agent-settings', label: 'Open Agent settings' },
+          }
+        : agent === 'codex'
         ? {
             title: 'Signed out of Codex',
             guidance: 'Your ChatGPT sign-in has expired. Sign in again to continue this conversation.',
@@ -50,7 +71,7 @@ export function turnFailureGuidance(kind: AgentTurnFailureKind, agent: AgentKind
     case 'network':
       return {
         title: 'Connection problem',
-        guidance: `${agent === 'codex' ? 'Codex' : 'Claude'} couldn’t reach its provider. Check your network, then try again.`,
+        guidance: `${runtimeName} couldn’t reach its provider. Check your network, then try again.`,
         action: { id: 'resend', label: 'Try again' },
       };
   }

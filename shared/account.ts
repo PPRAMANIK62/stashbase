@@ -19,6 +19,18 @@ export interface HostedQuota {
   periodEndsAt: string | null;
 }
 
+/** Public Agent allowance intentionally exposes only the user-facing weekly
+ * percentage and token detail. Picodollar accounting stays server-side. */
+export interface HostedAgentAllowance {
+  profile: string;
+  remainingPercent: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  windowStartedAt: string | null;
+  windowEndsAt: string | null;
+}
+
 export interface HostedAccountState {
   signedIn: boolean;
   active: boolean;
@@ -47,10 +59,12 @@ export interface HostedAccountActivation extends HostedAccountState {
 }
 
 export type HostedOAuthProvider = 'google';
+export type HostedOAuthPurpose = 'account' | 'embedding';
 
 export interface HostedOAuthStart {
   flowId: string;
   provider: HostedOAuthProvider;
+  purpose: HostedOAuthPurpose;
   url: string;
 }
 

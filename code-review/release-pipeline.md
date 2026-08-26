@@ -55,6 +55,11 @@ before its metadata and payloads coexist.
   included in the electron-builder input. The package-input test scans relative
   CommonJS dependencies that cross out of `electron/` so a source-only smoke
   cannot hide a packaged startup failure.
+- The exact OpenCode runtime and SDK versions are lockfile inputs. Its native
+  target must be unpacked from asar, must never be replaced by a PATH binary,
+  and the packaged smoke executes `--version` on the unpacked target. Source CI
+  additionally starts that exact target and completes an SDK turn against a
+  fake local model gateway; no real account or model credential is used.
 - Electron packages use electron-builder's official zip download and extraction
   path. Do not point `electronDist` at the unpacked npm installation: that path
   can flatten macOS framework symlinks before Developer ID signing.
@@ -142,8 +147,8 @@ credential-free and does not run this probabilistic check.
 | Publication coordinator | `.github/workflows/release.yml` |
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
 | Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
-| Packaged verification | `scripts/smoke-packaged-server.mjs` and platform release verifiers |
-| Focused evidence | `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
+| Packaged verification | `scripts/smoke-packaged-server.mjs` (including the unpacked OpenCode version probe) and platform release verifiers |
+| Focused evidence | `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
 
 ## Release Runbook
 

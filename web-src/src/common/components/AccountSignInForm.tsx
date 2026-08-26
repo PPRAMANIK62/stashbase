@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { errorMessage, type HostedAccountState } from '@/common/api/api';
+import { errorMessage, type HostedAccountState, type HostedOAuthPurpose } from '@/common/api/api';
 import { signInWithStashBase } from '@/common/lib/accountOAuth';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
@@ -7,9 +7,11 @@ import { StatusMessage } from '@/common/components/ui/status';
 export function AccountSignInForm({
   onSignedIn,
   onBack,
+  purpose = 'account',
 }: {
   onSignedIn: (account: HostedAccountState) => void;
   onBack?: () => void;
+  purpose?: HostedOAuthPurpose;
 }) {
   const [busy, setBusy] = useState(true);
   const [browserOpened, setBrowserOpened] = useState(false);
@@ -22,6 +24,7 @@ export function AccountSignInForm({
     setBrowserOpened(false);
     setError(null);
     void signInWithStashBase('google', {
+      purpose,
       onBrowserOpened: () => { if (mountedRef.current) setBrowserOpened(true); },
     }).then((account) => {
       if (mountedRef.current) onSignedIn(account);

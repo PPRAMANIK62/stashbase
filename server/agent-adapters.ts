@@ -9,6 +9,13 @@ import type { AgentAdapter } from './agent-contract.ts';
 import { attachCodexWebSocket, killActiveCodex, killCodexSessionsForFolder } from './codex-agent.ts';
 import { claudeHistoryActions } from './routes/sessions.ts';
 import { codexHistoryActions } from './routes/codex-sessions.ts';
+import {
+  attachOpenCodeWebSocket,
+  killActiveOpenCode,
+  killOpenCodeSessionsForFolder,
+  openCodeHistoryActions,
+} from './opencode-agent.ts';
+import { openCodeRuntimeAvailability } from './opencode-runtime.ts';
 
 const SHARED_PANEL_CAPABILITIES = {
   connection: true,
@@ -17,6 +24,7 @@ const SHARED_PANEL_CAPABILITIES = {
   transcript: true,
   approvals: true,
   history: true,
+  attachments: true,
   modes: true,
   effort: true,
   models: true,
@@ -24,6 +32,24 @@ const SHARED_PANEL_CAPABILITIES = {
 } as const;
 
 export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
+  {
+    id: 'stashbase', label: 'StashBase Agent', vendor: 'StashBase · OpenCode · DeepSeek',
+    capabilities: {
+      ...SHARED_PANEL_CAPABILITIES,
+      attachments: false,
+      modes: false,
+      effort: false,
+      models: false,
+      skills: false,
+      steering: false,
+      titleHint: true,
+    },
+    runtime: openCodeRuntimeAvailability,
+    attach: attachOpenCodeWebSocket,
+    stop: killActiveOpenCode,
+    stopFolder: killOpenCodeSessionsForFolder,
+    history: openCodeHistoryActions(),
+  },
   {
     id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
     capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: false, titleHint: false },

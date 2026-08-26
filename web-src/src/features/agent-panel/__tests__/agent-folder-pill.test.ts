@@ -211,7 +211,7 @@ test('newChatPlan reuses any blank tab, switching its agent when it differs', ()
     newChatPlan([{ id: 'b', agent: 'codex', blank: true }], 'claude'),
     { kind: 'reuse', id: 'b', switchAgent: true },
   );
-  // With both agents' blanks present, the requested agent's wins (no switch).
+  // With multiple Agents' blanks present, the requested Agent's wins (no switch).
   assert.deepEqual(
     newChatPlan([
       { id: 'b', agent: 'codex', blank: true },

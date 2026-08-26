@@ -37,6 +37,27 @@ function protocolRecords(logFile: string): ProtocolRecord[] {
     .map((line) => JSON.parse(line) as ProtocolRecord);
 }
 
+test('J06 offers StashBase Agent as the zero-install default with bring-your-own alternatives', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
+    const panel = activeAgentPanel(app.page);
+    await expect(panel.getByText('Sign in to StashBase', { exact: true })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Open account settings' })).toBeVisible();
+
+    await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+    await expect(app.page.getByRole('menuitem', { name: 'StashBase Agent' })).toBeVisible();
+    await expect(app.page.getByRole('menuitem', { name: 'Codex' })).toBeVisible();
+    await expect(app.page.getByRole('menuitem', { name: 'Claude Code' })).toBeVisible();
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
 test('Codex chat keeps its folder-bound transcript through approval and interruption', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   const protocolLog = path.join(fixture.artifacts, 'fake-codex-protocol.jsonl');
@@ -49,6 +70,8 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
     await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
+    await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+    await app.page.getByRole('menuitem', { name: 'Codex' }).click();
     await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
     let panel = activeAgentPanel(app.page);
     let composer = panel.locator('[aria-label="Message agent"]');
@@ -144,6 +167,7 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
     await expect(app.page.getByRole('menuitem', { name: 'Codex' })).toBeVisible();
     await app.page.getByRole('menuitem', { name: 'Codex' }).click();
+    await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
     await expect(chatTabs.getByRole('tab')).toHaveCount(initialCount);
 
     let panel = activeAgentPanel(app.page);

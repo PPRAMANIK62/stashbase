@@ -79,9 +79,12 @@ the product matrix as implementation truth rather than the narrower copy.
 
 ## Client Configuration
 
-StashBase writes MCP client configuration only for the built-in Chat agents:
-Agent readiness calls `ensureAgentMcp` (Claude Code, Codex), which regenerates
-the platform MCP launcher and idempotently rewrites that agent's own config.
+StashBase writes durable MCP client configuration only for the bring-your-own
+Chat agents: Agent readiness calls `ensureAgentMcp` (Claude Code, Codex), which
+regenerates the platform MCP launcher and idempotently rewrites that agent's own
+config. StashBase Agent injects the same launcher into each private OpenCode
+server with the owning window and live-session attribution; it does not write a
+user config file.
 StashBase config does not mirror client config. Every external client —
 including Claude Desktop — is configured by the user from the read-only
 Settings → MCP page (standard stdio config, URL access, token, Docker
@@ -97,6 +100,11 @@ Read, orientation, search, and StashBase-owned reindex work may use the low-risk
 approval path. Ordinary `write_file` and `edit_file` may be accepted only by
 the built-in panel's explicit Edit policy. Move, delete, commands, network,
 sandbox changes, and broader access remain explicit approval decisions.
+
+StashBase Agent Library chats disable native cwd file and command tools because
+the Library is a non-contiguous membership set; every file operation therefore
+crosses this MCP authorization boundary. A folder chat may use native local
+tools only inside its selected member cwd, with external directories denied.
 
 `create_project` creates a new source folder and changes Library membership.
 A built-in Agent call must follow an explicit user request or a visible
@@ -115,7 +123,7 @@ unattributed, and external callers never redirect a built-in session.
 | HTTP client Adapter | `mcp/library-operations-http.ts` |
 | HTTP server Adapter | `server/routes/mcp-http.ts` and `server/mcp-http-service.ts` |
 | Settings Interface | `server/mcp-http-settings.ts` and the narrow read/HTTP routes in `server/routes/mcp.ts` |
-| Launcher and built-in agent wiring | `ensureAgentMcp` and `ensureMcpLauncher` in `server/agent-mcp.ts` |
+| Launcher and built-in agent wiring | `ensureAgentMcp` and `ensureMcpLauncher` in `server/agent-mcp.ts`, with per-session OpenCode injection in `server/opencode-runtime.ts` |
 | Focused evidence | `server/library-operations/index.test.ts`, `server/routes/library-files.test.ts`, and `server/__tests__/mcp-http-*.test.ts` |
 
 ## Validation

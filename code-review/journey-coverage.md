@@ -203,13 +203,21 @@ aliases, and Journey E2E owns representative composition.
   permissions, failed-install external recheck without another download,
   managed Codex PowerShell path ownership and missing-output diagnostics,
   installed-but-signed-out Codex detection, same-executable browser login,
-  recovery, transcript, and layout state.
+  recovery, transcript, and layout state. `pnpm test:opencode:native` starts the
+  exact bundled OpenCode binary and completes an SDK session against a local
+  fake OpenAI-compatible gateway; broker tests cover token isolation, streaming,
+  refresh retry, per-session credentials, required UUID turn-header
+  attribution across retries, stable model profile routing, and allowance
+  classification. Config tests also prove that ambient credentials and process
+  injection flags do not enter the bundled runtime.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
-  the built-in panel against the deterministic fake runtime.
+  the default included-Agent account gate and bring-your-own choices, then
+  exercises the built-in panel against the deterministic fake Codex runtime.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
-- **Release Check:** real CLI/account setup, packaged runtime discovery, one
-  credentialed turn, and clipboard image behavior remain release evidence.
+- **Release Check:** packaged OpenCode version/executability, a real hosted
+  StashBase Agent turn and allowance response, bring-your-own CLI/account setup,
+  and bring-your-own clipboard image behavior remain release evidence.
 
 ## J07: Converge
 
@@ -307,7 +315,10 @@ aliases, and Journey E2E owns representative composition.
 - **Gap:** real-Agent intent/tool choice still needs an Eval. Codex
   configuration leaves `create_project` on the default prompt path, but no
   focused test locks that tool allowlist; Claude requires equivalent focused
-  or release evidence.
+  or release evidence. StashBase Agent can rebind the live panel and attributed
+  MCP path, but OpenCode cannot yet migrate its native history/cwd; its restored
+  row remains under Library and this path needs separate evidence after that
+  native limitation is resolved.
 
 ## Maintenance Rule
 

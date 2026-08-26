@@ -294,24 +294,29 @@ See [J05 evidence](../code-review/journey-coverage.md#j05-search).
 
 ### Outcome
 
-The user collaborates with a supported Agent against an explicit library or
-folder scope while retaining control of installation, context, tools, and
-permissions.
+The user collaborates with the included or a bring-your-own Agent against an
+explicit library or folder scope while retaining control of account use,
+installation, context, tools, and permissions.
 
 ### Entry State
 
-The workspace has a reusable blank Chat. The selected Agent runtime may be
-ready, missing, disconnected, or recoverable.
+The workspace has a reusable blank Chat. StashBase Agent is selected by default
+and may need account sign-in; a bring-your-own runtime may be ready, missing,
+disconnected, or recoverable.
 
 ### Primary Flow
 
-1. Use New Chat and choose the Agent and Library or folder scope.
-2. When the runtime is missing, explicitly choose **Install and continue**.
-3. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
+1. Use New Chat with StashBase Agent, or choose another Agent, and select the
+   Library or folder scope.
+2. For StashBase Agent, sign in to the StashBase account when needed; no Agent
+   install, model API key, or separate recharge is required within the fixed
+   seven-day included allowance.
+3. When a bring-your-own runtime is missing, explicitly choose **Install and
+   continue**. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
    finish the provider-owned browser flow started by that same runtime.
 4. Connect StashBase context and send a prompt.
-5. Inspect streaming output, tool activity, permissions, attachments, failures,
-   and file artifacts.
+5. Inspect streaming output, tool activity, permissions, runtime-supported
+   attachments, failures, and file artifacts.
 6. Continue, edit and resend, or open a source beside the same mounted Chat.
 7. Switch workspace folders without silently rebinding started work.
 
@@ -319,6 +324,17 @@ ready, missing, disconnected, or recoverable.
 
 - Opening the app, a folder, a tab, or history is never runtime-installation
   consent.
+- StashBase Agent uses only its included pinned runtime and account allowance;
+  its account token is absent from the renderer and OpenCode state.
+- Signing in for StashBase Agent establishes account identity without silently
+  activating hosted AI Index; that source remains an explicit setup or
+  Settings choice.
+- StashBase Agent does not offer transient attachments until its isolated
+  runtime can read their bytes through an authorized scope. Bring-your-own
+  runtimes retain attachment support.
+- Settings reports the current seven-day window as a remaining percentage and
+  reset time, with optional token detail but no monetary balance. A submitted
+  prompt and its auxiliary model calls share one server-enforced turn limit.
 - Codex authentication uses the executable StashBase already discovered or
   installed. StashBase neither installs a second copy nor receives the
   provider credential.
@@ -339,8 +355,10 @@ ready, missing, disconnected, or recoverable.
 
 ### Degradation and Recovery
 
-Runtime installation, authentication, MCP connection, transport, and turn
-failures remain distinguishable and preserve the transcript. An installation
+Account sign-in, allowance exhaustion, runtime installation, authentication,
+MCP connection, transport, and turn failures remain distinguishable and
+preserve the transcript. Exhausted included allowance leads to Agent Settings
+and the bring-your-own choices. An installation
 failure retains a no-download recheck so a CLI installed or repaired outside
 StashBase can resume preparation without repeating the managed install. The
 same recheck accepts a Codex login completed elsewhere. Abandoned or
@@ -589,6 +607,11 @@ registered folder while stale history overrides are rolled back. If the
 originating window cannot enter a successfully rebound project, the Chat keeps
 the new scope visible and reports a retryable open failure rather than
 reverting to an ambiguous Library presentation.
+
+Known Gap: a StashBase Agent chat updates its live scope and keeps using the
+attributed MCP connection, but OpenCode does not yet migrate the same native
+session record and cwd to the project. Its restored history remains under
+Library and native folder commands require a new folder-scoped chat.
 
 ### Evidence
 

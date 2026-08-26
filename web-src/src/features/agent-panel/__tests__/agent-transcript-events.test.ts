@@ -31,6 +31,21 @@ test('a tool event appends a running card carrying the call name and input', () 
   });
 });
 
+test('a late tool event fills a permission-first card without duplicating it', () => {
+  const awaiting = markToolAwaitingPermission([user('u1')], {
+    t: 'permission', id: 'p1', toolUseId: 'x1', name: 'Bash', title: 'Run command?', input: {},
+  });
+  const next = openToolCard(awaiting, {
+    t: 'tool', id: 'x1', name: 'Bash', input: { command: 'pwd' },
+  });
+
+  assert.equal(next.length, 2);
+  assert.deepEqual(toolAt(next, 'x1'), {
+    kind: 'tool', id: 'x1', name: 'Bash', input: { command: 'pwd' }, status: 'awaiting',
+    permId: 'p1', permTitle: 'Run command?',
+  });
+});
+
 test('transcript transforms never mutate the block list they are given', () => {
   const before: Block[] = [tool('x1', 'running')];
   const snapshot = structuredClone(before);

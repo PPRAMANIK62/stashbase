@@ -16,7 +16,7 @@ const SessionHistoryMenu = lazyWithRetry(() =>
   import('@/features/agent-panel/components/SessionHistoryMenu').then((mod) => ({ default: mod.SessionHistoryMenu })));
 
 /** History clock on a sidebar scope header: opens the merged
- *  session-history menu for that scope (both agents' sessions, newest
+ *  session-history menu for that scope (all agents' sessions, newest
  *  first). Picking a session records a pending resume in the store and
  *  ensures a suitable chat tab is active (the New Chat blank-tab reuse
  *  rule); that tab's AgentView consumes the request and resumes the

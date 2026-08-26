@@ -59,8 +59,10 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * implemented. It stays hand-rolled; `code-review/renderer-styling.md`
  * carries the rule and `TabStrip.tsx` the reason.
  * Raise it only for shell UI that must load with the window — anything a
- * user can open on demand belongs in a dynamic entry above. */
-const initialJsBudgetBytes = 428 * 1024;
+ * user can open on demand belongs in a dynamic entry above. 428 → 429 adds
+ * the always-visible third runtime metadata and included-Agent recovery
+ * action. */
+const initialJsBudgetBytes = 429 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',

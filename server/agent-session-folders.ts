@@ -35,7 +35,7 @@ function readFileState(): OverrideFile {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     const out: OverrideFile = {};
-    for (const agent of ['claude', 'codex'] as const) {
+    for (const agent of ['stashbase', 'claude', 'codex'] as const) {
       const value = (parsed as Record<string, unknown>)[agent];
       if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
       const map: Record<string, string> = {};

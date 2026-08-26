@@ -153,8 +153,8 @@ export interface CreateProjectDeps {
    * chain (Codex sanitizes the env): the app-wide single turn-active
    * session, or null on any ambiguity. */
   turnActiveSession(): AttributedAgentSession | null;
-  setOverride(agent: 'claude' | 'codex', nativeSessionId: string, folderAbs: string): void;
-  clearOverride(agent: 'claude' | 'codex', nativeSessionId: string): void;
+  setOverride(agent: AttributedAgentSession['agentId'], nativeSessionId: string, folderAbs: string): void;
+  clearOverride(agent: AttributedAgentSession['agentId'], nativeSessionId: string): void;
   assertAvailable(abs: string): void;
 }
 

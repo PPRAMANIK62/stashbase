@@ -1,4 +1,4 @@
-/** Sidebar session-history seams: the merged two-agent listing behind the
+/** Sidebar session-history seams: the merged multi-agent listing behind the
  * scope headers' History menus, the resume consume rule, and the
  * reuse/create tab decision the sidebar resume path shares with New Chat
  * (`newChatPlan`). */
@@ -15,7 +15,7 @@ import {
 
 const session = (id: string, lastModified: number) => ({ id, title: `Chat ${id}`, lastModified });
 
-test('merged listing interleaves both agents newest first, each row tagged with its agent', () => {
+test('merged listing interleaves agents newest first, each row tagged with its agent', () => {
   const merged = mergeAgentSessions([
     { agent: 'claude', sessions: [session('c2', 400), session('c1', 100)] },
     { agent: 'codex', sessions: [session('x2', 300), session('x1', 200)] },

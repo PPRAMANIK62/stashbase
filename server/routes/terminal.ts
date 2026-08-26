@@ -18,8 +18,13 @@ import {
   recheckAgentBootstrap,
   resetAgentBootstrap,
 } from '../agent-runtime-installer.ts';
+import type { AgentId } from '../../shared/agent-protocol.ts';
 
-function agentId(value: unknown): ManagedAgentId | null {
+function agentId(value: unknown): AgentId | null {
+  return value === 'stashbase' || value === 'claude' || value === 'codex' ? value : null;
+}
+
+function managedAgentId(value: unknown): ManagedAgentId | null {
   return value === 'claude' || value === 'codex' ? value : null;
 }
 
@@ -43,6 +48,10 @@ export function mount(app: express.Express): void {
       return;
     }
     try {
+      if (id === 'stashbase') {
+        res.json(agentCatalogResponse());
+        return;
+      }
       beginAgentBootstrap(id);
       res.status(202).json(agentCatalogResponse());
     } catch (error) {
@@ -60,6 +69,10 @@ export function mount(app: express.Express): void {
       return;
     }
     try {
+      if (id === 'stashbase') {
+        res.json(agentCatalogResponse());
+        return;
+      }
       recheckAgentBootstrap(id);
       res.json(agentCatalogResponse());
     } catch (error) {
@@ -70,7 +83,7 @@ export function mount(app: express.Express): void {
   /** Launch the selected Codex executable's provider-owned browser login.
    * This never installs another CLI or handles provider credentials itself. */
   app.post('/api/terminal/clis/:id/login', (req, res) => {
-    const id = agentId(req.params.id);
+    const id = managedAgentId(req.params.id);
     if (!id) {
       res.status(404).json({ error: 'Unsupported Agent runtime.' });
       return;
@@ -102,7 +115,7 @@ export function mount(app: express.Express): void {
    * executable, provider login, or native history. The next explicit New
    * Chat re-runs readiness. */
   app.delete('/api/terminal/clis/:id/managed', async (req, res) => {
-    const id = agentId(req.params.id);
+    const id = managedAgentId(req.params.id);
     if (!id) {
       res.status(404).json({ error: 'Unsupported Agent runtime.' });
       return;
