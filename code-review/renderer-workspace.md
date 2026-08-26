@@ -50,7 +50,9 @@ semantic readiness.
 - Document navigation and native context release cross the same save barrier.
   A failed save blocks the transition and keeps the recoverable buffer mounted.
 - Tabs, trees, overlays, and dialogs expose semantic selection/focus state.
-  Overlay dismissal restores focus to the initiating control.
+  Overlay dismissal restores focus to the initiating control. Destructive
+  library confirmation identifies the complete home-shortened member path,
+  not only its parent directory.
 - Drag-only organization gestures keep keyboard equivalents that route through
   the same action: the file row's Move to… picker
   (`features/workspace/components/MoveFilePicker.tsx`) calls the drop path's

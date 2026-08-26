@@ -72,9 +72,11 @@ manager, or a primary graph-navigation tool.
 - File create, rename, move, import, and delete are explicit. Organization
   gestures are not pointer-only: moving a file works by drag or through the
   file row's **Move to…** folder picker, and document tabs reorder by drag or
-  by keyboard. Destructive operations confirm intent. Agent instruction files remain visible and
-  user-owned; hidden tool infrastructure and derived data do not surface as
-  workspace content.
+  by keyboard. Destructive operations confirm intent. Library-removal
+  confirmation names the complete
+  home-shortened member path that remains on disk. Agent instruction files
+  remain visible and user-owned; hidden tool infrastructure and derived data
+  do not surface as workspace content.
 - Durable folder purpose, organization guidance, and Agent working rules live
   in the visible, user-owned `AGENTS.md`, not separate Library metadata.
 - Current folder entry makes one create-only exception to explicit mutation:

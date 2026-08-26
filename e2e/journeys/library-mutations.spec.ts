@@ -129,6 +129,8 @@ test('Favorites and library removal persist without deleting the member folder',
     await app.page.getByRole('menuitem', { name: 'Remove from Library' }).click();
     const removal = app.page.getByRole('dialog', { name: 'Remove from Library?' });
     await expect(removal).toContainText('not delete the folder or its files');
+    await expect(removal.getByTitle(fixture.workspaces.projectA, { exact: true }))
+      .toHaveText(fixture.workspaces.projectA);
     await removal.getByRole('button', { name: 'Cancel' }).click();
     expect(readRecent(fixture.configFile).some((entry) => entry.path === fixture.workspaces.projectA)).toBe(true);
 

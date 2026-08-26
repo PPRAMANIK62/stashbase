@@ -387,7 +387,7 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
         <RemoveFolderModal
           name={removeTarget.name}
           path={removeTarget.path}
-          parentLabel={removeTarget.parent}
+          pathLabel={removeTarget.displayPath}
           removing={removing}
           onCancel={cancelRemoval}
           onConfirm={() => removeFolder(removeTarget.path)}
@@ -397,17 +397,13 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
   );
 }
 
-/** What the remove-folder confirm modal names: the folder plus its
- *  shortened parent ("~/Projects"), so the dialog can say where the
- *  folder keeps living on disk after it leaves the library. */
-function removalDialogTarget(
+/** What the remove-folder confirm modal names: the folder plus its complete,
+ *  home-shortened path, so the location that stays on disk is unambiguous. */
+export function removalDialogTarget(
   path: string,
   homeDir: string,
-): { path: string; name: string; parent: string } {
-  const segs = path.split('/').filter(Boolean);
-  segs.pop();
-  const parent = shortenFolderPath(segs.length ? '/' + segs.join('/') : '/', homeDir);
-  return { path, name: basename(path), parent };
+): { path: string; name: string; displayPath: string } {
+  return { path, name: basename(path), displayPath: shortenFolderPath(path, homeDir) };
 }
 
 /** The active zone's header row — the window's current folder. Carries the
