@@ -4,8 +4,10 @@ import path from 'node:path';
 import {
   conversionProgressForFolder,
   conversionVersionsForFolder,
+  readIndexerStatusForFolder,
   semanticIndexingState,
 } from './index-status.ts';
+import { beginLibraryFolderRemoval } from './folder.ts';
 
 test('index status conversion maps are scoped and folder-relative', () => {
   const root = path.resolve('/tmp/stashbase-index-status');
@@ -43,4 +45,26 @@ test('semantic status distinguishes disabled, partial, paused, ready, and failed
   assert.equal(semanticIndexingState({ enabled: true, decision: null, indexed: 2, pending: 3, failed: false }), 'partial-indexing');
   assert.equal(semanticIndexingState({ enabled: true, decision: null, indexed: 2, pending: 0, failed: false }), 'ready');
   assert.equal(semanticIndexingState({ enabled: true, decision: null, indexed: 2, pending: 0, failed: true }), 'failed');
+});
+
+test('index status treats a daemon interruption during folder removal as transitional', async () => {
+  const root = path.resolve('/tmp/stashbase-index-status-removal');
+  const finishRemoval = beginLibraryFolderRemoval(root);
+  try {
+    const status = await readIndexerStatusForFolder(root, async () => {
+      throw new Error('MFS daemon closing');
+    });
+    assert.deepEqual(status, {
+      total: 0,
+      indexed: 0,
+      pendingCount: 0,
+      pending: [],
+      orphanedCount: 0,
+      orphaned: [],
+      upToDate: false,
+      indexReady: false,
+    });
+  } finally {
+    finishRemoval();
+  }
 });

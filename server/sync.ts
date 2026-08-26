@@ -184,8 +184,8 @@ async function deleteStaleRenameSource(
   }
 }
 
-function discoverConvertedSources(root: string): void {
-  discoverConvertibleSources(root);
+function discoverConvertedSources(root: string): Promise<void> {
+  return discoverConvertibleSources(root);
 }
 
 function cleanupRemovedSource(sourcePath: string): void {
@@ -249,14 +249,14 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
     // and future reindex.
   if (!(opts.semanticEnabled ?? isEmbeddingConfigured())) {
     cleanupMissingConvertedSources(root);
-    discoverConvertedSources(root);
+    await discoverConvertedSources(root);
     log.info(`no embedding source — skipping semantic index for "${root}" (conversion + keyword search unaffected)`);
     return emptyResult();
   }
 
   if (!canEmbed(opts)) {
     cleanupMissingConvertedSources(root);
-    discoverConvertedSources(root);
+    await discoverConvertedSources(root);
     log.info(`semantic embedding is paused for "${root}" (conversion + keyword search unaffected)`);
     return { ...emptyResult(), semanticPaused: true };
   }
@@ -279,7 +279,7 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
     diff.added.length === 0 && diff.modified.length === 0 &&
     deletedCandidates.length === 0 && diff.renamed.length === 0 && excludedRemoved.length === 0
   ) {
-    discoverConvertedSources(root);
+    await discoverConvertedSources(root);
     log.debug('index up to date');
     return emptyResult();
   }
@@ -366,7 +366,7 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   // This ordering matters for external Finder/Git moves: a renamed
   // PDF/image must first clear the old source identity and any stale
   // target artifacts, then queue a fresh conversion for the new path.
-  discoverConvertedSources(root);
+  await discoverConvertedSources(root);
 
   // Preparation remains independent and useful for keyword search. Stale
   // vector rows were removed above; stop before any derived/source upsert.

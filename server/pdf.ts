@@ -19,6 +19,7 @@ import { isDerivedNoteName, matchDerivedNote, NOTE_EXTS } from './format.ts';
 import { derivedNoteFor, derivedBundleFor, derivedBatchesFor, derivedDir } from './derived-store.ts';
 import { extractorSpawn } from './python-host.ts';
 import {
+  discoverCandidateSources,
   discoverNewSources,
   derivedIsFresh,
   indexFreshDerived,
@@ -354,8 +355,12 @@ export function maybeConvertPdf(
 
 /** Reconcile hook: convert any untracked `.pdf` under the folder (dropped
  *  in via git checkout / external copy / `mv`). */
-export function discoverNewPdfs(folderAbs: string): void {
-  discoverNewSources(folderAbs, PDF_SPEC, (abs) => maybeConvertPdf(abs));
+export async function discoverNewPdfs(folderAbs: string, candidates?: readonly string[]): Promise<void> {
+  if (candidates) {
+    await discoverCandidateSources(candidates, PDF_SPEC, (abs) => maybeConvertPdf(abs));
+    return;
+  }
+  await discoverNewSources(folderAbs, PDF_SPEC, (abs) => maybeConvertPdf(abs));
 }
 
 export function indexFreshPdf(pdfAbsPath: string): Promise<boolean> {

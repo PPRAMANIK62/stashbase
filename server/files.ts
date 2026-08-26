@@ -37,6 +37,7 @@ export {
   HIDDEN_DOT_FILES,
   listFiles,
   listFilesAndFolders,
+  listFilesAndFoldersAsync,
   listFolders,
   listImmediateDirectory,
   listIndexableTextFilesUnder,

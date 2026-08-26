@@ -7,7 +7,7 @@ import {
   fileVersion,
   fileStatVersion,
   getCurrentFolderBasename,
-  listFilesAndFolders,
+  listFilesAndFoldersAsync,
   pathExists,
   readText,
   resolveExisting,
@@ -74,7 +74,7 @@ export function mount(app: express.Express): void {
   // the window's current one. Powers cross-folder chat tabs (`@` mentions and
   // attachment validation run against the session's bound folder). Membership
   // is validated — an arbitrary filesystem path is rejected.
-  app.get('/api/files', (req, res) => {
+  app.get('/api/files', async (req, res) => {
     try {
       const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
       if (rawFolder) {
@@ -84,19 +84,18 @@ export function mount(app: express.Express): void {
         if (!member) {
           return res.status(400).json({ error: 'folder is not a registered library folder' });
         }
-        void runWithFolderRoot(member, () => ({
+        const result = await runWithFolderRoot(member, async () => ({
           folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
-          files: listFilesAndFolders(),
-        }))
-          .then((result) => res.json({
-            folder: result.folder,
-            files: result.files.files,
-            folders: result.files.folders,
-          }))
-          .catch((err: unknown) => sendError(res, err));
+          files: await listFilesAndFoldersAsync(),
+        }));
+        res.json({
+          folder: result.folder,
+          files: result.files.files,
+          folders: result.files.folders,
+        });
         return;
       }
-      const listing = listFilesAndFolders();
+      const listing = await listFilesAndFoldersAsync();
       res.json({
         folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
         files: listing.files,

@@ -4,7 +4,14 @@ import { LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION } from '../shared/file-form
 import { decodeEntities } from './html.ts';
 import { onSwitch } from './folder.ts';
 import { detectFormat, detectViewerFormat, isDerivedNoteName, type FileFormat, type ViewerFormat } from './format.ts';
-import { isCloudPlaceholderName, isHiddenDirName, isIndexExcludedDirName, MAX_INDEXABLE_BYTES, shouldIndexFilePath } from './indexable.ts';
+import {
+  FILESYSTEM_SCAN_YIELD_EVERY,
+  isCloudPlaceholderName,
+  isHiddenDirName,
+  isIndexExcludedDirName,
+  MAX_INDEXABLE_BYTES,
+  shouldIndexFilePath,
+} from './indexable.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { folderRoot, resolveSafe } from './file-paths.ts';
 import type { UnsupportedFileSummary } from '../shared/library-files.ts';
@@ -208,30 +215,129 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
   };
 }
 
-export function listFilesAndFolders(): FolderListing {
-  const root = folderRoot();
-  const scanResult = scanDirectory(root, '');
+interface AsyncScanState {
+  entriesSinceYield: number;
+}
 
+/** Async counterpart for request handling. It preserves the sidebar's exact
+ * classification while keeping recursive directory I/O and large flat-folder
+ * classification off uninterrupted turns of the shared Node event loop. */
+async function scanDirectoryAsync(
+  dir: string,
+  prefix: string,
+  state: AsyncScanState,
+): Promise<ScanResult> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch {
+    return {
+      isKept: false,
+      files: [],
+      folders: [],
+      unsupportedFiles: { sourceCode: 0, other: 0, otherExtensions: {} },
+    };
+  }
+
+  const acceptedEntries = visibleDirectoryEntries(entries);
+  if (acceptedEntries.length === 0) {
+    return {
+      isKept: true,
+      files: [],
+      folders: prefix ? [{ path: prefix }] : [],
+      unsupportedFiles: { sourceCode: 0, other: 0, otherExtensions: {} },
+    };
+  }
+
+  const files: FileEntry[] = [];
+  const folders: FolderEntry[] = [];
+  const unsupportedFiles: UnsupportedInfo = { sourceCode: 0, other: 0, otherExtensions: {} };
+  let hasSupportedInSubtree = false;
+  let hasKeptSubfolder = false;
+
+  for (const e of acceptedEntries) {
+    state.entriesSinceYield += 1;
+    if (state.entriesSinceYield >= FILESYSTEM_SCAN_YIELD_EVERY) {
+      state.entriesSinceYield = 0;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    const rel = prefix ? `${prefix}/${e.name}` : e.name;
+    const full = path.join(dir, e.name);
+
+    if (e.isDirectory()) {
+      const subResult = await scanDirectoryAsync(full, rel, state);
+      if (subResult.isKept) {
+        hasKeptSubfolder = true;
+        files.push(...subResult.files);
+        folders.push(...subResult.folders);
+      }
+      unsupportedFiles.sourceCode += subResult.unsupportedFiles.sourceCode;
+      unsupportedFiles.other += subResult.unsupportedFiles.other;
+      for (const [ext, count] of Object.entries(subResult.unsupportedFiles.otherExtensions)) {
+        unsupportedFiles.otherExtensions[ext] = (unsupportedFiles.otherExtensions[ext] ?? 0) + count;
+      }
+      continue;
+    }
+    if (!e.isFile() || e.name.endsWith('.tmp')) continue;
+
+    const format = detectViewerFormat(e.name);
+    if (!format) {
+      const classification = classifyUnsupportedFile(e.name);
+      if (classification === 'source') {
+        unsupportedFiles.sourceCode++;
+      } else {
+        unsupportedFiles.other++;
+        const ext = getNormalizedExtension(e.name);
+        unsupportedFiles.otherExtensions[ext] = (unsupportedFiles.otherExtensions[ext] ?? 0) + 1;
+      }
+      continue;
+    }
+
+    hasSupportedInSubtree = true;
+    let st: fs.Stats;
+    try { st = await fs.promises.stat(full); } catch { continue; }
+
+    const cached = previewCache.get(full);
+    let entry: Pick<FileEntry, 'heading' | 'snippet' | 'imported_at'>;
+    if (cached && cached.mtimeMs === st.mtimeMs) {
+      entry = { heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
+    } else if (format === 'pdf' || format === 'image' || format === 'docx' || format === 'audio') {
+      const imported_at = st.mtime.toISOString();
+      previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at });
+      entry = { heading: '', snippet: '', imported_at };
+    } else {
+      let content: string;
+      try { content = await readTextPrefixAsync(full, st.size); }
+      catch { continue; }
+      const { heading, snippet } = preview(content, format);
+      const imported_at = st.mtime.toISOString();
+      previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at });
+      entry = { heading, snippet, imported_at };
+    }
+    files.push({ name: rel, format, size: st.size, ...entry });
+  }
+
+  const isKept = hasSupportedInSubtree || hasKeptSubfolder;
+  if (isKept && prefix) folders.push({ path: prefix });
+  return { isKept, files, folders, unsupportedFiles };
+}
+
+function finishFolderListing(root: string, scanResult: ScanResult): FolderListing {
   const otherExtensions = Object.entries(scanResult.unsupportedFiles.otherExtensions)
     .map(([extension, count]) => ({ extension, count }))
     .sort((a, b) => {
-      if (a.count !== b.count) {
-        return b.count - a.count;
-      }
+      if (a.count !== b.count) return b.count - a.count;
       return a.extension.localeCompare(b.extension);
     });
 
   const seen = new Set<string>();
-  for (const f of scanResult.files) {
-    seen.add(path.join(root, f.name));
-  }
+  for (const f of scanResult.files) seen.add(path.join(root, f.name));
   for (const key of previewCache.keys()) {
     if (!seen.has(key)) previewCache.delete(key);
   }
 
   scanResult.files.sort((a, b) => (a.name < b.name ? -1 : 1));
   scanResult.folders.sort((a, b) => (a.path < b.path ? -1 : 1));
-
   return {
     files: scanResult.files,
     folders: scanResult.folders,
@@ -241,6 +347,17 @@ export function listFilesAndFolders(): FolderListing {
       otherExtensions,
     },
   };
+}
+
+export function listFilesAndFolders(): FolderListing {
+  const root = folderRoot();
+  return finishFolderListing(root, scanDirectory(root, ''));
+}
+
+export async function listFilesAndFoldersAsync(): Promise<FolderListing> {
+  const root = folderRoot();
+  const scanResult = await scanDirectoryAsync(root, '', { entriesSinceYield: 0 });
+  return finishFolderListing(root, scanResult);
 }
 
 export function listFiles(): FileEntry[] {
@@ -339,6 +456,17 @@ function readTextPrefix(full: string, size: number): string {
     return buffer.subarray(0, bytesRead).toString('utf8');
   } finally {
     fs.closeSync(fd);
+  }
+}
+
+async function readTextPrefixAsync(full: string, size: number): Promise<string> {
+  const handle = await fs.promises.open(full, 'r');
+  try {
+    const buffer = Buffer.alloc(Math.min(TEXT_PREVIEW_BYTES, size));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return buffer.subarray(0, bytesRead).toString('utf8');
+  } finally {
+    await handle.close();
   }
 }
 

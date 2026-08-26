@@ -86,11 +86,14 @@ manager, or a primary graph-navigation tool.
 ## Experience Contract
 
 - Folder entry is navigation first; listing, preparation, and indexing continue
-  in the background.
+  in the background. Code-heavy project infrastructure that cannot surface in
+  the Workbench does not make those background scans hold navigation closed.
 - Closing a window either makes its live edit durable or leaves the window open
   with an actionable failure. Closing one window never tears down another.
-- Folder removal never deletes user files. Every affected window saves first,
-  leaves the removed folder, and cannot silently re-add it during recovery.
+- Folder removal never deletes user files. Every affected window saves first
+  and leaves the removed folder, and recovery cannot silently re-add it.
+  Unfinished indexing is retired without holding the confirmation or removal
+  flow open.
   StashBase commits membership removal only after preparation, derived data,
   index rows, ordering, and folder-bound runtime state have finished cleanup.
 - Folder membership and favorites never replace unreadable settings with

@@ -38,8 +38,13 @@ import { clearRecord } from './conversion-status.ts';
 import { fromSourcePath, getActiveFolders, memberRootForAbs, onClose, onSwitch } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { logger, errorMessage } from './log.ts';
-import { isCloudPlaceholderName } from './indexable.ts';
-import { hasNoExtractableText, indexableFileSizeError } from './indexable.ts';
+import {
+  FILESYSTEM_SCAN_YIELD_EVERY,
+  hasNoExtractableText,
+  indexableFileSizeError,
+  isCloudPlaceholderName,
+  isIndexExcludedDirName,
+} from './indexable.ts';
 import { registerDerivedSource } from './derived-store.ts';
 import {
   ConversionScheduler,
@@ -562,21 +567,61 @@ export async function indexFreshDerived(absPath: string, spec: DerivedFreshnessS
  *  fresh derived text exists → nothing to do; conversion running or failure
  *  recorded → leave it (Retry is a human decision); otherwise queue.
  *  Idempotent across crashes — no persisted in-flight state to reclaim. */
-export function discoverNewSources(
+export async function discoverNewSources(
   folderAbs: string,
   spec: ConversionSpec,
-  queueConversion: (absPath: string) => void = (abs) => {
+  queueConversion: (absPath: string) => void = defaultDiscoveryQueue(spec),
+): Promise<void> {
+  await walkSources(folderAbs, '', spec.matches, (_rel, abs) => discoverSource(abs, spec, queueConversion));
+}
+
+/** Collect candidate files through the same yielding traversal and exclusion
+ * policy used by direct format discovery. */
+export async function collectSourceCandidates(
+  folderAbs: string,
+  matches: (name: string) => boolean,
+): Promise<string[]> {
+  const candidates: string[] = [];
+  await walkSources(folderAbs, '', matches, (_rel, abs) => candidates.push(abs));
+  return candidates;
+}
+
+/** Apply one format's freshness and scheduler checks to paths collected by a
+ * shared folder walk. Format dispatch uses this to avoid traversing the same
+ * code-heavy tree once for every prepared format. */
+export async function discoverCandidateSources(
+  candidates: readonly string[],
+  spec: ConversionSpec,
+  queueConversion: (absPath: string) => void = defaultDiscoveryQueue(spec),
+): Promise<void> {
+  let candidatesSinceYield = 0;
+  for (const abs of candidates) {
+    candidatesSinceYield += 1;
+    if (candidatesSinceYield >= FILESYSTEM_SCAN_YIELD_EVERY) {
+      candidatesSinceYield = 0;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    if (spec.matches(path.basename(abs))) discoverSource(abs, spec, queueConversion);
+  }
+}
+
+function defaultDiscoveryQueue(spec: ConversionSpec): (absPath: string) => void {
+  return (abs) => {
     const sourcePath = sourcePathOf(abs);
     runConversion(abs, sourcePath, spec, 'background', spec.cost);
-  },
+  };
+}
+
+function discoverSource(
+  abs: string,
+  spec: ConversionSpec,
+  queueConversion: (absPath: string) => void,
 ): void {
-  walkSources(folderAbs, '', spec, (_rel, abs) => {
-    if (derivedIsFresh(spec, abs)) return;
-    const sourcePath = sourcePathOf(abs);
-    if (isPendingOrFailed(sourcePath) || scheduler.has(sourcePath)) return;
-    log.info(`reconcile: queueing untracked ${spec.kind} source ${sourcePath}`);
-    queueConversion(abs);
-  });
+  if (derivedIsFresh(spec, abs)) return;
+  const sourcePath = sourcePathOf(abs);
+  if (isPendingOrFailed(sourcePath) || scheduler.has(sourcePath)) return;
+  log.info(`reconcile: queueing untracked ${spec.kind} source ${sourcePath}`);
+  queueConversion(abs);
 }
 
 /** Folder-relative paths of every queued or running conversion. */
@@ -590,22 +635,34 @@ export function getInFlightConversions(folderRoot?: string): string[] {
   return out;
 }
 
-function walkSources(
+interface DiscoveryWalkState {
+  entriesSinceYield: number;
+}
+
+async function walkSources(
   dir: string,
   prefix: string,
-  spec: ConversionSpec,
+  matches: (name: string) => boolean,
   fn: (rel: string, full: string) => void,
-): void {
+  state: DiscoveryWalkState = { entriesSinceYield: 0 },
+): Promise<void> {
   let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { return; }
   for (const e of entries) {
+    state.entriesSinceYield += 1;
+    if (state.entriesSinceYield >= FILESYSTEM_SCAN_YIELD_EVERY) {
+      state.entriesSinceYield = 0;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
     if (isCloudPlaceholderName(e.name)) continue;
-    // Skip hidden / sidecar / git plumbing and derived `_files` bundles.
+    // Match the index/sidebar project-directory policy so opening a code
+    // checkout never walks dependency caches once per prepared format.
     if (e.name.startsWith('.')) continue;
+    if (e.isDirectory() && isIndexExcludedDirName(e.name)) continue;
     if (e.isDirectory() && e.name.endsWith('_files')) continue;
     const full = path.join(dir, e.name);
     const rel = prefix ? `${prefix}/${e.name}` : e.name;
-    if (e.isDirectory()) walkSources(full, rel, spec, fn);
-    else if (e.isFile() && spec.matches(e.name)) fn(rel, full);
+    if (e.isDirectory()) await walkSources(full, rel, matches, fn, state);
+    else if (e.isFile() && matches(e.name)) fn(rel, full);
   }
 }

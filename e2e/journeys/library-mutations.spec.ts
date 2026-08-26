@@ -21,6 +21,31 @@ function readRecent(configFile: string): Array<{ path: string; favorite?: boolea
   }).recentFolders;
 }
 
+function enableFixtureSemanticIndex(configFile: string): void {
+  const config = JSON.parse(fs.readFileSync(configFile, 'utf8')) as Record<string, unknown>;
+  config.embeddingSource = 'openai';
+  config.embedder = {
+    provider: 'openai',
+    apiKey: 'e2e-index-removal-key',
+    model: 'text-embedding-3-small',
+  };
+  fs.writeFileSync(configFile, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+}
+
+function addSparseIndexWorkload(folder: string): string {
+  const workload = path.join(folder, 'large-index-workload');
+  fs.mkdirSync(workload);
+  // 512 × 8 MiB = 4 GiB logical input. Sparse files keep the fixture cheap
+  // while scan_diff still has to read/hash the same user-visible byte volume.
+  for (let index = 0; index < 512; index += 1) {
+    const file = path.join(workload, `note-${String(index).padStart(4, '0')}.md`);
+    const handle = fs.openSync(file, 'w');
+    fs.ftruncateSync(handle, 8 * 1024 * 1024);
+    fs.closeSync(handle);
+  }
+  return workload;
+}
+
 test('file and folder CRUD honors rename and delete cancel/confirm with disk as oracle', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   const folderPath = path.join(fixture.workspaces.projectA, 'CRUD Folder');
@@ -112,6 +137,41 @@ test('Favorites and library removal persist without deleting the member folder',
     await app.page.getByRole('dialog', { name: 'Remove from Library?' }).getByRole('button', { name: 'Remove' }).click();
     await expect.poll(() => readRecent(fixture.configFile).some((entry) => entry.path === fixture.workspaces.projectA)).toBe(false);
     expect(fs.existsSync(preservedFile)).toBe(true);
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
+test('library removal interrupts an unfinished large-folder reconcile', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  enableFixtureSemanticIndex(fixture.configFile);
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo, { aiIndexSetup: 'preserve' });
+    await openLibraryFolder(app.page, 'project-alpha');
+    // Keep the regression scoped to unfinished semantic indexing: the user's
+    // visible folder open/listing has already completed before removal.
+    await expect(fileTreeRow(app.page, 'Welcome.md')).toBeVisible();
+    const workload = addSparseIndexWorkload(fixture.workspaces.projectA);
+
+    await openCurrentFolderMenu(app, 'project-alpha');
+    await app.page.getByRole('menuitem', { name: 'Sync Folder' }).click();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    await openCurrentFolderMenu(app, 'project-alpha');
+    await app.page.getByRole('menuitem', { name: 'Remove from Library' }).click();
+    const removal = app.page.getByRole('dialog', { name: 'Remove from Library?' });
+    await expect(removal).toBeVisible({ timeout: 2_000 });
+    await removal.getByRole('button', { name: 'Remove' }).click();
+
+    await expect.poll(
+      () => readRecent(fixture.configFile).some((entry) => entry.path === fixture.workspaces.projectA),
+      { timeout: 12_000 },
+    ).toBe(false);
+    await expect(app.page).toHaveTitle('StashBase');
+    expect(fs.existsSync(workload)).toBe(true);
     app.errors.assertNone();
   } finally {
     await app?.close();

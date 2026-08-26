@@ -19,7 +19,7 @@ import fs, { closeSync, mkdirSync, openSync, readSync, rmSync, statSync } from '
 import { isImageFile } from './format.ts';
 import { derivedNoteFor, derivedDir } from './derived-store.ts';
 import { extractorSpawn } from './python-host.ts';
-import { derivedIsFresh, discoverNewSources, indexFreshDerived, maybeConvert, TransientConversionError, type ConversionSpec } from './conversion.ts';
+import { derivedIsFresh, discoverCandidateSources, discoverNewSources, indexFreshDerived, maybeConvert, TransientConversionError, type ConversionSpec } from './conversion.ts';
 import { lowerExtractorPriority, spawnOptionsForPdfOcr, terminateExtractorTree } from './extractor-process.ts';
 
 const OCR_COMPLETE_MARKER = '<!-- stashbase-ocr-conversion: complete -->';
@@ -154,8 +154,12 @@ export function maybeConvertImage(
 
 /** Reconcile hook: OCR any untracked image under the folder (added via git
  *  checkout / external copy / `mv`). */
-export function discoverNewImages(folderAbs: string): void {
-  discoverNewSources(folderAbs, IMAGE_SPEC);
+export async function discoverNewImages(folderAbs: string, candidates?: readonly string[]): Promise<void> {
+  if (candidates) {
+    await discoverCandidateSources(candidates, IMAGE_SPEC);
+    return;
+  }
+  await discoverNewSources(folderAbs, IMAGE_SPEC);
 }
 
 export function indexFreshImage(imageAbsPath: string): Promise<boolean> {

@@ -31,7 +31,7 @@ import {
 } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { errorMessage, logger } from '../log.ts';
-import { deleteFolderRuntimeState, indexer } from '../state.ts';
+import { cancelFolderSyncsAndWait, deleteFolderRuntimeState, indexer } from '../state.ts';
 import { clearRecordsUnder } from '../conversion-status.ts';
 import { cancelConversionsUnderAndWait } from '../conversion.ts';
 import { noteTreeChanged } from '../watcher.ts';
@@ -63,6 +63,11 @@ async function cleanupDerivedForFolder(folderAbs: string): Promise<DerivedCleanu
 }
 
 async function cleanupRemovedLibraryFolder(abs: string): Promise<void> {
+  // A large semantic `scan_diff` runs inside the single-threaded Python
+  // daemon and otherwise serializes every cleanup request behind it. Retire
+  // that reconcile first so Remove cannot sit in a half-cleared window state
+  // until the daemon's global ten-minute watchdog fires.
+  await cancelFolderSyncsAndWait(abs);
   const cancelled = await cancelConversionsUnderAndWait(abs);
   if (cancelled.length) {
     log.info(`folder remove: cancelled ${cancelled.length} queued/running conversion(s) under ${abs}`);

@@ -16,6 +16,7 @@ import { isDocxFile } from './format.ts';
 import { derivedDir, derivedHtmlFor } from './derived-store.ts';
 import {
   derivedIsFresh,
+  discoverCandidateSources,
   discoverNewSources,
   indexFreshDerived,
   maybeConvert,
@@ -253,8 +254,12 @@ export function maybeConvertDocx(
   return maybeConvert(docxAbsPath, DOCX_SPEC, { urgency: opts.urgency ?? 'background' });
 }
 
-export function discoverNewDocx(folderAbs: string): void {
-  discoverNewSources(folderAbs, DOCX_SPEC);
+export async function discoverNewDocx(folderAbs: string, candidates?: readonly string[]): Promise<void> {
+  if (candidates) {
+    await discoverCandidateSources(candidates, DOCX_SPEC);
+    return;
+  }
+  await discoverNewSources(folderAbs, DOCX_SPEC);
 }
 
 export function indexFreshDocx(docxAbsPath: string): Promise<boolean> {
