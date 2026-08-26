@@ -234,6 +234,7 @@ test('concurrent async registrations preserve membership and unrelated settings'
     const result = runConfigMutation(home, `
       const assert = (await import('node:assert/strict')).default;
       const folder = await import('./server/folder.ts');
+      const { filesystemPath } = await import('./server/filesystem-path.ts');
       const registrations = Promise.all([
         folder.registerLibraryFolderAsync(${JSON.stringify(first)}),
         folder.registerLibraryFolderAsync(${JSON.stringify(second)}),
@@ -244,7 +245,10 @@ test('concurrent async registrations preserve membership and unrelated settings'
       assert.equal(saved.capture?.clipboardImageImport, true);
       assert.deepEqual(
         new Set(saved.recentFolders?.map((entry) => entry.path)),
-        new Set([${JSON.stringify(first)}, ${JSON.stringify(second)}]),
+        new Set([
+          filesystemPath.absolute(${JSON.stringify(first)}),
+          filesystemPath.absolute(${JSON.stringify(second)}),
+        ]),
       );
     `);
     assert.equal(result.status, 0, result.stderr);
