@@ -32,6 +32,11 @@ function configureFakeAgent(fixture: Awaited<ReturnType<typeof createAppFixture>
   fixture.env.STASHBASE_FAKE_MCP_PORT = String(fixture.port);
 }
 
+async function selectCodex(page: LaunchedApp['page']): Promise<void> {
+  await page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+  await page.getByRole('menuitem', { name: 'Codex' }).click();
+}
+
 test('J07 converges an approved Agent write into a reviewed durable Canvas', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   configureFakeAgent(fixture);
@@ -44,6 +49,7 @@ test('J07 converges an approved Agent write into a reviewed durable Canvas', asy
     await fileTreeRow(app.page, 'Welcome.md').click();
     await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
 
+    await selectCodex(app.page);
     await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
     const chatTab = app.page.getByRole('tablist', { name: 'Chat sessions' }).getByRole('tab', { selected: true });
     const panel = activeAgentPanel(app.page);
@@ -90,6 +96,7 @@ test('J11 creates a project only after approval and continues the same conversat
   try {
     app = await launchApp(fixture, testInfo);
     await expect(app.page).toHaveTitle('StashBase');
+    await selectCodex(app.page);
     await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
     let panel = activeAgentPanel(app.page);
     let composer = panel.locator('[aria-label="Message agent"]');
@@ -170,6 +177,7 @@ test('J10 retrieves project evidence and turns it into a reviewed searchable res
     await search.getByRole('option', { name: new RegExp(sourceName.replace('.', '\\.')) }).click();
     await expect(activeDocumentTab(app.page)).toHaveAttribute('title', sourceName);
 
+    await selectCodex(app.page);
     await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
     const panel = activeAgentPanel(app.page);
     const composer = panel.locator('[aria-label="Message agent"]');

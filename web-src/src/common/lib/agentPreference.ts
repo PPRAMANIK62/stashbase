@@ -6,7 +6,7 @@
 import { isAgentKind, type AgentKind } from '@/common/lib/agentCatalog';
 
 const AGENT_PREFERENCE_KEY = 'stashbase.preferred-agent';
-export const DEFAULT_AGENT: AgentKind = 'codex';
+export const DEFAULT_AGENT: AgentKind = 'stashbase';
 
 interface AgentPreferenceStorage {
   getItem(key: string): string | null;
@@ -23,7 +23,7 @@ function browserStorage(): AgentPreferenceStorage | undefined {
 }
 
 /** Invalid, missing, or inaccessible UI preference state always recovers to
- * Codex. Runtime availability remains a separate setup concern. */
+ * the zero-setup StashBase Agent. Runtime availability remains separate. */
 export function readPreferredAgent(
   storage: AgentPreferenceStorage | undefined = browserStorage(),
 ): AgentKind {

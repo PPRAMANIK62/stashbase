@@ -23,7 +23,7 @@ test('active-folder workspace shell keeps its redesigned composition', async ({}
     // The titlebar folder switcher carries the window's folder identity.
     await expect(folderSwitcherTrigger(page)).toBeVisible();
     await expect(folderSwitcherTrigger(page)).toContainText('project-alpha');
-    await expect(page.getByRole('status').filter({ hasText: 'Codex is not installed' })).toBeVisible();
+    await expect(page.getByRole('alert').filter({ hasText: 'Sign in to StashBase' })).toBeVisible();
 
     await expectLinuxScreenshot(page, 'workspace-folder.png');
   } finally {
@@ -43,7 +43,7 @@ test('empty library keeps the redesigned zero-state composition', async ({}, tes
     // With no folder open the switcher trigger reads "Library".
     await expect(folderSwitcherTrigger(page)).toContainText('Library');
     await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
-    await expect(page.getByRole('status').filter({ hasText: 'Codex is not installed' })).toBeVisible();
+    await expect(page.getByRole('alert').filter({ hasText: 'Sign in to StashBase' })).toBeVisible();
 
     await expectLinuxScreenshot(page, 'workspace-empty.png');
   } finally {

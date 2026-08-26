@@ -182,6 +182,7 @@ export function EmbeddingPanel() {
           )}
           {signInFormOpen && (
             <AccountSignInForm
+              purpose="embedding"
               onBack={() => setSignInFormOpen(false)}
               onSignedIn={(account) => {
                 applySignedIn(account);

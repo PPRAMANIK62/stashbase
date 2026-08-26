@@ -106,6 +106,7 @@ function AgentRuntimeFailure({
   fallbackName,
   onRetry,
   onLogin,
+  onOpenAccount,
   onCheck,
   onCopyInstall,
   onOpenMcpSetup,
@@ -114,6 +115,7 @@ function AgentRuntimeFailure({
   fallbackName: string;
   onRetry: () => void;
   onLogin: () => void;
+  onOpenAccount: () => void;
   onCheck: () => void;
   onCopyInstall: () => void;
   onOpenMcpSetup: () => void;
@@ -125,7 +127,11 @@ function AgentRuntimeFailure({
     : presentation.manualAction === 'open-mcp-settings'
       ? onOpenMcpSetup
       : null;
-  const primaryAction = presentation.primaryAction === 'start-codex-login' ? onLogin : onRetry;
+  const primaryAction = presentation.primaryAction === 'start-codex-login'
+    ? onLogin
+    : presentation.primaryAction === 'open-account-settings'
+      ? onOpenAccount
+      : onRetry;
   return (
     <RuntimeCard
       role="alert"
@@ -180,6 +186,7 @@ export function AgentRuntimeGate({
   onCheck,
   onInstall,
   onLogin,
+  onOpenAccount,
   onCopyInstall,
   onOpenMcpSetup,
 }: {
@@ -196,6 +203,7 @@ export function AgentRuntimeGate({
   onCheck: () => void;
   onInstall: () => void;
   onLogin: () => void;
+  onOpenAccount: () => void;
   onCopyInstall: () => void;
   onOpenMcpSetup: () => void;
 }) {
@@ -212,6 +220,7 @@ export function AgentRuntimeGate({
         fallbackName={fallbackName}
         onRetry={onInstall}
         onLogin={onLogin}
+        onOpenAccount={onOpenAccount}
         onCheck={onCheck}
         onCopyInstall={onCopyInstall}
         onOpenMcpSetup={onOpenMcpSetup}

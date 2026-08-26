@@ -43,10 +43,10 @@ export function clipboardImageFiles(clipboard: DataTransfer, now = new Date()): 
 export function handleComposerPaste(
   clipboard: DataTransfer | null,
   disabled: boolean,
-  onPasteImages: (files: File[]) => void,
+  onPasteImages?: (files: File[]) => void,
   now = new Date(),
 ): false {
-  if (!disabled && clipboard) {
+  if (!disabled && clipboard && onPasteImages) {
     const files = clipboardImageFiles(clipboard, now);
     if (files.length) onPasteImages(files);
   }

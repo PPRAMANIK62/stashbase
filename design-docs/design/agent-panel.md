@@ -2,8 +2,9 @@
 
 ## User Outcome
 
-People collaborate with a supported local Agent against an explicit library or
-folder scope, then bring durable results back into ordinary local files.
+People collaborate with the included or a bring-your-own local Agent against an
+explicit library or folder scope, then bring durable results back into ordinary
+local files.
 
 ## Scope and Non-goals
 
@@ -13,17 +14,24 @@ transcript, composer, attachments, permissions, history, and adaptive layout.
 Runtime installation, native process ownership, MCP access, and indexing have
 separate engineering contracts.
 
-The panel is not a closed StashBase Agent product, a separate AI workspace, or
-a transcript-centered file manager.
+The panel is not a remote Agent host, a separate AI workspace, or a
+transcript-centered file manager. StashBase Agent runs the Agent locally and
+uses a hosted service only as its metered model provider.
 
 ## Current Experience
 
 - Chat begins expanded. With no document it is the primary work surface;
   opening a source docks the same mounted session beside it, and closing the
   last source expands an open Chat again.
+- New users default to StashBase Agent. Its pinned OpenCode runtime is included
+  with the app, requires no Agent installation or model API key, and becomes
+  ready after StashBase account sign-in. Settings shows the remaining percent
+  and reset time for the current fixed seven-day allowance window, with token
+  detail available on demand, and keeps Codex and Claude Code as explicit
+  alternatives. It never exposes the allowance's dollar value.
 - New Chat is the deliberate creation entry and reuses a completely blank tab.
   Opening the app, a folder, a tab, or history never grants runtime-installation
-  consent; a missing runtime waits for **Install and continue**.
+  consent; a missing bring-your-own runtime waits for **Install and continue**.
 - An installed but signed-out Codex runtime stops at a dedicated sign-in gate.
   **Sign in with ChatGPT** runs that same discovered executable's official
   browser flow; completion resumes preparation without another installation.
@@ -38,16 +46,27 @@ a transcript-centered file manager.
   replacing its native thread; the picker pauses while a turn is active. Claude
   keeps its selected model fixed after the conversation has content.
   Suggestions prefill rather than send.
-- Streaming, tool activity, permissions, attachments, skills, recovery, and
-  file artifacts remain inspectable. Editing and resending an earlier prompt
-  stops conflicting active work before beginning the new turn.
+- Streaming, tool activity, permissions, runtime-supported attachments, skills, recovery, and
+  file artifacts remain inspectable. Collapsed tool summaries omit exact
+  counts while using grammatical singular or plural category labels. Editing
+  and resending an earlier prompt stops conflicting active work before
+  beginning the new turn.
+- StashBase Agent normalizes OpenCode streaming, tools, permission requests,
+  native session history, and file Diffs into the same panel contract. Each
+  live panel session has an independently attributed local runtime and MCP
+  connection. Each user-submitted prompt also establishes one turn identity;
+  every model call caused by that prompt, including tool-follow-up calls, is
+  attributed to that turn until it settles.
 - Successful automatic approval reviews stay quiet in Auto. A blocked,
   interrupted, or failed automatic review remains inspectable alongside
   skill-context and configuration warnings as a non-fatal notice. These
   advisories do not close Chat, fail a turn, or masquerade as
   recovery-requiring errors.
-- Attachment labels preserve user-visible Unicode filenames from selection or
-  drop through the sent transcript and restored history.
+- Bring-your-own Agents preserve user-visible Unicode attachment filenames
+  from selection or drop through the sent transcript and restored history.
+  StashBase Agent does not advertise transient attachments until its isolated
+  OpenCode runtime has a scoped byte-reading path; Library mentions and MCP
+  context remain available.
 - Source and attachment access follows the
   [Documents format matrix](documents.md#format-capability-matrix). Built-in
   image attachment behavior does not imply that every external MCP client can
@@ -71,7 +90,8 @@ a transcript-centered file manager.
 - Respect explicit visibility. Initialization opens Chat; later automatic
   layout changes do not override a user hide or reveal.
 - Opening, switching, or resuming an Agent tab is not installation consent.
-  Each missing runtime waits for its own explicit setup action.
+  The included runtime needs no install action; each missing bring-your-own
+  runtime waits for its own explicit setup action.
 - A runtime, transport, or turn failure leaves one persistent explanation and
   a truthful, stage-specific recovery path. Retrying preparation resumes from
   the first incomplete stage. After an installation failure, **Check again**
@@ -81,9 +101,10 @@ a transcript-centered file manager.
   while **Check again** discovers a login completed elsewhere. Late output
   from an abandoned generation cannot enter a newer turn.
 - A failed turn explains itself in the conversation and never blocks the
-  panel: transient rate or network failures and an exhausted plan offer an
-  in-place Try again, and an expired sign-in offers Codex's in-app sign-in
-  or, for Claude, terminal sign-in steps with an in-place Reconnect. Either
+  panel: transient rate or network failures offer an in-place Try again. An
+  exhausted StashBase Agent allowance opens Agent Settings to review usage or
+  switch runtimes; an expired sign-in offers Codex's in-app sign-in or, for
+  Claude, terminal sign-in steps with an in-place Reconnect. Either
   way the same conversation continues without restarting StashBase: acting
   on a recovery settles its card — the message remains, the stale action
   does not — and automatically retries the failed message, answering when
@@ -96,10 +117,17 @@ a transcript-centered file manager.
   automatic approval is routine activity rather than a notice; other notices
   use a polite warning presentation and stay visible when no final answer
   follows. Only failures enter startup, turn, or session recovery.
+- StashBase Agent uses a service-owned model profile. The first release hides
+  model selection, while the stable profile alias keeps later model choice and
+  provider changes compatible with existing desktop builds.
 - The selected permission mode governs which actions the runtime approves on
   its own. Every approval it surfaces — permission, deletion, command, network,
   or broader filesystem — is an explicit user decision; the panel never answers
   one itself. Tool payloads render in a human-readable form.
+- Library-wide StashBase Agent sessions reach files only through the authorized
+  StashBase MCP operation layer. Folder-scoped sessions may use OpenCode's
+  native local tools inside that folder; commands, edits, network, and any
+  broader access retain their configured approval or denial.
 - Agent copy and tool affordances describe the actual source or prepared
   representation and never advertise a broader format capability than the
   selected surface provides.
@@ -123,6 +151,14 @@ a transcript-centered file manager.
 - [Agent Runtime](../../code-review/agent-runtime.md) owns native lifecycle.
 - [MCP Access](../../code-review/mcp-access.md) owns Agent file boundaries.
 
+## Known Gap — StashBase Agent Project Rebind
+
+An attributed StashBase Agent Library chat can create a project and move its
+live panel scope to that folder. OpenCode cannot yet move the same native
+session record to a different directory project, so the restored history row
+remains under Library and that continued chat stays on MCP-only file access.
+Codex and Claude Code retain the full native cwd and history migration contract.
+
 ## Contribution Direction
 
 ### Next
@@ -140,7 +176,7 @@ a transcript-centered file manager.
 
 ### Not Planned
 
-- A second knowledge store or StashBase-owned closed Agent service.
+- A second knowledge store or remotely hosted Agent execution/session service.
 - Implicit current-document context.
 - Presentation that weakens explicit access or recovery decisions.
 

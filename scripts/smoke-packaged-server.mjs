@@ -238,6 +238,18 @@ function findSidecarExecutable(root, name) {
   }) ?? sidecarCandidates(root, name)[0];
 }
 
+function findPackagedOpenCode(resourcesPath) {
+  const unpackedModules = path.join(resourcesPath, 'app.asar.unpacked', 'node_modules');
+  const direct = path.join(unpackedModules, 'opencode-ai', 'bin', 'opencode.exe');
+  if (fs.existsSync(direct)) return direct;
+  const pnpmRoot = path.join(unpackedModules, '.pnpm');
+  let packages = [];
+  try { packages = fs.readdirSync(pnpmRoot).filter((name) => name.startsWith('opencode-ai@')); } catch { /* reported below */ }
+  return packages
+    .map((name) => path.join(pnpmRoot, name, 'node_modules', 'opencode-ai', 'bin', 'opencode.exe'))
+    .find((candidate) => fs.existsSync(candidate)) ?? direct;
+}
+
 async function waitForServer(port, child, output) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -729,6 +741,7 @@ const { resourcesPath, appRoot, electronBin } = layout;
 const serverEntry = path.join(appRoot, 'dist', 'server', 'index.mjs');
 const daemonBin = findSidecarExecutable(resourcesPath, 'stashbase-daemon');
 const extractBin = findSidecarExecutable(resourcesPath, 'stashbase-extract');
+const openCodeBin = findPackagedOpenCode(resourcesPath);
 const requireExtract = args.includes('--require-extract')
   || process.env.STASHBASE_REQUIRE_EXTRACT === '1'
   || process.env.STASHBASE_BUILD_EXTRACT === '1';
@@ -747,10 +760,16 @@ const rgPath = path.join(
 assertFile(electronBin, 'packaged Electron binary');
 assertFile(appRoot, 'app.asar');
 assertFile(rgPath, 'packaged ripgrep binary');
+assertFile(openCodeBin, 'packaged OpenCode binary');
 assertFile(daemonBin, 'packaged Python daemon sidecar');
 if (requireExtract) assertFile(extractBin, 'packaged Python extractor sidecar');
 
 await smokeElectronMainDependencies(electronBin, appRoot, resourcesPath);
+const openCodeProbe = await runProcess(openCodeBin, ['--version'], { timeoutMs: 10_000 });
+if (openCodeProbe.code !== 0 || openCodeProbe.output.trim() !== '1.18.19') {
+  throw new Error(`unexpected packaged OpenCode version: exit=${openCodeProbe.code} output=${openCodeProbe.output.trim()}`);
+}
+console.log('[smoke] packaged OpenCode binary is executable and pinned to 1.18.19');
 await smokeDaemon(daemonBin);
 if (fs.existsSync(extractBin)) {
   const extractProbe = await runProcess(extractBin, [], { timeoutMs: 5_000 });

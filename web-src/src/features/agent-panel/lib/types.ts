@@ -40,6 +40,5 @@ export type Block =
 
 export type ServerEvent = AgentServerEvent;
 
-export type AgentKind = 'claude' | 'codex';
-export type { AgentModel, AgentSkill, AgentTurnFailureKind } from '@shared/agent-protocol';
+export type { AgentId as AgentKind, AgentModel, AgentSkill, AgentTurnFailureKind } from '@shared/agent-protocol';
 import type { AgentServerEvent, AgentTurnFailureKind } from '@shared/agent-protocol';

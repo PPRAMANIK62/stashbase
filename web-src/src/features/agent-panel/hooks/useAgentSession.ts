@@ -3,6 +3,7 @@ import { api, getWindowId } from '@/common/api/api';
 import { AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
 import { errorMessage } from '@/common/api/apiTransport';
 import { electronBridge } from '@/common/lib/electronBridge';
+import { openSettings } from '@/common/lib/settingsTrigger';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useStateWithRef } from '@/common/hooks/useStateWithRef';
 import type { Action, AppActions, ChatState, WorkspaceState } from '@/store/contexts/AppContext';
@@ -21,6 +22,7 @@ import {
   appendRuntimeNotice,
   appendToolOutput,
   applyPermissionReply,
+  appendFileDiff,
   completeToolCard,
   markToolAwaitingPermission,
   openToolCard,
@@ -538,6 +540,14 @@ export function useAgentSession({
       if (retry) promptQueue.resendFailedPrompt(retry);
       return;
     }
+    if (action === 'open-agent-settings') {
+      // Account/allowance recovery completes outside this view. Keep the
+      // failed prompt armed so the runtime's account-change reconnect can
+      // retry it exactly once when StashBase Agent becomes ready again.
+      if (retry) pendingRetryRef.current = retry;
+      openSettings('agents');
+      return;
+    }
     if (action === 'codex-sign-in') signInToCodexFromTurnFailure();
     else reconnectAfterFatal();
     // Arm AFTER the reset: resetSessionState clears any pending retry.
@@ -661,6 +671,12 @@ export function useAgentSession({
           }
         }
         toolNamesRef.current.delete(ev.id);
+        break;
+      case 'file-diff':
+        setBlocks((bs) => appendFileDiff(bs, ev));
+        void reconcileSessionFolder({ reloadWindowTree: true }).catch((err) => {
+          actions.toast(`Could not refresh files: ${errorMessage(err)}`, { level: 'error' });
+        });
         break;
       case 'permission':
         openKind.current = null;

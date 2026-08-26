@@ -22,6 +22,18 @@ export function appendRuntimeNotice(blocks: Block[], ev: ServerEventOf<'notice'>
 
 /** A tool call started: append its card in the running state. */
 export function openToolCard(blocks: Block[], ev: ServerEventOf<'tool'>): Block[] {
+  const index = blocks.findIndex((block) => block.kind === 'tool' && block.id === ev.id);
+  if (index >= 0) {
+    const next = blocks.slice();
+    const existing = next[index] as ToolBlock;
+    next[index] = {
+      ...existing,
+      name: ev.name,
+      input: ev.input,
+      status: existing.status === 'awaiting' ? 'awaiting' : 'running',
+    };
+    return next;
+  }
   return [...blocks, { kind: 'tool', id: ev.id, name: ev.name, input: ev.input, status: 'running' }];
 }
 
@@ -41,6 +53,25 @@ export function completeToolCard(blocks: Block[], ev: ServerEventOf<'tool-result
     block.kind === 'tool' && block.id === ev.id && block.status !== 'denied'
       ? { ...block, status: ev.isError ? 'error' : 'done', result: ev.content }
       : block));
+}
+
+/** OpenCode publishes authoritative before/after file content independently
+ * of its tool payload. Render it through the established settled tool card
+ * so all runtimes share the same inline diff and artifact treatment. */
+export function appendFileDiff(blocks: Block[], ev: ServerEventOf<'file-diff'>): Block[] {
+  return [...blocks, {
+    kind: 'tool',
+    id: ev.id,
+    name: 'FileDiff',
+    input: {
+      path: ev.file,
+      before: ev.before,
+      after: ev.after,
+      additions: ev.additions,
+      deletions: ev.deletions,
+    },
+    status: 'done',
+  }];
 }
 
 /** A permission prompt for a tool call: attach it to that call's card. */

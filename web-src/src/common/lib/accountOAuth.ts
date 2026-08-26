@@ -1,4 +1,4 @@
-import { api, type HostedAccountState, type HostedOAuthProvider } from '@/common/api/api';
+import { api, type HostedAccountState, type HostedOAuthProvider, type HostedOAuthPurpose } from '@/common/api/api';
 import { notifyAccountChanged } from '@/common/lib/accountEvents';
 import { openExternalUrl } from '@/common/lib/externalLink';
 
@@ -21,9 +21,9 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
  */
 async function runSignIn(
   provider: HostedOAuthProvider = 'google',
-  options: { signal?: AbortSignal; onBrowserOpened?: () => void } = {},
+  options: { signal?: AbortSignal; onBrowserOpened?: () => void; purpose?: HostedOAuthPurpose } = {},
 ): Promise<HostedAccountState> {
-  const started = await api.startAccountOAuth(provider);
+  const started = await api.startAccountOAuth(provider, options.purpose ?? 'account');
   openExternalUrl(started.url);
   options.onBrowserOpened?.();
 
@@ -44,13 +44,20 @@ async function runSignIn(
   throw new Error('Sign-in timed out. Start again from StashBase.');
 }
 
-let activeSignIn: Promise<HostedAccountState> | null = null;
+let activeSignIn: { purpose: HostedOAuthPurpose; promise: Promise<HostedAccountState> } | null = null;
 
 export function signInWithStashBase(
   provider: HostedOAuthProvider = 'google',
-  options: { signal?: AbortSignal; onBrowserOpened?: () => void } = {},
+  options: { signal?: AbortSignal; onBrowserOpened?: () => void; purpose?: HostedOAuthPurpose } = {},
 ): Promise<HostedAccountState> {
-  if (activeSignIn) return activeSignIn;
-  activeSignIn = runSignIn(provider, options).finally(() => { activeSignIn = null; });
-  return activeSignIn;
+  const purpose = options.purpose ?? 'account';
+  if (activeSignIn) {
+    if (activeSignIn.purpose === purpose) return activeSignIn.promise;
+    return Promise.reject(new Error('Another StashBase sign-in is already in progress.'));
+  }
+  const promise = runSignIn(provider, { ...options, purpose }).finally(() => {
+    if (activeSignIn?.promise === promise) activeSignIn = null;
+  });
+  activeSignIn = { purpose, promise };
+  return promise;
 }

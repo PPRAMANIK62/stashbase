@@ -1,11 +1,13 @@
 import packageJson from '../package.json' with { type: 'json' };
 import crypto from 'node:crypto';
-import type { HostedAccountState, HostedOAuthProvider, HostedOAuthStart, HostedOAuthStatus, HostedQuota } from '../shared/account.ts';
+import type { HostedAccountState, HostedAgentAllowance, HostedOAuthProvider, HostedOAuthPurpose, HostedOAuthStart, HostedOAuthStatus, HostedQuota } from '../shared/account.ts';
 
 export type {
   HostedAccountActivation,
   HostedAccountState,
+  HostedAgentAllowance,
   HostedOAuthProvider,
+  HostedOAuthPurpose,
   HostedOAuthStart,
   HostedOAuthStatus,
   HostedQuota,
@@ -52,6 +54,7 @@ interface ErrorPayload {
 
 interface PendingOAuthFlow {
   provider: HostedOAuthProvider;
+  purpose: HostedOAuthPurpose;
   verifier: string;
   windowId?: string;
   createdAt: number;
@@ -169,6 +172,7 @@ export function beginHostedOAuth(
   provider: HostedOAuthProvider,
   callbackOrigin: string,
   windowId?: string,
+  purpose: HostedOAuthPurpose = 'account',
 ): HostedOAuthStart {
   pruneOAuthFlows();
   const origin = assertLoopbackCallbackOrigin(callbackOrigin);
@@ -180,6 +184,7 @@ export function beginHostedOAuth(
 
   pendingOAuthFlows.set(flowId, {
     provider,
+    purpose,
     verifier,
     ...(windowId?.trim() ? { windowId: windowId.trim().slice(0, 128) } : {}),
     createdAt: Date.now(),
@@ -191,7 +196,12 @@ export function beginHostedOAuth(
   authorize.searchParams.set('redirect_to', callback.toString());
   authorize.searchParams.set('code_challenge', challenge);
   authorize.searchParams.set('code_challenge_method', 's256');
-  return { flowId, provider, url: authorize.toString() };
+  return { flowId, provider, purpose, url: authorize.toString() };
+}
+
+export function hostedOAuthPurpose(flowId: string): HostedOAuthPurpose | null {
+  pruneOAuthFlows();
+  return pendingOAuthFlows.get(flowId)?.purpose ?? null;
 }
 
 export async function exchangeHostedOAuthCode(flowId: string, authCode: string): Promise<HostedAccountSession> {
@@ -228,6 +238,7 @@ export function createFailedHostedOAuthFlow(message: string): string {
   const flowId = base64Url(crypto.randomBytes(24));
   pendingOAuthFlows.set(flowId, {
     provider: 'google',
+    purpose: 'account',
     verifier: base64Url(crypto.randomBytes(48)),
     createdAt: Date.now(),
     state: 'error',
@@ -435,6 +446,24 @@ export async function fetchHostedQuota(options: { forceRefreshToken?: boolean } 
   rememberHostedQuota(quota);
   await quotaAvailabilityRecovery;
   return quota;
+}
+
+export async function fetchHostedAgentAllowance(
+  options: { forceRefreshToken?: boolean } = {},
+): Promise<HostedAgentAllowance> {
+  const token = await hostedAccessToken({ forceRefresh: options.forceRefreshToken });
+  const response = await fetch(`${STASHBASE_API_URL}/v1/agent/usage`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+      'x-stashbase-client-version': CLIENT_VERSION,
+    },
+  });
+  const payload = await jsonBody<HostedAgentAllowance & ErrorPayload>(response);
+  if (response.status === 401 && !options.forceRefreshToken) {
+    return fetchHostedAgentAllowance({ forceRefreshToken: true });
+  }
+  if (!response.ok) throw new Error(messageOf(payload, `StashBase Agent usage service failed (HTTP ${response.status}).`));
+  return payload as HostedAgentAllowance;
 }
 
 function scheduleQuotaRefresh(quota: HostedQuota): void {

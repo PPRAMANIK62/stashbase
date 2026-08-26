@@ -102,6 +102,7 @@ export interface ComposerScopeControl {
 /** Context attachments — owned by AgentView so panel drops, the `+`
  * picker, and the send path share one list. */
 export interface ComposerAttachments {
+  enabled: boolean;
   items: Attachment[];
   uploading: boolean;
   onPick: (files: File[]) => void;
@@ -260,7 +261,7 @@ export function AgentComposer({
             return true;
           }}
           onSubmit={submit}
-          onPasteImages={attachments.onPasteImages}
+          onPasteImages={attachments.enabled ? attachments.onPasteImages : undefined}
           onFocusChange={onFocusChange}
           mentionOpen={suggestions.open}
           mentionListboxId={suggestions.composerListboxId}
@@ -270,16 +271,18 @@ export function AgentComposer({
           * rendered surface at all — the `+` button below opens it. A text
           * field's box treatment would be dead weight, and `Input` is typed
           * for Base UI's text input, not `type="file"`. */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            attachments.onPick(Array.from(e.target.files ?? []));
-            e.target.value = '';
-          }}
-        />
+        {attachments.enabled && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              attachments.onPick(Array.from(e.target.files ?? []));
+              e.target.value = '';
+            }}
+          />
+        )}
         {/* Action bar under the input. The negative side margins bleed the
           * top rule past the box padding so it spans edge to edge. */}
         {/* No divider above the controls: the composer reads as ONE input
@@ -287,16 +290,18 @@ export function AgentComposer({
           * muted styling carry the separation, and a mid-card hairline
           * would double up with the card's own border. */}
         <div className="flex items-center gap-1 pt-0.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground"
-            aria-label={attachments.uploading ? 'Uploading files' : 'Upload local files'}
-            disabled={attachments.uploading}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <PlusIcon />
-          </Button>
+          {attachments.enabled && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
+              aria-label={attachments.uploading ? 'Uploading files' : 'Upload local files'}
+              disabled={attachments.uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <PlusIcon />
+            </Button>
+          )}
           {/* Scope reads left (with the attach control); the run settings
             * — model, mode — group right next to send. */}
           <ScopeMenu

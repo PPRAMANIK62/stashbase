@@ -20,12 +20,13 @@ import { filesystemPath } from './filesystem-path.ts';
  * contract. */
 export type {
   AgentClientEvent,
+  AgentId,
   AgentModel,
   AgentServerEvent,
   AgentSkill,
 } from '../shared/agent-protocol.ts';
+import type { AgentId } from '../shared/agent-protocol.ts';
 
-export type AgentId = 'claude' | 'codex';
 export type AgentRuntimeState = 'available' | 'unavailable' | 'failed';
 export const AGENT_ACCESS_MODES = ['default', 'acceptEdits', 'plan', 'auto'] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
@@ -54,6 +55,7 @@ export interface AgentCapabilities {
   transcript: true;
   approvals: true;
   history: true;
+  attachments: boolean;
   modes: boolean;
   effort: boolean;
   /** The runtime can enumerate native models and accept an explicit choice;
@@ -174,6 +176,10 @@ export interface AgentAdapter {
   id: AgentId;
   label: string;
   vendor: string;
+  /** Bundled adapters own their executable, account gate, and local service
+   * readiness. External CLI adapters retain the shared discovery/bootstrap
+   * path below. */
+  runtime?: () => Omit<AgentRuntimeDescriptor, 'id' | 'label' | 'vendor' | 'endpoint' | 'capabilities'>;
   capabilities: AgentCapabilities;
   attach(ws: WebSocket, options: AgentConnectionOptions): void;
   stop(windowId?: string): void;
@@ -220,7 +226,7 @@ export interface AgentRuntimeDescriptor {
   launchCommand: string;
   endpoint: '/ws/agent';
   installed: boolean;
-  source: 'system' | 'managed' | null;
+  source: 'bundled' | 'system' | 'managed' | null;
   state: AgentRuntimeState;
   bootstrap: ReturnType<typeof agentBootstrapStatus>;
   error?: string;
@@ -230,7 +236,7 @@ export interface AgentRuntimeDescriptor {
 const adapters = new Map<AgentId, AgentAdapter>();
 const runtimeFailures = new Map<AgentId, string>();
 
-export function agentExecutableFor(id: AgentId): string | null {
+export function agentExecutableFor(id: Exclude<AgentId, 'stashbase'>): string | null {
   const config = id === 'claude'
     ? { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude Code' }
     : { name: 'codex', envNames: ['STASHBASE_CODEX_BIN', 'CODEX_CLI_BIN', 'CODEX_CLI_PATH'], logLabel: 'Codex' };
@@ -242,7 +248,21 @@ export function registerAgentAdapter(adapter: AgentAdapter): void {
 }
 
 /** Pure descriptor builder used by discovery and its contract tests. */
-export function runtimeDescriptorFor(adapter: AgentAdapter, executable = agentExecutableFor(adapter.id)): AgentRuntimeDescriptor {
+export function runtimeDescriptorFor(
+  adapter: AgentAdapter,
+  executable = adapter.id === 'stashbase' ? null : agentExecutableFor(adapter.id),
+): AgentRuntimeDescriptor {
+  if (adapter.runtime) {
+    return {
+      id: adapter.id,
+      label: adapter.label,
+      vendor: adapter.vendor,
+      endpoint: '/ws/agent',
+      capabilities: adapter.capabilities,
+      ...adapter.runtime(),
+    };
+  }
+  if (adapter.id === 'stashbase') throw new Error('Bundled Agent adapter must describe its runtime.');
   const cli = CLIS[adapter.id];
   const installed = executable !== null;
   const failure = runtimeFailures.get(adapter.id);
@@ -264,7 +284,7 @@ export function runtimeDescriptorFor(adapter: AgentAdapter, executable = agentEx
 }
 
 export function agentAdapter(id: string): AgentAdapter | null {
-  return id === 'claude' || id === 'codex' ? adapters.get(id) ?? null : null;
+  return id === 'stashbase' || id === 'claude' || id === 'codex' ? adapters.get(id) ?? null : null;
 }
 
 /** Native discovery is performed at request time so a CLI installed or
@@ -281,13 +301,20 @@ export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConn
     ws.close();
     return;
   }
-  if (!agentExecutableFor(adapter.id)) {
+  const runtime = runtimeDescriptorFor(adapter);
+  if (!runtime.installed || runtime.state !== 'available') {
+    const message = runtime.error ?? `${adapter.label} is not ready.`;
+    ws.send(JSON.stringify({ t: 'error', message }));
+    ws.close();
+    return;
+  }
+  if (adapter.id !== 'stashbase' && !agentExecutableFor(adapter.id)) {
     ws.send(JSON.stringify({ t: 'error', message: `${adapter.label} CLI is not available.` }));
     ws.close();
     return;
   }
   try {
-    ensureAgentMcp(adapter.id);
+    if (adapter.id !== 'stashbase') ensureAgentMcp(adapter.id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     ws.send(JSON.stringify({ t: 'error', message: `Could not connect StashBase MCP: ${message}` }));

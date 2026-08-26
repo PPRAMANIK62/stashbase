@@ -181,7 +181,7 @@ export function MentionComposer({
   onMentionDismiss: () => void;
   onShiftTab: () => boolean;
   onSubmit: (text: string) => boolean;
-  onPasteImages: (files: File[]) => void;
+  onPasteImages?: (files: File[]) => void;
   onFocusChange: (focused: boolean) => void;
   onSkillMarkerRemoved: () => void;
   mentionListboxId?: string;

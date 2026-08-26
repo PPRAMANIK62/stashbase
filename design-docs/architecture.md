@@ -17,9 +17,11 @@ Preparation and Search and Retrieval form the local RAG layer, while the Agent
 Panel is the built-in Agent client over the same authorized context.
 
 The desktop application owns file access, user interaction, format
-preparation, and the MCP boundary. A local indexing runtime owns chunking,
-embedding, storage, and semantic retrieval. Together they operate as one local
-library per installation.
+preparation, the MCP boundary, and Agent execution. A local indexing runtime
+owns chunking, embedding, storage, and semantic retrieval. The included Agent
+runs in pinned local OpenCode processes; a Node-owned loopback broker forwards
+only its model requests to the hosted model gateway. Together these components
+operate as one local library per installation.
 
 ## Ownership
 
@@ -28,15 +30,24 @@ library per installation.
 | Local files and folders | User | They remain the source of truth. |
 | `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never overwritten by StashBase. |
 | Extracted text, previews, indexes, preparation records | StashBase | They are rebuildable derived state. |
-| Application-scoped Agent runtimes | StashBase | They are demand-installed, rebuildable application state. |
+| Included OpenCode runtime | StashBase | It is pinned, packaged, private application state and never resolved from the user's PATH. |
+| Bring-your-own Agent runtimes | User / provider | They are explicitly discovered or demand-installed and keep their provider-owned login and history. |
 | Bug-report drafts | StashBase desktop application | They are ephemeral application state, not workspace files. |
 | Credentials and user settings | StashBase settings | They are managed through Settings, not environment variables. |
 | Desktop release state | Electron main process | It reads packaged-build update metadata; the renderer receives bounded status and actions only. |
 
 Credentials and optional hosted-account sessions are owned by the local Node
-service. Provider tokens do not cross into renderer responses or the indexing
-daemon. When the user selects hosted AI Index, Node may send extracted text
-through the hosted Adapter; the visible source and durable library remain local.
+service. Provider and account tokens do not cross into renderer responses,
+OpenCode configuration/history, or the indexing daemon. When the user selects
+hosted AI Index, Node may send extracted text through the hosted Adapter. When
+the user runs StashBase Agent, the Node broker sends prompts and necessary model
+context through the hosted model Adapter; sessions, tool execution, permissions,
+Diffs, and files remain local. The hosted service owns model routing and usage
+accounting, not Agent execution or session storage. Agent accounting is a
+separate cost ledger from AI Index: the service atomically reserves and settles
+each model request against its prompt turn, fixed seven-day account window,
+short-term limits, and UTC-day provider budget. Model and policy versions are
+pinned when a turn begins. The visible source and durable library remain local.
 Detailed persistence, refresh, and broker invariants live in
 [Settings and Config](../code-review/settings-config.md).
 
@@ -71,8 +82,10 @@ user-visible source file.
   an app-owned or already authorized root.
 - One local runtime owns indexing state. Other processes communicate through
   its supported boundary rather than maintaining competing copies of the index.
-- Agent readiness is demand-driven. Opening the app or a folder does not
-  install an Agent runtime; explicit Chat actions own preparation and recovery.
+- The included Agent runtime is already packaged and starts only for an active
+  StashBase Agent session. Bring-your-own readiness is demand-driven: opening
+  the app or a folder does not install an Agent runtime; explicit Chat actions
+  own preparation and recovery.
 - Closing a window releases only its UI and folder context. Shared application
   resources remain alive until the application session quits, and a window is
   retired only after its current edit is durable.
@@ -120,6 +133,12 @@ Format completion, scheduler, freshness, quota, and cleanup rules live in
 - External URLs and local-file navigation follow explicit, validated paths.
 - Network, commands, deletion, rename, and broader filesystem access remain
   explicit approval decisions in the Agent Panel.
+- Every StashBase Agent panel session receives a private OpenCode server
+  credential and MCP attribution identity. A Library-wide session disables
+  native cwd file/command tools and uses the membership-checked MCP layer;
+  folder sessions deny paths outside their working folder. The private process
+  receives an allowlisted non-secret environment rather than the desktop
+  process environment.
 - Bug-report draft lifecycle and any future report artifacts are owned by the
   desktop application. Renderer views can present safe draft metadata but do
   not own artifacts, filesystem access, or privileged actions. The focused

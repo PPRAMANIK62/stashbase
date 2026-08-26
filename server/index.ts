@@ -81,6 +81,7 @@ import {
 import { createClientErrorHandler } from './client-error.ts';
 import { startHostedEmbeddingBroker, stopHostedEmbeddingBroker } from './hosted-embedding-broker.ts';
 import { hostedAccountState, setHostedQuotaAvailableHandler } from './hosted-account.ts';
+import { stopOpenCodeRuntime } from './opencode-runtime.ts';
 
 const log = logger('server');
 
@@ -557,6 +558,7 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
 onClose((_oldRoot, windowId) => {
   stopAgentRuntime('claude', windowId);
   stopAgentRuntime('codex', windowId);
+  stopAgentRuntime('stashbase', windowId);
 });
 // Hook WebSocket upgrades. `/ws/agent` and `/ws/codex` go to our
 // structured chat bridges; everything else (Vite HMR in dev) falls
@@ -610,6 +612,7 @@ async function shutdown(reason: string): Promise<void> {
   try { server.close(); } catch { /* already gone */ }
   try { stopAgentRuntime('claude'); } catch { /* swallow */ }
   try { stopAgentRuntime('codex'); } catch { /* swallow */ }
+  try { stopAgentRuntime('stashbase'); } catch { /* swallow */ }
   // Hard ceiling: conversion cancellation may spend up to 2.5 s waiting for
   // extractor process groups to exit, and the daemon close ladder can spend
   // another ~3.5 s. Exit anyway if either side wedges.
@@ -618,6 +621,7 @@ async function shutdown(reason: string): Promise<void> {
     await runShutdownCleanup({
       closeMcp: () => mcpHttpService.close(),
       cancelAgentInstalls: cancelAgentRuntimeInstalls,
+      closeBundledAgent: stopOpenCodeRuntime,
       closeHostedBroker: stopHostedEmbeddingBroker,
       cancelModelDownloads: cancelAllTranscriptionModelDownloads,
       cancelConversions: cancelAllConversions,
