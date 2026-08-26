@@ -242,7 +242,9 @@ and effort. Renderer code selects by adapter metadata and does not branch on
 assumed CLI versions.
 
 - Model catalogs and effort levels come from the native runtime. `Default`
-  means no override and never rewrites global CLI configuration.
+  means no override and never rewrites global CLI configuration. A fresh
+  Codex session keeps that label until its native thread reports the actual
+  model; catalog metadata is not presented as live session identity.
 - Codex applies an explicit idle model change to the next turn of the existing
   thread. The Adapter ignores model changes while a turn is active; returning
   to `Default` omits the next turn's model override.

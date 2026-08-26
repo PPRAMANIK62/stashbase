@@ -77,7 +77,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
     let composer = panel.locator('[aria-label="Message agent"]');
     await expect(composer).toHaveAttribute('contenteditable', 'true');
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Model and effort: Fake Codex Model, Default' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Model and effort: Default, Default' })).toBeVisible();
 
     await composer.fill('approval turn');
     await panel.getByRole('button', { name: 'Send message' }).click();
@@ -88,6 +88,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
 
     await panel.getByRole('button', { name: 'Allow', exact: true }).click();
     await expect(panel.getByText('Deterministic approval completed.')).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Model and effort: Fake Codex Model, Default' })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
     await expect.poll(() => protocolRecords(protocolLog).find((entry) => entry.event === 'approval-response')?.decision)
       .toBe('accept');

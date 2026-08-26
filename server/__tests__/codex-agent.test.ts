@@ -296,6 +296,35 @@ test('Codex reports the native Default model after starting a new thread', async
   session.dispose();
 });
 
+test('Codex does not speculate about the active Default model before a new thread starts', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-default-truth-'));
+  runWithWindowId('default-truth-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('default-truth-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess([
+    { id: 'catalog-default', displayName: 'Catalog Default', isDefault: true },
+    { id: 'thread-model', displayName: 'Thread Model' },
+  ], { threadModel: 'thread-model' });
+  const session = new CodexSession(ws as unknown as WebSocket, 'default-truth-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+
+  const beforeTurn = ws.sent
+    .map((item) => JSON.parse(item) as { t: string; activeModel?: string })
+    .find((event) => event.t === 'models');
+  assert.equal(beforeTurn?.activeModel, undefined, 'Default remains unnamed until the native thread reports its model');
+
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+  await settle();
+  const afterTurn = ws.sent
+    .map((item) => JSON.parse(item) as { t: string; activeModel?: string })
+    .filter((event) => event.t === 'models')
+    .at(-1);
+  assert.equal(afterTurn?.activeModel, 'thread-model');
+  assert.equal('model' in (native.requests.find((request) => request.method === 'turn/start')?.params ?? {}), false);
+  session.dispose();
+});
+
 test('Codex invokes an enabled selected skill and never publishes disabled skills', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-skills-'));
   runWithWindowId('skills-window', () => setCurrentFolder(folder));
