@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { TextLayer } from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import type { PdfPageHighlight } from '@/features/documents/lib/pdfText';
 
-/** Render a single PDF page into a canvas with text layer on top so
- *  selection + find work. Mounted lazily via IntersectionObserver so
- *  the long-tail of pages in a 200-page paper doesn't eat memory.
+/** Render a single PDF page into a canvas with the pdf.js text layer on
+ *  top so selection, copy, and assistive-technology reading work (Find
+ *  scans text separately via `scanPages`). Mounted lazily via
+ *  IntersectionObserver so the long-tail of pages in a 200-page paper
+ *  doesn't eat memory.
  *
  *  Pure props: the page owns only its own visibility and rendered size,
  *  never the viewer's document, zoom, or scroll state. */
@@ -23,6 +26,7 @@ export function PdfPage({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const textLayerRef = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(pageIndex < 2); // eager-render first 2 pages
   const [renderedSize, setRenderedSize] = useState<{ width: number; height: number } | null>(null);
 
@@ -43,6 +47,7 @@ export function PdfPage({
     let cancelled = false;
     let pageProxy: PDFPageProxy | null = null;
     let renderTask: ReturnType<PDFPageProxy['render']> | null = null;
+    let textLayer: TextLayer | null = null;
     void doc.getPage(pageIndex + 1).then((page) => {
       if (cancelled) {
         page.cleanup();
@@ -66,7 +71,27 @@ export function PdfPage({
         viewport,
         transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : undefined,
       });
-      renderTask.promise.then(() => {
+      // The text layer renders into a detached host in parallel with the
+      // canvas, then both swap in together below — same no-flash rationale
+      // as the offscreen canvas, and it keeps selection aligned with the
+      // bitmap at every zoom level. `TextLayer` lays spans out in CSS units
+      // driven by `--total-scale-factor` (set on the live layer at swap).
+      const textLayerHost = document.createElement('div');
+      textLayer = new TextLayer({
+        textContentSource: page.streamTextContent(),
+        container: textLayerHost,
+        viewport,
+      });
+      const textLayerReady = textLayer.render().then(() => true).catch((err: unknown) => {
+        // Cancels reject with AbortException — expected, ignore. A failed
+        // text layer must not block the page bitmap: log and render without.
+        if ((err as { name?: string })?.name !== 'AbortException') {
+          console.error(`[pdf] page ${pageIndex + 1} text layer failed:`, err);
+        }
+        return false;
+      });
+      renderTask.promise.then(async () => {
+        const textLayerOk = await textLayerReady;
         if (cancelled) return;
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d');
@@ -79,6 +104,25 @@ export function PdfPage({
         canvas.style.width = `${logicalWidth}px`;
         canvas.style.height = `${logicalHeight}px`;
         ctx.drawImage(renderCanvas, 0, 0);
+        const layer = textLayerRef.current;
+        if (layer) {
+          if (textLayerOk) {
+            // Adopt the geometry `TextLayer` wrote on the detached host:
+            // width/height in `--total-scale-factor` units, `--min-font-size`,
+            // and the page's intrinsic rotation.
+            layer.setAttribute('style', textLayerHost.getAttribute('style') ?? '');
+            layer.style.setProperty(
+              '--total-scale-factor',
+              String(viewport.scale * (viewport.userUnit || 1)),
+            );
+            const rotation = textLayerHost.getAttribute('data-main-rotation');
+            if (rotation === null) layer.removeAttribute('data-main-rotation');
+            else layer.setAttribute('data-main-rotation', rotation);
+            layer.replaceChildren(...Array.from(textLayerHost.childNodes));
+          } else {
+            layer.replaceChildren();
+          }
+        }
         setRenderedSize({ width: logicalWidth, height: logicalHeight });
       }).catch((err: unknown) => {
         // Cancels (tab switch / scroll-out) reject with
@@ -94,6 +138,7 @@ export function PdfPage({
     return () => {
       cancelled = true;
       if (renderTask) renderTask.cancel();
+      if (textLayer) textLayer.cancel();
       if (pageProxy) pageProxy.cleanup();
     };
   }, [doc, pageIndex, scale, visible]);
@@ -111,7 +156,15 @@ export function PdfPage({
         width: reservedWidth ? `${reservedWidth}px` : undefined,
       }}
     >
-      {visible ? <canvas ref={canvasRef} className="block" /> : (
+      {visible ? (
+        <>
+          <canvas ref={canvasRef} className="block" aria-hidden="true" />
+          {/* Selectable/readable text mirror of the bitmap above. Populated
+            * imperatively at bitmap-swap time so text and pixels always
+            * agree; sits under the pointer-events-none highlight overlay. */}
+          <div ref={textLayerRef} className="pdf-text-layer" />
+        </>
+      ) : (
         <div className="flex min-h-[800px] w-[600px] items-center justify-center text-sm text-muted-foreground">Page {pageIndex + 1}</div>
       )}
       {/* No margin page number: at fit-to-width the gutter is 24px, so

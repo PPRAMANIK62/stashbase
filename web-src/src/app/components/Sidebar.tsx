@@ -55,7 +55,10 @@ export function Sidebar() {
      * visually spill into the main pane mid-transition.
      * `group/sidebar` drives the hover-reveal of the header action
      * icons (see the side-actions class strings below). */
-    <aside className="sidebar group/sidebar relative flex h-full min-h-0 min-w-0 flex-row overflow-hidden border-r border-border bg-pane">
+    /* Named landmark: the chat pane is a second `complementary` region
+     * ("Agent chat"), and two same-role landmarks are indistinguishable
+     * in a screen reader's landmark list without accessible names. */
+    <aside aria-label="Library" className="sidebar group/sidebar relative flex h-full min-h-0 min-w-0 flex-row overflow-hidden border-r border-border bg-pane">
       {/* macOS Electron only (display:none elsewhere): the quiet band at
         * the column's top that the traffic lights float over, doubling as
         * the window drag region now that there is no titlebar strip.

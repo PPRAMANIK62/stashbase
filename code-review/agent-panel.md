@@ -140,6 +140,21 @@
 
 ## Rendering and Accessibility
 
+- The chat tab strip follows the APG tabs pattern: a `tab` carries no
+  interactive descendant. The visual close × is pointer-only — hidden from
+  the accessibility tree and the tab order, so keyboard focus never lands on
+  an invisible control — and Delete on the focused tab closes it.
+- The transcript log announces appends politely, but the one in-flight turn
+  is `aria-busy` until it settles so token streaming does not re-announce
+  the live tail. Each turn states its speaker for linearized reading
+  (visually hidden "You:" / agent-short-name prefixes); bubble alignment
+  alone is not attribution. Hand-rolled disclosure toggles (activity groups,
+  tool rows, thinking) reference the panel they reveal via `aria-controls`,
+  matching the Collapsible primitive's wiring.
+- Pane-level state cards (runtime gates, the empty-chat greeting, the
+  whole-pane fatal card) head the pane's outline at `h2`;
+  transcript-inline cards (inline fatal, permission asks, turn-failure
+  guidance) sit at `h3`.
 - Agent response Markdown is rendered as React elements with GFM behavior. Raw
   HTML, remote images, and unsafe schemes remain inert.
 - The same shared renderer parses `$...$`, `$$...$$`, `\(...\)`, and

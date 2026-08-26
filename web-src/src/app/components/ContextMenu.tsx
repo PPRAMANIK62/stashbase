@@ -1,5 +1,6 @@
 import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppContext';
 import { getPreparationProblem } from '@/store/lib/fileReadiness';
+import { openMoveFilePicker } from '@/features/workspace';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 
 /** Right-click menu for file and folder rows. Loaded only after state owns a
@@ -21,6 +22,15 @@ export default function ContextMenu() {
     },
     ...(kind === 'file'
       ? [{
+          // The keyboard-reachable path to the move that dragging a row
+          // onto a folder performs — the picker gate (MoveFilePicker)
+          // routes through the same `actions.moveFile`. Focus belongs to
+          // the picker it opens, not back on the row, hence returnFocus.
+          label: 'Move to…',
+          title: 'Move this file to another folder',
+          returnFocus: false,
+          onSelect: () => openMoveFilePicker(target),
+        } satisfies MenuItem, {
           label: 'Copy Link',
           title: 'Copy a Markdown link to this file',
           onSelect: () => actions.copyFileLink(target),

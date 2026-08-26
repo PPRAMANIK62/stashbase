@@ -5,7 +5,7 @@
  * is pure and lives in `lib/toolActivity`, `lib/toolPayload`, and
  * `lib/diffModel`; this module only renders it.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { Button } from '@/common/components/ui/button';
 import { ChevronDownIcon, CodeIcon, EditIcon, FileGenericIcon, FolderIcon, NewFileIcon, SearchIcon } from '@/common/components/icons';
 import { cn } from '@/common/lib/utils';
@@ -36,6 +36,7 @@ export function ToolActivityGroup({ tools, live = false, onOpenArtifact }: {
   onOpenArtifact: (path: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const panelId = useId();
   const active = live || tools.some((tool) => tool.status === 'running');
   const summary = activitySummary(tools, active);
   return (
@@ -54,6 +55,10 @@ export function ToolActivityGroup({ tools, live = false, onOpenArtifact }: {
         className="group/row w-full justify-start gap-1.5 px-1.5 py-1 text-left text-sm"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
+        // Wired like the Collapsible primitive's trigger: the disclosure
+        // names WHAT it expands. Only while the list is mounted — a
+        // dangling aria-controls id is worse than none.
+        aria-controls={open ? panelId : undefined}
       >
         {/* One leading glyph, Codex-style: the pulsing liveness dot while the
           * group is the live tail, the first step's type icon once settled.
@@ -66,7 +71,7 @@ export function ToolActivityGroup({ tools, live = false, onOpenArtifact }: {
       {/* The expanded steps are a list, not a run of rows: a screen reader
         * announces "5 items" and each step's boundary instead of one
         * undifferentiated paragraph of narration. */}
-      {open && <ul className="m-0 grid list-none gap-0.5 pb-0.5 pl-5">{tools.map((tool) => <ToolRow key={tool.id} block={tool} />)}</ul>}
+      {open && <ul id={panelId} className="m-0 grid list-none gap-0.5 pb-0.5 pl-5">{tools.map((tool) => <ToolRow key={tool.id} block={tool} />)}</ul>}
       <ArtifactCards changes={tools.filter((tool) => tool.status === 'done').flatMap(fileChanges)} onOpen={onOpenArtifact} />
     </section>
   );
@@ -108,6 +113,7 @@ function ToolPayloadBody({ block }: { block: ToolBlock }) {
  * as their own card. */
 function ToolRow({ block }: { block: ToolBlock }) {
   const [open, setOpen] = useState(false);
+  const panelId = useId();
   const { verb, target, mono } = toolRowParts(block.name, block.input);
   const running = block.status === 'running';
   const failed = block.status === 'error' || block.status === 'denied';
@@ -121,6 +127,7 @@ function ToolRow({ block }: { block: ToolBlock }) {
         )}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
       >
         <ToolTypeIcon name={block.name} input={block.input} failed={failed} />
         <span className={cn('shrink-0', running && 'working-shimmer')}>{verb}</span>
@@ -133,7 +140,7 @@ function ToolRow({ block }: { block: ToolBlock }) {
         <ChevronDownIcon className={cn('ml-auto size-3 shrink-0 transition-opacity duration-fast ease-out', open ? 'opacity-60' : 'opacity-0 group-hover/row:opacity-60', !open && '-rotate-90')} />
       </Button>
       {open && (
-        <div className="pb-1 pl-6">
+        <div id={panelId} className="pb-1 pl-6">
           <ToolPayloadBody block={block} />
           {block.result != null && block.result !== '' && (
             <pre className={cn(toolPreClass, 'agent-tool-result', block.status === 'error' && 'err')}>{clipResult(block.result)}</pre>

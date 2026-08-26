@@ -17,6 +17,11 @@ test('outline entries are keyboard buttons with active and full-label accessibil
   assert.match(markup, /<button[^>]*aria-label="Heading level 1: Overview"[^>]*aria-current="location"/);
   assert.match(markup, /<button[^>]*aria-label="Heading level 3: Untitled section 1"/);
   assert.doesNotMatch(markup, />H1</);
+  // The list is flat (indent is padding), so each row's aria-level carries
+  // the nesting depth the markup no longer shows: the h3 under the h1 is
+  // outline depth 2 even though the document skipped h2.
+  assert.match(markup, /<li[^>]*aria-level="1"[^>]*>(?:(?!<\/li>)[\s\S])*Overview/);
+  assert.match(markup, /<li[^>]*aria-level="2"[^>]*>(?:(?!<\/li>)[\s\S])*Untitled section 1/);
   // Base indent 10px puts a depth-0 label on the sidebar's shared 38px
   // label gutter (see the DocumentOutline comment).
   assert.match(markup, /class="tree-row active" style="padding-left:10px"/);

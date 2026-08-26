@@ -5,7 +5,7 @@
  * `AgentUserTurn`, the tool surface in `AgentToolActivity`, and the pure
  * turn model in `lib/turnModel`.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/common/components/ui/button';
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@/common/components/ui/collapsible';
 import { AgentMarkdown } from '@/features/agent-panel/components/AgentMarkdown';
@@ -96,7 +96,6 @@ export function MessageList({
       role="log"
       aria-label="Agent conversation"
       aria-live="polite"
-      aria-busy={turnActive}
       ref={ref}
       onScroll={onScroll}
     >
@@ -110,7 +109,13 @@ export function MessageList({
         const settled = !(turnActive && index === turns.length - 1);
         const replyText = settled ? turnReplyText(turn) : '';
         return (
-          <div className={turnClass} key={turn.key}>
+          // `aria-busy` rides the ONE turn that is still streaming, not the
+          // whole log: token-by-token mutations of the live tail would
+          // otherwise re-announce through the log's polite live region on
+          // every chunk. The settled turns and notices around it keep
+          // announcing; this turn speaks once, when it settles and the
+          // busy flag drops.
+          <div className={turnClass} key={turn.key} aria-busy={!settled || undefined}>
             {turn.head && (
               <UserTurnHead
                 block={turn.head}
@@ -122,6 +127,10 @@ export function MessageList({
               * to the ANSWER region, mirroring `agent-turn-user` on the
               * question side — hovering one never lights up the other. */}
             <div className="agent-turn-reply group/reply flex flex-col gap-2.5">
+              {/* Speaker identity is visual-only (alignment/typography), so
+                * a linearized reading gets it stated. Pairs with the "You:"
+                * prefix in UserTurnHead. */}
+              {turn.body.length > 0 && <span className="sr-only">{agentShortName}: </span>}
               <TurnBody
                 blocks={turn.body}
                 liveBlockId={turnActive && blocks.length > 0 ? blocks[blocks.length - 1].id : null}
@@ -348,7 +357,11 @@ function FatalState({
   return (
     <div className="grid min-h-45 flex-1 place-items-center px-2 py-6">
       <StatusMessage tone="error" className="flex w-measure-sm flex-col items-start gap-2 rounded-xl p-3.5">
-        <SectionHeading>{copy.title}</SectionHeading>
+        {/* Level 2, stated: this card fills the pane (it renders only with
+          * an empty transcript), so it tops the pane outline like the other
+          * pane-level state cards. FatalInline below is a transcript entry
+          * and sits at h3 with the other inline cards. */}
+        <SectionHeading level={2}>{copy.title}</SectionHeading>
         <div className={fatalDetailClass}>{copy.detail}</div>
         <Button variant="outline" size="sm" onClick={onRetry}>{recoveryLabel}</Button>
       </StatusMessage>
@@ -441,6 +454,7 @@ function BlockView({ block, live, handlers }: {
 
 function ThinkingView({ text, active }: { text: string; active?: boolean }) {
   const [open, setOpen] = useState(false);
+  const panelId = useId();
   return (
     <div className="min-w-0">
       {/* A plain meta disclosure row — closed thinking should cost no
@@ -452,6 +466,9 @@ function ThinkingView({ text, active }: { text: string; active?: boolean }) {
         className="h-auto gap-1 px-0 py-0.5 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        // Only while the body exists — an aria-controls pointing at an
+        // unmounted id is a dangling reference.
+        aria-controls={open ? panelId : undefined}
       >
         <ChevronDownIcon className={cn('size-3 transition-transform duration-fast ease-out', !open && '-rotate-90')} />
         {/* Shimmers while this is the stream's live block — the label
@@ -464,7 +481,7 @@ function ThinkingView({ text, active }: { text: string; active?: boolean }) {
         * label starts (12px chevron + the button's 4px gap), so the
         * quote bar hangs in the margin the disclosure already opened. */}
       {open && (
-        <div className="ml-1 border-l-2 border-border pt-1 pb-1.5 pl-2.5 text-sm leading-normal whitespace-pre-wrap text-muted-foreground">
+        <div id={panelId} className="ml-1 border-l-2 border-border pt-1 pb-1.5 pl-2.5 text-sm leading-normal whitespace-pre-wrap text-muted-foreground">
           {text}
         </div>
       )}

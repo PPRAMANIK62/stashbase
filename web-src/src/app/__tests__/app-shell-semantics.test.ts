@@ -12,6 +12,7 @@ import { createElement as h, isValidElement, type ReactElement, type ReactNode }
 import { App } from '@/app/App';
 import { MainPane } from '@/app/components/MainPane';
 import { Sidebar } from '@/app/components/Sidebar';
+import { TitlebarControls } from '@/app/components/TitlebarControls';
 import { appActions, appState, mountApp, withDom } from '@/common/__tests__/renderHarness';
 import { DocumentOutlineProvider } from '@/common/components/DocumentOutlineContext';
 import { OverlayStackProvider, useOverlayLayer } from '@/common/components/OverlayStack';
@@ -36,6 +37,25 @@ test('the sidebar column carries the macOS window drag zone as a non-interactive
     assert.ok(zone, 'the sidebar owns the titlebar drag band');
     assert.equal(zone.getAttribute('aria-hidden'), 'true');
     assert.equal(zone.textContent, '', 'the drag band holds no content of its own');
+    // Two complementary landmarks exist (this one and "Agent chat"), so
+    // each must carry a name a landmark list can tell apart.
+    assert.equal(dom.query('aside.sidebar')?.getAttribute('aria-label'), 'Library');
+  });
+});
+
+test('the shell titlebar is a banner landmark rooted by a visually-hidden h1', async () => {
+  await withDom(async (dom) => {
+    await mountApp(dom, h(TitlebarControls), { state: appState() });
+    const header = dom.query('header.app-titlebar');
+    assert.ok(header, 'the window chrome band is a real <header>');
+    // `display: contents` in app-shell.css keeps it out of the `.app`
+    // grid; the control clusters must still live inside the landmark.
+    assert.ok(header.querySelector('.titlebar-controls'), 'the left control cluster sits in the banner');
+    assert.ok(header.querySelector('.titlebar-controls-right'), 'the right control cluster sits in the banner');
+    const h1 = header.querySelector('h1');
+    assert.ok(h1, 'the heading outline has a root');
+    assert.equal(h1.textContent, 'StashBase');
+    assert.match(h1.className, /(^| )sr-only( |$)/, 'the h1 is for the accessibility tree, not the paint');
   });
 });
 
@@ -117,6 +137,32 @@ test('exactly one document panel carries the id the tab strip points at', async 
       [],
       'with no document open there is nothing for a tab to control',
     );
+  });
+});
+
+test('the autosave status is announced and the inline new-note action is named', async () => {
+  const tab = makeTab();
+  tab.file = { name: 'Note.md', format: 'md', content: '# Hello' };
+  tab.editMode = true;
+  tab.saveStatus = { text: 'Save failed', cls: 'error' };
+
+  await withDom(async (dom) => {
+    await mountApp(dom, h(DocumentOutlineProvider, null, h(MainPane)), {
+      state: appState({ workspace: { folderPath: '/library', folder: 'library', tabs: [tab], activeTabId: tab.id } }),
+    });
+    // A polite live region: the save tick — and above all a save ERROR —
+    // must reach a screen reader mid-edit, not just repaint quietly.
+    const status = dom.byRole('status').find((el) => el.textContent === 'Save failed');
+    assert.ok(status, 'the save status is a role="status" live region');
+  });
+
+  await withDom(async (dom) => {
+    await mountApp(dom, h(DocumentOutlineProvider, null, h(MainPane)), {
+      state: appState({ workspace: { folderPath: '/library', folder: 'library' } }),
+    });
+    // Same naming rule as the sidebar's NewNoteButton: a bare "+"
+    // announces nothing.
+    assert.equal(dom.byLabel('New note in library').length, 1);
   });
 });
 

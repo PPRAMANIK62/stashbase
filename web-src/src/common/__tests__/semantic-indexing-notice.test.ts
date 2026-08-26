@@ -20,9 +20,20 @@ test('awaiting notice renders live guidance and dispatches both decisions withou
       onDefer: () => decisions.push('defer'),
     }));
   });
+  // The card itself is a plain named section, NOT a live region: it holds a
+  // heading and action buttons, structure that must be navigated rather than
+  // read out as one announcement. Only the text-only failure line is live —
+  // polite, and no longer an alert nested inside a status region.
+  const section = renderer!.root.findByType('section');
+  assert.equal(section.props.role, undefined);
+  assert.equal(section.props['aria-live'], undefined);
+  const heading = renderer!.root.findByType('h2');
+  assert.equal(section.props['aria-labelledby'], heading.props.id);
+  assert.equal(heading.children.join(''), 'Large AI Index workload');
   const status = renderer!.root.findByProps({ role: 'status' });
   assert.equal(status.props['aria-live'], 'polite');
-  assert.match(renderer!.root.findByProps({ role: 'alert' }).children.join(''), /stale row/);
+  assert.match(status.children.join(''), /stale row/);
+  assert.equal(renderer!.root.findAllByProps({ role: 'alert' }).length, 0);
   const buttons = renderer!.root.findAllByType('button');
   assert.deepEqual(buttons.map((button) => button.children.join('')), ['Build AI Index', 'Not now']);
   assert.ok(buttons.every((button) => button.props.autoFocus == null));

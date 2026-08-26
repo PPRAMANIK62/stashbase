@@ -63,6 +63,16 @@ body.is-electron.platform-darwin.is-fullscreen {
   --titlebar-controls-left: 8px;
 }
 
+/* The shell's banner landmark (TitlebarControls.tsx). `display:
+ * contents` generates no box: the `.app` grid never sees a fifth
+ * child to auto-place, and both control clusters keep resolving
+ * their absolute positions against `.app` exactly as they did as
+ * direct children. The element exists purely so the window chrome
+ * is a named `<header>` with the shell's visually-hidden h1. */
+.app-titlebar {
+  display: contents;
+}
+
 /* Shell-level controls in the titlebar band. Absolute over the
  * `.app` grid (NOT inside the panel columns) so collapsing either
  * panel leaves its toggle in place — always the way back in.

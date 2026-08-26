@@ -48,18 +48,22 @@ export function McpAccessPanel() {
       <SectionDescription className="mb-2.5">
         Paste this configuration into an external client’s MCP settings, then
         restart that client.{' '}
-        {/* Inline in the sentence, so the default size is taken for the
-          * type step alone and the height/padding come straight back off.
-          * Accent rather than the link variant's primary, and the
-          * underline inverts on hover, which is this description's
-          * established treatment. */}
-        <Button
-          variant="link"
-          className="h-auto cursor-pointer border-0 p-0 text-accent underline underline-offset-2 hover:no-underline"
-          onClick={() => openExternalUrl(MCP_SETUP_EXAMPLES_URL)}
+        {/* A real anchor, not a link-shaped button: this is navigation, so
+          * it announces as a link and offers copy/open-in-browser. The
+          * click still routes through openExternalUrl (the renderer must
+          * never navigate itself — see externalLink.ts), matching the
+          * markdown policy's local-link anchors. Accent + inverting
+          * underline is this description's established treatment. */}
+        <a
+          href={MCP_SETUP_EXAMPLES_URL}
+          className="cursor-pointer text-accent underline underline-offset-2 hover:no-underline"
+          onClick={(event) => {
+            event.preventDefault();
+            openExternalUrl(MCP_SETUP_EXAMPLES_URL);
+          }}
         >
           See setup examples
-        </Button>
+        </a>
         {' '}for Claude Desktop, Codex CLI, Claude Code, and other clients.
       </SectionDescription>
       <div className="overflow-hidden rounded-lg border border-border bg-muted">
@@ -93,7 +97,7 @@ export function McpAccessPanel() {
         {http ? (
           <>
             {http.settingsError && (
-              <div className="text-sm text-destructive">
+              <div role="alert" className="text-sm text-destructive">
                 Server connection settings are unavailable: {http.settingsError}
               </div>
             )}
@@ -192,7 +196,9 @@ export function McpAccessPanel() {
                     copied={copied === 'docker'}
                     onCopy={() => void copyText(http.dockerUrl, 'docker')}
                   />
-                  <div className={http.dockerActive ? 'text-sm text-status-success' : 'text-sm text-destructive'}>
+                  {/* role="status": the line flips between active and not
+                    * as the listener starts or fails after the toggle. */}
+                  <div role="status" className={http.dockerActive ? 'text-sm text-status-success' : 'text-sm text-destructive'}>
                     {http.dockerActive
                       ? 'Docker listener is active.'
                       : `Docker listener is not active${http.dockerError ? `: ${http.dockerError}` : '.'}`}
@@ -245,6 +251,7 @@ function McpHttpField(props: { label: string; value: string; copied: boolean; on
  * cyan/amber/red, no green). Sized to match the h-8 Input/Button rows. */
 function CopyButton(props: { copied: boolean; disabled?: boolean; onCopy(): void; label: string }) {
   return (
+    <>
     <Button
       type="button"
       variant="outline"
@@ -264,5 +271,11 @@ function CopyButton(props: { copied: boolean; disabled?: boolean; onCopy(): void
         * gives its glyph the matching 16px. */}
       {props.copied ? <CheckIcon /> : <CopyIcon />}
     </Button>
+    {/* The icon/label flip alone is silent — a name change on a focused
+      * control is not re-announced. This empty-at-rest status speaks
+      * "Copied" the moment the copy lands. sr-only is absolutely
+      * positioned, so the sibling adds nothing to the flex rows. */}
+    <span role="status" className="sr-only">{props.copied ? 'Copied' : ''}</span>
+    </>
   );
 }

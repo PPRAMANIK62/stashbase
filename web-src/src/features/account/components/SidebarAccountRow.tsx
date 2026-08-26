@@ -66,7 +66,12 @@ export function SidebarAccountRow() {
               <MenuPopup className="w-72 max-w-overlay-fit p-0" aria-label="StashBase account">
                 {account?.signedIn ? (
                   <>
-                    <div className="flex items-center gap-2.5 px-4 py-3">
+                    {/* Static blocks inside a role="menu" popup take
+                      * role="presentation" (the MenuSectionLabel idiom):
+                      * a menu's own children may only be items, groups,
+                      * separators, or presentation, and these rows are
+                      * read-only identity/usage detail, not items. */}
+                    <div role="presentation" className="flex items-center gap-2.5 px-4 py-3">
                       <AccountAvatar account={account} />
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold">{label}</div>
@@ -74,7 +79,7 @@ export function SidebarAccountRow() {
                       </div>
                     </div>
                     <MenuSeparator className="m-0" />
-                    <div className="px-4 py-3">
+                    <div role="presentation" className="px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-sm font-semibold">Remaining usage</span>
                         {remainingPercent !== null && <span className="text-sm text-muted-foreground">{remainingPercent}%</span>}
@@ -107,7 +112,7 @@ export function SidebarAccountRow() {
                       )}
                     </div>
                     <MenuSeparator className="m-0" />
-                    <div className="p-1">
+                    <div role="presentation" className="p-1">
                       <MenuItem label="Learn more" onClick={() => openExternalUrl('https://stashbase.ai')}>
                         <span className="flex items-center gap-2"><ExternalLinkIcon className="size-4" />Learn more</span>
                       </MenuItem>
@@ -115,7 +120,7 @@ export function SidebarAccountRow() {
                     </div>
                   </>
                 ) : (
-                  <div className="p-1">
+                  <div role="presentation" className="p-1">
                     <MenuItem
                       className="items-start py-2"
                       label="Sign in to StashBase — Free monthly AI Index usage"
@@ -130,7 +135,10 @@ export function SidebarAccountRow() {
                         </span>
                       </span>
                     </MenuItem>
-                    {signInError && <div className="px-2 py-1.5 text-xs text-destructive">{signInError}</div>}
+                    {/* role="alert", so a failed sign-in is announced when
+                      * it appears instead of sitting silently under the
+                      * menu item that still has focus. */}
+                    {signInError && <div role="alert" className="px-2 py-1.5 text-xs text-destructive">{signInError}</div>}
                   </div>
                 )}
               </MenuPopup>

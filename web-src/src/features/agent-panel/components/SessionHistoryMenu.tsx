@@ -102,6 +102,7 @@ export function SessionHistoryMenu({
           <Input
             type="text"
             autoFocus
+            aria-label="Search sessions"
             placeholder="Search sessions…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -145,6 +146,7 @@ export function SessionHistoryMenu({
                       <Input
                         className="mx-1.5 my-1 h-auto w-auto flex-1 rounded-md border-accent px-2 py-1"
                         autoFocus
+                        aria-label={`Rename ${row.title}`}
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
                         onKeyDown={(e) => {

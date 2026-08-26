@@ -171,11 +171,15 @@ export function ImagePreview({ name }: { name: string }) {
         /* Floating zoom controls, pinned to the pane (outside the scroll
          * area so they don't move with the image). */
         <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-border bg-popover p-[3px] shadow-elevation">
-          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom out" onClick={() => { setFitMode(false); setScale((s) => clampScale(s / 1.25)); }}>−</Button>
-          <Button variant="ghost" size="xs" className="min-w-12 px-2 font-normal text-muted-foreground tabular-nums" title="Actual size (100%)" onClick={() => { setFitMode(false); setScale(1); }}>
+          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom out" aria-label="Zoom out" onClick={() => { setFitMode(false); setScale((s) => clampScale(s / 1.25)); }}>−</Button>
+          {/* Stable name — the visible % readout mutates with every zoom
+            * step, and a control whose accessible name keeps changing is
+            * unfindable by voice or in a rotor list (same labels as the
+            * PDF chrome's zoom row). */}
+          <Button variant="ghost" size="xs" className="min-w-12 px-2 font-normal text-muted-foreground tabular-nums" title="Actual size (100%)" aria-label="Actual size" onClick={() => { setFitMode(false); setScale(1); }}>
             {Math.round(scale * 100)}%
           </Button>
-          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom in" onClick={() => { setFitMode(false); setScale((s) => clampScale(s * 1.25)); }}>+</Button>
+          <Button variant="ghost" size="xs" className="min-w-7 px-2 font-normal" title="Zoom in" aria-label="Zoom in" onClick={() => { setFitMode(false); setScale((s) => clampScale(s * 1.25)); }}>+</Button>
           {/* Pressed is the neutral selected surface — same semantics as
             * PdfPreview's Fit toggle, and the same rationing of accent. */}
           <Button

@@ -82,6 +82,7 @@ export function EditorHistoryNavigator() {
   const [active, setActive] = useState(0);
   const settingsBlocking = useSettingsBlocking();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const listboxRef = useRef<HTMLUListElement | null>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingListenersRef = useRef<PendingListeners | null>(null);
@@ -208,7 +209,12 @@ export function EditorHistoryNavigator() {
 
   useEffect(() => {
     if (phase !== 'open') return;
-    containerRef.current?.focus();
+    // Focus the LISTBOX, not the dialog container: `aria-activedescendant`
+    // only speaks from the focused element, and the listbox is where it
+    // lives. Key handling is unchanged — keydown/keyup bubble to the
+    // container's handlers. The container keeps `tabIndex` as a fallback
+    // focus target only.
+    (listboxRef.current ?? containerRef.current)?.focus();
     // Window losing OS-level focus (e.g. actually alt-tabbing to another
     // app) doesn't reliably blur the focused container, so watch for it
     // separately — otherwise a held Control released outside the window
@@ -269,10 +275,12 @@ export function EditorHistoryNavigator() {
       >
         <div id="editor-history-title" className={PICKER_LABEL_CLASS}>Editor History</div>
         <ul
-          className={PICKER_RESULTS_CLASS}
+          ref={listboxRef}
+          className={cn(PICKER_RESULTS_CLASS, 'outline-none')}
           role="listbox"
           aria-label="Recently used editors"
           aria-activedescendant={entries[active] ? `editor-history-${active}` : undefined}
+          tabIndex={-1}
         >
           {entries.map((entry, index) => (
             <PickerRow

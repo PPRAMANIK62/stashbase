@@ -161,7 +161,8 @@ test('JSON opens as a source-preserving tree and invalid source remains editable
     await expect(tree).toContainText('"fixture"');
     await expect(tree).toContainText('"raw journey"');
     await expect(region.getByRole('button', { name: 'Tree', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect(tree.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
+    // Row action names are contextual (`Edit $.fixture`), so match the prefix.
+    await expect(tree.getByRole('button', { name: /^Edit / })).toHaveCount(0);
     const treeItems = tree.getByRole('treeitem');
     await treeItems.first().focus();
     await app.page.keyboard.press('End');
@@ -180,11 +181,11 @@ test('JSON opens as a source-preserving tree and invalid source remains editable
     await region.getByRole('button', { name: 'Tree', exact: true }).click();
     await app.page.getByRole('button', { name: 'Switch to Live Editing' }).click();
     const fixtureRow = tree.getByRole('treeitem').filter({ hasText: '"fixture"' });
-    await fixtureRow.getByRole('button', { name: 'Edit', exact: true }).click();
+    await fixtureRow.getByRole('button', { name: 'Edit $.fixture', exact: true }).click();
     const treeEditor = region.getByRole('group', { name: 'Edit $.fixture' });
     await treeEditor.getByRole('button', { name: 'Cancel' }).click();
     await expect(fixtureRow).toBeFocused();
-    await fixtureRow.getByRole('button', { name: 'Edit', exact: true }).click();
+    await fixtureRow.getByRole('button', { name: 'Edit $.fixture', exact: true }).click();
     await treeEditor.getByLabel('JSON value').fill('"tree journey"');
     await treeEditor.getByRole('button', { name: 'Apply' }).click();
     await expect(fixtureRow).toBeFocused();

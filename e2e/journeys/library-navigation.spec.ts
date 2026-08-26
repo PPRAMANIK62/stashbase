@@ -91,7 +91,9 @@ test('persistent document tabs and Quick Open remain keyboard-operable and resto
     await app.page.keyboard.press('Escape');
     await expect(app.page.getByRole('search', { name: 'Find in document' })).toBeHidden();
 
-    await app.page.getByRole('button', { name: 'Close Welcome.md' }).click();
+    // The tab's × is pointer-only chrome (aria-hidden inside role="tab"),
+    // so it is addressed by its tooltip title rather than a role query.
+    await app.page.getByTitle('Close Welcome.md').click();
     await expect(documentTab(app.page, 'Welcome.md')).toHaveCount(0);
     await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Second Note.md');
     app.errors.assertNone();

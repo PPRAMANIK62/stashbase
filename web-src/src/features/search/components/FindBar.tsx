@@ -88,6 +88,7 @@ export function FindBar() {
         className={cn('h-6 w-45 px-1.5 text-sm', noMatch && 'border-destructive text-destructive')}
         type="text"
         placeholder="Find"
+        aria-label="Find in document"
         value={query}
         onChange={(e) => actions.setFindQuery(e.target.value)}
         onKeyDown={(e) => {
@@ -100,7 +101,9 @@ export function FindBar() {
           }
         }}
       />
-      <span className="min-w-10 px-1 text-right text-xs text-muted-foreground tabular-nums">
+      {/* Polite live region so the match tally reaches a screen reader
+        * without stealing the announcement from each typed character. */}
+      <span role="status" aria-live="polite" className="min-w-10 px-1 text-right text-xs text-muted-foreground tabular-nums">
         {hasQuery ? (total === 0 ? '0/0' : `${current || '?'}/${total}`) : ''}
       </span>
       <Button
@@ -108,6 +111,7 @@ export function FindBar() {
         size="xs"
         className={FIND_TOGGLE_CLASS}
         title="Match case"
+        aria-label="Match case"
         aria-pressed={caseSensitive}
         onClick={() => actions.toggleFindCaseSensitive()}
       >
@@ -118,6 +122,7 @@ export function FindBar() {
         size="xs"
         className={FIND_TOGGLE_CLASS}
         title="Whole word"
+        aria-label="Whole word"
         aria-pressed={wholeWord}
         onClick={() => actions.toggleFindWholeWord()}
       >
@@ -138,6 +143,7 @@ export function FindBar() {
         size="icon-xs"
         className="text-muted-foreground"
         title="Previous (Shift+Enter)"
+        aria-label="Previous match"
         disabled={total === 0}
         onClick={() => actions.findPrev()}
       >
@@ -150,6 +156,7 @@ export function FindBar() {
         size="icon-xs"
         className="text-muted-foreground"
         title="Next (Enter)"
+        aria-label="Next match"
         disabled={total === 0}
         onClick={() => actions.findNext()}
       >
@@ -162,6 +169,7 @@ export function FindBar() {
         size="icon-xs"
         className="text-muted-foreground"
         title="Close (Esc)"
+        aria-label="Close find bar"
         onClick={() => actions.closeFind()}
       >
         <svg className="size-3.5" viewBox="0 0 16 16" aria-hidden="true">
