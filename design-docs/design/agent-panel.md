@@ -39,6 +39,10 @@ uses a hosted service only as its metered model provider.
   attachments, content, and resumed history freeze that scope, while folder
   switching preserves started work. History remains attributable to its Agent
   and home scope.
+- Removing a conversation's folder is an expected scope retirement, not a
+  transport failure. A completely blank Chat silently starts again at Library;
+  a Chat with a draft, attachment, queued follow-up, transcript, active turn,
+  or resumed identity keeps that work visible and offers **New Library Chat**.
 - Runtime capabilities determine model, permission, and effort controls without
   rewriting global CLI defaults. New sessions start in Auto, where the agent
   decides when an action needs approval; Ask is an explicit per-session pick.
@@ -120,6 +124,10 @@ uses a hosted service only as its metered model provider.
 - StashBase Agent uses a service-owned model profile. The first release hides
   model selection, while the stable profile alias keeps later model choice and
   provider changes compatible with existing desktop builds.
+- Folder-scope retirement never offers Retry or reconnects user work into a
+  broader scope. In-flight tools and queued follow-ups become visibly
+  cancelled; the original Chat remains readable, and continuing begins in a
+  separate explicitly Library-scoped Chat.
 - The selected permission mode governs which actions the runtime approves on
   its own. Every approval it surfaces — permission, deletion, command, network,
   or broader filesystem — is an explicit user decision; the panel never answers

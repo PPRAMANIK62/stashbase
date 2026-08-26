@@ -191,9 +191,14 @@ export interface AgentAdapter {
 }
 
 /** The registry entry shape both runtime session sets satisfy. */
+export type AgentSessionTermination = {
+  kind: 'scope-removed';
+  folder: string;
+};
+
 export interface FolderBoundAgentSession {
   boundFolder(): string | null;
-  dispose(): void;
+  dispose(termination?: AgentSessionTermination): void;
 }
 
 /** Dispose exactly the sessions bound to `folderAbs` (filesystem identity
@@ -212,7 +217,7 @@ export function disposeSessionsBoundToFolder<T extends FolderBoundAgentSession>(
       matches = false;
     }
     if (matches) {
-      session.dispose();
+      session.dispose({ kind: 'scope-removed', folder: folderAbs });
       sessions.delete(session);
     }
   }

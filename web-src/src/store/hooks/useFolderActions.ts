@@ -128,9 +128,9 @@ export function useFolderActions(
     importIndexGrace.current.clear();
     keyBackfillGrace.current.clear();
     folderContextPath.current = '';
-    // Chat tabs survive a folder SWITCH (agent sessions are folder-bound
-    // server-side); they reset only when the window loses its folder
-    // context — see folderScopedReset.ts.
+    // Chat tabs survive both folder switches and folder loss. The server's
+    // structured scope-retirement event lets each affected AgentView decide
+    // whether to rebind a blank chat or preserve a started one.
     for (const action of folderScopedResetActions(reason)) dispatch(action);
   }, [
     dispatch,

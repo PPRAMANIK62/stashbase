@@ -4,6 +4,7 @@ import { useLatestRef } from '@/common/hooks/useLatestRef';
 import type { LibraryScope } from '@/common/lib/libraryScope';
 import type { WorkspaceState } from '@/store/contexts/AppContext';
 import { mentionListingPlan } from '@/features/agent-panel/lib/folderState';
+import { folderRefsEqual } from '@/store/lib/folderPath';
 
 /** Scope-specific file listing: `@` mentions, folder-file attachment
  *  validation, and context resolution run against the session's bound
@@ -17,11 +18,27 @@ import { mentionListingPlan } from '@/features/agent-panel/lib/folderState';
 export function useAgentMentionListing({
   connectedScope,
   workspace,
+  disabled = false,
 }: {
   connectedScope: LibraryScope | null;
   workspace: WorkspaceState;
+  /** A retired folder scope remains visible for attribution, but it can no
+   * longer authorize file listing or attachment resolution. */
+  disabled?: boolean;
 }) {
-  const listingPlan = connectedScope
+  // Removal reaches the renderer through two independent channels: the
+  // session's structured `scope-removed` exit and the window's membership
+  // update. Whichever arrives first must revoke listing access immediately;
+  // otherwise switching the window to another folder during that narrow gap
+  // can issue one stale cross-folder `/api/files` request for the removed
+  // root. Before the first membership load, an empty list is not yet
+  // authoritative, so it must not disable a valid startup session.
+  const scopeIsNoLongerMember = workspace.membershipLoaded
+    && connectedScope?.kind === 'folder'
+    && !workspace.recent.some((entry) => folderRefsEqual(entry.path, connectedScope.path));
+  const listingPlan = disabled || scopeIsNoLongerMember
+    ? { kind: 'disabled' as const }
+    : connectedScope
     ? mentionListingPlan(connectedScope, workspace.folderPath)
     : { kind: 'window' as const };
   const listingRoot = listingPlan.kind === 'folder' ? listingPlan.root : null;

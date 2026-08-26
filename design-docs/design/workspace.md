@@ -62,6 +62,9 @@ manager, or a primary graph-navigation tool.
 - Folder switches reset folder-scoped documents but preserve library search
   state and scope-pinned chats. A blank welcome chat may follow the new folder;
   started work and unsent drafts never silently rebind.
+- Removing a member preserves Chat tabs. A completely blank Chat returns to
+  Library without interruption; a Chat containing user work stays readable in
+  its retired folder scope and offers a separate **New Library Chat**.
 - Files declared previewable in the
   [Documents format matrix](documents.md#format-capability-matrix) open in
   persistent tabs with Quick Open, Command Palette, history, and
@@ -95,7 +98,9 @@ manager, or a primary graph-navigation tool.
 - Folder removal never deletes user files. Every affected window saves first
   and leaves the removed folder, and recovery cannot silently re-add it.
   Unfinished indexing is retired without holding the confirmation or removal
-  flow open.
+  flow open. Folder-loss and 412 recovery clear document/readiness state but
+  never clear Chat tabs; the Agent lifecycle retires only sessions bound to the
+  removed member.
   StashBase commits membership removal only after preparation, derived data,
   index rows, ordering, and folder-bound runtime state have finished cleanup.
 - Folder membership and favorites never replace unreadable settings with

@@ -81,6 +81,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'turn-end', isError: false },
     { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
     { t: 'exit', message: 'runtime stopped unexpectedly' },
+    { t: 'exit', reason: 'scope-removed', folder: '/Users/me/Projects/Research' },
   ];
   assert.equal(clientEvents.length, 7);
   assert.equal(events.length, 18);
@@ -227,8 +228,12 @@ test('folder-bound teardown ends only the sessions bound to the removed folder',
   const makeSession = (bound: string | null) => {
     const session = {
       disposed: false,
+      termination: null as null | { kind: 'scope-removed'; folder: string },
       boundFolder: () => bound,
-      dispose() { session.disposed = true; },
+      dispose(termination?: { kind: 'scope-removed'; folder: string }) {
+        session.disposed = true;
+        session.termination = termination ?? null;
+      },
     };
     return session;
   };
@@ -243,7 +248,13 @@ test('folder-bound teardown ends only the sessions bound to the removed folder',
 
   assert.equal(removedA.disposed, true);
   assert.equal(removedB.disposed, true);
+  assert.deepEqual(removedA.termination, {
+    kind: 'scope-removed',
+    folder: '/Users/me/Projects/Research',
+  });
+  assert.deepEqual(removedB.termination, removedA.termination);
   assert.equal(otherFolder.disposed, false);
+  assert.equal(otherFolder.termination, null);
   assert.equal(unstarted.disposed, false);
   assert.deepEqual([...sessions], [otherFolder, unstarted]);
 });

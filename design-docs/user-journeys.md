@@ -340,6 +340,10 @@ disconnected, or recoverable.
   provider credential.
 - A started draft, turn, attachment set, or restored conversation retains its
   visible scope.
+- Removing that scope silently returns only a completely blank Chat to
+  Library. Any Chat containing user work remains readable, cancels unfinished
+  work without presenting a transport failure, and offers **New Library Chat**
+  instead of Retry.
 - Chat-primary and docked layouts preserve the same session and in-progress
   state.
 - Commands, network, deletion, and broader filesystem access remain explicit
@@ -364,7 +368,9 @@ StashBase can resume preparation without repeating the managed install. The
 same recheck accepts a Codex login completed elsewhere. Abandoned or
 interrupted output cannot arrive in a newer turn or session. A Stop racing a
 native turn that has already ended clears the stale working state without
-presenting a turn failure.
+presenting a turn failure. Removing a folder is an expected scope retirement:
+it never widens a started conversation to Library or replaces its retained
+content with a connection error.
 
 ### Evidence
 

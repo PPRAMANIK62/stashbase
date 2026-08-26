@@ -18,6 +18,7 @@ import { agentMeta, isAgentKind } from '@/common/lib/agentCatalog';
 import { cn } from '@/common/lib/utils';
 import { useAppActions, useChat } from '@/store/contexts/AppContext';
 import { rememberPreferredAgent } from '@/common/lib/agentPreference';
+import { LIBRARY_SCOPE } from '@/common/lib/libraryScope';
 
 /** The inside of one tab body; `status` styles the "no active chat" notice
  *  and the lazy-load error fallback. It has to stay a class string: one of
@@ -217,6 +218,7 @@ export default function ChatPane() {
                   id={tab.id}
                   title={tab.title}
                   agent={isAgentKind(tab.agent) ? tab.agent : 'claude'}
+                  initialScope={tab.boundFolder === null ? LIBRARY_SCOPE : undefined}
                 />
               </ChatSessionBoundary>
             </TabsContent>

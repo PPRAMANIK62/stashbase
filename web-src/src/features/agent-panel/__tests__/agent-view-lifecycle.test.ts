@@ -6,9 +6,10 @@ import { AgentView } from '@/features/agent-panel/components/AgentView';
 import { MessageList } from '@/features/agent-panel/components/AgentMessages';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
 import { AGENT_META } from '@/common/lib/agentCatalog';
+import { LIBRARY_SCOPE, type LibraryScope } from '@/common/lib/libraryScope';
 import { api } from '@/common/api/api';
 import { AppProviders, type AppActions } from '@/store/contexts/AppContext';
-import { initialState, type State } from '@/store/state/state';
+import { initialState, type Action, type State } from '@/store/state/state';
 
 class LifecycleWebSocket {
   static OPEN = 1;
@@ -70,7 +71,12 @@ function buttonNamed(root: ReactTestInstance, label: string): ReactTestInstance 
   return button;
 }
 
-async function mountAgentView(t: TestContext, state = rendererState(), agent: 'claude' | 'codex' = 'codex') {
+async function mountAgentView(
+  t: TestContext,
+  state = rendererState(),
+  agent: 'claude' | 'codex' = 'codex',
+  initialScope?: LibraryScope,
+) {
   const previousWebSocket = globalThis.WebSocket;
   const previousWindow = globalThis.window;
   const previousLocation = globalThis.location;
@@ -125,15 +131,22 @@ async function mountAgentView(t: TestContext, state = rendererState(), agent: 'c
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   (globalThis as { React?: typeof React }).React = React;
 
+  const dispatched: Action[] = [];
   let renderer!: ReactTestRenderer;
   await act(async () => {
     renderer = create(React.createElement(
       AppProviders,
       {
         state,
-        dispatch: () => {},
+        dispatch: (action) => { dispatched.push(action); },
         actions: actionsStub(),
-        children: React.createElement(AgentView, { active: true, id: 'tab-1', title: 'Untitled', agent }),
+        children: React.createElement(AgentView, {
+          active: true,
+          id: 'tab-1',
+          title: 'Untitled',
+          agent,
+          initialScope,
+        }),
       },
     ));
   });
@@ -153,8 +166,104 @@ async function mountAgentView(t: TestContext, state = rendererState(), agent: 'c
     (globalThis as { React?: typeof React }).React = previousReact;
   });
 
-  return { renderer, first: LifecycleWebSocket.instances[0]! };
+  return { renderer, first: LifecycleWebSocket.instances[0]!, dispatched };
 }
+
+test('folder removal silently reconnects a completely blank chat to Library', async (t) => {
+  const { renderer, first } = await mountAgentView(t);
+
+  await act(async () => {
+    first.event({ t: 'exit', reason: 'scope-removed', folder: '/workspace' });
+  });
+
+  assert.equal(LifecycleWebSocket.instances.length, 2, 'the same blank tab starts a replacement session');
+  const replacement = LifecycleWebSocket.instances[1]!;
+  assert.equal(new URL(replacement.url).searchParams.get('scope'), 'library');
+  assert.equal(new URL(replacement.url).searchParams.has('folder'), false);
+  const output = renderedText(renderer);
+  assert.doesNotMatch(output, /couldn't continue|Session ended|Reconnect/);
+  assert.equal(renderer.root.findByType(AgentComposer).props.phase, 'connecting');
+});
+
+test('an explicitly Library-scoped new tab ignores the window folder on first connect', async (t) => {
+  await mountAgentView(t, rendererState(), 'codex', LIBRARY_SCOPE);
+
+  assert.equal(LifecycleWebSocket.instances.length, 1);
+  const connection = LifecycleWebSocket.instances[0]!;
+  assert.equal(new URL(connection.url).searchParams.get('scope'), 'library');
+  assert.equal(new URL(connection.url).searchParams.has('folder'), false);
+});
+
+test('folder removal preserves a draft-only chat instead of silently rebinding it', async (t) => {
+  const { renderer, first } = await mountAgentView(t);
+  await act(async () => {
+    first.event({ t: 'ready' });
+    renderer.root.findByType(AgentComposer).props.onDraftChange(true);
+  });
+  await act(async () => {
+    first.event({ t: 'exit', reason: 'scope-removed', folder: '/workspace' });
+  });
+
+  assert.equal(LifecycleWebSocket.instances.length, 1);
+  assert.match(renderedText(renderer), /workspace.*was removed from Library/s);
+  buttonNamed(renderer.root, 'New Library Chat');
+  assert.equal(
+    renderer.root.findByType(AgentComposer).props.closedPlaceholder,
+    'Folder removed — start a Library chat to continue…',
+  );
+});
+
+test('folder removal preserves a started chat and offers a fresh Library chat', async (t) => {
+  const { renderer, first, dispatched } = await mountAgentView(t);
+  await act(async () => {
+    first.event({ t: 'ready' });
+  });
+  await act(async () => {
+    renderer.root.findByType(AgentComposer).props.onSend('Keep this conversation');
+  });
+  await act(async () => {
+    first.event({ t: 'turn-start' });
+    first.event({ t: 'tool', id: 'tool-1', name: 'Bash', input: { command: 'pwd' } });
+  });
+  await act(async () => {
+    renderer.root.findByType(AgentComposer).props.onSend('Keep this follow-up too');
+  });
+  await act(async () => {
+    first.event({ t: 'exit', reason: 'scope-removed', folder: '/workspace' });
+  });
+
+  assert.equal(LifecycleWebSocket.instances.length, 1, 'started work is never silently rebound');
+  const messages = renderer.root.findByType(MessageList).props;
+  assert.equal(messages.phase, 'closed');
+  assert.equal(messages.fatal, null);
+  assert.equal(messages.blocks.some((block: { kind: string; text?: string }) => (
+    block.kind === 'user' && block.text === 'Keep this conversation'
+  )), true);
+  assert.equal(messages.blocks.find((block: { id: string }) => block.id === 'tool-1')?.status, 'cancelled');
+  assert.deepEqual(messages.queuedTurns.map((turn: { text: string; status: string }) => ({
+    text: turn.text,
+    status: turn.status,
+  })), [{ text: 'Keep this follow-up too', status: 'cancelled' }]);
+
+  const output = renderedText(renderer);
+  assert.match(output, /workspace.*was removed from Library/s);
+  assert.match(output, /This chat is still available/);
+  assert.match(output, /New Library Chat/);
+  assert.doesNotMatch(output, /couldn't continue|Reconnect to continue/);
+
+  await act(async () => {
+    buttonNamed(renderer.root, 'New Library Chat').props.onClick();
+  });
+  let newTabAction: Action | undefined;
+  for (let index = dispatched.length - 1; index >= 0; index -= 1) {
+    if (dispatched[index]?.type === 'CHAT_TAB_NEW') {
+      newTabAction = dispatched[index];
+      break;
+    }
+  }
+  assert.equal(newTabAction?.type, 'CHAT_TAB_NEW');
+  if (newTabAction?.type === 'CHAT_TAB_NEW') assert.equal(newTabAction.tab.boundFolder, null);
+});
 
 test('failed runtime setup keeps Check again available after external recovery', async (t) => {
   const state = rendererState();

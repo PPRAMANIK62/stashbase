@@ -18,7 +18,8 @@ import { MessageAttachments, UserMessageText, UserTurnHead } from '@/features/ag
 import { accentDotClass, spinnerClass, turnHeadClass } from '@/features/agent-panel/lib/panelStyles';
 import { formatMessageTime, groupTurns, replyTimestamp, settledReplySections, tailBlockSpeaks, turnReplyText, workTraceLabel, type TurnMeta } from '@/features/agent-panel/lib/turnModel';
 import { turnFailureGuidance, type TurnFailureActionId } from '@/features/agent-panel/lib/turnFailure';
-import type { AgentKind, Attachment, Block, ToolBlock } from '@/features/agent-panel/lib/types';
+import { basename } from '@/common/lib/paths';
+import type { AgentKind, Attachment, Block, RetiredAgentScope, ToolBlock } from '@/features/agent-panel/lib/types';
 
 /* One exchange: the user bubble plus the reply blocks under it. A class
  * string rather than a component because the two call sites below wrap
@@ -36,12 +37,12 @@ export interface QueuedTurnPreview {
   id: string;
   text: string;
   attachments?: Attachment[];
-  status: 'waiting' | 'steering' | 'steered';
+  status: 'waiting' | 'steering' | 'steered' | 'cancelled';
   canSteer?: boolean;
 }
 
 export function MessageList({
-  blocks, queuedTurns, turnActive, turnMeta, phase, fatal, fatalRecoveryLabel, agentKind, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact, onTurnFailureAction,
+  blocks, queuedTurns, turnActive, turnMeta, phase, fatal, fatalRecoveryLabel, scopeRetired, agentKind, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onStartLibraryChat, onOpenArtifact, onTurnFailureAction,
 }: {
   blocks: Block[];
   queuedTurns: QueuedTurnPreview[];
@@ -50,6 +51,7 @@ export function MessageList({
   phase: 'connecting' | 'live' | 'closed';
   fatal: string | null;
   fatalRecoveryLabel: 'Retry' | 'Reconnect';
+  scopeRetired: RetiredAgentScope | null;
   agentKind: AgentKind;
   agentShortName: string;
   onPermission: (toolBlockId: string, permId: string, allow: boolean) => void;
@@ -57,6 +59,7 @@ export function MessageList({
   onCopyUserMessage: (text: string) => void;
   onResendUserMessage: (text: string) => void;
   onRetry: () => void;
+  onStartLibraryChat: () => void;
   onOpenArtifact: (path: string) => void;
   onTurnFailureAction: (blockId: string, action: TurnFailureActionId) => void;
 }) {
@@ -102,6 +105,9 @@ export function MessageList({
       {phase === 'connecting' && <ConnectingNotice agentShortName={agentShortName} />}
       {blocks.length === 0 && phase === 'closed' && fatal && (
         <FatalState fatal={fatal} agentShortName={agentShortName} recoveryLabel={fatalRecoveryLabel} onRetry={onRetry} />
+      )}
+      {blocks.length === 0 && queuedTurns.length === 0 && scopeRetired && (
+        <ScopeRetiredNotice retired={scopeRetired} centered onStartLibraryChat={onStartLibraryChat} />
       )}
       {turns.map((turn, index) => {
         // The last turn is the one still streaming while a turn is
@@ -158,6 +164,9 @@ export function MessageList({
       ))}
       {blocks.length > 0 && phase === 'closed' && fatal && (
         <FatalInline fatal={fatal} agentShortName={agentShortName} recoveryLabel={fatalRecoveryLabel} onRetry={onRetry} />
+      )}
+      {(blocks.length > 0 || queuedTurns.length > 0) && scopeRetired && (
+        <ScopeRetiredNotice retired={scopeRetired} onStartLibraryChat={onStartLibraryChat} />
       )}
       {turnActive && !tailBlockSpeaks(blocks) && (
         // Generic tail status renders only when no visible block already
@@ -299,7 +308,13 @@ function QueuedTurn({
   turn: QueuedTurnPreview;
   onSteer: (id: string) => void;
 }) {
-  const label = turn.status === 'steered' ? 'Steered' : turn.status === 'steering' ? 'Steering' : 'Waiting';
+  const label = turn.status === 'steered'
+    ? 'Steered'
+    : turn.status === 'steering'
+      ? 'Steering'
+      : turn.status === 'cancelled'
+        ? 'Cancelled'
+        : 'Waiting';
   return (
     <div className={turnClass}>
       <div className={cn(turnHeadClass, 'text-muted-foreground')}>
@@ -315,7 +330,7 @@ function QueuedTurn({
             * first line of the message text beside it. */}
           <span className="inline-flex shrink-0 items-center gap-2.5 pt-px">
             <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-              <Dot />
+              {turn.status !== 'cancelled' && <Dot />}
               {label}
             </span>
             {turn.canSteer && turn.status === 'waiting' && (
@@ -328,6 +343,33 @@ function QueuedTurn({
       </div>
     </div>
   );
+}
+
+function ScopeRetiredNotice({
+  retired,
+  centered = false,
+  onStartLibraryChat,
+}: {
+  retired: RetiredAgentScope;
+  centered?: boolean;
+  onStartLibraryChat: () => void;
+}) {
+  const notice = (
+    <StatusMessage tone="warning" className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5">
+      <div>
+        <SectionHeading level={3}>{basename(retired.folder)} was removed from Library</SectionHeading>
+        <div className="text-sm leading-normal text-muted-foreground">
+          This chat is still available, but it can’t continue in that folder.
+        </div>
+      </div>
+      <Button variant="outline" size="sm" className="shrink-0" onClick={onStartLibraryChat}>
+        New Library Chat
+      </Button>
+    </StatusMessage>
+  );
+  return centered
+    ? <div className="grid min-h-45 flex-1 place-items-center px-2 py-6"><div className="w-measure-sm">{notice}</div></div>
+    : notice;
 }
 
 function fatalCopy(fatal: string, agentShortName: string): { title: string; detail: string } {

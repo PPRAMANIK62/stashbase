@@ -394,7 +394,7 @@ test('new chat tabs start blank and AgentView updates keep the flag current', ()
   assert.equal(state.chat.chatTabs[0].blank, true);
 });
 
-test('pendingResume channel: request replaces, consume clears, folder-context loss clears', () => {
+test('pendingResume channel: request replaces and consume clears', () => {
   const tab = makeChatTab('claude', []);
   let state = freshState({ chat: { chatTabs: [tab], activeChatTabId: tab.id } });
   assert.equal(state.chat.pendingResume, null);
@@ -418,14 +418,6 @@ test('pendingResume channel: request replaces, consume clears, folder-context lo
   assert.equal(state.chat.pendingResume, null);
   assert.equal(reducer(state, { type: 'CHAT_RESUME_CONSUMED' }), state);
 
-  // Losing the window's folder context clears an in-flight request too —
-  // the sessions it pointed at were just torn down.
-  state = reducer(state, {
-    type: 'CHAT_RESUME_REQUEST',
-    resume: { agent: 'claude', sessionId: 's3', folder: null },
-  });
-  state = reducer(state, { type: 'CHAT_TABS_RESET' });
-  assert.equal(state.chat.pendingResume, null);
 });
 
 test('out-of-folder tabs stay read-only and outside folder-local flows', () => {

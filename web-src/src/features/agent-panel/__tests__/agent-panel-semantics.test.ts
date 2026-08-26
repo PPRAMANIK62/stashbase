@@ -21,6 +21,7 @@ const emptyList = {
   phase: 'live' as const,
   fatal: null,
   fatalRecoveryLabel: 'Retry' as const,
+  scopeRetired: null,
   agentKind: 'codex' as const,
   agentShortName: 'Codex',
   onPermission: () => {},
@@ -28,6 +29,7 @@ const emptyList = {
   onCopyUserMessage: () => {},
   onResendUserMessage: () => {},
   onRetry: () => {},
+  onStartLibraryChat: () => {},
   onOpenArtifact: () => {},
   onTurnFailureAction: () => {},
 };

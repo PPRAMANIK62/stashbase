@@ -199,14 +199,17 @@ export function mount(app: express.Express): void {
       }
       const finishRemoval = beginLibraryFolderRemoval(abs);
       try {
-        // Tear down any live window bound to it FIRST (kills terminal sessions
-        // whose cwd is inside this folder).
-        clearFolderPath(abs);
         // Built-in Agent sessions are folder-pinned and survive window folder
         // switches, so removal must also end the sessions BOUND to this folder
-        // — including ones in windows currently showing another folder.
+        // — including ones in windows currently showing another folder. Do
+        // this BEFORE releasing window folder contexts: that release invokes
+        // the generic window-close teardown, whose raw socket close would
+        // otherwise erase the structured scope-retirement reason.
         stopAgentRuntimeForFolder('claude', abs);
         stopAgentRuntimeForFolder('codex', abs);
+        // Tear down every live window bound to the member after its affected
+        // Agent sessions have received the precise retirement event.
+        clearFolderPath(abs);
         // Membership is the commit record. Keep it until every cleanup owner
         // has acknowledged completion; a failure leaves the member recoverable
         // and the next reconcile can rebuild any partially-cleared cache.

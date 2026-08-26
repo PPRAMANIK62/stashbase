@@ -29,6 +29,10 @@ semantic readiness.
   pairs remain distinct identities.
 - Folder switching resets folder-scoped documents and readiness without
   clearing library search or silently rebinding a started or drafted Chat.
+- Folder loss and the 412 recovery ladder also preserve Chat tabs. They clear
+  the stale document workspace and preparation state only; the structured
+  Agent scope-retirement event decides per bound tab whether a completely
+  blank Chat returns to Library or user work remains visible.
 - Every site that clears folder context builds its preparation-indicator
   reset from the one shared plan in `lib/folderScopedReset.ts`. The folder
   switch/loss plan and the 412 index-status recovery ladder keep their own

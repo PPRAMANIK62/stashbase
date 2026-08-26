@@ -113,7 +113,7 @@ export interface ComposerAttachments {
 export function AgentComposer({
   phase, disabled, turnActive, active, agentShortName, hero, prefill,
   mode, effort, model, scope, mentions, skills, attachments,
-  onDraftChange, onFocusChange, onSend, onStop,
+  closedPlaceholder, onDraftChange, onFocusChange, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -126,6 +126,10 @@ export function AgentComposer({
   hero?: boolean;
   /** Empty-state starter template. Prefills the draft only — never sends. */
   prefill?: { text: string; nonce: number } | null;
+  /** A terminal state can be expected and non-reconnectable (folder scope
+   * retirement). Keep its composer draft visible, but do not tell the user
+   * to reconnect to a scope that no longer exists. */
+  closedPlaceholder?: string;
   mode: ComposerModeControl;
   effort: ComposerEffortControl;
   model: ComposerModelControl;
@@ -171,7 +175,7 @@ export function AgentComposer({
   const placeholder = phase === 'connecting'
     ? 'Connecting…'
     : phase === 'closed'
-      ? 'Reconnect to continue…'
+      ? closedPlaceholder ?? 'Reconnect to continue…'
       : turnActive
         ? 'Ask for follow-up changes'
         : `Explore with ${agentShortName}…`;

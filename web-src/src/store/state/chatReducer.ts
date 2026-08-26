@@ -125,20 +125,6 @@ export function chatReducer(c: ChatSlice, a: Action): ChatSlice | undefined {
       return { ...c, pendingResume: a.resume };
     case 'CHAT_RESUME_CONSUMED':
       return c.pendingResume ? { ...c, pendingResume: null } : c;
-    case 'CHAT_TABS_RESET':
-      // Wipes ALL tabs — called when the window LOSES its folder context
-      // (library removal / another window closing the folder; the server
-      // ends this window's agent sessions in those flows). A plain folder
-      // switch never dispatches this: sessions are folder-bound and tabs
-      // survive the switch. Fold the panel too, mirroring CHAT_TAB_CLOSE.
-      return {
-        ...c,
-        chatTabs: [],
-        activeChatTabId: null,
-        chatTabRecencyByAgent: {},
-        pendingResume: null,
-        chatOpen: false,
-      };
     default:
       // Not this slice's action — see the composition note in `stateReducer.ts`.
       return undefined;

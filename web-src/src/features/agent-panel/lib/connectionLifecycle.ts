@@ -47,6 +47,16 @@ export function terminalAgentState({
   };
 }
 
+/** Folder removal cancels in-flight work without painting it as a runtime
+ * failure. Settled steps remain untouched; running tools and unanswered
+ * permission cards become neutral cancelled history. */
+export function retireAgentTranscript(blocks: Block[]): Block[] {
+  return blocks.map((block) =>
+    block.kind === 'tool' && (block.status === 'running' || block.status === 'awaiting')
+      ? { ...block, status: 'cancelled', permId: undefined }
+      : block);
+}
+
 export interface ClosableAgentSocket {
   onclose: ((...args: any[]) => unknown) | null;
   readyState: number;

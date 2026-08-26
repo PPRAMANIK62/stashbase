@@ -203,7 +203,10 @@ aliases, and Journey E2E owns representative composition.
   permissions, failed-install external recheck without another download,
   managed Codex PowerShell path ownership and missing-output diagnostics,
   installed-but-signed-out Codex detection, same-executable browser login,
-  recovery, transcript, and layout state. `pnpm test:opencode:native` starts the
+  recovery, transcript, layout state, and structured folder-scope retirement
+  for blank, draft-only, queued, and active-tool Chats. Workspace reset tests
+  pin Chat preservation through both direct folder loss and 412 recovery.
+  `pnpm test:opencode:native` starts the
   exact bundled OpenCode binary and completes an SDK session against a local
   fake OpenAI-compatible gateway; broker tests cover token isolation, streaming,
   refresh retry, per-session credentials, required UUID turn-header
@@ -212,7 +215,10 @@ aliases, and Journey E2E owns representative composition.
   injection flags do not enter the bundled runtime.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
   the default included-Agent account gate and bring-your-own choices, then
-  exercises the built-in panel against the deterministic fake Codex runtime.
+  exercises the built-in panel against the deterministic fake Codex runtime,
+  including
+  retaining a started cross-folder Chat through Library removal and opening a
+  fresh explicitly Library-scoped Chat.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
 - **Release Check:** packaged OpenCode version/executability, a real hosted
