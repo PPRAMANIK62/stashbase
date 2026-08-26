@@ -58,9 +58,14 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * pull), 5% of this budget, for a keyboard contract that strip already
  * implemented. It stays hand-rolled; `code-review/renderer-styling.md`
  * carries the rule and `TabStrip.tsx` the reason.
+ * 428 → 429 for the file row's "Move to…" picker — the keyboard path to
+ * the drag-onto-a-folder move. Its body (ManagedMoveFilePicker, listed as
+ * a required dynamic entry below) stays lazy; the always-mounted gate
+ * that owns the open event is eager by the same shell-UI rule as Quick
+ * Open's and Link-to-file's gates, measured at ~1 KB of initial JS.
  * Raise it only for shell UI that must load with the window — anything a
  * user can open on demand belongs in a dynamic entry above. */
-const initialJsBudgetBytes = 428 * 1024;
+const initialJsBudgetBytes = 429 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
@@ -73,6 +78,7 @@ const expectedEntries = [
   'src/features/search/components/ManagedLibrarySearch.tsx',
   'src/features/search/components/ManagedQuickOpen.tsx',
   'src/features/documents/components/ManagedLinkFilePicker.tsx',
+  'src/features/workspace/components/ManagedMoveFilePicker.tsx',
   'src/app/components/ContextMenu.tsx',
   'src/common/components/DocumentOutline.tsx',
   'src/common/components/SemanticIndexingNotice.tsx',

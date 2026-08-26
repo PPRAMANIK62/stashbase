@@ -102,8 +102,10 @@ test('Quick Open honors editor recency and command availability while Settings o
     await expect(palette.getByRole('option', { name: /Save/ })).toBeVisible();
     await expect(palette.getByRole('option', { name: /Toggle Editing Mode/ })).toBeVisible();
     await palette.getByRole('combobox').press('Escape');
-    await app.page.getByRole('button', { name: 'Close Welcome.md' }).click();
-    await app.page.getByRole('button', { name: 'Close Second Note.md' }).click();
+    // The tab's × is pointer-only chrome (aria-hidden inside role="tab"),
+    // so it is addressed by its tooltip title rather than a role query.
+    await app.page.getByTitle('Close Welcome.md').click();
+    await app.page.getByTitle('Close Second Note.md').click();
     await app.page.keyboard.press('F1');
     const emptyPalette = app.page.getByRole('dialog', { name: 'Command Palette' });
     await expect(emptyPalette.getByRole('option', { name: /Save/ })).toHaveCount(0);
