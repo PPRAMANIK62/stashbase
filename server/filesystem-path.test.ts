@@ -263,7 +263,9 @@ test('resolveUnderAsync matches resolveUnder for symlink or junction escapes', a
   }
 });
 
-test('resolveUnderAsync never reaches synchronous filesystem primitives under macOS semantics', async (t) => {
+test('resolveUnderAsync never reaches synchronous filesystem primitives under macOS semantics', {
+  skip: process.platform === 'win32',
+}, async (t) => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-path-async-liveness-'));
   const root = path.join(temp, 'root');
   fs.mkdirSync(root);
