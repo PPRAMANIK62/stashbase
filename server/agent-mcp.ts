@@ -23,8 +23,8 @@ const MCP_ENTRY = fs.existsSync(path.join(APP_ROOT, 'dist', 'mcp', 'server.mjs')
 /** Regenerate the launcher when the MCP entry is available, so the config
  * handed out to copy actually works when pasted; otherwise report the
  * expected path without writing. */
-export function ensureMcpLauncher(): string {
-  return fs.existsSync(MCP_ENTRY) ? writeMcpWrapper() : currentMcpWrapper();
+export function ensureMcpLauncher(homeDir = os.homedir()): string {
+  return fs.existsSync(MCP_ENTRY) ? writeMcpWrapper(homeDir) : currentMcpWrapper(homeDir);
 }
 
 export function standardMcpJson(wrapper: string): Record<string, unknown> {
@@ -53,9 +53,9 @@ export function ensureAgentMcp(id: 'claude' | 'codex'): void {
   }
 }
 
-function currentMcpWrapper(): string {
+function currentMcpWrapper(homeDir = os.homedir()): string {
   return path.join(
-    os.homedir(),
+    homeDir,
     '.stashbase',
     'bin',
     process.platform === 'win32' ? 'stashbase-mcp.cmd' : 'stashbase-mcp',
@@ -78,9 +78,9 @@ function localBin(name: string): string {
   return path.join(APP_ROOT, 'node_modules', '.bin', process.platform === 'win32' ? `${name}.cmd` : name);
 }
 
-function writeMcpWrapper(): string {
-  const binDir = path.join(os.homedir(), '.stashbase', 'bin');
-  const wrapper = currentMcpWrapper();
+function writeMcpWrapper(homeDir = os.homedir()): string {
+  const binDir = path.join(homeDir, '.stashbase', 'bin');
+  const wrapper = currentMcpWrapper(homeDir);
   const resourcesPath = process.env.STASHBASE_RESOURCES_PATH || APP_ROOT;
   const isBuilt = MCP_ENTRY.endsWith(path.join('dist', 'mcp', 'server.mjs'));
   const content = process.platform === 'win32'

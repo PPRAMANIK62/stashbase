@@ -5,8 +5,8 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { createOpencodeClient, type Event } from '@opencode-ai/sdk';
+import { ensureMcpLauncher } from '../agent-mcp.ts';
 import {
   BUNDLED_OPENCODE_VERSION,
   buildOpenCodeConfig,
@@ -68,7 +68,10 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   config.mcp = {
     stashbase: {
       type: 'local',
-      command: [process.execPath, '--import', fileURLToPath(import.meta.resolve('tsx')), path.join(process.cwd(), 'mcp', 'server.ts')],
+      // Exercise the exact platform launcher used in production. In
+      // particular, Windows must go through the generated `.cmd` wrapper
+      // rather than a test-only Node/tsx command that bypasses its quoting.
+      command: [ensureMcpLauncher(temporaryRoot)],
       environment: { STASHBASE_WINDOW_ID: 'native-smoke' },
       enabled: true,
       timeout: 10_000,
@@ -126,7 +129,11 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     if (mcpStatus?.status === 'connected' || mcpStatus?.status === 'failed') break;
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
   }
-  assert.equal(mcpStatus?.status, 'connected', mcpStatus?.error ?? 'StashBase MCP did not connect');
+  assert.equal(
+    mcpStatus?.status,
+    'connected',
+    `${mcpStatus?.error ?? 'StashBase MCP did not connect'}\n${startupOutput}`.trim(),
+  );
   type PermissionRule = { permission: string; pattern: string; action: string };
   const agents = (await client.app.agents({ throwOnError: true })).data as unknown as Array<{
     name: string;
