@@ -33,6 +33,7 @@ export type {
   HostedAccountState,
   HostedAgentAllowance,
   HostedOAuthProvider,
+  HostedOAuthPurpose,
   HostedOAuthStart,
   HostedOAuthStatus,
   HostedQuota,

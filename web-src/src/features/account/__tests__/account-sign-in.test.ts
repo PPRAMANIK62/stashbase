@@ -17,8 +17,8 @@ async function waitUntil(predicate: () => boolean, message: string): Promise<voi
   }
 }
 
-test('account Sign in immediately opens one Supabase Google OAuth flow without an email form', async () => {
-  const requests: Array<{ url: string; method: string }> = [];
+test('account Sign in immediately opens one identity-only Google OAuth flow without an email form', async () => {
+  const requests: Array<{ url: string; method: string; body?: unknown }> = [];
   const opened: string[] = [];
   const storage = new Map<string, string>();
   const originalWindow = globalThis.window;
@@ -37,7 +37,11 @@ test('account Sign in immediately opens one Supabase Google OAuth flow without a
     },
     fetch: async (input: string | URL | Request, init: RequestInit = {}) => {
       const url = String(input);
-      requests.push({ url, method: init.method ?? 'GET' });
+      requests.push({
+        url,
+        method: init.method ?? 'GET',
+        ...(typeof init.body === 'string' ? { body: JSON.parse(init.body) as unknown } : {}),
+      });
       if (url === '/api/account/oauth/start') {
         return Response.json({
           flowId: 'flow-1',
@@ -67,6 +71,7 @@ test('account Sign in immediately opens one Supabase Google OAuth flow without a
 
     assert.equal(requests[0]?.url, '/api/account/oauth/start');
     assert.equal(requests[0]?.method, 'POST');
+    assert.deepEqual(requests[0]?.body, { provider: 'google', purpose: 'account' });
     assert.equal(requests.filter((request) => request.url === '/api/account/oauth/start').length, 1);
     assert.deepEqual(opened, ['https://example.supabase.co/auth/v1/authorize?provider=google']);
     assert.equal(mounted.renderer!.root.findAll((node) => node.type === 'input').length, 0);

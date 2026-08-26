@@ -24,6 +24,7 @@ const SHARED_PANEL_CAPABILITIES = {
   transcript: true,
   approvals: true,
   history: true,
+  attachments: true,
   modes: true,
   effort: true,
   models: true,
@@ -35,6 +36,7 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     id: 'stashbase', label: 'StashBase Agent', vendor: 'StashBase · OpenCode · DeepSeek',
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
+      attachments: false,
       modes: false,
       effort: false,
       models: false,

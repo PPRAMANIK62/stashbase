@@ -47,6 +47,7 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
   assert.ok(upstream[0].idempotencyKey);
   assert.equal(upstream[1].idempotencyKey, upstream[0].idempotencyKey);
   assert.equal(upstream[0].turnId, '00000000-0000-4000-8000-000000000001');
+  assert.equal(upstream[1].turnId, upstream[0].turnId);
   assert.equal(upstream[0].profile, 'stashbase-agent-default');
   assert.equal(runtime.model, 'stashbase-agent-default');
   assert.equal(upstream[0].url, 'https://gateway.invalid/v1/agent/chat/completions');
@@ -117,4 +118,8 @@ test('hosted Agent broker isolates session credentials and rejects calls outside
   assert.equal(response.status, 409);
   assert.equal(payload.error.code, 'agent_turn_required');
   assert.equal(called, false);
+  assert.throws(
+    () => broker.beginTurn('agent-session-a', 'not-a-uuid'),
+    /turn id must be a valid UUID/,
+  );
 });

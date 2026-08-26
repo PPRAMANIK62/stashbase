@@ -221,7 +221,10 @@ export function AgentRuntimePanel() {
 
 function AgentAllowanceCard({ allowance, onRefresh }: { allowance: HostedAgentAllowance; onRefresh: () => void }) {
   const percent = Math.max(0, Math.min(100, allowance.remainingPercent));
-  const reset = allowance.windowEndsAt ? new Date(allowance.windowEndsAt).toLocaleDateString() : null;
+  const reset = allowance.windowEndsAt ? new Date(allowance.windowEndsAt).toLocaleString([], {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }) : null;
   return (
     <div className="mb-2.5 rounded-lg border border-border bg-card px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">

@@ -541,6 +541,10 @@ export function useAgentSession({
       return;
     }
     if (action === 'open-agent-settings') {
+      // Account/allowance recovery completes outside this view. Keep the
+      // failed prompt armed so the runtime's account-change reconnect can
+      // retry it exactly once when StashBase Agent becomes ready again.
+      if (retry) pendingRetryRef.current = retry;
       openSettings('agents');
       return;
     }

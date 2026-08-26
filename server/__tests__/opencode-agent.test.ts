@@ -2,7 +2,29 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Event } from '@opencode-ai/sdk';
 import { OpenCodeEventTranslator } from '../opencode-agent.ts';
-import { buildOpenCodeConfig } from '../opencode-runtime.ts';
+import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment } from '../opencode-runtime.ts';
+
+test('bundled OpenCode inherits launch plumbing but no ambient credentials or injection flags', () => {
+  assert.deepEqual(safeOpenCodeInheritedEnvironment({
+    PATH: '/usr/bin',
+    SHELL: '/bin/zsh',
+    LANG: 'en_US.UTF-8',
+    LC_ALL: 'C',
+    SSL_CERT_FILE: '/private/cert.pem',
+    OPENAI_API_KEY: 'provider-secret',
+    STASHBASE_ACCESS_TOKEN: 'account-secret',
+    OPENCODE_CONFIG: '/user/config.json',
+    HTTPS_PROXY: 'https://user:secret@proxy.invalid',
+    NODE_OPTIONS: '--require /tmp/inject.cjs',
+    ELECTRON_RUN_AS_NODE: '1',
+  }), {
+    PATH: '/usr/bin',
+    SHELL: '/bin/zsh',
+    LANG: 'en_US.UTF-8',
+    LC_ALL: 'C',
+    SSL_CERT_FILE: '/private/cert.pem',
+  });
+});
 
 test('bundled OpenCode config disables sharing and updates while asking for every risky local action', () => {
   const config = buildOpenCodeConfig({

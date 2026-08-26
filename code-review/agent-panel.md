@@ -84,9 +84,11 @@
   UI remains a capped-height chat input, not an editor workbench.
 - Suggestions only prefill a draft; they never send. Their rotation pauses
   while hovered or focused.
-- File and image context is explicit through mentions, selection, drag/drop, or
-  composer-focused paste. Image paste suppresses the competing library-import
-  offer and preserves accompanying text.
+- File and image context is explicit through mentions and each runtime's
+  advertised attachment capability. Selection, drag/drop, and composer-focused
+  paste are available only when that runtime can actually read the uploaded
+  bytes; image paste then suppresses the competing library-import offer and
+  preserves accompanying text.
 - Transient attachment upload preserves the user-visible Unicode basename
   by parsing multipart filename parameters as UTF-8. The server still
   sanitizes and uniquifies every supplied display name before writing.

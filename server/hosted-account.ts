@@ -1,12 +1,13 @@
 import packageJson from '../package.json' with { type: 'json' };
 import crypto from 'node:crypto';
-import type { HostedAccountState, HostedAgentAllowance, HostedOAuthProvider, HostedOAuthStart, HostedOAuthStatus, HostedQuota } from '../shared/account.ts';
+import type { HostedAccountState, HostedAgentAllowance, HostedOAuthProvider, HostedOAuthPurpose, HostedOAuthStart, HostedOAuthStatus, HostedQuota } from '../shared/account.ts';
 
 export type {
   HostedAccountActivation,
   HostedAccountState,
   HostedAgentAllowance,
   HostedOAuthProvider,
+  HostedOAuthPurpose,
   HostedOAuthStart,
   HostedOAuthStatus,
   HostedQuota,
@@ -53,6 +54,7 @@ interface ErrorPayload {
 
 interface PendingOAuthFlow {
   provider: HostedOAuthProvider;
+  purpose: HostedOAuthPurpose;
   verifier: string;
   windowId?: string;
   createdAt: number;
@@ -170,6 +172,7 @@ export function beginHostedOAuth(
   provider: HostedOAuthProvider,
   callbackOrigin: string,
   windowId?: string,
+  purpose: HostedOAuthPurpose = 'account',
 ): HostedOAuthStart {
   pruneOAuthFlows();
   const origin = assertLoopbackCallbackOrigin(callbackOrigin);
@@ -181,6 +184,7 @@ export function beginHostedOAuth(
 
   pendingOAuthFlows.set(flowId, {
     provider,
+    purpose,
     verifier,
     ...(windowId?.trim() ? { windowId: windowId.trim().slice(0, 128) } : {}),
     createdAt: Date.now(),
@@ -192,7 +196,12 @@ export function beginHostedOAuth(
   authorize.searchParams.set('redirect_to', callback.toString());
   authorize.searchParams.set('code_challenge', challenge);
   authorize.searchParams.set('code_challenge_method', 's256');
-  return { flowId, provider, url: authorize.toString() };
+  return { flowId, provider, purpose, url: authorize.toString() };
+}
+
+export function hostedOAuthPurpose(flowId: string): HostedOAuthPurpose | null {
+  pruneOAuthFlows();
+  return pendingOAuthFlows.get(flowId)?.purpose ?? null;
 }
 
 export async function exchangeHostedOAuthCode(flowId: string, authCode: string): Promise<HostedAccountSession> {
@@ -229,6 +238,7 @@ export function createFailedHostedOAuthFlow(message: string): string {
   const flowId = base64Url(crypto.randomBytes(24));
   pendingOAuthFlows.set(flowId, {
     provider: 'google',
+    purpose: 'account',
     verifier: base64Url(crypto.randomBytes(48)),
     createdAt: Date.now(),
     state: 'error',

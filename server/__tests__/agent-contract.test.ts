@@ -47,6 +47,9 @@ test('runtime-only capabilities stay adapter-specific', () => {
   assert.equal(capabilities.stashbase!.modes, false);
   assert.equal(capabilities.stashbase!.models, false);
   assert.equal(capabilities.stashbase!.skills, false);
+  assert.equal(capabilities.stashbase!.attachments, false);
+  assert.equal(capabilities.claude!.attachments, true);
+  assert.equal(capabilities.codex!.attachments, true);
 });
 
 test('Agent effort identifiers stay runtime-owned while the URL boundary remains bounded', () => {

@@ -206,8 +206,10 @@ aliases, and Journey E2E owns representative composition.
   recovery, transcript, and layout state. `pnpm test:opencode:native` starts the
   exact bundled OpenCode binary and completes an SDK session against a local
   fake OpenAI-compatible gateway; broker tests cover token isolation, streaming,
-  refresh retry, per-session credentials, turn attribution, stable model
-  profile routing, and allowance classification.
+  refresh retry, per-session credentials, required UUID turn-header
+  attribution across retries, stable model profile routing, and allowance
+  classification. Config tests also prove that ambient credentials and process
+  injection flags do not enter the bundled runtime.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
   the default included-Agent account gate and bring-your-own choices, then
   exercises the built-in panel against the deterministic fake Codex runtime.
@@ -215,7 +217,7 @@ aliases, and Journey E2E owns representative composition.
   task-quality evidence belongs to the J10 core loop.
 - **Release Check:** packaged OpenCode version/executability, a real hosted
   StashBase Agent turn and allowance response, bring-your-own CLI/account setup,
-  and clipboard image behavior remain release evidence.
+  and bring-your-own clipboard image behavior remain release evidence.
 
 ## J07: Converge
 

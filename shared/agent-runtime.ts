@@ -87,6 +87,7 @@ export interface Agent {
     transcript: true;
     approvals: true;
     history: true;
+    attachments: boolean;
     modes: boolean;
     effort: boolean;
     models: boolean;

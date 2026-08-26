@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   api,
   type Agent,
@@ -60,6 +60,7 @@ export function useAgentRuntimes(): AgentRuntimesController {
   const [status, setStatus] = useState<AgentRuntimeStatus | null>(null);
   const [allowance, setAllowance] = useState<HostedAgentAllowance | null>(null);
   const [allowanceUnavailable, setAllowanceUnavailable] = useState(false);
+  const allowanceRequestRef = useRef(0);
   const hostedAgentReady = useMemo(
     () => agents.some((agent) => agent.id === 'stashbase' && agent.state === 'available'),
     [agents],
@@ -92,19 +93,24 @@ export function useAgentRuntimes(): AgentRuntimesController {
   }, [applyResponse, fail]);
 
   const refreshAllowance = useCallback(() => {
+    const request = ++allowanceRequestRef.current;
     void api.getAgentAllowance().then((next) => {
+      if (request !== allowanceRequestRef.current) return;
       setAllowance(next);
       setAllowanceUnavailable(false);
     }).catch(() => {
+      if (request !== allowanceRequestRef.current) return;
       setAllowance(null);
       setAllowanceUnavailable(true);
     });
   }, []);
 
   useEffect(() => { void refresh(true); }, [refresh]);
+  useEffect(() => () => { allowanceRequestRef.current += 1; }, []);
   useEffect(() => {
     if (hostedAgentReady) refreshAllowance();
     else {
+      allowanceRequestRef.current += 1;
       setAllowance(null);
       setAllowanceUnavailable(false);
     }

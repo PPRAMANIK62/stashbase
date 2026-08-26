@@ -42,6 +42,9 @@ access surface external clients copy from.
   actions, but only the Node server persists its session. Environment
   variables may isolate automated tests or select runtime plumbing, but are
   never the product credential source of truth.
+- Every OAuth flow records its initiating purpose. Account-menu and Agent
+  sign-in establish identity only; only the explicit hosted AI Index choice
+  may activate `stashbase-account`, reset the indexer, or begin backfill.
 - BYOK credentials, the refreshable Supabase account session, and the active
   embedding source persist independently. Switching sources retains the
   inactive credential and never silently falls back after a hosted failure.
@@ -62,6 +65,8 @@ access surface external clients copy from.
   response may cross to Settings only as profile alias, remaining percentage,
   token totals, and seven-day window timestamps; no monetary amount, provider
   pricing, account token, or model request is returned to the renderer.
+  The OpenCode child inherits only non-secret launch/locale/TLS plumbing, not
+  ambient provider keys, proxy credentials, or Node/Electron injection flags.
 - Refresh demand for one account session is single-flight. A refresh may
   update or clear only the exact session it started from; a stale completion
   cannot overwrite or sign out a newer session.

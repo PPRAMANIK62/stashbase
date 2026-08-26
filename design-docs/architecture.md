@@ -136,7 +136,9 @@ Format completion, scheduler, freshness, quota, and cleanup rules live in
 - Every StashBase Agent panel session receives a private OpenCode server
   credential and MCP attribution identity. A Library-wide session disables
   native cwd file/command tools and uses the membership-checked MCP layer;
-  folder sessions deny paths outside their working folder.
+  folder sessions deny paths outside their working folder. The private process
+  receives an allowlisted non-secret environment rather than the desktop
+  process environment.
 - Bug-report draft lifecycle and any future report artifacts are owned by the
   desktop application. Renderer views can present safe draft metadata but do
   not own artifacts, filesystem access, or privileged actions. The focused

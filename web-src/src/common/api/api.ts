@@ -19,6 +19,7 @@ import type {
   HostedAccountState,
   HostedAgentAllowance,
   HostedOAuthProvider,
+  HostedOAuthPurpose,
   HostedOAuthStart,
   HostedOAuthStatus,
   FileBody,
@@ -295,8 +296,8 @@ export const api = {
     send<EmbedderState>('PUT', '/api/embedder/source', { provider }),
   getAccount: (refresh = false) => getJson<HostedAccountState>(`/api/account${refresh ? '?refresh=1' : ''}`),
   getAgentAllowance: () => getJson<HostedAgentAllowance>('/api/account/agent-usage'),
-  startAccountOAuth: (provider: HostedOAuthProvider = 'google') =>
-    send<HostedOAuthStart>('POST', '/api/account/oauth/start', { provider }),
+  startAccountOAuth: (provider: HostedOAuthProvider = 'google', purpose: HostedOAuthPurpose = 'account') =>
+    send<HostedOAuthStart>('POST', '/api/account/oauth/start', { provider, purpose }),
   getAccountOAuthStatus: (flowId: string) =>
     getJson<HostedOAuthStatus>(`/api/account/oauth/status?flow=${encodeURIComponent(flowId)}`),
   useAccountAllowance: () => send<HostedAccountActivation>('PUT', '/api/account/source'),

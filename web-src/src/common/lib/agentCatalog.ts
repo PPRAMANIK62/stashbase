@@ -18,6 +18,7 @@ export interface AgentPanelCapabilities {
   transcript: true;
   approvals: true;
   history: true;
+  attachments: boolean;
   modes: boolean;
   effort: boolean;
   models: boolean;
@@ -42,7 +43,7 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
     name: 'StashBase Agent',
     shortName: 'StashBase',
     launcherLabel: 'StashBase Agent',
-    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: false, effort: false, models: false, skills: false, steering: false, titleHint: true },
+    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, attachments: false, modes: false, effort: false, models: false, skills: false, steering: false, titleHint: true },
     controlsNote: 'Runs locally · Model usage uses your StashBase allowance',
     Icon: CubeLogoIcon,
   },
@@ -51,7 +52,7 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
     name: 'Claude Code',
     shortName: 'Claude',
     launcherLabel: 'Claude Code',
-    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, models: true, skills: true, steering: false, titleHint: false },
+    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, attachments: true, modes: true, effort: true, models: true, skills: true, steering: false, titleHint: false },
     controlsNote: 'Access applies live · Effort on new session',
     Icon: ClaudeIcon,
   },
@@ -60,7 +61,7 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
     name: 'Codex',
     shortName: 'Codex',
     launcherLabel: 'Codex',
-    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, modes: true, effort: true, models: true, skills: true, steering: true, titleHint: true },
+    capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, attachments: true, modes: true, effort: true, models: true, skills: true, steering: true, titleHint: true },
     controlsNote: 'Access and effort apply on new session',
     Icon: CodexIcon,
   },

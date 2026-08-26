@@ -21,6 +21,7 @@ import { logger } from './log.ts';
 const log = logger('hosted-agent-broker');
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 const AGENT_GATEWAY_PATH = '/v1/agent/chat/completions';
+const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 interface GatewayError {
   code?: string;
@@ -146,6 +147,9 @@ export class HostedAgentBroker {
     const apiKey = this.channelBySession.get(agentSessionId);
     const channel = apiKey ? this.channels.get(apiKey) : undefined;
     if (!channel) throw new Error('The hosted Agent broker channel is unavailable.');
+    if (!UUID_PATTERN.test(turnId)) {
+      throw new Error('The hosted Agent turn id must be a valid UUID.');
+    }
     channel.turnId = turnId;
     channel.profile = profile;
   }

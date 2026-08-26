@@ -11,7 +11,10 @@
   package-owned binary and never falls back to PATH. OpenCode auto-update and
   sharing are disabled, provider configuration is process-injected, and its
   XDG state plus child HOME stay under AppData so user-global OpenCode/Claude
-  config and skills cannot enter the bundled runtime implicitly.
+  config and skills cannot enter the bundled runtime implicitly. Its child
+  environment is an allowlist of launch, locale, temporary-directory, and TLS
+  plumbing; ambient provider keys, proxy credentials, user OpenCode settings,
+  and Node/Electron injection flags do not cross the process boundary.
 - Readiness is a cheap packaged-binary and StashBase-account check. It never
   installs a runtime or asks for a model key. Sign-out ends StashBase Agent
   sessions and processes before clearing the Node-owned account session.
@@ -23,7 +26,9 @@
 - OpenCode receives only a random loopback model credential. The Node broker
   issues that credential per live Agent session, requires an active
   user-submitted turn, authenticates the account, retries one 401 after token
-  refresh, preserves one idempotency key, and streams to the hosted
+  refresh, preserves one idempotency key, and sends the same validated UUID in
+  `x-stashbase-agent-turn-id` for every model call in that prompt turn before
+  streaming to the hosted
   OpenAI-compatible contract at
   `POST /v1/agent/chat/completions`. The account usage contract is
   `GET /v1/agent/usage` and reports remaining percentage, token totals, and the
@@ -281,8 +286,10 @@ assumed CLI versions.
   settles its card to a plain message — a stale button must not outlive the
   state it described — and auto-resends the failed prompt (immediately for
   Try again, on session readiness for sign-in and Reconnect), so the
-  outcome is visible without retyping: an answer when the recovery stuck, a
-  fresh card when it did not. The armed retry is one-shot and cleared by
+  outcome is visible without retyping: an answer when the recovery worked, a
+  fresh card when it did not. Included-Agent account/allowance recovery arms
+  the same one-shot retry while Agent Settings is open. The armed retry is
+  cleared by
   every other session reset. A turn failure never gates the panel and never
   ends the session.
 - Skills are discovered and invoked through native capability paths. The

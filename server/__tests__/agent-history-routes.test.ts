@@ -37,7 +37,7 @@ test('shared replay adds metadata without changing shared or legacy messages res
     vendor: 'Anthropic',
     capabilities: {
       connection: true, prompts: true, interrupt: true, transcript: true,
-      approvals: true, history: true, modes: true, effort: true, models: true,
+      approvals: true, history: true, attachments: true, modes: true, effort: true, models: true,
       skills: true, steering: false, titleHint: false,
     },
     attach: (_ws: WebSocket) => {},
@@ -66,7 +66,7 @@ test('shared replay reports unavailable metadata without weakening messages comp
     vendor: 'OpenAI',
     capabilities: {
       connection: true, prompts: true, interrupt: true, transcript: true,
-      approvals: true, history: true, modes: true, effort: true, models: true,
+      approvals: true, history: true, attachments: true, modes: true, effort: true, models: true,
       skills: true, steering: true, titleHint: true,
     },
     attach: (_ws: WebSocket) => {},

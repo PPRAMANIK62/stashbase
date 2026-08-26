@@ -46,7 +46,7 @@ uses a hosted service only as its metered model provider.
   replacing its native thread; the picker pauses while a turn is active. Claude
   keeps its selected model fixed after the conversation has content.
   Suggestions prefill rather than send.
-- Streaming, tool activity, permissions, attachments, skills, recovery, and
+- Streaming, tool activity, permissions, runtime-supported attachments, skills, recovery, and
   file artifacts remain inspectable. Collapsed tool summaries omit exact
   counts while using grammatical singular or plural category labels. Editing
   and resending an earlier prompt stops conflicting active work before
@@ -62,8 +62,11 @@ uses a hosted service only as its metered model provider.
   skill-context and configuration warnings as a non-fatal notice. These
   advisories do not close Chat, fail a turn, or masquerade as
   recovery-requiring errors.
-- Attachment labels preserve user-visible Unicode filenames from selection or
-  drop through the sent transcript and restored history.
+- Bring-your-own Agents preserve user-visible Unicode attachment filenames
+  from selection or drop through the sent transcript and restored history.
+  StashBase Agent does not advertise transient attachments until its isolated
+  OpenCode runtime has a scoped byte-reading path; Library mentions and MCP
+  context remain available.
 - Source and attachment access follows the
   [Documents format matrix](documents.md#format-capability-matrix). Built-in
   image attachment behavior does not imply that every external MCP client can

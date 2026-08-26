@@ -83,6 +83,24 @@ test('a data-free native return focuses the window attached to the browser retur
   assert.equal(output.second.appReturned, undefined);
 });
 
+test('OAuth flows retain whether sign-in may activate hosted AI Index', () => {
+  const result = runIsolated(`
+    const account = await import('./server/hosted-account.ts');
+    const identity = account.beginHostedOAuth('google', 'http://127.0.0.1:8090');
+    const embedding = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', undefined, 'embedding');
+    process.stdout.write(JSON.stringify({
+      identity: { start: identity, purpose: account.hostedOAuthPurpose(identity.flowId) },
+      embedding: { start: embedding, purpose: account.hostedOAuthPurpose(embedding.flowId) },
+    }));
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.identity.start.purpose, 'account');
+  assert.equal(output.identity.purpose, 'account');
+  assert.equal(output.embedding.start.purpose, 'embedding');
+  assert.equal(output.embedding.purpose, 'embedding');
+});
+
 function runIsolated(source: string) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-hosted-account-test-'));
   try {

@@ -59,10 +59,12 @@ export interface HostedAccountActivation extends HostedAccountState {
 }
 
 export type HostedOAuthProvider = 'google';
+export type HostedOAuthPurpose = 'account' | 'embedding';
 
 export interface HostedOAuthStart {
   flowId: string;
   provider: HostedOAuthProvider;
+  purpose: HostedOAuthPurpose;
   url: string;
 }
 

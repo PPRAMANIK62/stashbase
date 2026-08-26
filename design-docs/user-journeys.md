@@ -315,8 +315,8 @@ disconnected, or recoverable.
    continue**. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
    finish the provider-owned browser flow started by that same runtime.
 4. Connect StashBase context and send a prompt.
-5. Inspect streaming output, tool activity, permissions, attachments, failures,
-   and file artifacts.
+5. Inspect streaming output, tool activity, permissions, runtime-supported
+   attachments, failures, and file artifacts.
 6. Continue, edit and resend, or open a source beside the same mounted Chat.
 7. Switch workspace folders without silently rebinding started work.
 
@@ -326,6 +326,12 @@ disconnected, or recoverable.
   consent.
 - StashBase Agent uses only its included pinned runtime and account allowance;
   its account token is absent from the renderer and OpenCode state.
+- Signing in for StashBase Agent establishes account identity without silently
+  activating hosted AI Index; that source remains an explicit setup or
+  Settings choice.
+- StashBase Agent does not offer transient attachments until its isolated
+  runtime can read their bytes through an authorized scope. Bring-your-own
+  runtimes retain attachment support.
 - Settings reports the current seven-day window as a remaining percentage and
   reset time, with optional token detail but no monetary balance. A submitted
   prompt and its auxiliary model calls share one server-enforced turn limit.

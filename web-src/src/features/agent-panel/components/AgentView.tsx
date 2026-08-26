@@ -76,6 +76,7 @@ export function AgentView({
   // reaches the window-level `useGlobalDragDrop` listener, which would
   // otherwise *also* fire and import the file into the folder.
   function onPanelDragOver(e: React.DragEvent) {
+    if (!runtime.capabilities.attachments) return;
     const kinds = dragPayloadKinds(e.dataTransfer);
     if (!acceptsAgentContextDrop(e.dataTransfer)) return;
     e.preventDefault();
@@ -91,6 +92,7 @@ export function AgentView({
     if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false);
   }
   function onPanelDrop(e: React.DragEvent) {
+    if (!runtime.capabilities.attachments) return;
     if (!acceptsAgentContextDrop(e.dataTransfer)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -237,6 +239,7 @@ export function AgentView({
         mentions={{ files: mentions.mentionFiles, folders: mentions.mentionFolders }}
         skills={{ list: skills.skills, state: skills.skillState, onRefresh: skills.refreshSkills }}
         attachments={{
+          enabled: runtime.capabilities.attachments,
           items: attach.attachments,
           uploading: attach.uploading,
           onPick: attach.uploadFiles,

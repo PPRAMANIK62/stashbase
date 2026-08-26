@@ -55,6 +55,7 @@ export interface AgentCapabilities {
   transcript: true;
   approvals: true;
   history: true;
+  attachments: boolean;
   modes: boolean;
   effort: boolean;
   /** The runtime can enumerate native models and accept an explicit choice;

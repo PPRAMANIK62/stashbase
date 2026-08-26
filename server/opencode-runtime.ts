@@ -36,6 +36,13 @@ import type { AgentRuntimeDescriptor } from './agent-contract.ts';
 const log = logger('opencode-runtime');
 export const BUNDLED_OPENCODE_VERSION = '1.18.19';
 const START_TIMEOUT_MS = 15_000;
+const OPEN_CODE_RUNTIME_ENV_KEYS = new Set([
+  'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
+  'TMP', 'TEMP', 'TMPDIR',
+  'LANG', 'LANGUAGE', 'TZ', 'TERM', 'COLORTERM', 'SHELL',
+  'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_EXTRA_CA_CERTS',
+  'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_FALLBACK_LIBRARY_PATH',
+]);
 
 interface RunningOpenCode {
   process: ChildProcessByStdio<null, Readable, Readable>;
@@ -82,14 +89,21 @@ async function availablePort(): Promise<number> {
   });
 }
 
+/** Keep only process plumbing needed to launch the bundled runtime. Provider
+ * credentials, user OpenCode settings, proxy credentials, and Electron/Node
+ * injection flags must never cross into the private Agent process. */
+export function safeOpenCodeInheritedEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(source).filter(([name]) => {
+    const upper = name.toUpperCase();
+    return OPEN_CODE_RUNTIME_ENV_KEYS.has(upper) || upper.startsWith('LC_');
+  }));
+}
+
 function privateRuntimeEnvironment(config: Config, username: string, password: string): NodeJS.ProcessEnv {
   const root = path.join(appDataRoot(), 'opencode');
   for (const name of ['data', 'config', 'cache', 'home']) fs.mkdirSync(path.join(root, name), { recursive: true });
-  const inherited = { ...process.env };
-  delete inherited.OPENCODE_CONFIG;
-  delete inherited.OPENCODE_CONFIG_DIR;
   return {
-    ...inherited,
+    ...safeOpenCodeInheritedEnvironment(process.env),
     // OpenCode discovers ecosystem config and skills under the user home even
     // in headless mode. Give the bundled runtime a private home so only the
     // process-injected StashBase config participates.
