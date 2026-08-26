@@ -87,7 +87,7 @@ export function GeneralPanel() {
           </FieldDescription>
         </div>
       </Field>
-      {error && <div className="mt-2.5 text-sm text-destructive">Couldn’t save capture settings: {error}</div>}
+      {error && <div role="alert" className="mt-2.5 text-sm text-destructive">Couldn’t save capture settings: {error}</div>}
 
       <div className="mt-7 border-t border-border pt-6">
         <SectionHeading level={3} className="mb-1">Application updates</SectionHeading>
@@ -146,7 +146,11 @@ export function GeneralPanel() {
             </Button>
           )}
         </div>
-        <div className={cn('mt-2.5 text-sm', updateState?.phase === 'error' || updateError ? 'text-destructive' : 'text-muted-foreground')}>
+        {/* role="status": the line rewrites itself in place through
+          * checking → downloading → ready/error, and every transition was
+          * silent to a screen reader. Polite status covers the error phase
+          * too — the failure is not urgent enough to interrupt. */}
+        <div role="status" className={cn('mt-2.5 text-sm', updateState?.phase === 'error' || updateError ? 'text-destructive' : 'text-muted-foreground')}>
           {updateError || updateStatus()}
         </div>
         {updateState?.platform === 'linux' && (

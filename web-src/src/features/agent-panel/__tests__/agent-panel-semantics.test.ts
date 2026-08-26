@@ -70,13 +70,31 @@ test('chat sessions are a named tab list whose tabs and panels reference each ot
   });
 });
 
-test('each chat tab offers a close action named for its session', async () => {
+test('closing a chat tab needs no focusable invisible control', async () => {
   const tab = { ...makeChatTab('codex', []), title: 'Release notes' };
   await withDom(async (dom) => {
+    const dispatched: Action[] = [];
     await mountApp(dom, h(ChatPane), {
       state: appState({ chat: { chatOpen: true, chatTabs: [tab], activeChatTabId: tab.id } }),
+      dispatch: (action) => dispatched.push(action),
     });
-    assert.equal(dom.byLabel('Close Release notes').length, 1);
+
+    // The visual × is pointer-only: out of the accessibility tree and out
+    // of the tab order, so Tab never lands on an invisible control and the
+    // tab carries no interactive descendant (APG tabs pattern).
+    const close = dom.query('[title="Close tab"]');
+    assert.ok(close, 'the pointer close affordance renders');
+    assert.equal(close.getAttribute('aria-hidden'), 'true');
+    assert.equal(close.tabIndex, -1);
+
+    // Keyboard close: Delete on the focused tab.
+    const [tabEl] = dom.byRole('tab');
+    await dom.fire(tabEl, new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }));
+    assert.deepEqual(dispatched.at(-1), { type: 'CHAT_TAB_CLOSE', id: tab.id });
+
+    // The pointer path still closes (and never activates on the way).
+    await dom.fire(close, new MouseEvent('click', { bubbles: true }));
+    assert.deepEqual(dispatched.at(-1), { type: 'CHAT_TAB_CLOSE', id: tab.id });
   });
 });
 
@@ -87,14 +105,27 @@ test('the transcript is a polite live log with an accessible name', async () => 
     assert.ok(log, 'the transcript announces itself as a log');
     assert.equal(log.getAttribute('aria-label'), 'Agent conversation');
     assert.equal(log.getAttribute('aria-live'), 'polite');
-    assert.equal(log.getAttribute('aria-busy'), 'false');
+    // Busy rides the one streaming turn (next test), never the whole log —
+    // a log-wide busy would hold back every settled announcement too.
+    assert.equal(log.getAttribute('aria-busy'), null);
   });
 });
 
-test('a running turn marks the transcript busy', async () => {
+test('only the streaming turn is held out of live announcement', async () => {
+  const blocks = [
+    { kind: 'user' as const, id: 'user-1', text: 'hello' },
+    { kind: 'assistant' as const, id: 'assistant-1', text: 'streaming reply' },
+  ];
   await withDom(async (dom) => {
-    await dom.render(h(MessageList, { ...emptyList, turnActive: true }));
-    assert.equal(dom.byRole('log')[0].getAttribute('aria-busy'), 'true');
+    await dom.render(h(MessageList, { ...emptyList, blocks, turnActive: true }));
+    assert.equal(dom.byRole('log')[0].getAttribute('aria-busy'), null);
+    const busy = dom.queryAll('[aria-busy="true"]');
+    assert.equal(busy.length, 1, 'exactly the in-flight turn is busy');
+    assert.ok(busy[0].className.includes('agent-turn'), 'busy sits on the turn container');
+
+    // Settling drops the flag, so the finished reply announces once.
+    await dom.render(h(MessageList, { ...emptyList, blocks, turnActive: false }));
+    assert.equal(dom.queryAll('[aria-busy="true"]').length, 0);
   });
 });
 

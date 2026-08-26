@@ -70,7 +70,16 @@ export function DocumentOutline({
          * section header's label — header 14(pl-3.5)+16(slot)+8(gap)=38;
          * row 8(rail border)+10+16(chev)+4(gap)=38 (the full-bleed row
          * carries the px-1.5 rail inside its transparent border). */
-        return <li key={heading.id} className={cn('tree-row', activeId === heading.id && 'active', isCollapsed && 'collapsed')} style={{ paddingLeft: Math.min(depth, 4) * 14 + 10 } as React.CSSProperties}>
+        /* The list stays FLAT (nesting is padding, and collapse maths run
+         * on the flat heading array), so each row's `aria-level` — a
+         * supported property of `listitem` for exactly this flattened-
+         * hierarchy case — carries the structural depth the markup no
+         * longer shows. Uncapped, unlike the visual indent: depth 5 stops
+         * indenting but must not stop being depth 5. The button's
+         * "Heading level N" label stays too: level is the document's
+         * heading number, depth is the outline's nesting, and they differ
+         * when a document skips levels. */
+        return <li key={heading.id} aria-level={depth + 1} className={cn('tree-row', activeId === heading.id && 'active', isCollapsed && 'collapsed')} style={{ paddingLeft: Math.min(depth, 4) * 14 + 10 } as React.CSSProperties}>
           {hasChildren ? <button type="button" className="chev cursor-pointer border-0 bg-transparent p-0" aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${label}`} aria-expanded={!isCollapsed} onClick={() => setCollapsed((previous) => {
             const next = new Set(previous);
             if (isCollapsed) next.delete(heading.id);

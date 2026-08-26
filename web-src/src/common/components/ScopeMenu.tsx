@@ -9,8 +9,8 @@ import {
   MenuPositioner,
   MenuTrigger,
 } from '@/common/components/ui/menu';
-import { MenuOption } from '@/common/components/ui/menu-option';
-import { MenuSectionLabel } from '@/common/components/ui/menu-radio';
+import { MenuOptionContent, menuOptionVariants } from '@/common/components/ui/menu-option';
+import { MenuRadioGroup, MenuRadioItem, MenuSectionLabel } from '@/common/components/ui/menu-radio';
 import { Pill } from '@/common/components/ui/pill';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
 import {
@@ -20,6 +20,10 @@ import {
   type LibraryFolderOption,
   type LibraryScope,
 } from '@/common/lib/libraryScope';
+
+/** Radio value standing in for the whole-Library choice. Folder values are
+ *  absolute paths, so this spelling can never collide with one. */
+const LIBRARY_VALUE = '__library__';
 
 /**
  * The app's ONE scope picker: the whole Library, or one library folder.
@@ -87,29 +91,56 @@ export function ScopeMenu({
             * it. The trigger keeps its `aria-label` — its visible text is
             * the current scope, not the question. */}
           <MenuPopup className="max-h-overlay-sm w-overlay-md overflow-auto p-1.5" aria-labelledby={headingId}>
-            <div className="flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm">
+            {/* The heading is the popup's (and the radio group's) name, not
+              * a menu item of its own — `presentation` keeps this row out of
+              * the menu's item semantics. */}
+            <div role="presentation" className="flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm">
               <span id={headingId} className="font-semibold text-foreground">{heading}</span>
             </div>
-            <MenuOption
-              label="Library"
-              active={isLibrary}
-              icon={LibraryIcon}
-              title="Library"
-              description={libraryDetail}
-              onClick={() => onSetScope(LIBRARY_SCOPE)}
-            />
-            {entries.length > 0 && <MenuSectionLabel>Folders</MenuSectionLabel>}
-            {entries.map((entry) => (
-              <MenuOption
-                key={entry.path}
-                label={basename(entry.path)}
-                active={scope.kind === 'folder' && scope.path === entry.path}
-                icon={FolderIcon}
-                title={basename(entry.path)}
-                description={shortenFolderPath(entry.path, homeDir)}
-                onClick={() => onSetScope(folderScope(entry.path))}
-              />
-            ))}
+            {/* One single-choice set, so `menuitemradio` rows in a radio
+              * group rather than plain menu items with a decorative check:
+              * the current scope reads back as `aria-checked`, not as a
+              * styling difference only sighted users get. The rows keep the
+              * `MenuOption` look by wearing its variant classes; the check
+              * glyph now comes from the radio primitive's own indicator
+              * (`pr-8` clears its lane on the checked row only, matching
+              * the old inline-check layout on unchecked rows). */}
+            <MenuRadioGroup
+              aria-labelledby={headingId}
+              className="flex flex-col gap-px"
+              value={isLibrary ? LIBRARY_VALUE : scope.path}
+              onValueChange={(value) => onSetScope(
+                value === LIBRARY_VALUE ? LIBRARY_SCOPE : folderScope(String(value)),
+              )}
+            >
+              <MenuRadioItem
+                value={LIBRARY_VALUE}
+                label="Library"
+                closeOnClick
+                className={cn(menuOptionVariants({ active: isLibrary }), isLibrary && 'pr-8')}
+              >
+                <MenuOptionContent icon={LibraryIcon} title="Library" description={libraryDetail} />
+              </MenuRadioItem>
+              {entries.length > 0 && <MenuSectionLabel>Folders</MenuSectionLabel>}
+              {entries.map((entry) => {
+                const active = scope.kind === 'folder' && scope.path === entry.path;
+                return (
+                  <MenuRadioItem
+                    key={entry.path}
+                    value={entry.path}
+                    label={basename(entry.path)}
+                    closeOnClick
+                    className={cn(menuOptionVariants({ active }), active && 'pr-8')}
+                  >
+                    <MenuOptionContent
+                      icon={FolderIcon}
+                      title={basename(entry.path)}
+                      description={shortenFolderPath(entry.path, homeDir)}
+                    />
+                  </MenuRadioItem>
+                );
+              })}
+            </MenuRadioGroup>
           </MenuPopup>
         </MenuPositioner>
       </MenuPortal>

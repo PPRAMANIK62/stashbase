@@ -67,7 +67,7 @@ function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number;
   const siblings = nodes.map((n) => n.name);
   return (
     <>
-      {nodes.map((n) =>
+      {nodes.map((n, index) =>
         n.type === 'folder' ? (
           <FolderRow
             key={n.path}
@@ -75,6 +75,8 @@ function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number;
             depth={depth}
             parent={parent}
             siblings={siblings}
+            posInSet={index + 1}
+            setSize={nodes.length}
           />
         ) : (
           <FileRow
@@ -85,6 +87,8 @@ function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number;
             paddingLeft={depth * 14 + 26}
             parent={parent}
             siblings={siblings}
+            posInSet={index + 1}
+            setSize={nodes.length}
           />
         ),
       )}
@@ -92,16 +96,39 @@ function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number;
   );
 }
 
+/** Stable DOM id for a folder's `role="group"` container, so the folder's
+ *  treeitem can claim it through `aria-owns` — the group is a DOM SIBLING
+ *  of its folder row (the flat-row layout drag/roving rely on), and
+ *  without the explicit ownership ARIA has no child relation to infer.
+ *  `encodeURIComponent` because id-reference lists are whitespace-split. */
+function treeGroupId(folderPath: string): string {
+  return `tree-group-${encodeURIComponent(folderPath)}`;
+}
+
+/** Where a row's context menu opens. A KEYBOARD-invoked contextmenu event
+ *  (Shift+F10 / the Menu key) carries clientX/Y = 0,0 — anchoring there
+ *  put the menu in the window corner, nowhere near the focused row. Those
+ *  anchor to the row's own rect instead; real pointer coordinates win. */
+function contextMenuPosition(e: MouseEvent): { x: number; y: number } {
+  if (e.clientX || e.clientY) return { x: e.clientX, y: e.clientY };
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  return { x: rect.left + Math.min(24, rect.width), y: rect.bottom };
+}
+
 function FolderRow({
   node,
   depth,
   parent,
   siblings,
+  posInSet,
+  setSize,
 }: {
   node: FolderNode;
   depth: number;
   parent: string;
   siblings: string[];
+  posInSet: number;
+  setSize: number;
 }) {
   const state = useWorkspace();
   const { dispatch, actions } = useAppActions();
@@ -129,9 +156,10 @@ function FolderRow({
     e.preventDefault();
     e.stopPropagation();
     (e.currentTarget as HTMLElement).focus({ preventScroll: true });
+    const { x, y } = contextMenuPosition(e);
     dispatch({
       type: 'CTX_MENU',
-      menu: { x: e.clientX, y: e.clientY, target: node.path, kind: 'folder' },
+      menu: { x, y, target: node.path, kind: 'folder' },
     });
   }
 
@@ -143,8 +171,13 @@ function FolderRow({
         role="treeitem"
         aria-label={node.name}
         aria-level={depth + 1}
+        aria-posinset={posInSet}
+        aria-setsize={setSize}
         aria-expanded={isExpanded}
         aria-selected={isActive}
+        // The children group renders as this row's SIBLING (below), so
+        // ARIA needs the ownership spelled out — see `treeGroupId`.
+        aria-owns={treeGroupId(node.path)}
         tabIndex={row.tabIndex}
         style={{ paddingLeft: depth * 14 + 26 }}
         data-path={node.path}
@@ -188,6 +221,7 @@ function FolderRow({
         )}
       </div>
       <div
+        id={treeGroupId(node.path)}
         className={cn('tree-children', !isExpanded && 'collapsed')}
         role="group"
       >
@@ -207,6 +241,8 @@ function FileRow({
   paddingLeft,
   parent,
   siblings,
+  posInSet,
+  setSize,
 }: {
   path: string;
   format: ViewerFormat;
@@ -214,6 +250,8 @@ function FileRow({
   paddingLeft: number;
   parent: string;
   siblings: string[];
+  posInSet: number;
+  setSize: number;
 }) {
   const state = useWorkspace();
   const { actions, dispatch } = useAppActions();
@@ -263,9 +301,10 @@ function FileRow({
     e.preventDefault();
     e.stopPropagation();
     (e.currentTarget as HTMLElement).focus({ preventScroll: true });
+    const { x, y } = contextMenuPosition(e);
     dispatch({
       type: 'CTX_MENU',
-      menu: { x: e.clientX, y: e.clientY, target: path, kind: 'file' },
+      menu: { x, y, target: path, kind: 'file' },
     });
   }
 
@@ -286,6 +325,8 @@ function FileRow({
       role="treeitem"
       aria-label={name}
       aria-level={depth + 1}
+      aria-posinset={posInSet}
+      aria-setsize={setSize}
       aria-selected={isActive}
       tabIndex={row.tabIndex}
       style={{ paddingLeft }}

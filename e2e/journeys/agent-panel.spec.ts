@@ -178,7 +178,9 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await openLibraryFolder(app.page, 'project-beta');
     await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
     await expect(chatTabs.getByRole('tab')).toHaveCount(initialCount + 1);
-    await chatTabs.getByRole('tab', { name: /^New Chat Close New Chat$/ }).click();
+    // The pointer-only close × is aria-hidden now, so it no longer
+    // leaks into the tab's accessible name.
+    await chatTabs.getByRole('tab', { name: /^New Chat$/ }).click();
     panel = activeAgentPanel(app.page);
     composer = panel.locator('[aria-label="Message agent"]');
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();

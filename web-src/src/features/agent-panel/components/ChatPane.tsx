@@ -111,6 +111,15 @@ export default function ChatPane() {
                 onClick={() => {
                   if (isAgentKind(tab.agent)) rememberPreferredAgent(tab.agent);
                 }}
+                // APG tabs pattern: the focused tab closes on Delete. The
+                // visual × below stays pointer-only (aria-hidden, out of
+                // the tab order), so this key is the keyboard close path.
+                onKeyDown={(event) => {
+                  if (event.key === 'Delete') {
+                    event.preventDefault();
+                    dispatch({ type: 'CHAT_TAB_CLOSE', id: tab.id });
+                  }
+                }}
                 className={cn(
                   // text-sm (12px) + py-1.5 (6px) + rounded-t-sm (the 6px
                   // control-role top corners) = the document tab's exact
@@ -138,15 +147,27 @@ export default function ChatPane() {
                   size="icon-xs"
                   className={cn(
                     'size-4 rounded-sm text-lg/none text-muted-foreground',
-                    // Hidden by default — surfaces on tab hover or for the
-                    // active tab, avoiding clutter with many tabs open.
-                    tab.id === activeId ? 'opacity-100' : 'opacity-0 group-hover/tab:opacity-100',
+                    // Hidden by default — surfaces on tab hover, on the
+                    // focused tab (:focus-within also matches the tab itself
+                    // holding focus), or for the active tab, avoiding
+                    // clutter with many tabs open.
+                    tab.id === activeId
+                      ? 'opacity-100'
+                      : 'opacity-0 group-hover/tab:opacity-100 group-focus-within/tab:opacity-100',
                   )}
-                  aria-label={`Close ${tab.title}`}
+                  // Pointer affordance only: a `tab` may not contain an
+                  // interactive descendant, and a focusable-but-invisible
+                  // control is a keyboard trap — so the × leaves the
+                  // accessibility tree and the tab order. Keyboard users
+                  // close the FOCUSED tab with Delete (the trigger's
+                  // onKeyDown above).
+                  aria-hidden
+                  tabIndex={-1}
                   title="Close tab"
                   // The list selects on focus and focus bubbles, so without
-                  // this a press on an inactive tab's × would select that
-                  // tab on the way to closing it.
+                  // this a pointer press on an inactive tab's × (which still
+                  // focuses a tabindex=-1 button) would select that tab on
+                  // the way to closing it.
                   onFocus={(event) => event.stopPropagation()}
                   onClick={(event) => {
                     event.stopPropagation();

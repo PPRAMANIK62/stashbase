@@ -42,7 +42,8 @@ editor, a media editor, or a proprietary document format.
   unsaved draft.
 - HTML is viewed as source content; the current compatibility preview executes
   local document scripts in a same-origin iframe. PDF uses its source document
-  in the preview surface. DOCX uses a sanitized source-based preview with a
+  in the preview surface with selectable page text. DOCX uses a sanitized
+  source-based preview with a
   prepared fallback; direct-preview failure remains explicit while that
   independently prepared fallback is pending or available. Image and media
   viewers keep source identity while adding format-appropriate navigation,

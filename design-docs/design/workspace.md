@@ -69,8 +69,10 @@ manager, or a primary graph-navigation tool.
 - Search or Agent links to a file in another member folder open a read-only
   out-of-folder tab without switching the current folder. The user can open
   that folder in another window for full editing.
-- File create, rename, move, import, and delete are explicit. Destructive
-  operations confirm intent. Agent instruction files remain visible and
+- File create, rename, move, import, and delete are explicit. Organization
+  gestures are not pointer-only: moving a file works by drag or through the
+  file row's **Move to…** folder picker, and document tabs reorder by drag or
+  by keyboard. Destructive operations confirm intent. Agent instruction files remain visible and
   user-owned; hidden tool infrastructure and derived data do not surface as
   workspace content.
 - Durable folder purpose, organization guidance, and Agent working rules live

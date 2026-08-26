@@ -74,7 +74,9 @@ test('J07 converges an approved Agent write into a reviewed durable Canvas', asy
     await expect(saveStatus(app.page)).toBeVisible();
     await expect.poll(() => fs.readFileSync(canvasFile, 'utf8')).toContain('Reviewed by the user.');
 
-    await app.page.getByRole('button', { name: 'Close Canvas.md' }).click();
+    // The document tab's × is pointer-only chrome (aria-hidden inside
+    // role="tab"), addressed by its tooltip title rather than a role query.
+    await app.page.getByTitle('Close Canvas.md').click();
     await expect(app.page.getByRole('tab', { name: 'Canvas.md' })).toHaveCount(0);
     await fileTreeRow(app.page, 'Canvas.md').click();
     await expect(activeMarkdownEditor(app.page)).toContainText('Reviewed by the user.');
@@ -108,7 +110,7 @@ test('J11 creates a project only after approval and continues the same conversat
     await expect(panel.getByText('permission declined')).toBeVisible();
     expect(fs.existsSync(projectFolder)).toBe(false);
     await folderSwitcherTrigger(app.page).click();
-    await expect(app.page.getByRole('menuitem', { name: new RegExp(`^${projectName}`) })).toHaveCount(0);
+    await expect(app.page.getByRole('menuitemradio', { name: new RegExp(`^${projectName}`) })).toHaveCount(0);
     await app.page.keyboard.press('Escape');
 
     await expect(composer).toHaveAttribute('contenteditable', 'true');
@@ -198,10 +200,12 @@ test('J10 retrieves project evidence and turns it into a reviewed searchable res
     await app.page.keyboard.insertText(`\n${reviewedMarker}`);
     await expect(saveStatus(app.page)).toBeVisible();
     await expect.poll(() => fs.readFileSync(resultFile, 'utf8')).toContain(reviewedMarker);
-    await app.page.getByRole('button', { name: `Close ${resultName}` }).click();
+    await app.page.getByTitle(`Close ${resultName}`).click();
 
     const selectedChat = app.page.getByRole('tablist', { name: 'Chat sessions' }).getByRole('tab', { selected: true });
-    await selectedChat.getByRole('button', { name: /^Close / }).click();
+    // Delete on the focused tab is the keyboard close path; the visual ×
+    // is pointer-only (aria-hidden), so it no longer resolves as a button.
+    await selectedChat.press('Delete');
 
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     search = app.page.getByRole('dialog', { name: 'Search library' });

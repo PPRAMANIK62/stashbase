@@ -47,6 +47,12 @@ semantic readiness.
   A failed save blocks the transition and keeps the recoverable buffer mounted.
 - Tabs, trees, overlays, and dialogs expose semantic selection/focus state.
   Overlay dismissal restores focus to the initiating control.
+- Drag-only organization gestures keep keyboard equivalents that route through
+  the same action: the file row's Move to… picker
+  (`features/workspace/components/MoveFilePicker.tsx`) calls the drop path's
+  `moveFile`, Ctrl/Cmd+Shift+Arrow reorders document tabs through the drag
+  path's `TABS_REORDER`, and Delete closes the focused tab — the tab chip's
+  visual close control stays presentational inside `role="tab"`.
 - Tree row order, visibility, and keyboard order all come from the one tree
   model. Every row is rendered whether or not its folder is open, so rows
   register their element with the roving-focus hook and navigation resolves

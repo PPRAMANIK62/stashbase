@@ -194,10 +194,15 @@ export function AudioPreview({ name }: { name: string }) {
         )}
         {transcript && transcript.segments.length > 0 && (
           <ul className="row-start-3 m-0 grid min-h-0 list-none content-start gap-0.5 overflow-auto p-0">
-            {transcript.segments.map((segment) => (
+            {transcript.segments.map((segment) => {
+              const playing = positionMs >= segment.startMs && positionMs < segment.endMs;
+              return (
               <li key={segment.id}>
                 <Button
                   variant="ghost"
+                  /* The playing wash is colour-only; aria-current carries the
+                   * same state to assistive technology. */
+                  aria-current={playing || undefined}
                   className={cn(
                     /* A two-column transcript row, not a label you hit: it
                      * takes the ghost tint and the press feedback from the
@@ -211,7 +216,7 @@ export function AudioPreview({ name }: { name: string }) {
                      * column already carries the accent moment, and it holds
                      * under the pointer so hovering the playing row does not
                      * demote it to the plain hover tint. */
-                    positionMs >= segment.startMs && positionMs < segment.endMs && 'bg-active hover:bg-active',
+                    playing && 'bg-active hover:bg-active',
                   )}
                   onClick={() => seek(segment.startMs)}
                 >
@@ -219,7 +224,8 @@ export function AudioPreview({ name }: { name: string }) {
                   <span className="leading-snug">{segment.text}</span>
                 </Button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

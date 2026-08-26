@@ -124,8 +124,10 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   line feed, and carriage return without changing the existing file; these
   bytes commonly signal that an interpreted JavaScript string consumed LaTeX
   escapes. Valid literal backslashes must remain byte-for-byte unchanged.
-- Image activation stays within the shared app lightbox. Code blocks never
-  execute, regardless of language label.
+- Image activation stays within the shared app lightbox and is reachable by
+  pointer and keyboard alike: Enter on a selected image node posts the same
+  preview message the click path posts. Code blocks never execute, regardless
+  of language label.
 - Do not add scripts, arbitrary embeds, remote document state, or AI features
   to the editor; the Agent panel is the application AI surface.
 
@@ -134,7 +136,7 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
 | Role | Stable entry points |
 |---|---|
 | Document Interface | `web-src/src/features/documents/components/CrepeDocument.tsx` and its registered editor handle |
-| Markdown Modules | `web-src/src/features/documents/milkdown/frontmatter.ts`, `headings.ts`, `outlineNavigation.ts`, `navigation.ts`, `paths.ts`, and `imageUrls.ts` |
+| Markdown Modules | `web-src/src/features/documents/milkdown/frontmatter.ts`, `headings.ts`, `outlineNavigation.ts`, `navigation.ts`, `paths.ts`, `imageUrls.ts`, and `imagePreview.ts` |
 | Trust Interface | Milkdown schema rendering in `CrepeDocument.tsx` — document Markdown never renders through a raw HTML string; sanitized-HTML trust is a [Document Viewers](document-viewers.md) concern |
 | Workspace Adapter | `useDocumentActions.ts`, document tabs, Find, outline, lightbox, and upload actions |
 | Asset/navigation Adapter | `/asset` route plus `web-src/src/common/api/api.ts` and Milkdown navigation helpers |

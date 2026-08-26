@@ -18,6 +18,7 @@ export { EmptyTabLanding } from '@/features/workspace/components/EmptyTabLanding
 export { FileTree } from '@/features/workspace/components/FileTree';
 export { FolderMenu } from '@/features/workspace/components/FolderMenu';
 export { FolderSwitcher } from '@/features/workspace/components/FolderSwitcher';
+export { MoveFilePicker } from '@/features/workspace/components/MoveFilePicker';
 export { RemoveFolderModal } from '@/features/workspace/components/RemoveFolderModal';
 export { TabStrip } from '@/features/workspace/components/TabStrip';
 export { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
@@ -28,6 +29,8 @@ export { useFolderRemoval } from '@/features/workspace/hooks/useFolderRemoval';
 export { useGlobalDragDrop } from '@/features/workspace/hooks/useGlobalDragDrop';
 export { useLibraryReconcile } from '@/features/workspace/hooks/useLibraryReconcile';
 export { useOpenFolderWindow } from '@/features/workspace/hooks/useOpenFolderWindow';
+
+export { openMoveFilePicker } from '@/features/workspace/lib/moveFilePickerTrigger';
 
 /* `refreshLibraryMembership` (lib/libraryMembership.ts) is deliberately
  * absent: the membership resync is a consequence of a folder mutation,

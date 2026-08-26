@@ -58,13 +58,26 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * pull), 5% of this budget, for a keyboard contract that strip already
  * implemented. It stays hand-rolled; `code-review/renderer-styling.md`
  * carries the rule and `TabStrip.tsx` the reason.
+ * 428 → 429 adds the always-visible third runtime metadata and
+ * included-Agent recovery action.
+ * 429 → 430 for the file row's "Move to…" picker — the keyboard path to
+ * the drag-onto-a-folder move. Its body (ManagedMoveFilePicker, listed as
+ * a required dynamic entry below) stays lazy; the always-mounted gate
+ * that owns the open event is eager by the same shell-UI rule as Quick
+ * Open's and Link-to-file's gates, measured at ~1 KB of initial JS.
+ * 430 → 434 for the HTML-semantics pass across the eager shell: the
+ * shared focus trap the always-mounted overlays now run (FindBar's veils,
+ * lightbox, crash card), ARIA state on menus/tabs/trees (aria-checked,
+ * aria-owns, posinset), live regions on previously silent status text,
+ * and the keyboard equivalents for pointer-only gestures (Delete-to-close,
+ * tab reorder, keyboard context-menu anchoring) — ~3.7 KB of eager code
+ * that is contract, not feature, and cannot move to a dynamic entry.
+ * 434 → 435 adds first-class TXT routing and its distinct tree glyph; the
+ * editor, decode-error state, and conflict surface remain together behind
+ * the required `PlainTextViewerPane` dynamic entry below.
  * Raise it only for shell UI that must load with the window — anything a
- * user can open on demand belongs in a dynamic entry above. 428 → 429 adds
- * the always-visible third runtime metadata and included-Agent recovery
- * action. 429 → 430 adds first-class TXT routing and its distinct tree glyph;
- * the editor, decode-error state, and conflict surface remain together behind
- * the required `PlainTextViewerPane` dynamic entry below. */
-const initialJsBudgetBytes = 430 * 1024;
+ * user can open on demand belongs in a dynamic entry above. */
+const initialJsBudgetBytes = 435 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
@@ -78,6 +91,7 @@ const expectedEntries = [
   'src/features/search/components/ManagedLibrarySearch.tsx',
   'src/features/search/components/ManagedQuickOpen.tsx',
   'src/features/documents/components/ManagedLinkFilePicker.tsx',
+  'src/features/workspace/components/ManagedMoveFilePicker.tsx',
   'src/app/components/ContextMenu.tsx',
   'src/common/components/DocumentOutline.tsx',
   'src/common/components/SemanticIndexingNotice.tsx',

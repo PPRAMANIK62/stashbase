@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { Button } from '@/common/components/ui/button';
+import { useFocusTrap } from '@/common/hooks/useFocusTrap';
 import { cn } from '@/common/lib/utils';
+
+/** Keyboard pan distance per arrow press on a zoomed image — the keyboard
+ *  counterpart of the pointer drag, in the same screen pixels the drag
+ *  deltas use. */
+const PAN_STEP = 48;
 
 export function ImageLightbox({ src, alt = '', onClose }: {
   src: string;
@@ -11,6 +17,12 @@ export function ImageLightbox({ src, alt = '', onClose }: {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const stageRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ id: number; x: number; y: number } | null>(null);
+  // Real modality behind the `aria-modal` promise: focus moves onto the
+  // dialog on open (the root carries tabindex so no arbitrary control gets
+  // spotlit), Tab cycles the stage controls, and closing hands focus back
+  // to whatever opened the lightbox.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
+  const zoomed = scale > 1;
 
   useEffect(() => {
     setScale(1);
@@ -19,17 +31,27 @@ export function ImageLightbox({ src, alt = '', onClose }: {
 
   useEffect(() => {
     // Inline the zoom/reset logic off the stable state setters so the
-    // listener binds once per `onClose` rather than re-binding on every
-    // render (each zoom/pan tick re-renders).
+    // listener binds once per `onClose` plus the zoomed/unzoomed threshold
+    // crossing, rather than re-binding on every render (each zoom/pan tick
+    // re-renders).
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
       else if (e.key === '0') { setScale(1); setOffset({ x: 0, y: 0 }); }
       else if (e.key === '+' || e.key === '=') setScale((v) => clamp(v * 1.2));
       else if (e.key === '-') setScale((v) => clamp(v / 1.2));
+      else if (zoomed && e.key.startsWith('Arrow')) {
+        // Arrow keys pan a zoomed image the way arrows scroll a viewport:
+        // ArrowDown reveals what is below, so the image moves up.
+        const dx = e.key === 'ArrowLeft' ? PAN_STEP : e.key === 'ArrowRight' ? -PAN_STEP : 0;
+        const dy = e.key === 'ArrowUp' ? PAN_STEP : e.key === 'ArrowDown' ? -PAN_STEP : 0;
+        if (dx === 0 && dy === 0) return;
+        e.preventDefault();
+        setOffset((p) => ({ x: p.x + dx, y: p.y + dy }));
+      }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [onClose, zoomed]);
 
   // React's delegated wheel events are not reliable for blocking the
   // browser's default scroll/zoom behavior in Electron. Match ImagePreview:
@@ -94,7 +116,7 @@ export function ImageLightbox({ src, alt = '', onClose }: {
     /* The dark scrim is a deliberate overlay color, independent of the
      * app theme — the lightbox always reads as a dark stage. The
      * `quick-open-blocking` marker keeps Quick Open from opening on top. */
-    <div className="quick-open-blocking fixed inset-0 z-modal flex flex-col bg-scrim text-white" role="dialog" aria-modal="true" aria-label="Image preview">
+    <div ref={dialogRef} className="quick-open-blocking fixed inset-0 z-modal flex flex-col bg-scrim text-white outline-none" role="dialog" aria-modal="true" aria-label="Image preview" tabIndex={-1}>
       <div
         ref={stageRef}
         className={cn(

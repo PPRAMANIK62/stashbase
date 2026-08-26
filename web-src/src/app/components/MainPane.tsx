@@ -131,6 +131,9 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
                   variant="ghost"
                   size="xs"
                   className="mx-1 size-[1.5em] cursor-pointer rounded-sm border-accent p-0 pb-[0.14em] align-middle leading-none text-accent hover:bg-accent/10 hover:text-accent dark:hover:bg-accent/10 [font-size:inherit]"
+                  /* Same naming rule as the sidebar's NewNoteButton — a bare
+                   * "+" announces nothing. */
+                  aria-label={'New note in ' + (state.activeFolder || state.folder || 'folder root')}
                   onClick={() => { void actions.newNote(); }}
                 >+</Button>{' '}
                 for a new note.
@@ -169,7 +172,10 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
             /* "Saved" / "Renaming…" share the default muted grey — green
              * felt too celebratory for a routine autosave tick. Errors
              * turn red so they break the visual rhythm. */
-            <span className={cn('text-sm transition-opacity duration-standard', saveStatus.cls === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
+            /* `role="status"` (an implicit polite live region): the save
+             * tick — and more importantly a save ERROR — is otherwise
+             * invisible to a screen reader mid-edit. Styling unchanged. */
+            <span role="status" className={cn('text-sm transition-opacity duration-standard', saveStatus.cls === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
               {saveStatus.text}
             </span>
           )}

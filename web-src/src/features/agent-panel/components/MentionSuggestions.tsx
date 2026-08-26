@@ -191,11 +191,10 @@ export function MentionSuggestions({ state, skills }: {
         <span className="font-semibold text-foreground">{isSkill ? 'Available skills' : 'Files and folders'}</span>
         <span>{choices.length ? '↑↓ navigate · Enter select · Esc dismiss' : 'Esc dismiss'}</span>
       </div>
-      {choices.length > 0 && (
-        <span className="sr-only" role="status">
-          {`${choices[activeIndex].name}, ${activeIndex + 1} of ${choices.length}`}
-        </span>
-      )}
+      {/* No sr-only status mirror of the active row here: the composer's
+        * aria-activedescendant (MentionComposer) already announces each
+        * option as the caret moves, and a parallel live region spoke every
+        * row twice. */}
       {choices.length > 0 ? (
         /* Plain listbox markup, because the keyboard belongs to the EDITOR:
           * focus stays in CodeMirror and arrow keys move `activeIndex`

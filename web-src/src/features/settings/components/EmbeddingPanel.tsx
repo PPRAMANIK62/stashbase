@@ -102,7 +102,10 @@ export function EmbeddingPanel() {
   if (loadError) {
     return (
       <div>
-        <div className="text-sm text-destructive">Couldn’t load embedder settings: {loadError}</div>
+        {/* role="alert": the failure replaces the panel after an async
+          * load, so it must announce itself — nothing else changes on
+          * screen for a listener to notice. */}
+        <div role="alert" className="text-sm text-destructive">Couldn’t load embedder settings: {loadError}</div>
         <div className="mt-2.5 flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={retryLoad}>Retry</Button>
         </div>
@@ -305,7 +308,7 @@ export function EmbeddingPanel() {
                 >{addBusy ? 'Validating…' : 'Add key'}</Button>
               </form>
               )}
-              {addError && <div className="mt-1.5 text-sm text-destructive">{addError}</div>}
+              {addError && <div role="alert" className="mt-1.5 text-sm text-destructive">{addError}</div>}
             </>
           ))}
           {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (

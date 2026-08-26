@@ -416,9 +416,13 @@ this file records the mechanics a change must respect.
    and the lightbox toolbar make.
 
    A text button that sits INSIDE a sentence (`Back`, `Skip AI Index for
-   now`, `See setup examples`, the preparation callouts) is
-   `variant="link"` with the size taken for its type step alone and the
-   height and padding removed — one shared shape, not a per-site recipe.
+   now`, the preparation callouts) is `variant="link"` with the size taken
+   for its type step alone and the height and padding removed — one shared
+   shape, not a per-site recipe. That shape is for ACTIONS in prose; an
+   in-sentence navigation to an external page (Settings → MCP's `See setup
+   examples`) is a real `<a href>` whose click is intercepted to route
+   through `openExternalUrl`, because a control that goes somewhere must
+   announce as a link and the renderer must never navigate itself.
 
    **Known Gap: there is no `radio` primitive.** Base UI ships `radio` and
    `radio-group`, but nothing wraps them, so the transcription model list is
