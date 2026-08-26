@@ -88,6 +88,18 @@ MCP listeners, conversions/native children, state storage, and index closure so
 one failure cannot skip later owners. OS signals are bounded fallbacks because
 Windows signal behavior is not a graceful child shutdown contract.
 
+The ladder exists only while Electron lives, so ownership is defended from
+both sides. A packaged launch never adopts a compatible listener already on
+the port — the single-instance lock makes any such listener an unowned
+leftover whose shutdown token died with its parent — and always spawns its own
+child. On a failed bind the server SIGKILLs a verified orphaned sibling (same
+entry file, parent gone) and rebinds once; live-parented siblings and foreign
+listeners are spared and keep the port-in-use guidance. SIGKILL is the reclaim
+signal because a sibling wedged in a native call ignores graceful signals and
+health probes. An Electron-owned server also watches for POSIX reparenting and
+shuts itself down when its owner disappears; both reclaim paths are POSIX-only,
+like the daemon reapers.
+
 ## Bug-report review windows
 
 The review is an independent dialog-sized window, never a child or modal of its
@@ -110,6 +122,10 @@ creation, presentation, survival, and retirement.
   the platform-specific final-window path.
 - Child cleanup timeout: use the bounded fallback and retain diagnostics.
 - Second launch during startup: route to the existing application instance.
+- Orphaned sibling server on the port: reclaim and rebind once; a
+  live-parented or foreign holder keeps the port-in-use guidance.
+- Owner dies without running the ladder: the reparented server shuts itself
+  down and the next launch reclaims anything left.
 
 ## Implementation Map
 
@@ -120,10 +136,10 @@ creation, presentation, survival, and retirement.
 | Renderer bridge Adapter | `electron/preload.cjs` and `useActiveFolderWorkspace.ts` |
 | Server context Interface | window-scoped registry and retirement in `server/folder.ts` |
 | HTTP Adapters | `server/routes/window-context.ts`, `server/routes/internal-shutdown.ts` |
-| Cleanup Interface | `server/shutdown-cleanup.ts` |
+| Cleanup Interface | `server/shutdown-cleanup.ts`; orphan reclaim in `server/stale-lock.ts`; parent watchdog in `server/parent-watchdog.ts` |
 | Bug-report window Adapter | `electron/bug-report-review-window.cjs`; draft authority lives in [Bug Reporting](bug-reporting.md) |
 | Desktop update Module | `electron/update-manager.cjs`; platform install strategy in `electron/update-install-strategy.cjs`; all-window save barrier in `electron/update-window-barrier.cjs`; IPC and native Adapters in `electron/main.cjs` and `electron/preload.cjs` |
-| Focused evidence | `electron/multi-window.test.cjs`, `electron/update-manager.test.cjs`, `electron/update-install-strategy.test.cjs`, `electron/update-window-barrier.test.cjs`, `electron/multi-window-smoke.cjs`, `server/folder-window.test.ts`, `server/window-context-route.test.ts`, `server/internal-shutdown-route.test.ts`, `server/__tests__/shutdown-cleanup.test.ts` |
+| Focused evidence | `electron/multi-window.test.cjs`, `electron/update-manager.test.cjs`, `electron/update-install-strategy.test.cjs`, `electron/update-window-barrier.test.cjs`, `electron/multi-window-smoke.cjs`, `server/folder-window.test.ts`, `server/window-context-route.test.ts`, `server/internal-shutdown-route.test.ts`, `server/stale-lock.test.ts`, `server/parent-watchdog.test.ts`, `server/__tests__/shutdown-cleanup.test.ts` |
 
 ## Validation
 
