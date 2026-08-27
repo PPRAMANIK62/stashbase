@@ -19,6 +19,7 @@ import {
 import { publishSemanticPause } from './sync.ts';
 import type { Indexer } from './indexer.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import { MfsDaemonRetiringError } from './mfs-daemon.ts';
 
 test('semantic pause is folder-scoped, durable across database reopen, and explicitly recoverable', () => {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-semantic-state-'));
@@ -97,6 +98,28 @@ test('removing folder runtime state invalidates an in-flight reconcile', async (
     result = await running;
   }
   assert.equal(result.cancelled, true, 'an interrupted reconcile is cancellation, not a visible sync failure');
+});
+
+test('a live folder reconcile resumes after another folder retires the shared daemon', async () => {
+  const folder = path.join(os.tmpdir(), 'stashbase-live-sync-through-daemon-retirement');
+  let bindCalls = 0;
+  let syncCalls = 0;
+  const deps = {
+    indexer: {} as Indexer,
+    bind: async () => { bindCalls += 1; },
+    sync: async () => {
+      syncCalls += 1;
+      if (syncCalls === 1) throw new MfsDaemonRetiringError();
+      return { added: [], modified: [], removed: [], renamed: [], failed: [] };
+    },
+    semanticEnabled: true,
+  };
+
+  const result = await runFolderSyncOperation(folder, { reason: 'library reconcile' }, deps);
+
+  assert.equal(result.cancelled, undefined);
+  assert.equal(bindCalls, 2, 'the replacement daemon must receive the folder binding again');
+  assert.equal(syncCalls, 2, 'authoritative reconcile is safe to retry from the beginning');
 });
 
 test('folder removal interrupts an unresponsive reconcile instead of waiting behind it', async () => {

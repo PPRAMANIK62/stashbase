@@ -53,6 +53,27 @@ interface Pending {
   reject: (e: Error) => void;
 }
 
+export const MFS_DAEMON_RETIRING = 'MFS_DAEMON_RETIRING';
+
+/** Typed interruption emitted only when Node deliberately retires the shared
+ * daemon. Callers whose operation is safe to restart can distinguish this
+ * lifecycle edge from a real daemon or indexing failure. */
+export class MfsDaemonRetiringError extends Error {
+  readonly code = MFS_DAEMON_RETIRING;
+
+  constructor() {
+    super('MFS daemon closing');
+    this.name = 'MfsDaemonRetiringError';
+  }
+}
+
+export function isMfsDaemonRetiringError(error: unknown): error is MfsDaemonRetiringError {
+  return error instanceof MfsDaemonRetiringError
+    || (typeof error === 'object'
+      && error !== null
+      && (error as { code?: unknown }).code === MFS_DAEMON_RETIRING);
+}
+
 /** Ceiling for one op's reply. A daemon that is alive but never replies
  *  (main thread stuck inside a C extension — observed during a Milvus
  *  Lite flock fight with a second StashBase-spawned daemon) used to hang
@@ -377,7 +398,7 @@ export class MfsDaemon extends EventEmitter {
     // the process is gone.
     const inflight = [...this.pending.values()];
     this.pending.clear();
-    const closeErr = new Error('MFS daemon closing');
+    const closeErr = new MfsDaemonRetiringError();
     for (const slot of inflight) slot.reject(closeErr);
     if (!proc) return;
     proc.stdin.end();

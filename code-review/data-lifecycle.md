@@ -158,6 +158,10 @@ search; only explicit Start clears it.
   invalidates queued folder-sync generations before cleanup and interrupts an
   active single-threaded daemon scan; concurrent status polls treat that short
   retirement window as transitional instead of surfacing a daemon-close error.
+  Because the daemon is process-wide, the same retirement may interrupt a
+  concurrent reconcile for another live member; that authoritative operation
+  retries once from bind after replacement readiness instead of surfacing an
+  expected lifecycle 500.
 - Source delete removes its derived text, manifests, resumable work, playback
   preview, attention rows, and index rows.
 - Move/rename retires the old source identity. Direct text may reuse index

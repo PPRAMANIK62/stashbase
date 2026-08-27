@@ -27,7 +27,7 @@ import { getEmbeddingSource, getEmbedderConfig } from './app-config.ts';
 import { isEmbeddingAvailable } from './embedding-availability.ts';
 import { hostedEmbeddingRuntime } from './hosted-embedding-broker.ts';
 import { syncIndex, type SyncResult } from './sync.ts';
-import { getDaemon } from './mfs-daemon.ts';
+import { getDaemon, isMfsDaemonRetiringError } from './mfs-daemon.ts';
 import { clearStaleMilvusLock } from './stale-lock.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { logger, errorMessage } from './log.ts';
@@ -393,32 +393,52 @@ export async function runFolderSyncOperation(
   scheduledGeneration = currentFolderSyncGeneration(folderRoot),
 ): Promise<SyncResult> {
   const shouldContinue = () => shouldContinueFolderSync(folderRoot, scheduledGeneration, opts.shouldContinue);
+  let daemonRetirementRetries = 0;
   try {
     if (opts.clearDecisionAtStart && !clearSemanticIndexingDecision(folderRoot)) {
       throw new Error('semantic indexing decision could not be cleared');
     }
-    if (!shouldContinue()) {
-      return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+    while (true) {
+      try {
+        if (!shouldContinue()) {
+          return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+        }
+        await deps.bind(folderRoot);
+        if (!shouldContinue()) {
+          return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+        }
+        const result = await deps.sync(deps.indexer, folderRoot, {
+          shouldContinue,
+          semanticEnabled: deps.semanticEnabled,
+          ...semanticSyncPolicy(folderRoot, opts.forceEmbedding),
+        });
+        if (result.cancelled) {
+          return result;
+        }
+        if (syncTouchedVisibleTree(result)) noteTreeChanged();
+        if (result.failed.length && !result.semanticPaused) {
+          recordIndexWarning(folderRoot, syncFailureMessage(result));
+        } else {
+          clearIndexWarning(folderRoot);
+        }
+        return result;
+      } catch (err: unknown) {
+        if (!shouldContinue()) {
+          return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+        }
+        // Folder removal must close the process-wide daemon to interrupt a
+        // scan for that folder. A concurrent reconcile for another live
+        // member is rejected by the same close even though its generation is
+        // still valid. Re-run that authoritative diff once: bind waits for
+        // daemon retirement and replays current bindings before continuing.
+        if (daemonRetirementRetries === 0 && isMfsDaemonRetiringError(err)) {
+          daemonRetirementRetries += 1;
+          log.info(`daemon retired during sync for ${folderRoot}; retrying on the replacement generation`);
+          continue;
+        }
+        throw err;
+      }
     }
-    await deps.bind(folderRoot);
-    if (!shouldContinue()) {
-      return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
-    }
-    const result = await deps.sync(deps.indexer, folderRoot, {
-      shouldContinue,
-      semanticEnabled: deps.semanticEnabled,
-      ...semanticSyncPolicy(folderRoot, opts.forceEmbedding),
-    });
-    if (result.cancelled) {
-      return result;
-    }
-    if (syncTouchedVisibleTree(result)) noteTreeChanged();
-    if (result.failed.length && !result.semanticPaused) {
-      recordIndexWarning(folderRoot, syncFailureMessage(result));
-    } else {
-      clearIndexWarning(folderRoot);
-    }
-    return result;
   } catch (err: unknown) {
     // Folder removal closes the single-threaded daemon to interrupt a long
     // disk scan. The rejected request belongs to an invalidated generation,

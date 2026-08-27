@@ -113,9 +113,11 @@ manager, or a primary graph-navigation tool.
 - Folder removal never deletes user files. Every affected window saves first
   and leaves the removed folder, and recovery cannot silently re-add it.
   Unfinished indexing is retired without holding the confirmation or removal
-  flow open. Folder-loss and 412 recovery clear document/readiness state but
-  never clear Chat tabs; the Agent lifecycle retires only sessions bound to the
-  removed member.
+  flow open. If retiring the shared index daemon interrupts work for another
+  live member, that member resumes reconcile after the replacement is ready.
+  Folder-loss and 412 recovery clear document/readiness state but never clear
+  Chat tabs; the Agent lifecycle retires only sessions bound to the removed
+  member.
   StashBase commits membership removal only after preparation, derived data,
   index rows, ordering, and folder-bound runtime state have finished cleanup.
 - Folder membership and favorites never replace unreadable settings with

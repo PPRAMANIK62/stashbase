@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { createFilesystemPath } from './filesystem-path.ts';
 import { retainedIndexedSource } from './indexer.mfs.ts';
-import { MfsDaemon } from './mfs-daemon.ts';
+import { isMfsDaemonRetiringError, MfsDaemon } from './mfs-daemon.ts';
 
 const windowsPath = createFilesystemPath({ platform: 'win32', cwd: 'C:/' });
 
@@ -76,6 +76,36 @@ test('daemon readiness includes rules and binding replay after every spawn', asy
   await daemon.close();
   const status = await daemon.call<{ operations: string[] }>('status', {});
   assert.deepEqual(status.operations, ['set_rules', 'bind_folder', 'status']);
+});
+
+test('daemon close rejects in-flight work with a typed retirement interruption', async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-fake-mfs-retirement-'));
+  const fixture = path.join(scratch, 'fake-daemon.mjs');
+  fs.writeFileSync(fixture, `
+    import readline from 'node:readline';
+    process.stdout.write(JSON.stringify({ event: 'ready', db: 'fake' }) + '\\n');
+    readline.createInterface({ input: process.stdin }).on('line', (line) => {
+      const request = JSON.parse(line);
+      if (request.op === 'block') {
+        process.stdout.write(JSON.stringify({ event: 'blocked' }) + '\\n');
+        return;
+      }
+      process.stdout.write(JSON.stringify({ id: request.id, ok: true, result: {} }) + '\\n');
+    });
+  `, 'utf8');
+  const daemon = new MfsDaemon(() => ({ command: process.execPath, args: [fixture], cwd: scratch }));
+  t.after(async () => {
+    await daemon.close();
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+
+  const blockedEvent = new Promise<void>((resolve) => daemon.once('daemon:blocked', () => resolve()));
+  const blocked = daemon.call('block', {});
+  const rejected = assert.rejects(blocked, isMfsDaemonRetiringError);
+  await blockedEvent;
+  await daemon.close();
+
+  await rejected;
 });
 
 test('local embedding setup probes the bounded Python runtime before selection', async (t) => {
