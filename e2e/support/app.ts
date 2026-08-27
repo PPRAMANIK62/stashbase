@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { TestInfo } from '@playwright/test';
 import { _electron, type ElectronApplication, type Page } from 'playwright';
 import { AppErrorCollector } from './errors.ts';
-import type { AppFixture } from './fixtures.ts';
+import { serverLogFileForPlatform, type AppFixture } from './fixtures.ts';
 import { dismissEmbeddingKeyPrompt } from './locators.ts';
 
 const SUPPORT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -106,10 +106,6 @@ function electronArgs(fixture: AppFixture): string[] {
   return process.platform === 'linux' ? ['--no-sandbox', ...applicationArgs] : applicationArgs;
 }
 
-function serverLogFile(fixture: AppFixture): string {
-  return path.join(fixture.home, 'Library', 'Logs', 'StashBase', 'server.log');
-}
-
 async function attachText(
   testInfo: TestInfo | undefined,
   name: string,
@@ -184,7 +180,7 @@ export async function launchApp(
           await quitElectronApplication(electronApplication!, page);
         }
         await assertPortAvailable(fixture.port);
-        const serverLog = serverLogFile(fixture);
+        const serverLog = serverLogFileForPlatform(fixture);
         if (fs.existsSync(serverLog)) {
           await attachText(testInfo, 'server-log', fs.readFileSync(serverLog, 'utf8'));
         }
@@ -207,7 +203,7 @@ export async function launchApp(
         }
       }
     }
-    const serverLog = serverLogFile(fixture);
+    const serverLog = serverLogFileForPlatform(fixture);
     if (fs.existsSync(serverLog)) {
       await attachText(testInfo, 'server-log', fs.readFileSync(serverLog, 'utf8'));
     }

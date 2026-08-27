@@ -67,10 +67,13 @@ reading the file that implements it.
 
 - Each worker owns disposable folders, configuration, ports, server processes,
   Agent fixtures, and browser state. Tests never read personal credentials or
-  documents.
+  documents. Fixture server ports come from a probed range below the ordinary
+  OS ephemeral-client ranges, so Chromium startup cannot reclaim a just-released
+  `listen(0)` port before the Electron-owned server binds it.
 - Readiness is explicit: wait for the server and required app state, not a
   fixed delay. Failures retain useful logs and process output without exposing
-  secrets.
+  secrets; the harness follows Electron's platform-specific application-log
+  location rather than assuming the macOS path on Linux or Windows.
 - Cleanup closes live windows, child processes, sockets, and temporary state.
   A failed assertion must not poison a later test or leave a local daemon
   running.

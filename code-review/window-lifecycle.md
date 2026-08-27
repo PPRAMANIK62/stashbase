@@ -47,8 +47,10 @@ after readiness, a save failure or timeout keeps the window open.
   renderer is actually running; a direct source launch and the lifecycle smoke
   serve the built renderer instead of proxying to an absent process. Those
   non-Vite launches use the actual server as Electron's one child so shutdown
-  cannot orphan a listener behind a watch wrapper. Packaged launches explicitly
-  remove both markers.
+  cannot orphan a listener behind a watch wrapper. Source readiness has a
+  bounded allowance for cold TypeScript loading; the pre-bundled packaged
+  server retains its shorter failure bound. Packaged launches explicitly remove
+  both development markers.
 - Browser-owned OAuth returns focus only through the packaged `stashbase://`
   handler, which accepts the exact data-free `oauth-complete` authority.
   Renderer polling updates account state without racing that browser-owned
@@ -121,6 +123,8 @@ creation, presentation, survival, and retirement.
 - Initial quit cancelled by an asynchronous window guard: resume quit through
   the platform-specific final-window path.
 - Child cleanup timeout: use the bounded fallback and retain diagnostics.
+- Server startup failure: record the cause before opening the native error
+  dialog so unattended launches retain actionable process output.
 - Second launch during startup: route to the existing application instance.
 - Orphaned sibling server on the port: reclaim and rebind once; a
   live-parented or foreign holder keeps the port-in-use guidance.

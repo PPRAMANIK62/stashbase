@@ -22,23 +22,53 @@ export interface AppFixture {
   cleanup(): Promise<void>;
 }
 
-function reservePort(): Promise<number> {
+// Avoid the OS ephemeral-client ranges used by Chromium and runner services.
+// `listen(0)` returns a currently free ephemeral port but releases it before
+// Electron launches, allowing an outbound connection to claim it before the
+// child server binds. This bounded application range makes that handoff
+// deterministic while still probing every candidate before use.
+export const E2E_PORT_MIN = 18_000;
+export const E2E_PORT_MAX = 31_999;
+const E2E_PORT_SPAN = E2E_PORT_MAX - E2E_PORT_MIN + 1;
+let nextPortCandidate = E2E_PORT_MIN + (process.pid % E2E_PORT_SPAN);
+
+function takePortCandidate(): number {
+  const candidate = nextPortCandidate;
+  nextPortCandidate = candidate >= E2E_PORT_MAX ? E2E_PORT_MIN : candidate + 1;
+  return candidate;
+}
+
+function canBindPort(port: number): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close();
-        reject(new Error('could not reserve an E2E port'));
-        return;
-      }
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE' || error.code === 'EACCES') resolve(false);
+      else reject(error);
+    });
+    server.listen(port, '127.0.0.1', () => {
       server.close((error) => {
         if (error) reject(error);
-        else resolve(address.port);
+        else resolve(true);
       });
     });
   });
+}
+
+async function reservePort(): Promise<number> {
+  for (let attempt = 0; attempt < E2E_PORT_SPAN; attempt += 1) {
+    const candidate = takePortCandidate();
+    if (await canBindPort(candidate)) return candidate;
+  }
+  throw new Error(`could not reserve an E2E port in ${E2E_PORT_MIN}-${E2E_PORT_MAX}`);
+}
+
+export function serverLogFileForPlatform(
+  fixture: Pick<AppFixture, 'home' | 'userData'>,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return platform === 'darwin'
+    ? path.join(fixture.home, 'Library', 'Logs', 'StashBase', 'server.log')
+    : path.join(fixture.userData, 'logs', 'server.log');
 }
 
 function writeSource(file: string, content: string): void {

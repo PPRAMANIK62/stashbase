@@ -115,7 +115,11 @@ test('a real server bind failure preserves diagnostics and leaves no Electron de
   });
   try {
     await expect(launchApp(fixture, testInfo, { readinessTimeoutMs: 5_000 })).rejects.toThrow();
-    expect(testInfo.attachments.map((attachment) => attachment.name)).toContain('electron-output');
+    const electronOutput = testInfo.attachments.find(
+      (attachment) => attachment.name === 'electron-output',
+    );
+    expect(electronOutput).toBeDefined();
+    expect(electronOutput?.body?.toString('utf8')).toContain('[electron] StashBase failed to start:');
   } finally {
     for (const socket of blockerConnections) socket.destroy();
     await new Promise<void>((resolve, reject) => blocker.close((error) => error ? reject(error) : resolve()));

@@ -22,6 +22,7 @@ const {
   createServerArguments,
   createServerChildEnvironment,
   isCompatibleServerHealth,
+  serverStartupTimeoutMs,
 } = require('./main-probe.cjs');
 const { createBugReportService } = require('./bug-report-service.cjs');
 const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
@@ -556,10 +557,11 @@ async function startOrReuseServer() {
       console.warn(`[electron] server exited with code ${code}`);
     }
   });
-  // Poll until the server is up. Embedding cold-start on first model load
-  // call can be slow, but listen() is sub-second — 10s ceiling is
-  // generous; we surface a clear error rather than hanging forever.
-  const deadline = Date.now() + 10_000;
+  // Poll until the server is up. Packaged code is already bundled; source
+  // launches compile TypeScript on demand and need a wider cold-start bound
+  // on contended developer and CI machines. Both paths still fail closed.
+  const startupTimeoutMs = serverStartupTimeoutMs({ packaged: app.isPackaged });
+  const deadline = Date.now() + startupTimeoutMs;
   while (Date.now() < deadline) {
     if (serverSpawnError) {
       throw new Error(appendServerLogHint(`server spawn failed: ${serverSpawnError.message}`));
@@ -574,7 +576,9 @@ async function startOrReuseServer() {
     await sleep(150);
   }
   stopSpawnedServer();
-  throw new Error(appendServerLogHint(`server did not come up on :${SERVER_PORT} within 10s`));
+  throw new Error(appendServerLogHint(
+    `server did not come up on :${SERVER_PORT} within ${startupTimeoutMs / 1000}s`,
+  ));
 }
 
 /** Coalesce every window onto one server readiness promise. The spawned
@@ -875,9 +879,14 @@ async function createWindow(initialFolder) {
   try {
     await ensureServer();
   } catch (err) {
+    const message = String(err?.message ?? err);
+    // Native error boxes are not BrowserWindows and can block unattended
+    // launch diagnostics. Preserve the same failure in stdout before opening
+    // the user-facing dialog so CI and terminal launches retain the cause.
+    console.error(`[electron] StashBase failed to start: ${message}`);
     dialog.showErrorBox(
       'StashBase failed to start',
-      `${String(err?.message ?? err)}${getServerLogPath() ? '\n\nServer log: available in the application log directory.' : ''}`,
+      `${message}${getServerLogPath() ? '\n\nServer log: available in the application log directory.' : ''}`,
     );
     if (mainWindows.size === 0) app.quit();
     return;

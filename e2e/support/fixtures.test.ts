@@ -3,7 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createAppFixture, safeInheritedEnvironment } from './fixtures.ts';
+import {
+  E2E_PORT_MAX,
+  E2E_PORT_MIN,
+  createAppFixture,
+  safeInheritedEnvironment,
+  serverLogFileForPlatform,
+} from './fixtures.ts';
 
 test('fixture environment strips credentials, agent history, and runtime overrides', () => {
   const inherited = safeInheritedEnvironment({
@@ -44,6 +50,11 @@ test('two app fixtures isolate every persistent root and port', async (t) => {
   assert.notEqual(first.folderHome, second.folderHome);
 
   for (const fixture of [first, second]) {
+    assert.ok(fixture.port >= E2E_PORT_MIN);
+    assert.ok(fixture.port <= E2E_PORT_MAX);
+  }
+
+  for (const fixture of [first, second]) {
     assert.ok(fixture.root.startsWith(path.join(os.tmpdir(), 'stashbase-e2e-')));
     assert.equal(fixture.env.HOME, fixture.home);
     assert.equal(fixture.env.USERPROFILE, fixture.home);
@@ -53,6 +64,24 @@ test('two app fixtures isolate every persistent root and port', async (t) => {
     assert.equal(fixture.env.CODEX_HOME, undefined);
     assert.equal(fixture.env.CLAUDE_CONFIG_DIR, undefined);
   }
+});
+
+test('fixture diagnostics follow Electron application log paths on every platform', async (t) => {
+  const fixture = await createAppFixture({ membership: 'empty' });
+  t.after(() => fixture.cleanup());
+
+  assert.equal(
+    serverLogFileForPlatform(fixture, 'darwin'),
+    path.join(fixture.home, 'Library', 'Logs', 'StashBase', 'server.log'),
+  );
+  assert.equal(
+    serverLogFileForPlatform(fixture, 'linux'),
+    path.join(fixture.userData, 'logs', 'server.log'),
+  );
+  assert.equal(
+    serverLogFileForPlatform(fixture, 'win32'),
+    path.join(fixture.userData, 'logs', 'server.log'),
+  );
 });
 
 test('fixture membership and source files use the production persisted formats', async (t) => {

@@ -44,8 +44,17 @@ function createServerArguments({ entry, portArgs, packaged, vite }) {
   return vite ? ['watch', entry, ...portArgs] : [entry, ...portArgs];
 }
 
+/** Source launches compile the TypeScript server on demand, so their first
+ * process can legitimately take longer on a cold or contended machine than
+ * the pre-bundled packaged entry. Keep packaged startup failure fast while
+ * giving source launches a separate bounded readiness budget. */
+function serverStartupTimeoutMs({ packaged }) {
+  return packaged ? 10_000 : 30_000;
+}
+
 module.exports = {
   createServerArguments,
   createServerChildEnvironment,
   isCompatibleServerHealth,
+  serverStartupTimeoutMs,
 };

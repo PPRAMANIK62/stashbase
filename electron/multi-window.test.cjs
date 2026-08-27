@@ -7,7 +7,11 @@ const {
   terminateChildProcessTree,
   waitForChildExit,
 } = require('./smoke-process.cjs');
-const { createServerArguments, createServerChildEnvironment } = require('./main-probe.cjs');
+const {
+  createServerArguments,
+  createServerChildEnvironment,
+  serverStartupTimeoutMs,
+} = require('./main-probe.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
   buildElectronSmokeArgs,
@@ -164,6 +168,11 @@ test('Electron-owned server uses a single process unless Vite explicitly needs w
   assert.deepEqual(direct, ['/repo/server/index.ts', '--port=4200']);
   assert.deepEqual(vite, ['watch', '/repo/server/index.ts', '--port=4200']);
   assert.deepEqual(packaged, ['/app/dist/server/index.mjs']);
+});
+
+test('source server startup covers cold TypeScript loading without weakening packaged failure bounds', () => {
+  assert.equal(serverStartupTimeoutMs({ packaged: false }), 30_000);
+  assert.equal(serverStartupTimeoutMs({ packaged: true }), 10_000);
 });
 
 test('application menu exposes VS Code window commands on Windows and Linux', () => {
