@@ -97,9 +97,10 @@ or ambiguous. The `afterPack` adapter validates versioned framework symlinks
 before signing. It preserves the original bundle in clean CI workspaces and
 uses a metadata-free clone only for local File Provider workspaces; no package,
 Homebrew, or recovery step may mutate or ad-hoc re-sign the app afterward. The
-bundled OpenCode/Bun executable alone receives the unsigned-executable-memory
-entitlement it needs under Hardened Runtime; the main app and ordinary helpers
-must not inherit that exception. The
+bundled OpenCode/Bun executable is declared as an additional nested signing
+target and alone receives the unsigned-executable-memory entitlement it needs
+under Hardened Runtime; the main app and ordinary helpers must not inherit that
+exception. The
 mounted release DMG must pass `codesign`, Gatekeeper `spctl`, and stapler
 validation before upload.
 

@@ -84,6 +84,7 @@ test('macOS package configuration requires Developer ID signing and notarization
   assert.equal(mac.entitlements, 'build/entitlements.mac.plist');
   assert.equal(mac.entitlementsInherit, 'build/entitlements.mac.inherit.plist');
   assert.equal(mac.sign, 'scripts/sign-macos-app.cjs');
+  assert.deepEqual(mac.binaries, ['Contents/Resources/opencode/opencode.exe']);
   assert.equal(pkg.build.dmg.sign, false);
   assert.deepEqual(dmgEntries, ['/Applications']);
 
