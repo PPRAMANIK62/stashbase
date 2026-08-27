@@ -106,7 +106,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.deepEqual(createProjectTool.inputSchema.required, ['name']);
     for (const name of ['write_file', 'edit_file']) {
       const tool = listed.body.result.tools.find((candidate: any) => candidate.name === name);
-      assert.match(tool.description, /Markdown, HTML, JSON, or \.txt/);
+      assert.match(tool.description, /Markdown, HTML, JSON, or UTF-8 plain-text/);
     }
     assert.match(
       listed.body.result.tools.find((tool: any) => tool.name === 'read_file').description,
