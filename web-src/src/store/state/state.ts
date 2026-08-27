@@ -133,6 +133,9 @@ export interface OpenFile {
   /** Selection-time result for a workbench-only generic file. Text is shown
    * read-only; every other state renders an explicit unavailable placeholder. */
   genericPreview?: GenericFilePreview;
+  /** Decode failure on a first-class text format (TXT), which keeps its named
+   * tab visible rather than substituting replacement characters. */
+  error?: import('@shared/library-files').FileBody['error'];
   /** Absolute member-folder root when this file lives OUTSIDE the window's
    *  active folder (an "out-of-folder" tab, opened from a library-wide
    *  search hit). Such tabs are strictly read-only, never enter the tree's

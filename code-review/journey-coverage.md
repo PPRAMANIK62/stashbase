@@ -120,7 +120,7 @@ aliases, and Journey E2E owns representative composition.
 
 **Status:** Release-dependent.
 
-- **Contract Test:** renderer, viewer, Markdown, JSON, file transaction, and
+- **Contract Test:** renderer, viewer, Markdown, JSON, TXT, file transaction, and
   Electron lifecycle suites cover source identity, parsing, mode changes,
   ordinary saves, navigation, removal of native reload bypasses, save-gated
   recovery reload, shared renderer/Agent/MCP version authority, conflict
@@ -128,7 +128,8 @@ aliases, and Journey E2E owns representative composition.
   failure/confirmation paths.
 - **Journey E2E:** [document editing smoke](../e2e/smoke/document-editing.spec.ts),
   [workspace navigation depth](../e2e/journeys/navigation-depth.spec.ts),
-  [Markdown and JSON](../e2e/journeys/markdown-json.spec.ts),
+  [Markdown, JSON, and TXT](../e2e/journeys/markdown-json.spec.ts), focused
+  `plain-text-document.test.ts`,
   [outline and Find](../e2e/journeys/markdown-outline-find.spec.ts),
   [library mutations](../e2e/journeys/library-mutations.spec.ts), and
   [format and media](../e2e/journeys/formats-media.spec.ts) cover representative
@@ -173,7 +174,7 @@ aliases, and Journey E2E owns representative composition.
 **Status:** Partial.
 
 - **Contract Test:** `pnpm test:retrieval` and the data, scope, credential,
-  and renderer suites cover exact filtering, semantic mechanics, source
+  and renderer suites cover exact filtering (including encoding-safe TXT), semantic mechanics, source
   remapping, access boundaries, account identity, and failure presentation.
 - **Journey E2E:** [semantic search UI](../e2e/journeys/semantic-search-ui.spec.ts)
   covers mode, scope, readiness, result presentation, and source navigation.
@@ -256,8 +257,11 @@ aliases, and Journey E2E owns representative composition.
   is outside StashBase ownership.
 - **Release Check:** packaged launcher, copied configuration, URL access, and
   one representative external client remain release evidence.
-- **Gap:** none in the deterministic transport and format-capability boundary.
-  Packaged launcher and third-party client behavior remain release evidence.
+- **Gap:** none in the deterministic transport, direct-text
+  description/parity, or format-capability boundary; focused MCP mutations
+  cover Markdown, JSON, and TXT plus invalid-encoding refusal and
+  generic-file exclusion. Packaged launcher and third-party client behavior
+  remain release evidence.
 
 ## J09: Bug report
 

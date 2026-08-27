@@ -78,7 +78,7 @@ function escapeRegExp(value: string): string {
  * Directly readable text formats — the source file is itself the indexed
  * and editable text.
  */
-export type DirectTextFormat = 'md' | 'html' | 'json' | 'text';
+export type DirectTextFormat = 'md' | 'html' | 'json' | 'txt';
 
 /**
  * Everything the renderer can open in the file tree: the direct text

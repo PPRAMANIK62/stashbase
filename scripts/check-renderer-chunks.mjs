@@ -72,19 +72,18 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * and the keyboard equivalents for pointer-only gestures (Delete-to-close,
  * tab reorder, keyboard context-menu anchoring) — ~3.7 KB of eager code
  * that is contract, not feature, and cannot move to a dynamic entry.
- * 434 → 436 for truthful workspace-tree capability. The text and generic
- * viewer bodies remain required dynamic entries below; the measured ~1.4 KiB
- * here is the eager tree's generic/excluded capability state, explanation,
- * selection routing, and system-file-manager escape for restricted entries,
- * which must exist before a row can be rendered or opened.
- * 436 → 437 gives every restricted entry ONE reveal affordance. The escape
- * to the system file manager was spelled inline on the excluded-folder row
- * only, so an unreadable file, an undownloaded cloud placeholder, and a
- * symlink rendered identically to a working file. Hoisting it into one
- * shared row action and calling it from both row kinds is eager by the same
- * rule as the capability state above — a row cannot render without it — and
- * the reveal moved from a tree.css descendant rule onto the row group,
- * which is utilities rather than a stylesheet the budget never counted.
+ * 434 → 435 adds first-class TXT routing and its distinct tree glyph; the
+ * editor, decode-error state, and conflict surface remain together behind
+ * the required `PlainTextViewerPane` dynamic entry below.
+ * 435 → 437 for truthful workspace-tree capability. The generic viewer body
+ * remains a required dynamic entry below; the measured cost here is the
+ * eager tree's generic/excluded capability state, explanation, selection
+ * routing, and the ONE reveal affordance every restricted entry shares —
+ * an unreadable file, an undownloaded cloud placeholder, and a symlink
+ * previously rendered identically to a working file. All of it must exist
+ * before a row can be rendered or opened. The reveal also moved from a
+ * tree.css descendant rule onto the row group, which is utilities rather
+ * than a stylesheet the budget never counted.
  * Raise it only for shell UI that must load with the window — anything a
  * user can open on demand belongs in a dynamic entry above. */
 const initialJsBudgetBytes = 437 * 1024;
@@ -93,7 +92,7 @@ const expectedEntries = [
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
   'src/features/documents/components/CrepeDocument.tsx',
   'src/features/documents/components/JsonDocument.tsx',
-  'src/features/documents/components/TextDocument.tsx',
+  'src/features/documents/components/PlainTextViewerPane.tsx',
   'src/features/documents/components/GenericFileViewer.tsx',
   'src/features/documents/components/json/JsonTreeView.tsx',
   'src/features/documents/components/PdfViewerPane.tsx',

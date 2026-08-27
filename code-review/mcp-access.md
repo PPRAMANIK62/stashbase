@@ -43,9 +43,11 @@ clients and are not a general host-filesystem API.
   `list_directory` and cannot be read or mutated by these tools.
 - Format capability follows the
   [Documents matrix](../design-docs/design/documents.md#format-capability-matrix):
-  `read_file` returns direct Markdown, HTML, JSON, or `.txt` source text and current
-  prepared PDF, DOCX, or media text; it does not return image bytes.
-  `write_file` and `edit_file` accept Markdown, HTML, JSON, and `.txt` source text only.
+  `read_file` returns direct Markdown, HTML, JSON, or valid UTF-8 TXT source
+  text and current prepared PDF, DOCX, or media text; it does not return image
+  bytes. `write_file` and `edit_file` accept those four direct-text families.
+  Invalid UTF-8 TXT fails explicitly and is never rewritten. Generic
+  workspace-only files are neither listed nor readable through MCP.
   Previewability or built-in image attachment support must not be generalized
   into external MCP text-read capability.
 - `create_project` creates only beneath the default folder home or an already

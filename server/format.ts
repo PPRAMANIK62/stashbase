@@ -3,7 +3,7 @@
  * structured-vs-unstructured model the whole ingestion pipeline rests on.
  *
  * The index unit is always markdown. Formats split two ways:
- *   - **Direct text** (`FileFormat`: md, html, json, text): the source file is itself
+ *   - **Direct text** (`FileFormat`: md, html, json, txt): the source file is itself
  *     the single source of truth and is indexed directly — markdown
  *     as-is; HTML via a cheap in-memory "→ heading markdown" optimization
  *     at MFS-feed time (`analyzeHtml`), NOT materialized to disk.
@@ -11,7 +11,7 @@
  *     converter extracts text into an AppData-derived representation. That
  *     text layer feeds search; PDFs/DOCX/audio also use it for Agent text
  *     reading, while images remain the read/view source.
- * MFS receives raw Markdown/JSON/plain text and markdown-shaped HTML plaintext; all format knowledge lives here / in
+ * MFS receives raw Markdown/JSON/TXT and markdown-shaped HTML plaintext; all format knowledge lives here / in
  * the converters, never in MFS.
  *
  * Lives separately from `files.ts` because `files.ts` imports from
@@ -61,7 +61,7 @@ const NOTE_FORMATS: Array<{ exts: readonly string[]; format: FileFormat }> = [
 const DIRECT_TEXT_FORMATS: Array<{ exts: readonly string[]; format: FileFormat }> = [
   ...NOTE_FORMATS,
   { exts: STRUCTURED_DATA_EXTENSIONS, format: 'json' },
-  { exts: PLAIN_TEXT_EXTENSIONS, format: 'text' },
+  { exts: PLAIN_TEXT_EXTENSIONS, format: 'txt' },
 ];
 
 /** Every note extension (no leading dot), e.g. `['md','markdown','html','htm']`.

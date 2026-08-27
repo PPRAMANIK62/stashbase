@@ -18,10 +18,10 @@
 import fs from 'node:fs';
 import {
   ensureFolderHome,
-  assertLibraryFolderAvailable,
+  assertLibraryFolderAvailableAsync,
   getFolderHome,
-  memberFolderRoots,
-  registerLibraryFolder,
+  memberFolderRootsAsync,
+  registerLibraryFolderAsync,
   validateFolderName,
 } from './folder.ts';
 import { ensureAgentsFile } from './agent-rules.ts';
@@ -111,6 +111,35 @@ export function resolveCreateProjectTarget(
   return { ok: true, parent, target: filesystemPath.join(parent, trimmed), name: trimmed };
 }
 
+/** Request-path target resolution with async mounted-volume identity checks. */
+export async function resolveCreateProjectTargetAsync(
+  name: unknown,
+  location: unknown,
+  deps: { folderHome: string; memberRoots: readonly string[] },
+): Promise<CreateProjectTargetResolution> {
+  if (typeof name !== 'string' || !name.trim()) return { ok: false, message: '`name` is required' };
+  const trimmed = name.trim();
+  const bad = validateFolderName(trimmed);
+  if (bad) return { ok: false, message: `invalid project name: ${bad}` };
+
+  let parent = deps.folderHome;
+  if (location != null && `${location}`.trim() !== '') {
+    if (typeof location !== 'string') return { ok: false, message: '`location` must be an absolute directory path' };
+    const raw = location.trim();
+    if (!filesystemPath.isAbsolute(raw)) return { ok: false, message: '`location` must be an absolute directory path' };
+    const abs = filesystemPath.absolute(raw);
+    const allowed = await withinAnyRootAsync(abs, [deps.folderHome, ...deps.memberRoots]);
+    if (!allowed) {
+      return {
+        ok: false,
+        message: '`location` must be the folder home, inside it, or inside a library folder',
+      };
+    }
+    parent = abs;
+  }
+  return { ok: true, parent, target: filesystemPath.join(parent, trimmed), name: trimmed };
+}
+
 function withinAnyRoot(abs: string, roots: readonly string[]): boolean {
   for (const root of roots) {
     try {
@@ -135,11 +164,35 @@ function owningRoot(abs: string, roots: readonly string[]): string | null {
   return owner;
 }
 
+async function withinAnyRootAsync(abs: string, roots: readonly string[]): Promise<boolean> {
+  for (const root of roots) {
+    try {
+      if (await filesystemPath.containsAsync(root, abs)) return true;
+    } catch {
+      // A malformed root cannot contain the candidate; keep checking.
+    }
+  }
+  return false;
+}
+
+async function owningRootAsync(abs: string, roots: readonly string[]): Promise<string | null> {
+  let owner: string | null = null;
+  for (const root of roots) {
+    try {
+      if (!(await filesystemPath.containsAsync(root, abs))) continue;
+      if (!owner || await filesystemPath.containsAsync(owner, root)) owner = filesystemPath.absolute(root);
+    } catch {
+      // A malformed persisted root cannot authorize filesystem access.
+    }
+  }
+  return owner;
+}
+
 export interface CreateProjectDeps {
   folderHome(): string;
-  memberRoots(): string[];
+  memberRoots(): string[] | Promise<string[]>;
   /** Register into library membership (the sidebar list source). */
-  register(abs: string): void;
+  register(abs: string): void | Promise<void>;
   ensureAgentsFile(abs: string): boolean;
   noteTreeChanged(): void;
   /** Bind + reconcile the new folder in the background. */
@@ -155,7 +208,7 @@ export interface CreateProjectDeps {
   turnActiveSession(): AttributedAgentSession | null;
   setOverride(agent: AttributedAgentSession['agentId'], nativeSessionId: string, folderAbs: string): void;
   clearOverride(agent: AttributedAgentSession['agentId'], nativeSessionId: string): void;
-  assertAvailable(abs: string): void;
+  assertAvailable(abs: string): void | Promise<void>;
 }
 
 const productionDeps: CreateProjectDeps = {
@@ -163,8 +216,8 @@ const productionDeps: CreateProjectDeps = {
     ensureFolderHome();
     return getFolderHome();
   },
-  memberRoots: memberFolderRoots,
-  register: registerLibraryFolder,
+  memberRoots: memberFolderRootsAsync,
+  register: registerLibraryFolderAsync,
   ensureAgentsFile,
   noteTreeChanged,
   syncFolder: (abs) => syncFolderNow(abs, { reason: 'create_project' }),
@@ -173,40 +226,41 @@ const productionDeps: CreateProjectDeps = {
   turnActiveSession: () => attributedTurnActiveSession(),
   setOverride: setAgentSessionFolderOverride,
   clearOverride: clearAgentSessionFolderOverride,
-  assertAvailable: assertLibraryFolderAvailable,
+  assertAvailable: assertLibraryFolderAvailableAsync,
 };
 
 export async function createProjectFolder(
   input: CreateProjectInput,
   deps: CreateProjectDeps = productionDeps,
 ): Promise<CreateProjectResult> {
-  const resolved = resolveCreateProjectTarget(input.name, input.location, {
+  const initialMemberRoots = await deps.memberRoots();
+  const resolved = await resolveCreateProjectTargetAsync(input.name, input.location, {
     folderHome: deps.folderHome(),
-    memberRoots: deps.memberRoots(),
+    memberRoots: initialMemberRoots,
   });
   if (!resolved.ok) throw operationError(resolved.message, 400, 'INVALID_PROJECT');
 
-  const roots = [deps.folderHome(), ...deps.memberRoots()];
-  const owner = owningRoot(resolved.parent, roots);
+  const roots = [deps.folderHome(), ...(await deps.memberRoots())];
+  const owner = await owningRootAsync(resolved.parent, roots);
   if (!owner) throw operationError('`location` is outside the owned folder scope', 400, 'INVALID_PROJECT');
 
   let parentStat: fs.Stats;
   let target: string;
   try {
-    const parentRel = filesystemPath.relative(owner, resolved.parent);
-    const targetRel = filesystemPath.relative(owner, resolved.target);
+    const parentRel = await filesystemPath.relativeAsync(owner, resolved.parent);
+    const targetRel = await filesystemPath.relativeAsync(owner, resolved.target);
     if (parentRel == null || targetRel == null) throw new Error('path is outside the owned folder scope');
-    const parent = filesystemPath.resolveUnder(owner, parentRel, { access: 'existing', label: 'location' });
-    target = filesystemPath.resolveUnder(owner, targetRel, { access: 'creatable', label: 'project path' });
-    parentStat = fs.statSync(parent);
+    const parent = await filesystemPath.resolveUnderAsync(owner, parentRel, { access: 'existing', label: 'location' });
+    target = await filesystemPath.resolveUnderAsync(owner, targetRel, { access: 'creatable', label: 'project path' });
+    parentStat = await fs.promises.stat(parent);
   } catch {
     throw operationError('`location` does not exist or escapes its owned folder through a symlink', 400, 'INVALID_PROJECT');
   }
   if (!parentStat.isDirectory()) throw operationError('`location` is not a directory', 400, 'INVALID_PROJECT');
-  deps.assertAvailable(target);
+  await deps.assertAvailable(target);
 
   try {
-    fs.mkdirSync(target);
+    await fs.promises.mkdir(target);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException)?.code === 'EEXIST') {
       throw operationError(`a folder named "${resolved.name}" already exists at that location`, 409, 'FOLDER_EXISTS');
@@ -217,9 +271,9 @@ export async function createProjectFolder(
   // Membership is the commit record. Persist it before seeding any content so
   // a config/removal failure can retire the still-empty directory we created.
   try {
-    deps.register(target);
+    await deps.register(target);
   } catch (err) {
-    try { fs.rmdirSync(target); } catch { /* keep a raced/non-empty folder */ }
+    try { await fs.promises.rmdir(target); } catch { /* keep a raced/non-empty folder */ }
     throw err;
   }
   // The project is a normal member folder from birth: AGENTS.md contract

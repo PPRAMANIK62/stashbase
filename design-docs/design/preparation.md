@@ -22,10 +22,10 @@ artifacts.
 
 ## Current Experience
 
-- Markdown, JSON, and `.txt` use source text directly. HTML supplies an
-  in-memory text representation for retrieval. They do not gain visible
-  derived files. Generic workspace files have no Preparation or retrieval
-  path; their tree visibility does not schedule background work.
+- Markdown, valid UTF-8 TXT, and JSON use source text directly. HTML supplies an in-memory text
+  representation for retrieval. They do not gain visible derived files.
+  Generic workspace files have no Preparation or retrieval path; their tree
+  visibility does not schedule background work.
 - PDF, image, DOCX, audio, and supported video sources may gain AppData-derived
   text. PDF and media derived text also serves Agent reading; source identity
   remains unchanged.

@@ -6,8 +6,8 @@ import {
 import { toSourcePath } from '../folder.ts';
 import { detectViewerFormat } from '../format.ts';
 import { sendError } from '../http.ts';
-import { planRenameLinks, type RenameEntry } from '../links.ts';
-import { bundleRenameEntry } from '../rename-helpers.ts';
+import { planRenameLinksAsync, type RenameEntry } from '../links.ts';
+import { bundleRenameEntryAsync } from '../rename-helpers.ts';
 import { deleteLibraryFile, moveLibraryFile } from '../library-file-mutations.ts';
 
 export function mountFileMutationRoutes(app: express.Express): void {
@@ -55,7 +55,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/rename-preview', (req, res) => {
+  app.post('/api/rename-preview', async (req, res) => {
     const kind = req.body?.kind === 'folder' ? 'folder' : 'file';
     const oldPath = typeof req.body?.old === 'string' ? req.body.old.trim() : '';
     const newPath = typeof req.body?.new === 'string' ? req.body.new.trim() : '';
@@ -67,11 +67,11 @@ export function mountFileMutationRoutes(app: express.Express): void {
     }
     const renames: RenameEntry[] = [{ kind, old: oldPath, new: newPath }];
     if (kind === 'file') {
-      const bundle = bundleRenameEntry(oldPath, newPath, 'pre');
+      const bundle = await bundleRenameEntryAsync(oldPath, newPath, 'pre');
       if (bundle) renames.push(bundle);
     }
     try {
-      const plan = planRenameLinks(renames);
+      const plan = await planRenameLinksAsync(renames);
       res.json({
         files: plan.length,
         links: plan.reduce((total, entry) => total + entry.changes, 0),
@@ -94,7 +94,7 @@ export function hasCompatibleRenameExtension(
   requestedName: string,
 ): boolean {
   if (!oldStructuredFormat) return detectViewerFormat(requestedName) === oldFormat;
-  return oldStructuredFormat === 'json' || oldStructuredFormat === 'text'
+  return oldStructuredFormat === 'json' || oldStructuredFormat === 'txt'
     ? detectFormat(requestedName) === oldStructuredFormat
     : detectFormat(requestedName) !== null;
 }

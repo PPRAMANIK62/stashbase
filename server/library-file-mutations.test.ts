@@ -192,21 +192,71 @@ $$`;
   await callTool(base, token, 'delete_file', { path: jsonTarget });
   assert.equal(fs.existsSync(jsonTarget), false);
 
-  const textSource = path.join(root, 'Data', 'notes.txt');
+  const textSource = path.join(root, 'Plain', 'README.TXT');
+  const textTarget = path.join(root, 'Archive', 'README.TXT');
+  const textLinkSource = path.join(root, 'Plain text link.md');
+  fs.writeFileSync(textLinkSource, '[Plain text](Plain/README.TXT)\n', 'utf8');
   const textCreated = await callTool(base, token, 'write_file', {
     path: textSource,
-    content: '\uFEFFfirst\r\nsecond\r\n',
+    content: '\uFEFF# literal heading\r\n[link](Note.md)\r\n',
   });
   const textRead = await callTool(base, token, 'read_file', { path: textSource });
-  assert.equal(textRead.format, 'text');
-  assert.equal(textRead.content, '\uFEFFfirst\r\nsecond\r\n');
-  await callTool(base, token, 'edit_file', {
+  assert.equal(textRead.format, 'txt');
+  assert.equal(textRead.content, '\uFEFF# literal heading\r\n[link](Note.md)\r\n');
+  const textEdited = await callTool(base, token, 'edit_file', {
     path: textSource,
-    old_text: 'second',
-    new_text: 'changed',
+    old_text: 'literal heading',
+    new_text: 'literal source',
     baseVersion: textCreated.version,
   });
-  assert.equal(fs.readFileSync(textSource, 'utf8'), '\uFEFFfirst\r\nchanged\r\n');
+  assert.equal(textEdited.replacements, 1);
+  assert.equal(fs.readFileSync(textSource, 'utf8'), '\uFEFF# literal source\r\n[link](Note.md)\r\n');
+  fs.writeFileSync(textSource, '\uFEFFexternal\r\nchange\r\n', 'utf8');
+  await assert.rejects(callTool(base, token, 'write_file', {
+    path: textSource,
+    content: 'stale writer',
+    baseVersion: textEdited.version,
+  }), /409|FILE_CHANGED/);
+  assert.equal(fs.readFileSync(textSource, 'utf8'), '\uFEFFexternal\r\nchange\r\n');
+  const textMoved = await callTool(base, token, 'move_file', { path: textSource, new_path: textTarget });
+  assert.equal(textMoved.linksUpdated, 1);
+  assert.equal(fs.readFileSync(textLinkSource, 'utf8'), '[Plain text](Archive/README.TXT)\n');
+  assert.equal(fs.existsSync(textSource), false);
+  assert.equal(fs.readFileSync(textTarget, 'utf8'), '\uFEFFexternal\r\nchange\r\n');
+  await callTool(base, token, 'delete_file', { path: textTarget });
+  assert.equal(fs.existsSync(textTarget), false);
+
+  const invalidText = path.join(root, 'Plain', 'broken.txt');
+  fs.mkdirSync(path.dirname(invalidText), { recursive: true });
+  const invalidBytes = Buffer.from([0x66, 0x6f, 0x80, 0x6f]);
+  fs.writeFileSync(invalidText, invalidBytes);
+  await assert.rejects(callTool(base, token, 'read_file', { path: invalidText }), /415|UNSUPPORTED_ENCODING/);
+  await assert.rejects(callTool(base, token, 'edit_file', {
+    path: invalidText,
+    old_text: 'foo',
+    new_text: 'bar',
+  }), /415|UNSUPPORTED_ENCODING/);
+  assert.deepEqual(fs.readFileSync(invalidText), invalidBytes);
+
+  const movedInvalidText = path.join(root, 'Archive', 'broken.txt');
+  await callTool(base, token, 'move_file', {
+    path: invalidText,
+    new_path: movedInvalidText,
+  });
+  assert.equal(fs.existsSync(invalidText), false);
+  assert.deepEqual(fs.readFileSync(movedInvalidText), invalidBytes);
+  await callTool(base, token, 'delete_file', { path: movedInvalidText });
+
+  const oversizedText = path.join(root, 'Plain', 'oversized.txt');
+  const movedOversizedText = path.join(root, 'Archive', 'oversized.txt');
+  fs.writeFileSync(oversizedText, Buffer.alloc((8 * 1024 * 1024) + 1, 0x61));
+  await callTool(base, token, 'move_file', {
+    path: oversizedText,
+    new_path: movedOversizedText,
+  });
+  assert.equal(fs.existsSync(oversizedText), false);
+  assert.equal(fs.statSync(movedOversizedText).size, (8 * 1024 * 1024) + 1);
+  await callTool(base, token, 'delete_file', { path: movedOversizedText });
 
   const opaqueSource = path.join(root, 'Data', 'script.ts');
   fs.writeFileSync(opaqueSource, 'export const value = 1;');

@@ -217,6 +217,8 @@ export function forgetClosedTabs(history: string[], openIds: Set<string>): strin
  *  temporarily undercounting the backfill. */
 export function optimisticKeyBackfillPaths(files: FileMeta[]): string[] {
   return files
+    // The shared predicate, not a per-format enumeration: the list form is
+    // what let a newly added format be forgotten here.
     .filter((f) => isRetrievableViewerFormat(f.format))
     .map((f) => f.name)
     .filter((name) => !name.split('/').some((seg) => seg.startsWith('.')))

@@ -29,8 +29,8 @@ import { normalizeFolderRelativePath } from '../folder-relative-path.ts';
 import { errorMessage, logger } from '../log.ts';
 import {
   getCurrentFolder,
-  exactMemberFolderRoot,
-  resolveFolderRoot,
+  exactMemberFolderRootAsync,
+  resolveFolderRootAsync,
   runWithWindowId,
   WINDOW_ID_HEADER,
 } from '../folder.ts';
@@ -66,10 +66,10 @@ const uploadParser = multer({
   limits: { fileSize: MAX_UPLOAD_FILE_BYTES, files: 500 },
 });
 
-function resolveUploadFolder(explicitFolder: string): string {
+async function resolveUploadFolder(explicitFolder: string): Promise<string> {
   if (explicitFolder) {
-    const root = resolveFolderRoot(explicitFolder);
-    const memberRoot = exactMemberFolderRoot(root);
+    const root = await resolveFolderRootAsync(explicitFolder);
+    const memberRoot = await exactMemberFolderRootAsync(root);
     if (!memberRoot) {
       const err = new Error('folder is not in your folders');
       (err as any).code = 'FOLDER_NOT_FOUND';
@@ -179,16 +179,6 @@ function sendUploadError(res: express.Response, err: unknown): void {
   res.status(400).json({ error: errorMessage(err) });
 }
 
-function pathExistsInFolder(folderRoot: string, relPath: string): boolean {
-  try {
-    validateUploadPath(relPath);
-    const target = filesystemPath.resolveUnder(folderRoot, relPath, { access: 'existing' });
-    return fs.existsSync(target);
-  } catch {
-    return false;
-  }
-}
-
 async function handleUpload(
   req: express.Request,
   res: express.Response,
@@ -199,6 +189,17 @@ async function handleUpload(
     await processUploadedFiles(req, res, files, signal);
   } finally {
     cleanupUploadedFiles(files);
+  }
+}
+
+async function pathExistsInFolderAsync(folderRoot: string, relPath: string): Promise<boolean> {
+  try {
+    validateUploadPath(relPath);
+    const target = await filesystemPath.resolveUnderAsync(folderRoot, relPath, { access: 'existing' });
+    await fs.promises.stat(target);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -221,7 +222,7 @@ async function processUploadedFiles(
     : '';
   let folderAbs: string;
   try {
-    folderAbs = resolveUploadFolder(explicitFolder);
+    folderAbs = await resolveUploadFolder(explicitFolder);
   } catch (err) {
     const code = (err as { code?: unknown })?.code;
     if (code === 'FOLDER_NOT_FOUND') {
@@ -251,7 +252,12 @@ async function processUploadedFiles(
     ? rawPaths.map(String)
     : typeof rawPaths === 'string' ? [rawPaths] : [];
 
-  const finalNames = computeFinalNames(files, paths, prefix, (rel) => pathExistsInFolder(folderAbs, rel));
+  const finalNames = await computeFinalNamesAsync(
+    files,
+    paths,
+    prefix,
+    (rel) => pathExistsInFolderAsync(folderAbs, rel),
+  );
 
   const out: { file: string; error?: string }[] = [];
   const toIndex: { name: string; sourcePath: string; text: string }[] = [];
@@ -431,6 +437,86 @@ export function computeFinalNames(
   return finalNames.map((name) => reserveFinalPath(name, used, exists));
 }
 
+export async function computeFinalNamesAsync(
+  files: Express.Multer.File[],
+  paths: string[],
+  prefix: string,
+  exists: (relPath: string) => Promise<boolean>,
+): Promise<string[]> {
+  const reserved = new Set<string>();
+  const finalByIndex = new Map<number, string>();
+  const noteStemRenames = new Map<string, string>();
+  const topLevelNoteStems = new Set<string>();
+  for (let i = 0; i < files.length; i++) {
+    const rel = rawUploadPathFor(files, paths, i);
+    if (rel.includes('/')) continue;
+    const isNote = isNoteName(rel);
+    const dot = rel.lastIndexOf('.');
+    const origStem = dot > 0 ? rel.slice(0, dot) : rel;
+    const ext = dot > 0 ? rel.slice(dot) : '';
+    if (isNote) topLevelNoteStems.add(origStem);
+    let finalStem = origStem;
+    let n = 2;
+    while (
+      (await exists(prefix + finalStem + ext))
+      || reserved.has(finalStem + ext)
+      || (isNote && await exists(prefix + finalStem + '_files'))
+    ) {
+      finalStem = `${origStem}-${n}`;
+      n++;
+    }
+    reserved.add(finalStem + ext);
+    finalByIndex.set(i, finalStem + ext);
+    if (isNote && finalStem !== origStem) noteStemRenames.set(origStem, finalStem);
+  }
+
+  const dirRenames = new Map<string, string>();
+  const seenDirs = new Set<string>();
+  for (let i = 0; i < files.length; i++) {
+    const rel = rawUploadPathFor(files, paths, i);
+    const dirEnd = rel.indexOf('/');
+    if (dirEnd < 0) continue;
+    const top = rel.slice(0, dirEnd);
+    if (seenDirs.has(top)) continue;
+    seenDirs.add(top);
+    const bundleMatch = top.match(/^(.+)_files$/);
+    if (bundleMatch && topLevelNoteStems.has(bundleMatch[1])) continue;
+    let finalDir = top;
+    let n = 2;
+    while ((await exists(prefix + finalDir)) || reserved.has(finalDir)) {
+      finalDir = `${top}-${n}`;
+      n++;
+    }
+    reserved.add(finalDir);
+    if (finalDir !== top) dirRenames.set(top, finalDir);
+  }
+
+  const finalNames = files.map((_, i) => {
+    const rel = rawUploadPathFor(files, paths, i);
+    const segments = rel.split('/');
+    if (segments.length === 1) {
+      return sanitizeFilename(prefix + (finalByIndex.get(i) ?? rel));
+    }
+    const top = segments[0];
+    const bundleMatch = top.match(/^(.+)_files$/);
+    if (bundleMatch && noteStemRenames.has(bundleMatch[1])) {
+      segments[0] = noteStemRenames.get(bundleMatch[1])! + '_files';
+      return sanitizeFilename(prefix + segments.join('/'));
+    }
+    if (dirRenames.has(top)) {
+      segments[0] = dirRenames.get(top)!;
+      return sanitizeFilename(prefix + segments.join('/'));
+    }
+    return sanitizeFilename(prefix + rel);
+  });
+  const used = new Set<string>();
+  const reservedNames: string[] = [];
+  for (const name of finalNames) {
+    reservedNames.push(await reserveFinalPathAsync(name, used, exists));
+  }
+  return reservedNames;
+}
+
 function reserveFinalPath(candidate: string, used: Set<string>, exists: (relPath: string) => boolean): string {
   if (!used.has(candidate) && !exists(candidate)) {
     used.add(candidate);
@@ -445,6 +531,30 @@ function reserveFinalPath(candidate: string, used: Set<string>, exists: (relPath
   for (let n = 2; ; n++) {
     const next = `${dir}${stem}-${n}${ext}`;
     if (!used.has(next) && !exists(next)) {
+      used.add(next);
+      return next;
+    }
+  }
+}
+
+async function reserveFinalPathAsync(
+  candidate: string,
+  used: Set<string>,
+  exists: (relPath: string) => Promise<boolean>,
+): Promise<string> {
+  if (!used.has(candidate) && !(await exists(candidate))) {
+    used.add(candidate);
+    return candidate;
+  }
+  const slash = candidate.lastIndexOf('/');
+  const dir = slash >= 0 ? candidate.slice(0, slash + 1) : '';
+  const base = slash >= 0 ? candidate.slice(slash + 1) : candidate;
+  const dot = base.lastIndexOf('.');
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const ext = dot > 0 ? base.slice(dot) : '';
+  for (let n = 2; ; n++) {
+    const next = `${dir}${stem}-${n}${ext}`;
+    if (!used.has(next) && !(await exists(next))) {
       used.add(next);
       return next;
     }

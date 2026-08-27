@@ -83,8 +83,10 @@ test('J03 keeps the workspace tree truthful while generic files stay outside ret
     await expect(app.page.getByRole('status')).toContainText('Binary file cannot be opened');
     await expect(app.page.getByRole('status')).toContainText(GENERIC_BINARY);
 
+    // A first-class TXT source, for contrast with the generic rows above: it
+    // opens in the literal plain-text editor and offers editing.
     await fileTreeRow(app.page, JOURNEY_TEXT).click();
-    await expect(app.page.getByRole('region', { name: 'Text document' })).toContainText('Plain text journey content.');
+    await expect(app.page.getByRole('region', { name: 'Plain text document' })).toContainText('# Literal heading');
     await expect(app.page.getByRole('button', { name: 'Switch to Live Editing' })).toBeVisible();
     app.errors.assertNone();
   } finally {

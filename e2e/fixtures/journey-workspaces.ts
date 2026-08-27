@@ -4,6 +4,7 @@ import type { AppFixture } from '../support/fixtures.ts';
 
 export const JOURNEY_MARKDOWN = 'Journey Markdown.md';
 export const JOURNEY_JSON = 'raw-data.json';
+export const JOURNEY_TEXT = 'literal-source.TXT';
 export const CROSS_FOLDER_NOTE = 'Cross Folder Result.md';
 export const EXACT_SEARCH_PHRASE = 'orchid regression phrase 7319';
 export const JOURNEY_HTML = 'read-only.html';
@@ -13,7 +14,6 @@ export const MALFORMED_DOCX = 'broken.docx';
 export const JOURNEY_PDF = 'two-pages.pdf';
 export const JOURNEY_DOCX = 'valid-document.docx';
 export const LEGACY_DERIVED_NOTE = '.two-pages.pdf.md';
-export const JOURNEY_TEXT = 'plain-notes.txt';
 export const GENERIC_TEXT = 'script.ts';
 export const GENERIC_BINARY = 'archive.zip';
 export const EXCLUDED_FOLDER = 'node_modules';
@@ -88,7 +88,6 @@ export function seedJourneyWorkspaces(fixture: AppFixture): void {
   write(path.join(projectA, JOURNEY_PDF), twoPagePdf());
   write(path.join(projectA, JOURNEY_DOCX), VALID_DOCX);
   write(path.join(projectA, LEGACY_DERIVED_NOTE), '# Hidden derived regression phrase\n');
-  write(path.join(projectA, JOURNEY_TEXT), 'Plain text journey content.\r\n');
   write(path.join(projectA, GENERIC_TEXT), 'export const genericJourney = "visible but not indexed";\n');
   write(path.join(projectA, GENERIC_BINARY), Buffer.from('PK\u0003\u0004generic binary fixture', 'binary'));
   write(path.join(projectA, '.env'), 'JOURNEY_VISIBLE_DOTFILE=true\n');
@@ -137,6 +136,7 @@ export function seedJourneyWorkspaces(fixture: AppFixture): void {
     '',
   ].join('\n'));
   write(path.join(projectA, JOURNEY_JSON), '{\r\n  "fixture": "raw journey",\r\n  "editable": true\r\n}\r\n');
+  write(path.join(projectA, JOURNEY_TEXT), '\uFEFF# Literal heading\r\n<strong>not HTML</strong>\r\n[link](Second Note.md)\r\n');
   write(path.join(projectB, CROSS_FOLDER_NOTE), [
     '# Cross Folder Result',
     '',

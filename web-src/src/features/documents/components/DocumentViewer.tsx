@@ -25,7 +25,7 @@ const LazyPdfViewerPane = lazyWithRetry(() => import('@/features/documents/compo
 const LazyDocxPreview = lazyWithRetry(() => import('@/features/documents/components/DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
 const LazyAudioPreview = lazyWithRetry(() => import('@/features/documents/components/AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
 const LazyJsonDocument = lazyWithRetry(() => import('@/features/documents/components/JsonDocument').then((mod) => ({ default: mod.JsonDocument })));
-const LazyTextDocument = lazyWithRetry(() => import('@/features/documents/components/TextDocument').then((mod) => ({ default: mod.TextDocument })));
+const LazyPlainTextViewerPane = lazyWithRetry(() => import('@/features/documents/components/PlainTextViewerPane').then((mod) => ({ default: mod.PlainTextViewerPane })));
 const LazyGenericFileViewer = lazyWithRetry(() => import('@/features/documents/components/GenericFileViewer').then((mod) => ({ default: mod.GenericFileViewer })));
 const LazyConflictResolver = lazyWithRetry(() => import('@/features/documents/components/ConflictResolver').then((mod) => ({ default: mod.ConflictResolver })));
 
@@ -44,7 +44,7 @@ const LazyConflictResolver = lazyWithRetry(() => import('@/features/documents/co
  * Adding a format means one `lazyWithRetry` and one branch in this file.
  *
  * A tab whose save hit a disk conflict routes to the resolver instead of
- * its editor, for each editable format. That substitution belongs here
+ * its editor, for every editable format. That substitution belongs here
  * rather than in the shell for the same reason the format switch does: the
  * shell supplies tab state and a cell, and never learns which surface a tab
  * is currently showing.
@@ -129,25 +129,12 @@ export function DocumentViewer({
           </LazyLoadBoundary>
         )
       )}
-      {cur && cur.format === 'text' && (
-        activeTab?.conflict ? (
-          <Suspense fallback={<EmptyState layout="fill" role="status">Loading conflict view…</EmptyState>}>
-            <LazyConflictResolver tabId={activeTab.id} />
+      {cur && cur.format === 'txt' && activeTab && (
+        <LazyLoadBoundary className={VIEWER_FALLBACK_CLASS} label="plain text document" resetKey={resourceResetKey}>
+          <Suspense fallback={<EmptyState layout="fill">Opening plain text…</EmptyState>}>
+            <LazyPlainTextViewerPane key={activeTab.id} tab={activeTab} />
           </Suspense>
-        ) : (
-          <LazyLoadBoundary className={VIEWER_FALLBACK_CLASS} label="text document" resetKey={resourceResetKey}>
-            <Suspense fallback={<EmptyState layout="fill">Opening text…</EmptyState>}>
-              <LazyTextDocument
-                key={activeTab?.id ?? cur.name}
-                tabId={activeTab?.id ?? ''}
-                content={cur.content}
-                readOnly={!editMode}
-                active
-                fileName={cur.name}
-              />
-            </Suspense>
-          </LazyLoadBoundary>
-        )
+        </LazyLoadBoundary>
       )}
       {cur && cur.format === 'generic' && cur.genericPreview && (
         <LazyLoadBoundary className={VIEWER_FALLBACK_CLASS} label="file preview" resetKey={resourceResetKey}>

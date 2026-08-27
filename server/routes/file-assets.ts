@@ -2,13 +2,13 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { analyzeHtml } from '../html.ts';
-import { resolveAsset, resolveExisting } from '../files.ts';
+import { resolveAssetAsync, resolveExistingAsync } from '../files.ts';
 import { detectViewerFormat } from '../format.ts';
 import { derivedHtmlPathForDocx } from '../docx.ts';
 import { isConversionTextUnavailable } from '../conversion.ts';
 import { hasFailed } from '../conversion-status.ts';
 import { filesystemPath } from '../filesystem-path.ts';
-import { exactMemberFolderRoot, runWithFolderRoot, toSourcePath } from '../folder.ts';
+import { exactMemberFolderRootAsync, runWithFolderRoot, toSourcePath } from '../folder.ts';
 import { sendError } from '../http.ts';
 import { isAudioFile } from '../format.ts';
 import { prepareAudioPreview, readAudioPreviewStatus } from '../audio-transcription.ts';
@@ -49,16 +49,16 @@ const MIME: Record<string, string> = {
 export function mountFileAssetRoutes(app: express.Express): void {
   // HTML responses carry heading ids and the scroll bootstrap. Video uses
   // sendFile for Range support; other assets stream with an explicit MIME.
-  app.get('/asset/*', (req, res) => {
-    const scope = parseAssetScope((req.params as any)[0] as string);
+  app.get('/asset/*', async (req, res) => {
+    const scope = await parseAssetScope((req.params as any)[0] as string);
     if (!scope) return res.status(404).end();
-    void withAssetScope(scope, () => {
-      const abs = resolveAsset(scope.rel);
+    void withAssetScope(scope, async () => {
+      const abs = await resolveAssetAsync(scope.rel);
       if (!abs) return res.status(404).end();
       const ext = path.extname(abs).toLowerCase();
       if (ext === '.html' || ext === '.htm') {
         try {
-          const raw = fs.readFileSync(abs, 'utf8');
+          const raw = await fs.promises.readFile(abs, 'utf8');
           const { preparedHtml } = analyzeHtml(raw);
           res.type('text/html').send(preparedHtml);
         } catch (err: unknown) {
@@ -78,7 +78,7 @@ export function mountFileAssetRoutes(app: express.Express): void {
   // or container is unsupported, AudioPreview retries through this AppData-only
   // WebM/Opus audio representation. Generation is deduplicated per source.
   app.get('/asset-audio-preview/*', async (req, res) => {
-    const scope = parseAssetScope((req.params as any)[0] as string);
+    const scope = await parseAssetScope((req.params as any)[0] as string);
     if (!scope) return res.status(404).end();
     if (!isAudioFile(scope.rel)) return res.status(415).end();
     const controller = new AbortController();
@@ -88,7 +88,7 @@ export function mountFileAssetRoutes(app: express.Express): void {
     res.once('close', abortOnPrematureClose);
     try {
       await withAssetScope(scope, async () => {
-        const sourceAbs = resolveExisting(scope.rel);
+        const sourceAbs = await resolveExistingAsync(scope.rel);
         if (!sourceAbs) return res.status(404).end();
         const previewAbs = await prepareAudioPreview(sourceAbs, controller.signal);
         res.type('audio/webm');
@@ -110,7 +110,7 @@ export function mountFileAssetRoutes(app: express.Express): void {
   app.post('/api/audio/preview/prepare', async (req, res) => {
     const rel = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
     if (!rel || !isAudioFile(rel)) return res.status(415).json({ error: 'media path required' });
-    const scope = explicitFolderScope(rel, req.body?.folder);
+    const scope = await explicitFolderScope(rel, req.body?.folder);
     if (!scope) return res.status(400).json({ error: 'folder is not a registered library folder' });
     const controller = new AbortController();
     const abort = () => controller.abort(new Error('audio preview request closed'));
@@ -119,7 +119,7 @@ export function mountFileAssetRoutes(app: express.Express): void {
     res.once('close', abortOnPrematureClose);
     try {
       await withAssetScope(scope, async () => {
-        const sourceAbs = resolveExisting(rel);
+        const sourceAbs = await resolveExistingAsync(rel);
         if (!sourceAbs) return res.status(404).json({ error: 'file not found' });
         await prepareAudioPreview(sourceAbs, controller.signal);
         res.json({ ok: true });
@@ -136,11 +136,11 @@ export function mountFileAssetRoutes(app: express.Express): void {
   app.get('/api/audio/preview/status', async (req, res) => {
     const rel = typeof req.query.path === 'string' ? req.query.path.trim() : '';
     if (!rel || !isAudioFile(rel)) return res.status(415).json({ error: 'media path required' });
-    const scope = explicitFolderScope(rel, req.query.folder);
+    const scope = await explicitFolderScope(rel, req.query.folder);
     if (!scope) return res.status(400).json({ error: 'folder is not a registered library folder' });
     try {
-      await withAssetScope(scope, () => {
-        const sourceAbs = resolveExisting(rel);
+      await withAssetScope(scope, async () => {
+        const sourceAbs = await resolveExistingAsync(rel);
         if (!sourceAbs) return res.status(404).json({ error: 'file not found' });
         res.json(readAudioPreviewStatus(sourceAbs));
       });
@@ -151,19 +151,19 @@ export function mountFileAssetRoutes(app: express.Express): void {
 
   // Derived DOCX HTML is a fallback when renderer-side conversion cannot
   // produce the immediate preview. The visible DOCX stays the source path.
-  app.get('/asset-derived/*', (req, res) => {
-    const scope = parseAssetScope((req.params as any)[0] as string);
+  app.get('/asset-derived/*', async (req, res) => {
+    const scope = await parseAssetScope((req.params as any)[0] as string);
     if (!scope) return res.status(404).end();
     const rel = scope.rel;
     if (detectViewerFormat(rel) !== 'docx') return res.status(415).end();
-    void withAssetScope(scope, () => {
+    void withAssetScope(scope, async () => {
       let sourceAbs: string | null = null;
       try {
-        sourceAbs = resolveExisting(rel);
+        sourceAbs = await resolveExistingAsync(rel);
         if (!sourceAbs) return res.status(404).end();
         if (isConversionTextUnavailable(sourceAbs)) throw new Error('document conversion unavailable');
         const htmlAbs = derivedHtmlPathForDocx(sourceAbs);
-        const raw = fs.readFileSync(htmlAbs, 'utf8');
+        const raw = await fs.promises.readFile(htmlAbs, 'utf8');
         const { preparedHtml } = analyzeHtml(raw);
         res.type('text/html').send(preparedHtml);
       } catch {
@@ -191,10 +191,12 @@ export function mountFileAssetRoutes(app: express.Express): void {
 /** Explicit-folder scope for the JSON audio endpoints: same membership rule
  *  as the path token, but carried as an ordinary `folder` parameter since no
  *  iframe/base-href constraint applies. Returns null for a non-member ref. */
-function explicitFolderScope(rel: string, folderRaw: unknown): AssetScope | null {
+async function explicitFolderScope(rel: string, folderRaw: unknown): Promise<AssetScope | null> {
   const ref = typeof folderRaw === 'string' && folderRaw.trim() ? folderRaw.trim() : undefined;
   if (!ref) return { rel };
-  const folderRoot = exactMemberFolderRoot(ref);
+  let folderRoot: string | null;
+  try { folderRoot = await exactMemberFolderRootAsync(ref); }
+  catch { return null; }
   if (!folderRoot) return null;
   return { rel, folderRoot };
 }
@@ -219,7 +221,7 @@ interface AssetScope {
  *  double-encoded by the renderer: Express decodes the wildcard once, so
  *  the surviving segment stays slash-free until we decode it here.
  *  Returns null for a malformed or non-member folder token. */
-function parseAssetScope(raw: string): AssetScope | null {
+async function parseAssetScope(raw: string): Promise<AssetScope | null> {
   const rel = stripAssetWindowPrefix(raw);
   if (!rel.startsWith('__folder/')) return { rel };
   const slash = rel.indexOf('/', '__folder/'.length);
@@ -230,7 +232,9 @@ function parseAssetScope(raw: string): AssetScope | null {
   } catch {
     return null;
   }
-  const folderRoot = exactMemberFolderRoot(folderRef);
+  let folderRoot: string | null;
+  try { folderRoot = await exactMemberFolderRootAsync(folderRef); }
+  catch { return null; }
   if (!folderRoot) return null;
   return { rel: rel.slice(slash + 1), folderRoot };
 }

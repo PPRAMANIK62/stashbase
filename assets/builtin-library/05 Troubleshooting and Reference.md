@@ -119,7 +119,7 @@ return, manual Sync, MCP reindex, Agent turn completion, and relevant settings
 changes. Use Sync or `reindex` when an external tool changed files and current
 retrieval has not caught up.
 
-An external change that conflicts with an unsaved Markdown, JSON, or `.txt` edit is not
+An external change that conflicts with an unsaved Markdown, plain-text, or JSON edit is not
 silently overwritten. Resolve the visible reload, overwrite, or merge decision.
 
 ## Removing a Folder or Start Here

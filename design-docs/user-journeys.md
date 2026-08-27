@@ -161,7 +161,7 @@ described by the
 
 1. Open the source in a persistent tab and receive only the preview or editing
    capabilities declared for that format.
-2. For content-editable Markdown, JSON, or plain text, enter the appropriate editing state
+2. For content-editable Markdown, JSON, or UTF-8 plain text, enter the appropriate editing state
    and save through the shared durability path.
 3. Navigate with tabs, Quick Open, outlines, Find, local links, or search
    results.
@@ -181,12 +181,14 @@ described by the
   binary, oversized, or unavailable state. Muted means they are absent from
   Search and automatic Chat context.
 - Excluded infrastructure is represented by a non-expandable folder row rather
-  than silently traversed or silently omitted. Its hover/focus action and
-  keyboard activation expose **Show in Finder / File Explorer**, so reduced
-  StashBase capability never implies that the source is unreachable. Hidden
-  derived artifacts never surface.
-- Writer/reader and JSON Tree/Source transitions preserve the same source
-  content rather than creating a second document model.
+  than silently traversed or silently omitted. Every restricted entry — file or
+  folder — exposes **Show in Finder / File Explorer** on hover/focus and by
+  keyboard, so reduced StashBase capability never implies that the source is
+  unreachable. Hidden derived artifacts never surface.
+- Writer/reader, JSON Tree/Source, and literal plain-text transitions preserve
+  the same source content rather than creating a second document model.
+- Unsupported plain-text encoding keeps the source identifiable, read-only,
+  and byte-unchanged; it never enters retrieval as replacement-character text.
 - Navigation, window retirement, and product-owned renderer recovery do not
   silently discard a live edit.
 - Parse, preview, decode, or availability failure keeps the source identifiable
@@ -544,6 +546,8 @@ Agent.
   original source.
 - The user can distinguish exploration from the accepted durable result.
 - The written result re-enters ordinary browsing, search, and Agent context.
+- Direct-text project evidence, including valid UTF-8 plain text, remains the
+  same visible source across Workbench, retrieval, and Agent/MCP access.
 - Losing semantic or Agent availability does not make existing source work or
   durable results inaccessible.
 

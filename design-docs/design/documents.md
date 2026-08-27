@@ -9,9 +9,10 @@ the source remains the durable object shared with other tools and Agents.
 
 This area owns document tabs and format-appropriate reading or editing
 experiences. Together with the Workspace area, it forms the Document
-Workbench. It includes Markdown, plain text, source-authoritative JSON, HTML,
-PDF, DOCX, images, audio, supported video containers, and truthful fallback
-surfaces for other local files. Preparation and indexing are separate areas.
+Workbench. It includes Markdown, literal UTF-8 plain text, source-authoritative
+JSON, HTML, PDF, DOCX, images, audio, supported video containers, and truthful
+fallback surfaces for other local files. Preparation and indexing are separate
+areas.
 
 StashBase is not an unrestricted browser, a script host, a pixel-perfect Word
 editor, a media editor, or a proprietary document format.
@@ -32,15 +33,18 @@ editor, a media editor, or a proprietary document format.
   remains available for malformed, incomplete, duplicate-key, or bounded-out
   content. Structured edits use the shared source-preserving save path rather
   than a second serialized document model.
-- Plain `.txt` sources use a source-preserving text editor. Other regular files
-  remain selectable but muted in the tree because Search and automatic Chat
-  context do not consume them. Selection performs bounded content inspection:
-  strict UTF-8 text opens read-only, while binary, invalidly encoded, oversized,
-  unavailable, and non-regular entries keep their source identity in an
-  explicit cannot-open surface. Recognized source languages are syntax
-  coloured for reading; an unrecognized one stays plain rather than being
-  coloured as a guessed language. Reading a code file offers no editing
-  chrome, because the file is read-only.
+- UTF-8 `.txt` sources use a literal source editor: Markdown, HTML, JSON, and
+  link-like syntax remain text. Existing in-folder sources are editable, while
+  out-of-folder results stay read-only. Unsupported encodings retain a visible
+  source tab with an explicit error and are never rewritten.
+- Other regular files remain selectable but muted in the tree because Search
+  and automatic Chat context do not consume them. Selection performs bounded
+  content inspection: strict UTF-8 text opens read-only, while binary,
+  invalidly encoded, oversized, unavailable, and non-regular entries keep their
+  source identity in an explicit cannot-open surface. Recognized source
+  languages are syntax coloured for reading; an unrecognized one stays plain
+  rather than being coloured as a guessed language. Reading such a file offers
+  no editing chrome, because it is read-only.
 - When a source changes on disk during an edit, StashBase keeps both versions,
   shows their differences, and waits for the user to reload, overwrite, or
   merge. An unresolved comparison blocks leaving; a merge returns as an
@@ -74,7 +78,7 @@ assertions.
 | Source family | Extensions | Workbench surface | Workbench authoring | Retrieval text | Agent and MCP file access |
 |---|---|---|---|---|---|
 | Markdown | `.md`, `.markdown` | Writer Mode and Reading View | New notes and existing sources are content-editable | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
-| Plain text | `.txt` | Source-preserving text view | Existing sources are content-editable; New Note creates Markdown | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
+| Plain text | `.txt` | Literal source editor | Existing sources are content-editable; New Note creates Markdown | Direct UTF-8 source text; unsupported encodings are excluded | `read_file`, `write_file`, and `edit_file` use valid UTF-8 source text |
 | JSON | `.json` | Source-preserving Tree and Source views | Existing sources are content-editable; New Note creates Markdown | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
 | HTML | `.html`, `.htm` | Compatibility preview | Preview-only in the Workbench | In-memory text derived from the source without durable Preparation | `read_file`, `write_file`, and `edit_file` use raw HTML source |
 | PDF | `.pdf` | Source PDF preview | Preview-only | Prepared Markdown | `read_file` returns current prepared Markdown; content writes are rejected |
@@ -105,6 +109,9 @@ filesystem entries are reveal-only. Generic bytes are never decoded lossily.
   and unsaved content.
 - Parsing or preview failure keeps the source identity visible and offers a
   truthful recovery path.
+- Direct-text saves preserve supported UTF-8 BOM, line-ending, and trailing-
+  newline conventions. Invalid UTF-8 is an explicit non-editable state, not a
+  lossy replacement-character decode.
 - A structured JSON view is a controller over source text, never a second
   document model or persistence path.
 - Rendering untrusted document content never grants application privileges or

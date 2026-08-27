@@ -2,19 +2,20 @@
  * and reveal, then composes mutation, ordering, and asset subroutes. */
 import express from 'express';
 import {
-  createTextExclusive,
+  createTextExclusiveAsync,
   detectFormat,
-  fileVersion,
-  fileStatVersion,
+  fileVersionAsync,
+  fileStatVersionAsync,
   getCurrentFolderBasename,
   listFilesAndFoldersAsync,
   pathExists,
-  readText,
-  resolveExisting,
+  pathExistsAsync,
+  readTextAsync,
+  resolveExistingAsync,
   sanitizeFilename,
 } from '../files.ts';
 import { detectViewerFormat, isNoteName } from '../format.ts';
-import { exactMemberFolderRoot, getCurrentFolderLabel, runWithFolderRoot } from '../folder.ts';
+import { exactMemberFolderRootAsync, getCurrentFolderLabel, runWithFolderRoot } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError, revealInOsFileManager } from '../http.ts';
 import { noteTreeChanged } from '../watcher.ts';
@@ -34,17 +35,26 @@ export function fileHeadStatus(name: string): number {
   return 204;
 }
 
+export async function fileHeadStatusAsync(name: string): Promise<number> {
+  const format = detectViewerFormat(name);
+  if (!format) return 415;
+  return (await pathExistsAsync(name)) ? 204 : 404;
+}
+
 /** Run a READ handler against an explicit `?folder=` member folder when the
  *  request carries one; otherwise against the window's own folder. Same
  *  membership rule as the `/api/files?folder=` listing above. */
 async function runWithExplicitReadFolder(
   req: express.Request,
   res: express.Response,
-  fn: () => void,
+  fn: () => unknown | Promise<unknown>,
 ): Promise<void> {
   const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
-  if (!rawFolder) return fn();
-  const member = filesystemPath.isAbsolute(rawFolder) ? exactMemberFolderRoot(rawFolder) : null;
+  if (!rawFolder) {
+    await fn();
+    return;
+  }
+  const member = filesystemPath.isAbsolute(rawFolder) ? await exactMemberFolderRootAsync(rawFolder) : null;
   if (!member) {
     res.status(400).json({ error: 'folder is not a registered library folder' });
     return;
@@ -80,7 +90,7 @@ export function mount(app: express.Express): void {
       const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
       if (rawFolder) {
         const member = filesystemPath.isAbsolute(rawFolder)
-          ? exactMemberFolderRoot(rawFolder)
+          ? await exactMemberFolderRootAsync(rawFolder)
           : null;
         if (!member) {
           return res.status(400).json({ error: 'folder is not a registered library folder' });
@@ -112,8 +122,8 @@ export function mount(app: express.Express): void {
   //  - `name` omitted → auto-pick first free `untitled-N.md` (race-safe via O_EXCL).
   //  - `dir`  optional → place the file inside that folder-relative folder
   //    (must already exist; create with POST /api/folders first).
-  // New Note always creates Markdown even though existing JSON and .txt
-  // sources are also content-editable in their format-specific viewers.
+  // New Note is intentionally Markdown even though existing JSON and TXT
+  // sources have their own editing surfaces (HTML remains preview-only here).
   app.post('/api/files', async (req, res) => {
     const requestedName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     const content = typeof req.body?.content === 'string' ? req.body.content : '';
@@ -131,7 +141,7 @@ export function mount(app: express.Express): void {
         // Silently scrub characters that break cross-platform sync —
         // user keeps the original title in the file's first heading.
         name = sanitizeFilename(prefix + base);
-        if (!createTextExclusive(name, content)) {
+        if (!(await createTextExclusiveAsync(name, content))) {
           return res.status(409).json({ error: 'file exists' });
         }
       } else {
@@ -140,7 +150,7 @@ export function mount(app: express.Express): void {
         let claimed = '';
         for (; i <= MAX_TRIES; i++) {
           const candidate = `${prefix}untitled-${i}${ext}`;
-          if (createTextExclusive(candidate, content)) {
+          if (await createTextExclusiveAsync(candidate, content)) {
             claimed = candidate;
             break;
           }
@@ -150,7 +160,7 @@ export function mount(app: express.Express): void {
       }
       const indexWarning = await upsertSavedFile(name, content);
       noteTreeChanged();
-      res.json({ name, content, indexWarning, version: fileVersion(name) ?? undefined });
+      res.json({ name, content, indexWarning, version: (await fileVersionAsync(name)) ?? undefined });
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -162,11 +172,11 @@ export function mount(app: express.Express): void {
   // route below stays bound to the window's own folder.
   app.head('/api/files/*', (req, res) => {
     const name = (req.params as any)[0] as string;
-    void runWithExplicitReadFolder(req, res, () => {
+    void runWithExplicitReadFolder(req, res, async () => {
       try {
-        const status = fileHeadStatus(name);
+        const status = await fileHeadStatusAsync(name);
         if (status === 204) {
-          const version = fileStatVersion(name);
+          const version = await fileStatVersionAsync(name);
           if (version) res.setHeader('x-stashbase-file-version', version);
         }
         res.sendStatus(status);
@@ -193,7 +203,7 @@ export function mount(app: express.Express): void {
   // ----- read -----
   app.get('/api/files/*', (req, res) => {
     const name = (req.params as any)[0] as string;
-    void runWithExplicitReadFolder(req, res, () => {
+    void runWithExplicitReadFolder(req, res, async () => {
       try {
         // Refuse anything outside the recognized direct-text formats. Bundle assets
         // (the PNG / CSS / WOFF that live alongside an arxiv html in its
@@ -203,13 +213,25 @@ export function mount(app: express.Express): void {
         // garbled UTF-8 to render.
         const format = detectFormat(name);
         if (!format) return res.status(415).json({ error: 'unsupported format' });
-        const content = readText(name);
+        let content: string | null;
+        try {
+          content = await readTextAsync(name);
+        } catch (err: unknown) {
+          if ((err as { code?: unknown })?.code !== 'UNSUPPORTED_ENCODING') throw err;
+          return res.json({
+            name,
+            format,
+            content: '',
+            version: (await fileVersionAsync(name)) ?? undefined,
+            error: { code: 'UNSUPPORTED_ENCODING', message: err instanceof Error ? err.message : String(err) },
+          });
+        }
         if (content == null) return res.status(404).json({ error: 'not found' });
         // Raw HTML in `content` (what the editor needs); the preview iframe
         // loads its prepared version via `/asset/*` — keeping injected ids +
         // bootstrap script out of the bytes that round-trip through the
         // editor (otherwise autosave would rewrite the file to include them).
-        res.json({ name, format, content, version: fileVersion(name) ?? undefined });
+        res.json({ name, format, content, version: (await fileVersionAsync(name)) ?? undefined });
       } catch (err: unknown) {
         sendError(res, err);
       }
@@ -239,10 +261,10 @@ export function mount(app: express.Express): void {
   // The renderer sends the folder-relative name and we resolve + shell
   // out here. Fire-and-forget spawn; we just confirm the file exists
   // before launching.
-  app.post('/api/reveal/*', (req, res) => {
+  app.post('/api/reveal/*', async (req, res) => {
     const name = (req.params as any)[0] as string;
     try {
-      const abs = resolveExisting(name);
+      const abs = await resolveExistingAsync(name);
       if (!abs) return res.status(404).json({ error: 'not found' });
       revealInOsFileManager(abs);
       res.json({});

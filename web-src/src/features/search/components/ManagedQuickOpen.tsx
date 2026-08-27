@@ -43,7 +43,7 @@ export default function ManagedQuickOpen({
     activeFileIsEditable: Boolean(activeTab?.file
       && (activeTab.file.format === 'md'
         || activeTab.file.format === 'json'
-        || activeTab.file.format === 'text')
+        || activeTab.file.format === 'txt')
       && !activeTab.file.folder),
   };
   const fileItems = useMemo(

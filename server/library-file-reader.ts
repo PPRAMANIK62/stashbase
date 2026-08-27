@@ -1,10 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { derivedNoteFor, sourceForDerivedText } from './derived-store.ts';
-import { memberRootForAbs, runWithFolderRoot } from './folder.ts';
+import { memberRootForAbsAsync, runWithFolderRoot } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { detectFormat, detectViewerFormat } from './format.ts';
-import { fileStatVersion, fileVersion, pathExists, readText, readUtf8FileBounded } from './files.ts';
+import {
+  fileStatVersionAsync,
+  fileVersionAsync,
+  pathExistsAsync,
+  readTextAsync,
+  readUtf8FileBoundedAsync,
+} from './files.ts';
 import { isConversionTextUnavailable } from './conversion.ts';
 import { isAudioTranscriptTextUnavailable } from './audio-transcription.ts';
 import { derivedHtmlPathForDocx } from './docx.ts';
@@ -37,12 +43,12 @@ export function isAgentReadableDerivedTextReady(
 }
 
 export async function agentContextFile(rawPath: unknown): Promise<AgentContextFile> {
-  const target = normalizeLibraryFilePath(rawPath);
+  const target = await normalizeLibraryFilePath(rawPath);
   const folderName = path.basename(target.folderRoot);
   return runWithFolderRoot(target.folderRoot, async () => {
     const sourceFormat = detectViewerFormat(target.folderRel);
     if (!sourceFormat) throw routeError('unsupported format', 415, 'UNSUPPORTED_FORMAT');
-    if (!pathExists(target.folderRel)) throw routeError('not found', 404);
+    if (!(await pathExistsAsync(target.folderRel))) throw routeError('not found', 404);
 
     if (sourceFormat !== 'pdf' && sourceFormat !== 'docx' && sourceFormat !== 'audio') {
       return {
@@ -76,7 +82,9 @@ export async function agentContextFile(rawPath: unknown): Promise<AgentContextFi
         reason: 'Searchable text is pending or preparation failed; retry after completion or reprocess the source.',
       };
     }
-    if (!fs.existsSync(derivedAbs)) {
+    try {
+      await fs.promises.access(derivedAbs);
+    } catch {
       return {
         path: target.abs,
         folder: folderName,
@@ -111,9 +119,9 @@ export async function agentContextFile(rawPath: unknown): Promise<AgentContextFi
 }
 
 export async function readLibraryFile(rawPath: unknown): Promise<LibraryFileRead> {
-  const derived = normalizeDerivedReadPath(rawPath);
+  const derived = await normalizeDerivedReadPath(rawPath);
   if (derived) return derived;
-  const target = normalizeLibraryFilePath(rawPath);
+  const target = await normalizeLibraryFilePath(rawPath);
   return runWithFolderRoot(target.folderRoot, async () => {
     const format = detectFormat(target.folderRel);
     if (!format) {
@@ -132,18 +140,22 @@ export async function readLibraryFile(rawPath: unknown): Promise<LibraryFileRead
       }
       throw routeError('unsupported format', 415, 'UNSUPPORTED_FORMAT');
     }
-    const content = readText(target.folderRel);
+    const content = await readTextAsync(target.folderRel);
     if (content == null) throw routeError('not found', 404);
     return {
       path: target.abs,
       format,
       content,
-      version: fileVersion(target.folderRel) ?? undefined,
+      version: (await fileVersionAsync(target.folderRel)) ?? undefined,
     };
   });
 }
 
-function readSourceDerivedFile(sourceAbs: string, folderRel: string, sourceFormat: 'pdf' | 'docx' | 'audio'): LibraryFileRead {
+async function readSourceDerivedFile(
+  sourceAbs: string,
+  folderRel: string,
+  sourceFormat: 'pdf' | 'docx' | 'audio',
+): Promise<LibraryFileRead> {
   const label = sourceFormat === 'docx' ? 'HTML' : 'Markdown';
   if (isConversionTextUnavailable(sourceAbs) || isAudioTranscriptTextUnavailable(sourceAbs)) {
     throw routeError(`extracted ${label} is pending or preparation failed; retry after completion or reprocess the ${sourceFormat.toUpperCase()}`, 409, 'CONVERSION_NOT_READY');
@@ -153,7 +165,7 @@ function readSourceDerivedFile(sourceAbs: string, folderRel: string, sourceForma
     : derivedNoteFor(sourceAbs);
   let content: string;
   try {
-    content = readUtf8FileBounded(derivedAbs);
+    content = await readUtf8FileBoundedAsync(derivedAbs);
   } catch (err) {
     if ((err as { code?: unknown })?.code === 'FILE_TOO_LARGE') throw err;
     throw routeError(`extracted ${label} is not available for this ${sourceFormat.toUpperCase()} yet; retry conversion or run reindex first`, 409, 'CONVERSION_NOT_READY');
@@ -165,11 +177,11 @@ function readSourceDerivedFile(sourceAbs: string, folderRel: string, sourceForma
     readPath: derivedAbs,
     derived: true,
     content,
-    version: fileStatVersion(folderRel) ?? undefined,
+    version: (await fileStatVersionAsync(folderRel)) ?? undefined,
   };
 }
 
-function normalizeDerivedReadPath(rawPath: unknown): Promise<LibraryFileRead> | null {
+async function normalizeDerivedReadPath(rawPath: unknown): Promise<LibraryFileRead | null> {
   let abs: string;
   try {
     abs = resolveLibraryAbs(rawPath, { allowEmpty: false });
@@ -178,18 +190,22 @@ function normalizeDerivedReadPath(rawPath: unknown): Promise<LibraryFileRead> | 
   }
   const sourceAbs = sourceForDerivedText(abs);
   if (!sourceAbs) return null;
-  const folderRoot = memberRootForAbs(sourceAbs);
+  const folderRoot = await memberRootForAbsAsync(sourceAbs);
   if (!folderRoot) {
     throw routeError('derived source is not in your folders (call library_info to list them)', 400);
   }
   return readDerivedLibraryFile(abs, sourceAbs, folderRoot);
 }
 
-function readDerivedLibraryFile(derivedAbs: string, sourceAbs: string, folderRoot: string): Promise<LibraryFileRead> {
+async function readDerivedLibraryFile(
+  derivedAbs: string,
+  sourceAbs: string,
+  folderRoot: string,
+): Promise<LibraryFileRead> {
   if (isConversionTextUnavailable(sourceAbs) || isAudioTranscriptTextUnavailable(sourceAbs)) {
     throw routeError('derived text is pending or preparation failed; retry after completion or reprocess the source', 409, 'CONVERSION_NOT_READY');
   }
-  const folderRel = filesystemPath.relative(folderRoot, sourceAbs);
+  const folderRel = await filesystemPath.relativeAsync(folderRoot, sourceAbs);
   if (folderRel == null || folderRel === '') {
     throw routeError('derived source path is invalid for its folder', 400);
   }
@@ -204,15 +220,15 @@ function readDerivedLibraryFile(derivedAbs: string, sourceAbs: string, folderRoo
       sourceFormat,
       readPath: derivedAbs,
       derived: true,
-      content: readDerivedText(derivedAbs, sourceFormat),
-      version: fileStatVersion(folderRel) ?? undefined,
+      content: await readDerivedText(derivedAbs, sourceFormat),
+      version: (await fileStatVersionAsync(folderRel)) ?? undefined,
     };
   });
 }
 
-function readDerivedText(derivedAbs: string, sourceFormat: 'pdf' | 'docx' | 'audio'): string {
+async function readDerivedText(derivedAbs: string, sourceFormat: 'pdf' | 'docx' | 'audio'): Promise<string> {
   try {
-    return readUtf8FileBounded(derivedAbs);
+    return await readUtf8FileBoundedAsync(derivedAbs);
   } catch (err) {
     if ((err as { code?: unknown })?.code === 'FILE_TOO_LARGE') throw err;
     throw routeError(sourceFormat === 'docx'

@@ -62,7 +62,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     getToken: () => token,
     operations: createLibraryOperations({
       getLibraryInfo: () => ({ folder_home: '/tmp', folders: [] }),
-      normalizeSearchScope: (_folder, pathPrefix) => ({
+      normalizeSearchScope: async (_folder, pathPrefix) => ({
         folderRoot: '/tmp',
         pathPrefix: typeof pathPrefix === 'string' ? pathPrefix : undefined,
       }),
@@ -98,6 +98,10 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       ['notes', 'data', 'pdf', 'image', 'docx', 'audio'],
     );
     assert.deepEqual(searchTool.inputSchema.properties.mode.enum, ['semantic', 'keyword']);
+    for (const name of ['read_file', 'write_file', 'edit_file']) {
+      const tool = listed.body.result.tools.find((candidate: any) => candidate.name === name);
+      assert.match(tool.description, /Markdown.*HTML.*JSON.*(?:plain text|plain-text)/i);
+    }
     const createProjectTool = listed.body.result.tools.find((tool: any) => tool.name === 'create_project');
     assert.deepEqual(createProjectTool.inputSchema.required, ['name']);
     for (const name of ['write_file', 'edit_file']) {

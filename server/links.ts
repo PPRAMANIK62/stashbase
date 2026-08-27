@@ -43,7 +43,15 @@
  *   - `?query` and `#anchor` suffixes are preserved verbatim.
  */
 import path from 'node:path';
-import { detectFormat, listFiles, readText, saveText } from './files.ts';
+import {
+  detectFormat,
+  listFiles,
+  listFilesAsync,
+  readText,
+  readTextAsync,
+  saveText,
+  saveTextAsync,
+} from './files.ts';
 import { logger, errorMessage } from './log.ts';
 
 const log = logger('links');
@@ -73,6 +81,10 @@ export interface AppliedRenamePlan extends CascadeResult {
    *  Used when a later index step fails and the disk rename is about to
    *  roll back, so link rewrites don't point at a reverted path. */
   rollback: () => void;
+}
+
+export interface AppliedRenamePlanAsync extends CascadeResult {
+  rollback: () => Promise<void>;
 }
 
 export interface PlanEntry {
@@ -269,6 +281,29 @@ export function planRenameLinks(renames: RenameEntry[]): PlanEntry[] {
   return out;
 }
 
+export async function planRenameLinksAsync(renames: RenameEntry[]): Promise<PlanEntry[]> {
+  if (renames.length === 0) return [];
+  const out: PlanEntry[] = [];
+  for (const file of await listFilesAsync()) {
+    const format = detectFormat(file.name);
+    if (format !== 'md' && format !== 'html') continue;
+    const content = await readTextAsync(file.name);
+    if (content == null) continue;
+    const fromName = file.name;
+    const toName = applyRenameForward(fromName, renames);
+    const rewritten = rewriteLinks({
+      content,
+      format,
+      fromDir: dirOf(fromName),
+      toDir: dirOf(toName),
+      renames,
+    });
+    if (rewritten.changes === 0) continue;
+    out.push({ fromName, toName, newContent: rewritten.content, changes: rewritten.changes });
+  }
+  return out;
+}
+
 /** Apply a side-effect-free preview plan to the current POST-rename disk
  *  state. The returned rollback only undoes files this call successfully
  *  rewrote; failed writes are reported and left for the caller to decide. */
@@ -300,6 +335,40 @@ export function applyRenamePlan(plan: PlanEntry[]): AppliedRenamePlan {
         const original = originals[i];
         try {
           saveText(original.name, original.content);
+        } catch (err: unknown) {
+          log.warn(`failed to roll back link rewrite in ${original.name}: ${errorMessage(err)}`);
+        }
+      }
+    },
+  };
+}
+
+export async function applyRenamePlanAsync(plan: PlanEntry[]): Promise<AppliedRenamePlanAsync> {
+  const updated: Array<{ name: string; changes: number }> = [];
+  const failed: Array<{ name: string; error: string }> = [];
+  const originals: Array<{ name: string; content: string }> = [];
+  for (const entry of plan) {
+    const original = await readTextAsync(entry.toName);
+    if (original == null) {
+      failed.push({ name: entry.toName, error: 'read returned null' });
+      continue;
+    }
+    try {
+      await saveTextAsync(entry.toName, entry.newContent);
+      originals.push({ name: entry.toName, content: original });
+      updated.push({ name: entry.toName, changes: entry.changes });
+    } catch (err: unknown) {
+      failed.push({ name: entry.toName, error: errorMessage(err) });
+    }
+  }
+  return {
+    updated,
+    failed,
+    rollback: async () => {
+      for (let i = originals.length - 1; i >= 0; i--) {
+        const original = originals[i];
+        try {
+          await saveTextAsync(original.name, original.content);
         } catch (err: unknown) {
           log.warn(`failed to roll back link rewrite in ${original.name}: ${errorMessage(err)}`);
         }

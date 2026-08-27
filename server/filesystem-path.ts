@@ -8,11 +8,17 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { promisify } from 'node:util';
 
 // fs.promises.realpath() has no `.native` counterpart (unlike the sync and
-// callback APIs), so promisify the callback-style native binding directly.
-const realpathNativeAsync = promisify(fs.realpath.native);
+// callback APIs), so wrap the callback-style native binding directly.
+function realpathNativeAsync(input: fs.PathLike): Promise<string> {
+  return new Promise((resolve, reject) => {
+    fs.realpath.native(input, (error, resolvedPath) => {
+      if (error) reject(error);
+      else resolve(resolvedPath);
+    });
+  });
+}
 
 export type FilesystemPlatform = 'win32' | 'darwin' | 'posix';
 export type PathAccess = 'lexical' | 'existing' | 'creatable';
@@ -32,20 +38,27 @@ export interface FilesystemPathModule {
   real(input: string): string;
   /** Stable comparison/map identity following Windows and mounted macOS volume rules. */
   identity(input: string): string;
+  /** Async request-path equivalent of `identity()`. */
+  identityAsync(input: string): Promise<string>;
   /** Whether two existing spellings resolve to one path, excluding distinct hard links. */
   sameExistingPath(a: string, b: string): boolean;
+  /** Async request-path equivalent of `sameExistingPath()`. */
+  sameExistingPathAsync(a: string, b: string): Promise<boolean>;
   equal(a: string, b: string): boolean;
+  equalAsync(a: string, b: string): Promise<boolean>;
   contains(root: string, candidate: string): boolean;
+  containsAsync(root: string, candidate: string): Promise<boolean>;
   relative(root: string, candidate: string): string | null;
+  relativeAsync(root: string, candidate: string): Promise<string | null>;
   join(root: string, relative: string): string;
   /** Restore real component spelling on case-insensitive filesystems. */
   canonicalRelative(root: string, relative: string): string;
+  canonicalRelativeAsync(root: string, relative: string): Promise<string>;
   /** Resolve a folder-relative path and optionally enforce realpath safety. */
   resolveUnder(root: string, relative: string, options?: ResolveUnderOptions): string;
   /** Promise-based equivalent of `resolveUnder()` for staged migration of
-   *  request-handling callers. Canonicalization and realpath checks use async
-   *  filesystem APIs; platform identity/containment still shares the sync
-   *  implementation where noted by the File Transactions known gap. */
+   *  request-handling callers. Canonicalization, identity, containment, and
+   *  realpath checks use async filesystem APIs. */
   resolveUnderAsync(root: string, relative: string, options?: ResolveUnderOptions): Promise<string>;
 }
 
@@ -181,6 +194,13 @@ export function createFilesystemPath(
     );
   }
 
+  function sameExistingPathAsync(a: string, b: string): Promise<boolean> {
+    return sameFilesystemAliasAsync(
+      toNative(absolute(a), platform),
+      toNative(absolute(b), platform),
+    );
+  }
+
   function equal(a: string, b: string): boolean {
     return identity(a) === identity(b);
   }
@@ -189,6 +209,110 @@ export function createFilesystemPath(
     const rootKey = identity(root);
     const candidateKey = identity(candidate);
     return candidateKey === rootKey || candidateKey.startsWith(childPrefix(rootKey));
+  }
+
+  async function identityAsync(input: string): Promise<string> {
+    const source = absolute(input);
+    if (platform === 'win32') return source.toLowerCase();
+    if (platform === 'darwin') return darwinIdentityAsync(source);
+    return source;
+  }
+
+  async function darwinIdentityAsync(source: string): Promise<string> {
+    const segments = source.split('/').filter(Boolean);
+    const identitySegments: string[] = [];
+    let cursor = '/';
+    let insensitive = await isCaseInsensitiveVolumeAsync(cursor);
+
+    for (let i = 0; i < segments.length; i += 1) {
+      const segment = segments[i];
+      identitySegments.push(macIdentitySegment(segment, insensitive));
+
+      const candidate = path.posix.join(cursor, segment);
+      try {
+        if (!(await fs.promises.stat(candidate)).isDirectory()) {
+          for (const suffix of segments.slice(i + 1)) {
+            identitySegments.push(macIdentitySegment(suffix, insensitive));
+          }
+          break;
+        }
+        cursor = candidate;
+        insensitive = await isCaseInsensitiveVolumeAsync(cursor);
+      } catch {
+        for (const suffix of segments.slice(i + 1)) {
+          identitySegments.push(macIdentitySegment(suffix, insensitive));
+        }
+        break;
+      }
+    }
+
+    return `/${identitySegments.join('/')}`;
+  }
+
+  async function isCaseInsensitiveVolumeAsync(existingDirectory: string): Promise<boolean> {
+    let directory = existingDirectory;
+    let directoryStat: fs.Stats;
+    try {
+      directoryStat = await fs.promises.stat(directory);
+      if (!directoryStat.isDirectory()) {
+        directory = path.posix.dirname(directory);
+        directoryStat = await fs.promises.stat(directory);
+      }
+    } catch {
+      return false;
+    }
+    const cached = volumeCaseInsensitive.get(directoryStat.dev);
+    if (cached !== undefined) return cached;
+
+    const device = directoryStat.dev;
+    let cursor = directory;
+    while (true) {
+      try {
+        let inspectedAlias = false;
+        for (const entry of await fs.promises.readdir(cursor)) {
+          const alias = swapAsciiLetterCase(entry);
+          if (alias === entry) continue;
+          inspectedAlias = true;
+          if (await sameFilesystemAliasAsync(
+            path.posix.join(cursor, entry),
+            path.posix.join(cursor, alias),
+          )) {
+            volumeCaseInsensitive.set(device, true);
+            return true;
+          }
+        }
+        if (inspectedAlias) {
+          volumeCaseInsensitive.set(device, false);
+          return false;
+        }
+      } catch {
+        break;
+      }
+      const parent = path.posix.dirname(cursor);
+      if (parent === cursor) break;
+      try {
+        if ((await fs.promises.stat(parent)).dev !== device) break;
+      } catch {
+        break;
+      }
+      cursor = parent;
+    }
+
+    volumeCaseInsensitive.set(device, false);
+    return false;
+  }
+
+  async function containsAsync(root: string, candidate: string): Promise<boolean> {
+    const [rootKey, candidateKey] = await Promise.all([
+      identityAsync(root),
+      identityAsync(candidate),
+    ]);
+    return candidateKey === rootKey || candidateKey.startsWith(childPrefix(rootKey));
+  }
+
+  async function equalAsync(a: string, b: string): Promise<boolean> {
+    const [aKey, bKey] = await Promise.all([identityAsync(a), identityAsync(b)]);
+    return aKey === bKey;
   }
 
   function relative(root: string, candidate: string): string | null {
@@ -204,13 +328,28 @@ export function createFilesystemPath(
     return rel.split(pathApi.sep).join('/');
   }
 
+  async function relativeAsync(root: string, candidate: string): Promise<string | null> {
+    const rootSource = absolute(root);
+    const candidateSource = absolute(candidate);
+    if (!(await containsAsync(rootSource, candidateSource))) return null;
+    if (platform === 'darwin') {
+      const rootDepth = rootSource.split('/').filter(Boolean).length;
+      return candidateSource.split('/').filter(Boolean).slice(rootDepth).join('/');
+    }
+    const rel = pathApi.relative(toNative(rootSource, platform), toNative(candidateSource, platform));
+    if (escapesRoot(rel, pathApi)) return null;
+    return rel.split(pathApi.sep).join('/');
+  }
+
   function join(root: string, relativePath: string): string {
     const rootSource = absolute(root);
+    return joinLexically(rootSource, relativePath);
+  }
+
+  function joinLexically(rootSource: string, relativePath: string): string {
     const rel = normalizeRelative(relativePath, platform);
     if (!rel) return rootSource;
-    const joined = absolute(toNative(rel, platform), toNative(rootSource, platform));
-    if (!contains(rootSource, joined)) throw new Error('path escapes folder');
-    return joined;
+    return absolute(toNative(rel, platform), toNative(rootSource, platform));
   }
 
   function canonicalRelative(root: string, relativePath: string): string {
@@ -253,7 +392,7 @@ export function createFilesystemPath(
       : access === 'creatable'
         ? canonicalCreatableRelative(rootSource, relativePath)
         : canonicalRelative(rootSource, relativePath);
-    const targetSource = join(rootSource, resolvedRelative);
+    const targetSource = joinLexically(rootSource, resolvedRelative);
     const rootNative = toNative(rootSource, platform);
     const targetNative = toNative(targetSource, platform);
     if (access === 'lexical') return targetSource;
@@ -287,9 +426,9 @@ export function createFilesystemPath(
 
   // --- Async mirrors for the request-handling path -------------------------
   // These duplicate the sync functions above one-for-one using async
-  // filesystem APIs for canonicalization and realpath work. They establish a
-  // migration path for request handlers; platform identity/containment still
-  // shares sync helpers until the File Transactions known gap is closed.
+  // filesystem APIs for canonicalization, containment, and realpath work.
+  // They establish a migration path for request handlers without introducing
+  // blocking filesystem calls into async request execution.
   // Kept as separate functions, rather than a sync/async flag on the
   // existing ones, so neither implementation has to guard against `await`
   // inside a hot, already-audited sync path.
@@ -334,7 +473,7 @@ export function createFilesystemPath(
       : access === 'creatable'
         ? await canonicalCreatableRelativeAsync(rootSource, relativePath)
         : await canonicalRelativeAsync(rootSource, relativePath);
-    const targetSource = join(rootSource, resolvedRelative);
+    const targetSource = joinLexically(rootSource, resolvedRelative);
     const rootNative = toNative(rootSource, platform);
     const targetNative = toNative(targetSource, platform);
     if (access === 'lexical') return targetSource;
@@ -342,7 +481,7 @@ export function createFilesystemPath(
     const rootReal = await realpathNativeAsync(rootNative);
     if (access === 'existing') {
       const targetReal = await realpathNativeAsync(targetNative);
-      if (!contains(rootReal, targetReal)) {
+      if (!(await containsAsync(rootReal, targetReal))) {
         throw new Error(`${label} escapes folder through symlink`);
       }
       return targetSource;
@@ -358,9 +497,9 @@ export function createFilesystemPath(
       if (parent === probe) break;
       probe = parent;
     }
-    if (!contains(rootNative, probe)) throw new Error(`${label} escapes folder`);
+    if (!(await containsAsync(rootNative, probe))) throw new Error(`${label} escapes folder`);
     const probeReal = await realpathNativeAsync(probe);
-    if (!contains(rootReal, probeReal)) {
+    if (!(await containsAsync(rootReal, probeReal))) {
       throw new Error(`${label} escapes folder through symlink`);
     }
     return targetSource;
@@ -372,12 +511,18 @@ export function createFilesystemPath(
     isAbsolute,
     real,
     identity,
+    identityAsync,
     sameExistingPath,
+    sameExistingPathAsync,
     equal,
+    equalAsync,
     contains,
+    containsAsync,
     relative,
+    relativeAsync,
     join,
     canonicalRelative,
+    canonicalRelativeAsync,
     resolveUnder,
     resolveUnderAsync,
   };
@@ -507,6 +652,19 @@ async function sameFilesystemEntryAsync(a: string, b: string): Promise<boolean> 
   try {
     const [aStat, bStat] = await Promise.all([fs.promises.stat(a), fs.promises.stat(b)]);
     return aStat.dev === bStat.dev && aStat.ino === bStat.ino;
+  } catch {
+    return false;
+  }
+}
+
+async function sameFilesystemAliasAsync(a: string, b: string): Promise<boolean> {
+  if (!(await sameFilesystemEntryAsync(a, b))) return false;
+  try {
+    const [aReal, bReal] = await Promise.all([
+      realpathNativeAsync(a),
+      realpathNativeAsync(b),
+    ]);
+    return aReal === bReal;
   } catch {
     return false;
   }

@@ -18,10 +18,12 @@
 
 ## Format Completion
 
-- Markdown, HTML, JSON, and `.txt` use source-owned text paths. JSON validity is
-  not an admission gate and JSON never joins note bundles or legacy-derived
-  hiding. Generic workspace files remain outside Preparation, exact retrieval,
-  semantic admission, and automatic Agent context.
+- Markdown, HTML, JSON, and UTF-8 TXT use source-owned text paths. JSON validity
+  is not an admission gate and JSON/TXT never join note bundles or legacy-
+  derived hiding. Invalid UTF-8 TXT is not indexed; reconcile removes any stale
+  semantic row and reports the decode failure. Generic workspace files remain
+  outside Preparation, exact retrieval, semantic admission, and automatic Agent
+  context.
 - Image OCR is complete only when current, searchable derived text carries its
   completion marker. Empty OCR is a failure, not success.
 - PDF text is complete only when current derived Markdown has the terminal

@@ -46,8 +46,9 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   // and .txt own their content, so they get it; a generic code file is
   // read-only by product rule and never does.
   const showsEditToggle = !!cur
-    && (cur.format === 'md' || cur.format === 'json' || cur.format === 'text')
+    && (cur.format === 'md' || cur.format === 'json' || cur.format === 'txt')
     && !cur.folder
+    && !cur.error
     && !activeTab?.conflict;
 
   // Reserve room for the absolute-positioned chrome (edit toggle / PDF

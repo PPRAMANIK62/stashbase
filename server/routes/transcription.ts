@@ -25,8 +25,8 @@ import { LOCAL_TRANSCRIPTION_PROVIDER_ID } from '../whisper-cpp-provider.ts';
 import { getScheduledConversion } from '../conversion.ts';
 import { listPreparationProblems, readProgress } from '../conversion-status.ts';
 import { isAudioFile } from '../format.ts';
-import { resolveExisting } from '../files.ts';
-import { exactMemberFolderRoot, runWithFolderRoot } from '../folder.ts';
+import { resolveExistingAsync } from '../files.ts';
+import { exactMemberFolderRootAsync, runWithFolderRoot } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError } from '../http.ts';
 import { errorMessage, logger } from '../log.ts';
@@ -102,11 +102,11 @@ export function mount(app: express.Express): void {
       const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
       let sourceAbs: string | null;
       if (rawFolder) {
-        const member = exactMemberFolderRoot(rawFolder);
+        const member = await exactMemberFolderRootAsync(rawFolder);
         if (!member) return res.status(400).json({ error: 'folder is not a registered library folder' });
-        sourceAbs = await runWithFolderRoot(member, () => resolveExisting(rel));
+        sourceAbs = await runWithFolderRoot(member, () => resolveExistingAsync(rel));
       } else {
-        sourceAbs = resolveExisting(rel);
+        sourceAbs = await resolveExistingAsync(rel);
       }
       if (!sourceAbs) return res.status(404).json({ error: 'file not found' });
       const transcript = readAudioTranscript(sourceAbs);
@@ -125,7 +125,13 @@ export function mount(app: express.Express): void {
               },
         });
       }
-      const problem = listPreparationProblems().find((item) => filesystemPath.equal(item.path, sourceAbs));
+      let problem: ReturnType<typeof listPreparationProblems>[number] | undefined;
+      for (const item of listPreparationProblems()) {
+        if (await filesystemPath.equalAsync(item.path, sourceAbs)) {
+          problem = item;
+          break;
+        }
+      }
       if (problem) {
         if (problem.entry.status === 'cancelled') {
           return res.json({ status: 'cancelled' });
