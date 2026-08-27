@@ -104,6 +104,7 @@ test('macOS package configuration requires Developer ID signing and notarization
   const ordinary = '/tmp/StashBase.app/Contents/Frameworks/StashBase Helper.app';
   const openCode = '/tmp/StashBase.app/Contents/Resources/opencode/opencode.exe';
   assert.equal(signMacosApp.optionsForSignedFile(ordinary, inherited), inherited);
+  assert.equal(signMacosApp.isBundledOpenCode('C:\\StashBase.app\\Contents\\Resources\\opencode\\opencode.exe'), true);
   assert.deepEqual(signMacosApp.optionsForSignedFile(openCode, inherited), {
     ...inherited,
     entitlements: path.join(root, 'build', 'entitlements.mac.opencode.plist'),

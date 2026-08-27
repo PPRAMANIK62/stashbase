@@ -7,10 +7,10 @@ const openCodeEntitlements = path.resolve(
   'build',
   'entitlements.mac.opencode.plist',
 );
-const openCodeSuffix = path.join('Contents', 'Resources', 'opencode', 'opencode.exe');
+const openCodeSuffix = '/Contents/Resources/opencode/opencode.exe';
 
 function isBundledOpenCode(filePath) {
-  return filePath.endsWith(openCodeSuffix);
+  return filePath.replaceAll('\\', '/').endsWith(openCodeSuffix);
 }
 
 function optionsForSignedFile(filePath, inherited) {
