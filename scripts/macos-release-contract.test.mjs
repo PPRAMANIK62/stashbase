@@ -110,6 +110,12 @@ test('macOS package configuration requires Developer ID signing and notarization
     ...inherited,
     entitlements: path.join(root, 'build', 'entitlements.mac.opencode.plist'),
   });
+  const wrappedOptionsForFile = signMacosApp.createOptionsForFile(() => inherited);
+  assert.deepEqual(
+    wrappedOptionsForFile(openCode),
+    signMacosApp.optionsForSignedFile(openCode, inherited),
+    'electron-osx-sign consumes optionsForFile synchronously',
+  );
 });
 
 test('macOS release adapters preserve the final signature and require its verification', () => {

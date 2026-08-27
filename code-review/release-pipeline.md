@@ -100,7 +100,8 @@ Homebrew, or recovery step may mutate or ad-hoc re-sign the app afterward. The
 bundled OpenCode/Bun executable is declared as an additional nested signing
 target and alone receives the unsigned-executable-memory entitlement it needs
 under Hardened Runtime; the main app and ordinary helpers must not inherit that
-exception. The
+exception. Its per-file signing adapter must stay synchronous because the
+pinned signing library consumes that callback without awaiting a Promise. The
 mounted release DMG must pass `codesign`, Gatekeeper `spctl`, and stapler
 validation before upload.
 
