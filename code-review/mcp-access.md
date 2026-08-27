@@ -79,7 +79,7 @@ clients and are not a general host-filesystem API.
 StashBase writes durable MCP client configuration only for the bring-your-own
 Chat agents: Agent readiness calls `ensureAgentMcp` (Claude Code, Codex), which
 regenerates the platform MCP launcher and idempotently rewrites that agent's own
-config. Default injects the same launcher into each private OpenCode
+config. Built-in injects the same launcher into each private OpenCode
 server with the owning window and live-session attribution; it does not write a
 user config file.
 StashBase config does not mirror client config. Every external client —
@@ -98,7 +98,7 @@ approval path. Ordinary `write_file` and `edit_file` may be accepted only by
 the built-in panel's explicit Edit policy. Move, delete, commands, network,
 sandbox changes, and broader access remain explicit approval decisions.
 
-Default Library chats disable native cwd file and command tools because
+Built-in Library chats disable native cwd file and command tools because
 the Library is a non-contiguous membership set; every file operation therefore
 crosses this MCP authorization boundary. A folder chat may use native local
 tools only inside its selected member cwd, with external directories denied.

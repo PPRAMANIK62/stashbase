@@ -1,6 +1,6 @@
 # MCP Configuration
 
-Default receives an attributed MCP connection automatically. StashBase
+Built-in receives an attributed MCP connection automatically. StashBase
 also configures Codex and Claude Code when their built-in Chat readiness runs.
 Nothing needs to be pasted for those panel runtimes. Every external
 MCP-compatible client is configured by you: copy the standard configuration or

@@ -11,7 +11,7 @@ StashBase keeps source ownership in local files, prepares the formats that need
 help, indexes them, and exposes authorized context through MCP. Local browsing,
 editing, preview, and exact retrieval do not require a cloud account. When a
 user explicitly selects hosted AI Index, extracted text may be sent to that
-provider for indexing or retrieval. The included Default Agent runs locally
+provider for indexing or retrieval. The included Built-in Agent runs locally
 and sends only prompts and necessary model context through its hosted model
 gateway. In both cases the source files remain locally owned.
 
@@ -40,7 +40,7 @@ re-explaining it.
 - A VS Code-like **Document Workbench** for browsing, reading, editing, and
   navigating ordinary local files.
 - A Codex-like **Agent Panel** whose Chat leads before a document is opened and
-  docks beside active source work, with an included zero-install default while
+  docks beside active source work, with the zero-install Built-in Agent while
   preserving bring-your-own-agent workflows.
 - A **local RAG layer** that prepares difficult formats and retrieves
   source-grounded evidence for built-in and external Agents.

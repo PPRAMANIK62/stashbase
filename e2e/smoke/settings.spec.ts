@@ -108,6 +108,11 @@ test('signed-in Google identity is consistent in the sidebar, account menu, and 
     const accountButton = app.page.getByRole('button', { name: 'Account: Ada Lovelace (ada@example.com)' });
     await expect(accountButton).toBeVisible();
     await expect(accountButton).toContainText('Ada Lovelace');
+
+    await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+    const builtInAgent = app.page.getByRole('menuitem').filter({ hasText: 'Built-in' });
+    await expect(builtInAgent).toContainText('Free credits included');
+    await app.page.keyboard.press('Escape');
     await expect(accountButton.locator('img[src="/api/account/avatar"]')).toBeVisible();
     await accountButton.click();
     await expect(app.page.getByText('ada@example.com', { exact: true })).toBeVisible();

@@ -72,7 +72,7 @@ export function AgentRuntimePanel() {
     <div>
       <SectionHeading level={3} className="mb-1">Agent runtimes</SectionHeading>
       <SectionDescription className="mb-2.5">
-        Default is included and uses your fixed 7-day account allowance. Codex and Claude Code remain available as bring-your-own runtimes.
+        Built-in includes free credits through your fixed 7-day account allowance. Codex and Claude Code remain available as bring-your-own runtimes.
       </SectionDescription>
       {accountSignInOpen && (
         <div className="mb-2.5 rounded-lg border border-border bg-card p-3">

@@ -40,7 +40,7 @@ Credentials and optional hosted-account sessions are owned by the local Node
 service. Provider and account tokens do not cross into renderer responses,
 OpenCode configuration/history, or the indexing daemon. When the user selects
 hosted AI Index, Node may send extracted text through the hosted Adapter. When
-the user runs Default, the Node broker sends prompts and necessary model
+the user runs Built-in, the Node broker sends prompts and necessary model
 context through the hosted model Adapter; sessions, tool execution, permissions,
 Diffs, and files remain local. The hosted service owns model routing and usage
 accounting, not Agent execution or session storage. Agent accounting is a
@@ -83,7 +83,7 @@ user-visible source file.
 - One local runtime owns indexing state. Other processes communicate through
   its supported boundary rather than maintaining competing copies of the index.
 - The included Agent runtime is already packaged and starts only for an active
-  Default session. Bring-your-own readiness is demand-driven: opening
+  Built-in session. Bring-your-own readiness is demand-driven: opening
   the app or a folder does not install an Agent runtime; explicit Chat actions
   own preparation and recovery.
 - Closing a window releases only its UI and folder context. Shared application
@@ -133,7 +133,7 @@ Format completion, scheduler, freshness, quota, and cleanup rules live in
 - External URLs and local-file navigation follow explicit, validated paths.
 - Network, commands, deletion, rename, and broader filesystem access remain
   explicit approval decisions in the Agent Panel.
-- Every Default panel session receives a private OpenCode server
+- Every Built-in panel session receives a private OpenCode server
   credential and MCP attribution identity. A Library-wide session disables
   native cwd file/command tools and uses the membership-checked MCP layer;
   folder sessions deny paths outside their working folder. The private process

@@ -313,15 +313,15 @@ installation, context, tools, and permissions.
 
 ### Entry State
 
-The workspace has a reusable blank Chat. **Default** is selected by default
+The workspace has a reusable blank Chat. **Built-in** is selected by default
 and may need account sign-in; a bring-your-own runtime may be ready, missing,
 disconnected, or recoverable.
 
 ### Primary Flow
 
-1. Use New Chat with Default, or choose another Agent, and select the
+1. Use New Chat with Built-in, or choose another Agent, and select the
    Library or folder scope.
-2. For Default, sign in to the StashBase account when needed; no Agent
+2. For Built-in, sign in to the StashBase account when needed; no Agent
    install, model API key, or separate recharge is required within the fixed
    seven-day included allowance.
 3. When a bring-your-own runtime is missing, explicitly choose **Install and
@@ -337,12 +337,12 @@ disconnected, or recoverable.
 
 - Opening the app, a folder, a tab, or history is never runtime-installation
   consent.
-- Default uses only its included pinned runtime and account allowance;
+- Built-in uses only its included pinned runtime and account allowance;
   its account token is absent from the renderer and OpenCode state.
-- Signing in for Default establishes account identity without silently
+- Signing in for Built-in establishes account identity without silently
   activating hosted AI Index; that source remains an explicit setup or
   Settings choice.
-- Default does not offer transient attachments until its isolated
+- Built-in does not offer transient attachments until its isolated
   runtime can read their bytes through an authorized scope. Bring-your-own
   runtimes retain attachment support.
 - Settings reports the current seven-day window as a remaining percentage and
@@ -629,7 +629,7 @@ originating window cannot enter a successfully rebound project, the Chat keeps
 the new scope visible and reports a retryable open failure rather than
 reverting to an ambiguous Library presentation.
 
-Known Gap: a Default chat updates its live scope and keeps using the
+Known Gap: a Built-in chat updates its live scope and keeps using the
 attributed MCP connection, but OpenCode does not yet migrate the same native
 session record and cwd to the project. Its restored history remains under
 Library and native folder commands require a new folder-scoped chat.

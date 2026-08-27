@@ -37,7 +37,7 @@ function protocolRecords(logFile: string): ProtocolRecord[] {
     .map((line) => JSON.parse(line) as ProtocolRecord);
 }
 
-test('J06 lists bring-your-own Agents before the zero-install Default', async ({}, testInfo) => {
+test('J06 lists bring-your-own Agents before the zero-install Built-in Agent', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   let app: LaunchedApp | undefined;
   try {
@@ -52,7 +52,8 @@ test('J06 lists bring-your-own Agents before the zero-install Default', async ({
     await expect(agents).toHaveCount(3);
     await expect(agents.nth(0)).toHaveText('Codex');
     await expect(agents.nth(1)).toHaveText('Claude Code');
-    await expect(agents.nth(2)).toHaveText('Default');
+    await expect(agents.nth(2)).toContainText('Built-in');
+    await expect(agents.nth(2)).toContainText('Sign in for free credits');
     app.errors.assertNone();
   } finally {
     await app?.close();

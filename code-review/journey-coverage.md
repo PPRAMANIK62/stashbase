@@ -228,7 +228,7 @@ aliases, and Journey E2E owns representative composition.
   classification. Config tests also prove that ambient credentials and process
   injection flags do not enter the bundled runtime.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
-  the default included-Agent account gate and bring-your-own choices, then
+  the Built-in Agent account gate and bring-your-own choices, then
   exercises the built-in panel against the deterministic fake Codex runtime,
   including
   retaining a started cross-folder Chat through Library removal and opening a
@@ -236,7 +236,7 @@ aliases, and Journey E2E owns representative composition.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
 - **Release Check:** packaged OpenCode version/executability plus a fake-gateway
-  model turn that proves the signed runtime stays alive, a real hosted Default
+  model turn that proves the signed runtime stays alive, a real hosted Built-in
   turn and allowance response, bring-your-own CLI/account setup,
   and bring-your-own clipboard image behavior remain release evidence.
 
@@ -338,7 +338,7 @@ aliases, and Journey E2E owns representative composition.
 - **Gap:** real-Agent intent/tool choice still needs an Eval. Codex
   configuration leaves `create_project` on the default prompt path, but no
   focused test locks that tool allowlist; Claude requires equivalent focused
-  or release evidence. Default can rebind the live panel and attributed
+  or release evidence. Built-in can rebind the live panel and attributed
   MCP path, but OpenCode cannot yet migrate its native history/cwd; its restored
   row remains under Library and this path needs separate evidence after that
   native limitation is resolved.

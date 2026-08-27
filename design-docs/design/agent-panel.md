@@ -15,7 +15,7 @@ Runtime installation, native process ownership, MCP access, and indexing have
 separate engineering contracts.
 
 The panel is not a remote Agent host, a separate AI workspace, or a
-transcript-centered file manager. **Default**, the included Agent, runs locally
+transcript-centered file manager. **Built-in**, the included Agent, runs locally
 and uses a hosted service only as its metered model provider.
 
 ## Current Experience
@@ -23,8 +23,10 @@ and uses a hosted service only as its metered model provider.
 - Chat begins expanded. With no document it is the primary work surface;
   opening a source docks the same mounted session beside it, and closing the
   last source expands an open Chat again.
-- New users start with **Default** selected. The New Chat picker lists Codex,
-  Claude Code, then Default, keeping the zero-setup choice available without
+- New users start with **Built-in** selected. The New Chat picker lists Codex,
+  Claude Code, then Built-in. Its second line says **Sign in for free credits**
+  while signed out and **Free credits included** after sign-in, keeping the
+  zero-setup choice available without
   placing it ahead of explicit bring-your-own runtimes. Its pinned OpenCode runtime is included
   with the app, requires no Agent installation or model API key, and becomes
   ready after StashBase account sign-in. Settings shows the remaining percent
@@ -60,7 +62,7 @@ and uses a hosted service only as its metered model provider.
   counts while using grammatical singular or plural category labels. Editing
   and resending an earlier prompt stops conflicting active work before
   beginning the new turn.
-- Default normalizes OpenCode streaming, tools, permission requests,
+- Built-in normalizes OpenCode streaming, tools, permission requests,
   native session history, and file Diffs into the same panel contract. Each
   live panel session has an independently attributed local runtime and MCP
   connection. Each user-submitted prompt also establishes one turn identity;
@@ -73,7 +75,7 @@ and uses a hosted service only as its metered model provider.
   recovery-requiring errors.
 - Bring-your-own Agents preserve user-visible Unicode attachment filenames
   from selection or drop through the sent transcript and restored history.
-  Default does not advertise transient attachments until its isolated
+  Built-in does not advertise transient attachments until its isolated
   OpenCode runtime has a scoped byte-reading path; Library mentions and MCP
   context remain available.
 - Source and attachment access follows the
@@ -111,7 +113,7 @@ and uses a hosted service only as its metered model provider.
   from an abandoned generation cannot enter a newer turn.
 - A failed turn explains itself in the conversation and never blocks the
   panel: transient rate or network failures offer an in-place Try again. An
-  exhausted Default allowance opens Agent Settings to review usage or
+  exhausted Built-in allowance opens Agent Settings to review usage or
   switch runtimes; an expired sign-in offers Codex's in-app sign-in or, for
   Claude, terminal sign-in steps with an in-place Reconnect. Either
   way the same conversation continues without restarting StashBase: acting
@@ -126,7 +128,7 @@ and uses a hosted service only as its metered model provider.
   automatic approval is routine activity rather than a notice; other notices
   use a polite warning presentation and stay visible when no final answer
   follows. Only failures enter startup, turn, or session recovery.
-- Default uses a service-owned model profile. The first release hides
+- Built-in uses a service-owned model profile. The first release hides
   model selection, while the stable profile alias keeps later model choice and
   provider changes compatible with existing desktop builds.
 - Folder-scope retirement never offers Retry or reconnects user work into a
@@ -137,7 +139,7 @@ and uses a hosted service only as its metered model provider.
   its own. Every approval it surfaces — permission, deletion, command, network,
   or broader filesystem — is an explicit user decision; the panel never answers
   one itself. Tool payloads render in a human-readable form.
-- Library-wide Default sessions reach files only through the authorized
+- Library-wide Built-in sessions reach files only through the authorized
   StashBase MCP operation layer. Folder-scoped sessions may use OpenCode's
   native local tools inside that folder; commands, edits, network, and any
   broader access retain their configured approval or denial.
@@ -164,9 +166,9 @@ and uses a hosted service only as its metered model provider.
 - [Agent Runtime](../../code-review/agent-runtime.md) owns native lifecycle.
 - [MCP Access](../../code-review/mcp-access.md) owns Agent file boundaries.
 
-## Known Gap — Default Project Rebind
+## Known Gap — Built-in Project Rebind
 
-An attributed Default Library chat can create a project and move its
+An attributed Built-in Library chat can create a project and move its
 live panel scope to that folder. OpenCode cannot yet move the same native
 session record to a different directory project, so the restored history row
 remains under Library and that continued chat stays on MCP-only file access.

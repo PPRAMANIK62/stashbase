@@ -178,12 +178,12 @@ export function buildOpenCodeConfig(
     },
     agent: {
       'stashbase-folder': {
-        description: 'StashBase Default Agent for one authorized library folder.',
+        description: 'StashBase built-in Agent for one authorized library folder.',
         mode: 'primary',
         ...(preamble ? { prompt: preamble } : {}),
       },
       'stashbase-library': {
-        description: 'StashBase Default Agent for the authorized library.',
+        description: 'StashBase built-in Agent for the authorized library.',
         mode: 'primary',
         ...(preamble ? { prompt: preamble } : {}),
         // A Library chat spans a non-contiguous set of registered folders.
@@ -274,7 +274,7 @@ class OpenCodeRuntime {
             retryable: true,
           },
         },
-        error: 'Sign in to StashBase to use Default.',
+        error: 'Sign in to StashBase to use Built-in.',
       };
     }
     return {
@@ -283,7 +283,7 @@ class OpenCodeRuntime {
       installed: true,
       source: 'bundled',
       state: 'available',
-      bootstrap: { phase: 'ready', progress: 1, message: 'Default is ready.' },
+      bootstrap: { phase: 'ready', progress: 1, message: 'Built-in is ready.' },
     };
   }
 
@@ -337,7 +337,7 @@ class OpenCodeRuntime {
     const executable = bundledOpenCodeExecutable();
     if (!executable) throw new Error('The bundled OpenCode runtime is missing.');
     if (this.requireAccount && !getHostedAccountSession()) {
-      throw new Error('Sign in to StashBase to use Default.');
+      throw new Error('Sign in to StashBase to use Built-in.');
     }
     await startHostedAgentBroker();
     if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
@@ -347,7 +347,7 @@ class OpenCodeRuntime {
     const password = cryptoRandomSecret();
     const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
     const model = hostedAgentRuntime(this.agentSessionId);
-    if (!model) throw new Error('The Default Agent model broker is not running.');
+    if (!model) throw new Error('The built-in Agent model broker is not running.');
     const child = spawn(executable, [
       'serve',
       '--hostname=127.0.0.1',

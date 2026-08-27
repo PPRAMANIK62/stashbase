@@ -1,8 +1,17 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { ChevronDownIcon, PlusIcon } from '@/common/components/icons';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 import { Button } from '@/common/components/ui/button';
-import { AGENT_META, AGENTS, type AgentKind } from '@/common/lib/agentCatalog';
+import {
+  AGENT_META,
+  AGENTS,
+  builtInLauncherDetail,
+  type AgentKind,
+} from '@/common/lib/agentCatalog';
+import {
+  accountSignedInSnapshot,
+  subscribeAccountSignedIn,
+} from '@/common/lib/accountEvents';
 import {
   newChatAgentSelectionPlan,
   readPreferredAgent,
@@ -26,6 +35,11 @@ export function NewChatButton() {
   const { actions } = useAppActions();
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
   const pickerRef = useRef<HTMLButtonElement | null>(null);
+  const accountSignedIn = useSyncExternalStore(
+    subscribeAccountSignedIn,
+    accountSignedInSnapshot,
+    accountSignedInSnapshot,
+  );
 
   function startChat(agent: AgentKind) {
     actions.activateChatTab(agent);
@@ -46,6 +60,7 @@ export function NewChatButton() {
    * the same thing. */
   const agentItems: MenuItem[] = AGENTS.map((agent) => ({
     label: agent.launcherLabel,
+    detail: agent.id === 'stashbase' ? builtInLauncherDetail(accountSignedIn) : undefined,
     icon: <agent.Icon />,
     onSelect: () => pickAgent(agent.id),
   }));

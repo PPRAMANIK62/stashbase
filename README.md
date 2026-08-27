@@ -240,7 +240,7 @@ These helpers exist for Agent clients that run in a sandbox and cannot directly 
 
 ### Connect a Client
 
-Default receives the MCP connection automatically; StashBase also configures the selected built-in Codex or Claude Code runtime during readiness. For any external MCP-compatible client, copy the standard configuration or the server connection details from **Settings → MCP** and register them in that client.
+Built-in receives the MCP connection automatically; StashBase also configures the selected Codex or Claude Code runtime during readiness. For any external MCP-compatible client, copy the standard configuration or the server connection details from **Settings → MCP** and register them in that client.
 
 For setup examples, URL-based clients, Docker access, ports, CORS boundaries, and token rotation, see [MCP configuration](docs/mcp-configuration.md).
 
@@ -248,11 +248,13 @@ For setup examples, URL-based clients, Docker access, ports, CORS boundaries, an
 
 ## Built-In Agent Chat
 
-StashBase includes a built-in chat whose **Default** choice runs a pinned
+StashBase includes a built-in chat whose **Built-in** choice runs a pinned
 local OpenCode runtime against the whole library or one selected folder. It
 uses the signed-in account's fixed seven-day model allowance without a separate Agent
 install or model API key. Codex and Claude Code remain available as
-bring-your-own runtimes and appear before Default in the picker. Chat fills the workspace until you open a document,
+bring-your-own runtimes and appear before Built-in in the picker. Its second
+line says **Sign in for free credits** while signed out and **Free credits
+included** after sign-in. Chat fills the workspace until you open a document,
 then adapts into a side panel so the conversation and source stay visible
 together.
 
@@ -261,7 +263,7 @@ knowledge base. It adds:
 
 - Sessions keep their chosen Library or folder scope even when the window
   switches folders.
-- New Chat reuses a completely blank conversation when possible; Default is
+- New Chat reuses a completely blank conversation when possible; Built-in is
   selected initially and later chats use the Agent you last selected.
 - Tool calls and file edits can be reviewed in the app.
 - Session history stays in the selected runtime's native local storage.
@@ -270,7 +272,7 @@ knowledge base. It adds:
 - `@` mentions find files and folders with forgiving workspace-path search;
   selecting one inserts only its workspace-relative path.
 
-Default keeps sessions, file and command execution, permissions, and
+Built-in keeps sessions, file and command execution, permissions, and
 Diffs local; only prompts and necessary model context pass through the metered
 StashBase gateway. Claude Code and Codex keep their normal provider login and
 native history. Those provider credentials are independent from StashBase
@@ -400,7 +402,7 @@ Reasonably stable:
 - AI Index and exact text search
 - MCP access for built-in and externally configured clients
 - Bounded file helpers for sandboxed Agents
-- Built-in Claude Code / Codex panel
+- Built-in, Claude Code, and Codex panel
 
 ### Where We Need Help
 

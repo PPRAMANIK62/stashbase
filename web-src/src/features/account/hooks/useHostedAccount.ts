@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage, type HostedAccountState } from '@/common/api/api';
-import { ACCOUNT_CHANGED_EVENT, notifyAccountChanged } from '@/common/lib/accountEvents';
+import {
+  ACCOUNT_CHANGED_EVENT,
+  notifyAccountChanged,
+  publishAccountSignedIn,
+} from '@/common/lib/accountEvents';
 import { signInWithStashBase } from '@/common/lib/accountOAuth';
 
 export interface HostedAccount {
@@ -32,9 +36,14 @@ export function useHostedAccount(): HostedAccount {
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
 
-  const refresh = useCallback((refreshUsage = false) => {
-    api.getAccount(refreshUsage).then(setAccount).catch(() => { /* local server startup race */ });
+  const applyAccount = useCallback((nextAccount: HostedAccountState) => {
+    setAccount(nextAccount);
+    publishAccountSignedIn(nextAccount.signedIn);
   }, []);
+
+  const refresh = useCallback((refreshUsage = false) => {
+    api.getAccount(refreshUsage).then(applyAccount).catch(() => { /* local server startup race */ });
+  }, [applyAccount]);
 
   useEffect(() => {
     refresh(false);
@@ -45,21 +54,22 @@ export function useHostedAccount(): HostedAccount {
 
   const signOut = useCallback(() => {
     void api.signOutAccount()
-      .then(() => {
+      .then((nextAccount) => {
+        applyAccount(nextAccount);
         notifyAccountChanged();
         refresh(false);
       })
       .catch(() => { /* Settings remains the recovery surface */ });
-  }, [refresh]);
+  }, [applyAccount, refresh]);
 
   const signIn = useCallback(() => {
     setSigningIn(true);
     setSignInError(null);
     void signInWithStashBase('google')
-      .then(setAccount)
+      .then(applyAccount)
       .catch((error: unknown) => setSignInError(errorMessage(error)))
       .finally(() => setSigningIn(false));
-  }, []);
+  }, [applyAccount]);
 
   return { account, signingIn, signInError, refresh, signIn, signOut };
 }

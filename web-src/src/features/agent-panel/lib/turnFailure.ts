@@ -22,7 +22,7 @@ export interface TurnFailureGuidance {
 /** Map a classified turn failure to its truthful recovery. The renderer
  * switches on the adapter-assigned kind only — never on message prose. */
 export function turnFailureGuidance(kind: AgentTurnFailureKind, agent: AgentKind): TurnFailureGuidance {
-  const runtimeName = agent === 'stashbase' ? 'Default' : agent === 'codex' ? 'Codex' : 'Claude';
+  const runtimeName = agent === 'stashbase' ? 'Built-in' : agent === 'codex' ? 'Codex' : 'Claude';
   switch (kind) {
     case 'rate-limit':
       return {
@@ -34,7 +34,7 @@ export function turnFailureGuidance(kind: AgentTurnFailureKind, agent: AgentKind
       return {
         title: 'Usage limit reached',
         guidance: agent === 'stashbase'
-          ? 'Default reached a provider usage limit. Wait for the provider’s reset or choose another Agent, then try again.'
+          ? 'Built-in reached a provider usage limit. Wait for the provider’s reset or choose another Agent, then try again.'
           : `Your ${agent === 'codex' ? 'ChatGPT' : 'Claude'} plan’s usage is used up for now. Wait for the provider’s reset or upgrade the plan, then try again.`,
         action: { id: 'resend', label: 'Try again' },
       };

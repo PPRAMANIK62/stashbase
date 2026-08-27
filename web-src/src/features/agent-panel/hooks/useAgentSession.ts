@@ -605,7 +605,7 @@ export function useAgentSession({
     if (action === 'open-agent-settings') {
       // Account/allowance recovery completes outside this view. Keep the
       // failed prompt armed so the runtime's account-change reconnect can
-      // retry it exactly once when Default becomes ready again.
+      // retry it exactly once when Built-in becomes ready again.
       if (retry) pendingRetryRef.current = retry;
       openSettings('agents');
       return;

@@ -49,7 +49,7 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     history: claudeHistoryActions(),
   },
   {
-    id: 'stashbase', label: 'Default', vendor: 'StashBase · OpenCode · DeepSeek',
+    id: 'stashbase', label: 'Built-in', vendor: 'StashBase · OpenCode · DeepSeek',
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
       attachments: false,

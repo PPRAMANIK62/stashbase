@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AGENT_META, AGENTS } from '@/common/lib/agentCatalog';
+import { AGENT_META, AGENTS, builtInLauncherDetail } from '@/common/lib/agentCatalog';
 import {
   DEFAULT_AGENT,
   newChatAgentSelectionPlan,
@@ -16,7 +16,7 @@ function memoryStorage(initial: string | null = null) {
   };
 }
 
-test('Default is selected until the user chooses another Agent', () => {
+test('Built-in is selected until the user chooses another Agent', () => {
   const storage = memoryStorage();
 
   assert.equal(DEFAULT_AGENT, 'stashbase');
@@ -26,7 +26,7 @@ test('Default is selected until the user chooses another Agent', () => {
   assert.equal(readPreferredAgent(storage), 'claude');
 });
 
-test('invalid or inaccessible Agent preferences recover to Default', () => {
+test('invalid or inaccessible Agent preferences recover to Built-in', () => {
   assert.equal(readPreferredAgent(memoryStorage('other-agent')), 'stashbase');
 
   const inaccessible = {
@@ -44,11 +44,14 @@ test('choosing the agent only updates the next-chat preference', () => {
   });
 });
 
-test('the Agent picker presents bring-your-own runtimes before the included Default', () => {
+test('the Agent picker presents bring-your-own runtimes before the included Built-in Agent', () => {
   assert.deepEqual(AGENTS.map((agent) => [agent.id, agent.name]), [
     ['codex', 'Codex'],
     ['claude', 'Claude Code'],
-    ['stashbase', 'Default'],
+    ['stashbase', 'Built-in'],
   ]);
-  assert.equal(AGENT_META.stashbase.launcherLabel, 'Default');
+  assert.equal(AGENT_META.stashbase.launcherLabel, 'Built-in');
+  assert.equal(builtInLauncherDetail(false), 'Sign in for free credits');
+  assert.equal(builtInLauncherDetail(true), 'Free credits included');
+  assert.equal(builtInLauncherDetail(null), 'Free credits included');
 });

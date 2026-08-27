@@ -3,9 +3,9 @@
 > Review contract for supported CLI discovery, managed installation, MCP
 > preparation, native session ownership, history, and protocol normalization.
 
-## Included Default Agent
+## Included Built-in Agent
 
-- Default is the included `stashbase` adapter and the default blank-chat
+- Built-in is the included `stashbase` adapter and the default blank-chat
   preference. It uses exact-version
   `opencode-ai@1.18.19` and `@opencode-ai/sdk@1.18.19` dependencies; packaging
   copies the dependency's platform-specific postinstall target to a stable
@@ -26,7 +26,7 @@
   final signed binary and observe it still running; `--version` alone is not a
   runtime proof.
 - Readiness is a cheap packaged-binary and StashBase-account check. It never
-  installs a runtime or asks for a model key. Sign-out ends Default
+  installs a runtime or asks for a model key. Sign-out ends Built-in
   sessions and processes before clearing the Node-owned account session.
 - Each live panel session owns a loopback-only OpenCode server with random
   Basic authentication. Its MCP child receives the exact window id and a
@@ -228,7 +228,7 @@ it is not a third scope.
 
 ## Native Process Ownership
 
-- Each live Default chat owns one authenticated OpenCode server. The
+- Each live Built-in chat owns one authenticated OpenCode server. The
   per-session process boundary keeps MCP attribution exact when turns run
   concurrently. All servers may share OpenCode's native history store, while
   their injected config and credentials remain process-local.
@@ -321,7 +321,7 @@ assumed CLI versions.
 
 ## Known Gap — OpenCode Directory Rebind
 
-An attributed Default Library chat participates in `create_project`:
+An attributed Built-in Library chat participates in `create_project`:
 the live panel scope changes and subsequent MCP operations remain attached to
 that session/window. OpenCode 1.18.19 has no supported operation for moving the
 same native session between directory projects. The Adapter therefore does not
