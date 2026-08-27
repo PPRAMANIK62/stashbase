@@ -27,7 +27,7 @@
  *   • Skip AI Index for now — the caller records the choice for this window;
  *     the Files panel keeps a quiet "Set up AI Index" entry for later.
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { type EmbedderProvider } from '@/common/api/apiTypes';
 import { useApiKeyEntry } from '@/features/settings/hooks/useApiKeyEntry';
 import ManagedModalShell from '@/common/components/ManagedModalShell';
@@ -66,9 +66,28 @@ const TITLES: Record<View, string> = {
  * mechanism ("…even when the wording is different") — product copy in a
  * dialog whose job is a choice, and the sentence that started every layer
  * of this screen running two lines deep. */
-const DESCRIPTIONS: Record<View, string> = {
+const DESCRIPTIONS: Record<View, ReactNode> = {
   choice: 'Help Agents find context across your files.',
-  signin: 'Use your free monthly AI Index allowance.',
+  /* The free allowance is the one thing this view has to say, so it takes
+   * the view's single accent moment: the same `accent/8` wash the tinted
+   * card that led here wears at rest, laid over the operative phrase.
+   *
+   * Geometry follows the app's other `<mark>` (the library-search hit):
+   * `-xs` because the corner ramp assigns that step to an inline run of
+   * text, `px-px`, and inherited ink. The wash IS the signal — adding
+   * `text-foreground` inside a muted DialogDescription put the phrase at
+   * the same size and colour as the dialog title above it, so a subtitle
+   * carried three emphasis signals and out-weighed its own heading. The
+   * hue differs from the search mark's amber on purpose: amber is
+   * reserved for search hits. */
+  signin: (
+    <>
+      Use your{' '}
+      <mark className="rounded-xs bg-accent/8 box-decoration-clone px-px text-inherit">
+        free monthly AI Index allowance
+      </mark>.
+    </>
+  ),
   key: 'Paste an OpenAI or OpenRouter key.',
 };
 
