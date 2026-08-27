@@ -3,9 +3,10 @@
 > Review contract for supported CLI discovery, managed installation, MCP
 > preparation, native session ownership, history, and protocol normalization.
 
-## Included StashBase Agent
+## Included Default Agent
 
-- StashBase Agent is the default adapter. It uses exact-version
+- Default is the included `stashbase` adapter and the default blank-chat
+  preference. It uses exact-version
   `opencode-ai@1.18.19` and `@opencode-ai/sdk@1.18.19` dependencies; packaging
   copies the dependency's platform-specific postinstall target to a stable
   resource outside asar rather than relying on dependency collection to retain
@@ -18,8 +19,14 @@
   environment is an allowlist of launch, locale, temporary-directory, and TLS
   plumbing; ambient provider keys, proxy credentials, user OpenCode settings,
   and Node/Electron injection flags do not cross the process boundary.
+- macOS signs the bundled OpenCode/Bun executable with its own entitlements.
+  `allow-unsigned-executable-memory` is required for its generated executable
+  pages under Hardened Runtime and must not leak to the Electron app or ordinary
+  helpers. The packaged smoke must complete a fake-gateway model turn with the
+  final signed binary and observe it still running; `--version` alone is not a
+  runtime proof.
 - Readiness is a cheap packaged-binary and StashBase-account check. It never
-  installs a runtime or asks for a model key. Sign-out ends StashBase Agent
+  installs a runtime or asks for a model key. Sign-out ends Default
   sessions and processes before clearing the Node-owned account session.
 - Each live panel session owns a loopback-only OpenCode server with random
   Basic authentication. Its MCP child receives the exact window id and a
@@ -221,7 +228,7 @@ it is not a third scope.
 
 ## Native Process Ownership
 
-- Each live StashBase Agent chat owns one authenticated OpenCode server. The
+- Each live Default chat owns one authenticated OpenCode server. The
   per-session process boundary keeps MCP attribution exact when turns run
   concurrently. All servers may share OpenCode's native history store, while
   their injected config and credentials remain process-local.
@@ -231,6 +238,11 @@ it is not a third scope.
 - Every process exit/dispose rejects pending RPC work. Closed peers discard
   later inbound messages. A generation token prevents events from a retired
   process from settling or clearing a replacement generation.
+- An unexpected per-panel OpenCode exit is a terminal session event. The
+  runtime reports it to the owning panel, which emits one error and one exit,
+  ends turn attribution, and closes the socket; native death must never leave
+  the renderer in a permanent working state. Intentional panel or app teardown
+  detaches that listener before terminating the child.
 - A timed-out Codex `turn/start` has an ambiguous native outcome. Retire the
   generation before reconnecting; a later prompt uses a fresh generation.
 - Claude session-id acquisition serializes by id after verifying the requested
@@ -309,7 +321,7 @@ assumed CLI versions.
 
 ## Known Gap — OpenCode Directory Rebind
 
-An attributed StashBase Agent Library chat participates in `create_project`:
+An attributed Default Library chat participates in `create_project`:
 the live panel scope changes and subsequent MCP operations remain attached to
 that session/window. OpenCode 1.18.19 has no supported operation for moving the
 same native session between directory projects. The Adapter therefore does not

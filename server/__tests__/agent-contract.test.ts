@@ -23,7 +23,11 @@ const REQUIRED_SHARED_CAPABILITIES = [
 ] as const;
 
 test('every built-in runtime declares the fundamental Shared Agent Contract behavior', () => {
-  assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => adapter.id), ['stashbase', 'claude', 'codex']);
+  assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => [adapter.id, adapter.label]), [
+    ['codex', 'Codex'],
+    ['claude', 'Claude Code'],
+    ['stashbase', 'Default'],
+  ]);
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
     for (const capability of REQUIRED_SHARED_CAPABILITIES) {
       assert.equal(adapter.capabilities[capability], true, `${adapter.id} must support ${capability}`);
@@ -120,7 +124,7 @@ test('capability discovery reports supported, unavailable, and failed runtimes w
 test('capability discovery publishes the registered adapter catalog', () => {
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) registerAgentAdapter(adapter);
   const discovered = discoverAgentRuntimes();
-  assert.deepEqual(discovered.map((runtime) => runtime.id), ['stashbase', 'claude', 'codex']);
+  assert.deepEqual(discovered.map((runtime) => runtime.id), ['codex', 'claude', 'stashbase']);
   for (const runtime of discovered) {
     const adapter = BUILT_IN_AGENT_ADAPTERS.find((candidate) => candidate.id === runtime.id)!;
     assert.equal(runtime.endpoint, '/ws/agent');

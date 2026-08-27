@@ -1,6 +1,6 @@
 /**
  * Structured chat view for an agent tab — the VSCode-extension-style
- * panel. StashBase Agent (OpenCode), Claude (Agent SDK), and Codex
+ * panel. Default (OpenCode), Claude (Agent SDK), and Codex
  * (app-server) connect through the Shared Agent Contract at `/ws/agent`;
  * their adapters live in server.
  * All adapters render the event stream as ordered blocks:

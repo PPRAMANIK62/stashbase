@@ -38,10 +38,11 @@ document appears, the same Chat adapts into a side panel alongside the source.
 It is a convenient client of StashBase context, not a separate AI workspace
 and not a replacement for external Agent clients.
 
-StashBase Agent is the default path: a pinned local OpenCode runtime uses the
+Default is the included path: a pinned local OpenCode runtime uses the
 signed-in account's included model allowance without asking the user to install
-an Agent or configure a model key. Codex and Claude Code remain first-class
-bring-your-own alternatives. Sessions, file access, commands, MCP, permissions,
+an Agent or configure a model key. It remains the initial selection while the
+picker lists Codex and Claude Code before it as first-class bring-your-own
+alternatives. Sessions, file access, commands, MCP, permissions,
 and Diff handling stay local whichever path is selected; the included path
 sends only model requests through the hosted gateway.
 

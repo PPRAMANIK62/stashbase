@@ -4,6 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createOpencodeClient } from '@opencode-ai/sdk';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -591,6 +592,138 @@ function runProcess(command, commandArgs, options = {}) {
   });
 }
 
+async function smokePackagedOpenCode(openCodeBin) {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-packaged-opencode-'));
+  const gateway = http.createServer(async (request, response) => {
+    for await (const _chunk of request) { /* Drain the request before replying. */ }
+    response.writeHead(200, { 'content-type': 'text/event-stream' });
+    const base = {
+      id: 'chatcmpl-stashbase-packaged-smoke',
+      object: 'chat.completion.chunk',
+      created: 1,
+      model: 'stashbase-agent-default',
+    };
+    response.write(`data: ${JSON.stringify({
+      ...base,
+      choices: [{ index: 0, delta: { role: 'assistant', content: 'probe ok' }, finish_reason: null }],
+    })}\n\n`);
+    response.write(`data: ${JSON.stringify({
+      ...base,
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    })}\n\n`);
+    response.end('data: [DONE]\n\n');
+  });
+  await new Promise((resolve, reject) => {
+    gateway.once('error', reject);
+    gateway.listen(0, '127.0.0.1', resolve);
+  });
+  const gatewayAddress = gateway.address();
+  if (!gatewayAddress || typeof gatewayAddress === 'string') throw new Error('OpenCode smoke gateway has no port');
+
+  const portProbe = http.createServer();
+  await new Promise((resolve, reject) => {
+    portProbe.once('error', reject);
+    portProbe.listen(0, '127.0.0.1', resolve);
+  });
+  const serverAddress = portProbe.address();
+  if (!serverAddress || typeof serverAddress === 'string') throw new Error('OpenCode smoke server has no port');
+  const serverPort = serverAddress.port;
+  await new Promise((resolve) => portProbe.close(resolve));
+
+  const username = 'stashbase';
+  const password = 'packaged-smoke-secret';
+  const model = 'stashbase-agent-default';
+  const config = {
+    autoupdate: false,
+    share: 'disabled',
+    enabled_providers: ['stashbase'],
+    model: `stashbase/${model}`,
+    provider: {
+      stashbase: {
+        name: 'StashBase packaged smoke',
+        npm: '@ai-sdk/openai-compatible',
+        options: {
+          apiKey: 'fake-loopback-key',
+          baseURL: `http://127.0.0.1:${gatewayAddress.port}/v1`,
+          timeout: false,
+        },
+        models: { [model]: { name: 'Packaged smoke', tool_call: true, reasoning: true } },
+      },
+    },
+    agent: { 'stashbase-smoke': { mode: 'primary' } },
+  };
+  const child = spawn(openCodeBin, [
+    'serve', '--hostname=127.0.0.1', `--port=${serverPort}`, '--pure', '--log-level=WARN',
+  ], {
+    env: {
+      ...process.env,
+      HOME: temporaryRoot,
+      USERPROFILE: temporaryRoot,
+      OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
+      OPENCODE_SERVER_USERNAME: username,
+      OPENCODE_SERVER_PASSWORD: password,
+      XDG_DATA_HOME: path.join(temporaryRoot, 'data'),
+      XDG_CONFIG_HOME: path.join(temporaryRoot, 'config'),
+      XDG_CACHE_HOME: path.join(temporaryRoot, 'cache'),
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  child.stdout.on('data', (chunk) => { output += chunk.toString(); });
+  child.stderr.on('data', (chunk) => { output += chunk.toString(); });
+
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`OpenCode startup timed out\n${output.slice(-4_000)}`)), 15_000);
+      const inspect = () => {
+        if (!output.includes('opencode server listening')) return;
+        clearTimeout(timer);
+        resolve();
+      };
+      child.stdout.on('data', inspect);
+      child.stderr.on('data', inspect);
+      child.once('exit', (code, signal) => {
+        clearTimeout(timer);
+        reject(new Error(`OpenCode exited during startup (${code ?? signal})\n${output.slice(-4_000)}`));
+      });
+    });
+    const client = createOpencodeClient({
+      baseUrl: `http://127.0.0.1:${serverPort}`,
+      directory: temporaryRoot,
+      headers: { authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}` },
+      throwOnError: true,
+    });
+    const session = (await client.session.create({ throwOnError: true, body: { title: 'Packaged Smoke' } })).data;
+    const response = (await client.session.prompt({
+      throwOnError: true,
+      path: { id: session.id },
+      body: {
+        model: { providerID: 'stashbase', modelID: model },
+        agent: 'stashbase-smoke',
+        parts: [{ type: 'text', text: 'Reply with probe ok.' }],
+      },
+    })).data;
+    const text = response.parts
+      .filter((part) => part.type === 'text')
+      .map((part) => part.text)
+      .join('');
+    if (text !== 'probe ok') throw new Error(`unexpected packaged OpenCode response: ${JSON.stringify(text)}`);
+    await sleep(250);
+    if (child.exitCode != null || child.signalCode != null) {
+      throw new Error(`packaged OpenCode exited unexpectedly (${child.exitCode ?? child.signalCode})`);
+    }
+    console.log('[smoke] packaged OpenCode completed a model turn and stayed alive');
+  } finally {
+    if (child.exitCode == null && child.signalCode == null) child.kill('SIGTERM');
+    if (child.exitCode == null && child.signalCode == null) {
+      await new Promise((resolve) => child.once('exit', resolve));
+    }
+    await new Promise((resolve) => gateway.close(resolve));
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
 async function smokeElectronMainDependencies(electronBin, appRoot, resourcesPath) {
   const entry = path.join(appRoot, 'electron', 'multi-window.cjs');
   const probe = await runProcess(
@@ -762,6 +895,7 @@ if (openCodeProbe.code !== 0 || openCodeProbe.output.trim() !== '1.18.19') {
   throw new Error(`unexpected packaged OpenCode version: exit=${openCodeProbe.code} output=${openCodeProbe.output.trim()}`);
 }
 console.log('[smoke] packaged OpenCode binary is executable and pinned to 1.18.19');
+await smokePackagedOpenCode(openCodeBin);
 await smokeDaemon(daemonBin);
 if (fs.existsSync(extractBin)) {
   const extractProbe = await runProcess(extractBin, [], { timeoutMs: 5_000 });

@@ -113,8 +113,10 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   });
 
   t.after(async () => {
-    if (child.exitCode == null) child.kill('SIGTERM');
-    if (child.exitCode == null) await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    if (child.exitCode == null && child.signalCode == null) child.kill('SIGTERM');
+    if (child.exitCode == null && child.signalCode == null) {
+      await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    }
     await new Promise<void>((resolve) => gateway.close(() => resolve()));
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   });
@@ -193,12 +195,11 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     },
   });
   await consumed;
-  const text = events.flatMap((event) => (
-    event.type === 'message.part.updated' && event.properties.part.type === 'text'
-      ? [event.properties.part.text]
-      : []
-  )).at(-1);
-  assert.equal(text, 'probe ok');
+  assert.ok(events.some((event) => (
+    event.type === 'message.part.updated'
+      && event.properties.part.type === 'text'
+      && event.properties.part.text === 'probe ok'
+  )), 'the fake gateway response did not reach the OpenCode event stream');
   assert.ok(events.some((event) => event.type === 'session.diff'));
   assert.ok(events.some((event) => event.type === 'session.idle'));
 
@@ -235,4 +236,11 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   for (const name of ['stashbase_read_file', 'stashbase_write_file']) {
     assert.ok(libraryTools.includes(name), `Library profile omitted ${name}`);
   }
+
+  // A hardened-runtime signing mismatch can let Bun finish the request and
+  // then have AMFI kill it while it returns to executable memory. Do not let
+  // teardown hide that packaged-only failure as a successful smoke.
+  await new Promise<void>((resolve) => setTimeout(resolve, 250));
+  assert.equal(child.exitCode, null, `OpenCode exited unexpectedly (${child.exitCode ?? child.signalCode})`);
+  assert.equal(child.signalCode, null, `OpenCode exited unexpectedly (${child.signalCode})`);
 });

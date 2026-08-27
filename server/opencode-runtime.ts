@@ -178,12 +178,12 @@ export function buildOpenCodeConfig(
     },
     agent: {
       'stashbase-folder': {
-        description: 'StashBase Agent for one authorized library folder.',
+        description: 'StashBase Default Agent for one authorized library folder.',
         mode: 'primary',
         ...(preamble ? { prompt: preamble } : {}),
       },
       'stashbase-library': {
-        description: 'StashBase Agent for the authorized library.',
+        description: 'StashBase Default Agent for the authorized library.',
         mode: 'primary',
         ...(preamble ? { prompt: preamble } : {}),
         // A Library chat spans a non-contiguous set of registered folders.
@@ -226,6 +226,7 @@ class OpenCodeRuntime {
   private starting: Promise<RunningOpenCode> | null = null;
   private startingProcess: RunningOpenCode['process'] | null = null;
   private generation = 0;
+  private readonly exitListeners = new Set<(error: Error) => void>();
 
   constructor(
     private readonly mcpEnvironment: Record<string, string> = {},
@@ -273,7 +274,7 @@ class OpenCodeRuntime {
             retryable: true,
           },
         },
-        error: 'Sign in to StashBase to use StashBase Agent.',
+        error: 'Sign in to StashBase to use Default.',
       };
     }
     return {
@@ -282,7 +283,7 @@ class OpenCodeRuntime {
       installed: true,
       source: 'bundled',
       state: 'available',
-      bootstrap: { phase: 'ready', progress: 1, message: 'StashBase Agent is ready.' },
+      bootstrap: { phase: 'ready', progress: 1, message: 'Default is ready.' },
     };
   }
 
@@ -296,6 +297,11 @@ class OpenCodeRuntime {
     });
   }
 
+  onExit(listener: (error: Error) => void): () => void {
+    this.exitListeners.add(listener);
+    return () => this.exitListeners.delete(listener);
+  }
+
   async close(): Promise<void> {
     this.generation += 1;
     const running = this.running;
@@ -307,11 +313,11 @@ class OpenCodeRuntime {
     if (process) {
       process.kill('SIGTERM');
       const timeout = setTimeout(() => {
-        if (process.exitCode == null) process.kill('SIGKILL');
+        if (process.exitCode == null && process.signalCode == null) process.kill('SIGKILL');
       }, 1_500);
       timeout.unref?.();
       await new Promise<void>((resolve) => {
-        if (process.exitCode != null) resolve();
+        if (process.exitCode != null || process.signalCode != null) resolve();
         else process.once('exit', () => resolve());
       });
       clearTimeout(timeout);
@@ -331,7 +337,7 @@ class OpenCodeRuntime {
     const executable = bundledOpenCodeExecutable();
     if (!executable) throw new Error('The bundled OpenCode runtime is missing.');
     if (this.requireAccount && !getHostedAccountSession()) {
-      throw new Error('Sign in to StashBase to use StashBase Agent.');
+      throw new Error('Sign in to StashBase to use Default.');
     }
     await startHostedAgentBroker();
     if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
@@ -341,7 +347,7 @@ class OpenCodeRuntime {
     const password = cryptoRandomSecret();
     const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
     const model = hostedAgentRuntime(this.agentSessionId);
-    if (!model) throw new Error('The StashBase Agent model broker is not running.');
+    if (!model) throw new Error('The Default Agent model broker is not running.');
     const child = spawn(executable, [
       'serve',
       '--hostname=127.0.0.1',
@@ -362,8 +368,12 @@ class OpenCodeRuntime {
       const running = { process: child, url, authorization };
       this.running = running;
       child.once('exit', (code, signal) => {
-        if (this.running?.process === child) this.running = null;
-        if (code !== 0 && signal !== 'SIGTERM') log.warn(`OpenCode exited (${code ?? signal ?? 'unknown'}).`);
+        if (this.running?.process !== child) return;
+        this.running = null;
+        const reason = code ?? signal ?? 'unknown';
+        const error = new Error(`The included Agent runtime exited unexpectedly (${reason}).`);
+        log.warn(error.message);
+        for (const listener of this.exitListeners) listener(error);
       });
       return running;
     } catch (error) {
@@ -420,6 +430,7 @@ export interface OpenCodeSessionRuntime {
   client(directory: string): Promise<OpencodeClient>;
   beginTurn(turnId: string, profile?: string): void;
   endTurn(): void;
+  onExit(listener: (error: Error) => void): () => void;
   close(): Promise<void>;
 }
 
@@ -442,6 +453,7 @@ export function createOpenCodeSessionRuntime(
     client: (directory) => sessionRuntime.client(directory),
     beginTurn: (turnId, profile) => beginHostedAgentTurn(context.agentSessionId, turnId, profile),
     endTurn: () => endHostedAgentTurn(context.agentSessionId),
+    onExit: (listener) => sessionRuntime.onExit(listener),
     close: () => sessionRuntime.close(),
   };
 }

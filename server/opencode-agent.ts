@@ -221,7 +221,7 @@ export class OpenCodeEventTranslator {
   }
 }
 
-class OpenCodePanelSession {
+export class OpenCodePanelSession {
   private readonly abort = new AbortController();
   private readonly translator = new OpenCodeEventTranslator();
   private readonly cwd: string;
@@ -234,12 +234,14 @@ class OpenCodePanelSession {
   private sessionId: string | null = null;
   private client: Awaited<ReturnType<typeof openCodeClient>> | null = null;
   private disposed = false;
+  private readonly stopRuntimeExitListener: () => void;
   private readonly onMessage = (data: RawData) => { void this.handleMessage(data); };
   private readonly onClose = () => this.dispose();
 
   constructor(
     private readonly ws: WebSocket,
     private readonly options: import('./agent-contract.ts').AgentConnectionOptions,
+    runtime?: OpenCodeSessionRuntime,
   ) {
     const binding = runWithWindowId(options.windowId, () => resolveSessionBinding({
       scope: options.scope,
@@ -250,11 +252,14 @@ class OpenCodePanelSession {
     this.cwd = binding.cwd;
     this.libraryScoped = binding.libraryScoped;
     this.windowId = options.windowId;
-    this.runtime = createOpenCodeSessionRuntime({
+    this.runtime = runtime ?? createOpenCodeSessionRuntime({
       windowId: this.windowId,
       agentSessionId: this.attributionId,
       cwd: this.cwd,
       scope: this.libraryScoped ? 'library' : 'folder',
+    });
+    this.stopRuntimeExitListener = this.runtime.onExit((error) => {
+      if (!this.disposed) this.fail(error, true);
     });
     registerAttributedAgentSession(this.attributionId, this);
     ws.on('message', this.onMessage);
@@ -280,6 +285,7 @@ class OpenCodePanelSession {
     if (this.disposed) return;
     this.disposed = true;
     this.abort.abort();
+    this.stopRuntimeExitListener();
     this.runtime.endTurn();
     this.ws.off('message', this.onMessage);
     this.ws.off('close', this.onClose);
@@ -374,7 +380,7 @@ class OpenCodePanelSession {
           send(this.ws, { t: 'skills', skills: [], state: 'empty' });
           break;
         case 'steer':
-          send(this.ws, { t: 'steer-result', id: event.id, ok: false, message: 'StashBase Agent queues follow-up prompts.' });
+          send(this.ws, { t: 'steer-result', id: event.id, ok: false, message: 'Default queues follow-up prompts.' });
           break;
       }
     } catch (error) {

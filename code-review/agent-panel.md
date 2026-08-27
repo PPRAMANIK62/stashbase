@@ -30,7 +30,8 @@
   Installation and authentication failures retain a separate **Check again**
   action; it calls the no-download discovery path so external recovery does not
   silently grant installation consent or start another login.
-- StashBase Agent is the default blank-chat preference. Its gate distinguishes
+- Default is the default blank-chat preference and appears after Codex and
+  Claude Code in selection surfaces. Its gate distinguishes
   account-required from runtime installation, and Settings shows its fixed
   seven-day allowance as remaining percentage and reset time beside the Codex
   and Claude Code alternatives. Dollar values and model selection remain

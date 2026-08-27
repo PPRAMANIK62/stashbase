@@ -19,7 +19,7 @@ runtime. Manual checks remain available when automatic checks are disabled.
 Models, derived data, caches, the pinned OpenCode state, and legacy managed
 Agent runtimes live under AppData and are not app-config fields. Claude Code
 and Codex configuration files are rewritten only by Agent readiness
-(`ensureAgentMcp`). StashBase Agent receives an in-memory OpenCode config and
+(`ensureAgentMcp`). Default receives an in-memory OpenCode config and
 per-session MCP environment instead of a durable client config. StashBase never
 writes any other client's configuration — the MCP Settings page is a read-only
 access surface external clients copy from.

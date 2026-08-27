@@ -240,7 +240,7 @@ export class HostedAgentBroker {
     if (!upstream.ok) {
       const payload = await upstream.json().catch(() => null) as GatewayError | null;
       const nested = payload?.error;
-      const upstreamMessage = nested?.message ?? payload?.message ?? `StashBase Agent gateway failed (HTTP ${upstream.status}).`;
+      const upstreamMessage = nested?.message ?? payload?.message ?? `Default Agent gateway failed (HTTP ${upstream.status}).`;
       const upstreamCode = nested?.code ?? payload?.code;
       const allowanceMessage = upstreamCode === 'agent_turn_budget_exhausted'
         ? `This Agent turn reached its spending limit. ${upstreamMessage}`

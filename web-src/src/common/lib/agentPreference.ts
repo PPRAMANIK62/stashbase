@@ -23,7 +23,7 @@ function browserStorage(): AgentPreferenceStorage | undefined {
 }
 
 /** Invalid, missing, or inaccessible UI preference state always recovers to
- * the zero-setup StashBase Agent. Runtime availability remains separate. */
+ * the zero-setup Default Agent. Runtime availability remains separate. */
 export function readPreferredAgent(
   storage: AgentPreferenceStorage | undefined = browserStorage(),
 ): AgentKind {

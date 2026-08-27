@@ -37,7 +37,7 @@ function protocolRecords(logFile: string): ProtocolRecord[] {
     .map((line) => JSON.parse(line) as ProtocolRecord);
 }
 
-test('J06 offers StashBase Agent as the zero-install default with bring-your-own alternatives', async ({}, testInfo) => {
+test('J06 lists bring-your-own Agents before the zero-install Default', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   let app: LaunchedApp | undefined;
   try {
@@ -48,9 +48,11 @@ test('J06 offers StashBase Agent as the zero-install default with bring-your-own
     await expect(panel.getByRole('button', { name: 'Open account settings' })).toBeVisible();
 
     await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
-    await expect(app.page.getByRole('menuitem', { name: 'StashBase Agent' })).toBeVisible();
-    await expect(app.page.getByRole('menuitem', { name: 'Codex' })).toBeVisible();
-    await expect(app.page.getByRole('menuitem', { name: 'Claude Code' })).toBeVisible();
+    const agents = app.page.getByRole('menuitem');
+    await expect(agents).toHaveCount(3);
+    await expect(agents.nth(0)).toHaveText('Codex');
+    await expect(agents.nth(1)).toHaveText('Claude Code');
+    await expect(agents.nth(2)).toHaveText('Default');
     app.errors.assertNone();
   } finally {
     await app?.close();

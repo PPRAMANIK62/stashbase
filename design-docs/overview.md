@@ -11,7 +11,7 @@ StashBase keeps source ownership in local files, prepares the formats that need
 help, indexes them, and exposes authorized context through MCP. Local browsing,
 editing, preview, and exact retrieval do not require a cloud account. When a
 user explicitly selects hosted AI Index, extracted text may be sent to that
-provider for indexing or retrieval. The included StashBase Agent runs locally
+provider for indexing or retrieval. The included Default Agent runs locally
 and sends only prompts and necessary model context through its hosted model
 gateway. In both cases the source files remain locally owned.
 

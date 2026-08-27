@@ -40,9 +40,9 @@ export interface AgentMeta {
 export const AGENT_META: Record<AgentKind, AgentMeta> = {
   stashbase: {
     id: 'stashbase',
-    name: 'StashBase Agent',
-    shortName: 'StashBase',
-    launcherLabel: 'StashBase Agent',
+    name: 'Default',
+    shortName: 'Default',
+    launcherLabel: 'Default',
     capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, attachments: false, modes: false, effort: false, models: false, skills: false, steering: false, titleHint: true },
     controlsNote: 'Runs locally · Model usage uses your StashBase allowance',
     Icon: CubeLogoIcon,
@@ -67,7 +67,7 @@ export const AGENT_META: Record<AgentKind, AgentMeta> = {
   },
 };
 
-export const AGENTS: AgentMeta[] = [AGENT_META.stashbase, AGENT_META.codex, AGENT_META.claude];
+export const AGENTS: AgentMeta[] = [AGENT_META.codex, AGENT_META.claude, AGENT_META.stashbase];
 
 export function isAgentKind(value: string): value is AgentKind {
   return value === 'stashbase' || value === 'claude' || value === 'codex';

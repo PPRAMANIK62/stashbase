@@ -58,9 +58,10 @@ before its metadata and payloads coexist.
 - The exact OpenCode runtime and SDK versions are lockfile inputs. Its native
   postinstall target must be copied to a stable resource outside asar rather
   than entrusted to dependency collection, must never be replaced by a PATH
-  binary, and the packaged smoke executes `--version` on that resource. Source
-  CI additionally starts that exact target and completes an SDK turn against a
-  fake local model gateway; no real account or model credential is used.
+  binary. Source CI starts that exact target and completes an SDK turn against
+  a fake local model gateway. Packaged smoke repeats both the version check and
+  model turn against the final signed resource, asserting that the process
+  remains alive; no real account or model credential is used.
 - Electron packages use electron-builder's official zip download and extraction
   path. Do not point `electronDist` at the unpacked npm installation: that path
   can flatten macOS framework symlinks before Developer ID signing.
@@ -96,6 +97,9 @@ or ambiguous. The `afterPack` adapter validates versioned framework symlinks
 before signing. It preserves the original bundle in clean CI workspaces and
 uses a metadata-free clone only for local File Provider workspaces; no package,
 Homebrew, or recovery step may mutate or ad-hoc re-sign the app afterward. The
+bundled OpenCode/Bun executable alone receives the unsigned-executable-memory
+entitlement it needs under Hardened Runtime; the main app and ordinary helpers
+must not inherit that exception. The
 mounted release DMG must pass `codesign`, Gatekeeper `spctl`, and stapler
 validation before upload.
 
@@ -147,7 +151,7 @@ credential-free and does not run this probabilistic check.
 | Tag gate Interface | `.github/workflows/release-ci-gate.yml` and `scripts/require-green-ci.mjs` |
 | Publication coordinator | `.github/workflows/release.yml` |
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
-| Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
+| Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs` (including the explicit OpenCode resource version probe) and platform release verifiers |
 | Focused evidence | `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
 

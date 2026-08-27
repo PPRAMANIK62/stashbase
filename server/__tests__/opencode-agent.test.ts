@@ -1,8 +1,27 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import type { Event } from '@opencode-ai/sdk';
-import { OpenCodeEventTranslator } from '../opencode-agent.ts';
-import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment } from '../opencode-runtime.ts';
+import type { WebSocket } from 'ws';
+import { OpenCodeEventTranslator, OpenCodePanelSession } from '../opencode-agent.ts';
+import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, type OpenCodeSessionRuntime } from '../opencode-runtime.ts';
+
+class FakeWebSocket extends EventEmitter {
+  OPEN = 1;
+  readyState = this.OPEN;
+  sent: string[] = [];
+
+  send(value: string): void { this.sent.push(value); }
+  close(): void {
+    this.readyState = 3;
+    this.emit('close');
+  }
+}
+
+async function settle(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
 
 test('bundled OpenCode inherits launch plumbing but no ambient credentials or injection flags', () => {
   assert.deepEqual(safeOpenCodeInheritedEnvironment({
@@ -65,6 +84,56 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
   });
   assert.equal(attributed.agent?.['stashbase-folder']?.prompt, 'Use StashBase tools.');
   assert.equal(attributed.agent?.['stashbase-library']?.prompt, 'Use StashBase tools.');
+});
+
+test('an unexpected bundled runtime exit terminates the panel instead of leaving a turn working', async () => {
+  const ws = new FakeWebSocket();
+  let exitListener: ((error: Error) => void) | null = null;
+  let closeCalls = 0;
+  const runtime: OpenCodeSessionRuntime = {
+    async client(directory) {
+      return {
+        event: {
+          subscribe: async ({ signal }: { signal?: AbortSignal } = {}) => ({
+            stream: (async function* () {
+              await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve(), { once: true }));
+            })(),
+          }),
+        },
+        session: {
+          create: async () => ({ data: { id: 'session-1', title: 'New Chat', directory } }),
+          update: async () => ({ data: true }),
+          promptAsync: async () => ({ data: true }),
+          abort: async () => ({ data: true }),
+        },
+      } as never;
+    },
+    beginTurn: () => {},
+    endTurn: () => {},
+    onExit(listener) {
+      exitListener = listener;
+      return () => { exitListener = null; };
+    },
+    close: async () => { closeCalls += 1; },
+  };
+  new OpenCodePanelSession(ws as unknown as WebSocket, {
+    windowId: 'runtime-exit-window',
+    folder: '/workspace',
+  }, runtime);
+  await settle();
+  ws.emit('message', Buffer.from(JSON.stringify({ t: 'prompt', text: 'hi' })));
+  await settle();
+
+  assert.ok(exitListener);
+  (exitListener as (error: Error) => void)(new Error('The included Agent runtime exited unexpectedly (SIGKILL).'));
+  await settle();
+
+  const events = ws.sent.map((value) => JSON.parse(value) as { t: string; message?: string });
+  assert.ok(events.some((event) => event.t === 'turn-start'));
+  assert.ok(events.some((event) => event.t === 'error' && event.message?.includes('SIGKILL')));
+  assert.ok(events.some((event) => event.t === 'exit' && event.message?.includes('SIGKILL')));
+  assert.equal(ws.readyState, 3);
+  assert.equal(closeCalls, 1);
 });
 
 test('OpenCode events normalize into the Shared Agent Contract without duplicate cumulative content', () => {

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -55,6 +55,31 @@ function assertPath(target, label) {
   if (!fs.existsSync(target)) throw new Error(`DMG is missing ${label}: ${target}`);
 }
 
+function signedEntitlements(executable) {
+  const result = spawnSync('/usr/bin/codesign', ['-d', '--entitlements', ':-', executable], {
+    cwd: root,
+    encoding: 'utf8',
+    env: process.env,
+  });
+  if (result.status !== 0) {
+    throw new Error(`Could not read signed entitlements for ${executable}:\n${result.stderr}`);
+  }
+  return `${result.stdout}\n${result.stderr}`;
+}
+
+function verifyOpenCodeEntitlements(appPath) {
+  const appExecutable = path.join(appPath, 'Contents', 'MacOS', productName);
+  const openCodeExecutable = path.join(appPath, 'Contents', 'Resources', 'opencode', 'opencode.exe');
+  assertPath(openCodeExecutable, 'bundled OpenCode runtime');
+  const entitlement = 'com.apple.security.cs.allow-unsigned-executable-memory';
+  if (!signedEntitlements(openCodeExecutable).includes(entitlement)) {
+    throw new Error(`Bundled OpenCode is missing ${entitlement}.`);
+  }
+  if (signedEntitlements(appExecutable).includes(entitlement)) {
+    throw new Error(`${entitlement} must stay scoped to bundled OpenCode.`);
+  }
+}
+
 function verifyMountedDmg(dmg) {
   const mountPoint = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-dmg-verify-'));
   let attached = false;
@@ -65,6 +90,7 @@ function verifyMountedDmg(dmg) {
     assertPath(appPath, `${productName}.app`);
     assertPath(path.join(mountPoint, 'Applications'), 'Applications link');
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath]);
+    verifyOpenCodeEntitlements(appPath);
     run('/usr/sbin/spctl', ['--assess', '--type', 'execute', '--verbose=2', appPath]);
     run('/usr/bin/xcrun', ['stapler', 'validate', appPath]);
     console.log(`[release:verify:mac] verified signed and notarized app in ${path.basename(dmg)}`);

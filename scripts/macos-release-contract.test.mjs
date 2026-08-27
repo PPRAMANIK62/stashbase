@@ -10,6 +10,7 @@ import { assertMacosReleaseCredentials } from './macos-release-contract.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const afterPack = require('./after-pack-macos.cjs');
+const signMacosApp = require('./sign-macos-app.cjs');
 
 function source(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -82,6 +83,7 @@ test('macOS package configuration requires Developer ID signing and notarization
   assert.equal(mac.notarize, true);
   assert.equal(mac.entitlements, 'build/entitlements.mac.plist');
   assert.equal(mac.entitlementsInherit, 'build/entitlements.mac.inherit.plist');
+  assert.equal(mac.sign, 'scripts/sign-macos-app.cjs');
   assert.equal(pkg.build.dmg.sign, false);
   assert.deepEqual(dmgEntries, ['/Applications']);
 
@@ -92,6 +94,20 @@ test('macOS package configuration requires Developer ID signing and notarization
     assert.match(entitlements, /com\.apple\.security\.cs\.allow-jit/);
     assert.doesNotMatch(entitlements, /allow-unsigned-executable-memory|get-task-allow/);
   }
+
+  const openCodeEntitlements = source('build/entitlements.mac.opencode.plist');
+  assert.match(openCodeEntitlements, /com\.apple\.security\.cs\.allow-jit/);
+  assert.match(openCodeEntitlements, /com\.apple\.security\.cs\.allow-unsigned-executable-memory/);
+  assert.doesNotMatch(openCodeEntitlements, /get-task-allow/);
+
+  const inherited = { entitlements: '/tmp/inherit.plist', hardenedRuntime: true };
+  const ordinary = '/tmp/StashBase.app/Contents/Frameworks/StashBase Helper.app';
+  const openCode = '/tmp/StashBase.app/Contents/Resources/opencode/opencode.exe';
+  assert.equal(signMacosApp.optionsForSignedFile(ordinary, inherited), inherited);
+  assert.deepEqual(signMacosApp.optionsForSignedFile(openCode, inherited), {
+    ...inherited,
+    entitlements: path.join(root, 'build', 'entitlements.mac.opencode.plist'),
+  });
 });
 
 test('macOS release adapters preserve the final signature and require its verification', () => {
@@ -130,6 +146,7 @@ test('macOS release adapters preserve the final signature and require its verifi
 
   const verifier = source('scripts/release-verify-mac.mjs');
   assert.match(verifier, /codesign/);
+  assert.match(verifier, /allow-unsigned-executable-memory/);
   assert.match(verifier, /spctl/);
   assert.match(verifier, /stapler/);
 

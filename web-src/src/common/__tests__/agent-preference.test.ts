@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { AGENT_META, AGENTS } from '@/common/lib/agentCatalog';
 import {
   DEFAULT_AGENT,
   newChatAgentSelectionPlan,
@@ -15,7 +16,7 @@ function memoryStorage(initial: string | null = null) {
   };
 }
 
-test('StashBase Agent is the default until the user chooses another Agent', () => {
+test('Default is selected until the user chooses another Agent', () => {
   const storage = memoryStorage();
 
   assert.equal(DEFAULT_AGENT, 'stashbase');
@@ -25,7 +26,7 @@ test('StashBase Agent is the default until the user chooses another Agent', () =
   assert.equal(readPreferredAgent(storage), 'claude');
 });
 
-test('invalid or inaccessible Agent preferences recover to StashBase Agent', () => {
+test('invalid or inaccessible Agent preferences recover to Default', () => {
   assert.equal(readPreferredAgent(memoryStorage('other-agent')), 'stashbase');
 
   const inaccessible = {
@@ -41,4 +42,13 @@ test('choosing the agent only updates the next-chat preference', () => {
     preferredAgent: 'claude',
     startAgent: null,
   });
+});
+
+test('the Agent picker presents bring-your-own runtimes before the included Default', () => {
+  assert.deepEqual(AGENTS.map((agent) => [agent.id, agent.name]), [
+    ['codex', 'Codex'],
+    ['claude', 'Claude Code'],
+    ['stashbase', 'Default'],
+  ]);
+  assert.equal(AGENT_META.stashbase.launcherLabel, 'Default');
 });

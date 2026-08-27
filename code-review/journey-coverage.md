@@ -235,8 +235,9 @@ aliases, and Journey E2E owns representative composition.
   fresh explicitly Library-scoped Chat.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
-- **Release Check:** packaged OpenCode version/executability, a real hosted
-  StashBase Agent turn and allowance response, bring-your-own CLI/account setup,
+- **Release Check:** packaged OpenCode version/executability plus a fake-gateway
+  model turn that proves the signed runtime stays alive, a real hosted Default
+  turn and allowance response, bring-your-own CLI/account setup,
   and bring-your-own clipboard image behavior remain release evidence.
 
 ## J07: Converge
@@ -337,7 +338,7 @@ aliases, and Journey E2E owns representative composition.
 - **Gap:** real-Agent intent/tool choice still needs an Eval. Codex
   configuration leaves `create_project` on the default prompt path, but no
   focused test locks that tool allowlist; Claude requires equivalent focused
-  or release evidence. StashBase Agent can rebind the live panel and attributed
+  or release evidence. Default can rebind the live panel and attributed
   MCP path, but OpenCode cannot yet migrate its native history/cwd; its restored
   row remains under Library and this path needs separate evidence after that
   native limitation is resolved.

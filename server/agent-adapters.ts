@@ -33,7 +33,23 @@ const SHARED_PANEL_CAPABILITIES = {
 
 export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
   {
-    id: 'stashbase', label: 'StashBase Agent', vendor: 'StashBase · OpenCode · DeepSeek',
+    id: 'codex', label: 'Codex', vendor: 'OpenAI',
+    capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: true, titleHint: true },
+    attach: (ws, options) => attachCodexWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder, options.scope),
+    stop: killActiveCodex,
+    stopFolder: killCodexSessionsForFolder,
+    history: codexHistoryActions(),
+  },
+  {
+    id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
+    capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: false, titleHint: false },
+    attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder, options.scope),
+    stop: killActiveAgent,
+    stopFolder: killAgentSessionsForFolder,
+    history: claudeHistoryActions(),
+  },
+  {
+    id: 'stashbase', label: 'Default', vendor: 'StashBase · OpenCode · DeepSeek',
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
       attachments: false,
@@ -49,21 +65,5 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     stop: killActiveOpenCode,
     stopFolder: killOpenCodeSessionsForFolder,
     history: openCodeHistoryActions(),
-  },
-  {
-    id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
-    capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: false, titleHint: false },
-    attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder, options.scope),
-    stop: killActiveAgent,
-    stopFolder: killAgentSessionsForFolder,
-    history: claudeHistoryActions(),
-  },
-  {
-    id: 'codex', label: 'Codex', vendor: 'OpenAI',
-    capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: true, titleHint: true },
-    attach: (ws, options) => attachCodexWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder, options.scope),
-    stop: killActiveCodex,
-    stopFolder: killCodexSessionsForFolder,
-    history: codexHistoryActions(),
   },
 ];
