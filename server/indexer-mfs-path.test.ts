@@ -77,3 +77,32 @@ test('daemon readiness includes rules and binding replay after every spawn', asy
   const status = await daemon.call<{ operations: string[] }>('status', {});
   assert.deepEqual(status.operations, ['set_rules', 'bind_folder', 'status']);
 });
+
+test('local embedding setup probes the bounded Python runtime before selection', async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-fake-local-embedder-'));
+  const fixture = path.join(scratch, 'fake-daemon.mjs');
+  fs.writeFileSync(fixture, `
+    import readline from 'node:readline';
+    process.stdout.write(JSON.stringify({ event: 'ready', db: 'fake' }) + '\\n');
+    readline.createInterface({ input: process.stdin }).on('line', (line) => {
+      const request = JSON.parse(line);
+      const result = request.op === 'probe_embedder' ? request.args : {};
+      process.stdout.write(JSON.stringify({ id: request.id, ok: true, result }) + '\\n');
+    });
+  `, 'utf8');
+  const daemon = new MfsDaemon(() => ({ command: process.execPath, args: [fixture], cwd: scratch }));
+  t.after(async () => {
+    await daemon.close();
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+
+  assert.deepEqual(await daemon.probeEmbedder({
+    provider: 'onnx',
+    model: 'gpahal/bge-m3-onnx-int8',
+    dimension: 1024,
+  }), {
+    provider: 'onnx',
+    model: 'gpahal/bge-m3-onnx-int8',
+    dimension: 1024,
+  });
+});

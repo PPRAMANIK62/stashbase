@@ -322,6 +322,33 @@ class StashbaseDaemonTests(unittest.TestCase):
             else:
                 sys.modules["mfs.embedder"] = previous
 
+    def test_probe_embedder_reports_local_runtime_without_opening_a_store(self) -> None:
+        embedder = types.SimpleNamespace(
+            provider="onnx",
+            model_name="gpahal/bge-m3-onnx-int8",
+            dimension=1024,
+        )
+        svc = mock.Mock()
+        with mock.patch.object(stashbase_daemon, "make_embedder", return_value=embedder) as make:
+            result = stashbase_daemon.op_probe_embedder(svc, {
+                "provider": "onnx",
+                "model": "gpahal/bge-m3-onnx-int8",
+                "dimension": 1024,
+            })
+        self.assertEqual(result, {
+            "provider": "onnx",
+            "model": "gpahal/bge-m3-onnx-int8",
+            "dimension": 1024,
+        })
+        make.assert_called_once_with(
+            "onnx",
+            model="gpahal/bge-m3-onnx-int8",
+            api_key=None,
+            dimension=1024,
+            base_url=None,
+        )
+        svc.assert_not_called()
+
     def test_collection_name_separates_local_from_openai_at_same_dimension(self) -> None:
         self.assertEqual(stashbase_daemon._collection_name(1536), "vectors_openai_1536")
         self.assertEqual(stashbase_daemon._collection_name(1536, "openai"), "vectors_openai_1536")
@@ -460,10 +487,11 @@ class StashbaseDaemonTests(unittest.TestCase):
             else:
                 sys.modules["mfs.embedder"] = previous_mfs
 
-    def test_no_key_reopen_raises_when_multiple_collections_exist(self) -> None:
-        # If a library has been indexed with more than one provider
-        # historically, nothing records which one is "active" -- reopening
-        # without a credential must fail loudly rather than silently guess.
+    def test_no_key_reopen_uses_the_active_provider_when_multiple_collections_exist(self) -> None:
+        # Node persists the active embedding source and sends its provider and
+        # dimension on every bind. When historical collections coexist, that
+        # hint is the durable selection -- cleanup must reopen it rather than
+        # guessing or refusing all list/delete work.
         try:
             import milvus_lite  # noqa: F401
         except ImportError:
@@ -486,12 +514,31 @@ class StashbaseDaemonTests(unittest.TestCase):
                 finally:
                     setup2.close_all()
 
-                ambiguous = stashbase_daemon.StashbaseStore(tmp)
+                cleanup = stashbase_daemon.StashbaseStore(tmp)
                 try:
-                    with self.assertRaises(RuntimeError):
-                        ambiguous.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                    cleanup.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                    collection = getattr(getattr(cleanup._store, "_config", None), "collection_name", None)
+                    self.assertEqual(collection, "vectors_openai_1536")
                 finally:
-                    ambiguous.close_all()
+                    cleanup.close_all()
+
+                local_cleanup = stashbase_daemon.StashbaseStore(tmp)
+                try:
+                    local_cleanup._ensure_store_for_dimension(1024, provider="onnx")
+                    collection = getattr(getattr(local_cleanup._store, "_config", None), "collection_name", None)
+                    self.assertEqual(collection, "vectors_onnx_1024")
+                    stores = local_cleanup.mutation_stores()
+                    self.assertEqual(
+                        {getattr(store._config, "collection_name", None) for _, _, store in stores},
+                        {"vectors_openai_1536", "vectors_onnx_1024"},
+                    )
+                    for _, _, store in stores:
+                        store.delete_by_prefix = mock.Mock(wraps=store.delete_by_prefix)
+                    stashbase_daemon.op_delete_prefix(local_cleanup, {"prefix": "/library"})
+                    for _, _, store in stores:
+                        store.delete_by_prefix.assert_called_once_with("/library/")
+                finally:
+                    local_cleanup.close_all()
         finally:
             if previous_openai is None:
                 sys.modules.pop("openai", None)
@@ -662,7 +709,7 @@ class StashbaseDaemonTests(unittest.TestCase):
                     root_identity="/library",
                     dimension=1536,
                 )
-            ensure.assert_called_once_with(1536)
+            ensure.assert_called_once_with(1536, provider="openai")
 
     def test_delete_acknowledgements_propagate_store_failures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -42,9 +42,9 @@ folder. No account, AI Index source, active folder, or Agent runtime is assumed.
    existing folder. An existing folder home is never seeded or modified by
    onboarding.
 3. **Choose AI Index deliberately.** See why meaning-based retrieval is
-   recommended, which hosted or bring-your-own-key source would be used, and
-   what remains local. Configure it or deliberately skip for now without
-   losing local functionality.
+   recommended, whether a hosted, local-device, or bring-your-own-key source
+   would be used, and what remains local. Configure it or deliberately skip
+   for now without losing local functionality.
 4. **Enter the workspace.** Select a library folder and begin browsing before
    preparation or indexing completes. A fresh window does not silently choose
    a folder on the user's behalf.
@@ -262,7 +262,7 @@ AI Index may be ready, partially ready, disabled, or unavailable.
 
 1. Enter one query in library search.
 2. Use Exact Search without AI Index or Similar Search with an explicitly
-   selected hosted or bring-your-own-key source.
+   selected hosted, local-device, or bring-your-own-key source.
 3. Optionally narrow the query to one member folder.
 4. Review ranked evidence and readiness guidance.
 5. Open a result in its visible source context.

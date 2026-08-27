@@ -26,7 +26,8 @@ user-managed results.
 - AI Index provides meaning-based retrieval when an embedding source is
   configured. Product copy says **AI Index**; engineering terms such as
   semantic indexing and embeddings appear only where technically necessary.
-- AI Index setup offers hosted account access as the primary path and
+- AI Index setup offers hosted account access as the primary path, a local
+  ONNX model that keeps text on the device after first model setup, and
   OpenAI/OpenRouter keys as an advanced path. The active source remains
   explicit, and browser sign-in returns to the initiating window or offers a
   deliberate app-return action.
@@ -75,7 +76,8 @@ user-managed results.
 - Previewability alone never claims retrievable text. Each result comes from a
   direct-text or current prepared-text capability and resolves to the visible
   source.
-- BYOK credentials are managed through Settings. Account login starts only
+- Local model selection, BYOK credentials, and account source selection are
+  managed through Settings. Account login starts only
   from an explicit Sign in action in setup, Settings, or the account menu.
   Browsing local files and serving an existing local index never depends on
   online authentication.

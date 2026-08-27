@@ -15,6 +15,7 @@ import type {
   ApiKeySaveResult,
   EmbedderState,
   EmbedderProvider,
+  EmbeddingSource,
   HostedAccountActivation,
   HostedAccountState,
   HostedOAuthProvider,
@@ -290,8 +291,8 @@ export const api = {
     send<{ ok: true }>('DELETE', `/api/transcription/models/${encodeURIComponent(id)}`),
   // Embedder ----------------------------------------------------
   getEmbedder: () => getJson<EmbedderState>('/api/embedder'),
-  useApiKeySource: (provider: EmbedderProvider) =>
-    send<EmbedderState>('PUT', '/api/embedder/source', { provider }),
+  useEmbeddingSource: (source: Exclude<EmbeddingSource, 'stashbase-account'>) =>
+    send<EmbedderState>('PUT', '/api/embedder/source', { source }),
   getAccount: (refresh = false) => getJson<HostedAccountState>(`/api/account${refresh ? '?refresh=1' : ''}`),
   startAccountOAuth: (provider: HostedOAuthProvider = 'google') =>
     send<HostedOAuthStart>('POST', '/api/account/oauth/start', { provider }),

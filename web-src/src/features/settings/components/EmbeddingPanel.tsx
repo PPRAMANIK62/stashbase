@@ -87,6 +87,7 @@ export function EmbeddingPanel() {
     signOut,
     useAccountAllowance,
     useApiKeySource,
+    useLocalSource,
     applySignedIn,
   } = useEmbedderSettings();
   const [keyEditOpen, setKeyEditOpen] = useState(false);
@@ -118,7 +119,9 @@ export function EmbeddingPanel() {
   // up they would be answering a question the user has not reached yet, so
   // the panel shows the choice alone until a path is picked.
   const hostedActive = state.source === 'stashbase-account' && state.account.signedIn;
+  const localActive = state.source === 'local';
   const showingHostedSummary = hostedActive && !keyFormOpen && !signInFormOpen;
+  const showingLocalSummary = localActive && !keyFormOpen && !signInFormOpen;
   const showingAuthChoice = !state.authorized && !keyFormOpen && !signInFormOpen;
 
   return (
@@ -172,8 +175,30 @@ export function EmbeddingPanel() {
               {state.account.quotaUnavailable && <div className="mt-2 text-xs text-muted-foreground">Usage is temporarily unavailable.</div>}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" disabled={accountBusy} onClick={() => { void refreshAccount(); }}>Refresh usage</Button>
+                <Button variant="outline" size="sm" disabled={accountBusy} onClick={() => { void useLocalSource(); }}>Use local model</Button>
                 <Button variant="outline" size="sm" disabled={accountBusy} onClick={() => setKeyFormOpen(true)}>Use your own key</Button>
                 <Button variant="ghost" size="sm" disabled={accountBusy} onClick={() => { void signOut(); }}>Sign out</Button>
+              </div>
+            </Card>
+          )}
+          {showingLocalSummary && (
+            <Card surface="raised" className="p-4">
+              <SectionHeading level={4}>Local model</SectionHeading>
+              <SectionDescription className="mt-1">
+                Text stays on this device. The first setup downloads the model; later indexing works offline.
+              </SectionDescription>
+              <div className="mt-2 text-xs text-muted-foreground [&_code]:font-mono [&_code]:text-2xs [&_code]:text-accent">
+                Model: <code>{state.model}</code>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {state.account.signedIn && (
+                  <Button variant="outline" size="sm" disabled={accountBusy} onClick={() => { void useAccountAllowance(); }}>
+                    Use account allowance
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" disabled={accountBusy} onClick={() => setKeyFormOpen(true)}>
+                  Use your own key
+                </Button>
               </div>
             </Card>
           )}
@@ -186,7 +211,7 @@ export function EmbeddingPanel() {
               }}
             />
           )}
-          {state.account.signedIn && !hostedActive && !signInFormOpen && (
+          {state.account.signedIn && !hostedActive && !localActive && !signInFormOpen && (
             <Card surface="raised" className="mb-3 flex items-center justify-between gap-3 px-3 py-2.5">
               <AccountSummary
                 account={state.account}
@@ -204,7 +229,7 @@ export function EmbeddingPanel() {
               >Use account allowance</Button>
             </Card>
           )}
-          {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (
+          {!showingHostedSummary && !showingLocalSummary && !signInFormOpen && !showingAuthChoice && (
             <FieldSet className="mt-0.5 mb-2 w-fit">
             {/* A single-choice group, so fieldset/legend rather than an
               * aria-label on the control. The legend is hidden because the
@@ -228,14 +253,14 @@ export function EmbeddingPanel() {
             </SegmentedControl>
             </FieldSet>
           )}
-          {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (
+          {!showingHostedSummary && !showingLocalSummary && !signInFormOpen && !showingAuthChoice && (
           <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm leading-normal text-muted-foreground [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
             {state.hasKey && <span>Current: {PROVIDERS[state.provider].label}</span>}
             <span>Model: <code>{selected.model}</code></span>
             <span>{selected.costHint}</span>
           </div>
           )}
-          {!showingHostedSummary && !signInFormOpen && (hasSelectedProviderKey ? (
+          {!showingHostedSummary && !showingLocalSummary && !signInFormOpen && (hasSelectedProviderKey ? (
             <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-0 text-sm leading-8 text-muted-foreground">{directSourceActive ? 'Key active' : 'Key configured'}</div>
               <div className="flex flex-wrap gap-2">
@@ -254,6 +279,11 @@ export function EmbeddingPanel() {
                   onClick={() => setKeyEditOpen(true)}
                 >Change key…</Button>
                 <Button
+                  variant="outline"
+                  disabled={accountBusy}
+                  onClick={() => { void useLocalSource(); }}
+                >Use local model</Button>
+                <Button
                   variant="destructive-outline"
                   onClick={() => setKeyRemoveOpen(true)}
                 >Remove key…</Button>
@@ -271,7 +301,12 @@ export function EmbeddingPanel() {
                 * key already on file is a different question and keeps the
                 * plain form. */}
               {showingAuthChoice && (
-                <EmbeddingAuthChoice onSignIn={() => setSignInFormOpen(true)} onUseOwnKey={() => setKeyFormOpen(true)} />
+                <EmbeddingAuthChoice
+                  localBusy={accountBusy}
+                  onSignIn={() => setSignInFormOpen(true)}
+                  onUseLocal={() => { void useLocalSource(); }}
+                  onUseOwnKey={() => setKeyFormOpen(true)}
+                />
               )}
               {!showingAuthChoice && (
               /* A real `form`, so Enter in the field submits through the
@@ -307,7 +342,7 @@ export function EmbeddingPanel() {
               {addError && <div className="mt-1.5 text-sm text-destructive">{addError}</div>}
             </>
           ))}
-          {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (
+          {!showingHostedSummary && !showingLocalSummary && !signInFormOpen && !showingAuthChoice && (
             <SectionDescription className="mt-3.5 [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
               Stored locally in <code>~/.stashbase/config.json</code>. Used only for embeddings, never chat.
             </SectionDescription>

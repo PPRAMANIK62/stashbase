@@ -41,8 +41,10 @@ access surface external clients copy from.
   variables may isolate automated tests or select runtime plumbing, but are
   never the product credential source of truth.
 - BYOK credentials, the refreshable Supabase account session, and the active
-  embedding source persist independently. Switching sources retains the
-  inactive credential and never silently falls back after a hosted failure.
+  embedding source persist independently. The local source requires no
+  credential; selecting it first probes the bounded ONNX runtime before the
+  source is persisted. Switching sources retains the inactive credential and
+  never silently falls back after a hosted or local-runtime failure.
 - Account access and refresh tokens are Node-only configuration. They never
   cross renderer HTTP responses or the Node/Python boundary; Python receives a
   random per-process loopback bearer credential instead.

@@ -1,12 +1,12 @@
 """StashBase sidecar daemon.
 
-Owns the **single** per-machine, app-data Milvus Lite DB for the whole
-app with **one** collection (``vectors_openai_1536``). V1 ships a single
-fixed embedder (OpenAI), so the whole library lives in that one collection
-— there's no embedder switching, no per-provider collection pool, and no
-active/archive distinction. Each opened **folder** (an absolute path
-anywhere on disk) is **bound** so the daemon knows it exists; all folders
-share the collection and are distinguished by their absolute-path prefix.
+Owns the **single** per-machine, app-data Milvus Lite DB for the whole app.
+Each embedding runtime has its own ``vectors_<provider>_<dimension>``
+collection; one collection is active for the configured source while older
+provider collections remain isolated on disk. Each opened **folder** (an
+absolute path anywhere on disk) is **bound** so the daemon knows it exists;
+all folders share the active collection and are distinguished by their
+absolute-path prefix.
 
 The Node side (server/mfs-daemon.ts) spawns this script once and talks
 to it over stdin/stdout in line-delimited JSON.
@@ -34,9 +34,12 @@ name to keep the protocol surface small).
 
 - ``bind_folder {folder, provider, api_key?, model?, dimension?}``
                         — register that the folder root ``folder`` exists.
-                          The first bind carrying an ``api_key`` builds the
-                          embedder + collection; later binds reuse them.
+                          The first configured bind builds the embedder and
+                          active collection; later binds reuse them.
                           Idempotent; safe to call after a daemon respawn.
+- ``probe_embedder {provider, api_key?, model?, dimension?}``
+                        — initialize an embedder without changing the active
+                          collection, so source selection can fail safely.
 - ``unbind_folder {folder}``
                         — forget the folder root ``folder``. Existing rows
                           stay; the root can be re-bound later.
@@ -112,11 +115,10 @@ print(json.dumps({"event": "starting", "pid": os.getpid()}), flush=True)
 
 # ---------------------------------------------------------------- embedder
 #
-# V1 ships a narrow embedder set: OpenAI directly, or OpenRouter as an
-# OpenAI-compatible endpoint for the same 1536d OpenAI embedding model.
-# There is no arbitrary model switching and no local fallback — the whole
-# library uses one collection. Built lazily on the first bind that carries
-# an API key; the daemon may have zero embedders loaded at idle.
+# The supported set is deliberately narrow: OpenAI directly, OpenRouter as
+# an OpenAI-compatible endpoint, the loopback-only account broker, or the
+# fixed local ONNX model. Embedders are built lazily; the daemon may have no
+# embedder loaded at idle.
 
 def make_embedder(provider: str = "openai", *, model=None, api_key=None, dimension=None, base_url=None):
     """Build an embedding provider satisfying MFS's protocol
@@ -159,9 +161,9 @@ class _OnnxEmbedder:
     named "local" (mfs.embedder.local.LocalEmbedding, sentence-transformers
     based). Since vectors_<provider>_<dim> is disk-persisted and can't be
     migrated later, "onnx" is the safer identifier to commit to.
-    Requires the optional `mfs-cli[onnx]` extra
-    (``pip install "mfs-cli[onnx]"``); raises mfs.embedder's own
-    ImportError with install instructions if it isn't installed.
+    The desktop daemon bundles the `mfs-cli[onnx]` runtime; source setups
+    install the same extra through `python/requirements.txt`. Raises
+    mfs.embedder's own ImportError if that runtime is incomplete.
     """
     provider = "onnx"
 
@@ -664,16 +666,8 @@ def _collection_name(dim: int, provider: str = "openai") -> str:
 _COLLECTION_NAME_RE = re.compile(r"^vectors_([a-zA-Z0-9]+)_(\d+)$")
 
 
-def _discover_collection(db_path) -> tuple[str, int] | None:
-    """Find the single ``vectors_<provider>_<dim>`` collection already on
-    disk, with no embedder and no credential. Nothing else records which
-    provider an existing collection belongs to, so this is the only
-    reliable way to reopen one for credential-less cleanup (list/delete) --
-    guessing a default would risk silently opening the wrong, empty
-    collection while the real rows sit unreachable in another one.
-    Returns (provider, dim), or None if nothing indexed yet. Raises if
-    more than one collection exists, since which one the caller meant is
-    genuinely ambiguous without a credential to disambiguate."""
+def _list_embedding_collections(db_path) -> list[tuple[str, int]]:
+    """Return every provider/dimension identity encoded in this local DB."""
     from pymilvus import MilvusClient
     client = MilvusClient(uri=str(db_path))
     try:
@@ -685,13 +679,40 @@ def _discover_collection(db_path) -> tuple[str, int] | None:
         m = _COLLECTION_NAME_RE.match(name)
         if m:
             matches.append((m.group(1), int(m.group(2))))
+    return matches
+
+
+def _discover_collection(
+    db_path,
+    preferred_provider: str | None = None,
+    preferred_dim: int | None = None,
+) -> tuple[str, int] | None:
+    """Find the active ``vectors_<provider>_<dim>`` collection already on
+    disk, with no embedder and no credential. Nothing inside Milvus records
+    which provider an existing collection belongs to, so this is the only
+    reliable way to reopen one for credential-less cleanup (list/delete) --
+    guessing a default would risk silently opening the wrong, empty
+    collection while the real rows sit unreachable in another one.
+    The Node owner persists the active embedding source and supplies its
+    provider/dimension even when a cloud credential is absent. Prefer that
+    exact collection when present; fall back to the only collection for
+    legacy configs that predate explicit source identity. Returns
+    (provider, dim), or None if nothing indexed yet. Raises only when more
+    than one collection exists and the supplied identity matches none."""
+    matches = _list_embedding_collections(db_path)
     if not matches:
         return None
+    if preferred_provider is not None and preferred_dim is not None:
+        preferred_name = _collection_name(preferred_dim, preferred_provider)
+        for provider, dim in matches:
+            if _collection_name(dim, provider) == preferred_name:
+                return provider, dim
     if len(matches) > 1:
         found = ", ".join(f"{p}_{d}" for p, d in matches)
         raise RuntimeError(
             f"multiple embedding collections exist on disk ({found}); "
-            f"cannot reopen without a credential to disambiguate which one is active"
+            f"none matches the active provider/dimension "
+            f"({preferred_provider!r}, {preferred_dim!r})"
         )
     return matches[0]
 
@@ -733,20 +754,21 @@ def _relative_source_path(prefix: str, source: str) -> str:
 
 
 class StashbaseStore:
-    """Holds the global app-data DB and the **single** ``MilvusStore``
-    every folder shares. V1 has one fixed embedder (OpenAI), so the whole
-    library lives in one collection — no per-provider pool, no active/archive
-    distinction.
+    """Holds the global app-data DB and the active ``MilvusStore`` every
+    folder shares. Provider/dimension pairs have isolated collections. Search
+    and indexing use only the configured source; path mutations also open
+    historical collections so stale rows cannot survive a delete or rename.
 
     Lifecycle:
         1. ``__init__`` records the resolved global ``milvus.db`` path.
            No daemon-side I/O yet.
-        2. ``bind_root(root, ...)`` — first bind carrying an API key creates
-           the embedder + collection. A no-key bind may reopen an existing
-           collection for list/delete cleanup, but never creates a new one.
-           Later binds reuse the process-owned store and register the folder
-           root so ``scan_diff`` / ``status`` know which folders exist.
-        3. ``store_for_path(path)`` / ``stores()`` — return the one
+        2. ``bind_root(root, ...)`` — the first configured bind creates the
+           embedder + active collection. A no-key cloud bind may reopen an
+           existing collection for list/delete cleanup, but never creates a
+           new one. Later binds reuse the process-owned store and register
+           the folder root so ``scan_diff`` / ``status`` know which folders
+           exist.
+        3. ``store_for_path(path)`` / ``stores()`` — return the active
            ``(embedder, store)``; raise if nothing's bound yet.
 
     A daemon respawn loses the bindings; the Node side re-issues
@@ -756,16 +778,20 @@ class StashbaseStore:
     def __init__(self, store_root: str) -> None:
         # ONE global Milvus DB for the whole app, in per-machine app-data
         # (`--store-root`). Folders register absolute roots; every folder
-        # shares this single collection, scoped by absolute-path prefix.
+        # shares the active collection, scoped by absolute-path prefix.
         # `store_root` uses a `.nosync` suffix upstream so iCloud skips the
         # WAL `.arrow` files (corrupting them would break the collection).
         store_parent = Path(store_root).expanduser().resolve()
         self._db_path: Path = store_parent / "milvus.db"
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        # The one embedder + store, created on the first bind with a key.
+        # The active embedder + store, created on the first configured bind.
         self._embedder: Any = None
         self._store: Any = None
         self._dim: int = 0
+        # Collection name -> connected store. Search/indexing use `_store`;
+        # path mutations enumerate this pool so inactive-provider rows cannot
+        # survive delete or rename operations.
+        self._stores: dict[str, Any] = {}
         # Opaque Node-generated comparison identity -> retained source spelling.
         # Node's filesystem-path module is the single identity owner; Python
         # never repeats Unicode/platform case mapping with a drifting runtime.
@@ -776,46 +802,26 @@ class StashbaseStore:
         cached store once created."""
         return self._ensure_store_for_dimension(embedder.dimension, embedder)
 
-    def _ensure_store_for_dimension(self, dim: int, embedder=None):
-        """Open the collection for reads/deletes, optionally attaching an
-        embedder. An existing database must remain cleanable after the user
-        removes credentials; cleanup operations do not require embeddings.
-
-        With no embedder (the credential-less cleanup path), `dim` is not
-        trusted as a hint: nothing persists which provider an existing
-        collection belongs to, so the real collection is discovered from
-        disk instead of guessed -- see `_discover_collection`."""
-        if self._store is not None:
-            if embedder is not None:
-                wanted = _collection_name(dim, getattr(embedder, "provider", None) or "openai")
-                current = getattr(getattr(self._store, "_config", None), "collection_name", None)
-                if current != wanted:
-                    self.close_all(clear_bindings=False)
-                    return self._ensure_store_for_dimension(dim, embedder)
-                self._embedder = embedder
-            return self._store
+    def _connect_store(self, provider: str, dim: int):
+        """Connect one existing-or-new collection and retain it for mutations."""
         from mfs.store import MilvusStore
         from mfs.config import MilvusConfig
         os.environ["MFS_HOME"] = str(self._db_path.parent)
-        if embedder is not None:
-            collection_provider = getattr(embedder, "provider", None) or "openai"
-            resolved_dim = dim
-        else:
-            discovered = _discover_collection(self._db_path)
-            if discovered is None:
-                return None
-            collection_provider, resolved_dim = discovered
-        config = MilvusConfig(
-            uri=str(self._db_path), collection_name=_collection_name(resolved_dim, collection_provider),
-        )
-        store = MilvusStore(config, resolved_dim)
+        collection_name = _collection_name(dim, provider)
+        if collection_name in self._stores:
+            return self._stores[collection_name]
+        config = MilvusConfig(uri=str(self._db_path), collection_name=collection_name)
+        store = MilvusStore(config, dim)
         _patch_inverted_index_skip()
         _patch_milvus_manifest_windows_replace()
         _patch_mfs_local_query_snapshot()
         try:
             store.connect()
         except Exception as err:
-            _close_milvus_lite_resources(store, self._db_path)
+            if self._stores or self._store is not None:
+                store.close()
+            else:
+                _close_milvus_lite_resources(store, self._db_path)
             # pymilvus wraps Milvus Lite's lock error generically, so we
             # walk the exception chain (both __cause__ and __context__)
             # and also pattern-match the wrapper message.
@@ -842,12 +848,41 @@ class StashbaseStore:
                 ) from err
             raise
         # Milvus Lite leaves freshly-created (and re-opened) collections
-        # in the "released" state — queries fail with code=101 until we
-        # explicitly load. MFS's ensure_collection doesn't do this for us.
+        # in the "released" state — queries fail with code=101 until loaded.
         try:
             store.client.load_collection(config.collection_name)
         except Exception as err:
             print(f"[stashbase] load_collection warn: {err}", file=sys.stderr)
+        self._stores[collection_name] = store
+        return store
+
+    def _ensure_store_for_dimension(self, dim: int, embedder=None, provider: str | None = None):
+        """Open the collection for reads/deletes, optionally attaching an
+        embedder. An existing database must remain cleanable after the user
+        removes credentials; cleanup operations do not require embeddings.
+
+        With no embedder (the credential-less cleanup path), the provider and
+        dimension identify the active collection selected by Node. Discovery
+        retains a single-collection fallback for legacy config -- see
+        `_discover_collection`."""
+        if self._store is not None:
+            if embedder is not None:
+                wanted = _collection_name(dim, getattr(embedder, "provider", None) or "openai")
+                current = getattr(getattr(self._store, "_config", None), "collection_name", None)
+                if current != wanted:
+                    self.close_all(clear_bindings=False)
+                    return self._ensure_store_for_dimension(dim, embedder)
+                self._embedder = embedder
+            return self._store
+        if embedder is not None:
+            collection_provider = getattr(embedder, "provider", None) or "openai"
+            resolved_dim = dim
+        else:
+            discovered = _discover_collection(self._db_path, provider, dim)
+            if discovered is None:
+                return None
+            collection_provider, resolved_dim = discovered
+        store = self._connect_store(collection_provider, resolved_dim)
         self._embedder = embedder
         self._store = store
         self._dim = resolved_dim
@@ -877,7 +912,7 @@ class StashbaseStore:
             )
             self._ensure_store(embedder)
         elif self._store is None and self._db_path.exists():
-            self._ensure_store_for_dimension(dimension or 1536)
+            self._ensure_store_for_dimension(dimension or 1536, provider=provider)
         requested = _norm_root(root)
         identity = root_identity or requested
         root = self._bound.setdefault(identity, requested)
@@ -912,7 +947,7 @@ class StashbaseStore:
 
     def store_for_path(self, path: str, *, path_identity: str | None = None):
         """Return ``(embedder, store)`` for ``path`` (absolute POSIX).
-        Every folder shares the one collection; the path still has to
+        Every folder shares the active collection; the path still has to
         live under a bound root."""
         if (
             self.root_for_path(path, path_identity=path_identity) is None
@@ -926,13 +961,32 @@ class StashbaseStore:
         return (self._embedder, self._store)
 
     def stores(self) -> list[tuple[str, Any, Any]]:
-        """The single ``(provider_key, embedder, store)`` as a list (or
-        empty before the first keyed bind). Tuple shape kept so call
-        sites can unpack uniformly."""
+        """The active collection for search, status, and reconcile reads."""
         if self._store is None:
             return []
-        provider_key = getattr(self._embedder, "provider", None) or "openai"
-        return [(f"{provider_key}_{self._dim}", self._embedder, self._store)]
+        active_name = getattr(getattr(self._store, "_config", None), "collection_name", None)
+        if not active_name:
+            provider = getattr(self._embedder, "provider", None) or "openai"
+            active_name = _collection_name(self._dim or 1536, provider)
+        self._stores.setdefault(active_name, self._store)
+        return [(active_name.removeprefix("vectors_"), self._embedder, self._store)]
+
+    def mutation_stores(self) -> list[tuple[str, Any, Any]]:
+        """Every persisted collection for path delete and rename mutations."""
+        if self._store is None:
+            return []
+        self.stores()
+        if self._db_path.exists():
+            for provider, dim in _list_embedding_collections(self._db_path):
+                self._connect_store(provider, dim)
+        return [
+            (
+                name.removeprefix("vectors_"),
+                self._embedder if store is self._store else None,
+                store,
+            )
+            for name, store in self._stores.items()
+        ]
 
     def bound_roots(self) -> list[str]:
         """Absolute folder roots Node has registered, sorted. Used by
@@ -950,7 +1004,15 @@ class StashbaseStore:
 
     def close_all(self, *, clear_bindings: bool = True) -> None:
         """Release Milvus Lite's flock. The next ``bind_folder`` reopens."""
-        _close_milvus_lite_resources(self._store, self._db_path)
+        stores = list(dict.fromkeys([*self._stores.values(), self._store]))
+        for store in stores:
+            if store is not None:
+                try:
+                    store.close()
+                except Exception as err:
+                    print(f"[stashbase] close store warn: {err}", file=sys.stderr)
+        _close_milvus_lite_resources(None, self._db_path)
+        self._stores.clear()
         self._store = None
         self._embedder = None
         self._dim = 0
@@ -1015,6 +1077,28 @@ def op_bind_folder(svc: StashbaseStore, args: dict) -> dict:
     )
 
 
+def op_probe_embedder(_svc: StashbaseStore, args: dict) -> dict:
+    """Load an embedder without changing bindings or collection state.
+
+    The local model's first-use download and load happen here before Settings
+    persists the source. `_OnnxEmbedder` owns the deadline, so failure returns
+    through the ordinary daemon error reply instead of wedging the sidecar.
+    """
+    _require(args, "provider")
+    embedder = make_embedder(
+        args["provider"],
+        model=args.get("model"),
+        api_key=args.get("api_key"),
+        dimension=args.get("dimension"),
+        base_url=args.get("base_url"),
+    )
+    return {
+        "provider": getattr(embedder, "provider", args["provider"]),
+        "model": embedder.model_name,
+        "dimension": embedder.dimension,
+    }
+
+
 def op_unbind_folder(svc: StashbaseStore, args: dict) -> dict:
     _require(args, "folder")
     return svc.unbind_root(
@@ -1058,7 +1142,7 @@ def op_upsert(svc: StashbaseStore, args: dict) -> dict:
     # Defensive: also wipe the same source from OTHER collections, so
     # if a user switched providers we don't accidentally retain stale
     # rows under the old collection that'd surface in search hits.
-    for _pk, _emb, other in svc.stores():
+    for _pk, _emb, other in svc.mutation_stores():
         if other is store:
             continue
         try:
@@ -1111,7 +1195,7 @@ def op_delete(svc: StashbaseStore, args: dict) -> dict:
     _require(args, "path")
     path = args["path"]
     n = 0
-    for _pk, _emb, store in svc.stores():
+    for _pk, _emb, store in svc.mutation_stores():
         removed = int(store.delete_by_source(path))
         if removed:
             _flush_store(store)
@@ -1150,7 +1234,7 @@ def op_rename(svc: StashbaseStore, args: dict) -> dict:
             # re-embed path below — never leaves the store half-renamed.
             pass
 
-    for _pk, _emb, store in svc.stores():
+    for _pk, _emb, store in svc.mutation_stores():
         try:
             store.delete_by_source(old)
         except Exception:
@@ -1190,7 +1274,7 @@ def _try_rename_without_reembed(
     ]
     per_store_records: list[tuple[Any, list[ChunkRecord]]] = []
     total = 0
-    for _pk, _emb, store in svc.stores():
+    for _pk, _emb, store in svc.mutation_stores():
         try:
             rows = store._query_all(
                 f'source == "{old}"', output_fields=fields,
@@ -1238,7 +1322,7 @@ def _try_rename_without_reembed(
     for store, records in per_store_records:
         store.insert_chunks(records)
         _flush_store(store)
-    for _pk, _emb, store in svc.stores():
+    for _pk, _emb, store in svc.mutation_stores():
         try:
             removed = int(store.delete_by_source(old))
             if removed:
@@ -1260,7 +1344,7 @@ def op_reconcile_source(svc: StashbaseStore, args: dict) -> dict:
     new = args["new"]
     copied = _try_rename_without_reembed(svc, old, new, args["file_hash"])
     if copied is None:
-        for _pk, _emb, store in svc.stores():
+        for _pk, _emb, store in svc.mutation_stores():
             store.delete_by_source(old)
         return {"reused": False, "chunks": 0}
     return {"reused": True, "chunks": copied}
@@ -1293,7 +1377,7 @@ def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
 
     if nested:
         # Safe original path: clear the old prefix first, then re-embed.
-        for _pk, _emb, store in svc.stores():
+        for _pk, _emb, store in svc.mutation_stores():
             try:
                 store.delete_by_prefix(old_prefix)
             except Exception:
@@ -1324,7 +1408,7 @@ def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
             fast_files += 1
             continue
         # Per-file fallback: drop the stale old rows, then re-embed.
-        for _pk, _emb, store in svc.stores():
+        for _pk, _emb, store in svc.mutation_stores():
             try:
                 store.delete_by_source(old_path)
             except Exception:
@@ -1337,7 +1421,7 @@ def op_rename_prefix(svc: StashbaseStore, args: dict) -> dict:
 
     # Sweep any rows still under the old prefix — old files that weren't in
     # the move list (e.g. excluded by reserved-file rules upstream).
-    for _pk, _emb, store in svc.stores():
+    for _pk, _emb, store in svc.mutation_stores():
         try:
             store.delete_by_prefix(old_prefix)
         except Exception:
@@ -1351,7 +1435,7 @@ def op_delete_prefix(svc: StashbaseStore, args: dict) -> dict:
     _require(args, "prefix")
     prefix = _source_child_prefix(args["prefix"])
     removed = 0
-    for _pk, _emb, store in svc.stores():
+    for _pk, _emb, store in svc.mutation_stores():
         store_removed = int(store.delete_by_prefix(prefix))
         if store_removed:
             _flush_store(store)
@@ -1412,7 +1496,7 @@ def _visible_source_for_extension_filter(source: str) -> str | None:
 
 
 def op_search(svc: StashbaseStore, args: dict) -> dict:
-    """Hybrid search in the single collection, optionally scoped to one
+    """Hybrid search in the active collection, optionally scoped to one
     ``folder``. MFS's ``hybrid_search`` already does dense + BM25 + RRF
     inside the collection, so its order is the final order — no
     second-pass fusion. ``top_k`` bounded to [1, 200]."""
@@ -1768,6 +1852,7 @@ def op_close_store(svc: StashbaseStore, _args: dict) -> dict:
 
 
 OPS = {
+    "probe_embedder": op_probe_embedder,
     "bind_folder": op_bind_folder,
     "unbind_folder": op_unbind_folder,
     "upsert": op_upsert,

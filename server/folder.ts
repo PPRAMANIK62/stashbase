@@ -183,8 +183,8 @@ function normalizeWindowId(windowId: string | null | undefined): string {
 /** Absolute path of the **default folder home** — the fixed directory where
  *  "new folder by name" is created and the built-in manual is seeded. It is
  *  NOT a configurable root, an isolation boundary, or an index scope: the
- *  daemon keys one global collection by absolute path, and folders are
- *  opened in place from anywhere on disk. There is no UI to change it.
+ *  daemon keys the active provider/dimension collection by absolute path, and
+ *  folders are opened in place from anywhere on disk. There is no UI to change it.
  *  `STASHBASE_FOLDER_HOME` overrides it for tests / power users. */
 export function getFolderHome(): string {
   const env = process.env.STASHBASE_FOLDER_HOME;
@@ -426,7 +426,7 @@ export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exc
   // A Folder can be opened from anywhere on disk — there is no unified root
   // constraint. The folder home is only the default location for the built-in
   // folder and new-folder-by-name; opening an arbitrary folder is the
-  // norm (the daemon keys one global collection by absolute path, so a
+  // norm (the daemon keys its active collection by absolute path, so a
   // folder outside the root indexes just fine).
   // Creating a folder only happens on the explicit New-folder flow
   // (`opts.create`). Open / recent flows must NOT mkdir: a missing

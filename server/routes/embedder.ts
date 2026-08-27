@@ -2,10 +2,10 @@
  * Embedder routes: manage the global embedding provider key and validate
  * a key without persisting it.
  *
- * The current provider set is intentionally narrow: OpenAI directly, or
- * OpenRouter as an OpenAI-compatible endpoint for the same 1536d OpenAI
- * embedding model. Arbitrary model switching stays out of scope so the
- * single local collection remains valid.
+ * The source set is intentionally narrow: the hosted account broker,
+ * OpenAI/OpenRouter BYOK, or one fixed local ONNX model. Each runtime uses a
+ * provider/dimension collection identity so incompatible vector spaces never
+ * mix.
  */
 import express from 'express';
 import { logger, errorMessage } from '../log.ts';
@@ -27,6 +27,15 @@ import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from
 import { sendError, validateEmbedderKey } from '../http.ts';
 import { hostedAccountState } from '../hosted-account.ts';
 import type { ApiKeySaveResult, EmbedderState } from '../../shared/embedding.ts';
+import {
+  LOCAL_EMBEDDING_DIMENSION,
+  LOCAL_EMBEDDING_MODEL,
+  LOCAL_EMBEDDING_PROVIDER,
+  LOCAL_EMBEDDING_SOURCE,
+  type EmbeddingSource,
+} from '../../shared/embedding.ts';
+import { getDaemon } from '../mfs-daemon.ts';
+import type { EmbedderRuntimeConfig } from '../indexer.ts';
 
 const log = logger('routes/embedder');
 
@@ -37,6 +46,63 @@ function parseProvider(raw: unknown, fallback: EmbedderProvider): EmbedderProvid
 
 function providerLabel(provider: EmbedderProvider): string {
   return provider === 'openrouter' ? 'OpenRouter' : 'OpenAI';
+}
+
+export type SelectableEmbeddingSource = Exclude<EmbeddingSource, 'stashbase-account'>;
+
+export interface EmbeddingSourceActivationDependencies {
+  resetRuntime: () => Promise<void>;
+  bindFolders: (runtime?: EmbedderRuntimeConfig) => Promise<void>;
+  persistSource: (source: EmbeddingSource) => unknown;
+}
+
+const defaultSourceActivationDependencies: EmbeddingSourceActivationDependencies = {
+  resetRuntime: () => resetIndexerRuntime({ forgetBindings: true }),
+  bindFolders: (runtime) => bootBindAllFolders(runtime, { strict: true }),
+  persistSource: setEmbeddingSource,
+};
+
+/**
+ * Activate a source before committing it to durable config. A failed reset or
+ * bind therefore leaves the prior source selected; if a later config write
+ * fails, best-effort rollback restores the prior runtime as well.
+ */
+export async function activateEmbeddingSource(
+  previousSource: EmbeddingSource,
+  source: SelectableEmbeddingSource,
+  runtime: EmbedderRuntimeConfig,
+  deps: EmbeddingSourceActivationDependencies = defaultSourceActivationDependencies,
+): Promise<void> {
+  let runtimeReset = false;
+  let sourcePersisted = false;
+  try {
+    await deps.resetRuntime();
+    runtimeReset = true;
+    await deps.bindFolders(runtime);
+    deps.persistSource(source);
+    sourcePersisted = true;
+  } catch (err: unknown) {
+    if (runtimeReset) {
+      try {
+        if (sourcePersisted) deps.persistSource(previousSource);
+        await deps.resetRuntime();
+        await deps.bindFolders();
+      } catch (rollbackError: unknown) {
+        log.warn(`source activation rollback failed: ${errorMessage(rollbackError)}`);
+      }
+    }
+    throw err;
+  }
+}
+
+function parseSelectableSource(raw: unknown, fallback: EmbedderProvider): SelectableEmbeddingSource | null {
+  if (raw == null || raw === '') return fallback;
+  if (raw === LOCAL_EMBEDDING_SOURCE) return raw;
+  return isEmbedderProvider(raw) ? raw : null;
+}
+
+function sourceLabel(source: SelectableEmbeddingSource): string {
+  return source === LOCAL_EMBEDDING_SOURCE ? 'Local model' : providerLabel(source);
 }
 
 export function mount(app: express.Express): void {
@@ -50,7 +116,7 @@ export function mount(app: express.Express): void {
       hasKey: !!cfg.apiKey,
       authorized: isEmbeddingConfigured(),
       source,
-      model: cfg.model,
+      model: source === LOCAL_EMBEDDING_SOURCE ? LOCAL_EMBEDDING_MODEL : cfg.model,
       account,
     };
     res.json(state);
@@ -117,26 +183,50 @@ export function mount(app: express.Express): void {
 
   app.put('/api/embedder/source', async (req, res) => {
     const cfg = getEmbedderConfig();
-    const provider = parseProvider(req.body?.provider, cfg.provider);
-    if (!provider) return res.status(400).json({ error: 'unknown embedder provider' });
-    if (!cfg.apiKey || cfg.provider !== provider) {
-      return res.status(400).json({ error: `Add a ${providerLabel(provider)} key before selecting it.` });
+    const source = parseSelectableSource(req.body?.source ?? req.body?.provider, cfg.provider);
+    if (!source) return res.status(400).json({ error: 'unknown embedding source' });
+    if (source !== LOCAL_EMBEDDING_SOURCE && (!cfg.apiKey || cfg.provider !== source)) {
+      return res.status(400).json({ error: `Add a ${providerLabel(source)} key before selecting it.` });
     }
+    const previousSource = getEmbeddingSource();
+    const shouldBackfill = shouldReconcileAfterEmbeddingSourceChange(
+      previousSource,
+      source,
+      isEmbeddingAvailable(),
+    );
     try {
-      setEmbeddingSource(provider);
-      await resetIndexerRuntime({ forgetBindings: true });
-      await bootBindAllFolders();
-      void reconcileLibraryFolders(`${providerLabel(provider)} source selected`)
-        .catch((err: unknown) => {
-          log.warn(`source selected: semantic reconcile failed: ${errorMessage(err)}`);
-        });
+      const runtime: EmbedderRuntimeConfig = source === LOCAL_EMBEDDING_SOURCE
+        ? {
+            provider: LOCAL_EMBEDDING_PROVIDER,
+            model: LOCAL_EMBEDDING_MODEL,
+            dimension: LOCAL_EMBEDDING_DIMENSION,
+          }
+        : {
+            provider: cfg.provider,
+            apiKey: cfg.apiKey,
+            model: cfg.model,
+            dimension: cfg.dimension,
+            baseUrl: cfg.baseUrl,
+          };
+      if (source === LOCAL_EMBEDDING_SOURCE) {
+        await getDaemon().probeEmbedder(runtime);
+      }
+      const account = await hostedAccountState(false);
+      await activateEmbeddingSource(previousSource, source, runtime);
+      if (shouldBackfill) {
+        void reconcileLibraryFolders(`${sourceLabel(source)} source selected`)
+          .catch((err: unknown) => {
+            log.warn(`source selected: semantic reconcile failed: ${errorMessage(err)}`);
+          });
+      }
       res.json({
-        provider,
-        hasKey: true,
+        provider: cfg.provider,
+        hasKey: !!cfg.apiKey,
         authorized: true,
-        source: provider,
-        model: getEmbedderConfig().model,
-        account: await hostedAccountState(false),
+        source,
+        model: source === LOCAL_EMBEDDING_SOURCE ? LOCAL_EMBEDDING_MODEL : cfg.model,
+        account,
+        backfillStarted: shouldBackfill,
       });
     } catch (err: unknown) {
       sendError(res, err);

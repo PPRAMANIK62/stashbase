@@ -4,8 +4,8 @@
  * the `Indexer` contract. The `Indexer` API speaks absolute POSIX-spelled
  * source paths; this module is the daemon boundary and sends Node-generated
  * comparison identities separately wherever Python needs routing keys. The
- * daemon keys one global collection by retained absolute source path and
- * scopes by an absolute folder root.
+ * daemon keys the active provider/dimension collection by retained absolute
+ * source path and scopes by an absolute folder root.
  *
  * HTML special-case: we feed MFS a markdown-shaped plaintext (see
  * `server/html.ts:analyzeHtml`) so its markdown chunker keeps respecting
@@ -50,7 +50,7 @@ export function excludePausedPendingHits<T extends { fileName: string }>(
   return hits.filter((hit) => !pending.has(filesystemPath.identity(hit.fileName)));
 }
 
-// The daemon keys its single global collection by **absolute POSIX path**
+// The daemon keys its active collection by **absolute POSIX path**
 // and binds absolute folder roots. Under the Folder model every caller
 // already passes absolute paths/roots (`state.ts` binds absolute roots) and accepts absolute paths
 // back. This adapter normalizes every crossing so daemon calls never acquire
@@ -153,7 +153,7 @@ export class MfsIndexer implements Indexer {
       dimension: cfg.dimension,
       baseUrl: cfg.baseUrl,
     });
-    if (cfg.apiKey) {
+    if (cfg.apiKey || cfg.provider === 'onnx') {
       try { await this.reconcileLegacySourceSpelling(source); }
       catch (err) {
         // Legacy spelling repair is auxiliary. A list/read failure must not

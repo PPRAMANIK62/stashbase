@@ -9,8 +9,8 @@
  * The daemon owns ONE global Milvus DB in per-machine app data (see
  * `local-data.ts:globalVectorStoreDir`) and is **not** anchored to a default
  * folder home: every opened folder registers an **absolute root** and is indexed
- * into the one collection, keyed by absolute path. The Node side records
- * each bound root here so a respawn can replay them.
+ * into the active provider/dimension collection, keyed by absolute path. The
+ * Node side records each bound root here so a respawn can replay them.
  *
  * Python lives in `<project>/python/.venv.nosync/bin/python` after the user
  * runs `pnpm setup:python`. In packaged Electron a portable Python
@@ -35,6 +35,7 @@ import { logger } from './log.ts';
 import { globalVectorStoreDir } from './local-data.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { isDevelopmentRuntime } from './development-runtime.ts';
+import type { LOCAL_EMBEDDING_PROVIDER } from '../shared/embedding.ts';
 
 const log = logger('mfs');
 
@@ -75,7 +76,7 @@ const CALL_TIMEOUT_MS = 10 * 60_000;
 const READY_TIMEOUT_MS = 90_000;
 
 export interface BindFolderArgs {
-  provider: 'openai' | 'openrouter' | 'stashbase';
+  provider: 'openai' | 'openrouter' | 'stashbase' | typeof LOCAL_EMBEDDING_PROVIDER;
   apiKey?: string;
   model?: string;
   dimension?: number;
@@ -162,6 +163,24 @@ export class MfsDaemon extends EventEmitter {
     await this.call('bind_folder', {
       folder: source,
       folder_identity: key,
+      provider: cfg.provider,
+      ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
+      ...(cfg.model ? { model: cfg.model } : {}),
+      ...(cfg.dimension ? { dimension: cfg.dimension } : {}),
+      ...(cfg.baseUrl ? { base_url: cfg.baseUrl } : {}),
+    });
+  }
+
+  /** Load one embedder without changing folder bindings or opening a
+   * collection. Settings uses this readiness barrier before persisting a
+   * local source, so missing runtime files and bounded first-model setup
+   * failures remain an actionable selection error. */
+  async probeEmbedder(cfg: BindFolderArgs): Promise<{
+    provider: string;
+    model: string;
+    dimension: number;
+  }> {
+    return this.call('probe_embedder', {
       provider: cfg.provider,
       ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
       ...(cfg.model ? { model: cfg.model } : {}),

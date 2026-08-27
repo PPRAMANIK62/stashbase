@@ -7,18 +7,19 @@
  *
  * Paths on every method are absolute POSIX paths. Server modules that
  * operate in folder-relative terms translate at the route/files boundary;
- * the indexer and daemon key one global collection by absolute source path.
+ * the indexer and daemon key the active collection by absolute source path.
  */
 import type { SearchHit } from '../shared/search-results.ts';
+import type { LOCAL_EMBEDDING_PROVIDER } from '../shared/embedding.ts';
 
 export type { SearchHit } from '../shared/search-results.ts';
 
 export interface EmbedderRuntimeConfig {
   /** Supported embedding endpoints. OpenRouter is used only as an
    *  OpenAI-compatible embeddings endpoint for the fixed 1536d model. */
-  provider: 'openai' | 'openrouter' | 'stashbase';
-  /** Provider API key. Absent ⇒ the folder is registered but indexing
-   *  stays disabled until the user adds a key (graceful no-key degrade). */
+  provider: 'openai' | 'openrouter' | 'stashbase' | typeof LOCAL_EMBEDDING_PROVIDER;
+  /** Provider API key. Cloud providers require one; the local ONNX runtime
+   *  deliberately does not. */
   apiKey?: string;
   /** Optional model override. Defaults are provider-specific. */
   model?: string;
@@ -29,9 +30,9 @@ export interface EmbedderRuntimeConfig {
 }
 
 export interface Indexer {
-  /** Register a folder with the indexer. V1 has one fixed collection, so
-   *  this just makes the folder known (and builds the collection on the
-   *  first bind carrying a key). Idempotent — safe to call on every
+  /** Register a folder with the indexer. This makes the folder known and
+   *  opens the collection for the active provider/dimension on the first
+   *  configured bind. Idempotent — safe to call on every
    *  server start for every known folder, and after a daemon respawn. */
   bindFolder(folder: string, cfg: EmbedderRuntimeConfig): Promise<void>;
 

@@ -2,9 +2,9 @@
  * Process-wide indexer state + folder-switch orchestration.
  *
  * One `MfsIndexer` instance lives for the lifetime of the server
- * process. The daemon underneath owns one Milvus DB in app data with a
- * single collection (V1 fixes the embedder to OpenAI — no switching).
- * Every folder is bound into that one collection. Boot binds every known
+ * process. The daemon underneath owns one Milvus DB in app data and isolates
+ * vectors by provider/dimension collection. Every folder is bound into the
+ * collection selected by the active embedding source. Boot binds every known
  * folder so MCP cross-folder search has them all available; boot and
  * Welcome can also reconcile known folders without opening them, so
  * interrupted conversion work is rediscovered library-wide.
@@ -32,6 +32,12 @@ import {
   type SemanticIndexingDecision,
 } from './state-db.ts';
 import type { SemanticWorkloadEstimate } from './semantic-workload.ts';
+import {
+  LOCAL_EMBEDDING_DIMENSION,
+  LOCAL_EMBEDDING_MODEL,
+  LOCAL_EMBEDDING_PROVIDER,
+  LOCAL_EMBEDDING_SOURCE,
+} from '../shared/embedding.ts';
 
 const log = logger('state');
 
@@ -119,9 +125,17 @@ export function semanticSyncPolicy(folderRoot: string, forceEmbedding = false): 
 /** Resolve the active runtime embedder config. Returns null when no source is
  * configured or the hosted allowance is exhausted — the caller still binds
  * the folder, while semantic work stays paused until availability returns. */
-function resolveEmbedder(): EmbedderRuntimeConfig | null {
+export function resolveEmbedderRuntime(): EmbedderRuntimeConfig | null {
   if (!isEmbeddingAvailable()) return null;
-  if (getEmbeddingSource() === 'stashbase-account') return hostedEmbeddingRuntime();
+  const source = getEmbeddingSource();
+  if (source === 'stashbase-account') return hostedEmbeddingRuntime();
+  if (source === LOCAL_EMBEDDING_SOURCE) {
+    return {
+      provider: LOCAL_EMBEDDING_PROVIDER,
+      model: LOCAL_EMBEDDING_MODEL,
+      dimension: LOCAL_EMBEDDING_DIMENSION,
+    };
+  }
   const cfg = getEmbedderConfig();
   if (!cfg.apiKey) return null;
   return {
@@ -152,20 +166,29 @@ function libraryFolderRoots(): string[] {
   return [...members.values()];
 }
 
-export async function bootBindAllFolders(): Promise<void> {
+export async function bootBindAllFolders(
+  runtimeOverride?: EmbedderRuntimeConfig,
+  opts: { strict?: boolean } = {},
+): Promise<void> {
   const roots = libraryFolderRoots();
   if (roots.length === 0) {
     log.info('boot bind: no member folders');
     return;
   }
   log.info(`boot bind: ${roots.length} folder(s)`);
-  const cfg = resolveEmbedder() ?? {
-    provider: getEmbeddingSource() === 'stashbase-account' ? 'stashbase' : getEmbedderConfig().provider,
+  const source = getEmbeddingSource();
+  const cfg = runtimeOverride ?? resolveEmbedderRuntime() ?? {
+    provider: source === 'stashbase-account'
+      ? 'stashbase'
+      : source === LOCAL_EMBEDDING_SOURCE
+        ? LOCAL_EMBEDDING_PROVIDER
+        : getEmbedderConfig().provider,
   };
   for (const root of roots) {
     try {
       await indexer.bindFolder(root, cfg);
     } catch (err: unknown) {
+      if (opts.strict) throw err;
       log.warn(`boot bind ${root} failed: ${errorMessage(err)}`);
     }
   }
@@ -225,9 +248,14 @@ export async function bindIndexerForFolder(folderAbs: string): Promise<void> {
       log.warn(`stale-lock sweep failed: ${errorMessage(err)}`);
     }
   }
-  const cfg = resolveEmbedder();
+  const cfg = resolveEmbedderRuntime();
+  const source = getEmbeddingSource();
   const runtime = cfg ?? {
-    provider: getEmbeddingSource() === 'stashbase-account' ? 'stashbase' : getEmbedderConfig().provider,
+    provider: source === 'stashbase-account'
+      ? 'stashbase'
+      : source === LOCAL_EMBEDDING_SOURCE
+        ? LOCAL_EMBEDDING_PROVIDER
+        : getEmbedderConfig().provider,
   };
   if (!cfg) {
     log.warn(`embedder: no embedding source active — ${folderAbs} bound but AI Index is disabled until an account or key is selected`);
