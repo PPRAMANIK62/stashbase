@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { EditorState } from '@codemirror/state';
 import {
   AUDIO_SOURCE_EXTENSIONS,
@@ -13,6 +13,7 @@ import {
 import { saveFileContent, validateEditableFileWrite } from './file-save.ts';
 import { detectViewerFormat, isConvertibleSource } from './format.ts';
 import { runWithFolderRoot } from './folder.ts';
+import { getDaemon } from './mfs-daemon.ts';
 import {
   createFolder,
   createTextExclusiveAsync,
@@ -36,6 +37,10 @@ import {
   saveText,
   sanitizeFilename,
 } from './files.ts';
+
+after(async () => {
+  await getDaemon().close();
+});
 
 test('async request-path file operations preserve create, read, list, rename, and delete behavior', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-async-files-'));
