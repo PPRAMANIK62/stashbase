@@ -23,6 +23,13 @@
 - Direct preview and durable preparation are independent. A direct DOCX view
   may succeed while searchable extraction is pending or failed; neither state
   may falsely complete the other.
+- A generic workspace entry is not admitted to a normal document-read path.
+  Selection invokes the separate bounded preview Interface: known binary
+  extensions fail fast; other regular files are admitted only by strict UTF-8
+  decoding with no NUL or meaningful binary-control density; sources above
+  `8 MiB` remain unloaded. Text is always read-only. Binary, invalid encoding,
+  oversized, unreadable, cloud-placeholder, symlink, and special-entry results
+  retain the source name, size when available, and a reveal action.
 
 ## Trust Boundary
 
@@ -87,6 +94,20 @@ forwarding, and script confinement.
   a matching Tree node; an unrepresentable source range switches to the visible
   Source editor before selection. Both views save through
   [File Transactions](file-transactions.md).
+- Plain `.txt` source uses the lazy CodeMirror text surface with shared
+  save/version, conflict, Find, line-ending, and BOM preservation. Generic
+  strict-UTF-8 text reuses that surface read-only and never registers an editor
+  save handle.
+- Every CodeMirror surface takes its chrome and token colours from one shared
+  code surface, so the JSON source view and the text/code viewer cannot drift
+  in gutter, padding, selection, or syntax role. Grammars resolve from the
+  source name and load on demand; an unrecognized or absent name renders
+  uncoloured rather than guessing a language, and a grammar that resolves after
+  its editor is destroyed is discarded instead of dispatched.
+- The main pane reserves its top chrome band only when a control actually
+  occupies it. A viewer with no top chrome fills from directly under the tab
+  strip; reserving the band for it exposes the pane's own background above the
+  viewer surface as a bright empty strip.
 
 ## Implementation Map
 
@@ -94,11 +115,11 @@ forwarding, and script confinement.
 |---|---|
 | Shared format vocabulary | `shared/file-formats.ts` and dispatch policy in `server/format.ts` |
 | Viewer dispatch | `web-src/src/app/components/MainPane.tsx`, `web-src/src/features/documents/components/DocumentViewer.tsx` |
-| Primary viewers | `web-src/src/features/documents/components/PdfViewerPane.tsx` (the PDF dynamic entry, composing preparation policy onto the viewer) over `PdfPreview.tsx` with its `PdfChrome.tsx` / `PdfPage.tsx` presenters, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx`, the lazy `json/JsonTreeView.tsx` controller, and the shared `web-src/src/common/components/ImageLightbox.tsx` |
+| Primary viewers | `web-src/src/features/documents/components/PdfViewerPane.tsx` (the PDF dynamic entry, composing preparation policy onto the viewer) over `PdfPreview.tsx` with its `PdfChrome.tsx` / `PdfPage.tsx` presenters, `DocxPreview.tsx`, `HtmlPreview.tsx`, `ImagePreview.tsx`, `AudioPreview.tsx`, `JsonDocument.tsx`, `TextDocument.tsx`, `GenericFileViewer.tsx`, the lazy `json/JsonTreeView.tsx` controller, and the shared `web-src/src/common/components/ImageLightbox.tsx` |
 | Preview-control Modules | `web-src/src/features/documents/hooks/usePdfDocument.ts`, `usePdfZoom.ts`, `usePdfPageTracking.ts`, `usePdfFindRegistration.ts`, `usePdfPreparation.ts`, `useFileReprocess.ts` (the Reprocess command and its stale-reply guard, shared by the PDF chrome row and the image and DOCX banners), `useAudioFallbackController.ts`, `useAudioTranscriptController.ts`, `web-src/src/features/documents/lib/audioPlayback.ts`, `audioTranscript.ts`, `findIframe.ts`, `previewChunkHighlight.ts`, `pdfText.ts`, `pdfFindController.ts`, `previewIframe.ts`, and `previewMessages.ts` |
 | Worker/Sanitizer Seam | `web-src/src/features/documents/workers/docxPreview.worker.ts`, `shared/html-sanitization.ts` |
-| Server asset/preparation Adapters | `/asset` and `/derived-asset` routes, `server/docx.ts`, media preparation Modules |
-| Focused evidence | `web-src/src/features/documents/__tests__/pdf-viewer.test.ts`, `pdf-text.test.ts`, `audio-playback.test.ts`, `audio-transcript.test.ts`, `json-document.test.ts`, `json-source-model.test.ts`, plus `e2e/journeys/formats-media.spec.ts` and `markdown-json.spec.ts` |
+| Server asset/preparation Adapters | `/asset` and `/derived-asset` routes, `/api/file-preview`, `server/generic-file-preview.ts`, `server/docx.ts`, media preparation Modules |
+| Focused evidence | `web-src/src/features/documents/__tests__/pdf-viewer.test.ts`, `pdf-text.test.ts`, `audio-playback.test.ts`, `audio-transcript.test.ts`, `json-document.test.ts`, `json-source-model.test.ts`, `text-document.test.ts`, `server/generic-file-preview.test.ts`, plus `e2e/journeys/formats-media.spec.ts` and `markdown-json.spec.ts` |
 
 ## Validation
 
@@ -117,9 +138,10 @@ native codec behavior remain release checks.
 
 Review at least one representative fixture for each behavior class rather than
 inferring every capability from one extension: editable prose, editable
-structured text, direct preview-only text, binary preview with prepared text,
-OCR image, and transcript media. Extension aliases remain lower-level format
-detection evidence.
+structured text, editable plain text, generic strict text, generic binary,
+direct preview-only text, binary preview with prepared text, OCR image, and
+transcript media. Extension aliases remain lower-level format detection
+evidence.
 
 Related journeys: [J03](../design-docs/user-journeys.md#j03-read-and-edit-source-documents)
 and [J04](../design-docs/user-journeys.md#j04-prepare-a-hard-to-read-file).

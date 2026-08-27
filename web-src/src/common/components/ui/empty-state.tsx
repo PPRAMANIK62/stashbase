@@ -31,8 +31,14 @@ const emptyStateVariants = cva('text-sm text-muted-foreground', {
       /** Fills the host cell and centres on both axes — the lazy viewer
        * fallbacks, where there is no list to sit in, only an empty pane.
        * A message pinned to the pane's top-left corner reads as content
-       * that failed to lay out rather than as a placeholder. */
-      fill: 'grid h-full place-items-center p-4 text-center',
+       * that failed to lay out rather than as a placeholder.
+       * `place-content-center` is load-bearing for multi-child states:
+       * grid's default `align-content: stretch` splits a tall pane's
+       * spare height evenly between the auto rows, scattering an
+       * icon-title-action stack down the pane; packing the rows first
+       * keeps the stack one cluster (and lets a `gap-*` mean what it
+       * says) while a single-child fallback renders identically. */
+      fill: 'grid h-full place-content-center place-items-center p-4 text-center',
     },
   },
   defaultVariants: { layout: 'row' },

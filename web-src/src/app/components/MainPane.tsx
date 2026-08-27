@@ -42,11 +42,25 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
       if (!opened) actions.toast('New window is only available in the desktop app.', { level: 'error' });
     })();
   }
+  // The edit toggle (read/write swap plus the save tick) — Markdown, JSON
+  // and .txt own their content, so they get it; a generic code file is
+  // read-only by product rule and never does.
+  const showsEditToggle = !!cur
+    && (cur.format === 'md' || cur.format === 'json' || cur.format === 'text')
+    && !cur.folder
+    && !activeTab?.conflict;
+
   // Reserve room for the absolute-positioned chrome (edit toggle / PDF
-  // controls / floating-actions at `top-chrome`, height 24px) so editor /
-  // preview content doesn't render underneath it. HTML / image viewers
-  // have no top chrome, so they skip the band and fill from just under
-  // the tab strip.
+  // controls / the Untitled strip at `top-chrome`, height 24px) so editor
+  // / preview content doesn't render underneath it.
+  //
+  // Derived from whether chrome ACTUALLY renders, not from a list of
+  // formats that usually have some. A blocklist reserved the band for
+  // every viewer except HTML and image, so a read-only code file — which
+  // renders no top chrome at all — opened under 32px of empty `--bg`
+  // white sitting on top of the editor's `--pane` surface: a bright strip
+  // between the tab strip and the code, marking out a control row that
+  // was never there.
   //
   // 32px is the floor, not a taste call. The chrome starts at
   // --chrome-top (44px at the default interface size) while the tab strip
@@ -55,7 +69,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   // covering it, so the band has to span 44 - 35.7 + 24. Every control
   // that lives in it is therefore 24px; put a 28px one back and it hangs
   // into the document.
-  const chromeBand = hasTabs && cur?.format !== 'html' && cur?.format !== 'image';
+  const chromeBand = hasTabs && (showsEditToggle || cur?.format === 'pdf' || emptyTab);
 
   return (
     <main
@@ -162,7 +176,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         </div>
       )}
       <FindBar />
-      {cur && (cur.format === 'md' || cur.format === 'json') && !cur.folder && !activeTab?.conflict && (
+      {showsEditToggle && (
         /* Floating actions in the main pane's top-right — sits below the
          * tab strip (unconditionally present whenever there's an open
          * file, so a fixed offset is safe). The edit toggle lives here on

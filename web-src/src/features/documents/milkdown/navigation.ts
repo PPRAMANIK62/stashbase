@@ -1,7 +1,4 @@
-import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
 import { assetBaseUrl } from '@/common/api/api';
-
-const VIEWABLE_FILE_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
 
 export type MilkdownLinkTarget =
   | { kind: 'anchor'; id: string }
@@ -28,10 +25,7 @@ export function resolveMilkdownLink(raw: string, noteName: string, noteFolder?: 
       const decoded = asset[2].split('/').map(decodeURIComponent);
       if (decoded.some((segment) => !segment || segment === '.' || segment === '..' || /[\\/]/.test(segment))) return { kind: 'ignore' };
       const path = decoded.join('/');
-      if (VIEWABLE_FILE_RE.test(path)) {
-        return { kind: 'library-file', path, anchor: url.hash.slice(1) || undefined, ...(folder ? { folder } : {}) };
-      }
-      return { kind: 'ignore' };
+      return { kind: 'library-file', path, anchor: url.hash.slice(1) || undefined, ...(folder ? { folder } : {}) };
     } catch { return { kind: 'ignore' }; }
   }
   return url.protocol === 'http:' || url.protocol === 'https:' ? { kind: 'external', href: url.href } : { kind: 'ignore' };

@@ -9,9 +9,9 @@ the source remains the durable object shared with other tools and Agents.
 
 This area owns document tabs and format-appropriate reading or editing
 experiences. Together with the Workspace area, it forms the Document
-Workbench. It includes Markdown, source-authoritative JSON, HTML, PDF, DOCX,
-images, audio, and supported video containers. Preparation and indexing are
-separate areas.
+Workbench. It includes Markdown, plain text, source-authoritative JSON, HTML,
+PDF, DOCX, images, audio, supported video containers, and truthful fallback
+surfaces for other local files. Preparation and indexing are separate areas.
 
 StashBase is not an unrestricted browser, a script host, a pixel-perfect Word
 editor, a media editor, or a proprietary document format.
@@ -32,6 +32,15 @@ editor, a media editor, or a proprietary document format.
   remains available for malformed, incomplete, duplicate-key, or bounded-out
   content. Structured edits use the shared source-preserving save path rather
   than a second serialized document model.
+- Plain `.txt` sources use a source-preserving text editor. Other regular files
+  remain selectable but muted in the tree because Search and automatic Chat
+  context do not consume them. Selection performs bounded content inspection:
+  strict UTF-8 text opens read-only, while binary, invalidly encoded, oversized,
+  unavailable, and non-regular entries keep their source identity in an
+  explicit cannot-open surface. Recognized source languages are syntax
+  coloured for reading; an unrecognized one stays plain rather than being
+  coloured as a guessed language. Reading a code file offers no editing
+  chrome, because the file is read-only.
 - When a source changes on disk during an edit, StashBase keeps both versions,
   shows their differences, and waits for the user to reload, overwrite, or
   merge. An unresolved comparison blocks leaving; a merge returns as an
@@ -65,6 +74,7 @@ assertions.
 | Source family | Extensions | Workbench surface | Workbench authoring | Retrieval text | Agent and MCP file access |
 |---|---|---|---|---|---|
 | Markdown | `.md`, `.markdown` | Writer Mode and Reading View | New notes and existing sources are content-editable | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
+| Plain text | `.txt` | Source-preserving text view | Existing sources are content-editable; New Note creates Markdown | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
 | JSON | `.json` | Source-preserving Tree and Source views | Existing sources are content-editable; New Note creates Markdown | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
 | HTML | `.html`, `.htm` | Compatibility preview | Preview-only in the Workbench | In-memory text derived from the source without durable Preparation | `read_file`, `write_file`, and `edit_file` use raw HTML source |
 | PDF | `.pdf` | Source PDF preview | Preview-only | Prepared Markdown | `read_file` returns current prepared Markdown; content writes are rejected |
@@ -72,11 +82,12 @@ assertions.
 | DOCX | `.docx` | Sanitized source-based preview with a prepared fallback | Preview-only | Prepared HTML | `read_file` returns current prepared HTML; content writes are rejected |
 | Audio | `.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.opus`, `.aac`, `.aiff`, `.aif` | Source playback or compatible local audio preview | Preview-only | Prepared timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
 | Video container | `.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv`, `.avi` | Media playback when compatible, otherwise a local audio preview | Preview-only | Audio track prepared as timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
+| Generic workspace file | Any other regular file, plus restricted filesystem entries | Strict UTF-8 text is read-only; otherwise an explicit binary, oversized, unavailable, symlink, special-entry, or cloud-placeholder state | No content editing | None; the muted tree state means Search and automatic Chat context exclude it | Not listed, read, written, moved, or deleted through Agent/MCP file tools |
 
-Rename, move, and delete are file-mutation capabilities over recognized visible
-sources; they do not make a preview-only format content-editable. Unsupported
-formats remain outside these viewer and content-read paths and must be reported
-truthfully rather than opened as lossy text.
+Rename, move, and delete are file-mutation capabilities over regular files in
+the active Workbench, including generic regular files; they do not make a
+preview-only format content-editable or widen Agent access. Restricted
+filesystem entries are reveal-only. Generic bytes are never decoded lossily.
 
 ## Experience Contract
 
@@ -85,6 +96,8 @@ truthfully rather than opened as lossy text.
 - Every format exposes only the capabilities in the matrix above. A
   preview-only source never shows a content-editing affordance, and a surface
   must not call prepared text the editable source.
+- Muted generic-file styling always means the same thing: the file is visible
+  in the Workbench but excluded from Search and automatic Chat context.
 - Editable documents use the shared save/version path. An external-write
   conflict never silently overwrites either the dirty buffer or newer disk
   content.

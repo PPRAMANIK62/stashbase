@@ -177,6 +177,15 @@ this file records the mechanics a change must respect.
    also the one place Tailwind's `@theme inline` token bridge may live —
    it does not move to a feature file.
 
+   `muted-foreground` clears AA against the resting surfaces it was
+   calibrated for, NOT against the selected-row fill (`--active`), where it
+   lands under the floor. Any surface that dims a row and can also select
+   it therefore restores full ink on selection — selection already carries
+   its own emphasis, so the dim only has to hold in the resting list. Check
+   a subdued role against the surface it actually paints on before reusing
+   it; a colour verified against the base white can still fail on a sunken
+   pane or a selected row.
+
    A `@theme` entry is a NAMESPACE, not an alias. `--color-secondary`
    generates `bg-secondary` and declares `--color-secondary`; it never
    declares a bare `--secondary`. A hand-written `color-mix()` or `calc()`
@@ -1138,10 +1147,16 @@ cross-feature, not because migrating them was skipped:
 - **Rendered-content typography**: Crepe variable bridge (`.crepe-shell`,
   `features/documents/documents.css`), `.agent-prose`
   (`features/agent-panel/agent-panel.css`), and the JSON value/type classes
-  that carry the `--syntax-json-*` roles
+  that carry the `--syntax-*` roles
   (`features/documents/components/json/json-tree.css`). Those roles come from
   the global token layer in both themes; they never embed a fixed palette in
-  the component. Content follows `--reading-font-size` or the reading step of
+  the component. One syntax palette serves every code surface — JSON source,
+  JSON tree, and the code viewer — with roles named for what a token means
+  rather than for a language, so the same kind of token is the same colour
+  wherever it appears. Each role clears AA against the surface code actually
+  paints on (`--pane`), which is stricter than measuring against the base
+  white; the json-document test asserts that floor for all roles in both
+  themes. Content follows `--reading-font-size` or the reading step of
   the ramp, not whatever the chrome around it is wearing. It does not get its
   own text face: chrome and content share the system UI sans, while code/data
   surfaces switch to bundled Geist Mono through `--font-mono`.

@@ -7,6 +7,7 @@ import { tags } from '@lezer/highlight';
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import './json/json-tree.css';
 import { useAppActions, useWorkspace, type FindController, type FindOptions, type MatchInfo } from '@/store/contexts/AppContext';
+import { stashbaseCodeTheme } from '@/features/documents/lib/codeSurface';
 import { analyzeJsonSource, formatPath, matchingJsonTreeNodes } from '@/features/documents/lib/json/sourceModel';
 import type { JsonTreeSessionState } from '@/features/documents/components/json/JsonTreeView';
 import { Button } from '@/common/components/ui/button';
@@ -93,23 +94,19 @@ export function createJsonEditor(host: HTMLElement, opts: {
           // positions and counts can never refer to an older document.
           queueMicrotask(() => opts.onFindInfo(find.refresh()));
         }),
+        // Surface chrome is shared with the code viewer (codeSurface.ts) so
+        // the two can never drift; only the JSON-specific token roles and
+        // the malformed-source underline stay local.
+        stashbaseCodeTheme,
         EditorView.theme({
-          '&': { height: '100%', backgroundColor: 'transparent', color: 'var(--fg)' },
-          '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono, ui-monospace, monospace)' },
-          '.cm-content': { padding: '20px 0 72px', caretColor: 'var(--focus-ring)' },
-          '.cm-line': { padding: '0 20px' },
-          '.cm-gutters': { backgroundColor: 'var(--pane)', color: 'var(--muted)', border: '0' },
-          '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--accent) 7%, transparent)' },
-          '&.cm-focused': { outline: 'none' },
-          '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'color-mix(in srgb, var(--accent) 28%, transparent)' },
-          '.cm-json-property': { color: 'var(--syntax-json-property)' },
-          '.cm-json-string': { color: 'var(--syntax-json-string)' },
-          '.cm-json-boolean': { color: 'var(--syntax-json-boolean)' },
-          '.cm-json-number': { color: 'var(--syntax-json-number)' },
-          '.cm-json-punctuation': { color: 'var(--syntax-json-punctuation)' },
+          '.cm-json-property': { color: 'var(--syntax-property)' },
+          '.cm-json-string': { color: 'var(--syntax-string)' },
+          '.cm-json-boolean': { color: 'var(--syntax-keyword)' },
+          '.cm-json-number': { color: 'var(--syntax-number)' },
+          '.cm-json-punctuation': { color: 'var(--syntax-punctuation)' },
           '.cm-json-invalid': {
-            color: 'var(--syntax-json-invalid)',
-            textDecoration: 'underline wavy var(--syntax-json-invalid)',
+            color: 'var(--syntax-invalid)',
+            textDecoration: 'underline wavy var(--syntax-invalid)',
             textUnderlineOffset: '2px',
           },
         }),

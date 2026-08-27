@@ -36,8 +36,10 @@ test('Milkdown local links to viewer-supported library files resolve, not just n
   });
 });
 
-test('Milkdown links to unsupported extensions are still ignored', () => {
-  assert.deepEqual(resolveMilkdownLink('archive.zip', 'notes/current.md'), { kind: 'ignore' });
+test('Milkdown links to generic workspace files navigate to an honest placeholder', () => {
+  assert.deepEqual(resolveMilkdownLink('archive.zip', 'notes/current.md'), {
+    kind: 'library-file', path: 'notes/archive.zip', anchor: undefined,
+  });
 });
 
 test('links inside an out-of-folder document resolve back to that member folder', () => {

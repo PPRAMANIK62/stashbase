@@ -4,10 +4,6 @@
  * host (image lightbox / in-app nav / external open) via `postMessage`.
  */
 
-import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
-
-const VIEWABLE_FILE_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
-
 /** Click handler for a preview iframe's document: a clicked image opens
  *  the shared lightbox; a clicked link forwards to in-app nav (relative
  *  notes) or external open (`http(s)`). Other schemes fall through.
@@ -51,12 +47,10 @@ function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: s
   if (url.origin === window.location.origin && url.pathname.startsWith('/asset/')) {
     let decoded: { path: string; folder?: string };
     try { decoded = decodeAssetPathname(url.pathname); } catch { return; }
-    if (VIEWABLE_FILE_RE.test(decoded.path)) {
-      // A target the app can already open in a viewer tab (notes plus PDF,
-      // image, DOCX, audio/video, JSON — same vocabulary Milkdown link
-      // navigation uses, see markdown-rendering.md) navigates in-app; a
-      // `__folder/` token keeps the target inside an out-of-folder
-      // document's own member folder.
+    if (isSafeWorkspacePath(decoded.path)) {
+      // Every visible regular file is an in-app navigation target. The
+      // document loader decides whether that target gets a rich viewer,
+      // read-only text, or an explicit binary/unavailable placeholder.
       e.preventDefault();
       const hash = url.hash.startsWith('#') ? url.hash.slice(1) : '';
       window.postMessage({
@@ -80,6 +74,14 @@ function forwardAnchorClick(anchor: HTMLAnchorElement, e: Event, currentPath?: s
     e.preventDefault();
     window.postMessage({ type: 'stashbase-open-external', href: url.href }, window.location.origin);
   }
+}
+
+function isSafeWorkspacePath(value: string): boolean {
+  if (!value) return false;
+  return value.split('/').every((segment) => Boolean(segment)
+    && segment !== '.'
+    && segment !== '..'
+    && !/[\\/]/.test(segment));
 }
 
 function decodeAssetPathname(pathname: string): { path: string; folder?: string } {

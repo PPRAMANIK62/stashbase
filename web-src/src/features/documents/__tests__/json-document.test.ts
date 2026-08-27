@@ -111,19 +111,24 @@ test('real JSON CodeMirror session handles malformed source, editing, live Find 
     const style = window.document.createElement('style');
     style.textContent = fs.readFileSync('web-src/src/styles/globals.css', 'utf8');
     window.document.head.appendChild(style);
-    const syntaxRoles = ['property', 'string', 'boolean', 'number', 'punctuation', 'invalid'];
-    const light = Object.fromEntries(syntaxRoles.map((role) => [
-      role, window.getComputedStyle(window.document.documentElement).getPropertyValue(`--syntax-json-${role}`).trim(),
+    // One palette for every code surface — the JSON source view, the JSON
+    // tree, and the read-only code viewer all read these roles, so the
+    // contrast floor is asserted once here for all of them. Measured
+    // against `--surface-sunken`, which is what `--pane` resolves to and
+    // what every one of those surfaces actually paints behind its text.
+    const syntaxRoles = ['property', 'string', 'keyword', 'number', 'punctuation', 'comment', 'invalid'];
+    const readRoles = () => Object.fromEntries(syntaxRoles.map((role) => [
+      role, window.getComputedStyle(window.document.documentElement).getPropertyValue(`--syntax-${role}`).trim(),
     ]));
-    const lightSurface = window.getComputedStyle(window.document.documentElement).getPropertyValue('--surface-base').trim();
+    const readSurface = () => window.getComputedStyle(window.document.documentElement).getPropertyValue('--surface-sunken').trim();
+    const light = readRoles();
+    const lightSurface = readSurface();
     window.document.documentElement.dataset.theme = 'dark';
-    const dark = Object.fromEntries(syntaxRoles.map((role) => [
-      role, window.getComputedStyle(window.document.documentElement).getPropertyValue(`--syntax-json-${role}`).trim(),
-    ]));
-    const darkSurface = window.getComputedStyle(window.document.documentElement).getPropertyValue('--surface-base').trim();
+    const dark = readRoles();
+    const darkSurface = readSurface();
     for (const role of syntaxRoles) {
-      assert.ok(light[role], `light theme defines --syntax-json-${role}`);
-      assert.ok(dark[role], `dark theme defines --syntax-json-${role}`);
+      assert.ok(light[role], `light theme defines --syntax-${role}`);
+      assert.ok(dark[role], `dark theme defines --syntax-${role}`);
       assert.notEqual(light[role], dark[role], `${role} is calibrated independently for dark theme`);
       assert.ok(contrastRatio(light[role], lightSurface) >= 4.5, `${role} meets AA contrast in light theme`);
       assert.ok(contrastRatio(dark[role], darkSurface) >= 4.5, `${role} meets AA contrast in dark theme`);

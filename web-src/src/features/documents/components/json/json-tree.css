@@ -23,11 +23,11 @@
 .json-tree-row { display: flex; align-items: center; min-height: var(--density-control); gap: 8px; border-radius: var(--radius-control); padding: 2px 6px; }
 .json-tree-row[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .json-tree-leaf { width: 24px; color: var(--muted); text-align: center; }
-.json-tree-key { color: var(--syntax-json-property); }
+.json-tree-key { color: var(--syntax-property); }
 .json-tree-type { border-radius: var(--radius-container); padding: 1px 6px; color: var(--muted); background: var(--hover); font: var(--text-xs) var(--font-sans, sans-serif); }
-.json-tree-value { min-width: 0; overflow: hidden; color: var(--syntax-json-string); text-overflow: ellipsis; white-space: nowrap; }
-.json-tree-type-number + .json-tree-value { color: var(--syntax-json-number); }
-.json-tree-type-boolean + .json-tree-value, .json-tree-type-null + .json-tree-value { color: var(--syntax-json-boolean); }
+.json-tree-value { min-width: 0; overflow: hidden; color: var(--syntax-string); text-overflow: ellipsis; white-space: nowrap; }
+.json-tree-type-number + .json-tree-value { color: var(--syntax-number); }
+.json-tree-type-boolean + .json-tree-value, .json-tree-type-null + .json-tree-value { color: var(--syntax-keyword); }
 .json-tree-actions { display: flex; gap: 2px; margin-left: auto; opacity: 0; }
 .json-tree-row:hover .json-tree-actions, .json-tree-row:focus-within .json-tree-actions { opacity: 1; }
 .json-tree-error { padding: 8px 20px; color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, transparent); }
