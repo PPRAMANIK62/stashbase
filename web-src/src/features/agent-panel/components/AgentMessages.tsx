@@ -5,7 +5,7 @@
  * `AgentUserTurn`, the tool surface in `AgentToolActivity`, and the pure
  * turn model in `lib/turnModel`.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/common/components/ui/button';
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@/common/components/ui/collapsible';
 import { AgentMarkdown } from '@/features/agent-panel/components/AgentMarkdown';
@@ -18,7 +18,8 @@ import { MessageAttachments, UserMessageText, UserTurnHead } from '@/features/ag
 import { accentDotClass, spinnerClass, turnHeadClass } from '@/features/agent-panel/lib/panelStyles';
 import { formatMessageTime, groupTurns, replyTimestamp, settledReplySections, tailBlockSpeaks, turnReplyText, workTraceLabel, type TurnMeta } from '@/features/agent-panel/lib/turnModel';
 import { turnFailureGuidance, type TurnFailureActionId } from '@/features/agent-panel/lib/turnFailure';
-import type { AgentKind, Attachment, Block, ToolBlock } from '@/features/agent-panel/lib/types';
+import { basename } from '@/common/lib/paths';
+import type { AgentKind, Attachment, Block, RetiredAgentScope, ToolBlock } from '@/features/agent-panel/lib/types';
 
 /* One exchange: the user bubble plus the reply blocks under it. A class
  * string rather than a component because the two call sites below wrap
@@ -36,12 +37,12 @@ export interface QueuedTurnPreview {
   id: string;
   text: string;
   attachments?: Attachment[];
-  status: 'waiting' | 'steering' | 'steered';
+  status: 'waiting' | 'steering' | 'steered' | 'cancelled';
   canSteer?: boolean;
 }
 
 export function MessageList({
-  blocks, queuedTurns, turnActive, turnMeta, phase, fatal, fatalRecoveryLabel, agentKind, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onOpenArtifact, onTurnFailureAction,
+  blocks, queuedTurns, turnActive, turnMeta, phase, fatal, fatalRecoveryLabel, scopeRetired, agentKind, agentShortName, onPermission, onSteerQueued, onCopyUserMessage, onResendUserMessage, onRetry, onStartLibraryChat, onOpenArtifact, onTurnFailureAction,
 }: {
   blocks: Block[];
   queuedTurns: QueuedTurnPreview[];
@@ -50,6 +51,7 @@ export function MessageList({
   phase: 'connecting' | 'live' | 'closed';
   fatal: string | null;
   fatalRecoveryLabel: 'Retry' | 'Reconnect';
+  scopeRetired: RetiredAgentScope | null;
   agentKind: AgentKind;
   agentShortName: string;
   onPermission: (toolBlockId: string, permId: string, allow: boolean) => void;
@@ -57,6 +59,7 @@ export function MessageList({
   onCopyUserMessage: (text: string) => void;
   onResendUserMessage: (text: string) => void;
   onRetry: () => void;
+  onStartLibraryChat: () => void;
   onOpenArtifact: (path: string) => void;
   onTurnFailureAction: (blockId: string, action: TurnFailureActionId) => void;
 }) {
@@ -96,7 +99,6 @@ export function MessageList({
       role="log"
       aria-label="Agent conversation"
       aria-live="polite"
-      aria-busy={turnActive}
       ref={ref}
       onScroll={onScroll}
     >
@@ -104,13 +106,22 @@ export function MessageList({
       {blocks.length === 0 && phase === 'closed' && fatal && (
         <FatalState fatal={fatal} agentShortName={agentShortName} recoveryLabel={fatalRecoveryLabel} onRetry={onRetry} />
       )}
+      {blocks.length === 0 && queuedTurns.length === 0 && scopeRetired && (
+        <ScopeRetiredNotice retired={scopeRetired} centered onStartLibraryChat={onStartLibraryChat} />
+      )}
       {turns.map((turn, index) => {
         // The last turn is the one still streaming while a turn is
         // active; only a settled turn offers actions on its reply.
         const settled = !(turnActive && index === turns.length - 1);
         const replyText = settled ? turnReplyText(turn) : '';
         return (
-          <div className={turnClass} key={turn.key}>
+          // `aria-busy` rides the ONE turn that is still streaming, not the
+          // whole log: token-by-token mutations of the live tail would
+          // otherwise re-announce through the log's polite live region on
+          // every chunk. The settled turns and notices around it keep
+          // announcing; this turn speaks once, when it settles and the
+          // busy flag drops.
+          <div className={turnClass} key={turn.key} aria-busy={!settled || undefined}>
             {turn.head && (
               <UserTurnHead
                 block={turn.head}
@@ -122,6 +133,10 @@ export function MessageList({
               * to the ANSWER region, mirroring `agent-turn-user` on the
               * question side — hovering one never lights up the other. */}
             <div className="agent-turn-reply group/reply flex flex-col gap-2.5">
+              {/* Speaker identity is visual-only (alignment/typography), so
+                * a linearized reading gets it stated. Pairs with the "You:"
+                * prefix in UserTurnHead. */}
+              {turn.body.length > 0 && <span className="sr-only">{agentShortName}: </span>}
               <TurnBody
                 blocks={turn.body}
                 liveBlockId={turnActive && blocks.length > 0 ? blocks[blocks.length - 1].id : null}
@@ -149,6 +164,9 @@ export function MessageList({
       ))}
       {blocks.length > 0 && phase === 'closed' && fatal && (
         <FatalInline fatal={fatal} agentShortName={agentShortName} recoveryLabel={fatalRecoveryLabel} onRetry={onRetry} />
+      )}
+      {(blocks.length > 0 || queuedTurns.length > 0) && scopeRetired && (
+        <ScopeRetiredNotice retired={scopeRetired} onStartLibraryChat={onStartLibraryChat} />
       )}
       {turnActive && !tailBlockSpeaks(blocks) && (
         // Generic tail status renders only when no visible block already
@@ -290,7 +308,13 @@ function QueuedTurn({
   turn: QueuedTurnPreview;
   onSteer: (id: string) => void;
 }) {
-  const label = turn.status === 'steered' ? 'Steered' : turn.status === 'steering' ? 'Steering' : 'Waiting';
+  const label = turn.status === 'steered'
+    ? 'Steered'
+    : turn.status === 'steering'
+      ? 'Steering'
+      : turn.status === 'cancelled'
+        ? 'Cancelled'
+        : 'Waiting';
   return (
     <div className={turnClass}>
       <div className={cn(turnHeadClass, 'text-muted-foreground')}>
@@ -306,7 +330,7 @@ function QueuedTurn({
             * first line of the message text beside it. */}
           <span className="inline-flex shrink-0 items-center gap-2.5 pt-px">
             <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-              <Dot />
+              {turn.status !== 'cancelled' && <Dot />}
               {label}
             </span>
             {turn.canSteer && turn.status === 'waiting' && (
@@ -319,6 +343,33 @@ function QueuedTurn({
       </div>
     </div>
   );
+}
+
+function ScopeRetiredNotice({
+  retired,
+  centered = false,
+  onStartLibraryChat,
+}: {
+  retired: RetiredAgentScope;
+  centered?: boolean;
+  onStartLibraryChat: () => void;
+}) {
+  const notice = (
+    <StatusMessage tone="warning" className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5">
+      <div>
+        <SectionHeading level={3}>{basename(retired.folder)} was removed from Library</SectionHeading>
+        <div className="text-sm leading-normal text-muted-foreground">
+          This chat is still available, but it can’t continue in that folder.
+        </div>
+      </div>
+      <Button variant="outline" size="sm" className="shrink-0" onClick={onStartLibraryChat}>
+        New Library Chat
+      </Button>
+    </StatusMessage>
+  );
+  return centered
+    ? <div className="grid min-h-45 flex-1 place-items-center px-2 py-6"><div className="w-measure-sm">{notice}</div></div>
+    : notice;
 }
 
 function fatalCopy(fatal: string, agentShortName: string): { title: string; detail: string } {
@@ -348,7 +399,11 @@ function FatalState({
   return (
     <div className="grid min-h-45 flex-1 place-items-center px-2 py-6">
       <StatusMessage tone="error" className="flex w-measure-sm flex-col items-start gap-2 rounded-xl p-3.5">
-        <SectionHeading>{copy.title}</SectionHeading>
+        {/* Level 2, stated: this card fills the pane (it renders only with
+          * an empty transcript), so it tops the pane outline like the other
+          * pane-level state cards. FatalInline below is a transcript entry
+          * and sits at h3 with the other inline cards. */}
+        <SectionHeading level={2}>{copy.title}</SectionHeading>
         <div className={fatalDetailClass}>{copy.detail}</div>
         <Button variant="outline" size="sm" onClick={onRetry}>{recoveryLabel}</Button>
       </StatusMessage>
@@ -441,6 +496,7 @@ function BlockView({ block, live, handlers }: {
 
 function ThinkingView({ text, active }: { text: string; active?: boolean }) {
   const [open, setOpen] = useState(false);
+  const panelId = useId();
   return (
     <div className="min-w-0">
       {/* A plain meta disclosure row — closed thinking should cost no
@@ -452,6 +508,9 @@ function ThinkingView({ text, active }: { text: string; active?: boolean }) {
         className="h-auto gap-1 px-0 py-0.5 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        // Only while the body exists — an aria-controls pointing at an
+        // unmounted id is a dangling reference.
+        aria-controls={open ? panelId : undefined}
       >
         <ChevronDownIcon className={cn('size-3 transition-transform duration-fast ease-out', !open && '-rotate-90')} />
         {/* Shimmers while this is the stream's live block — the label
@@ -464,7 +523,7 @@ function ThinkingView({ text, active }: { text: string; active?: boolean }) {
         * label starts (12px chevron + the button's 4px gap), so the
         * quote bar hangs in the margin the disclosure already opened. */}
       {open && (
-        <div className="ml-1 border-l-2 border-border pt-1 pb-1.5 pl-2.5 text-sm leading-normal whitespace-pre-wrap text-muted-foreground">
+        <div id={panelId} className="ml-1 border-l-2 border-border pt-1 pb-1.5 pl-2.5 text-sm leading-normal whitespace-pre-wrap text-muted-foreground">
           {text}
         </div>
       )}

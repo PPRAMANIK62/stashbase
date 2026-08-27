@@ -31,6 +31,7 @@ import { deleteDerivedForSource, knownDerivedSourcesUnderFolder } from './derive
 import { filesystemPath } from './filesystem-path.ts';
 import { estimateSemanticWorkload, type SemanticWorkloadEstimate } from './semantic-workload.ts';
 import type { SyncResult } from '../shared/sync.ts';
+import { decodeDirectTextBytes } from './text-decoding.ts';
 
 export type { SyncResult } from '../shared/sync.ts';
 
@@ -86,7 +87,7 @@ async function assertSyncConverged(
 function readTextAt(root: string, abs: string): string | null {
   const rel = filesystemPath.relative(root, abs);
   if (rel == null || rel === '') return null;
-  try { return fs.readFileSync(abs, 'utf8'); } catch { return null; }
+  try { return decodeDirectTextBytes(rel, fs.readFileSync(abs)); } catch { return null; }
 }
 
 export interface SyncOptions {
@@ -184,8 +185,8 @@ async function deleteStaleRenameSource(
   }
 }
 
-function discoverConvertedSources(root: string): void {
-  discoverConvertibleSources(root);
+function discoverConvertedSources(root: string): Promise<void> {
+  return discoverConvertibleSources(root);
 }
 
 function cleanupRemovedSource(sourcePath: string): void {
@@ -249,14 +250,14 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
     // and future reindex.
   if (!(opts.semanticEnabled ?? isEmbeddingConfigured())) {
     cleanupMissingConvertedSources(root);
-    discoverConvertedSources(root);
+    await discoverConvertedSources(root);
     log.info(`no embedding source — skipping semantic index for "${root}" (conversion + keyword search unaffected)`);
     return emptyResult();
   }
 
   if (!canEmbed(opts)) {
     cleanupMissingConvertedSources(root);
-    discoverConvertedSources(root);
+    await discoverConvertedSources(root);
     log.info(`semantic embedding is paused for "${root}" (conversion + keyword search unaffected)`);
     return { ...emptyResult(), semanticPaused: true };
   }
@@ -279,7 +280,7 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
     diff.added.length === 0 && diff.modified.length === 0 &&
     deletedCandidates.length === 0 && diff.renamed.length === 0 && excludedRemoved.length === 0
   ) {
-    discoverConvertedSources(root);
+    await discoverConvertedSources(root);
     log.debug('index up to date');
     return emptyResult();
   }
@@ -366,7 +367,7 @@ export async function syncIndex(indexer: Indexer, root: string, opts: SyncOption
   // This ordering matters for external Finder/Git moves: a renamed
   // PDF/image must first clear the old source identity and any stale
   // target artifacts, then queue a fresh conversion for the new path.
-  discoverConvertedSources(root);
+  await discoverConvertedSources(root);
 
   // Preparation remains independent and useful for keyword search. Stale
   // vector rows were removed above; stop before any derived/source upsert.
@@ -500,7 +501,8 @@ async function indexOne(
   }
   const content = readTextAt(root, sourcePath);
   if (content == null) {
-    failed.push({ name: sourcePath, error: 'read returned null' });
+    try { await indexer.deleteFile(sourcePath); } catch { /* best-effort stale cleanup */ }
+    failed.push({ name: sourcePath, error: 'source text could not be decoded safely' });
     return 0;
   }
   try {

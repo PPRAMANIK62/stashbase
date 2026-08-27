@@ -7,7 +7,7 @@ import { mount } from './library-files.ts';
 test('library search validates and forwards file-type filters', async () => {
   let searchInput: Record<string, unknown> | undefined;
   const operations = createLibraryOperations({
-    normalizeSearchScope: (_folder, pathPrefix) => ({
+    normalizeSearchScope: async (_folder, pathPrefix) => ({
       folderRoot: '/library',
       pathPrefix: typeof pathPrefix === 'string' ? pathPrefix : undefined,
     }),

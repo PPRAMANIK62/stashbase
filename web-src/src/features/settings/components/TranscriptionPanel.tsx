@@ -55,7 +55,9 @@ export function TranscriptionPanel() {
           />
         )}
         {selectedProvider?.runtimeError && (
-          <div className="text-sm text-destructive">Transcription runtime unavailable: {selectedProvider.runtimeError}</div>
+          // role="alert": appears (or changes) when a provider probe fails
+          // after the panel is already up.
+          <div role="alert" className="text-sm text-destructive">Transcription runtime unavailable: {selectedProvider.runtimeError}</div>
         )}
         <FieldSet>
           <FieldLegend className="sr-only">Transcription model</FieldLegend>
@@ -132,7 +134,7 @@ export function TranscriptionPanel() {
                     </Button>
                   )}
                 </div>
-                {operation.status === 'failed' && <div className="col-span-full text-sm text-destructive">{operation.error}</div>}
+                {operation.status === 'failed' && <div role="alert" className="col-span-full text-sm text-destructive">{operation.error}</div>}
               </li>
             );
           })}
@@ -153,7 +155,7 @@ export function TranscriptionPanel() {
           onValueChange={(language) => { void chooseLanguage(language); }}
         />
       </Section>
-      {error && <div className="text-sm text-destructive">{error}</div>}
+      {error && <div role="alert" className="text-sm text-destructive">{error}</div>}
     </div>
   );
 }

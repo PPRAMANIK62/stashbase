@@ -37,6 +37,102 @@ function protocolRecords(logFile: string): ProtocolRecord[] {
     .map((line) => JSON.parse(line) as ProtocolRecord);
 }
 
+test('J06 offers StashBase Agent as the zero-install default with bring-your-own alternatives', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
+    const panel = activeAgentPanel(app.page);
+    await expect(panel.getByText('Sign in to StashBase', { exact: true })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Open account settings' })).toBeVisible();
+
+    await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+    await expect(app.page.getByRole('menuitem', { name: 'StashBase Agent' })).toBeVisible();
+    await expect(app.page.getByRole('menuitem', { name: 'Codex' })).toBeVisible();
+    await expect(app.page.getByRole('menuitem', { name: 'Claude Code' })).toBeVisible();
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
+test('removing a chat folder preserves started work and opens a fresh Library chat', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'two-folders' });
+  fixture.env.STASHBASE_CODEX_BIN = FAKE_CODEX;
+  fixture.env.STASHBASE_AGENT_DISCOVERY_POLICY = 'system-only';
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await dismissEmbeddingKeyPrompt(app.page);
+
+    await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+    await app.page.getByRole('menuitem', { name: 'Codex' }).click();
+    await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
+    let panel = activeAgentPanel(app.page);
+    let composer = panel.locator('[aria-label="Message agent"]');
+    await expect(composer).toHaveAttribute('contenteditable', 'true');
+    await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
+    await composer.fill('math reply');
+    await expect(composer).toContainText('math reply');
+    await panel.getByRole('button', { name: 'Send message' }).click();
+    await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
+
+    const activeStartedTab = app.page.getByRole('tab', { selected: true });
+    const startedPanelId = await activeStartedTab.getAttribute('aria-controls');
+    if (!startedPanelId) throw new Error('started chat tab did not expose its controlled panel');
+    const startedTab = app.page.locator(`[role="tab"][aria-controls="${startedPanelId}"]`);
+    await app.page.getByRole('button', { name: 'More actions for project-alpha' }).click();
+    await app.page.getByRole('menuitem', { name: 'Remove from Library' }).click();
+    const removal = app.page.getByRole('dialog', { name: 'Remove from Library?' });
+    await removal.getByRole('button', { name: 'Remove' }).click();
+
+    await expect(removal).toBeHidden();
+    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
+    await expect(startedTab).toBeVisible();
+    await startedTab.click();
+    await expect(startedTab).toHaveAttribute('aria-selected', 'true');
+    panel = activeAgentPanel(app.page);
+    await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
+    await expect(panel.getByText('project-alpha was removed from Library')).toBeVisible();
+    await expect(panel.getByText('This chat is still available, but it can’t continue in that folder.')).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Reconnect' })).toHaveCount(0);
+    await expect(panel.getByRole('alert')).toHaveCount(0);
+
+    // Browse another member after the removal. The retired conversation
+    // remains pinned to its old scope, and its action must still create an
+    // explicitly Library-scoped tab rather than inheriting project-beta.
+    await openLibraryFolder(app.page, 'project-beta');
+    await dismissEmbeddingKeyPrompt(app.page);
+    await expect(startedTab).toHaveAttribute('aria-selected', 'false');
+    await startedTab.click();
+    await expect(startedTab).toHaveAttribute('aria-selected', 'true');
+    panel = activeAgentPanel(app.page);
+    await expect(panel.getByText('project-alpha was removed from Library')).toBeVisible();
+    await panel.getByRole('button', { name: 'New Library Chat' }).click();
+    panel = activeAgentPanel(app.page);
+    composer = panel.locator('[aria-label="Message agent"]');
+    await expect(panel.getByRole('button', { name: 'Session scope: Library' })).toBeVisible();
+    await expect(composer).toHaveAttribute('contenteditable', 'true');
+    await expect(app.page).toHaveTitle('project-beta — StashBase');
+    await expect.poll(() => fs.existsSync(path.join(fixture.workspaces.projectA, 'Welcome.md'))).toBe(true);
+    // The status poll already in flight when membership commits receives the
+    // route's expected 404; Chromium logs that handled HTTP response as a
+    // generic resource error before the renderer's generation fence drops it.
+    expect(app.errors.records.filter((record) => !(
+      record.kind === 'console'
+      && record.text === 'Failed to load resource: the server responded with a status of 404 (Not Found)'
+    ))).toEqual([]);
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
 test('Codex chat keeps its folder-bound transcript through approval and interruption', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   const protocolLog = path.join(fixture.artifacts, 'fake-codex-protocol.jsonl');
@@ -49,12 +145,14 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
     await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
+    await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+    await app.page.getByRole('menuitem', { name: 'Codex' }).click();
     await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
     let panel = activeAgentPanel(app.page);
     let composer = panel.locator('[aria-label="Message agent"]');
     await expect(composer).toHaveAttribute('contenteditable', 'true');
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Model and effort: Fake Codex Model, Default' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Model and effort: Default, Default' })).toBeVisible();
 
     await composer.fill('approval turn');
     await panel.getByRole('button', { name: 'Send message' }).click();
@@ -65,6 +163,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
 
     await panel.getByRole('button', { name: 'Allow', exact: true }).click();
     await expect(panel.getByText('Deterministic approval completed.')).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Model and effort: Fake Codex Model, Default' })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Send message' })).toBeVisible();
     await expect.poll(() => protocolRecords(protocolLog).find((entry) => entry.event === 'approval-response')?.decision)
       .toBe('accept');
@@ -144,6 +243,7 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
     await expect(app.page.getByRole('menuitem', { name: 'Codex' })).toBeVisible();
     await app.page.getByRole('menuitem', { name: 'Codex' }).click();
+    await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
     await expect(chatTabs.getByRole('tab')).toHaveCount(initialCount);
 
     let panel = activeAgentPanel(app.page);
@@ -153,7 +253,9 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await openLibraryFolder(app.page, 'project-beta');
     await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
     await expect(chatTabs.getByRole('tab')).toHaveCount(initialCount + 1);
-    await chatTabs.getByRole('tab', { name: /^New Chat Close New Chat$/ }).click();
+    // The pointer-only close × is aria-hidden now, so it no longer
+    // leaks into the tab's accessible name.
+    await chatTabs.getByRole('tab', { name: /^New Chat$/ }).click();
     panel = activeAgentPanel(app.page);
     composer = panel.locator('[aria-label="Message agent"]');
     await expect(panel.getByRole('button', { name: /Session folder: project-alpha/ })).toBeVisible();

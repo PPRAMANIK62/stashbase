@@ -82,6 +82,18 @@ async function clickButton(win, accessibleName) {
   `);
 }
 
+// The tab's × is pointer-only chrome (aria-hidden inside role="tab"), so it
+// is addressed by its tooltip title rather than an accessible name.
+async function clickTabClose(win, name) {
+  await win.webContents.executeJavaScript(`
+    (() => {
+      const button = document.querySelector(${JSON.stringify(`button[title=${JSON.stringify(`Close ${name}`)}]`)});
+      if (!button) throw new Error('missing tab close control: ' + ${JSON.stringify(name)});
+      button.click();
+    })()
+  `);
+}
+
 async function waitForActiveReady(win, name) {
   await waitFor(
     () => win.webContents.executeJavaScript(`
@@ -266,7 +278,7 @@ async function run() {
     'inactive beta Find controller remained registered',
   );
 
-  await clickButton(win, 'Close beta.md');
+  await clickTabClose(win, 'beta.md');
   await waitFor(
     () => win.webContents.executeJavaScript("!document.querySelector('[role=\"region\"][aria-label=\"beta.md Markdown document\"]')"),
     'closed Markdown editor was not destroyed',

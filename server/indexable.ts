@@ -32,6 +32,10 @@ export const INDEX_EXCLUDED_DIRS = new Set<string>([
   'vendor',
 ]);
 
+/** Large recursive scans yield after this many entries so folder entry and
+ * reconcile cannot monopolize the shared Node event loop on flat code trees. */
+export const FILESYSTEM_SCAN_YIELD_EVERY = 2_048;
+
 /** Hard ceiling for a single source text that we will send to the daemon.
  *  It must be large enough for book-length PDF/OCR derived markdown,
  *  while still catching accidental bundled app dumps or source trees. */
@@ -99,6 +103,17 @@ export function shouldIndexSourcePath(sourcePath: string): boolean {
 export function indexableFileSizeError(absPath: string): string | null {
   let st: fs.Stats;
   try { st = fs.statSync(absPath); } catch { return 'file is not readable'; }
+  if (!st.isFile()) return 'path is not a file';
+  if (st.size === 0) return 'empty file';
+  if (st.size > MAX_INDEXABLE_BYTES) {
+    return `file is too large to index (${formatBytes(st.size)} > ${formatBytes(MAX_INDEXABLE_BYTES)})`;
+  }
+  return null;
+}
+
+export async function indexableFileSizeErrorAsync(absPath: string): Promise<string | null> {
+  let st: fs.Stats;
+  try { st = await fs.promises.stat(absPath); } catch { return 'file is not readable'; }
   if (!st.isFile()) return 'path is not a file';
   if (st.size === 0) return 'empty file';
   if (st.size > MAX_INDEXABLE_BYTES) {

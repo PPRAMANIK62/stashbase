@@ -25,6 +25,7 @@ const LazyPdfViewerPane = lazyWithRetry(() => import('@/features/documents/compo
 const LazyDocxPreview = lazyWithRetry(() => import('@/features/documents/components/DocxPreview').then((mod) => ({ default: mod.DocxPreview })));
 const LazyAudioPreview = lazyWithRetry(() => import('@/features/documents/components/AudioPreview').then((mod) => ({ default: mod.AudioPreview })));
 const LazyJsonDocument = lazyWithRetry(() => import('@/features/documents/components/JsonDocument').then((mod) => ({ default: mod.JsonDocument })));
+const LazyPlainTextViewerPane = lazyWithRetry(() => import('@/features/documents/components/PlainTextViewerPane').then((mod) => ({ default: mod.PlainTextViewerPane })));
 const LazyConflictResolver = lazyWithRetry(() => import('@/features/documents/components/ConflictResolver').then((mod) => ({ default: mod.ConflictResolver })));
 
 /**
@@ -42,7 +43,7 @@ const LazyConflictResolver = lazyWithRetry(() => import('@/features/documents/co
  * Adding a format means one `lazyWithRetry` and one branch in this file.
  *
  * A tab whose save hit a disk conflict routes to the resolver instead of
- * its editor, for the two editable formats. That substitution belongs here
+ * its editor, for every editable format. That substitution belongs here
  * rather than in the shell for the same reason the format switch does: the
  * shell supplies tab state and a cell, and never learns which surface a tab
  * is currently showing.
@@ -126,6 +127,13 @@ export function DocumentViewer({
             </Suspense>
           </LazyLoadBoundary>
         )
+      )}
+      {cur && cur.format === 'txt' && activeTab && (
+        <LazyLoadBoundary className={VIEWER_FALLBACK_CLASS} label="plain text document" resetKey={resourceResetKey}>
+          <Suspense fallback={<EmptyState layout="fill">Opening plain text…</EmptyState>}>
+            <LazyPlainTextViewerPane key={activeTab.id} tab={activeTab} />
+          </Suspense>
+        </LazyLoadBoundary>
       )}
       {cur && !editMode && cur.format === 'html' && (
         <HtmlPreview name={cur.name} />

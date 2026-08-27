@@ -3,24 +3,28 @@ import { api, getWindowId } from '@/common/api/api';
 import { AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
 import { errorMessage } from '@/common/api/apiTransport';
 import { electronBridge } from '@/common/lib/electronBridge';
+import { openSettings } from '@/common/lib/settingsTrigger';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useStateWithRef } from '@/common/hooks/useStateWithRef';
 import type { Action, AppActions, ChatState, WorkspaceState } from '@/store/contexts/AppContext';
+import { makeChatTab } from '@/store/state/state';
 import { resolveAssistantLink } from '@/features/agent-panel/lib/assistantLinkTarget';
 import type { TurnMeta } from '@/features/agent-panel/lib/turnModel';
 import { agentConnectionUrl } from '@/features/agent-panel/lib/connectionUrl';
 import { isBlankChatTab, newChatScope, nextSessionScope } from '@/features/agent-panel/lib/folderState';
 import {
   libraryScopesEqual,
+  LIBRARY_SCOPE,
   scopeChangedScope,
   scopeRequestParams,
   type LibraryScope,
 } from '@/common/lib/libraryScope';
-import { closeAgentSocketIntentionally, terminalAgentState } from '@/features/agent-panel/lib/connectionLifecycle';
+import { closeAgentSocketIntentionally, retireAgentTranscript, terminalAgentState } from '@/features/agent-panel/lib/connectionLifecycle';
 import {
   appendRuntimeNotice,
   appendToolOutput,
   applyPermissionReply,
+  appendFileDiff,
   completeToolCard,
   markToolAwaitingPermission,
   openToolCard,
@@ -42,7 +46,7 @@ import { useAgentRuntimeCatalog } from '@/features/agent-panel/hooks/useAgentRun
 import { useAgentSkills } from '@/features/agent-panel/hooks/useAgentSkills';
 import { useAgentTabRegistration } from '@/features/agent-panel/hooks/useAgentTabRegistration';
 import { useSessionFolderReconcile } from '@/features/agent-panel/hooks/useSessionFolderReconcile';
-import type { Attachment, Block, ServerEvent } from '@/features/agent-panel/lib/types';
+import type { Attachment, Block, RetiredAgentScope, ServerEvent } from '@/features/agent-panel/lib/types';
 
 /** The whole "talk to the runtime" concern for one AgentView tab: WebSocket
  *  connection lifecycle, server-event routing, session reset/resume, and
@@ -103,6 +107,7 @@ export function useAgentSession({
   attachmentsRef,
   clearComposerAttachments,
   discardAttachmentsForReset,
+  initialScope,
 }: {
   active: boolean;
   id: string;
@@ -116,6 +121,10 @@ export function useAgentSession({
   attachmentsRef: RefObject<Attachment[]>;
   clearComposerAttachments: () => void;
   discardAttachmentsForReset: () => void;
+  /** Optional first-connect override used by the scope-retirement action to
+   * create a genuinely Library-scoped tab even when this window is browsing
+   * another member folder. */
+  initialScope?: LibraryScope;
 }) {
   const meta = AGENT_META[agent];
   const folderPathRef = useLatestRef(workspace.folderPath);
@@ -139,11 +148,16 @@ export function useAgentSession({
   const [phase, setPhase] = useState<'connecting' | 'live' | 'closed'>('connecting');
   const [fatal, setFatal, fatalRef] = useStateWithRef<string | null>(null);
   const [fatalRecoveryLabel, setFatalRecoveryLabel] = useState<'Retry' | 'Reconnect'>('Retry');
+  const [scopeRetired, setScopeRetired] = useState<RetiredAgentScope | null>(null);
   const [nonce, setNonce] = useState(0);
   const recentRef = useLatestRef(workspace.recent);
   // `resumeIdRef` holds a session id to resume on the next connect; it
   // rides the connect URL (like effort) and is consumed-and-cleared there.
   const resumeIdRef = useRef<string | null>(null);
+  // One-shot override for a replacement/new connection that must bind to a
+  // precise scope independent of the window's current folder. Consumed in
+  // the same place as `resumeIdRef`, so it cannot leak into later retries.
+  const nextConnectionScopeRef = useRef<LibraryScope | null>(initialScope ?? null);
   // The failed prompt to auto-resend once the replacement session is ready,
   // armed only by an acted-on failure card (sign-in / reconnect). Firing it
   // makes the recovery's outcome visible immediately: an answer when the
@@ -198,7 +212,11 @@ export function useAgentSession({
     reconnect,
     resetSessionState,
   });
-  const mentions = useAgentMentionListing({ connectedScope: controls.connectedScope, workspace });
+  const mentions = useAgentMentionListing({
+    connectedScope: controls.connectedScope,
+    workspace,
+    disabled: scopeRetired !== null,
+  });
   const promptQueue = useAgentPromptQueue({
     agentShortName: meta.shortName,
     capabilitiesRef: runtimeCatalog.capabilitiesRef,
@@ -363,6 +381,7 @@ export function useAgentSession({
     setTurnBusy(turnStillActive);
     setFatal(nextFatal);
     setFatalRecoveryLabel(recoveryLabel);
+    setScopeRetired(null);
     if (forgetNativeSession) {
       sessionIdRef.current = null;
       controls.setRestoredClaudeSession(false);
@@ -405,6 +424,49 @@ export function useAgentSession({
     });
   }
 
+  /** A removed member folder is an expected authorization/lifecycle change,
+   * not a runtime crash. Completely blank tabs can safely become fresh
+   * Library sessions in place; every form of user work stays visible in a
+   * retired, non-reconnectable conversation. */
+  function retireRemovedScope(folder: string) {
+    const completelyBlank = isBlankChatTab({
+      hasContent: blocksRef.current.length > 0 || queuedPromptsRef.current.length > 0,
+      turnActive: turnActiveRef.current,
+      resumedSession: controls.modelControlRef.current.resumedSession,
+      picked: controls.pickedScopeRef.current,
+      hasDraftText: controls.hasDraftTextRef.current,
+      attachmentCount: attachmentsRef.current.length,
+    });
+    if (completelyBlank) {
+      nextConnectionScopeRef.current = LIBRARY_SCOPE;
+      controls.setPickedScope(undefined);
+      controls.setConnectedScope(LIBRARY_SCOPE);
+      dispatch({ type: 'CHAT_TAB_SET_SCOPE', id: idRef.current, folder: null });
+      resetSessionState({
+        transcript: 'clear',
+        forgetNativeSession: true,
+        modelReset: 'new-session',
+      });
+      return;
+    }
+
+    // Preserve transcript, queued follow-ups, draft, attachment chips, tab,
+    // and native history identity. Only live work is retired.
+    interruptedKeyRef.current = currentTurnKey();
+    setBlocks((current) => retireAgentTranscript(current));
+    promptQueue.retireQueue();
+    pendingRetryRef.current = null;
+    toolNamesRef.current.clear();
+    openKind.current = null;
+    setTurnBusy(false);
+    setFatal(null);
+    setFatalRecoveryLabel('Retry');
+    setScopeRetired({ folder });
+    setPhase('closed');
+    controls.setConnectedScope({ kind: 'folder', path: folder });
+    dispatch({ type: 'CHAT_TAB_SET_SCOPE', id: idRef.current, folder });
+  }
+
   useEffect(() => {
     if (!runtimeCatalog.runtime) {
       readyRef.current = false;
@@ -430,10 +492,12 @@ export function useAgentSession({
     // re-resuming.
     const resume = resumeIdRef.current;
     resumeIdRef.current = null;
+    const forcedScope = nextConnectionScopeRef.current;
+    nextConnectionScopeRef.current = null;
     // Bind this session's scope explicitly: the user's pick, else the
     // window's current folder, else the whole library. Recorded here so a
     // later window-folder switch can never rebind a started conversation.
-    const sessionScopeForConnect = nextSessionScope(
+    const sessionScopeForConnect = forcedScope ?? nextSessionScope(
       controls.pickedScopeRef.current,
       folderPathRef.current,
       recentRef.current.map((entry) => entry.path),
@@ -536,6 +600,14 @@ export function useAgentSession({
     const retry = cardUser ? { text: cardUser.text, attachments: cardUser.attachments ?? [] } : null;
     if (action === 'resend') {
       if (retry) promptQueue.resendFailedPrompt(retry);
+      return;
+    }
+    if (action === 'open-agent-settings') {
+      // Account/allowance recovery completes outside this view. Keep the
+      // failed prompt armed so the runtime's account-change reconnect can
+      // retry it exactly once when StashBase Agent becomes ready again.
+      if (retry) pendingRetryRef.current = retry;
+      openSettings('agents');
       return;
     }
     if (action === 'codex-sign-in') signInToCodexFromTurnFailure();
@@ -662,6 +734,12 @@ export function useAgentSession({
         }
         toolNamesRef.current.delete(ev.id);
         break;
+      case 'file-diff':
+        setBlocks((bs) => appendFileDiff(bs, ev));
+        void reconcileSessionFolder({ reloadWindowTree: true }).catch((err) => {
+          actions.toast(`Could not refresh files: ${errorMessage(err)}`, { level: 'error' });
+        });
+        break;
       case 'permission':
         openKind.current = null;
         setBlocks((bs) => markToolAwaitingPermission(bs, ev));
@@ -746,6 +824,10 @@ export function useAgentSession({
         break;
       case 'exit':
         exitReceivedRef.current = true;
+        if (ev.reason === 'scope-removed') {
+          retireRemovedScope(ev.folder);
+          break;
+        }
         finishRendererSession({ ready: readyRef.current, exitReceived: true, message: ev.message });
         if (ev.message) runtimeCatalog.refreshRuntimes();
         break;
@@ -782,6 +864,14 @@ export function useAgentSession({
     // "You stopped after X" rather than "Worked for X".
     interruptedKeyRef.current = currentTurnKey();
     wsRef.current?.send(JSON.stringify({ t: 'interrupt' }));
+  }
+
+  /** The retired conversation remains untouched. Start a separate tab whose
+   * first connection is explicitly Library-scoped, even if this window is
+   * currently browsing another member folder. */
+  function startLibraryChat(): void {
+    const tab = { ...makeChatTab(agent, chat.chatTabs), boundFolder: null };
+    dispatch({ type: 'CHAT_TAB_NEW', tab });
   }
 
   /** Rename this tab from the session's server-derived title once the
@@ -858,11 +948,13 @@ export function useAgentSession({
       phase,
       fatal,
       fatalRecoveryLabel,
+      scopeRetired,
       prefill,
       setPrefill,
       stop,
       reconnect,
       reconnectAfterFatal,
+      startLibraryChat,
       handleTurnFailureAction,
       replyPermission,
       copyUserMessage,

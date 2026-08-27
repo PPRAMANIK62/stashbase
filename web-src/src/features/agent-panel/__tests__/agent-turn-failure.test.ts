@@ -16,13 +16,20 @@ test('every failure kind offers a truthful in-place action', () => {
   const claude = turnFailureGuidance('auth-expired', 'claude');
   assert.equal(claude.action.id, 'reconnect');
   assert.match(claude.guidance, /\/login/);
+  assert.equal(turnFailureGuidance('auth-expired', 'stashbase').action.id, 'open-agent-settings');
   // Quota, rate, and network clear on the provider side, so their action is
   // a plain resend on the live session — no process replacement.
-  for (const agent of ['claude', 'codex'] as const) {
+  for (const agent of ['stashbase', 'claude', 'codex'] as const) {
     assert.equal(turnFailureGuidance('quota', agent).action.id, 'resend');
     assert.equal(turnFailureGuidance('rate-limit', agent).action.id, 'resend');
     assert.equal(turnFailureGuidance('network', agent).action.id, 'resend');
   }
+  const allowance = turnFailureGuidance('allowance-exhausted', 'stashbase');
+  assert.equal(allowance.action.id, 'open-agent-settings');
+  assert.match(allowance.guidance, /7-day window/i);
+  const restricted = turnFailureGuidance('access-restricted', 'stashbase');
+  assert.equal(restricted.action.id, 'open-agent-settings');
+  assert.match(restricted.guidance, /support/i);
 });
 
 test('a bare failed terminal event adds one generic explanation', () => {

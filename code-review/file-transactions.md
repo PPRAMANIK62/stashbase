@@ -13,8 +13,8 @@
   transaction sequence. HTTP and MCP routes are adapters, not alternate
   mutation implementations.
 - Content capability is format- and surface-specific: the Workbench edits
-  Markdown and JSON, while library/Agent operations accept Markdown, HTML, and
-  JSON text. Preview-only binary formats reject content writes. Rename, move,
+  Markdown, JSON, and valid UTF-8 TXT, while library/Agent operations accept
+  Markdown, HTML, JSON, and valid UTF-8 TXT. Preview-only binary formats reject content writes. Rename, move,
   and delete are file mutations and do not imply content editability. The
   product-facing boundary lives in the
   [Documents format matrix](../design-docs/design/documents.md#format-capability-matrix).
@@ -35,6 +35,27 @@
 - App-maintained derived paths are never writable source targets. Dot-directory
   Agent configuration remains writable even though dot-directories stay out of
   the knowledge index.
+- Request-handling Adapters perform potentially slow realpath,
+  canonicalization, existence, and type checks asynchronously. A sync path
+  resolver is allowed only where its caller is already outside the shared Node
+  request-handling event loop or the work is otherwise bounded.
+
+### Request-path path-resolution liveness
+
+`FilesystemPathModule.resolveUnderAsync` owns asynchronous canonicalization,
+mounted-volume identity, containment, and native realpath checks; async library
+membership lookup also reads configuration and probes member directories without
+sync filesystem calls. HTTP and MCP file reads, writes, uploads, listings,
+scoped search, folder mutations, and project creation use those async identity
+and containment boundaries, so slow `stat`, directory canonicalization, and
+native `realpath` waits yield the shared Node event loop. Some request Adapters
+still perform bounded synchronous content/configuration work after path
+resolution; converting that separate work is not part of this path-identity
+contract. The sync resolver remains for background/compatibility paths and
+focused synchronous tests.
+`server/filesystem-path.test.ts` proves that the async macOS path reaches no
+sync stat/directory primitive, preserves Windows component spelling, and keeps
+unrelated event-loop work live while native realpath is artificially delayed.
 
 ## Save and Version Contract
 
@@ -47,8 +68,9 @@
   source baseline. The asynchronously rendered dirty indicator is not a
   durability authority and cannot make context release skip a fresh edit.
 - A byte-identical save is a no-op and retains the current version.
-- Markdown and JSON persistence preserves supported BOM and line-ending
-  conventions without manufacturing unrelated source changes.
+- Markdown, JSON, and TXT persistence preserves supported UTF-8 BOM, line-
+  ending, and trailing-newline conventions without manufacturing unrelated
+  source changes. Invalid UTF-8 TXT is never lossily decoded or rewritten.
 - JSON Tree operations enter this same save path as minimal source patches.
   They preserve untouched whitespace, property order, escape spelling, numeric
   lexemes, and trailing-newline state; no whole-document serializer is a save
@@ -180,11 +202,11 @@ text reads and manifest-known derived-text reads also reject responses above
 
 | Role | Stable entry points |
 |---|---|
-| Path Interface | `FilesystemPathModule` in `server/filesystem-path.ts` and in-folder policy in `server/folder-relative-path.ts` |
+| Path Interface | `FilesystemPathModule.resolveUnderAsync` in `server/filesystem-path.ts`, `resolveSafeAsync` in `server/file-paths.ts`, and in-folder policy in `server/folder-relative-path.ts` |
 | Save Interface | `validateEditableFileWrite`, `upsertSavedFile`, and `saveFileContent` in `server/file-save.ts` |
 | Active-folder Adapter | `server/routes/files.ts`, `server/routes/file-mutations.ts`, and `server/routes/upload.ts` |
 | Source Mutation Module | `server/library-file-mutations.ts` |
-| Link Cascade Module | `server/links.ts` (`planRenameLinks`, `cascadeRenameLinks`, `applyRenamePlan`) |
+| Link Cascade Module | `server/links.ts` (`planRenameLinksAsync`, `applyRenamePlanAsync`, plus sync background/test compatibility entry points) |
 | Library/MCP Adapter | `LibraryOperations` and MCP/HTTP transport adapters |
 | Publication Module | `server/import-publication.ts` |
 | Lifecycle Adapter | conversion cancellation, cleanup, and reconcile Modules in [Data Lifecycle](data-lifecycle.md) |

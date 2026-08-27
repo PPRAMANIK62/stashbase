@@ -22,10 +22,10 @@ export interface SessionHistory {
 }
 
 /**
- * Both agents' sessions for one history scope, newest first, with the
+ * Every Agent's sessions for one history scope, newest first, with the
  * rename and delete commands for a row.
  *
- * Each agent stores its own history, so a listing is two independent
+ * Each Agent stores its own history, so listings are independent
  * requests merged into one ordering. They are fetched together and a
  * failure is per agent: one agent being unreachable must leave the other's
  * sessions listed rather than blank the menu.
@@ -42,8 +42,8 @@ export function useSessionHistory(scope: HistoryScope): SessionHistory {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      // Both agents fetch in parallel; one failing must not blank the
-      // other's history — the failed agent surfaces as a quiet inline note.
+      // Agents fetch in parallel; one failing must not blank the others'
+      // history — the failed Agent surfaces as a quiet inline note.
       const lists = await Promise.all(AGENTS.map(async (agent) => ({
         agent: agent.id,
         sessions: await api.listSessions(agent.id, historyRequestParams(scope)).catch(() => null),

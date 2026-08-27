@@ -133,6 +133,10 @@ test('retired folder metadata does not escape library APIs or survive a membersh
         path: ${JSON.stringify(member)},
         openedAt: ${JSON.stringify(openedAt)},
       }]);
+      assert.deepEqual(await folder.getRecentFoldersAsync(), [{
+        path: ${JSON.stringify(member)},
+        openedAt: ${JSON.stringify(openedAt)},
+      }]);
       assert.deepEqual(Object.keys(library.getLibraryInfo().folders[0]).sort(), ['name', 'path', 'provider']);
       assert.equal(folder.setRecentFavorite(${JSON.stringify(member)}, true), true);
       assert.deepEqual(JSON.parse(fs.readFileSync(${JSON.stringify(configPath)}, 'utf8')).recentFolders, [{
@@ -290,15 +294,52 @@ test('an in-progress library removal blocks reopen and descendant registration',
       const assert = (await import('node:assert/strict')).default;
       const path = await import('node:path');
       const folder = await import('./server/folder.ts');
-      folder.registerLibraryFolder(${JSON.stringify(member)});
-      const finish = folder.beginLibraryFolderRemoval(${JSON.stringify(member)});
+      await folder.registerLibraryFolderAsync(${JSON.stringify(member)});
+      const finish = await folder.beginLibraryFolderRemovalAsync(${JSON.stringify(member)});
       try {
         assert.throws(() => folder.setCurrentFolder(${JSON.stringify(member)}), (error) => error.code === 'FOLDER_REMOVING');
         assert.throws(() => folder.registerLibraryFolder(path.join(${JSON.stringify(member)}, 'child')), (error) => error.code === 'FOLDER_REMOVING');
+        await assert.rejects(
+          folder.registerLibraryFolderAsync(path.join(${JSON.stringify(member)}, 'async-child')),
+          (error) => error.code === 'FOLDER_REMOVING',
+        );
       } finally {
         finish();
       }
       folder.setCurrentFolder(${JSON.stringify(member)});
+    `);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('concurrent async registrations preserve membership and unrelated settings', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-folder-registration-race-'));
+  const first = path.join(home, 'first');
+  const second = path.join(home, 'second');
+  fs.mkdirSync(first);
+  fs.mkdirSync(second);
+  try {
+    const result = runConfigMutation(home, `
+      const assert = (await import('node:assert/strict')).default;
+      const folder = await import('./server/folder.ts');
+      const { filesystemPath } = await import('./server/filesystem-path.ts');
+      const registrations = Promise.all([
+        folder.registerLibraryFolderAsync(${JSON.stringify(first)}),
+        folder.registerLibraryFolderAsync(${JSON.stringify(second)}),
+      ]);
+      queueMicrotask(() => config.setCapturePreferences({ clipboardImageImport: true }));
+      await registrations;
+      const saved = config.readAppConfigStrict();
+      assert.equal(saved.capture?.clipboardImageImport, true);
+      assert.deepEqual(
+        new Set(saved.recentFolders?.map((entry) => entry.path)),
+        new Set([
+          filesystemPath.absolute(${JSON.stringify(first)}),
+          filesystemPath.absolute(${JSON.stringify(second)}),
+        ]),
+      );
     `);
     assert.equal(result.status, 0, result.stderr);
   } finally {

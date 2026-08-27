@@ -49,6 +49,41 @@ test('JSON indexing keeps raw malformed text, extension, source hash, and visibl
   assert.equal(prepared.fileHash, bytesToHex(blake3(new TextEncoder().encode(content))));
 });
 
+test('TXT indexing keeps literal UTF-8 text, extension, source hash, and visible identity', () => {
+  const content = '\uFEFFheading-like # source\r\n[link](note.md)\r\n';
+  const prepared = prepareForIndex('/library/README.TXT', content);
+  assert.equal(prepared.text, content);
+  assert.equal(prepared.ext, '.txt');
+  assert.equal(prepared.fileHash, bytesToHex(blake3(new TextEncoder().encode(content))));
+});
+
+test('TXT reconcile removes a stale row instead of indexing invalid UTF-8', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-invalid-txt-reconcile-'));
+  try {
+    const invalid = path.join(root, 'broken.txt');
+    fs.writeFileSync(invalid, Buffer.from([0x6e, 0x65, 0x80, 0x64, 0x6c, 0x65]));
+    const upserts: string[] = [];
+    const deletes: string[] = [];
+    const indexer = {
+      syncDiff: async () => ({ added: [], modified: [invalid], deleted: [], renamed: [] }),
+      listFiles: async () => ({ [invalid]: 'stale-hash' }),
+      upsertFile: async (source: string) => { upserts.push(source); return 1; },
+      deleteFile: async (source: string) => { deletes.push(source); },
+      renameFile: async () => 1,
+      status: async () => ({ pending: [], total: 0, indexed: 0, pendingCount: 0, orphanedCount: 0, orphaned: [], upToDate: true }),
+    } as unknown as Indexer;
+
+    const result = await syncIndex(indexer, root, { semanticEnabled: true });
+
+    assert.deepEqual(upserts, []);
+    assert.deepEqual(deletes, [invalid]);
+    assert.deepEqual(result.modified, []);
+    assert.deepEqual(result.failed, [{ name: 'broken.txt', error: 'source text could not be decoded safely' }]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('JSON reconcile covers add, modify, delete, and hash-reused rename under source paths', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-json-reconcile-'));
   try {

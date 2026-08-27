@@ -14,7 +14,14 @@
  */
 import { MfsIndexer } from './indexer.mfs.ts';
 import type { Indexer, EmbedderRuntimeConfig } from './indexer.ts';
-import { getCurrentFolder, getRecentFolders, onClose, onSwitch, runWithWindowId } from './folder.ts';
+import {
+  getCurrentFolder,
+  getRecentFolders,
+  isLibraryFolderRemovalInProgress,
+  onClose,
+  onSwitch,
+  runWithWindowId,
+} from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { getEmbeddingSource, getEmbedderConfig } from './app-config.ts';
 import { isEmbeddingAvailable } from './embedding-availability.ts';
@@ -76,7 +83,10 @@ function shouldContinueFolderSync(
 export async function deleteFolderRuntimeState(folderRoot: string): Promise<void> {
   const root = filesystemPath.identity(folderRoot);
   indexWarnings.delete(root);
-  folderSyncGeneration.delete(root);
+  // Never reset this to zero while an older reconcile can still observe it:
+  // doing so makes a generation-0 task look current again. Retaining the
+  // monotonic value is cheap and lets a later re-add start from fresh truth.
+  folderSyncGeneration.set(root, currentFolderSyncGeneration(folderRoot) + 1);
   clearSemanticIndexingDecision(folderRoot);
 }
 
@@ -324,6 +334,27 @@ function syncTouchedVisibleTree(result: SyncResult): boolean {
 
 const folderSyncQueues = new Map<string, Promise<unknown>>();
 
+/** Stop queued/running reconcile before removal begins index cleanup. The
+ * Python daemon handles one request at a time, and a large `scan_diff` cannot
+ * observe Node's cooperative generation flag while it is walking disk. Close
+ * the daemon to reject that request immediately; the next cleanup operation
+ * respawns it and replays bindings from durable Node-owned state. */
+export async function cancelFolderSyncsAndWait(
+  folderRoot: string,
+  interruptIndexer: () => Promise<void> = () => indexer.close(),
+): Promise<void> {
+  const key = filesystemPath.identity(folderRoot);
+  folderSyncGeneration.set(key, currentFolderSyncGeneration(folderRoot) + 1);
+  const pending = folderSyncQueues.get(key);
+  if (!pending) return;
+  try {
+    await interruptIndexer();
+  } catch (err: unknown) {
+    log.warn(`folder remove: indexer interrupt failed for ${folderRoot}: ${errorMessage(err)}`);
+  }
+  await pending?.catch(() => undefined);
+}
+
 export function enqueueFolderSyncOperation<T>(queueKey: string, operation: () => Promise<T>): Promise<T> {
   const prev = folderSyncQueues.get(queueKey) ?? Promise.resolve();
   const next = prev.catch(() => undefined).then(operation);
@@ -339,8 +370,15 @@ export async function syncFolderNow(
   opts: { reason?: string; shouldContinue?: () => boolean; forceEmbedding?: boolean; clearDecisionAtStart?: boolean } = {},
 ): Promise<SyncResult> {
   const syncFolderRoot = filesystemPath.absolute(folderRoot);
+  if (isLibraryFolderRemovalInProgress(syncFolderRoot)) {
+    return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+  }
   const queueKey = filesystemPath.identity(syncFolderRoot);
-  return enqueueFolderSyncOperation(queueKey, () => runFolderSyncOperation(syncFolderRoot, opts));
+  const scheduledGeneration = currentFolderSyncGeneration(syncFolderRoot);
+  return enqueueFolderSyncOperation(
+    queueKey,
+    () => runFolderSyncOperation(syncFolderRoot, opts, undefined, scheduledGeneration),
+  );
 }
 
 export async function runFolderSyncOperation(
@@ -352,12 +390,15 @@ export async function runFolderSyncOperation(
     sync: typeof syncIndex;
     semanticEnabled?: boolean;
   } = { indexer, bind: bindIndexerForFolder, sync: syncIndex },
+  scheduledGeneration = currentFolderSyncGeneration(folderRoot),
 ): Promise<SyncResult> {
-  const syncGeneration = currentFolderSyncGeneration(folderRoot);
-  const shouldContinue = () => shouldContinueFolderSync(folderRoot, syncGeneration, opts.shouldContinue);
+  const shouldContinue = () => shouldContinueFolderSync(folderRoot, scheduledGeneration, opts.shouldContinue);
   try {
     if (opts.clearDecisionAtStart && !clearSemanticIndexingDecision(folderRoot)) {
       throw new Error('semantic indexing decision could not be cleared');
+    }
+    if (!shouldContinue()) {
+      return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
     }
     await deps.bind(folderRoot);
     if (!shouldContinue()) {
@@ -379,6 +420,12 @@ export async function runFolderSyncOperation(
     }
     return result;
   } catch (err: unknown) {
+    // Folder removal closes the single-threaded daemon to interrupt a long
+    // disk scan. The rejected request belongs to an invalidated generation,
+    // so surface normal cancellation instead of a stale warning/toast.
+    if (!shouldContinue()) {
+      return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+    }
     recordIndexWarning(folderRoot, errorMessage(err));
     throw err;
   }

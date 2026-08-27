@@ -150,6 +150,7 @@ export function RequireApiKeyModal({
       {view === 'signin' && (
         <div ref={choiceRef} tabIndex={-1} className="outline-none">
           <AccountSignInForm
+            purpose="embedding"
             onBack={() => setView('choice')}
             // The signed-in account carries no backfill flag: see the Known
             // Gap on `HostedAccountActivation` in `shared/account.ts`.

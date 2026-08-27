@@ -10,7 +10,8 @@ import { randomUUID } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { indexableFileSizeError } from './indexable.ts';
+import { indexableFileSizeErrorAsync } from './indexable.ts';
+import { decodeDirectTextBytes } from './text-decoding.ts';
 
 const PUBLICATION_RECOVERY_SUFFIX = '.publication.json';
 
@@ -48,9 +49,9 @@ export async function publishStagedImport(input: {
     writable: true,
     allowQuotes: true,
   });
-  const target = filesystemPath.resolveUnder(input.folderRoot, input.relativePath, { access: 'creatable' });
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  filesystemPath.resolveUnder(input.folderRoot, input.relativePath, { access: 'creatable' });
+  const target = await filesystemPath.resolveUnderAsync(input.folderRoot, input.relativePath, { access: 'creatable' });
+  await fs.promises.mkdir(path.dirname(target), { recursive: true });
+  await filesystemPath.resolveUnderAsync(input.folderRoot, input.relativePath, { access: 'creatable' });
   const tmp = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${randomUUID()}.tmp`);
   try {
     // The OS staging root can be on another device, so first finish the write
@@ -68,17 +69,20 @@ export async function publishStagedImport(input: {
     // preferred no-clobber primitive: it atomically exposes the completed inode
     // and fails with EEXIST instead of destroying user bytes.
     await publishNoClobber(tmp, target, input.stagedPath, input.signal);
-    try { fs.rmSync(tmp, { force: true }); } catch { /* hidden duplicate; target is safely published */ }
+    try { await fs.promises.rm(tmp, { force: true }); } catch { /* hidden duplicate; target is safely published */ }
   } catch (err) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort partial cleanup */ }
+    try { await fs.promises.rm(tmp, { force: true }); } catch { /* best-effort partial cleanup */ }
     throw err;
   }
 
   if (!input.captureIndexText) return { path: target };
-  const indexSkipReason = indexableFileSizeError(target);
+  const indexSkipReason = await indexableFileSizeErrorAsync(target);
   if (indexSkipReason) return { path: target, indexSkipReason };
   try {
-    return { path: target, indexText: await fs.promises.readFile(target, 'utf8') };
+    return {
+      path: target,
+      indexText: decodeDirectTextBytes(input.relativePath, await fs.promises.readFile(target)),
+    };
   } catch (err: unknown) {
     // Publication already succeeded. An indexing-only read failure must not
     // tell the user that the import failed and invite a duplicate retry.

@@ -13,7 +13,7 @@ export interface QueuedPrompt {
   attachments: Attachment[];
   titleHint?: string;
   skill?: string;
-  status: 'waiting' | 'steering' | 'steered';
+  status: 'waiting' | 'steering' | 'steered' | 'cancelled';
 }
 
 interface PromptToSend {
@@ -92,6 +92,13 @@ export function useAgentPromptQueue({
 
   function clearQueue() {
     mutateQueue(() => []);
+  }
+
+  /** Keep every queued follow-up visible as user-authored history when its
+   * folder scope is retired, but make it inert so no later transition can
+   * send it into another session. */
+  function retireQueue() {
+    mutateQueue((queue) => queue.map((prompt) => ({ ...prompt, status: 'cancelled' })));
   }
 
   function setQueuedPromptStatus(promptId: string, status: QueuedPrompt['status']) {
@@ -256,6 +263,7 @@ export function useAgentPromptQueue({
   return {
     queuedTurns,
     clearQueue,
+    retireQueue,
     setQueuedPromptStatus,
     runNextQueuedPrompt,
     steerQueuedPrompt,

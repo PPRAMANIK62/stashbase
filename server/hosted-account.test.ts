@@ -83,6 +83,24 @@ test('a data-free native return focuses the window attached to the browser retur
   assert.equal(output.second.appReturned, undefined);
 });
 
+test('OAuth flows retain whether sign-in may activate hosted AI Index', () => {
+  const result = runIsolated(`
+    const account = await import('./server/hosted-account.ts');
+    const identity = account.beginHostedOAuth('google', 'http://127.0.0.1:8090');
+    const embedding = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', undefined, 'embedding');
+    process.stdout.write(JSON.stringify({
+      identity: { start: identity, purpose: account.hostedOAuthPurpose(identity.flowId) },
+      embedding: { start: embedding, purpose: account.hostedOAuthPurpose(embedding.flowId) },
+    }));
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.identity.start.purpose, 'account');
+  assert.equal(output.identity.purpose, 'account');
+  assert.equal(output.embedding.start.purpose, 'embedding');
+  assert.equal(output.embedding.purpose, 'embedding');
+});
+
 function runIsolated(source: string) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-hosted-account-test-'));
   try {
@@ -119,6 +137,11 @@ test('OAuth PKCE session persists locally and authenticates quota requests', () 
         plan: 'free', grantedTokens: 1000000, usedTokens: 12, reservedTokens: 0,
         remainingTokens: 999988, periodStartedAt: '2026-08-01T00:00:00.000Z', periodEndsAt: '2026-09-01T00:00:00.000Z',
       });
+      if (String(url).endsWith('/v1/agent/usage')) return Response.json({
+        profile: 'stashbase-agent-default', remainingPercent: 75,
+        inputTokens: 100, outputTokens: 25, cacheReadTokens: 10,
+        windowStartedAt: '2026-08-01T00:00:00.000Z', windowEndsAt: '2026-08-08T00:00:00.000Z',
+      });
       throw new Error('unexpected URL ' + url);
     };
     const account = await import('./server/hosted-account.ts');
@@ -129,8 +152,9 @@ test('OAuth PKCE session persists locally and authenticates quota requests', () 
     account.noteHostedOAuthAppReturn();
     config.setEmbeddingSource('stashbase-account');
     const quota = await account.fetchHostedQuota();
+    const agentAllowance = await account.fetchHostedAgentAllowance();
     const state = await account.hostedAccountState();
-    process.stdout.write(JSON.stringify({ started, status: account.hostedOAuthStatus(started.flowId), calls, quota, state, session: config.getHostedAccountSession(), source: config.getEmbeddingSource() }));
+    process.stdout.write(JSON.stringify({ started, status: account.hostedOAuthStatus(started.flowId), calls, quota, agentAllowance, state, session: config.getHostedAccountSession(), source: config.getEmbeddingSource() }));
   `);
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
@@ -146,7 +170,9 @@ test('OAuth PKCE session persists locally and authenticates quota requests', () 
   assert.equal(output.status.state, 'complete');
   assert.equal(output.status.appReturned, true);
   assert.equal(output.calls[1].authorization, 'Bearer access-1');
+  assert.equal(output.calls[2].authorization, 'Bearer access-1');
   assert.equal(output.quota.remainingTokens, 999_988);
+  assert.equal(output.agentAllowance.remainingPercent, 75);
   assert.equal(output.session.refreshToken, 'refresh-1');
   assert.equal(output.source, 'stashbase-account');
   assert.equal(output.state.email, 'person@example.com');

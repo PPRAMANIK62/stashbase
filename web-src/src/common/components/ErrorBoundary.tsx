@@ -3,6 +3,7 @@ import {
   lazy,
   type ComponentType,
   type ErrorInfo,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import { electronBridge, type ElectronBridge } from '@/common/lib/electronBridge';
@@ -158,6 +159,32 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, State> {
 
   reset = () => { void reloadForRecovery(); };
 
+  /** Stable callback ref (not an inline arrow, which would re-fire per
+   *  render): pulls focus onto the crash dialog the moment it mounts, so
+   *  keyboard users land on the recovery surface instead of whatever
+   *  focused control the crash left behind it. Hand-rolled like the
+   *  buttons below — the crash path must not lean on hooks or the
+   *  primitive stack that may have just thrown. */
+  focusDialog = (node: HTMLDivElement | null) => { node?.focus(); };
+
+  /** Minimal Tab loop keeping `aria-modal` honest: the app behind the veil
+   *  is unrecoverable until reload, so Tab must not wander into it. */
+  trapTab = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab') return;
+    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button'));
+    if (controls.length === 0) return;
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    const current = document.activeElement;
+    if (event.shiftKey && (current === first || current === event.currentTarget)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && current === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   copyDetails = async () => {
     if (!this.state.error) return;
     const details = [
@@ -176,12 +203,22 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, State> {
     if (!this.state.error) return this.props.children;
     return (
       <div className="fixed inset-0 z-modal grid place-items-center bg-veil p-4">
-        <StatusMessage
-          tone="error"
-          className="grid max-h-overlay-window w-overlay-xl gap-3 overflow-hidden rounded-xl bg-popover p-5 text-popover-foreground shadow-elevation"
+        {/* The card is a dialog, not one big `role="alert"`: wrapping the
+          * whole card in an assertive live region made a screen reader
+          * read the entire stack trace in one breath. The dialog takes
+          * focus on mount and only the short message line stays an alert
+          * for the announcement. */}
+        <div
+          ref={this.focusDialog}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="error-boundary-title"
+          tabIndex={-1}
+          className="grid max-h-overlay-window w-overlay-xl gap-3 overflow-hidden rounded-xl bg-popover p-5 text-popover-foreground shadow-elevation outline-none"
+          onKeyDown={this.trapTab}
         >
-          <h1 className="m-0 text-base font-semibold">Something went wrong</h1>
-          <div>{this.state.error.message || 'Unknown error'}</div>
+          <h1 id="error-boundary-title" className="m-0 text-base font-semibold">Something went wrong</h1>
+          <StatusMessage tone="error">{this.state.error.message || 'Unknown error'}</StatusMessage>
           <pre className="max-h-overlay-sm overflow-auto rounded-md bg-pane p-3 text-xs whitespace-pre-wrap">
             {this.state.error.stack ?? '(no stack)'}
           </pre>
@@ -189,7 +226,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, State> {
             <button type="button" className={ERROR_BUTTON_PRIMARY_CLASS} onClick={this.reset}>Reload</button>
             <button type="button" className={ERROR_BUTTON_OUTLINE_CLASS} onClick={() => void this.copyDetails()}>Copy details</button>
           </div>
-        </StatusMessage>
+        </div>
       </div>
     );
   }

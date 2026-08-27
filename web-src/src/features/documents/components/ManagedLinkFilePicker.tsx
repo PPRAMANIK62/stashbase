@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { rankQuickOpen } from '@/common/lib/quickOpen';
+import { useFocusTrap } from '@/common/hooks/useFocusTrap';
 import { usePickerListNav } from '@/common/hooks/usePickerListNav';
 import { useWorkspace } from '@/store/contexts/AppContext';
 import {
@@ -40,13 +41,18 @@ export default function ManagedLinkFilePicker({
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // Makes `aria-modal` true rather than aspirational: Tab stays on the
+  // query field and cancelling restores focus to the editor that opened
+  // the picker.
+  const panelRef = useFocusTrap<HTMLDivElement>();
+
   return (
     <div
       className={cn('link-file-picker-veil quick-open-blocking', PICKER_VEIL_CLASS)}
       role="presentation"
       onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}
     >
-      <div className={pickerPanelClass('wide')} role="dialog" aria-label="Link to file">
+      <div ref={panelRef} className={pickerPanelClass('wide')} role="dialog" aria-modal="true" aria-label="Link to file">
         {/* Deliberately NOT the `Input` primitive — the same palette-field
           * exemption as Quick Open and library search: `Input` is the box
           * role, and this is a seam across a panel that is itself the box
@@ -57,6 +63,7 @@ export default function ManagedLinkFilePicker({
         <input
           ref={inputRef}
           className="w-full border-0 border-b border-solid border-border bg-transparent px-3.5 py-3.5 [font-family:inherit] text-xl text-foreground outline-0 placeholder:text-placeholder"
+          aria-label="Link to file"
           role="combobox"
           aria-autocomplete="list"
           aria-controls="link-file-picker-results"

@@ -8,16 +8,16 @@ import { Button } from '@/common/components/ui/button';
 export function RemoveFolderModal({
   name,
   path,
-  parentLabel,
+  pathLabel,
   removing,
   onCancel,
   onConfirm,
 }: {
   name: string;
   path: string;
-  /** Home-shortened parent directory (`~/…`), shown so same-named
-   *  folders in different places read apart. */
-  parentLabel: string;
+  /** Complete home-shortened member path (`~/…`), shown so the retained
+   *  on-disk location is explicit and same-named folders read apart. */
+  pathLabel: string;
   removing: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -40,7 +40,7 @@ export function RemoveFolderModal({
         * as an input field; no extra top margin — the shell's description
         * rhythm (mb-3.5) already spaces it. */}
       <div className="w-fit max-w-full truncate rounded-xs bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground" title={path}>
-        {parentLabel}
+        {pathLabel}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button

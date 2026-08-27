@@ -20,7 +20,9 @@ user-managed results.
 - Exact text search works without AI Index over the direct source or current
   prepared representation declared by the
   [Documents format matrix](documents.md#format-capability-matrix), including
-  raw JSON and current prepared text. Whole-token search applies its result cap
+  raw JSON, valid UTF-8 plain text, and current prepared text. Plain-text files
+  with unsupported encodings are excluded from exact and semantic evidence
+  rather than decoded lossily. Whole-token search applies its result cap
   after token filtering, so substring-heavy files do not hide later eligible
   evidence.
 - AI Index provides meaning-based retrieval when an embedding source is
@@ -51,6 +53,9 @@ user-managed results.
   skip is local to the current window context and remains reversible. The
   observable setup sequence lives in
   [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-value).
+- AI Index runtime refreshes after account, quota, or key changes remain
+  background work. Overlapping refresh and folder-removal activity does not
+  interrupt local browsing or surface native process errors as user actions.
 - Hosted indexing and meaning-based queries draw from one token allowance.
   The account menu and AI Index Settings show the provider display name and
   avatar when available, retain the full email for account identification, and

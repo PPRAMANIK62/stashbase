@@ -4,11 +4,13 @@ import { getConversionSchedulerSnapshot, getInFlightConversions } from './conver
 import { clearRecord, listPreparationProblems, readProgress, type ConversionProgress } from './conversion-status.ts';
 import { blockedAudioSourcesForFolder } from './audio-transcription.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import { isLibraryFolderRemovalInProgress } from './folder.ts';
 import { hasNoExtractableText, shouldIndexFilePath } from './indexable.ts';
 import { displayPathForHit } from './pdf.ts';
 import { getFsChangeCounter } from './watcher.ts';
 import { getIndexWarning, getSemanticIndexingState, indexer } from './state.ts';
 import type { IndexStatus, PreparationFailure, SemanticIndexingState } from '../shared/index-status.ts';
+import type { IndexerStatus } from './indexer.ts';
 
 /** The `/api/index-status` wire contract lives in `shared/index-status.ts` so
  * the renderer can import it without pulling this module's server-only graph
@@ -41,9 +43,39 @@ export function semanticIndexingState(input: {
   return 'ready';
 }
 
+const RETIRING_FOLDER_INDEX_STATUS: IndexerStatus = {
+  total: 0,
+  indexed: 0,
+  pendingCount: 0,
+  pending: [],
+  orphanedCount: 0,
+  orphaned: [],
+  upToDate: false,
+  indexReady: false,
+};
+
+/** Status polls can already be queued behind a long daemon scan when folder
+ * removal closes that daemon to interrupt the scan. During that short
+ * retirement window, return a neutral transitional snapshot instead of
+ * turning the expected rejected daemon call into a renderer-visible 500. */
+export async function readIndexerStatusForFolder(
+  folderRoot: string,
+  readStatus: () => Promise<IndexerStatus> = () => indexer.status(folderRoot),
+): Promise<IndexerStatus> {
+  if (isLibraryFolderRemovalInProgress(folderRoot)) {
+    return { ...RETIRING_FOLDER_INDEX_STATUS };
+  }
+  try {
+    return await readStatus();
+  } catch (err: unknown) {
+    if (!isLibraryFolderRemovalInProgress(folderRoot)) throw err;
+    return { ...RETIRING_FOLDER_INDEX_STATUS };
+  }
+}
+
 export async function buildIndexStatus(folderRoot: string): Promise<IndexStatus> {
   const curRoot = filesystemPath.absolute(folderRoot);
-  const status = await indexer.status(curRoot);
+  const status = await readIndexerStatusForFolder(curRoot);
   const treeVersion = getFsChangeCounter();
   const availability = embeddingAvailability();
   const semanticEnabled = availability.configured;

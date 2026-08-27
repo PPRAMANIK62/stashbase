@@ -36,7 +36,8 @@ import { filesystemPath } from './filesystem-path.ts';
 import { getEmbeddingSource, getHostedAccountSession, migrateLegacyEmbedderConfig } from './app-config.ts';
 import { isEmbeddingAvailable } from './embedding-availability.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from './state.ts';
-import { reapOrphanDaemons } from './stale-lock.ts';
+import { reapOrphanDaemons, reclaimStaleServerPort } from './stale-lock.ts';
+import { startParentWatchdog } from './parent-watchdog.ts';
 import { logger } from './log.ts';
 import { cancelAllConversions, setDerivedNoteIndexer } from './conversion.ts';
 import { cancelAllTranscriptionModelDownloads } from './transcription-models.ts';
@@ -81,6 +82,7 @@ import {
 import { createClientErrorHandler } from './client-error.ts';
 import { startHostedEmbeddingBroker, stopHostedEmbeddingBroker } from './hosted-embedding-broker.ts';
 import { hostedAccountState, setHostedQuotaAvailableHandler } from './hosted-account.ts';
+import { stopOpenCodeRuntime } from './opencode-runtime.ts';
 
 const log = logger('server');
 
@@ -424,7 +426,33 @@ const server = app.listen(PORT, '127.0.0.1', () => {
 // a clean message + exit code 1 instead of an unhandled `Error: listen
 // EADDRINUSE` stack trace, which Electron presents as "server quit
 // unexpectedly" with no useful context.
+//
+// Before giving up on EADDRINUSE, try once to reclaim the port from an
+// orphaned sibling server — the leftover of an Electron owner that died
+// without completing its kill ladder. A wedged orphan never answers
+// `/api/health` and ignores SIGTERM, so without this the app cannot launch
+// at all until the user hand-kills the process. Only a verified sibling
+// (same entry file, parent gone) is reclaimed; anything else falls through
+// to the existing guidance.
+let portReclaimAttempted = false;
 server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE' && !portReclaimAttempted) {
+    portReclaimAttempted = true;
+    let reclaimed = 0;
+    try {
+      reclaimed = reclaimStaleServerPort(PORT, fileURLToPath(import.meta.url));
+    } catch (reclaimErr: unknown) {
+      log.warn(`stale server reclaim failed: ${reclaimErr instanceof Error ? reclaimErr.message : String(reclaimErr)}`);
+    }
+    if (reclaimed > 0) {
+      log.warn(`reclaimed port ${PORT} from ${reclaimed} orphaned server(s) — retrying bind`);
+      // SIGKILL frees a LISTEN socket immediately; the delay just gives the
+      // kernel a beat. The original `app.listen` callback is still pending
+      // on 'listening', so a successful rebind boots normally.
+      setTimeout(() => server.listen(PORT, '127.0.0.1'), 400);
+      return;
+    }
+  }
   if (err.code === 'EADDRINUSE') {
     log.warn(`port ${PORT} is already in use — is another StashBase running? Quit it (or pass --port=N to use a different port).`);
   } else if (err.code === 'EACCES') {
@@ -557,6 +585,7 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
 onClose((_oldRoot, windowId) => {
   stopAgentRuntime('claude', windowId);
   stopAgentRuntime('codex', windowId);
+  stopAgentRuntime('stashbase', windowId);
 });
 // Hook WebSocket upgrades. `/ws/agent` and `/ws/codex` go to our
 // structured chat bridges; everything else (Vite HMR in dev) falls
@@ -610,6 +639,7 @@ async function shutdown(reason: string): Promise<void> {
   try { server.close(); } catch { /* already gone */ }
   try { stopAgentRuntime('claude'); } catch { /* swallow */ }
   try { stopAgentRuntime('codex'); } catch { /* swallow */ }
+  try { stopAgentRuntime('stashbase'); } catch { /* swallow */ }
   // Hard ceiling: conversion cancellation may spend up to 2.5 s waiting for
   // extractor process groups to exit, and the daemon close ladder can spend
   // another ~3.5 s. Exit anyway if either side wedges.
@@ -618,6 +648,7 @@ async function shutdown(reason: string): Promise<void> {
     await runShutdownCleanup({
       closeMcp: () => mcpHttpService.close(),
       cancelAgentInstalls: cancelAgentRuntimeInstalls,
+      closeBundledAgent: stopOpenCodeRuntime,
       closeHostedBroker: stopHostedEmbeddingBroker,
       cancelModelDownloads: cancelAllTranscriptionModelDownloads,
       cancelConversions: cancelAllConversions,
@@ -644,3 +675,17 @@ async function shutdown(reason: string): Promise<void> {
 process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
 process.on('SIGINT', () => { void shutdown('SIGINT'); });
 process.on('SIGHUP', () => { void shutdown('SIGHUP'); });
+
+// An Electron-owned server must not outlive its owner. The `will-quit` kill
+// ladder lives in the parent, so it protects nothing when Electron itself
+// dies uncleanly — the orphan then keeps the daemon, the Milvus flock, and
+// the port. The shutdown token env is the "Electron owns me" marker; a
+// standalone `node server` run stays exempt.
+if (process.env.STASHBASE_SHUTDOWN_TOKEN) {
+  startParentWatchdog({
+    onOrphaned: () => {
+      log.warn('parent process is gone — shutting down orphaned server');
+      void shutdown('parent exited');
+    },
+  });
+}

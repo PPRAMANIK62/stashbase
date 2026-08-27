@@ -78,6 +78,13 @@ export interface FileBody {
   format: ViewerFormat;
   content: string;
   version?: string;
+  /** In-band source-open failure used when the source identity is valid but
+   * its bytes cannot safely become editor text. Such bodies are read-only and
+   * must never be persisted back to disk. */
+  error?: {
+    code: 'UNSUPPORTED_ENCODING';
+    message: string;
+  };
 }
 
 /** Upload reports per file rather than failing the batch: one rejected

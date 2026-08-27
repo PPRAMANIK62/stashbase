@@ -36,6 +36,25 @@ test('keyword search includes malformed case-variant JSON and applies data befor
   }
 });
 
+test('keyword search includes decodable case-variant TXT and excludes invalid UTF-8 TXT', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-txt-search-'));
+  try {
+    fs.writeFileSync(path.join(root, 'valid.TXT'), 'literal needle in plain text');
+    fs.writeFileSync(path.join(root, 'broken.txt'), Buffer.from([0x6e, 0x65, 0x65, 0x64, 0x6c, 0x65, 0x80]));
+
+    const result = await runKeywordSearch('needle', root, {
+      caseStrict: false,
+      wholeWord: false,
+      types: ['notes'],
+    });
+
+    assert.deepEqual(result.files.map((file) => file.path), ['valid.TXT']);
+    assert.equal(result.totalMatches, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('whole-word keyword search finds a match past the per-file substring cap', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-whole-word-cap-'));
   try {
@@ -142,7 +161,7 @@ test('packaged ripgrep path prefers app.asar.unpacked when present', () => {
 
 test('search type categories map to source extensions', () => {
   assert.deepEqual(searchExtensionsForTypes(['pdf']), ['.pdf']);
-  assert.deepEqual(searchExtensionsForTypes(['notes']), ['.md', '.markdown', '.html', '.htm']);
+  assert.deepEqual(searchExtensionsForTypes(['notes']), ['.md', '.markdown', '.html', '.htm', '.txt']);
   assert.deepEqual(searchExtensionsForTypes(['data']), ['.json']);
   assert.deepEqual(searchExtensionsForTypes(['docx', 'docx']), ['.docx']);
   assert.deepEqual(
@@ -165,6 +184,7 @@ test('type membership checks extensions case-insensitively', () => {
   assert.equal(matchesSearchTypes('clip.MOV', ['audio']), true);
   assert.equal(matchesSearchTypes('meeting.m4a', ['docx']), false);
   assert.equal(matchesSearchTypes('note.md', []), true);
+  assert.equal(matchesSearchTypes('notes/README.TXT', ['notes']), true);
   assert.equal(matchesSearchTypes('nested/Data.JSON', ['data']), true);
   assert.equal(matchesSearchTypes('nested/Data.JSON', ['notes']), false);
 });

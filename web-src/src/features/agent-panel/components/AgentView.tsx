@@ -1,8 +1,9 @@
 /**
  * Structured chat view for an agent tab — the VSCode-extension-style
- * panel. Both Claude (Agent SDK) and Codex (app-server) connect through the
- * Shared Agent Contract at `/ws/agent`; their adapters live in server.
- * Both render the event stream as ordered blocks:
+ * panel. StashBase Agent (OpenCode), Claude (Agent SDK), and Codex
+ * (app-server) connect through the Shared Agent Contract at `/ws/agent`;
+ * their adapters live in server.
+ * All adapters render the event stream as ordered blocks:
  * user / assistant bubbles, collapsible thinking, tool cards with
  * inline diffs + approve/reject, and error notices. A composer at the
  * bottom sends prompts, stops a running turn, takes dropped files, and
@@ -28,17 +29,20 @@ import { MessageList } from '@/features/agent-panel/components/AgentMessages';
 import { useAgentAttachments } from '@/features/agent-panel/hooks/useAgentAttachments';
 import { useAgentSession } from '@/features/agent-panel/hooks/useAgentSession';
 import { openSettings } from '@/common/lib/settingsTrigger';
+import type { LibraryScope } from '@/common/lib/libraryScope';
 
 export function AgentView({
   active,
   id,
   title,
   agent = 'claude',
+  initialScope,
 }: {
   active: boolean;
   id: string;
   title: string;
   agent?: AgentKind;
+  initialScope?: LibraryScope;
 }) {
   const workspace = useWorkspace();
   const chat = useChat();
@@ -61,6 +65,7 @@ export function AgentView({
     attachmentsRef: attach.attachmentsRef,
     clearComposerAttachments: attach.clearComposerAttachments,
     discardAttachmentsForReset: attach.discardAttachmentsForReset,
+    initialScope,
   });
   // The session groups its state by owner; destructure the namespaces once
   // so the JSX below reads as composition rather than prop threading.
@@ -75,6 +80,7 @@ export function AgentView({
   // reaches the window-level `useGlobalDragDrop` listener, which would
   // otherwise *also* fire and import the file into the folder.
   function onPanelDragOver(e: React.DragEvent) {
+    if (!runtime.capabilities.attachments) return;
     const kinds = dragPayloadKinds(e.dataTransfer);
     if (!acceptsAgentContextDrop(e.dataTransfer)) return;
     e.preventDefault();
@@ -90,6 +96,7 @@ export function AgentView({
     if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false);
   }
   function onPanelDrop(e: React.DragEvent) {
+    if (!runtime.capabilities.attachments) return;
     if (!acceptsAgentContextDrop(e.dataTransfer)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -150,6 +157,7 @@ export function AgentView({
           onCheck={() => void runtime.checkRuntime()}
           onInstall={() => void runtime.startRuntimeBootstrap()}
           onLogin={() => void runtime.loginToCodex()}
+          onOpenAccount={() => openSettings('agents')}
           onCopyInstall={runtime.copyInstallHint}
           onOpenMcpSetup={() => openSettings('mcp')}
         />
@@ -179,6 +187,7 @@ export function AgentView({
             phase={transcript.phase}
             fatal={transcript.fatal}
             fatalRecoveryLabel={transcript.fatalRecoveryLabel}
+            scopeRetired={transcript.scopeRetired}
             agentKind={agent}
             agentShortName={session.meta.shortName}
             onTurnFailureAction={transcript.handleTurnFailureAction}
@@ -187,10 +196,11 @@ export function AgentView({
             onCopyUserMessage={transcript.copyUserMessage}
             onResendUserMessage={queue.resend}
             onRetry={transcript.reconnectAfterFatal}
+            onStartLibraryChat={transcript.startLibraryChat}
             onOpenArtifact={transcript.openArtifactLink}
           />
         )}
-        {transcript.phase === 'closed' && !transcript.fatal && (
+        {transcript.phase === 'closed' && !transcript.fatal && !transcript.scopeRetired && (
           <div className="flex items-center justify-between gap-2.5 border-t border-border px-3 py-2 text-sm text-muted-foreground">
             <span>Session ended.</span>
             <Button variant="outline" size="sm" onClick={transcript.reconnect}>Reconnect</Button>
@@ -205,6 +215,7 @@ export function AgentView({
         active={active}
         agentShortName={session.meta.shortName}
         prefill={transcript.prefill}
+        closedPlaceholder={transcript.scopeRetired ? 'Folder removed — start a Library chat to continue…' : undefined}
         mode={{ show: runtime.capabilities?.modes === true, value: controls.mode, onSet: controls.changeMode }}
         effort={{
           show: runtime.capabilities?.effort === true,
@@ -235,6 +246,7 @@ export function AgentView({
         mentions={{ files: mentions.mentionFiles, folders: mentions.mentionFolders }}
         skills={{ list: skills.skills, state: skills.skillState, onRefresh: skills.refreshSkills }}
         attachments={{
+          enabled: runtime.capabilities.attachments,
           items: attach.attachments,
           uploading: attach.uploading,
           onPick: attach.uploadFiles,

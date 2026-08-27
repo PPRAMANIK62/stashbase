@@ -37,6 +37,10 @@ export function UserTurnHead({
     // up the user cluster, and vice versa.
     <div className="agent-turn-user group/user flex flex-col gap-2.5">
       <div className={turnHeadClass}>
+        {/* The bubble alignment that shows WHO is speaking is visual-only;
+          * a linearized reading needs the speaker stated. The reply side's
+          * prefix lives in AgentMessages. */}
+        <span className="sr-only">You: </span>
         {block.attachments && block.attachments.length > 0 && <MessageAttachments attachments={block.attachments} />}
         {editing ? (
           <InlineUserMessageEditor
@@ -130,6 +134,7 @@ function InlineUserMessageEditor({
         * an edit card IS the focus affordance. */}
       <Textarea
         className="p-0 focus-visible:ring-0"
+        aria-label="Edit message"
         ref={textareaRef}
         value={text}
         onChange={(e) => {

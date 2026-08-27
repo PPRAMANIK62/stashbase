@@ -578,16 +578,17 @@
     }
 
     /* Palette query inputs (Quick Open / library search / the link-file
-     * picker): the modal panel is the focus affordance, and its
-     * overflow-hidden corners clip the ring to a stray thick bar under the
-     * input — suppress the ring here. All three palette veils are listed;
-     * the picker renders the same seam into the same overflow-hidden panel,
-     * so leaving it out only made the defect harder to find. (This rule
+     * and move-file pickers): the modal panel is the focus affordance, and
+     * its overflow-hidden corners clip the ring to a stray thick bar under
+     * the input — suppress the ring here. All four palette veils are listed;
+     * each picker renders the same seam into the same overflow-hidden panel,
+     * so leaving one out only made the defect harder to find. (This rule
      * is unlayered on purpose: the Tailwind `outline-0` utility loses to the
      * unlayered ring rule above, so an unlayered override is required.) */
     .quick-open-veil input:focus-visible,
     .library-search-veil input:focus-visible,
-    .link-file-picker-veil input:focus-visible {
+    .link-file-picker-veil input:focus-visible,
+    .move-file-picker-veil input:focus-visible {
       outline: none;
     }
 

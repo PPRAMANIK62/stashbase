@@ -1,9 +1,11 @@
 # MCP Configuration
 
-StashBase's built-in Chat agents (Claude Code, Codex) connect automatically —
-nothing to configure. Every other MCP-compatible client is configured by you:
-copy the standard configuration or the URL access details from
-**Settings -> MCP** and register them in the client, as in the examples below.
+StashBase Agent receives an attributed MCP connection automatically. StashBase
+also configures Codex and Claude Code when their built-in Chat readiness runs.
+Nothing needs to be pasted for those panel runtimes. Every external
+MCP-compatible client is configured by you: copy the standard configuration or
+the URL access details from **Settings -> MCP** and register them in the client,
+as in the examples below.
 
 ## Manual stdio Setup
 

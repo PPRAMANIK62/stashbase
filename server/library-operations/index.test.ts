@@ -91,7 +91,7 @@ test('Library Operations forwards keyword mode, options, and a prefix-only scope
   let searchInput: Record<string, unknown> | undefined;
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
-    normalizeSearchScope: (_folder, pathPrefix) => ({
+    normalizeSearchScope: async (_folder, pathPrefix) => ({
       folderRoot: '/library',
       pathPrefix: typeof pathPrefix === 'string' ? pathPrefix : undefined,
     }),

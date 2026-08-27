@@ -9,13 +9,16 @@ import {
   exchangeHostedOAuthCode,
   failHostedOAuth,
   finishHostedOAuth,
+  fetchHostedAgentAllowance,
   hostedAccountState,
   hostedAccountAvatar,
   hostedOAuthStatus,
+  hostedOAuthPurpose,
   noteHostedOAuthAppReturn,
   noteHostedOAuthReturnIntent,
   signOutHostedAccount,
   type HostedOAuthProvider,
+  type HostedOAuthPurpose,
 } from '../hosted-account.ts';
 import { startHostedEmbeddingBroker } from '../hosted-embedding-broker.ts';
 import { errorMessage, logger } from '../log.ts';
@@ -24,9 +27,12 @@ import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from
 import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { processPrivateTokenMatches } from '../process-private-token.ts';
 import { currentWindowId } from '../folder.ts';
+import { stopAgentRuntime } from '../agent-contract.ts';
+import { stopOpenCodeRuntime } from '../opencode-runtime.ts';
 
 const log = logger('routes/account');
 const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google']);
+const OAUTH_PURPOSES = new Set<HostedOAuthPurpose>(['account', 'embedding']);
 const OAUTH_RETURN_TOKEN_HEADER = 'x-stashbase-oauth-return-token';
 
 interface AccountRouteOptions {
@@ -36,6 +42,12 @@ interface AccountRouteOptions {
 function oauthProvider(value: unknown): HostedOAuthProvider | null {
   return typeof value === 'string' && OAUTH_PROVIDERS.has(value as HostedOAuthProvider)
     ? value as HostedOAuthProvider
+    : null;
+}
+
+function oauthPurpose(value: unknown): HostedOAuthPurpose | null {
+  return typeof value === 'string' && OAUTH_PURPOSES.has(value as HostedOAuthPurpose)
+    ? value as HostedOAuthPurpose
     : null;
 }
 
@@ -81,11 +93,22 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     }
   });
 
+  app.get('/api/account/agent-usage', async (_req, res) => {
+    try {
+      if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
+      res.json(await fetchHostedAgentAllowance());
+    } catch (error: unknown) {
+      res.status(502).json({ error: errorMessage(error) });
+    }
+  });
+
   app.post('/api/account/oauth/start', (req, res) => {
     try {
       const provider = oauthProvider(req.body?.provider ?? 'google');
       if (!provider) return res.status(400).json({ error: 'Unsupported sign-in provider.' });
-      res.json(beginHostedOAuth(provider, callbackOrigin(req), currentWindowId()));
+      const purpose = oauthPurpose(req.body?.purpose ?? 'account');
+      if (!purpose) return res.status(400).json({ error: 'Unsupported sign-in purpose.' });
+      res.json(beginHostedOAuth(provider, callbackOrigin(req), currentWindowId(), purpose));
     } catch (error: unknown) {
       res.status(400).json({ error: errorMessage(error) });
     }
@@ -118,7 +141,9 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     }
     try {
       await exchangeHostedOAuthCode(flowId, authCode);
-      const backfillStarted = await activateHostedSource('StashBase account activated');
+      const backfillStarted = hostedOAuthPurpose(flowId) === 'embedding'
+        ? await activateHostedSource('StashBase account activated')
+        : false;
       finishHostedOAuth(flowId);
       log.info(`OAuth sign-in completed${backfillStarted ? '; semantic backfill started' : ''}`);
       res.type('html').send(oauthResultPage({
@@ -172,6 +197,8 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
 
   app.delete('/api/account', async (_req, res) => {
     const wasActive = (await hostedAccountState(false)).active;
+    stopAgentRuntime('stashbase');
+    await stopOpenCodeRuntime();
     await signOutHostedAccount();
     if (wasActive) {
       try {

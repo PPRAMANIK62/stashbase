@@ -123,6 +123,8 @@ export function JsonTreeView({ source, editable, session, onSessionChange, onSou
       <div className="json-tree-scroll" role="tree" aria-label="JSON values">
         <TreeNode node={analysis.root} source={source} editable={editable} expanded={session.expanded} selectedPath={session.selectedPath} selectedRef={selectedRef}
           siblingCount={1}
+          positionInSet={1}
+          idPrefix={fieldIds}
           onSelect={(selectedPath) => updateSession({ selectedPath })}
           onNavigate={moveTreeSelection}
           onToggle={(path) => { const expanded = new Set(session.expanded); if (expanded.has(path)) expanded.delete(path); else expanded.add(path); updateSession({ expanded }); }}
@@ -154,9 +156,11 @@ export function JsonTreeView({ source, editable, session, onSessionChange, onSou
   );
 }
 
-function TreeNode({ node, source, editable, expanded, selectedPath, selectedRef, siblingCount, onSelect, onNavigate, onToggle, onEdit, onDelete, onMove }: {
+function TreeNode({ node, source, editable, expanded, selectedPath, selectedRef, siblingCount, positionInSet, idPrefix, onSelect, onNavigate, onToggle, onEdit, onDelete, onMove }: {
   node: JsonSourceNode; source: string; editable: boolean; expanded: Set<string>; selectedPath: string | null;
   siblingCount: number;
+  positionInSet: number;
+  idPrefix: string;
   selectedRef: React.RefObject<HTMLDivElement | null>; onSelect: (path: string) => void; onToggle: (path: string) => void;
   onNavigate: (node: JsonSourceNode, command: 'previous' | 'next' | 'first' | 'last' | 'parent' | 'child') => void;
   onEdit: (intent: EditIntent) => void; onDelete: (node: JsonSourceNode) => void; onMove: (node: JsonSourceNode, delta: number) => void;
@@ -166,8 +170,17 @@ function TreeNode({ node, source, editable, expanded, selectedPath, selectedRef,
   const isExpanded = node.path.length === 0 || expanded.has(path);
   const selected = selectedPath === path;
   const index = typeof node.path.at(-1) === 'number' ? Number(node.path.at(-1)) : -1;
-  return <div className="json-tree-node">
+  /* The children group renders as a DOM *sibling* of its treeitem row (the
+   * wrapper div is layout-only, role="presentation"), so ownership is
+   * declared instead: `aria-owns` from the row to the group id. Ids are
+   * namespaced per tree instance — every open JSON tab keeps its tree
+   * mounted, so a bare path would repeat across tabs — and the path
+   * segment is URI-encoded because JSON keys may contain spaces. */
+  const groupId = `${idPrefix}-group-${encodeURIComponent(path)}`;
+  return <div className="json-tree-node" role="presentation">
     <div ref={selected ? selectedRef : undefined} className="json-tree-row" role="treeitem" tabIndex={selected || (!selectedPath && node.path.length === 0) ? 0 : -1} aria-selected={selected} aria-expanded={container ? isExpanded : undefined}
+      aria-level={node.path.length + 1} aria-posinset={positionInSet} aria-setsize={siblingCount}
+      aria-owns={container && isExpanded ? groupId : undefined}
       onFocus={() => onSelect(path)} onKeyDown={(event) => {
         if (event.key === 'ArrowDown') { event.preventDefault(); onNavigate(node, 'next'); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); onNavigate(node, 'previous'); }
@@ -181,16 +194,19 @@ function TreeNode({ node, source, editable, expanded, selectedPath, selectedRef,
       <code className="json-tree-key">{node.key !== undefined ? JSON.stringify(node.key) : typeof node.path.at(-1) === 'number' ? `[${node.path.at(-1)}]` : '$'}</code>
       <span className={cn('json-tree-type', `json-tree-type-${node.type}`)}>{node.type}</span>
       <code className="json-tree-value" title={path}>{container ? `${node.type === 'object' ? '{' : '['}${node.children.length}${node.type === 'object' ? '}' : ']'}` : node.raw}</code>
+      {/* Action buttons nested inside a treeitem are a known APG deviation
+        * kept for its editing ergonomics; each carries the row's path in
+        * its name so "Edit"/"Delete" are distinguishable out of context. */}
       {editable && <span className="json-tree-actions">
-        <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} onClick={() => onEdit({ kind: container ? 'subtree' : 'value', node })}>{container ? 'Edit JSON' : 'Edit'}</Button>
-        {node.key !== undefined && <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} onClick={() => onEdit({ kind: 'rename', node })}>Rename</Button>}
-        {container && <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} onClick={() => onEdit({ kind: 'add', node })}>Add</Button>}
-        {node.path.length > 0 && <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} onClick={() => onDelete(node)}>Delete</Button>}
+        <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} aria-label={`Edit ${path}`} onClick={() => onEdit({ kind: container ? 'subtree' : 'value', node })}>{container ? 'Edit JSON' : 'Edit'}</Button>
+        {node.key !== undefined && <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} aria-label={`Rename ${path}`} onClick={() => onEdit({ kind: 'rename', node })}>Rename</Button>}
+        {container && <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} aria-label={`Add to ${path}`} onClick={() => onEdit({ kind: 'add', node })}>Add</Button>}
+        {node.path.length > 0 && <Button type="button" variant="ghost" size="xs" tabIndex={selected ? 0 : -1} aria-label={`Delete ${path}`} onClick={() => onDelete(node)}>Delete</Button>}
         {index > 0 && <Button type="button" variant="ghost" size="icon-xs" tabIndex={selected ? 0 : -1} aria-label={`Move ${path} up`} onClick={() => onMove(node, -1)}>↑</Button>}
         {index >= 0 && index < siblingCount - 1 && <Button type="button" variant="ghost" size="icon-xs" tabIndex={selected ? 0 : -1} aria-label={`Move ${path} down`} onClick={() => onMove(node, 1)}>↓</Button>}
       </span>}
     </div>
-    {container && isExpanded && <div role="group" className="json-tree-children">{node.children.map((child) => <TreeNode key={formatPath(child.path)} siblingCount={node.children.length} {...{ node: child, source, editable, expanded, selectedPath, selectedRef, onSelect, onNavigate, onToggle, onEdit, onDelete, onMove }} />)}</div>}
+    {container && isExpanded && <div role="group" id={groupId} className="json-tree-children">{node.children.map((child, childIndex) => <TreeNode key={formatPath(child.path)} siblingCount={node.children.length} positionInSet={childIndex + 1} idPrefix={idPrefix} {...{ node: child, source, editable, expanded, selectedPath, selectedRef, onSelect, onNavigate, onToggle, onEdit, onDelete, onMove }} />)}</div>}
   </div>;
 }
 

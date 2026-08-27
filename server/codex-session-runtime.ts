@@ -25,6 +25,7 @@ import {
   type AgentSkill,
   type AgentClientEvent,
   type AgentServerEvent,
+  type AgentSessionTermination,
 } from './agent-contract.ts';
 import {
   approvalTitle,
@@ -103,10 +104,6 @@ export class CodexSession implements AttributedAgentSession {
    * the runtime reports for a resumed/default session. */
   private selectedModel: string | undefined;
   private activeModel: string | undefined;
-  /** The catalog's `isDefault` entry — what a NEW thread will run when no
-   * explicit model is selected. Surfaced as the session identity so the
-   * renderer can show a concrete model name instead of "Default". */
-  private catalogDefaultModel: string | undefined;
   private models: AgentModel[] = [];
   private skills = new Map<string, { name: string; path: string }>();
   private skillSequence = 0;
@@ -508,10 +505,6 @@ export class CodexSession implements AttributedAgentSession {
       return undefined;
     }
     const selected = this.model && this.models.some((entry) => entry.id === this.model) ? this.model : undefined;
-    // With no explicit selection the new thread will run the catalog's
-    // default — report that concrete identity up front; the thread-start
-    // metadata later confirms (or corrects) it.
-    if (!selected && this.catalogDefaultModel) this.activeModel = this.catalogDefaultModel;
     this.send({
       t: 'models',
       models: this.models,
@@ -558,7 +551,6 @@ export class CodexSession implements AttributedAgentSession {
         if (model && !seenModels.has(model.id)) {
           seenModels.add(model.id);
           models.push(model);
-          if ((entry as JsonObject).isDefault === true) this.catalogDefaultModel ??= model.id;
         }
       }
       const nextCursor = stringValue(result.nextCursor);
@@ -1003,8 +995,11 @@ export class CodexSession implements AttributedAgentSession {
     this.dispose();
   }
 
-  dispose(): void {
+  dispose(termination?: AgentSessionTermination): void {
     if (this.closed) return;
+    if (termination?.kind === 'scope-removed') {
+      this.send({ t: 'exit', reason: 'scope-removed', folder: termination.folder });
+    }
     this.closed = true;
     unregisterAttributedAgentSession(this.attributionId);
     this.onDispose?.(this);

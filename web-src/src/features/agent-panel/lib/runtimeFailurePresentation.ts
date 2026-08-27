@@ -1,7 +1,7 @@
 import type { AgentBootstrapStatus } from '@/common/api/apiTypes';
 
 export type AgentRuntimeFailureAction = 'copy-install-command' | 'open-mcp-settings';
-export type AgentRuntimeFailurePrimaryAction = 'retry-bootstrap' | 'start-codex-login';
+export type AgentRuntimeFailurePrimaryAction = 'retry-bootstrap' | 'start-codex-login' | 'open-account-settings';
 
 export interface AgentRuntimeFailurePresentation {
   title: string;
@@ -44,6 +44,14 @@ export function runtimeFailurePresentation(
         manualLabel,
       };
     case 'authentication':
+      if (failure.code === 'account-required') {
+        return {
+          title: 'Sign in to StashBase',
+          message,
+          retryLabel: 'Open account settings',
+          primaryAction: 'open-account-settings',
+        };
+      }
       if (failure.code === 'authentication-check-failed') {
         return {
           title: `Couldn’t check ${name} sign-in`,

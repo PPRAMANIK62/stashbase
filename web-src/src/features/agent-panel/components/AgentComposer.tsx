@@ -102,6 +102,7 @@ export interface ComposerScopeControl {
 /** Context attachments — owned by AgentView so panel drops, the `+`
  * picker, and the send path share one list. */
 export interface ComposerAttachments {
+  enabled: boolean;
   items: Attachment[];
   uploading: boolean;
   onPick: (files: File[]) => void;
@@ -112,7 +113,7 @@ export interface ComposerAttachments {
 export function AgentComposer({
   phase, disabled, turnActive, active, agentShortName, hero, prefill,
   mode, effort, model, scope, mentions, skills, attachments,
-  onDraftChange, onFocusChange, onSend, onStop,
+  closedPlaceholder, onDraftChange, onFocusChange, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -125,6 +126,10 @@ export function AgentComposer({
   hero?: boolean;
   /** Empty-state starter template. Prefills the draft only — never sends. */
   prefill?: { text: string; nonce: number } | null;
+  /** A terminal state can be expected and non-reconnectable (folder scope
+   * retirement). Keep its composer draft visible, but do not tell the user
+   * to reconnect to a scope that no longer exists. */
+  closedPlaceholder?: string;
   mode: ComposerModeControl;
   effort: ComposerEffortControl;
   model: ComposerModelControl;
@@ -170,7 +175,7 @@ export function AgentComposer({
   const placeholder = phase === 'connecting'
     ? 'Connecting…'
     : phase === 'closed'
-      ? 'Reconnect to continue…'
+      ? closedPlaceholder ?? 'Reconnect to continue…'
       : turnActive
         ? 'Ask for follow-up changes'
         : `Explore with ${agentShortName}…`;
@@ -260,7 +265,7 @@ export function AgentComposer({
             return true;
           }}
           onSubmit={submit}
-          onPasteImages={attachments.onPasteImages}
+          onPasteImages={attachments.enabled ? attachments.onPasteImages : undefined}
           onFocusChange={onFocusChange}
           mentionOpen={suggestions.open}
           mentionListboxId={suggestions.composerListboxId}
@@ -270,16 +275,18 @@ export function AgentComposer({
           * rendered surface at all — the `+` button below opens it. A text
           * field's box treatment would be dead weight, and `Input` is typed
           * for Base UI's text input, not `type="file"`. */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            attachments.onPick(Array.from(e.target.files ?? []));
-            e.target.value = '';
-          }}
-        />
+        {attachments.enabled && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              attachments.onPick(Array.from(e.target.files ?? []));
+              e.target.value = '';
+            }}
+          />
+        )}
         {/* Action bar under the input. The negative side margins bleed the
           * top rule past the box padding so it spans edge to edge. */}
         {/* No divider above the controls: the composer reads as ONE input
@@ -287,16 +294,18 @@ export function AgentComposer({
           * muted styling carry the separation, and a mid-card hairline
           * would double up with the card's own border. */}
         <div className="flex items-center gap-1 pt-0.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground"
-            aria-label={attachments.uploading ? 'Uploading files' : 'Upload local files'}
-            disabled={attachments.uploading}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <PlusIcon />
-          </Button>
+          {attachments.enabled && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
+              aria-label={attachments.uploading ? 'Uploading files' : 'Upload local files'}
+              disabled={attachments.uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <PlusIcon />
+            </Button>
+          )}
           {/* Scope reads left (with the attach control); the run settings
             * — model, mode — group right next to send. */}
           <ScopeMenu

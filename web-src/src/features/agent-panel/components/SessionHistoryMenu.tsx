@@ -2,7 +2,7 @@
  * Session-history popover for one history scope: the active folder's
  * header row lists that folder's sessions, and the New Chat row lists
  * ALL sessions across the library (each row labeled with its home and
- * resumed in its own scope). The menu merges BOTH agents' sessions
+ * resumed in its own scope). The menu merges every Agent's sessions
  * (newest first, each row carrying its agent's glyph — the New Chat
  * row's agent label is only the default for NEW chats, never a history
  * filter); rename/delete route through the row's agent and scope, and
@@ -102,6 +102,7 @@ export function SessionHistoryMenu({
           <Input
             type="text"
             autoFocus
+            aria-label="Search sessions"
             placeholder="Search sessions…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -111,7 +112,7 @@ export function SessionHistoryMenu({
           {loading && <EmptyState>Loading…</EmptyState>}
           {!loading && allFailed && <EmptyState>Could not load sessions.</EmptyState>}
           {!loading && !allFailed && failedAgents.length > 0 && (
-            // Partial failure stays quiet: the loaded agent's rows render
+            // Partial failure stays quiet: the loaded Agents' rows render
             // normally with one muted note for the missing runtime.
             <div className="px-2.5 pt-0.5 pb-1 text-xs text-muted-foreground" role="status">
               {failedAgents.map((agent) => AGENT_META[agent].shortName).join(' and ')} history could not be loaded.
@@ -145,6 +146,7 @@ export function SessionHistoryMenu({
                       <Input
                         className="mx-1.5 my-1 h-auto w-auto flex-1 rounded-md border-accent px-2 py-1"
                         autoFocus
+                        aria-label={`Rename ${row.title}`}
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
                         onKeyDown={(e) => {

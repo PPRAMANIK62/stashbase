@@ -3,11 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { clearCurrentFolder, setCurrentFolder } from '../folder.ts';
-import { listFilesAndFolders } from '../file-listing.ts';
+import { runWithFolderRoot } from '../folder.ts';
+import { listFilesAndFolders, listFilesAndFoldersAsync } from '../file-listing.ts';
 
 test('file-listing scan and classification', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-listing-test-'));
+  const originalReadFileSync = fs.readFileSync;
 
   try {
     // Set up test folder structure
@@ -32,6 +33,17 @@ test('file-listing scan and classification', async () => {
     fs.writeFileSync(path.join(folderMixed, 'data.csv'), '1,2,3');
     fs.writeFileSync(path.join(folderMixed, 'archive.zip'), '');
     fs.writeFileSync(path.join(folderMixed, 'config.JSON'), '{ invalid json');
+    fs.writeFileSync(path.join(folderMixed, 'plain.TxT'), '# literal heading\n<strong>literal</strong>');
+    fs.writeFileSync(path.join(folderMixed, 'broken.txt'), Buffer.from([0x62, 0x61, 0x80, 0x64]));
+    const largeText = path.join(folderMixed, 'large.txt');
+    fs.writeFileSync(largeText, Buffer.concat([
+      Buffer.from('# bounded preview\n'),
+      Buffer.alloc((8 * 1024 * 1024) + 1, 0x61),
+    ]));
+    fs.readFileSync = ((file, options) => {
+      if (String(file) === largeText) throw new Error('listing must not read a whole TXT source');
+      return originalReadFileSync(file, options as never);
+    }) as typeof fs.readFileSync;
     fs.mkdirSync(path.join(folderMixed, 'config.json_files'));
     fs.writeFileSync(path.join(folderMixed, 'config.json_files', 'asset.md'), '# visible child');
 
@@ -53,8 +65,19 @@ test('file-listing scan and classification', async () => {
     fs.writeFileSync(path.join(folderDotOnly, '.DS_Store'), '');
 
     // Run listing scan
-    setCurrentFolder(tempDir);
-    const result = listFilesAndFolders();
+    const { result, asyncResult } = await runWithFolderRoot(tempDir, async () => {
+      const result = listFilesAndFolders();
+      const originalReaddirSync = fs.readdirSync;
+      fs.readdirSync = (() => {
+        throw new Error('async HTTP listing used synchronous directory I/O');
+      }) as typeof fs.readdirSync;
+      try {
+        return { result, asyncResult: await listFilesAndFoldersAsync() };
+      } finally {
+        fs.readdirSync = originalReaddirSync;
+      }
+    });
+    assert.deepEqual(asyncResult, result, 'async HTTP listing must preserve sidebar classification');
 
     // Verify folders list (pruning validation)
     // - Should keep 'docs', 'mixed', and 'empty-dir'
@@ -73,9 +96,20 @@ test('file-listing scan and classification', async () => {
     assert.ok(fileNames.includes('docs/note2.html'));
     assert.ok(fileNames.includes('mixed/note3.md'));
     assert.ok(fileNames.includes('mixed/config.JSON'));
+    assert.ok(fileNames.includes('mixed/plain.TxT'));
+    assert.ok(fileNames.includes('mixed/broken.txt'));
+    assert.ok(fileNames.includes('mixed/large.txt'));
     assert.ok(fileNames.includes('mixed/config.json_files/asset.md'), 'JSON must not claim a note bundle');
     assert.ok(!fileNames.includes('src/main.ts'), 'unsupported files should not be in the files list');
     assert.ok(!fileNames.includes('.DS_Store'), 'dot-files should not be listed');
+    assert.equal(result.files.find((file) => file.name === 'mixed/plain.TxT')?.heading, '');
+    assert.equal(
+      result.files.find((file) => file.name === 'mixed/plain.TxT')?.snippet,
+      '# literal heading <strong>literal</strong>',
+      'TXT preview remains literal rather than using Markdown or HTML semantics',
+    );
+    assert.equal(result.files.find((file) => file.name === 'mixed/broken.txt')?.snippet, '');
+    assert.match(result.files.find((file) => file.name === 'mixed/large.txt')?.snippet ?? '', /^# bounded preview/);
 
     // The unchanged counts below double as the dot-file regression: the
     // two .DS_Store files must not appear in `other`/`otherExtensions`
@@ -100,7 +134,7 @@ test('file-listing scan and classification', async () => {
     assert.deepEqual(exts[1], { extension: '.zip', count: 1 });
 
   } finally {
-    clearCurrentFolder();
+    fs.readFileSync = originalReadFileSync;
     // Recursively clean up the temp directory
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

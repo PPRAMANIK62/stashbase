@@ -95,6 +95,10 @@ export class MfsDaemon extends EventEmitter {
   private pending = new Map<number, Pending>();
   private nextId = 1;
   private readyP: Promise<void> | null = null;
+  /** One retirement barrier for every concurrent close/reset caller. A new
+   * generation must not spawn until the previous child has actually exited
+   * and released the process-wide daemon lock. */
+  private closeP: Promise<void> | null = null;
   /** Bumps every time we (re)spawn the Python process. Callers that
    *  cache "I already configured this daemon" state can compare against
    *  the value at config time — if it changed, re-issue the config op. */
@@ -112,6 +116,11 @@ export class MfsDaemon extends EventEmitter {
    * current rules and every retained folder binding. Public operations never
    * race the bootstrap handshake. */
   async ensureReady(): Promise<void> {
+    // `close()` clears `proc`/`readyP` before the child has necessarily
+    // released its flock. A concurrent config reset used to observe that
+    // empty slot and spawn a replacement early; wait through every retirement
+    // that became current before this continuation resumes.
+    while (this.closeP) await this.closeP;
     if (this.readyP) return this.readyP;
     const attempt = this.spawnAndConfigure();
     this.readyP = attempt;
@@ -248,9 +257,15 @@ export class MfsDaemon extends EventEmitter {
       readyTimer.unref();
       let ready = false;
       const failAll = (err: Error) => {
+        // A retiring generation can report its exit after another lifecycle
+        // continuation has begun. It no longer owns the shared pending map or
+        // readiness latch, so its late event must not invalidate the current
+        // child. The close barrier prevents that overlap in normal operation;
+        // this identity fence keeps the callback safe by construction.
+        if (this.proc !== proc) return;
         for (const slot of this.pending.values()) slot.reject(err);
         this.pending.clear();
-        if (this.proc === proc) this.proc = null;
+        this.proc = null;
         this.readyP = null;
       };
       const onReady = () => {
@@ -354,6 +369,7 @@ export class MfsDaemon extends EventEmitter {
   }
 
   async close(): Promise<void> {
+    if (this.closeP) return this.closeP;
     const proc = this.proc;
     this.proc = null;
     this.readyP = null;
@@ -370,7 +386,7 @@ export class MfsDaemon extends EventEmitter {
     // a C extension (Milvus Lite, ONNX), so a stuck daemon won't die
     // on SIGTERM. SIGKILL can't be caught — guarantees the slot frees
     // up so the next bind doesn't trip on a stale flock.
-    await new Promise<void>((resolve) => {
+    const retirement = new Promise<void>((resolve) => {
       let exited = false;
       const termTimer = setTimeout(() => {
         if (exited) return;
@@ -389,6 +405,12 @@ export class MfsDaemon extends EventEmitter {
         resolve();
       });
     });
+    this.closeP = retirement;
+    try {
+      await retirement;
+    } finally {
+      if (this.closeP === retirement) this.closeP = null;
+    }
   }
 }
 

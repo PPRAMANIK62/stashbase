@@ -20,7 +20,7 @@ import { EditorHistoryNavigator, LinkFilePicker, usePreviewMessages } from '@/fe
 import { UnsupportedFilesModal } from '@/features/preparation';
 import { LibrarySearch, QuickOpen } from '@/features/search';
 import { EmbedderRequireKeyGate, SettingsPortal, useAppliedAppearance } from '@/features/settings';
-import { ChatSplitter, SidebarSplitter, useGlobalDragDrop } from '@/features/workspace';
+import { ChatSplitter, MoveFilePicker, SidebarSplitter, useGlobalDragDrop } from '@/features/workspace';
 import { DocumentOutlineProvider } from '@/common/components/DocumentOutlineContext';
 import { ErrorBoundary, LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { OverlayStackProvider } from '@/common/components/OverlayStack';
@@ -175,6 +175,7 @@ function AppBody() {
       <LibrarySearch />
       <EditorHistoryNavigator />
       <LinkFilePicker />
+      <MoveFilePicker />
       {previewImage && (
         <LazyLoadBoundary
           className="quick-open-blocking fixed inset-0 z-modal bg-scrim text-white"

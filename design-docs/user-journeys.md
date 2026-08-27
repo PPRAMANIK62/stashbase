@@ -159,7 +159,7 @@ An authorized folder contains a source listed in the
 
 1. Open the source in a persistent tab and receive only the preview or editing
    capabilities declared for that format.
-2. For content-editable Markdown or JSON, enter the appropriate editing state
+2. For content-editable Markdown, JSON, or UTF-8 plain text, enter the appropriate editing state
    and save through the shared durability path.
 3. Navigate with tabs, Quick Open, outlines, Find, local links, or search
    results.
@@ -174,8 +174,10 @@ An authorized folder contains a source listed in the
 - Preview-only formats never expose a content-editing affordance. Workbench
   content editing, Agent/MCP content writes, and file-level rename/move/delete
   remain distinguishable capabilities.
-- Writer/reader and JSON Tree/Source transitions preserve the same source
-  content rather than creating a second document model.
+- Writer/reader, JSON Tree/Source, and literal plain-text transitions preserve
+  the same source content rather than creating a second document model.
+- Unsupported plain-text encoding keeps the source identifiable, read-only,
+  and byte-unchanged; it never enters retrieval as replacement-character text.
 - Navigation, window retirement, and product-owned renderer recovery do not
   silently discard a live edit.
 - Parse, preview, or unsupported-format failure keeps the source identifiable
@@ -294,24 +296,29 @@ See [J05 evidence](../code-review/journey-coverage.md#j05-search).
 
 ### Outcome
 
-The user collaborates with a supported Agent against an explicit library or
-folder scope while retaining control of installation, context, tools, and
-permissions.
+The user collaborates with the included or a bring-your-own Agent against an
+explicit library or folder scope while retaining control of account use,
+installation, context, tools, and permissions.
 
 ### Entry State
 
-The workspace has a reusable blank Chat. The selected Agent runtime may be
-ready, missing, disconnected, or recoverable.
+The workspace has a reusable blank Chat. StashBase Agent is selected by default
+and may need account sign-in; a bring-your-own runtime may be ready, missing,
+disconnected, or recoverable.
 
 ### Primary Flow
 
-1. Use New Chat and choose the Agent and Library or folder scope.
-2. When the runtime is missing, explicitly choose **Install and continue**.
-3. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
+1. Use New Chat with StashBase Agent, or choose another Agent, and select the
+   Library or folder scope.
+2. For StashBase Agent, sign in to the StashBase account when needed; no Agent
+   install, model API key, or separate recharge is required within the fixed
+   seven-day included allowance.
+3. When a bring-your-own runtime is missing, explicitly choose **Install and
+   continue**. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
    finish the provider-owned browser flow started by that same runtime.
 4. Connect StashBase context and send a prompt.
-5. Inspect streaming output, tool activity, permissions, attachments, failures,
-   and file artifacts.
+5. Inspect streaming output, tool activity, permissions, runtime-supported
+   attachments, failures, and file artifacts.
 6. Continue, edit and resend, or open a source beside the same mounted Chat.
 7. Switch workspace folders without silently rebinding started work.
 
@@ -319,11 +326,26 @@ ready, missing, disconnected, or recoverable.
 
 - Opening the app, a folder, a tab, or history is never runtime-installation
   consent.
+- StashBase Agent uses only its included pinned runtime and account allowance;
+  its account token is absent from the renderer and OpenCode state.
+- Signing in for StashBase Agent establishes account identity without silently
+  activating hosted AI Index; that source remains an explicit setup or
+  Settings choice.
+- StashBase Agent does not offer transient attachments until its isolated
+  runtime can read their bytes through an authorized scope. Bring-your-own
+  runtimes retain attachment support.
+- Settings reports the current seven-day window as a remaining percentage and
+  reset time, with optional token detail but no monetary balance. A submitted
+  prompt and its auxiliary model calls share one server-enforced turn limit.
 - Codex authentication uses the executable StashBase already discovered or
   installed. StashBase neither installs a second copy nor receives the
   provider credential.
 - A started draft, turn, attachment set, or restored conversation retains its
   visible scope.
+- Removing that scope silently returns only a completely blank Chat to
+  Library. Any Chat containing user work remains readable, cancels unfinished
+  work without presenting a transport failure, and offers **New Library Chat**
+  instead of Retry.
 - Chat-primary and docked layouts preserve the same session and in-progress
   state.
 - Commands, network, deletion, and broader filesystem access remain explicit
@@ -339,14 +361,18 @@ ready, missing, disconnected, or recoverable.
 
 ### Degradation and Recovery
 
-Runtime installation, authentication, MCP connection, transport, and turn
-failures remain distinguishable and preserve the transcript. An installation
+Account sign-in, allowance exhaustion, runtime installation, authentication,
+MCP connection, transport, and turn failures remain distinguishable and
+preserve the transcript. Exhausted included allowance leads to Agent Settings
+and the bring-your-own choices. An installation
 failure retains a no-download recheck so a CLI installed or repaired outside
 StashBase can resume preparation without repeating the managed install. The
 same recheck accepts a Codex login completed elsewhere. Abandoned or
 interrupted output cannot arrive in a newer turn or session. A Stop racing a
 native turn that has already ended clears the stale working state without
-presenting a turn failure.
+presenting a turn failure. Removing a folder is an expected scope retirement:
+it never widens a started conversation to Library or replaces its retained
+content with a connection error.
 
 ### Evidence
 
@@ -509,6 +535,8 @@ Agent.
   original source.
 - The user can distinguish exploration from the accepted durable result.
 - The written result re-enters ordinary browsing, search, and Agent context.
+- Direct-text project evidence, including valid UTF-8 plain text, remains the
+  same visible source across Workbench, retrieval, and Agent/MCP access.
 - Losing semantic or Agent availability does not make existing source work or
   durable results inaccessible.
 
@@ -589,6 +617,11 @@ registered folder while stale history overrides are rolled back. If the
 originating window cannot enter a successfully rebound project, the Chat keeps
 the new scope visible and reports a retryable open failure rather than
 reverting to an ambiguous Library presentation.
+
+Known Gap: a StashBase Agent chat updates its live scope and keeps using the
+attributed MCP connection, but OpenCode does not yet migrate the same native
+session record and cwd to the project. Its restored history remains under
+Library and native folder commands require a new folder-scoped chat.
 
 ### Evidence
 

@@ -55,7 +55,10 @@ export function Sidebar() {
      * visually spill into the main pane mid-transition.
      * `group/sidebar` drives the hover-reveal of the header action
      * icons (see the side-actions class strings below). */
-    <aside className="sidebar group/sidebar relative flex h-full min-h-0 min-w-0 flex-row overflow-hidden border-r border-border bg-pane">
+    /* Named landmark: the chat pane is a second `complementary` region
+     * ("Agent chat"), and two same-role landmarks are indistinguishable
+     * in a screen reader's landmark list without accessible names. */
+    <aside aria-label="Library" className="sidebar group/sidebar relative flex h-full min-h-0 min-w-0 flex-row overflow-hidden border-r border-border bg-pane">
       {/* macOS Electron only (display:none elsewhere): the quiet band at
         * the column's top that the traffic lights float over, doubling as
         * the window drag region now that there is no titlebar strip.
@@ -384,7 +387,7 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
         <RemoveFolderModal
           name={removeTarget.name}
           path={removeTarget.path}
-          parentLabel={removeTarget.parent}
+          pathLabel={removeTarget.displayPath}
           removing={removing}
           onCancel={cancelRemoval}
           onConfirm={() => removeFolder(removeTarget.path)}
@@ -394,17 +397,13 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
   );
 }
 
-/** What the remove-folder confirm modal names: the folder plus its
- *  shortened parent ("~/Projects"), so the dialog can say where the
- *  folder keeps living on disk after it leaves the library. */
-function removalDialogTarget(
+/** What the remove-folder confirm modal names: the folder plus its complete,
+ *  home-shortened path, so the location that stays on disk is unambiguous. */
+export function removalDialogTarget(
   path: string,
   homeDir: string,
-): { path: string; name: string; parent: string } {
-  const segs = path.split('/').filter(Boolean);
-  segs.pop();
-  const parent = shortenFolderPath(segs.length ? '/' + segs.join('/') : '/', homeDir);
-  return { path, name: basename(path), parent };
+): { path: string; name: string; displayPath: string } {
+  return { path, name: basename(path), displayPath: shortenFolderPath(path, homeDir) };
 }
 
 /** The active zone's header row — the window's current folder. Carries the

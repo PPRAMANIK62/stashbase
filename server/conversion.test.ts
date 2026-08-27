@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { INDEX_EXCLUDED_DIRS } from './indexable.ts';
 import { closeStateDb } from './state-db.ts';
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -14,6 +15,82 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 function tick(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
+
+test('conversion discovery skips project directories excluded from indexing', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-conversion-discovery-'));
+  const previousDataRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  process.env.STASHBASE_LOCAL_DATA_ROOT = path.join(root, 'data');
+  try {
+    const { discoverNewSources } = await import('./conversion.ts');
+    fs.writeFileSync(path.join(root, 'visible.pdf'), 'visible');
+    for (const directory of INDEX_EXCLUDED_DIRS) {
+      const excluded = path.join(root, directory);
+      fs.mkdirSync(excluded, { recursive: true });
+      fs.writeFileSync(path.join(excluded, 'hidden.pdf'), 'hidden');
+    }
+
+    const originalReaddirSync = fs.readdirSync;
+    fs.readdirSync = (() => {
+      throw new Error('conversion discovery used synchronous directory I/O');
+    }) as typeof fs.readdirSync;
+    const discovered: string[] = [];
+    try {
+      await discoverNewSources(root, {
+        kind: 'discovery_test',
+        lane: 'light',
+        cost: 0,
+        matches: (name: string) => name.endsWith('.pdf'),
+        derivedNote: (absPath: string) => `${absPath}.md`,
+        convert: async () => undefined,
+        cleanupDerived: () => undefined,
+      }, (absPath) => discovered.push(path.relative(root, absPath)));
+    } finally {
+      fs.readdirSync = originalReaddirSync;
+    }
+
+    assert.deepEqual(discovered, ['visible.pdf']);
+  } finally {
+    closeStateDb();
+    if (previousDataRoot == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousDataRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('format dispatch shares one recursive discovery pass', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-conversion-dispatch-'));
+  const previousDataRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  process.env.STASHBASE_LOCAL_DATA_ROOT = path.join(root, 'data');
+  try {
+    const { discoverConvertibleSources } = await import('./conversion-dispatch.ts');
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.writeFileSync(path.join(root, 'src', 'main.ts'), 'export {};');
+    fs.mkdirSync(path.join(root, 'node_modules'));
+    fs.writeFileSync(path.join(root, 'node_modules', 'hidden.pdf'), 'hidden');
+
+    const promises = fs.promises as typeof fs.promises & {
+      readdir: (...args: unknown[]) => Promise<unknown>;
+    };
+    const originalReaddir = promises.readdir;
+    let readdirCalls = 0;
+    promises.readdir = (async (...args: unknown[]) => {
+      readdirCalls += 1;
+      return (originalReaddir as (...inner: unknown[]) => Promise<unknown>)(...args);
+    }) as typeof promises.readdir;
+    try {
+      await discoverConvertibleSources(root);
+    } finally {
+      promises.readdir = originalReaddir;
+    }
+
+    assert.equal(readdirCalls, 2, 'root and visible src should each be read once');
+  } finally {
+    closeStateDb();
+    if (previousDataRoot == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousDataRoot;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('stale final output is invalidated synchronously when conversion is queued', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-conversion-'));

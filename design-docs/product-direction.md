@@ -38,6 +38,13 @@ document appears, the same Chat adapts into a side panel alongside the source.
 It is a convenient client of StashBase context, not a separate AI workspace
 and not a replacement for external Agent clients.
 
+StashBase Agent is the default path: a pinned local OpenCode runtime uses the
+signed-in account's included model allowance without asking the user to install
+an Agent or configure a model key. Codex and Claude Code remain first-class
+bring-your-own alternatives. Sessions, file access, commands, MCP, permissions,
+and Diff handling stay local whichever path is selected; the included path
+sends only model requests through the hosted gateway.
+
 Work may begin before a project exists. When an exploratory Library Chat
 becomes worth continuing, the user can explicitly turn it into an ordinary
 local project. The same conversation follows the new scope; project files

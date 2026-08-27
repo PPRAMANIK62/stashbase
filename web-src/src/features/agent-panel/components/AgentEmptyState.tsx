@@ -205,7 +205,9 @@ export function EmptyChatGreeting({ agentShortName, connecting }: {
 }) {
   return (
     <>
-      <SectionHeading className="pb-6 text-center text-2xl">
+      {/* Level 2, stated: pane-level surfaces top the chat pane's outline
+        * at h2 (see the scheme note on RuntimeCard). */}
+      <SectionHeading level={2} className="pb-6 text-center text-2xl">
         Your knowledge is here.
       </SectionHeading>
       {connecting && (

@@ -18,6 +18,10 @@ semantic readiness.
 
 - Every asynchronous folder open, file load, index refresh, and binary stat
   applies only while its captured folder, tab, and generation remain current.
+- Active-folder listing performs recursive directory I/O asynchronously and
+  yields during large flat-directory classification. Exact unsupported-file
+  disclosure cannot monopolize the shared Node request loop while a folder is
+  opening.
 - One source identity owns at most one document tab in a window. The workspace
   reducer resolves concurrent open completions against its latest state; an
   asynchronous caller's earlier duplicate check is never the uniqueness
@@ -25,6 +29,10 @@ semantic readiness.
   pairs remain distinct identities.
 - Folder switching resets folder-scoped documents and readiness without
   clearing library search or silently rebinding a started or drafted Chat.
+- Folder loss and the 412 recovery ladder also preserve Chat tabs. They clear
+  the stale document workspace and preparation state only; the structured
+  Agent scope-retirement event decides per bound tab whether a completely
+  blank Chat returns to Library or user work remains visible.
 - Every site that clears folder context builds its preparation-indicator
   reset from the one shared plan in `lib/folderScopedReset.ts`. The folder
   switch/loss plan and the 412 index-status recovery ladder keep their own
@@ -46,7 +54,15 @@ semantic readiness.
 - Document navigation and native context release cross the same save barrier.
   A failed save blocks the transition and keeps the recoverable buffer mounted.
 - Tabs, trees, overlays, and dialogs expose semantic selection/focus state.
-  Overlay dismissal restores focus to the initiating control.
+  Overlay dismissal restores focus to the initiating control. Destructive
+  library confirmation identifies the complete home-shortened member path,
+  not only its parent directory.
+- Drag-only organization gestures keep keyboard equivalents that route through
+  the same action: the file row's Move to… picker
+  (`features/workspace/components/MoveFilePicker.tsx`) calls the drop path's
+  `moveFile`, Ctrl/Cmd+Shift+Arrow reorders document tabs through the drag
+  path's `TABS_REORDER`, and Delete closes the focused tab — the tab chip's
+  visual close control stays presentational inside `role="tab"`.
 - Tree row order, visibility, and keyboard order all come from the one tree
   model. Every row is rendered whether or not its folder is open, so rows
   register their element with the roving-focus hook and navigation resolves
@@ -56,6 +72,9 @@ semantic readiness.
 - JSON Tree/Source mode, expansion, selected path, and tree query are retained
   per recent tab. Only the active JSON tab owns Find/editor registration, and
   the bounded tree entry remains lazy.
+- TXT tabs retain literal source identity and share the active-tab Find/save
+  authority. Only valid in-folder UTF-8 sources can enter edit mode;
+  out-of-folder and decode-error tabs stay read-only.
 - Polling, timers, controllers, and native subscriptions retire when their
   generation or window context ends. Late results cannot repopulate reset
   state.
@@ -66,7 +85,7 @@ semantic readiness.
 
 The initial renderer contains only window chrome and the minimum workspace
 shell. Feature surfaces that open on demand remain dynamic entries. The
-authoritative budget is `418 KiB` of initial static JavaScript, and the current
+authoritative budget is `430 KiB` of initial static JavaScript, and the current
 required dynamic-entry set lives in `scripts/check-renderer-chunks.mjs`.
 Change that list or budget only when the ownership of eager shell behavior
 changes, never to make an accidental dependency pass.
@@ -79,9 +98,9 @@ changes, never to make an accidental dependency pass.
 | Primary owners | `web-src/src/store/state/state.ts`, `state/stateReducer.ts` and the `state/workspaceReducer.ts`, `state/chatReducer.ts`, `state/uiShellReducer.ts` sub-reducers it composes, `state/stateHelpers.ts`, `lib/folderScopedReset.ts`, `lib/folderPath.ts`, `lib/folderTransition.ts`, and the internal `hooks/useDocumentActions.ts`, `hooks/useFileActions.ts`, `hooks/useFolderActions.ts`, `hooks/useSearchActions.ts` Modules |
 | Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx` |
 | Renderer tree model | `web-src/src/features/workspace/lib/fileTreeModel.ts` (nesting, manual-rank ordering, visible rows), `lib/treeKeyboard.ts` (roving-focus rules), `hooks/useTreeRoving.ts` (row registry and per-row binding) |
-| Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts` |
+| Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `server/routes/files.ts`, and the asynchronous request listing in `server/file-listing.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
-| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, and `scripts/check-renderer-chunks.mjs` |
+| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, and `scripts/check-renderer-chunks.mjs` |
 
 The four action hooks are private Seams inside the workspace Module. Do not make
 components depend on them directly; that would create a second transition

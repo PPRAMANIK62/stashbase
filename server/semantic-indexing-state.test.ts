@@ -9,9 +9,16 @@ import {
   getSemanticIndexingDecision,
   setSemanticIndexingDecision,
 } from './state-db.ts';
-import { enqueueFolderSyncOperation, runFolderSyncOperation, semanticSyncPolicy } from './state.ts';
+import {
+  cancelFolderSyncsAndWait,
+  deleteFolderRuntimeState,
+  enqueueFolderSyncOperation,
+  runFolderSyncOperation,
+  semanticSyncPolicy,
+} from './state.ts';
 import { publishSemanticPause } from './sync.ts';
 import type { Indexer } from './indexer.ts';
+import { filesystemPath } from './filesystem-path.ts';
 
 test('semantic pause is folder-scoped, durable across database reopen, and explicitly recoverable', () => {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-semantic-state-'));
@@ -57,6 +64,66 @@ test('resume intent is serialized after an older reconcile can publish its decis
   assert.deepEqual(events, [
     'older-start', 'older-publish-awaiting', 'resume-clear', 'resume-embed',
   ]);
+});
+
+test('removing folder runtime state invalidates an in-flight reconcile', async () => {
+  const folder = path.join(os.tmpdir(), 'stashbase-removal-cancels-sync');
+  let shouldContinue: (() => boolean) | undefined;
+  let releaseSync!: () => void;
+  const syncGate = new Promise<void>((resolve) => { releaseSync = resolve; });
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => { markStarted = resolve; });
+  const deps = {
+    indexer: {} as Indexer,
+    bind: async () => undefined,
+    sync: async (_indexer: Indexer, _root: string, options?: { shouldContinue?: () => boolean }) => {
+      shouldContinue = options?.shouldContinue;
+      markStarted();
+      await syncGate;
+      throw new Error('MFS daemon closing');
+    },
+    semanticEnabled: true,
+  };
+
+  const running = runFolderSyncOperation(folder, { reason: 'app boot' }, deps);
+  let result;
+  try {
+    await started;
+    assert.equal(shouldContinue?.(), true);
+    await deleteFolderRuntimeState(folder);
+    assert.equal(shouldContinue?.(), false, 'library removal must invalidate work already scanning the folder');
+  } finally {
+    releaseSync();
+    result = await running;
+  }
+  assert.equal(result.cancelled, true, 'an interrupted reconcile is cancellation, not a visible sync failure');
+});
+
+test('folder removal interrupts an unresponsive reconcile instead of waiting behind it', async () => {
+  const folder = path.join(os.tmpdir(), 'stashbase-removal-interrupts-sync');
+  let releaseSync!: () => void;
+  const syncGate = new Promise<void>((resolve) => { releaseSync = resolve; });
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => { markStarted = resolve; });
+  let interruptCalls = 0;
+  const running = enqueueFolderSyncOperation(filesystemPath.identity(folder), async () => {
+    markStarted();
+    await syncGate;
+  });
+  await started;
+  const cancellation = cancelFolderSyncsAndWait(folder, async () => {
+    interruptCalls += 1;
+    releaseSync();
+  });
+  const settledQuickly = await Promise.race([
+    cancellation.then(() => true),
+    new Promise<false>((resolve) => setTimeout(() => resolve(false), 50)),
+  ]);
+  if (!settledQuickly) releaseSync();
+  await Promise.allSettled([running, cancellation]);
+
+  assert.equal(settledQuickly, true, 'removal must interrupt a daemon scan before awaiting its queue');
+  assert.equal(interruptCalls, 1);
 });
 
 test('restart policy reloads pause, invalidates stale work, and resumes only after clear', async () => {

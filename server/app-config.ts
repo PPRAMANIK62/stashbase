@@ -189,9 +189,36 @@ export function readAppConfigStrict(): AppConfigFile {
   }
 }
 
+export async function readAppConfigStrictAsync(): Promise<AppConfigFile> {
+  try {
+    const raw = await fs.promises.readFile(CONFIG_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(`${CONFIG_FILE} must contain a JSON object`);
+    }
+    if (parsed.recentVaults && !parsed.recentFolders) {
+      parsed.recentFolders = parsed.recentVaults;
+    }
+    return parsed as AppConfigFile;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return {};
+    const detail = err instanceof SyntaxError ? `invalid JSON: ${err.message}`
+      : err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not read ${CONFIG_FILE}: ${detail}`, { cause: err });
+  }
+}
+
 export function readAppConfig(): AppConfigFile {
   try {
     return readAppConfigStrict();
+  } catch {
+    return {};
+  }
+}
+
+export async function readAppConfigAsync(): Promise<AppConfigFile> {
+  try {
+    return await readAppConfigStrictAsync();
   } catch {
     return {};
   }

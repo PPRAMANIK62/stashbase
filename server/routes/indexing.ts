@@ -7,8 +7,8 @@ import fs from 'node:fs';
 import { logger } from '../log.ts';
 import {
   getCurrentFolder,
-  exactMemberFolderRoot,
-  resolveFolderRoot,
+  exactMemberFolderRootAsync,
+  resolveFolderRootAsync,
 } from '../folder.ts';
 import {
   cancelAudioPreparation,
@@ -53,9 +53,9 @@ function parseFolderParam(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
-function requireMemberFolderRoot(ref: string): string {
-  const root = resolveFolderRoot(ref);
-  const memberRoot = exactMemberFolderRoot(root);
+async function requireMemberFolderRoot(ref: string): Promise<string> {
+  const root = await resolveFolderRootAsync(ref);
+  const memberRoot = await exactMemberFolderRootAsync(root);
   if (!memberRoot) {
     const err = new Error('folder is not in your folders');
     (err as any).status = 404;
@@ -65,9 +65,9 @@ function requireMemberFolderRoot(ref: string): string {
   return memberRoot;
 }
 
-function requireRequestFolder(explicit?: string): { folderRoot: string } {
+async function requireRequestFolder(explicit?: string): Promise<{ folderRoot: string }> {
   if (explicit) {
-    const root = requireMemberFolderRoot(explicit);
+    const root = await requireMemberFolderRoot(explicit);
     return { folderRoot: root };
   }
   const folderRoot = getCurrentFolder();
@@ -85,17 +85,21 @@ function sourcePathForAbs(absPath: string): string {
 }
 
 /** Resolve an explicit-folder request without allowing a symlink inside the
- * library folder to redirect preparation/extraction outside that folder. */
-function requireExistingFileInFolder(folderRoot: string, rel: string): string {
+ * library folder to redirect preparation/extraction outside that folder.
+ *
+ * Uses the promise-based resolver so canonicalization, realpath, existence,
+ * and type checks can move off the single Node request-handling event loop. */
+async function requireExistingFileInFolderAsync(folderRoot: string, rel: string): Promise<string> {
   let abs: string;
   try {
-    abs = filesystemPath.resolveUnder(folderRoot, rel);
+    abs = await filesystemPath.resolveUnderAsync(folderRoot, rel);
   } catch (cause) {
     const err = new Error('path escapes folder', { cause });
     (err as any).status = 400;
     throw err;
   }
-  if (!fs.existsSync(abs)) {
+  const exists = await fs.promises.access(abs).then(() => true, () => false);
+  if (!exists) {
     clearRecord(sourcePathForAbs(abs));
     const err = new Error('file not found');
     (err as any).status = 404;
@@ -103,13 +107,14 @@ function requireExistingFileInFolder(folderRoot: string, rel: string): string {
   }
 
   try {
-    abs = filesystemPath.resolveUnder(folderRoot, rel, { access: 'existing' });
+    abs = await filesystemPath.resolveUnderAsync(folderRoot, rel, { access: 'existing' });
   } catch (cause) {
     const err = new Error('path escapes folder through symlink', { cause });
     (err as any).status = 400;
     throw err;
   }
-  if (!fs.statSync(abs).isFile()) {
+  const stat = await fs.promises.stat(abs);
+  if (!stat.isFile()) {
     const err = new Error('file not found');
     (err as any).status = 404;
     throw err;
@@ -117,11 +122,11 @@ function requireExistingFileInFolder(folderRoot: string, rel: string): string {
   return abs;
 }
 
-export function reprocessFileInFolder(
+export async function reprocessFileInFolder(
   relPath: string,
   folderName?: string,
   options: { language?: string } = {},
-): 'conversion' | 'index' {
+): Promise<'conversion' | 'index'> {
   const rel = typeof relPath === 'string' ? relPath.trim() : '';
   if (!rel) {
     const err = new Error('path required');
@@ -129,9 +134,9 @@ export function reprocessFileInFolder(
     throw err;
   }
 
-  const { folderRoot } = requireRequestFolder(folderName?.trim() || undefined);
+  const { folderRoot } = await requireRequestFolder(folderName?.trim() || undefined);
 
-  const abs = requireExistingFileInFolder(folderRoot, rel);
+  const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   const sourcePath = sourcePathForAbs(abs);
   if (isConversionPending(sourcePath)) {
     // A manual retry promotes queued work; running work is non-preemptive.
@@ -178,8 +183,8 @@ async function cancelFilePreparationInFolder(relPath: string, folderName?: strin
     (err as any).status = 400;
     throw err;
   }
-  const { folderRoot } = requireRequestFolder(folderName?.trim() || undefined);
-  const abs = requireExistingFileInFolder(folderRoot, rel);
+  const { folderRoot } = await requireRequestFolder(folderName?.trim() || undefined);
+  const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   const sourcePath = sourcePathForAbs(abs);
   if (isAudioFile(rel)) return cancelAudioPreparation(sourcePath);
   const cancelled = await cancelConversionAndWait(sourcePath, 'user-request');
@@ -187,15 +192,15 @@ async function cancelFilePreparationInFolder(relPath: string, folderName?: strin
   return cancelled;
 }
 
-function prepareConvertibleInFolder(relPath: string, folderName?: string): void {
+async function prepareConvertibleInFolder(relPath: string, folderName?: string): Promise<void> {
   const rel = typeof relPath === 'string' ? relPath.trim() : '';
   if (!rel) {
     const err = new Error('path required');
     (err as any).status = 400;
     throw err;
   }
-  const { folderRoot } = requireRequestFolder(folderName?.trim() || undefined);
-  const abs = requireExistingFileInFolder(folderRoot, rel);
+  const { folderRoot } = await requireRequestFolder(folderName?.trim() || undefined);
+  const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   if (!prepareConvertibleSource(abs, rel)) {
     const err = new Error('only DOCX and media files require interactive preparation');
     (err as any).status = 415;
@@ -215,9 +220,9 @@ function normalizeLanguageOverride(value: unknown): string | undefined {
 export function mount(app: express.Express): void {
   // Opening a DOCX is an explicit user gesture. Queue it in the light lane
   // at interactive priority (or promote the existing queued task).
-  app.post('/api/files/prepare', (req, res) => {
+  app.post('/api/files/prepare', async (req, res) => {
     try {
-      prepareConvertibleInFolder(req.body?.path, parseFolderParam(req.body?.folder));
+      await prepareConvertibleInFolder(req.body?.path, parseFolderParam(req.body?.folder));
       res.json({ ok: true });
     } catch (err: unknown) {
       sendError(res, err);
@@ -232,7 +237,7 @@ export function mount(app: express.Express): void {
   app.post('/api/sync', async (req, res) => {
     try {
       const explicit = parseFolderParam(req.query.folder);
-      const { folderRoot } = requireRequestFolder(explicit);
+      const { folderRoot } = await requireRequestFolder(explicit);
       const result = await syncFolderNow(folderRoot, { reason: 'manual sync' });
       // `/api/sync` is also the explicit "something outside the app may
       // have changed" reconcile hook. Bump even when the semantic diff is
@@ -248,7 +253,7 @@ export function mount(app: express.Express): void {
 
   app.post('/api/semantic-indexing/decision', async (req, res) => {
     try {
-      const { folderRoot } = requireRequestFolder(parseFolderParam(req.body?.folder));
+      const { folderRoot } = await requireRequestFolder(parseFolderParam(req.body?.folder));
       const decision = req.body?.decision;
       if (decision === 'defer') {
         deferSemanticIndexing(folderRoot);
@@ -280,10 +285,10 @@ export function mount(app: express.Express): void {
       const topK = Number.isFinite(req.body?.top_k) ? Number(req.body.top_k) : 8;
       if (!query) return res.status(400).json({ error: 'query required' });
       const explicit = parseFolderParam(req.body?.folder);
-      const { folderRoot } = requireRequestFolder(explicit);
+      const { folderRoot } = await requireRequestFolder(explicit);
       const types = parseSearchTypes(req.body?.types);
       if (types == null) return res.status(400).json({ error: SEARCH_TYPES_VALIDATION_ERROR });
-      const prefixAbs = resolveScopePrefix(folderRoot, req.body?.path_prefix);
+      const prefixAbs = await resolveScopePrefix(folderRoot, req.body?.path_prefix);
       if (prefixAbs === false) return res.status(400).json({ error: 'path_prefix must be a folder-relative subfolder' });
       const result = await retrieval.search({
         mode: 'semantic', query, topK, folderRoot, pathPrefix: prefixAbs, types,
@@ -300,10 +305,10 @@ export function mount(app: express.Express): void {
           code: 'EMBEDDER_KEY_REQUIRED',
         });
       }
-      const out = searchHitsFromEvidence(result.evidence).flatMap((hit) => {
-        const rel = filesystemPath.relative(folderRoot, hit.fileName);
-        return rel == null ? [] : [{ ...hit, fileName: rel }];
-      });
+      const out = (await Promise.all(searchHitsFromEvidence(result.evidence).map(async (hit) => {
+        const rel = await filesystemPath.relativeAsync(folderRoot, hit.fileName);
+        return rel == null ? null : { ...hit, fileName: rel };
+      }))).filter((hit): hit is NonNullable<typeof hit> => hit != null);
       res.json({ hits: out });
     } catch (err: unknown) {
       sendError(res, err);
@@ -321,7 +326,7 @@ export function mount(app: express.Express): void {
       const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
       if (!query) return res.status(400).json({ error: 'q required' });
       const explicit = parseFolderParam(req.query.folder);
-      const { folderRoot: folderDir } = requireRequestFolder(explicit);
+      const { folderRoot: folderDir } = await requireRequestFolder(explicit);
       const caseStrict = req.query.case_strict === '1' || req.query.case_strict === 'true';
       const wholeWord = req.query.whole_word === '1' || req.query.whole_word === 'true';
       const types = parseSearchTypes(
@@ -331,7 +336,7 @@ export function mount(app: express.Express): void {
       );
       if (types == null) return res.status(400).json({ error: SEARCH_TYPES_VALIDATION_ERROR });
       const rawPrefix = typeof req.query.path_prefix === 'string' ? req.query.path_prefix : undefined;
-      const prefixAbs = resolveScopePrefix(folderDir, rawPrefix);
+      const prefixAbs = await resolveScopePrefix(folderDir, rawPrefix);
       if (prefixAbs === false) return res.status(400).json({ error: 'path_prefix must be a folder-relative subfolder' });
       const result = await retrieval.search({
         mode: 'keyword', query, folderRoot: folderDir, pathPrefix: prefixAbs,
@@ -358,17 +363,17 @@ export function mount(app: express.Express): void {
   // conversions for the conversion indicator.
   app.get('/api/index-status', async (req, res) => {
     try {
-      const { folderRoot } = requireRequestFolder(parseFolderParam(req.query.folder));
+      const { folderRoot } = await requireRequestFolder(parseFolderParam(req.query.folder));
       res.json(await buildIndexStatus(folderRoot));
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
 
-  app.post('/api/index-warning/dismiss', (req, res) => {
+  app.post('/api/index-warning/dismiss', async (req, res) => {
     try {
       const explicit = parseFolderParam(req.body?.folder);
-      const { folderRoot } = requireRequestFolder(explicit);
+      const { folderRoot } = await requireRequestFolder(explicit);
       clearIndexWarning(folderRoot);
       res.json({ ok: true });
     } catch (err: unknown) {
@@ -392,13 +397,13 @@ export function mount(app: express.Express): void {
   // failure row. PDF/image/DOCX/audio sources also clear stale final derived
   // artifacts and re-run extraction; directly readable files schedule a
   // reconcile so the index is rebuilt from source.
-  app.post('/api/files/reprocess', (req, res) => {
+  app.post('/api/files/reprocess', async (req, res) => {
     try {
       const rel = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
       const targetFolder = typeof req.body?.folder === 'string' && req.body.folder.trim()
         ? req.body.folder.trim()
         : undefined;
-      const mode = reprocessFileInFolder(rel, targetFolder, { language: req.body?.language });
+      const mode = await reprocessFileInFolder(rel, targetFolder, { language: req.body?.language });
       res.json({ ok: true, mode });
     } catch (err: unknown) {
       sendError(res, err);
@@ -422,14 +427,14 @@ export function mount(app: express.Express): void {
 /** Resolves a folder-relative subfolder scope to an absolute directory
  *  inside `folderRoot`. Absent/empty → undefined (folder-wide search);
  *  escaping, missing, or non-directory values → false (caller 400s). */
-function resolveScopePrefix(folderRoot: string, raw: unknown): string | undefined | false {
+async function resolveScopePrefix(folderRoot: string, raw: unknown): Promise<string | undefined | false> {
   if (raw == null) return undefined;
   if (typeof raw !== 'string') return false;
   const rel = raw.trim().replace(/^\/+|\/+$/g, '');
   if (!rel) return undefined;
   try {
-    const abs = filesystemPath.resolveUnder(folderRoot, rel, { access: 'existing' });
-    return fs.statSync(abs).isDirectory() ? abs : false;
+    const abs = await filesystemPath.resolveUnderAsync(folderRoot, rel, { access: 'existing' });
+    return (await fs.promises.stat(abs)).isDirectory() ? abs : false;
   } catch {
     return false;
   }

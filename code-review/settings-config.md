@@ -16,9 +16,11 @@ Automatic desktop update checks are default-on: app config owns the preference,
 while Electron main reads it through the local route and owns the release
 runtime. Manual checks remain available when automatic checks are disabled.
 
-Models, derived data, caches, and legacy managed Agent runtimes live under
-AppData and are not app-config fields. The built-in Chat agents' own configuration files
-are rewritten only by Agent readiness (`ensureAgentMcp`); StashBase never
+Models, derived data, caches, the pinned OpenCode state, and legacy managed
+Agent runtimes live under AppData and are not app-config fields. Claude Code
+and Codex configuration files are rewritten only by Agent readiness
+(`ensureAgentMcp`). StashBase Agent receives an in-memory OpenCode config and
+per-session MCP environment instead of a durable client config. StashBase never
 writes any other client's configuration — the MCP Settings page is a read-only
 access surface external clients copy from.
 
@@ -40,6 +42,9 @@ access surface external clients copy from.
   actions, but only the Node server persists its session. Environment
   variables may isolate automated tests or select runtime plumbing, but are
   never the product credential source of truth.
+- Every OAuth flow records its initiating purpose. Account-menu and Agent
+  sign-in establish identity only; only the explicit hosted AI Index choice
+  may activate `stashbase-account`, reset the indexer, or begin backfill.
 - BYOK credentials, the refreshable Supabase account session, and the active
   embedding source persist independently. The local source requires no
   credential; selecting it first probes the bounded ONNX runtime before the
@@ -57,6 +62,13 @@ access surface external clients copy from.
   images from the exact allowed host and bounds redirects, time, bytes, and
   raster content type; failure remains an ordinary initials/icon fallback and
   never becomes a general URL proxy or account failure.
+- The OpenCode provider config likewise receives only a random process-local
+  broker key scoped to one live Agent session. The hosted Agent allowance
+  response may cross to Settings only as profile alias, remaining percentage,
+  token totals, and seven-day window timestamps; no monetary amount, provider
+  pricing, account token, or model request is returned to the renderer.
+  The OpenCode child inherits only non-secret launch/locale/TLS plumbing, not
+  ambient provider keys, proxy credentials, or Node/Electron injection flags.
 - Refresh demand for one account session is single-flight. A refresh may
   update or clear only the exact session it started from; a stale completion
   cannot overwrite or sign out a newer session.
@@ -108,7 +120,7 @@ access surface external clients copy from.
 | Role | Stable entry points |
 |---|---|
 | Persistent Interface | strict/fallback read and write plus domain getters/setters in `server/app-config.ts` |
-| Domain owners | `server/mcp-http-settings.ts`, `server/hosted-account.ts`, `server/hosted-embedding-broker.ts`, embedding and transcription configuration Modules |
+| Domain owners | `server/mcp-http-settings.ts`, `server/hosted-account.ts`, `server/hosted-embedding-broker.ts`, `server/hosted-agent-broker.ts`, embedding and transcription configuration Modules |
 | HTTP Adapters | `server/routes/appearance.ts`, `capture.ts`, `updates.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
 | Renderer Adapters | `web-src/src/features/account/components/SidebarAccountRow.tsx`, `web-src/src/common/components/AccountIdentity.tsx`, and `web-src/src/features/settings/hooks/` — one controller per panel (`useGeneralSettings.ts`, `useEmbedderSettings.ts`, `useTranscriptionSettings.ts`, `useMcpAccess.ts`, `useAgentRuntimes.ts`, `useAppearanceSettings.ts`, `useApiKeyEntry.ts`), each owning its reads, its optimistic writes, and their ordering guards. The panels under `components/` render what a controller returns and hold only which dialog is open |
 | Authorization read | `web-src/src/common/hooks/useEmbedderState.ts` — shared with the Files-panel callout, which may not import this feature |
@@ -116,7 +128,7 @@ access surface external clients copy from.
 | Capture runtime Adapter | `web-src/src/app/hooks/useClipboardImageOffer.ts`, `electron/preload.cjs`, and the clipboard boundary in `electron/main.cjs` |
 | Update runtime Adapter | `electron/update-manager.cjs`, `electron/main.cjs`, `electron/preload.cjs`, `web-src/src/common/hooks/useDesktopUpdate.ts`, and `web-src/src/common/components/DesktopUpdateBanner.tsx` — the hook and banner sit in `common/` because Settings and the sidebar account row both render update state, and a feature may not import a sibling |
 | Open-request Interfaces | `web-src/src/common/lib/settingsTrigger.ts` (Settings), `web-src/src/common/lib/embeddingSetupTrigger.ts` (AI Index setup), `web-src/src/common/lib/embeddingAuth.ts` (authorization and basic-mode facts) — shared so no surface reaches into the Settings feature to ask it to open |
-| Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, renderer account/appearance/embedding tests, `web-src/src/common/__tests__/desktop-update-hook.test.ts`, `web-src/src/features/settings/__tests__/appearance.test.ts`, `web-src/src/common/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts`, and J04 in `e2e/journeys/preparation-capture.spec.ts` |
+| Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/hosted-agent-broker.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, renderer account/appearance/embedding tests, `web-src/src/common/__tests__/desktop-update-hook.test.ts`, `web-src/src/features/settings/__tests__/appearance.test.ts`, `web-src/src/common/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts`, and J04 in `e2e/journeys/preparation-capture.spec.ts` |
 
 ## Validation
 

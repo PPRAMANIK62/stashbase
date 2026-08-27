@@ -365,10 +365,20 @@ function writeFileAtomic(file, content, options = {}) {
 async function startOrReuseServer() {
   const existing = await probeServer(SERVER_PORT, 300);
   if (existing.compatible) {
-    console.log(`[electron] reusing existing server at ${SERVER_URL}`);
-    return;
-  }
-  if (existing.occupied) {
+    if (!app.isPackaged) {
+      console.log(`[electron] reusing existing server at ${SERVER_URL}`);
+      return;
+    }
+    // Packaged builds never adopt. The single-instance lock means a live
+    // sibling Electron cannot exist, so a compatible listener is an orphan
+    // from a dead owner (or a manually launched server). Adopting it strands
+    // shutdown — its shutdown token belongs to the dead parent and
+    // `will-quit` only kills a child we spawned — so the server would
+    // outlive every future session. Spawn our own child instead: on
+    // EADDRINUSE it reclaims a verified orphaned sibling and rebinds, or
+    // exits with the port guidance when the holder has a live parent.
+    console.warn(`[electron] found an unowned StashBase server on ${SERVER_URL} — spawning an owned replacement`);
+  } else if (existing.occupied) {
     const what = existing.legacyStashBase
       ? 'an older StashBase server'
       : 'another local service';
@@ -1386,7 +1396,11 @@ if (!hasSingleInstanceLock) {
 let quitting = false;
 app.on('will-quit', (event) => {
   if (quitting) return;
-  if (!serverProc || serverProc.killed) return;
+  // `.killed` only records that a signal was SENT (e.g. the spawn-timeout
+  // path's SIGTERM) — the child may still be alive, and skipping the ladder
+  // here would orphan it because the timeout path's SIGKILL timer is unref'd
+  // and dies with us. Only a child that actually exited skips the ladder.
+  if (!serverProc || serverProc.exitCode != null || serverProc.signalCode != null) return;
   event.preventDefault();
   quitting = true;
   void requestJson(SERVER_PORT, '/api/internal/shutdown', 1500, {

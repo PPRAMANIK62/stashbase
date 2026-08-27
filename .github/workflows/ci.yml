@@ -132,6 +132,9 @@ jobs:
       - name: Test agent adapters
         run: pnpm test:agent
 
+      - name: Test bundled OpenCode runtime
+        run: pnpm test:opencode:native
+
       - name: Test MCP transports
         run: pnpm test:mcp
 

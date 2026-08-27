@@ -159,7 +159,6 @@ export async function recoverLostFolderContext({
     // has already cleared this window's current-folder context; make
     // the renderer match instead of leaving a stale tree open.
     dispatch({ type: 'TABS_RESET' });
-    dispatch({ type: 'CHAT_TABS_RESET' });
     dispatch({ type: 'ACTIVE_FOLDER', path: '' });
     dispatch({ type: 'FILE_ORDER_LOADED', order: {} });
     dispatch({ type: 'FILES_LOADED', files: [], folders: [], folder: '', folderPath: '' });

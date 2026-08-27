@@ -41,7 +41,13 @@ export function TitlebarControls() {
   }
 
   return (
-    <>
+    /* The shell's banner landmark. `display: contents` (app-shell.css) so
+     * the two absolutely-positioned control clusters keep positioning
+     * against `.app` exactly as before — the header contributes semantics
+     * only, never a grid track. The visually-hidden h1 roots the heading
+     * outline; the folder identity itself stays in `document.title`. */
+    <header className="app-titlebar">
+      <h1 className="sr-only">StashBase</h1>
       <div className="titlebar-controls">
         <TooltipButton
           className={controlButtonClass}
@@ -75,6 +81,6 @@ export function TitlebarControls() {
           <PanelRightIcon />
         </TooltipButton>
       </div>
-    </>
+    </header>
   );
 }

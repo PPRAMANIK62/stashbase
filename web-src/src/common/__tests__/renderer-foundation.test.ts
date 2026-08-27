@@ -762,6 +762,10 @@ const RAW_CONTROL_EXEMPTIONS: Record<string, { count: number; why: string }> = {
     count: 1,
     why: 'Palette query field — the third veil named in that same focus-suppression rule, and the one that wore a clipped ring until it was added to it.',
   },
+  'features/workspace/components/ManagedMoveFilePicker.tsx': {
+    count: 1,
+    why: 'Palette query field — the fourth veil named in that same focus-suppression rule, matching the other three pickers stroke for stroke.',
+  },
   'features/workspace/components/NewFolderInput.tsx': {
     count: 1,
     why: 'Tree-row inline editor. A field that sits flush inside a 22px tree row at the row’s own indent, where the accent stroke IS the editing affordance; the box treatment would have to be cancelled decision by decision.',

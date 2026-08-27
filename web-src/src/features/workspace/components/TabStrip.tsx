@@ -9,8 +9,10 @@ const TAB_MIME = 'application/x-stashbase-tab';
 
 /**
  * Tab strip at the top of the main pane — one chip per open tab plus a
- * `+` button. Left-click activates, `×` (or middle-click) closes, `+`
- * pushes an empty tab (Obsidian-style). The active tab gets a stronger
+ * `+` button. Left-click activates, `×` (or middle-click, or Delete on
+ * the focused tab) closes, `+` pushes an empty tab (Obsidian-style);
+ * Ctrl/Cmd+Shift+Arrow moves the focused tab (keyboard reorder parity
+ * with drag). The active tab gets a stronger
  * background; inactive tabs are muted; long names ellipsize. Every tab
  * is persistent — a sidebar click opens a lasting tab, so there is no
  * italic "preview" state or double-click-to-keep promotion.
@@ -118,6 +120,35 @@ export function TabStrip() {
     e.preventDefault();
   }
 
+  /** Close a tab from its keyboard (Delete / middle-click parity) or ×
+   *  paths, keeping focus in the strip: the neighbour that slides into
+   *  the closed tab's slot takes it (previous one when the last tab
+   *  closes; nothing when the strip empties). `closeTab` already owns
+   *  which tab becomes ACTIVE — this only parks the caret. */
+  function closeTabKeepingFocus(id: string) {
+    const index = state.tabs.findIndex((tab) => tab.id === id);
+    const neighbour = state.tabs[index + 1] ?? state.tabs[index - 1];
+    void actions.closeTab(id);
+    if (neighbour) {
+      requestAnimationFrame(() => document.getElementById(`document-tab-${neighbour.id}`)?.focus());
+    }
+  }
+
+  /** Keyboard parity for drag-to-reorder: move the focused tab one slot
+   *  left/right through the same TABS_REORDER action the drop path
+   *  dispatches, and keep focus (and selection state) on the moved tab. */
+  function reorderTab(id: string, direction: -1 | 1) {
+    const tabs = state.tabs;
+    const current = tabs.findIndex((tab) => tab.id === id);
+    const target = current + direction;
+    if (current < 0 || target < 0 || target >= tabs.length) return;
+    // Moving right past one neighbour = insert before the tab AFTER that
+    // neighbour (or append at the end); moving left = insert before it.
+    const beforeId = direction === 1 ? tabs[target + 1]?.id ?? null : tabs[target].id;
+    dispatch({ type: 'TABS_REORDER', id, beforeId });
+    requestAnimationFrame(() => document.getElementById(`document-tab-${id}`)?.focus());
+  }
+
   // TODO(09⏳02 b/c): drag-to-split (drop a tab on the right edge of the
   // main pane → vertical split) and drag-to-window (drag a tab out →
   // spawn a new window). Both couple to multi-window state; only the
@@ -178,6 +209,10 @@ export function TabStrip() {
               data-active={isActive ? '' : undefined}
               aria-selected={isActive}
               aria-controls="document-panel"
+              // Delete closes the focused tab (APG deletable-tabs
+              // pattern) — the × below is pointer chrome only, so this
+              // is the closability the tab itself advertises.
+              aria-keyshortcuts="Delete"
               tabIndex={isActive ? 0 : -1}
               draggable
               title={t.file ? (t.file.folder ? `${t.file.folder}/${t.file.name}` : t.file.name) : 'Empty tab'}
@@ -188,6 +223,22 @@ export function TabStrip() {
                   void actions.activateTab(t.id);
                   return;
                 }
+                // Delete closes the focused tab — the pointer-only ×
+                // is hidden from the accessibility tree, so this is the
+                // keyboard close path.
+                if (e.key === 'Delete') {
+                  e.preventDefault();
+                  closeTabKeepingFocus(t.id);
+                  return;
+                }
+                // Ctrl/Cmd+Shift+Arrow REORDERS (keyboard parity with
+                // drag); plain arrows keep navigating below.
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+                  e.preventDefault();
+                  reorderTab(t.id, e.key === 'ArrowRight' ? 1 : -1);
+                  return;
+                }
+                if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
                 if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
                 e.preventDefault();
                 // Moving the caret SELECTS as it goes — `activateOnFocus`
@@ -223,12 +274,21 @@ export function TabStrip() {
               onDrop={(e) => onTabDrop(e, t.id)}
             >
               <span className="tab-label">{label}</span>
+              {/* Pointer-only chrome, removed from the accessibility
+                * tree ON PURPOSE: `role="tab"` treats its children as
+                * presentational, so an interactive Button in here was a
+                * phantom second tab stop inside the tablist that some
+                * AT surfaced and some flattened. Keyboard/AT users close
+                * the FOCUSED TAB with Delete (see onKeyDown above, and
+                * the tab's aria-keyshortcuts); mouse users keep the ×
+                * and its tooltip. */}
               <Button
                 variant="ghost"
                 size="icon-xs"
                 className="tab-close font-normal"
-                title="Close tab"
-                aria-label={`Close ${label}`}
+                title={`Close ${label}`}
+                aria-hidden="true"
+                tabIndex={-1}
                 onClick={(e) => {
                   e.stopPropagation();
                   void actions.closeTab(t.id);

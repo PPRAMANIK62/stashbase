@@ -14,6 +14,12 @@
   required. Otherwise it creates a new tab. No started tab is hijacked.
 - A blank tab may follow a window folder switch. Draft or attachments freeze
   the scope visible to the user; content and resumed history remain pinned.
+- A structured `scope-removed` exit retires only Chats bound to that member. A
+  completely blank tab reconnects in place with an explicit Library scope. A
+  tab containing any user work preserves its tab, draft, attachments,
+  transcript, queued follow-ups, and history identity in a closed neutral
+  state; **New Library Chat** creates a separate tab whose first connection is
+  Library-scoped even when the window is browsing another folder.
 - A scope-specific History selection records one pending handoff. The active
   suitable blank tab consumes it exactly once before reconnecting.
 - Runtime readiness gates Chat before transport connection. Failed gates use
@@ -24,6 +30,11 @@
   Installation and authentication failures retain a separate **Check again**
   action; it calls the no-download discovery path so external recovery does not
   silently grant installation consent or start another login.
+- StashBase Agent is the default blank-chat preference. Its gate distinguishes
+  account-required from runtime installation, and Settings shows its fixed
+  seven-day allowance as remaining percentage and reset time beside the Codex
+  and Claude Code alternatives. Dollar values and model selection remain
+  hidden in the first release.
 - Tab activation and history resume only select renderer state. A missing
   runtime remains on the setup gate until **Install and continue**; activation
   code must not call the preparation endpoint speculatively.
@@ -62,7 +73,9 @@
   locked after binding. Model and effort come from runtime capabilities, and
   Default remains an omitted override. An idle Codex conversation applies a
   model choice to its next turn on the same thread; its row is disabled only
-  during an active turn. A populated Claude conversation keeps its model fixed.
+  during an active turn. Before a fresh Codex thread reports its actual model,
+  the control says Default rather than speculating from catalog metadata. A
+  populated Claude conversation keeps its model fixed.
   Locked controls stay legible and inert at the smallest surface that cannot
   act: a pinned setting dims its own row — still naming its value and why —
   while sibling settings stay adjustable, and a pill goes inert only when
@@ -79,9 +92,11 @@
   UI remains a capped-height chat input, not an editor workbench.
 - Suggestions only prefill a draft; they never send. Their rotation pauses
   while hovered or focused.
-- File and image context is explicit through mentions, selection, drag/drop, or
-  composer-focused paste. Image paste suppresses the competing library-import
-  offer and preserves accompanying text.
+- File and image context is explicit through mentions and each runtime's
+  advertised attachment capability. Selection, drag/drop, and composer-focused
+  paste are available only when that runtime can actually read the uploaded
+  bytes; image paste then suppresses the competing library-import offer and
+  preserves accompanying text.
 - Transient attachment upload preserves the user-visible Unicode basename
   by parsing multipart filename parameters as UTF-8. The server still
   sanitizes and uniquifies every supplied display name before writing.
@@ -115,8 +130,16 @@
   live renderer for this session's messages, or the history source's own
   per-message/turn times (Claude native transcript lines; Codex turn
   boundaries).
-- Tool activity is compact and inspectable. Intermediate failure may tint its
-  row but does not turn the whole summary into a terminal error.
+- Tool activity is compact and inspectable. Its collapsed category summary
+  omits exact counts but preserves singular/plural grammar from the underlying
+  actions. Intermediate failure may tint its row but does not turn the whole
+  summary into a terminal error.
+- OpenCode native file Diffs enter the same settled file-change surface, and
+  OpenCode tool names are already normalized before renderer state sees them.
+- Scope retirement is not a fatal transport state. Running or
+  permission-waiting tools and queued follow-ups become cancelled history;
+  settled content remains unchanged, no generic Retry/Reconnect appears, and
+  a raw socket close still follows the ordinary failure path.
 - Permission requests and recovery actions never enter collapsed activity.
 - Every settled reply exposes one standing Copy Reply control — always
   visible, never hover- or menu-gated — carrying the untouched assistant
@@ -129,10 +152,25 @@
 
 ## Rendering and Accessibility
 
+- The chat tab strip follows the APG tabs pattern: a `tab` carries no
+  interactive descendant. The visual close × is pointer-only — hidden from
+  the accessibility tree and the tab order, so keyboard focus never lands on
+  an invisible control — and Delete on the focused tab closes it.
+- The transcript log announces appends politely, but the one in-flight turn
+  is `aria-busy` until it settles so token streaming does not re-announce
+  the live tail. Each turn states its speaker for linearized reading
+  (visually hidden "You:" / agent-short-name prefixes); bubble alignment
+  alone is not attribution. Hand-rolled disclosure toggles (activity groups,
+  tool rows, thinking) reference the panel they reveal via `aria-controls`,
+  matching the Collapsible primitive's wiring.
+- Pane-level state cards (runtime gates, the empty-chat greeting, the
+  whole-pane fatal card) head the pane's outline at `h2`;
+  transcript-inline cards (inline fatal, permission asks, turn-failure
+  guidance) sit at `h3`.
 - Agent response Markdown is rendered as React elements with GFM behavior. Raw
   HTML, remote images, and unsafe schemes remain inert.
 - The same shared renderer parses `$...$`, `$$...$$`, `\(...\)`, and
-  `\[...\]` into untrusted, locally bundled KaTeX output for both runtimes
+  `\[...\]` into untrusted, locally bundled KaTeX output for every runtime
   and restored history. Its delimiter normalization must remain
   Markdown-aware: code, escapes, incomplete streaming input, and currency
   prose stay literal; invalid TeX degrades visibly. Keep KaTeX and its fonts
@@ -159,7 +197,7 @@
 | Window-level catalog prime | `web-src/src/features/agent-panel/hooks/useAgentCatalogPrime.ts` — the one eager runtime read, called from `app/App.tsx` because every chat surface is lazy |
 | Sidebar entry points | `web-src/src/features/agent-panel/components/NewChatButton.tsx` (the split button, and the only reader of the next-chat agent preference) and `ScopeHistoryButton.tsx` (the per-scope history clock, which owns the `SessionHistoryMenu` lazy boundary). Both are exported from the feature barrel and merely placed by `app/components/Sidebar.tsx`; the sidebar holds no Agent logic of its own |
 | Session state Interface | `web-src/src/features/agent-panel/hooks/useAgentSession.ts` owns transport, event routing, and session reset/resume, and composes the focused sub-hooks beside it in `web-src/src/features/agent-panel/hooks/`. It returns those sub-hooks as owner-named groups (controls, queue, mentions, skills, runtime, transcript) rather than one flat surface; the transcript rules its events imply are pure Modules in `lib/transcriptEvents.ts` |
-| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx` owns the block list and turn layout over the pure turn model in `lib/turnModel.ts`, with the user half in `AgentUserTurn.tsx` and the tool surface in `AgentToolActivity.tsx`; `AgentComposer.tsx` owns the draft and its send predicate, with the suggestion popup in `MentionSuggestions.tsx` and the session pills in `ComposerPills.tsx`; `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` over `hooks/useSessionHistory.ts`, which merges both agents' listings and routes a rename or delete through the row's own agent and scope |
+| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx` owns the block list and turn layout over the pure turn model in `lib/turnModel.ts`, with the user half in `AgentUserTurn.tsx` and the tool surface in `AgentToolActivity.tsx`; `AgentComposer.tsx` owns the draft and its send predicate, with the suggestion popup in `MentionSuggestions.tsx` and the session pills in `ComposerPills.tsx`; `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` over `hooks/useSessionHistory.ts`, which merges every registered agent's listings and routes a rename or delete through the row's own agent and scope |
 | State Interfaces | Chat tab state/actions in `web-src/src/store/state/state.ts` and `state/stateReducer.ts`; activation consent in the `activateChatTab` action (`store/contexts/AppContext.tsx`) over `store/lib/chatTabPlan.ts`; focused pure state Modules under `features/agent-panel/lib/` |
 | Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `features/agent-panel/lib/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
 | Attachment HTTP Adapter | `web-src/src/common/api/api.ts` and `server/routes/attach.ts` |

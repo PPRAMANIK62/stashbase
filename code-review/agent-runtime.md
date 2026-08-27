@@ -3,6 +3,63 @@
 > Review contract for supported CLI discovery, managed installation, MCP
 > preparation, native session ownership, history, and protocol normalization.
 
+## Included StashBase Agent
+
+- StashBase Agent is the default adapter. It uses exact-version
+  `opencode-ai@1.18.19` and `@opencode-ai/sdk@1.18.19` dependencies; packaging
+  unpacks the native OpenCode target from asar. Resolution accepts only that
+  package-owned binary and never falls back to PATH. OpenCode auto-update and
+  sharing are disabled, provider configuration is process-injected, and its
+  XDG state plus child HOME stay under AppData so user-global OpenCode/Claude
+  config and skills cannot enter the bundled runtime implicitly. Its child
+  environment is an allowlist of launch, locale, temporary-directory, and TLS
+  plumbing; ambient provider keys, proxy credentials, user OpenCode settings,
+  and Node/Electron injection flags do not cross the process boundary.
+- Readiness is a cheap packaged-binary and StashBase-account check. It never
+  installs a runtime or asks for a model key. Sign-out ends StashBase Agent
+  sessions and processes before clearing the Node-owned account session.
+- Each live panel session owns a loopback-only OpenCode server with random
+  Basic authentication. Its MCP child receives the exact window id and a
+  random live-session attribution id. History reads use a separate runtime
+  and remain available while signed out because native sessions are local;
+  app shutdown closes every process and the model broker.
+- OpenCode receives only a random loopback model credential. The Node broker
+  issues that credential per live Agent session, requires an active
+  user-submitted turn, authenticates the account, retries one 401 after token
+  refresh, preserves one idempotency key, and sends the same validated UUID in
+  `x-stashbase-agent-turn-id` for every model call in that prompt turn before
+  streaming to the hosted
+  OpenAI-compatible contract at
+  `POST /v1/agent/chat/completions`. The account usage contract is
+  `GET /v1/agent/usage` and reports remaining percentage, token totals, and the
+  fixed seven-day window timestamps. Neither endpoint exposes account tokens,
+  model pricing, or monetary balances to the renderer or OpenCode state.
+- The hosted service owns DeepSeek routing, picodollar cost accounting,
+  fixed seven-day windows, and allowance enforcement in a ledger separate
+  from AI Index. It pre-reserves before every call and settles provider usage
+  exactly once without making an account balance negative. The first call of
+  a submitted prompt pins policy and model versions for that turn; all later
+  model calls caused by the same prompt reuse its turn identity and $0.20
+  ceiling. It does not own Agent processes, sessions, tools, permission
+  decisions, or files. A 402 becomes the structured
+  `allowance-exhausted` turn failure and routes recovery to Agent Settings.
+  Active hosted-account restrictions block Agent reservations atomically.
+  Reset or expiry closes a window to new calls immediately; reservations
+  already in flight still settle against that original window, while a later
+  call must use a fresh prompt-turn identity.
+- The desktop targets the stable `stashbase-agent-default` profile alias and
+  does not expose model selection in the first release. The hosted service
+  resolves the alias through an immutable, versioned model profile registered
+  to a code-owned provider Adapter; arbitrary provider URLs are never accepted.
+  File Diffs, cumulative text/reasoning, tool states, permissions, titles,
+  history, abort, and errors normalize through the shared protocol. OpenCode
+  tool names are normalized once at this Adapter boundary.
+- Library sessions disable OpenCode's native read/write/edit/search/command
+  tools and reach files only through the membership-checked StashBase MCP
+  operations. Folder sessions may use native tools inside their exact cwd;
+  edits, commands, web access, and doom-loop recovery ask, while external
+  directory access is denied.
+
 ## Discovery and Preparation
 
 - App boot and folder navigation perform only cheap discovery, a bounded
@@ -121,7 +178,7 @@
   omits the surface. Availability follows the general development-runtime
   marker and does not depend on whether the renderer is served through Vite.
 - Development turn failure injection is a separate one-shot `nextTurnFailure`
-  value consumed by the next prompt of any live session, in either runtime.
+  value consumed by the next prompt of a live Claude or Codex session.
   The adapter plays a scripted failure through its normal event path — a
   turn-scoped error for rate-limit, quota, auth-expired, and network shapes, or
   a session-ending exit for crash — and the prompt never reaches the native
@@ -146,8 +203,11 @@ it is not a third scope.
   Claude's `CLAUDE.md` bridge is create-only. Both remain visible user files.
 - Window folder switching does not tear down or rebind started sessions.
 - Folder removal ends every session bound to that member across windows but
-  does not end library sessions. Window close ends that window's sessions;
-  app quit ends all sessions through the cleanup ladder.
+  does not end library sessions. Before closing each affected transport, the
+  Adapter emits the structured `scope-removed` exit with the retired member
+  path; renderer behavior must not depend on membership refresh timing or a
+  raw close. Window close ends that window's sessions; app quit ends all
+  sessions through the cleanup ladder.
 - `create_project` may migrate only the attributed live library session.
   Persist the session-to-folder override before emitting the scope change so
   history never lists the session in both scopes. Preserve native session
@@ -158,6 +218,10 @@ it is not a third scope.
 
 ## Native Process Ownership
 
+- Each live StashBase Agent chat owns one authenticated OpenCode server. The
+  per-session process boundary keeps MCP attribution exact when turns run
+  concurrently. All servers may share OpenCode's native history store, while
+  their injected config and credentials remain process-local.
 - One live Codex chat owns one app-server process and one thread. History
   clients have separate process ownership and may share only their RPC
   vocabulary and a bounded idle cache.
@@ -181,7 +245,9 @@ and effort. Renderer code selects by adapter metadata and does not branch on
 assumed CLI versions.
 
 - Model catalogs and effort levels come from the native runtime. `Default`
-  means no override and never rewrites global CLI configuration.
+  means no override and never rewrites global CLI configuration. A fresh
+  Codex session keeps that label until its native thread reports the actual
+  model; catalog metadata is not presented as live session identity.
 - Codex applies an explicit idle model change to the next turn of the existing
   thread. The Adapter ignores model changes while a turn is active; returning
   to `Default` omits the next turn's model override.
@@ -191,6 +257,10 @@ assumed CLI versions.
 - Runtime errors settle only the matching active turn once. Retry-in-progress
   signals do not become permanent failures; repeated or late terminal events
   are ignored.
+- Expected scope retirement is a structured terminal event, distinct from
+  normal exit, runtime error, and unclassified transport closure. Both native
+  Adapters send it before disposal; the renderer uses its reason and folder
+  fields directly and never classifies close timing or message prose.
 - Turn interruption is idempotent at the Adapter boundary. Codex currently
   exposes its already-idle interrupt race only through the stable
   `no active turn to interrupt` invalid-request message, without structured
@@ -209,7 +279,8 @@ assumed CLI versions.
   assigns this classification from native event structure; the renderer never
   parses provider prose to recover severity.
 - Turn-scoped runtime errors carry a structured failure kind — rate-limit,
-  quota, auth-expired, or network — classified once in the adapters through
+  quota, included-allowance exhaustion, hosted access restriction,
+  auth-expired, or network — classified once in the adapters through
   the shared classifier; an unmatched message stays a plain error. The
   renderer maps the kind to recovery copy and actions without parsing
   messages, and every card carries a truthful action. Rate, network, and
@@ -224,12 +295,24 @@ assumed CLI versions.
   settles its card to a plain message — a stale button must not outlive the
   state it described — and auto-resends the failed prompt (immediately for
   Try again, on session readiness for sign-in and Reconnect), so the
-  outcome is visible without retyping: an answer when the recovery stuck, a
-  fresh card when it did not. The armed retry is one-shot and cleared by
+  outcome is visible without retyping: an answer when the recovery worked, a
+  fresh card when it did not. Included-Agent account/allowance recovery arms
+  the same one-shot retry while Agent Settings is open. The armed retry is
+  cleared by
   every other session reset. A turn failure never gates the panel and never
   ends the session.
 - Skills are discovered and invoked through native capability paths. The
   runtime never exposes or concatenates skill-file contents into a prompt.
+
+## Known Gap — OpenCode Directory Rebind
+
+An attributed StashBase Agent Library chat participates in `create_project`:
+the live panel scope changes and subsequent MCP operations remain attached to
+that session/window. OpenCode 1.18.19 has no supported operation for moving the
+same native session between directory projects. The Adapter therefore does not
+claim a durable session-folder override: restored history remains under
+Library, and the continued chat stays on its safe MCP-only agent profile rather
+than enabling native commands against the old folder-home cwd.
 
 ## Implementation Map
 
@@ -237,6 +320,7 @@ assumed CLI versions.
 |---|---|
 | Agent Interface | `AgentAdapter`, normalized client/server events, scope resolution, attach, and stop in `server/agent-contract.ts` |
 | Adapter registry | `server/agent-adapters.ts` |
+| StashBase/OpenCode Adapter | `server/opencode-runtime.ts`, `server/opencode-agent.ts`, and `server/hosted-agent-broker.ts` |
 | Turn failure classification | `classifyAgentTurnFailure` in `server/agent-turn-failure.ts` over the shared kinds in `shared/agent-protocol.ts`; renderer recovery guidance in `web-src/src/features/agent-panel/lib/turnFailure.ts` |
 | Preparation Interface | `AgentBootstrapCoordinator` and its structured failure contract in `server/agent-runtime-installer.ts`; discovery and one-shot debug controls in `server/agent-cli.ts` and `server/agent-runtime-paths.ts` |
 | MCP wiring | `ensureAgentMcp` and the launcher writer in `server/agent-mcp.ts` |
@@ -244,7 +328,7 @@ assumed CLI versions.
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
 | Renderer Adapter | `web-src/src/common/lib/agentCatalog.ts`, the `activateChatTab` action in `web-src/src/store/contexts/AppContext.tsx`, `runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
-| Focused evidence | `server/__tests__/agent-contract.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs`; J11 in `e2e/journeys/agent-workflows.spec.ts` proves the first post-rebind MCP write lands in the project |
+| Focused evidence | `server/__tests__/agent-contract.test.ts`, `opencode-agent.test.ts`, `hosted-agent-broker.test.ts`, `opencode-native-smoke.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs`; J11 in `e2e/journeys/agent-workflows.spec.ts` proves the first post-rebind MCP write for the established native adapters |
 
 ## Validation
 
@@ -254,6 +338,7 @@ Run:
 pnpm typecheck
 pnpm test:agent
 pnpm test:agent:native
+pnpm test:opencode:native
 ```
 
 Run `pnpm test:e2e:agent-protocol` when the Codex vocabulary changes and

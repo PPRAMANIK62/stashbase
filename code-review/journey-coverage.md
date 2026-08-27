@@ -125,7 +125,7 @@ aliases, and Journey E2E owns representative composition.
 
 **Status:** Release-dependent.
 
-- **Contract Test:** renderer, viewer, Markdown, JSON, file transaction, and
+- **Contract Test:** renderer, viewer, Markdown, JSON, TXT, file transaction, and
   Electron lifecycle suites cover source identity, parsing, mode changes,
   ordinary saves, navigation, removal of native reload bypasses, save-gated
   recovery reload, shared renderer/Agent/MCP version authority, conflict
@@ -133,7 +133,8 @@ aliases, and Journey E2E owns representative composition.
   failure/confirmation paths.
 - **Journey E2E:** [document editing smoke](../e2e/smoke/document-editing.spec.ts),
   [workspace navigation depth](../e2e/journeys/navigation-depth.spec.ts),
-  [Markdown and JSON](../e2e/journeys/markdown-json.spec.ts),
+  [Markdown, JSON, and TXT](../e2e/journeys/markdown-json.spec.ts), focused
+  `plain-text-document.test.ts`,
   [outline and Find](../e2e/journeys/markdown-outline-find.spec.ts),
   [library mutations](../e2e/journeys/library-mutations.spec.ts), and
   [format and media](../e2e/journeys/formats-media.spec.ts) cover representative
@@ -176,7 +177,7 @@ aliases, and Journey E2E owns representative composition.
 **Status:** Partial.
 
 - **Contract Test:** `pnpm test:retrieval` and the data, scope, credential,
-  and renderer suites cover exact filtering, semantic mechanics, source
+  and renderer suites cover exact filtering (including encoding-safe TXT), semantic mechanics, source
   remapping, access boundaries, account identity, and failure presentation.
   Python daemon tests additionally lock the fixed ONNX model identity,
   provider/dimension collection separation, and cross-collection cleanup for
@@ -214,13 +215,27 @@ aliases, and Journey E2E owns representative composition.
   permissions, failed-install external recheck without another download,
   managed Codex PowerShell path ownership and missing-output diagnostics,
   installed-but-signed-out Codex detection, same-executable browser login,
-  recovery, transcript, and layout state.
+  recovery, transcript, layout state, and structured folder-scope retirement
+  for blank, draft-only, queued, and active-tool Chats. Workspace reset tests
+  pin Chat preservation through both direct folder loss and 412 recovery.
+  `pnpm test:opencode:native` starts the
+  exact bundled OpenCode binary and completes an SDK session against a local
+  fake OpenAI-compatible gateway; broker tests cover token isolation, streaming,
+  refresh retry, per-session credentials, required UUID turn-header
+  attribution across retries, stable model profile routing, and allowance
+  classification. Config tests also prove that ambient credentials and process
+  injection flags do not enter the bundled runtime.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
-  the built-in panel against the deterministic fake runtime.
+  the default included-Agent account gate and bring-your-own choices, then
+  exercises the built-in panel against the deterministic fake Codex runtime,
+  including
+  retaining a started cross-folder Chat through Library removal and opening a
+  fresh explicitly Library-scoped Chat.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
-- **Release Check:** real CLI/account setup, packaged runtime discovery, one
-  credentialed turn, and clipboard image behavior remain release evidence.
+- **Release Check:** packaged OpenCode version/executability, a real hosted
+  StashBase Agent turn and allowance response, bring-your-own CLI/account setup,
+  and bring-your-own clipboard image behavior remain release evidence.
 
 ## J07: Converge
 
@@ -251,9 +266,8 @@ aliases, and Journey E2E owns representative composition.
   is outside StashBase ownership.
 - **Release Check:** packaged launcher, copied configuration, URL access, and
   one representative external client remain release evidence.
-- **Gap:** MCP `write_file` and `edit_file` descriptions currently name only
-  Markdown/HTML even though the shared operation also accepts JSON. See the
-  [MCP Access Known Gap](mcp-access.md#known-gap--json-tool-description).
+- **Gap:** none in the direct-text format description/parity boundary; focused
+  MCP mutations cover Markdown, JSON, and TXT plus invalid-encoding refusal.
 
 ## J09: Bug report
 
@@ -318,7 +332,10 @@ aliases, and Journey E2E owns representative composition.
 - **Gap:** real-Agent intent/tool choice still needs an Eval. Codex
   configuration leaves `create_project` on the default prompt path, but no
   focused test locks that tool allowlist; Claude requires equivalent focused
-  or release evidence.
+  or release evidence. StashBase Agent can rebind the live panel and attributed
+  MCP path, but OpenCode cannot yet migrate its native history/cwd; its restored
+  row remains under Library and this path needs separate evidence after that
+  native limitation is resolved.
 
 ## Maintenance Rule
 

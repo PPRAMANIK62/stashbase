@@ -71,7 +71,9 @@ export function AppearancePanel() {
 
   if (!preferences) {
     return error
-      ? <div className="text-sm text-destructive">Couldn’t load appearance: {error}</div>
+      // role="alert": the failure replaces the loading text after an async
+      // fetch, so it has to announce itself.
+      ? <div role="alert" className="text-sm text-destructive">Couldn’t load appearance: {error}</div>
       : <div className="py-3 text-base text-muted-foreground">Loading…</div>;
   }
   return (
@@ -83,7 +85,7 @@ export function AppearancePanel() {
       <PresetGroup label="Theme" value={preferences.theme} choices={THEMES} disabled={saving} onChange={(theme) => { void save({ theme }); }} />
       <PresetGroup label="Interface size" value={preferences.uiScale} choices={SCALES} disabled={saving} onChange={(uiScale) => { void save({ uiScale }); }} hint="Scales app controls and chrome without changing document text." />
       <PresetGroup label="Reading text size" value={preferences.readingTextSize} choices={SCALES} disabled={saving} onChange={(readingTextSize) => { void save({ readingTextSize }); }} hint="Changes Markdown reading and editing text without affecting the interface." />
-      {error && <div className="mt-2.5 text-sm text-destructive">Couldn’t save appearance: {error}</div>}
+      {error && <div role="alert" className="mt-2.5 text-sm text-destructive">Couldn’t save appearance: {error}</div>}
     </div>
   );
 }
