@@ -73,7 +73,7 @@ export async function saveFileContent(
     const currentVersion = fileVersion(name);
     if (currentVersion !== opts.baseVersion) {
       const currentContent = readText(name);
-      const serializedContent = format === 'md' || format === 'json'
+      const serializedContent = format === 'md' || format === 'json' || format === 'text'
         ? preserveTextSourceFormat(currentContent ?? '', content)
         : content;
       if (currentContent === serializedContent) {
@@ -88,7 +88,7 @@ export async function saveFileContent(
   // CodeMirror stores its document with LF line separators. Editable raw text
   // still owns its byte-level presentation: retain a leading UTF-8 BOM and
   // serialize edits using the source's uniform (or dominant mixed) ending.
-  const preservesSourceFormat = format === 'md' || format === 'json';
+  const preservesSourceFormat = format === 'md' || format === 'json' || format === 'text';
   const previousContent = preservesSourceFormat ? readText(name) : null;
   const savedContent = preservesSourceFormat
     ? preserveTextSourceFormat(previousContent ?? '', content)

@@ -18,8 +18,10 @@
 
 ## Format Completion
 
-- Markdown, HTML, and JSON use source-owned text paths. JSON validity is not an
-  admission gate and JSON never joins note bundles or legacy-derived hiding.
+- Markdown, HTML, JSON, and `.txt` use source-owned text paths. JSON validity is
+  not an admission gate and JSON never joins note bundles or legacy-derived
+  hiding. Generic workspace files remain outside Preparation, exact retrieval,
+  semantic admission, and automatic Agent context.
 - Image OCR is complete only when current, searchable derived text carries its
   completion marker. Empty OCR is a failure, not success.
 - PDF text is complete only when current derived Markdown has the terminal
@@ -109,6 +111,9 @@ search; only explicit Start clears it.
   Direct-text sources remain usable without durable Preparation; prepared-text
   sources become readable only through current, format-owned output; a
   preview-only surface never changes either classification.
+- Workbench visibility is wider than reconcile discovery. Generic files and
+  excluded-directory placeholders may appear in the tree without becoming
+  daemon admission, keyword-search, or Preparation work.
 - A newly queued source invalidates stale final output immediately, then the
   extractor repeats cleanup at execution.
 - Content-addressed prepared output carries the source hash into the indexing

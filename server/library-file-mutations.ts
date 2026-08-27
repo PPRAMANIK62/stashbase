@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { isEmbeddingAvailable } from './embedding-availability.ts';
 import { queueConvertibleSource } from './conversion-dispatch.ts';
 import { clearRecord } from './conversion-status.ts';
@@ -13,6 +15,7 @@ import {
   renameOnDisk,
 } from './files.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import { resolveSafe } from './file-paths.ts';
 import { runWithFolderRoot } from './folder.ts';
 import { detectFormat, detectViewerFormat, isConvertibleSource } from './format.ts';
 import { contentSizeError } from './indexable.ts';
@@ -73,7 +76,7 @@ export async function editLibraryFile(
   if (!oldText) throw routeError('old_text must not be empty', 400);
   const current = await readLibraryFile(rawPath);
   if (current.derived) {
-    throw routeError('edit_file cannot edit derived PDF/DOCX/audio text; create or edit a Markdown/HTML source file instead', 415, 'UNSUPPORTED_FORMAT');
+    throw routeError('edit_file cannot edit derived PDF/DOCX/audio text; create or edit a Markdown, HTML, JSON, or .txt source file instead', 415, 'UNSUPPORTED_FORMAT');
   }
   const count = countOccurrences(current.content, oldText);
   if (count === 0) throw routeError('old_text not found', 409, 'EDIT_MISMATCH');
@@ -101,25 +104,33 @@ function countOccurrences(content: string, needle: string): number {
 export async function moveLibraryFile(
   rawPath: unknown,
   rawNewPath: unknown,
-  opts: { cascade?: boolean } = {},
+  opts: { cascade?: boolean; allowOpaque?: boolean } = {},
 ): Promise<{ path: string; oldPath: string; linksUpdated: number; indexWarning?: string }> {
   const oldTarget = normalizeLibraryFilePath(rawPath);
   const newTarget = normalizeLibraryFilePath(rawNewPath);
   if (!filesystemPath.equal(oldTarget.folderRoot, newTarget.folderRoot)) {
     throw routeError('move_file currently supports moves within the same folder only', 400);
   }
+  validateLibraryWritableFolderRel(oldTarget.folderRel);
   validateLibraryWritableFolderRel(newTarget.folderRel);
   return runWithFolderRoot(oldTarget.folderRoot, async () => {
     const oldFormat = detectViewerFormat(oldTarget.folderRel);
-    if (!oldFormat) throw routeError('unsupported format', 415, 'UNSUPPORTED_FORMAT');
+    const opaque = oldFormat == null;
+    if (opaque && !opts.allowOpaque) throw routeError('unsupported format', 415, 'UNSUPPORTED_FORMAT');
+    if (opaque && !isRegularFileNoFollow(oldTarget.folderRel)) {
+      throw routeError('source is not a regular file', 415, 'UNSUPPORTED_FORMAT');
+    }
     const oldStructuredFormat = detectFormat(oldTarget.folderRel);
     const newFormat = oldStructuredFormat ? detectFormat(newTarget.folderRel) : detectViewerFormat(newTarget.folderRel);
-    if (newFormat !== oldFormat) {
+    if (!opaque && newFormat !== oldFormat) {
       throw routeError(`new_path must keep a ${oldFormat} extension`, 400);
     }
-    const viewerOnly = !oldStructuredFormat && isConvertibleSource(oldTarget.folderRel);
-    const content = viewerOnly ? null : readText(oldTarget.folderRel);
-    if (!viewerOnly && content == null) throw routeError('not found', 404);
+    if (opaque && path.extname(newTarget.folderRel).toLocaleLowerCase() !== path.extname(oldTarget.folderRel).toLocaleLowerCase()) {
+      throw routeError('new_path must keep the original extension', 400);
+    }
+    const viewerOnly = !opaque && !oldStructuredFormat && isConvertibleSource(oldTarget.folderRel);
+    const content = opaque || viewerOnly ? null : readText(oldTarget.folderRel);
+    if (!opaque && !viewerOnly && content == null) throw routeError('not found', 404);
     if (viewerOnly && !pathExists(oldTarget.folderRel)) throw routeError('not found', 404);
     if (pathExists(newTarget.folderRel) && !isSameExistingPath(oldTarget.folderRel, newTarget.folderRel)) {
       throw routeError('target exists', 409);
@@ -147,7 +158,14 @@ export async function moveLibraryFile(
 
     let indexWarning: string | undefined;
     try {
-      if (viewerOnly) {
+      if (opaque) {
+        await indexer.deleteFile(oldTarget.abs).catch((err) => {
+          log.warn(`library move: failed to remove opaque source index row ${oldTarget.abs}: ${errorMessage(err)}`);
+        });
+        await indexer.deleteFile(newTarget.abs).catch((err) => {
+          log.warn(`library move: failed to remove opaque target index row ${newTarget.abs}: ${errorMessage(err)}`);
+        });
+      } else if (viewerOnly) {
         clearRecord(oldTarget.abs);
         clearRecord(newTarget.abs);
         try { deleteDerivedForSource(oldTarget.abs); } catch (err: unknown) {
@@ -211,9 +229,18 @@ export async function moveLibraryFile(
   });
 }
 
-export async function deleteLibraryFile(rawPath: unknown): Promise<{ path: string; alreadyGone: boolean; indexWarning?: string }> {
+export async function deleteLibraryFile(
+  rawPath: unknown,
+  opts: { allowOpaque?: boolean } = {},
+): Promise<{ path: string; alreadyGone: boolean; indexWarning?: string }> {
   const target = normalizeLibraryFilePath(rawPath);
   return runWithFolderRoot(target.folderRoot, async () => {
+    if (!detectViewerFormat(target.folderRel) && !opts.allowOpaque) {
+      throw routeError('unsupported format', 415, 'UNSUPPORTED_FORMAT');
+    }
+    if (pathEntryExistsNoFollow(target.folderRel) && !isRegularFileNoFollow(target.folderRel)) {
+      throw routeError('source is not a regular file', 415, 'UNSUPPORTED_FORMAT');
+    }
     await prepareFileOperation(target.folderRel);
     const derivedArtifacts = derivedArtifactsForSource(target.folderRel);
     const removed = deleteFile(target.folderRel);
@@ -243,4 +270,21 @@ export async function deleteLibraryFile(rawPath: unknown): Promise<{ path: strin
       ...(failures.length ? { indexWarning: `Deleted, but AI Index cleanup failed for ${failures.length} path(s). Run sync to reconcile.` } : {}),
     };
   });
+}
+
+function isRegularFileNoFollow(folderRel: string): boolean {
+  try {
+    return fs.lstatSync(resolveSafe(folderRel)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function pathEntryExistsNoFollow(folderRel: string): boolean {
+  try {
+    fs.lstatSync(resolveSafe(folderRel));
+    return true;
+  } catch {
+    return false;
+  }
 }

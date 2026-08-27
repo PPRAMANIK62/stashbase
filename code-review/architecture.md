@@ -105,6 +105,11 @@ surface.
   cleanup failures.
 - Static renderer serving must bypass every API and asset route before serving
   the web bundle.
+- `shared/file-formats.ts` and `shared/library-files.ts` carry the exact
+  renderer/server tree contract. `generic` widens Workbench visibility only;
+  the server's known-format detector remains the narrower retrieval and Agent
+  admission boundary. Generic preview uses its own read-only route rather than
+  widening `/api/files`, library operations, or MCP.
 
 ## Durable Seams
 

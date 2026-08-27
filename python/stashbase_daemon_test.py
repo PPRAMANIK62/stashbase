@@ -20,17 +20,19 @@ class StashbaseDaemonTests(unittest.TestCase):
         previous = {key: value.copy() if hasattr(value, "copy") else value for key, value in stashbase_daemon._RULES.items()}
         try:
             stashbase_daemon.op_set_rules(None, {
-                "include_extensions": [".html", ".htm", ".json"],
+                "include_extensions": [".html", ".htm", ".json", ".txt"],
                 "note_extensions": [".md", ".markdown", ".html", ".htm"],
             })
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 (root / "data.JSON").write_text("{ invalid", encoding="utf-8")
+                (root / "notes.txt").write_text("plain text", encoding="utf-8")
                 bundle = root / "data_files"
                 bundle.mkdir()
                 (bundle / "child.md").write_text("# Visible", encoding="utf-8")
                 scanned = stashbase_daemon._walk_disk(root)
                 self.assertIn("data.JSON", scanned)
+                self.assertIn("notes.txt", scanned)
                 self.assertIn("data_files/child.md", scanned)
         finally:
             stashbase_daemon._RULES.clear()

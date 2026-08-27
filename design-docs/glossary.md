@@ -65,11 +65,22 @@ matters. Use the narrow capability instead:
   built-in attachment and external MCP behavior differ.
 - **File-mutable** — the visible source can be renamed, moved, or deleted. This
   does not imply that its contents are editable.
+- **Retrieval-eligible** — Search and automatic Chat context may consume direct
+  or current prepared text for the source. A muted generic file is explicitly
+  not retrieval-eligible even when its bytes can be shown read-only.
 
 Creating a new text source, importing a binary source, previewing it, editing
 its contents, and mutating its file identity are separate capabilities. The
 canonical Shipping matrix lives in the
 [Documents area](design/documents.md#format-capability-matrix).
+
+## Generic workspace file
+
+An ordinary file visible in the active-folder tree that has no declared
+retrieval format. Selection may inspect it as bounded strict UTF-8 text or show
+an explicit unavailable placeholder, but it remains outside Search, automatic
+Chat context, Preparation, and Agent/MCP file access. The muted tree treatment
+communicates this capability boundary; it does not mean the file is missing.
 
 ## Derived data
 

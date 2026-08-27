@@ -1,9 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION } from '../shared/file-formats.ts';
+import {
+  LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION,
+} from '../shared/file-formats.ts';
 import { decodeEntities } from './html.ts';
 import { onSwitch } from './folder.ts';
-import { detectFormat, detectViewerFormat, isDerivedNoteName, type FileFormat, type ViewerFormat } from './format.ts';
+import {
+  detectFormat,
+  detectViewerFormat,
+  isDerivedNoteName,
+  isNoteName,
+  type FileFormat,
+  type ViewerFormat,
+} from './format.ts';
 import {
   FILESYSTEM_SCAN_YIELD_EVERY,
   isCloudPlaceholderName,
@@ -14,9 +23,10 @@ import {
 } from './indexable.ts';
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { folderRoot, resolveSafe } from './file-paths.ts';
-import type { UnsupportedFileSummary } from '../shared/library-files.ts';
-
-export type { UnsupportedFileSummary } from '../shared/library-files.ts';
+import type {
+  WorkspaceEntryAvailability,
+  WorkspaceFileKind,
+} from '../shared/library-files.ts';
 
 const LEGACY_DERIVED_SOURCE_RE = new RegExp(`^(.+)\\.(${LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
 const LEGACY_DERIVED_STEM_RE = new RegExp(`\\.(${LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
@@ -24,25 +34,26 @@ const LEGACY_DERIVED_STEM_RE = new RegExp(`\\.(${LEGACY_DERIVED_SOURCE_EXTENSION
 export interface FileEntry {
   /** Folder-relative POSIX path (e.g. `topic/note.md`). */
   name: string;
-  /** Widened to `ViewerFormat` to include viewable-only formats like
-   *  `pdf` (which are surfaced in the sidebar but never indexed). */
+  /** Workbench dispatch. `generic` is tree-visible but excluded from retrieval. */
   format: ViewerFormat;
   /** Raw file size on disk. Zero-byte notes are intentionally not indexed. */
   size: number;
   heading: string;
   snippet: string;
   imported_at: string;
+  entryKind?: WorkspaceFileKind;
+  availability?: WorkspaceEntryAvailability;
 }
 
 export interface FolderEntry {
   /** Folder-relative POSIX path (e.g. `topic/sub`). */
   path: string;
+  kind?: 'normal' | 'excluded' | 'unreadable';
 }
 
 export interface FolderListing {
   files: FileEntry[];
   folders: FolderEntry[];
-  unsupportedFiles: UnsupportedFileSummary;
 }
 
 export type ImmediateDirectoryEntry =
@@ -62,57 +73,144 @@ const TEXT_PREVIEW_BYTES = 4096;
 
 onSwitch(() => previewCache.clear());
 
-const SOURCE_EXTENSIONS = new Set<string>([
-  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-  '.py', '.pyw',
-  '.go', '.rs',
-  '.java', '.kt', '.kts', '.scala',
-  '.c', '.h', '.cc', '.cpp', '.cxx', '.hpp',
-  '.cs',
-  '.rb', '.php',
-  '.swift', '.m', '.mm',
-  '.dart',
-  '.ex', '.exs',
-  '.lua', '.r',
-  '.sh', '.bash', '.zsh', '.fish', '.ps1',
-  '.sql',
-  '.vue', '.svelte',
-  '.css', '.scss', '.less',
-  '.ipynb',
-]);
-
-const SOURCE_BASENAMES = new Set<string>([
-  'dockerfile',
-  'makefile',
-  'cmakelists.txt',
-]);
-
-function classifyUnsupportedFile(name: string): 'source' | 'other' {
-  const base = name.toLowerCase();
-  if (SOURCE_BASENAMES.has(base)) return 'source';
-
-  const ext = path.extname(name).toLowerCase();
-  if (SOURCE_EXTENSIONS.has(ext)) return 'source';
-
-  return 'other';
-}
-
-function getNormalizedExtension(name: string): string {
-  const ext = path.extname(name).toLowerCase();
-  return ext === '' ? 'no extension' : ext;
-}
-
-interface UnsupportedInfo {
-  sourceCode: number;
-  other: number;
-  otherExtensions: Record<string, number>;
-}
-
 interface ScanResult {
   isKept: boolean;
   files: FileEntry[];
   folders: FolderEntry[];
-  unsupportedFiles: UnsupportedInfo;
+}
+
+/** Workspace visibility is intentionally wider than index visibility. Hidden
+ * product-derived artifacts and dot-directories remain infrastructure, while
+ * ordinary dot-files and unknown source formats are real user content. */
+function workspaceDirectoryEntries(entries: fs.Dirent[]): fs.Dirent[] {
+  const noteStems = new Set<string>();
+  const legacyDerivedStems = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const note = entry.name.match(/^(.+)\.(md|markdown|html|htm|pdf)$/i);
+    if (note) noteStems.add(note[1]);
+    const source = entry.name.match(LEGACY_DERIVED_SOURCE_RE);
+    if (source) legacyDerivedStems.add(source[1]);
+  }
+
+  return entries.filter((entry) => {
+    if (entry.isDirectory() && isHiddenDirName(entry.name)) return false;
+    if (entry.isFile() && HIDDEN_DOT_FILES.has(entry.name)) return false;
+    if (entry.isFile() && entry.name.startsWith('.')) {
+      // Dot-notes are part of the established hidden-note namespace. Keep
+      // them out even when they are user-owned; ordinary dotfiles such as
+      // .env and .gitignore remain truthful workspace entries.
+      if (isNoteName(entry.name)) return false;
+      if (isDerivedScratchName(entry.name)) return false;
+      if (isDerivedNoteName(entry.name)) return false;
+      if (isLegacyDerivedNoteName(entry.name, legacyDerivedStems)) return false;
+    }
+    if (entry.isDirectory() && entry.name.endsWith('_files')) {
+      const stem = entry.name.slice(0, -'_files'.length);
+      if (noteStems.has(stem) || stem.startsWith('.')) return false;
+    }
+    return !(entry.isDirectory() && isDerivedScratchName(entry.name));
+  });
+}
+
+function workspaceEntryKind(entry: fs.Dirent): WorkspaceFileKind {
+  if (isCloudPlaceholderName(entry.name)) return 'cloud-placeholder';
+  if (entry.isSymbolicLink()) return 'symlink';
+  if (!entry.isFile()) return 'special';
+  return 'regular';
+}
+
+function unreadableFileEntry(entry: fs.Dirent, rel: string): FileEntry {
+  const entryKind = workspaceEntryKind(entry);
+  return {
+    name: rel,
+    format: 'generic',
+    size: 0,
+    heading: '',
+    snippet: '',
+    imported_at: '',
+    ...(entryKind === 'regular' ? {} : { entryKind }),
+    availability: 'unreadable',
+  };
+}
+
+function scanWorkspaceFileSync(entry: fs.Dirent, rel: string, full: string): FileEntry {
+  let st: fs.Stats;
+  try { st = fs.lstatSync(full); }
+  catch { return unreadableFileEntry(entry, rel); }
+  return finishWorkspaceFileEntry(entry, rel, full, st, (size) => readTextPrefix(full, size));
+}
+
+async function scanWorkspaceFileAsync(entry: fs.Dirent, rel: string, full: string): Promise<FileEntry> {
+  let st: fs.Stats;
+  try { st = await fs.promises.lstat(full); }
+  catch { return unreadableFileEntry(entry, rel); }
+  return finishWorkspaceFileEntryAsync(entry, rel, full, st);
+}
+
+function workspaceFileBase(entry: fs.Dirent, rel: string, st: fs.Stats): FileEntry {
+  const entryKind = workspaceEntryKind(entry);
+  const format = entryKind === 'regular' ? (detectViewerFormat(entry.name) ?? 'generic') : 'generic';
+  return {
+    name: rel,
+    format,
+    size: st.size,
+    heading: '',
+    snippet: '',
+    imported_at: st.mtime.toISOString(),
+    ...(entryKind === 'regular' ? {} : { entryKind }),
+  };
+}
+
+function finishWorkspaceFileEntry(
+  entry: fs.Dirent,
+  rel: string,
+  full: string,
+  st: fs.Stats,
+  readPrefix: (size: number) => string,
+): FileEntry {
+  const base = workspaceFileBase(entry, rel, st);
+  if (base.format === 'generic') return base;
+  if (base.format === 'pdf' || base.format === 'image' || base.format === 'docx' || base.format === 'audio') {
+    previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at: base.imported_at });
+    return base;
+  }
+  const cached = previewCache.get(full);
+  if (cached && cached.mtimeMs === st.mtimeMs) {
+    return { ...base, heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
+  }
+  try {
+    const { heading, snippet } = preview(readPrefix(st.size), base.format);
+    previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at: base.imported_at });
+    return { ...base, heading, snippet };
+  } catch {
+    return { ...base, format: 'generic', availability: 'unreadable' };
+  }
+}
+
+async function finishWorkspaceFileEntryAsync(
+  entry: fs.Dirent,
+  rel: string,
+  full: string,
+  st: fs.Stats,
+): Promise<FileEntry> {
+  const base = workspaceFileBase(entry, rel, st);
+  if (base.format === 'generic') return base;
+  if (base.format === 'pdf' || base.format === 'image' || base.format === 'docx' || base.format === 'audio') {
+    previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at: base.imported_at });
+    return base;
+  }
+  const cached = previewCache.get(full);
+  if (cached && cached.mtimeMs === st.mtimeMs) {
+    return { ...base, heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
+  }
+  try {
+    const { heading, snippet } = preview(await readTextPrefixAsync(full, st.size), base.format);
+    previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at: base.imported_at });
+    return { ...base, heading, snippet };
+  } catch {
+    return { ...base, format: 'generic', availability: 'unreadable' };
+  }
 }
 
 function scanDirectory(dir: string, prefix: string): ScanResult {
@@ -121,97 +219,40 @@ function scanDirectory(dir: string, prefix: string): ScanResult {
     entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch {
     return {
-      isKept: false,
+      isKept: Boolean(prefix),
       files: [],
-      folders: [],
-      unsupportedFiles: { sourceCode: 0, other: 0, otherExtensions: {} },
-    };
-  }
-
-  const acceptedEntries = visibleDirectoryEntries(entries);
-
-  // If there are no accepted entries, this folder is physically empty.
-  if (acceptedEntries.length === 0) {
-    return {
-      isKept: true,
-      files: [],
-      folders: prefix ? [{ path: prefix }] : [],
-      unsupportedFiles: { sourceCode: 0, other: 0, otherExtensions: {} },
+      folders: prefix ? [{ path: prefix, kind: 'unreadable' }] : [],
     };
   }
 
   const files: FileEntry[] = [];
   const folders: FolderEntry[] = [];
-  const unsupportedFiles: UnsupportedInfo = { sourceCode: 0, other: 0, otherExtensions: {} };
-  let hasSupportedInSubtree = false;
-  let hasKeptSubfolder = false;
 
-  for (const e of acceptedEntries) {
+  for (const e of workspaceDirectoryEntries(entries)) {
     const rel = prefix ? `${prefix}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
 
     if (e.isDirectory()) {
+      if (isIndexExcludedDirName(e.name)) {
+        folders.push({ path: rel, kind: 'excluded' });
+        continue;
+      }
       const subResult = scanDirectory(full, rel);
       if (subResult.isKept) {
-        hasKeptSubfolder = true;
         files.push(...subResult.files);
         folders.push(...subResult.folders);
       }
-      unsupportedFiles.sourceCode += subResult.unsupportedFiles.sourceCode;
-      unsupportedFiles.other += subResult.unsupportedFiles.other;
-      for (const [ext, count] of Object.entries(subResult.unsupportedFiles.otherExtensions)) {
-        unsupportedFiles.otherExtensions[ext] = (unsupportedFiles.otherExtensions[ext] ?? 0) + count;
-      }
-    } else if (e.isFile()) {
-      if (e.name.endsWith('.tmp')) continue;
-
-      const format = detectViewerFormat(e.name);
-      if (format) {
-        hasSupportedInSubtree = true;
-        let st: fs.Stats;
-        try { st = fs.statSync(full); } catch { continue; }
-
-        const cached = previewCache.get(full);
-        let entry: Pick<FileEntry, 'heading' | 'snippet' | 'imported_at'>;
-        if (cached && cached.mtimeMs === st.mtimeMs) {
-          entry = { heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
-        } else if (format === 'pdf' || format === 'image' || format === 'docx' || format === 'audio') {
-          const imported_at = st.mtime.toISOString();
-          previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at });
-          entry = { heading: '', snippet: '', imported_at };
-        } else {
-          let content: string;
-          try { content = readTextPrefix(full, st.size); }
-          catch { continue; }
-          const { heading, snippet } = preview(content, format);
-          const imported_at = st.mtime.toISOString();
-          previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at });
-          entry = { heading, snippet, imported_at };
-        }
-        files.push({ name: rel, format, size: st.size, ...entry });
-      } else {
-        const classification = classifyUnsupportedFile(e.name);
-        if (classification === 'source') {
-          unsupportedFiles.sourceCode++;
-        } else {
-          unsupportedFiles.other++;
-          const ext = getNormalizedExtension(e.name);
-          unsupportedFiles.otherExtensions[ext] = (unsupportedFiles.otherExtensions[ext] ?? 0) + 1;
-        }
-      }
+      continue;
     }
+    files.push(scanWorkspaceFileSync(e, rel, full));
   }
 
-  const isKept = hasSupportedInSubtree || hasKeptSubfolder;
-  if (isKept && prefix) {
-    folders.push({ path: prefix });
-  }
+  if (prefix) folders.push({ path: prefix });
 
   return {
-    isKept,
+    isKept: true,
     files,
     folders,
-    unsupportedFiles,
   };
 }
 
@@ -219,7 +260,7 @@ interface AsyncScanState {
   entriesSinceYield: number;
 }
 
-/** Async counterpart for request handling. It preserves the sidebar's exact
+/** Async counterpart for request handling. It preserves the workspace tree's exact
  * classification while keeping recursive directory I/O and large flat-folder
  * classification off uninterrupted turns of the shared Node event loop. */
 async function scanDirectoryAsync(
@@ -232,30 +273,16 @@ async function scanDirectoryAsync(
     entries = await fs.promises.readdir(dir, { withFileTypes: true });
   } catch {
     return {
-      isKept: false,
+      isKept: Boolean(prefix),
       files: [],
-      folders: [],
-      unsupportedFiles: { sourceCode: 0, other: 0, otherExtensions: {} },
-    };
-  }
-
-  const acceptedEntries = visibleDirectoryEntries(entries);
-  if (acceptedEntries.length === 0) {
-    return {
-      isKept: true,
-      files: [],
-      folders: prefix ? [{ path: prefix }] : [],
-      unsupportedFiles: { sourceCode: 0, other: 0, otherExtensions: {} },
+      folders: prefix ? [{ path: prefix, kind: 'unreadable' }] : [],
     };
   }
 
   const files: FileEntry[] = [];
   const folders: FolderEntry[] = [];
-  const unsupportedFiles: UnsupportedInfo = { sourceCode: 0, other: 0, otherExtensions: {} };
-  let hasSupportedInSubtree = false;
-  let hasKeptSubfolder = false;
 
-  for (const e of acceptedEntries) {
+  for (const e of workspaceDirectoryEntries(entries)) {
     state.entriesSinceYield += 1;
     if (state.entriesSinceYield >= FILESYSTEM_SCAN_YIELD_EVERY) {
       state.entriesSinceYield = 0;
@@ -265,71 +292,25 @@ async function scanDirectoryAsync(
     const full = path.join(dir, e.name);
 
     if (e.isDirectory()) {
+      if (isIndexExcludedDirName(e.name)) {
+        folders.push({ path: rel, kind: 'excluded' });
+        continue;
+      }
       const subResult = await scanDirectoryAsync(full, rel, state);
       if (subResult.isKept) {
-        hasKeptSubfolder = true;
         files.push(...subResult.files);
         folders.push(...subResult.folders);
       }
-      unsupportedFiles.sourceCode += subResult.unsupportedFiles.sourceCode;
-      unsupportedFiles.other += subResult.unsupportedFiles.other;
-      for (const [ext, count] of Object.entries(subResult.unsupportedFiles.otherExtensions)) {
-        unsupportedFiles.otherExtensions[ext] = (unsupportedFiles.otherExtensions[ext] ?? 0) + count;
-      }
       continue;
     }
-    if (!e.isFile() || e.name.endsWith('.tmp')) continue;
-
-    const format = detectViewerFormat(e.name);
-    if (!format) {
-      const classification = classifyUnsupportedFile(e.name);
-      if (classification === 'source') {
-        unsupportedFiles.sourceCode++;
-      } else {
-        unsupportedFiles.other++;
-        const ext = getNormalizedExtension(e.name);
-        unsupportedFiles.otherExtensions[ext] = (unsupportedFiles.otherExtensions[ext] ?? 0) + 1;
-      }
-      continue;
-    }
-
-    hasSupportedInSubtree = true;
-    let st: fs.Stats;
-    try { st = await fs.promises.stat(full); } catch { continue; }
-
-    const cached = previewCache.get(full);
-    let entry: Pick<FileEntry, 'heading' | 'snippet' | 'imported_at'>;
-    if (cached && cached.mtimeMs === st.mtimeMs) {
-      entry = { heading: cached.heading, snippet: cached.snippet, imported_at: cached.imported_at };
-    } else if (format === 'pdf' || format === 'image' || format === 'docx' || format === 'audio') {
-      const imported_at = st.mtime.toISOString();
-      previewCache.set(full, { mtimeMs: st.mtimeMs, heading: '', snippet: '', imported_at });
-      entry = { heading: '', snippet: '', imported_at };
-    } else {
-      let content: string;
-      try { content = await readTextPrefixAsync(full, st.size); }
-      catch { continue; }
-      const { heading, snippet } = preview(content, format);
-      const imported_at = st.mtime.toISOString();
-      previewCache.set(full, { mtimeMs: st.mtimeMs, heading, snippet, imported_at });
-      entry = { heading, snippet, imported_at };
-    }
-    files.push({ name: rel, format, size: st.size, ...entry });
+    files.push(await scanWorkspaceFileAsync(e, rel, full));
   }
 
-  const isKept = hasSupportedInSubtree || hasKeptSubfolder;
-  if (isKept && prefix) folders.push({ path: prefix });
-  return { isKept, files, folders, unsupportedFiles };
+  if (prefix) folders.push({ path: prefix });
+  return { isKept: true, files, folders };
 }
 
 function finishFolderListing(root: string, scanResult: ScanResult): FolderListing {
-  const otherExtensions = Object.entries(scanResult.unsupportedFiles.otherExtensions)
-    .map(([extension, count]) => ({ extension, count }))
-    .sort((a, b) => {
-      if (a.count !== b.count) return b.count - a.count;
-      return a.extension.localeCompare(b.extension);
-    });
-
   const seen = new Set<string>();
   for (const f of scanResult.files) seen.add(path.join(root, f.name));
   for (const key of previewCache.keys()) {
@@ -341,11 +322,6 @@ function finishFolderListing(root: string, scanResult: ScanResult): FolderListin
   return {
     files: scanResult.files,
     folders: scanResult.folders,
-    unsupportedFiles: {
-      sourceCode: scanResult.unsupportedFiles.sourceCode,
-      other: scanResult.unsupportedFiles.other,
-      otherExtensions,
-    },
   };
 }
 
@@ -407,7 +383,7 @@ function visibleDirectoryEntries(entries: fs.Dirent[]): fs.Dirent[] {
   return entries.filter((entry) => {
     if (isCloudPlaceholderName(entry.name)) return false;
     if (entry.isDirectory() && (isHiddenDirName(entry.name) || isIndexExcludedDirName(entry.name))) return false;
-    /* Dot-files and app-derived infrastructure are never user-visible. */
+    /* The Agent directory tool omits dotfiles and app-derived infrastructure. */
     if (entry.isFile() && entry.name.startsWith('.')) return false;
     if (entry.isDirectory() && entry.name.endsWith('_files')) {
       const stem = entry.name.slice(0, -'_files'.length);
@@ -470,7 +446,7 @@ async function readTextPrefixAsync(full: string, size: number): Promise<string> 
   }
 }
 
-/** Junk dot-FILES hidden from the sidebar. Dot DIRECTORIES (.claude,
+/** Junk dot-FILES hidden from the workspace. Dot DIRECTORIES (.claude,
  *  .git, .stashbase, …) are hidden wholesale by `isHiddenDirName`. */
 export const HIDDEN_DOT_FILES = new Set<string>([
   '.DS_Store',

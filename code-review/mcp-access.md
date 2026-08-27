@@ -37,11 +37,15 @@ clients and are not a general host-filesystem API.
   not read file bodies. `read_file` has an `8 MiB` response ceiling for source
   and current derived text; oversized content fails explicitly rather than
   consuming unbounded server memory.
+- The Workbench tree is intentionally wider than the Agent file surface.
+  Generic files, user dotfiles admitted only by the Workbench, excluded-folder
+  placeholders, symlinks, and special entries do not appear in
+  `list_directory` and cannot be read or mutated by these tools.
 - Format capability follows the
   [Documents matrix](../design-docs/design/documents.md#format-capability-matrix):
-  `read_file` returns direct Markdown, HTML, or JSON source text and current
+  `read_file` returns direct Markdown, HTML, JSON, or `.txt` source text and current
   prepared PDF, DOCX, or media text; it does not return image bytes.
-  `write_file` and `edit_file` accept Markdown, HTML, and JSON source text only.
+  `write_file` and `edit_file` accept Markdown, HTML, JSON, and `.txt` source text only.
   Previewability or built-in image attachment support must not be generalized
   into external MCP text-read capability.
 - `create_project` creates only beneath the default folder home or an already
@@ -50,15 +54,6 @@ clients and are not a general host-filesystem API.
   seeds missing Agent instructions create-only and registers the folder.
   Session rebind requires trusted live-session attribution; ambiguous or
   external callers only create and register.
-
-## Known Gap — JSON Tool Description
-
-Shipping `write_file` and `edit_file` operations accept JSON through the same
-versioned text transaction used by Markdown and HTML, and focused mutation
-tests exercise that behavior. Their current MCP tool descriptions name only
-Markdown/HTML, so clients may underuse a real capability. Until the tool
-metadata is corrected and locked by focused evidence, treat the operation and
-the product matrix as implementation truth rather than the narrower copy.
 
 ## Transports and Credentials
 

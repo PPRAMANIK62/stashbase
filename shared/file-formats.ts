@@ -9,9 +9,11 @@ export const MARKDOWN_NOTE_EXTENSIONS = ['md', 'markdown'] as const;
 export const HTML_NOTE_EXTENSIONS = ['html', 'htm'] as const;
 export const NOTE_EXTENSIONS = [...MARKDOWN_NOTE_EXTENSIONS, ...HTML_NOTE_EXTENSIONS] as const;
 export const STRUCTURED_DATA_EXTENSIONS = ['json'] as const;
+export const PLAIN_TEXT_EXTENSIONS = ['txt'] as const;
 export const DIRECT_TEXT_EXTENSIONS = [
   ...NOTE_EXTENSIONS,
   ...STRUCTURED_DATA_EXTENSIONS,
+  ...PLAIN_TEXT_EXTENSIONS,
 ] as const;
 export const PDF_EXTENSIONS = ['pdf'] as const;
 export const IMAGE_SOURCE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'] as const;
@@ -56,6 +58,7 @@ export const VIEWABLE_FILE_EXTENSIONS = [
 ] as const;
 
 export const AUDIO_SOURCE_EXTENSION_ALTERNATION = extensionAlternation(AUDIO_SOURCE_EXTENSIONS);
+export const DIRECT_TEXT_EXTENSION_ALTERNATION = extensionAlternation(DIRECT_TEXT_EXTENSIONS);
 export const PDF_EXTENSION_ALTERNATION = extensionAlternation(PDF_EXTENSIONS);
 export const IMAGE_SOURCE_EXTENSION_ALTERNATION = extensionAlternation(IMAGE_SOURCE_EXTENSIONS);
 export const DOCX_EXTENSION_ALTERNATION = extensionAlternation(DOCX_EXTENSIONS);
@@ -75,7 +78,7 @@ function escapeRegExp(value: string): string {
  * Directly readable text formats — the source file is itself the indexed
  * and editable text.
  */
-export type DirectTextFormat = 'md' | 'html' | 'json';
+export type DirectTextFormat = 'md' | 'html' | 'json' | 'text';
 
 /**
  * Everything the renderer can open in the file tree: the direct text
@@ -87,4 +90,18 @@ export type DirectTextFormat = 'md' | 'html' | 'json';
  * server's file listing emits it and the renderer routes tabs on it, so the
  * two must agree value for value.
  */
-export type ViewerFormat = DirectTextFormat | 'pdf' | 'image' | 'docx' | 'audio';
+export type KnownViewerFormat = DirectTextFormat | 'pdf' | 'image' | 'docx' | 'audio';
+
+/**
+ * The complete workspace-tree format vocabulary. `generic` is deliberately
+ * not a known/indexable format: it means only that the source exists and can
+ * be selected in the workbench. Opening it performs bounded content
+ * inspection and may produce either a read-only text view or an honest
+ * binary/unavailable placeholder.
+ */
+export type ViewerFormat = KnownViewerFormat | 'generic';
+
+/** Search and automatic Agent context may consume only these formats. */
+export function isRetrievableViewerFormat(format: ViewerFormat): format is KnownViewerFormat {
+  return format !== 'generic';
+}

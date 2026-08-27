@@ -46,6 +46,7 @@ test('MCP library mutations work outside an active folder and enforce versions',
     folder,
     libraryRoutes,
     mcpRoutes,
+    libraryMutations,
     stateDb,
     derivedStore,
     state,
@@ -54,6 +55,7 @@ test('MCP library mutations work outside an active folder and enforce versions',
     import('./folder.ts'),
     import('./routes/library-files.ts'),
     import('./routes/mcp-http.ts'),
+    import('./library-file-mutations.ts'),
     import('./state-db.ts'),
     import('./derived-store.ts'),
     import('./state.ts'),
@@ -189,6 +191,41 @@ $$`;
   assert.equal(fs.readFileSync(jsonTarget, 'utf8').includes('"z": 2'), true);
   await callTool(base, token, 'delete_file', { path: jsonTarget });
   assert.equal(fs.existsSync(jsonTarget), false);
+
+  const textSource = path.join(root, 'Data', 'notes.txt');
+  const textCreated = await callTool(base, token, 'write_file', {
+    path: textSource,
+    content: '\uFEFFfirst\r\nsecond\r\n',
+  });
+  const textRead = await callTool(base, token, 'read_file', { path: textSource });
+  assert.equal(textRead.format, 'text');
+  assert.equal(textRead.content, '\uFEFFfirst\r\nsecond\r\n');
+  await callTool(base, token, 'edit_file', {
+    path: textSource,
+    old_text: 'second',
+    new_text: 'changed',
+    baseVersion: textCreated.version,
+  });
+  assert.equal(fs.readFileSync(textSource, 'utf8'), '\uFEFFfirst\r\nchanged\r\n');
+
+  const opaqueSource = path.join(root, 'Data', 'script.ts');
+  fs.writeFileSync(opaqueSource, 'export const value = 1;');
+  await assert.rejects(callTool(base, token, 'read_file', { path: opaqueSource }), /415|UNSUPPORTED_FORMAT/);
+  await assert.rejects(callTool(base, token, 'move_file', {
+    path: opaqueSource,
+    new_path: path.join(root, 'Archive', 'script.ts'),
+  }), /415|UNSUPPORTED_FORMAT/);
+  await assert.rejects(callTool(base, token, 'delete_file', { path: opaqueSource }), /415|UNSUPPORTED_FORMAT/);
+  assert.equal(fs.readFileSync(opaqueSource, 'utf8'), 'export const value = 1;');
+
+  const opaqueTarget = path.join(root, 'Archive', 'script.ts');
+  const workbenchMoved = await libraryMutations.moveLibraryFile(opaqueSource, opaqueTarget, { allowOpaque: true });
+  assert.equal(workbenchMoved.path, opaqueTarget.replace(/\\/g, '/'));
+  assert.equal(fs.existsSync(opaqueSource), false);
+  assert.equal(fs.readFileSync(opaqueTarget, 'utf8'), 'export const value = 1;');
+  const workbenchDeleted = await libraryMutations.deleteLibraryFile(opaqueTarget, { allowOpaque: true });
+  assert.equal(workbenchDeleted.alreadyGone, false);
+  assert.equal(fs.existsSync(opaqueTarget), false);
 
   const audioSource = path.join(root, 'Recordings', 'meeting.wav');
   const audioTarget = path.join(root, 'Archive', 'meeting.wav');

@@ -120,9 +120,24 @@ test('quoted imported filenames remain readable, writable, and deletable', async
 
 test('editable file writes apply portable path, hidden-derived, and format policy', () => {
   assert.doesNotThrow(() => validateEditableFileWrite("John's Notes.md"));
+  assert.doesNotThrow(() => validateEditableFileWrite('notes.txt'));
   assert.throws(() => validateEditableFileWrite('../escape.md'), /invalid segment/);
   assert.throws(() => validateEditableFileWrite('.report.pdf.md'), /app-maintained derived notes/);
   assert.throws(() => validateEditableFileWrite('report.pdf'), /unsupported editable format/);
+});
+
+test('TXT save boundary preserves BOM and CRLF like other source text', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-txt-save-'));
+  try {
+    fs.writeFileSync(path.join(root, 'notes.txt'), '\uFEFFone\r\ntwo\r\n', 'utf8');
+    await runWithFolderRoot(root, async () => {
+      const version = fileVersion('notes.txt')!;
+      await saveFileContent('notes.txt', '\uFEFFone\nchanged\n', { baseVersion: version });
+      assert.equal(readText('notes.txt'), '\uFEFFone\r\nchanged\r\n');
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('JSON save boundary preserves BOM/CRLF and rejects a stale renderer version', async () => {

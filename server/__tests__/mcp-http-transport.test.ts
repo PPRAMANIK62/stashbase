@@ -100,6 +100,14 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.deepEqual(searchTool.inputSchema.properties.mode.enum, ['semantic', 'keyword']);
     const createProjectTool = listed.body.result.tools.find((tool: any) => tool.name === 'create_project');
     assert.deepEqual(createProjectTool.inputSchema.required, ['name']);
+    for (const name of ['write_file', 'edit_file']) {
+      const tool = listed.body.result.tools.find((candidate: any) => candidate.name === name);
+      assert.match(tool.description, /Markdown, HTML, JSON, or \.txt/);
+    }
+    assert.match(
+      listed.body.result.tools.find((tool: any) => tool.name === 'read_file').description,
+      /Generic Workbench-only files are not listed or readable through MCP/,
+    );
 
     const called = await post(base, callRequest, token);
     assert.equal(called.status, 200);

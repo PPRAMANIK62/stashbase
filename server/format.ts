@@ -3,7 +3,7 @@
  * structured-vs-unstructured model the whole ingestion pipeline rests on.
  *
  * The index unit is always markdown. Formats split two ways:
- *   - **Direct text** (`FileFormat`: md, html, json): the source file is itself
+ *   - **Direct text** (`FileFormat`: md, html, json, text): the source file is itself
  *     the single source of truth and is indexed directly — markdown
  *     as-is; HTML via a cheap in-memory "→ heading markdown" optimization
  *     at MFS-feed time (`analyzeHtml`), NOT materialized to disk.
@@ -11,7 +11,7 @@
  *     converter extracts text into an AppData-derived representation. That
  *     text layer feeds search; PDFs/DOCX/audio also use it for Agent text
  *     reading, while images remain the read/view source.
- * MFS receives raw Markdown/JSON and markdown-shaped HTML plaintext; all format knowledge lives here / in
+ * MFS receives raw Markdown/JSON/plain text and markdown-shaped HTML plaintext; all format knowledge lives here / in
  * the converters, never in MFS.
  *
  * Lives separately from `files.ts` because `files.ts` imports from
@@ -35,8 +35,10 @@ import {
   MARKDOWN_NOTE_EXTENSIONS,
   PDF_EXTENSIONS,
   PDF_EXTENSION_ALTERNATION,
+  PLAIN_TEXT_EXTENSIONS,
   STRUCTURED_DATA_EXTENSIONS,
   type DirectTextFormat,
+  type KnownViewerFormat,
   type ViewerFormat,
 } from '../shared/file-formats.ts';
 import { SEARCH_TYPE_CATEGORIES, type SearchTypeCategory } from '../shared/search-types.ts';
@@ -44,7 +46,7 @@ import { SEARCH_TYPE_CATEGORIES, type SearchTypeCategory } from '../shared/searc
 /** Directly readable text formats — indexed directly (the file is the source). */
 export type FileFormat = DirectTextFormat;
 
-export type { DirectTextFormat, ViewerFormat } from '../shared/file-formats.ts';
+export type { DirectTextFormat, KnownViewerFormat, ViewerFormat } from '../shared/file-formats.ts';
 
 /** Recognised note extensions and how the rest of the pipeline should
  *  treat them. Adding a format = one line here + a chunker + a viewer —
@@ -59,6 +61,7 @@ const NOTE_FORMATS: Array<{ exts: readonly string[]; format: FileFormat }> = [
 const DIRECT_TEXT_FORMATS: Array<{ exts: readonly string[]; format: FileFormat }> = [
   ...NOTE_FORMATS,
   { exts: STRUCTURED_DATA_EXTENSIONS, format: 'json' },
+  { exts: PLAIN_TEXT_EXTENSIONS, format: 'text' },
 ];
 
 /** Every note extension (no leading dot), e.g. `['md','markdown','html','htm']`.
@@ -122,7 +125,7 @@ const DOCX_PATTERN = new RegExp(`\\.(${DOCX_EXTENSION_ALTERNATION})$`, 'i');
 const AUDIO_PATTERN = new RegExp(`\\.(${AUDIO_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
 const CONVERTIBLE_SOURCE_PATTERN = new RegExp(`\\.(${CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
 
-const VIEWER_ONLY_FORMATS: Array<{ pattern: RegExp; format: ViewerFormat }> = [
+const VIEWER_ONLY_FORMATS: Array<{ pattern: RegExp; format: KnownViewerFormat }> = [
   { pattern: PDF_PATTERN, format: 'pdf' },
   { pattern: IMAGE_PATTERN, format: 'image' },
   { pattern: AUDIO_PATTERN, format: 'audio' },
@@ -160,7 +163,7 @@ export function isConvertibleSource(name: string): boolean {
 }
 
 const SEARCH_TYPE_EXTENSIONS: Record<SearchTypeCategory, readonly string[]> = {
-  notes: NOTE_EXTS,
+  notes: [...NOTE_EXTS, ...PLAIN_TEXT_EXTENSIONS],
   data: STRUCTURED_DATA_EXTENSIONS,
   pdf: PDF_EXTENSIONS,
   image: IMAGE_SOURCE_EXTENSIONS,
@@ -205,7 +208,7 @@ export function detectFormat(name: string): FileFormat | null {
 /** Like `detectFormat` but also recognises viewer-only formats.
  *  Used by the sidebar / file tree which surfaces every viewable file
  *  to the user, even ones that don't go through indexing. */
-export function detectViewerFormat(name: string): ViewerFormat | null {
+export function detectViewerFormat(name: string): KnownViewerFormat | null {
   const note = detectFormat(name);
   if (note) return note;
   if (isDocxFile(name)) return 'docx';

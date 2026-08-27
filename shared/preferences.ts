@@ -33,5 +33,4 @@ export interface UpdatePreferences {
 
 export interface OnboardingPreferences {
   sourceCodeNoticeVersion?: number;
-  unsupportedFormatsNoticeVersion?: number;
 }

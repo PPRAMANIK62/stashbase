@@ -315,6 +315,7 @@ mountOnboardingRoutes(app);
 // previously-bound folder.
 app.use([
   '/api/files',
+  '/api/file-preview',
   '/api/folders',
   '/api/search',
   '/api/rename-preview',

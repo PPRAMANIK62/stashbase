@@ -13,8 +13,8 @@
   transaction sequence. HTTP and MCP routes are adapters, not alternate
   mutation implementations.
 - Content capability is format- and surface-specific: the Workbench edits
-  Markdown and JSON, while library/Agent operations accept Markdown, HTML, and
-  JSON text. Preview-only binary formats reject content writes. Rename, move,
+  Markdown, JSON, and `.txt`, while library/Agent operations accept Markdown,
+  HTML, JSON, and `.txt` text. Preview-only and generic formats reject content writes. Rename, move,
   and delete are file mutations and do not imply content editability. The
   product-facing boundary lives in the
   [Documents format matrix](../design-docs/design/documents.md#format-capability-matrix).
@@ -60,7 +60,7 @@ focused concurrency evidence currently establishes the required liveness.
   source baseline. The asynchronously rendered dirty indicator is not a
   durability authority and cannot make context release skip a fresh edit.
 - A byte-identical save is a no-op and retains the current version.
-- Markdown and JSON persistence preserves supported BOM and line-ending
+- Markdown, JSON, and `.txt` persistence preserves supported BOM and line-ending
   conventions without manufacturing unrelated source changes.
 - JSON Tree operations enter this same save path as minimal source patches.
   They preserve untouched whitespace, property order, escape spelling, numeric
@@ -133,6 +133,13 @@ active-folder HTTP routes and library/MCP operations only normalize their
 transport-specific arguments and map results. A delete acknowledgement waits
 for old source and derived index identities; rename/move removes the old
 identity before reporting any optional new-identity indexing lag.
+
+The active-folder Adapter may opt regular generic files into rename/move/delete
+without granting content writes or retrieval. Generic rename/move preserves the
+actual suffix and retires any stale index identity defensively. The shared
+library/Agent Interface does not opt in and returns `415`, so a Workbench file
+operation cannot accidentally widen MCP. Symlinks and special entries never
+enter the mutation transaction.
 
 ### Link Cascade
 

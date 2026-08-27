@@ -107,7 +107,7 @@ export function prepareForIndex(filePath: string, content: string): {
     const { plaintext } = analyzeHtml(content);
     return { text: plaintext, ext: '.md', fileHash };
   }
-  // Markdown and JSON already are the directly readable source of truth.
+  // Markdown, JSON, and .txt already are directly readable source truth.
   return {
     text: content,
     ext: path.extname(filePath).toLowerCase() || '.md',

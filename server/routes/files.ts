@@ -19,6 +19,7 @@ import { filesystemPath } from '../filesystem-path.ts';
 import { sendError, revealInOsFileManager } from '../http.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { saveFileContent, upsertSavedFile } from '../file-save.ts';
+import { readGenericFilePreview } from '../generic-file-preview.ts';
 import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
 import { mountFileOrderRoutes } from './file-order.ts';
@@ -100,7 +101,6 @@ export function mount(app: express.Express): void {
         folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
         files: listing.files,
         folders: listing.folders,
-        unsupportedFiles: listing.unsupportedFiles,
       });
     } catch (err: unknown) {
       sendError(res, err);
@@ -112,8 +112,8 @@ export function mount(app: express.Express): void {
   //  - `name` omitted → auto-pick first free `untitled-N.md` (race-safe via O_EXCL).
   //  - `dir`  optional → place the file inside that folder-relative folder
   //    (must already exist; create with POST /api/folders first).
-  // New notes are always Markdown — it's the only editable format (HTML
-  // files are viewable but no longer authored here).
+  // New Note always creates Markdown even though existing JSON and .txt
+  // sources are also content-editable in their format-specific viewers.
   app.post('/api/files', async (req, res) => {
     const requestedName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     const content = typeof req.body?.content === 'string' ? req.body.content : '';
@@ -124,8 +124,8 @@ export function mount(app: express.Express): void {
       let name: string;
       if (requestedName) {
         // Honour an extension the caller already typed; otherwise
-        // attach the format-derived one. Both .md and .html count
-        // as recognised extensions.
+        // attach Markdown. Existing note extensions remain recognized so an
+        // explicit .html request is not rewritten to .html.md.
         const hasExt = isNoteName(requestedName);
         const base = hasExt ? requestedName : requestedName + ext;
         // Silently scrub characters that break cross-platform sync —
@@ -176,12 +176,26 @@ export function mount(app: express.Express): void {
     });
   });
 
+  // Generic workspace entries are inspected only when selected. Keeping this
+  // route separate from `/api/files/*` prevents a workbench-only capability
+  // from becoming an editable, indexable, or Agent-readable document.
+  app.get('/api/file-preview/*', (req, res) => {
+    const name = (req.params as any)[0] as string;
+    void runWithExplicitReadFolder(req, res, () => {
+      try {
+        res.json(readGenericFilePreview(name));
+      } catch (err: unknown) {
+        sendError(res, err);
+      }
+    });
+  });
+
   // ----- read -----
   app.get('/api/files/*', (req, res) => {
     const name = (req.params as any)[0] as string;
     void runWithExplicitReadFolder(req, res, () => {
       try {
-        // Refuse anything that isn't a markdown / HTML note. Bundle assets
+        // Refuse anything outside the recognized direct-text formats. Bundle assets
         // (the PNG / CSS / WOFF that live alongside an arxiv html in its
         // `_files/` folder) get saved to disk so the iframe can pull them
         // via `/asset/*`, but they're not viewable through this route —

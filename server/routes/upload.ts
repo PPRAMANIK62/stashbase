@@ -277,7 +277,7 @@ async function processUploadedFiles(
       const savedAbs = published.path;
       out.push({ file: name });
       if (textFormat) {
-        // Structured notes (Markdown / HTML) are saved and indexed
+        // Direct-text sources are saved and indexed
         // **exactly as dropped** — we never rewrite the user's file. Inline
         // `data:` resources stay inline (the preview renders them directly;
         // HTML's `analyzeHtml` flattens them out of the *indexed* text in

@@ -19,12 +19,13 @@ export function mountFileMutationRoutes(app: express.Express): void {
     const requested = typeof req.body?.new_name === 'string' ? req.body.new_name.trim() : '';
     if (!requested) return res.status(400).json({ error: 'new_name required' });
     const oldFormat = detectViewerFormat(oldName);
-    if (!oldFormat) return res.status(415).json({ error: 'unsupported format' });
     const oldStructuredFormat = detectFormat(oldName);
     let newName = requested;
-    const requestedHasCompatibleExt = hasCompatibleRenameExtension(oldStructuredFormat, oldFormat, newName);
+    const requestedHasCompatibleExt = oldFormat
+      ? hasCompatibleRenameExtension(oldStructuredFormat, oldFormat, newName)
+      : opaqueRenameExtension(oldName) === opaqueRenameExtension(newName);
     if (!requestedHasCompatibleExt) {
-      const oldExt = oldName.match(/\.[^./]+$/)?.[0] ?? '.md';
+      const oldExt = oldName.match(/\.[^./]+$/)?.[0] ?? '';
       newName += oldExt;
     }
     newName = renameTargetPath(oldName, newName);
@@ -32,6 +33,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
     try {
       const result = await moveLibraryFile(toSourcePath(oldName), toSourcePath(newName), {
         cascade: req.body?.cascade !== false,
+        allowOpaque: true,
       });
       res.json({
         name: newName,
@@ -46,7 +48,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
   app.delete('/api/files/*', async (req, res) => {
     const name = (req.params as any)[0] as string;
     try {
-      const result = await deleteLibraryFile(toSourcePath(name));
+      const result = await deleteLibraryFile(toSourcePath(name), { allowOpaque: true });
       res.json({ alreadyGone: result.alreadyGone, indexWarning: result.indexWarning });
     } catch (err: unknown) {
       sendError(res, err);
@@ -80,14 +82,20 @@ export function mountFileMutationRoutes(app: express.Express): void {
   });
 }
 
+function opaqueRenameExtension(name: string): string {
+  const base = name.replace(/\\/g, '/').split('/').pop() ?? name;
+  const lastDot = base.lastIndexOf('.');
+  return lastDot > 0 ? base.slice(lastDot).toLocaleLowerCase() : '';
+}
+
 export function hasCompatibleRenameExtension(
   oldStructuredFormat: ReturnType<typeof detectFormat>,
   oldFormat: NonNullable<ReturnType<typeof detectViewerFormat>>,
   requestedName: string,
 ): boolean {
   if (!oldStructuredFormat) return detectViewerFormat(requestedName) === oldFormat;
-  return oldStructuredFormat === 'json'
-    ? detectFormat(requestedName) === 'json'
+  return oldStructuredFormat === 'json' || oldStructuredFormat === 'text'
+    ? detectFormat(requestedName) === oldStructuredFormat
     : detectFormat(requestedName) !== null;
 }
 
