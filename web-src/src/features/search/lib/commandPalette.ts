@@ -5,7 +5,7 @@ export type QuickAccessProvider = 'files' | 'commands' | 'help';
 export interface CommandContext {
   hasFolder: boolean;
   hasActiveTab: boolean;
-  activeFileIsMarkdown: boolean;
+  activeFileIsEditable: boolean;
 }
 
 export interface CommandDefinition {
@@ -27,7 +27,7 @@ export const commandDefinitions: readonly CommandDefinition[] = [
   { id: 'document.new-note', label: 'New Note', category: 'Document', shortcut: 'Cmd/Ctrl+N', available: ({ hasFolder }) => hasFolder },
   { id: 'document.save', label: 'Save', category: 'Document', shortcut: 'Cmd/Ctrl+S', available: ({ hasActiveTab }) => hasActiveTab },
   { id: 'document.close-editor', label: 'Close Editor', category: 'Document', shortcut: 'Cmd/Ctrl+W', available: ({ hasActiveTab }) => hasActiveTab },
-  { id: 'document.toggle-editing', label: 'Toggle Editing Mode', category: 'Document', available: ({ activeFileIsMarkdown }) => activeFileIsMarkdown },
+  { id: 'document.toggle-editing', label: 'Toggle Editing Mode', category: 'Document', available: ({ activeFileIsEditable }) => activeFileIsEditable },
   { id: 'document.find', label: 'Find in Document', category: 'Document', shortcut: 'Cmd/Ctrl+F', available: ({ hasActiveTab }) => hasActiveTab },
   { id: 'search.open', label: 'Search Library', category: 'Search', shortcut: 'Cmd/Ctrl+Shift+F', available: () => true },
   { id: 'agent.show-claude', label: 'Show Claude Code', category: 'Agent Panel', available: ({ hasFolder }) => hasFolder },

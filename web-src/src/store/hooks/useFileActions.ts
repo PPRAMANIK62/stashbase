@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type MutableRefObject } from 'react';
 import {
   CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION,
-  VIEWABLE_FILE_EXTENSION_ALTERNATION,
+  DIRECT_TEXT_EXTENSION_ALTERNATION,
 } from '@shared/file-formats';
 import { api, ApiError, errorMessage } from '@/common/api/api';
 import { basename } from '@/common/lib/paths';
@@ -19,7 +19,7 @@ import {
 import type { ToastOptions } from './useFeedbackActions';
 
 const CONVERTIBLE_SOURCE_RE = new RegExp(`\\.(${CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION})$`, 'i');
-const VIEWABLE_FILE_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
+const DIRECT_TEXT_FILE_RE = new RegExp(`\\.(${DIRECT_TEXT_EXTENSION_ALTERNATION})$`, 'i');
 
 type Dispatch = (action: Action) => void;
 type Toast = (message: string, opts?: ToastOptions) => string;
@@ -464,12 +464,12 @@ export function useFileActions(
         const merged = [...new Set([...stateRef.current.workspace.pendingConversions, ...converting])].sort();
         dispatch({ type: 'PENDING_CONVERSIONS', paths: merged });
       }
-      // Optimistically mark the indexable imports (md / html, non-hidden)
+      // Optimistically mark direct-text imports (Markdown, HTML, JSON, .txt)
       // as pending too. These never enter `pendingConversions`; they live
       // in `pendingSemanticNames` until the folder is up-to-date.
       // `refreshIndexState` holds these until the folder is up-to-date.
       const indexing = (j.files || [])
-        .filter((x) => !x.error && /\.(md|markdown|html?)$/i.test(x.file))
+        .filter((x) => !x.error && DIRECT_TEXT_FILE_RE.test(x.file))
         .filter((x) => !x.file.split('/').some((seg) => seg.startsWith('.')))
         .map((x) => x.file);
       if (indexing.length) {
@@ -484,15 +484,13 @@ export function useFileActions(
       // immediately so search-readiness accounting catches up even when a
       // conversion finishes inside the regular poll window.
       void refreshIndexState();
-      // Auto-open the first viewable file the drop produced — the
+      // Auto-open the first file the drop produced — the
       // import was a deliberate user action, so showing what landed is
-      // expected (mirrors dropping a file into an editor). Limited to
-      // formats the viewer can actually render (md/html via getFile,
-      // pdf + image + DOCX synthesized in `loadFile`). Opens at most ONE file,
-      // so a batch drop doesn't explode into tabs.
-      const first = j.files?.find(
-        (x) => !x.error && VIEWABLE_FILE_RE.test(x.file),
-      );
+      // expected (mirrors dropping a file into an editor). The truthful
+      // workbench renders every regular file as a document, read-only text,
+      // or an explicit placeholder. Opens at most one file so a batch drop
+      // does not explode into tabs.
+      const first = j.files?.find((x) => !x.error);
       // A drop is a deliberate gesture, so show what landed in its own
       // tab (mirrors dropping a file into an editor).
       if (first) void openInNewTab(first.file, targetFolderPath);

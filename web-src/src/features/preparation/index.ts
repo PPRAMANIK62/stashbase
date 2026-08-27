@@ -10,9 +10,3 @@ import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 
 export const EmbeddingSetupCallout = lazyWithRetry(() =>
   import('@/features/preparation/components/EmbeddingSetupCallout'));
-
-export const UnsupportedFilesCallout = lazyWithRetry(() =>
-  import('@/features/preparation/components/UnsupportedFilesCallout'));
-
-export const UnsupportedFilesModal = lazyWithRetry(() =>
-  import('@/features/preparation/components/UnsupportedFilesModal'));

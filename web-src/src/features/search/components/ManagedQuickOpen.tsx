@@ -32,6 +32,7 @@ export default function ManagedQuickOpen({
   const [query, setQuery] = useState(commandsOnly ? '>' : '');
   const inputRef = useRef<HTMLInputElement | null>(null);
   const paths = useMemo(() => state.files.map((file) => file.name), [state.files]);
+  const fileByPath = useMemo(() => new Map(state.files.map((file) => [file.name, file])), [state.files]);
   const recentPaths = state.recentFilePaths;
   const [recentCommandIds, setRecentCommandIds] = useState<string[]>(() => recentCommandIdsMemory);
   const route = routeQuickAccess(query);
@@ -39,7 +40,11 @@ export default function ManagedQuickOpen({
     hasFolder: Boolean(state.folder),
     hasActiveTab: Boolean(state.activeTabId),
     // Out-of-folder tabs are read-only — keep Toggle Editing off the palette.
-    activeFileIsMarkdown: activeTab?.file?.format === 'md' && !activeTab.file.folder,
+    activeFileIsEditable: Boolean(activeTab?.file
+      && (activeTab.file.format === 'md'
+        || activeTab.file.format === 'json'
+        || activeTab.file.format === 'text')
+      && !activeTab.file.folder),
   };
   const fileItems = useMemo(
     () => rankQuickOpen(paths, route.provider === 'files' ? route.query : '', recentPaths),
@@ -47,7 +52,7 @@ export default function ManagedQuickOpen({
   );
   const commands = useMemo(
     () => rankCommandPalette(commandDefinitions.filter((command) => command.available(commandContext)), route.query, recentCommandIds),
-    [commandContext.activeFileIsMarkdown, commandContext.hasActiveTab, commandContext.hasFolder, recentCommandIds, route.query],
+    [commandContext.activeFileIsEditable, commandContext.hasActiveTab, commandContext.hasFolder, recentCommandIds, route.query],
   );
   const itemCount = route.provider === 'files' ? fileItems.length : route.provider === 'commands' ? commands.length : 0;
   const close = () => { setQuery(''); setActive(0); onClose(); };
@@ -105,12 +110,16 @@ export default function ManagedQuickOpen({
         onKeyDown={onKeyDown} />
       <div className={PICKER_LABEL_CLASS}>{route.provider === 'files' ? (route.query.trim() ? 'Files' : 'Recent editors') : route.provider === 'commands' ? 'Commands' : 'Quick Access'}</div>
       <ul id="quick-open-results" className={PICKER_RESULTS_CLASS} role="listbox" aria-label="Quick Open results">
-        {route.provider === 'files' && fileItems.map((item, index) => <PickerRow key={item.path} id={`quick-open-${index}`} selected={index === active} label={item.basename} detail={item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Active Library'} onHover={() => setActive(index)} onPick={() => accept(item.path)} />)}
-        {route.provider === 'files' && fileItems.length === 0 && <PickerEmptyRow>{route.query.trim() ? 'No matching source files' : 'No recently used editors'}</PickerEmptyRow>}
+        {route.provider === 'files' && fileItems.map((item, index) => {
+          const generic = fileByPath.get(item.path)?.format === 'generic';
+          const folder = item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : 'Active Library';
+          return <PickerRow key={item.path} id={`quick-open-${index}`} selected={index === active} label={<span className={generic ? 'text-muted-foreground group-aria-selected:text-foreground' : undefined}>{item.basename}</span>} detail={folder} detailPrefix={generic ? 'Not in Search or Chat ·' : undefined} onHover={() => setActive(index)} onPick={() => accept(item.path)} />;
+        })}
+        {route.provider === 'files' && fileItems.length === 0 && <PickerEmptyRow>{route.query.trim() ? 'No matching files' : 'No recently used editors'}</PickerEmptyRow>}
         {route.provider === 'commands' && commands.map((command, index) => <PickerRow key={command.id} id={`quick-open-${index}`} selected={index === active} label={command.label} detail={command.shortcut ?? command.category} onHover={() => setActive(index)} onPick={() => runCommand(command.id)} />)}
         {route.provider === 'commands' && commands.length === 0 && <PickerEmptyRow>No matching available commands</PickerEmptyRow>}
       </ul>
-      {route.provider === 'help' && <div className="px-2.5 py-3.5 leading-normal text-muted-foreground [&_kbd]:[font-family:inherit] [&_kbd]:font-semibold [&_kbd]:text-foreground" role="note">Type a file name to open a source file, or <kbd>&gt;</kbd> to run a command. Cmd/Ctrl+Shift+P and F1 open commands directly.</div>}
+      {route.provider === 'help' && <div className="px-2.5 py-3.5 leading-normal text-muted-foreground [&_kbd]:[font-family:inherit] [&_kbd]:font-semibold [&_kbd]:text-foreground" role="note">Type a file name to open a workspace file, or <kbd>&gt;</kbd> to run a command. Cmd/Ctrl+Shift+P and F1 open commands directly.</div>}
     </div>
   </div>;
 }

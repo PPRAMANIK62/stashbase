@@ -9,10 +9,14 @@ import {
   openLibraryFolder,
 } from '../support/locators.ts';
 import {
+  EXCLUDED_FOLDER,
+  GENERIC_BINARY,
+  GENERIC_TEXT,
   JOURNEY_AUDIO,
   JOURNEY_DOCX,
   JOURNEY_HTML,
   JOURNEY_PDF,
+  JOURNEY_TEXT,
   LEGACY_DERIVED_NOTE,
   MALFORMED_DOCX,
   MALFORMED_PDF,
@@ -26,6 +30,68 @@ function expectOnlyKnownViewerFailures(app: LaunchedApp, allowed: RegExp[]): voi
   ));
   expect(unexpected).toEqual([]);
 }
+
+test('J03 keeps the workspace tree truthful while generic files stay outside retrieval', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  seedJourneyWorkspaces(fixture);
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await dismissEmbeddingKeyPrompt(app.page);
+
+    const genericText = fileTreeRow(app.page, GENERIC_TEXT);
+    await expect(genericText).toBeVisible();
+    await expect(genericText).toHaveClass(/non-retrievable/);
+    await expect(genericText).toHaveAttribute('title', /Not included in Search or automatic Chat context/);
+    await expect(fileTreeRow(app.page, GENERIC_BINARY)).toBeVisible();
+    await expect(fileTreeRow(app.page, '.env')).toBeVisible();
+
+    const excluded = fileTreeRow(app.page, EXCLUDED_FOLDER);
+    await expect(excluded).toBeVisible();
+    expect(
+      await excluded.evaluate((row) => window.getComputedStyle(row).color),
+      'an excluded folder stays muted even though it remains externally reachable',
+    ).toBe(await genericText.evaluate((row) => window.getComputedStyle(row).color));
+    await expect(excluded).not.toHaveAttribute('aria-disabled', /.*/);
+    await expect(excluded).toHaveAttribute('aria-label', /contents excluded, Show in/);
+    await expect(excluded).not.toHaveAttribute('aria-expanded', /.*/);
+    const externalFolderAction = excluded.getByRole('button', { name: /Show in/ });
+    const externalFolderTooltip = app.page.locator('[data-slot="tooltip-content"]').filter({ hasText: /Show in/ });
+    await expect(externalFolderAction).toBeHidden();
+    await expect(externalFolderTooltip).toHaveCount(0);
+    await excluded.hover();
+    await expect(externalFolderAction).toBeVisible();
+    await externalFolderAction.hover();
+    await expect(externalFolderTooltip).toBeVisible();
+    await expect(fileTreeRow(app.page, `${EXCLUDED_FOLDER}/dependency.js`)).toHaveCount(0);
+    await expect(fileTreeRow(app.page, LEGACY_DERIVED_NOTE)).toHaveCount(0);
+
+    await genericText.click();
+    const genericViewer = app.page.getByRole('region', { name: 'Read-only text document' });
+    await expect(genericViewer).toContainText('visible but not indexed');
+    await expect(app.page.getByRole('button', { name: 'Switch to Live Editing' })).toHaveCount(0);
+
+    await app.page.keyboard.press(`${primaryKey}+O`);
+    const quickOpen = app.page.getByRole('dialog', { name: 'Quick Open' });
+    await quickOpen.getByRole('combobox').fill(GENERIC_TEXT);
+    await expect(quickOpen.getByRole('option', { name: new RegExp(GENERIC_TEXT.replace('.', '\\.')) }))
+      .toContainText('Not in Search or Chat');
+    await quickOpen.getByRole('combobox').press('Escape');
+
+    await fileTreeRow(app.page, GENERIC_BINARY).click();
+    await expect(app.page.getByRole('status')).toContainText('Binary file cannot be opened');
+    await expect(app.page.getByRole('status')).toContainText(GENERIC_BINARY);
+
+    await fileTreeRow(app.page, JOURNEY_TEXT).click();
+    await expect(app.page.getByRole('region', { name: 'Text document' })).toContainText('Plain text journey content.');
+    await expect(app.page.getByRole('button', { name: 'Switch to Live Editing' })).toBeVisible();
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
 
 test('read-only HTML, image, and audio sources use their dedicated viewers', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });

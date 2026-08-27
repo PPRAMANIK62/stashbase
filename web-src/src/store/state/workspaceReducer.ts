@@ -65,6 +65,7 @@ function openFile(w: WorkspaceSlice, a: Extract<Action, { type: 'FILE_OPEN' }>):
     format: a.body.format,
     content: a.body.content,
     version: a.body.version,
+    ...(a.body.genericPreview ? { genericPreview: a.body.genericPreview } : {}),
     ...(a.libraryFolder ? { folder: a.libraryFolder } : {}),
   };
   const outOfFolder = Boolean(a.libraryFolder);
@@ -242,9 +243,8 @@ export function workspaceReducer(w: WorkspaceSlice, a: Action): WorkspaceSlice |
         folders: a.folders,
         folder: a.folder,
         folderPath,
-        unsupportedFiles: a.unsupportedFiles,
         ...(folderChanged
-          ? { recentFilePaths: [], editorHistory: [], unsupportedModalOpen: false }
+          ? { recentFilePaths: [], editorHistory: [] }
           : {}),
       };
     }
@@ -397,8 +397,6 @@ export function workspaceReducer(w: WorkspaceSlice, a: Action): WorkspaceSlice |
       return reorderTabs(w, a.id, a.beforeId);
     case 'NEW_FOLDER_INPUT':
       return { ...w, newFolderInputOpen: a.open };
-    case 'UNSUPPORTED_MODAL':
-      return { ...w, unsupportedModalOpen: a.open };
     default:
       // Not this slice's action — see the composition note in `stateReducer.ts`.
       return undefined;

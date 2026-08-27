@@ -457,7 +457,6 @@ test('loading a different folder clears per-folder session state', () => {
       folderPath: '/old',
       recentFilePaths: ['old.md'],
       editorHistory: ['old.md'],
-      unsupportedModalOpen: true,
     },
   });
   const next = reducer(state, {
@@ -469,7 +468,6 @@ test('loading a different folder clears per-folder session state', () => {
   });
   assert.deepEqual(next.workspace.recentFilePaths, []);
   assert.deepEqual(next.workspace.editorHistory, []);
-  assert.equal(next.workspace.unsupportedModalOpen, false);
 });
 
 test('PDF page numbers are isolated per tab and reset when replacing a file', () => {
@@ -508,45 +506,6 @@ test('PDF page numbers are isolated per tab and reset when replacing a file', ()
     body: { name: 'doc3.pdf', format: 'pdf', content: '' },
   });
   assert.equal(state.workspace.tabs[0].pdfPage, undefined); // reset / not leaked from doc1.pdf
-});
-
-test('FILES_LOADED captures unsupportedFiles and folder change resets modal state', () => {
-  const summary = {
-    sourceCode: 3,
-    other: 1,
-    otherExtensions: [{ extension: '.zip', count: 1 }],
-  };
-
-  let state = reducer(freshState({ workspace: { unsupportedModalOpen: true } }), {
-    type: 'FILES_LOADED',
-    files: [],
-    folders: [],
-    folder: 'notes',
-    folderPath: '/notes',
-    unsupportedFiles: summary,
-  });
-
-  assert.deepEqual(state.workspace.unsupportedFiles, summary);
-
-  state = reducer(state, {
-    type: 'FILES_LOADED',
-    files: [],
-    folders: [],
-    folder: 'other',
-    folderPath: '/other',
-    unsupportedFiles: undefined,
-  });
-
-  assert.equal(state.workspace.unsupportedFiles, undefined);
-  assert.equal(state.workspace.unsupportedModalOpen, false);
-});
-
-test('UNSUPPORTED_MODAL toggle action updates state', () => {
-  let state = reducer(freshState(), { type: 'UNSUPPORTED_MODAL', open: true });
-  assert.equal(state.workspace.unsupportedModalOpen, true);
-
-  state = reducer(state, { type: 'UNSUPPORTED_MODAL', open: false });
-  assert.equal(state.workspace.unsupportedModalOpen, false);
 });
 
 test('SET_CONFLICT and RESOLVE_CONFLICT_DISCARD reducer actions', () => {

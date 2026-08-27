@@ -9,8 +9,7 @@
  * ROW REGISTRY, not a DOM query. Navigation used to find its siblings by
  * running `querySelectorAll('[role="treeitem"]')` over the nearest
  * `[role="tree"]` and dropping anything inside a `.tree-children.collapsed`
- * subtree — every collapsed row is rendered and merely hidden by CSS, so
- * visibility had to be re-derived from a class name. That made keyboard
+ * subtree. Visibility had to be re-derived from a class name. That made keyboard
  * navigation silently depend on a stylesheet: renaming that class broke
  * arrow keys with nothing to catch it. Rows now hand their element to this
  * hook through a ref, and order and visibility come from `visibleNodePaths`
@@ -26,8 +25,7 @@ export interface TreeRovingValue {
   /** Every on-screen row path, in render order. */
   visiblePaths: string[];
   setRovingPath: (path: string) => void;
-  /** Live rows by path — collapsed ones included, so reads go through
-   *  `visiblePaths` rather than trusting the map's membership. */
+  /** Live on-screen rows by path; order still comes from `visiblePaths`. */
   rows: Map<string, HTMLElement>;
 }
 

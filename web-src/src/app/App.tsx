@@ -17,7 +17,6 @@ import { AlertConfirmModal } from '@/app/components/AlertConfirmModal';
 import { Toasts } from '@/common/components/Toasts';
 import { ChatPane, useAgentCatalogPrime, useChatLayoutFollowUp } from '@/features/agent-panel';
 import { EditorHistoryNavigator, LinkFilePicker, usePreviewMessages } from '@/features/documents';
-import { UnsupportedFilesModal } from '@/features/preparation';
 import { LibrarySearch, QuickOpen } from '@/features/search';
 import { EmbedderRequireKeyGate, SettingsPortal, useAppliedAppearance } from '@/features/settings';
 import { ChatSplitter, MoveFilePicker, SidebarSplitter, useGlobalDragDrop } from '@/features/workspace';
@@ -199,9 +198,6 @@ function AppBody() {
         />
       )}
       <CascadePromptModal />
-      <Suspense fallback={null}>
-        <UnsupportedFilesModal />
-      </Suspense>
       <AlertConfirmModal />
       <Toasts />
       <EmbedderRequireKeyGate />

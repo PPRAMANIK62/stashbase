@@ -1,7 +1,7 @@
 # Capabilities and Boundaries
 
 This is the detailed product-facing capability reference bundled on
-2026-08-25. Use the narrow capability names below: preview, Workbench content
+2026-08-27. Use the narrow capability names below: preview, Workbench content
 editing, retrieval text, Agent/MCP access, and file mutation are not
 interchangeable.
 
@@ -10,6 +10,7 @@ interchangeable.
 | Source family | Workbench surface | Workbench content editing | Retrieval text | Agent and external MCP file access |
 |---|---|---|---|---|
 | Markdown (`.md`, `.markdown`) | Writer Mode and Reading View | New and existing Markdown is content-editable | Direct source text | `read_file`, `write_file`, and `edit_file` use source text |
+| Plain text (`.txt`) | Source-preserving text view | Existing plain text is content-editable; New Note creates Markdown | Direct source text | `read_file`, `write_file`, and `edit_file` use source text |
 | JSON (`.json`) | Source-preserving Tree and Source views | Existing JSON is content-editable; New Note creates Markdown | Direct raw source text | `read_file`, `write_file`, and `edit_file` use source text |
 | HTML (`.html`, `.htm`) | Compatibility preview | Preview-only in the Workbench | Clean text derived in memory from the source | MCP file helpers use raw HTML source text |
 | PDF (`.pdf`) | Source PDF preview | Preview-only | Prepared Markdown | `read_file` returns current prepared Markdown; content writes are rejected |
@@ -17,20 +18,27 @@ interchangeable.
 | DOCX (`.docx`) | Sanitized source-based preview with prepared fallback | Preview-only | Prepared HTML | `read_file` returns current prepared HTML; content writes are rejected |
 | Audio (`.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.opus`, `.aac`, `.aiff`, `.aif`) | Source playback or compatible local audio preview | Preview-only | Prepared timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
 | Video (`.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv`, `.avi`) | Media playback when compatible, otherwise a local audio preview | Preview-only | Audio track prepared as timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
+| Generic workspace file (every other format) | Strict UTF-8 text opens read-only; binary, invalid encoding, oversized, unavailable, symlink, special, and cloud-placeholder entries keep an explicit cannot-open surface | No content editing | None; the muted tree state means Search and automatic Chat context exclude it | Not listed, read, written, moved, or deleted through Agent/MCP file tools |
 
-Rename, move, and delete are file-level mutations over recognized visible
-sources. They do not make a preview-only format content-editable. Unsupported
-formats must be reported as unsupported for the requested surface rather than
-opened as lossy text.
+Rename, move, and delete are Workbench file-level mutations over regular
+visible sources, including generic files. They do not make a preview-only
+format content-editable or widen Agent access. Restricted filesystem entries
+are reveal-only, and generic bytes are never decoded lossily.
 
 ## Document Workbench
 
+- The tree shows ordinary files instead of filtering unknown formats. Generic
+  rows are muted because Search and automatic Chat context exclude them.
+- Dependency and generated-output directories are visible as non-expandable
+  excluded rows; StashBase does not traverse their contents. Exact derived
+  artifacts and dot-directories remain hidden infrastructure.
 - Files open in persistent tabs with format-appropriate surfaces.
 - Markdown Writer Mode and Reading View use the same underlying source.
 - JSON Tree and Source views preserve the exact raw source, including malformed
   or duplicate-key content in Source view.
-- Quick Open is active-folder navigation. The Command Palette exposes existing
-  safe application actions.
+- Quick Open includes every file visible in the active tree and carries the
+  same generic-file explanation. The Command Palette exposes existing safe
+  application actions.
 - Find, outlines, local links, history, and search results navigate back to
   source identity.
 - Search or Agent links to a file in another Library folder open read-only
@@ -42,7 +50,7 @@ opened as lossy text.
 
 Preparation creates the representation needed for retrieval or Agent reading:
 
-- Markdown and JSON use source text directly.
+- Markdown, JSON, and `.txt` use source text directly.
 - HTML provides clean in-memory retrieval text without a durable prepared file.
 - PDF produces Markdown.
 - DOCX produces HTML.

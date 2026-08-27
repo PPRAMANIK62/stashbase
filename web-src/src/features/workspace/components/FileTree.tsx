@@ -1,8 +1,9 @@
 import { useMemo, type MouseEvent } from 'react';
 import '@/common/styles/tree.css';
 import '@/features/workspace/workspace.css';
-import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
-import { BotIcon, CancelledIcon, ChevronDownIcon, ClaudeIcon, WarningIcon } from '@/common/components/icons';
+import { VIEWABLE_FILE_EXTENSION_ALTERNATION, type ViewerFormat } from '@shared/file-formats';
+import type { FileMeta } from '@/common/api/api';
+import { BotIcon, CancelledIcon, ChevronDownIcon, ClaudeIcon, ExternalLinkIcon, FolderIcon, WarningIcon } from '@/common/components/icons';
 import { useTreeRowDrag } from '@/features/workspace/hooks/useTreeRowDrag';
 import { TreeRovingContext, useTreeRoving, useTreeRow } from '@/features/workspace/hooks/useTreeRoving';
 import { buildTree, visibleNodePaths, type FolderNode, type TreeNode } from '@/features/workspace/lib/fileTreeModel';
@@ -11,11 +12,11 @@ import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { hasName } from '@/store/state/state';
 import { getFileReadiness } from '@/store/lib/fileReadiness';
 import { EmptyState } from '@/common/components/ui/empty-state';
-import { SectionHeading } from '@/common/components/ui/section';
 import { FileTypeIcon } from '@/common/components/FileTypeIcon';
+import { TooltipButton } from '@/common/components/TooltipButton';
+import { showInFileManagerLabel } from '@/common/lib/fileManager';
 import { NewFolderInput } from '@/features/workspace/components/NewFolderInput';
 import { RenameInput, useRenameTarget } from '@/features/workspace/components/RenameInput';
-import { cn } from '@/common/lib/utils';
 
 const VIEWABLE_EXTENSION_RE = new RegExp(`\\.(${VIEWABLE_FILE_EXTENSION_ALTERNATION})$`, 'i');
 
@@ -33,21 +34,7 @@ export function FileTree() {
 
   const inputAtRoot = state.newFolderInputOpen && state.activeFolder === '';
   if (root.children.length === 0 && !inputAtRoot) {
-    const { sourceCode = 0, other = 0 } = state.unsupportedFiles || {};
-    const total = sourceCode + other;
-    if (total > 0) {
-      return (
-        <EmptyState className="flex-col items-center gap-1 text-center">
-          <SectionHeading className="text-sm">No supported files found</SectionHeading>
-          {/* text-xs, the ramp's meta step — the note scales with
-            * --ui-scale where the old hardcoded 11px did not. */}
-          <div className="text-xs leading-snug">
-            StashBase found {total} file{total === 1 ? '' : 's'} in this folder, but none can currently be displayed or indexed. Nothing on disk was changed.
-          </div>
-        </EmptyState>
-      );
-    }
-    return <EmptyState>No notes yet — click + to create one</EmptyState>;
+    return <EmptyState>No files yet — click + to create a note</EmptyState>;
   }
   return (
     <TreeRovingContext.Provider value={roving}>
@@ -81,7 +68,7 @@ function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number;
           <FileRow
             key={n.path}
             path={n.path}
-            format={n.meta.format}
+            meta={n.meta}
             depth={depth}
             paddingLeft={depth * 14 + 26}
             parent={parent}
@@ -133,6 +120,8 @@ function FolderRow({
   const { dispatch, actions } = useAppActions();
   const row = useTreeRow(node.path, parent);
   const isExpanded = hasName(state.expanded, node.path);
+  const isRestricted = node.kind === 'excluded' || node.kind === 'unreadable';
+  const externalActionLabel = showInFileManagerLabel();
   const isActive = state.selectedPath === node.path;
   const renaming = useRenameTarget(node.path, 'folder');
   const { dropEdge, dragProps } = useTreeRowDrag({
@@ -144,8 +133,9 @@ function FolderRow({
   });
 
   const rowClass =
-    'tree-row folder' +
-    (isExpanded ? '' : ' collapsed') +
+    'tree-row folder group/row' +
+    (!isRestricted && !isExpanded ? ' collapsed' : '') +
+    (isRestricted ? ' restricted' : '') +
     (isActive ? ' active-folder' : '') +
     (dropEdge === 'into' ? ' drop-target' : '') +
     (dropEdge === 'above' ? ' drop-edge-above' : '') +
@@ -158,7 +148,7 @@ function FolderRow({
     const { x, y } = contextMenuPosition(e);
     dispatch({
       type: 'CTX_MENU',
-      menu: { x, y, target: node.path, kind: 'folder' },
+      menu: { x, y, target: node.path, kind: isRestricted ? 'restricted' : 'folder' },
     });
   }
 
@@ -168,43 +158,60 @@ function FolderRow({
         ref={row.ref}
         className={rowClass}
         role="treeitem"
-        aria-label={node.name}
+        aria-label={isRestricted
+          ? `${node.name}, ${node.kind === 'excluded' ? 'contents excluded' : 'unreadable'}, ${externalActionLabel}`
+          : node.name}
         aria-level={depth + 1}
         aria-posinset={posInSet}
         aria-setsize={setSize}
-        aria-expanded={isExpanded}
+        aria-expanded={isRestricted ? undefined : isExpanded}
         aria-selected={isActive}
         // The children group renders as this row's SIBLING (below), so
         // ARIA needs the ownership spelled out — see `treeGroupId`.
-        aria-owns={treeGroupId(node.path)}
+        aria-owns={isRestricted ? undefined : treeGroupId(node.path)}
         tabIndex={row.tabIndex}
         style={{ paddingLeft: depth * 14 + 26 }}
         data-path={node.path}
-        draggable={!renaming}
-        {...dragProps}
+        draggable={!isRestricted && !renaming}
+        {...(isRestricted ? {} : dragProps)}
+        title={isRestricted ? undefined : node.path}
         onFocus={row.onFocus}
         onClick={() => {
           if (renaming) return;
-          dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
+          if (isRestricted) actions.revealFile(node.path);
+          else dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
         }}
         onKeyDown={(e) => {
           if (row.moveFocus(e)) return;
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            if (!renaming) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
+            if (isRestricted) actions.revealFile(node.path);
+            else if (!renaming) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
           } else if (e.key === 'ArrowRight') {
             e.preventDefault();
+            if (isRestricted) return;
             if (!isExpanded) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
             else row.focusNext();
           } else if (e.key === 'ArrowLeft') {
             e.preventDefault();
+            if (isRestricted) {
+              row.focusParent();
+              return;
+            }
             if (isExpanded) dispatch({ type: 'TOGGLE_FOLDER', path: node.path });
             else row.focusParent();
           }
         }}
         onContextMenu={onContextMenu}
       >
-        <span className="chev"><ChevronDownIcon /></span>
+        {/* Two different slots on purpose: `.chev` is the 12px disclosure
+          * step ("a direction, not an object") and only a chevron belongs
+          * there, while a folder glyph is an OBJECT and takes the 14px
+          * `.icon` step every other row glyph uses. Both slots are 16px
+          * wide, so the label edge is unchanged. */}
+        {isRestricted
+          ? <span className="icon"><FolderIcon /></span>
+          : <span className="chev"><ChevronDownIcon /></span>}
         {renaming ? (
           <RenameInput
             initialBasename={node.name}
@@ -218,24 +225,23 @@ function FolderRow({
         ) : (
           <span className="label">{node.name}</span>
         )}
+        {isRestricted && <TreeRevealAction path={node.path} label={externalActionLabel} />}
       </div>
-      <div
-        id={treeGroupId(node.path)}
-        className={cn('tree-children', !isExpanded && 'collapsed')}
-        role="group"
-      >
-        {state.newFolderInputOpen && state.activeFolder === node.path && (
-          <NewFolderInput parentPath={node.path} depth={depth + 1} />
-        )}
-        <TreeNodes nodes={node.children} depth={depth + 1} parent={node.path} />
-      </div>
+      {!isRestricted && isExpanded && (
+        <div id={treeGroupId(node.path)} role="group">
+          {state.newFolderInputOpen && state.activeFolder === node.path && (
+            <NewFolderInput parentPath={node.path} depth={depth + 1} />
+          )}
+          <TreeNodes nodes={node.children} depth={depth + 1} parent={node.path} />
+        </div>
+      )}
     </>
   );
 }
 
 function FileRow({
   path,
-  format,
+  meta,
   depth,
   paddingLeft,
   parent,
@@ -244,7 +250,7 @@ function FileRow({
   setSize,
 }: {
   path: string;
-  format: 'md' | 'html' | 'json' | 'pdf' | 'image' | 'docx' | 'audio';
+  meta: FileMeta;
   depth: number;
   paddingLeft: number;
   parent: string;
@@ -253,6 +259,10 @@ function FileRow({
   setSize: number;
 }) {
   const state = useWorkspace();
+  const format: ViewerFormat = meta.format;
+  const isRestricted = meta.availability === 'unreadable'
+    || (meta.entryKind != null && meta.entryKind !== 'regular');
+  const isGeneric = format === 'generic';
   const { actions, dispatch } = useAppActions();
   const row = useTreeRow(path, parent);
   const isActive = state.selectedPath === path;
@@ -276,25 +286,31 @@ function FileRow({
   });
 
   const rowClass =
-    `tree-row file format-${format}` +
+    `tree-row file group/row format-${format}` +
+    (isGeneric ? ' non-retrievable' : '') +
+    (isRestricted ? ' restricted' : '') +
     (isActive ? ' active' : '') +
     (readiness.preparationFailure ? ' preparation-failed' : '') +
     (readiness.preparationCancellation ? ' preparation-cancelled' : '') +
     (dropEdge === 'above' ? ' drop-edge-above' : '') +
     (dropEdge === 'below' ? ' drop-edge-below' : '');
 
-  const title = readiness.preparationFailure
+  const title = isRestricted
+    ? restrictedFileExplanation(meta, path)
+    : isGeneric
+      ? `Not included in Search or automatic Chat context. ${path}`
+      : readiness.preparationFailure
     ? `File preparation failed; this file may not be searchable. ${path}`
     : readiness.preparationCancellation
       ? `File preparation was cancelled; this file is not searchable until reprocessed. ${path}`
-    : path;
+      : path;
   // Protect the extension during inline rename for every recognised
   // format — notes (md/html) *and* the binary viewer formats (pdf +
   // images). Without the binaries here, editing "photo.png" exposes the
   // whole name and a user can drop ".png", which silently breaks format
   // detection (the row vanishes) and orphans the derived OCR note.
-  const extMatch = name.match(VIEWABLE_EXTENSION_RE);
-  const ext = extMatch ? extMatch[0] : '';
+  const extMatch = isGeneric ? null : name.match(VIEWABLE_EXTENSION_RE);
+  const ext = extMatch ? extMatch[0] : isGeneric ? genericExtension(name) : '';
 
   function onContextMenu(e: MouseEvent) {
     e.preventDefault();
@@ -303,7 +319,7 @@ function FileRow({
     const { x, y } = contextMenuPosition(e);
     dispatch({
       type: 'CTX_MENU',
-      menu: { x, y, target: path, kind: 'file' },
+      menu: { x, y, target: path, kind: isRestricted ? 'restricted' : 'file' },
     });
   }
 
@@ -322,7 +338,9 @@ function FileRow({
       ref={row.ref}
       className={rowClass}
       role="treeitem"
-      aria-label={name}
+      aria-label={isGeneric
+        ? `${name}, not included in Search or automatic Chat context`
+        : name}
       aria-level={depth + 1}
       aria-posinset={posInSet}
       aria-setsize={setSize}
@@ -331,8 +349,8 @@ function FileRow({
       style={{ paddingLeft }}
       data-path={path}
       title={title}
-      draggable={!renaming}
-      {...dragProps}
+      draggable={!isRestricted && !renaming}
+      {...(isRestricted ? {} : dragProps)}
       onFocus={row.onFocus}
       onClick={() => {
         if (renaming) return;
@@ -389,12 +407,88 @@ function FileRow({
           <CancelledIcon />
         </span>
       ) : null}
+      {/* Same escape the restricted FOLDER row carries. Opening one of
+        * these files still lands on its explanation surface, but the
+        * reduced-capability state should look and act the same on both
+        * kinds of row. */}
+      {isRestricted && <TreeRevealAction path={path} label={showInFileManagerLabel()} />}
     </div>
   );
 }
 
-function agentRulesIcon(basename: string) {
-  const normalized = basename.toLowerCase();
+/**
+ * The row-level escape to the system file manager, shared by every
+ * restricted entry so one reduced-capability state has one answer.
+ *
+ * Reveal-on-hover is spelled in utilities against the row's `group/row`,
+ * not as a descendant rule in tree.css: that stylesheet is UNLAYERED and
+ * therefore beats every Tailwind utility it matches, so a `color` there
+ * silently defeated the ghost recipe's own hover ink. Utilities also match
+ * the app's other hover-reveals (the sidebar's row actions, the chat tab
+ * strip). The element keeps its box either way, so revealing it never
+ * re-truncates the label beside it.
+ *
+ * `invisible`, not opacity alone: at rest this control must be genuinely
+ * gone — not hit-testable, not announced — and a transparent button is
+ * still both. Opacity carries the fade on the way in.
+ *
+ * `size-4 p-0` rather than the `icon-xs` recipe's 24px box: `.tree-row` is
+ * pinned to a 28px min-height with 3px padding, leaving a 22px content
+ * budget, and a 24px child silently grows every restricted row to 30px —
+ * which also breaks the drop-target midpoint math that assumes whole
+ * pixels. The sidebar's folder-head button makes the same override.
+ */
+function TreeRevealAction({ path, label }: { path: string; label: string }) {
+  const { actions } = useAppActions();
+  return (
+    <TooltipButton
+      label={label}
+      // Not the `right` default: this button sits on the sidebar's right
+      // edge, so a right-side tip always lands on the document pane. The
+      // titlebar buttons that keep the default open into the empty
+      // titlebar band instead.
+      side="top"
+      size="icon-xs"
+      tabIndex={-1}
+      className="invisible size-4 flex-none rounded-sm p-0 opacity-0 transition-opacity duration-fast group-hover/row:visible group-hover/row:opacity-100 group-focus-within/row:visible group-focus-within/row:opacity-100"
+      onClick={(event) => {
+        event.stopPropagation();
+        actions.revealFile(path);
+      }}
+    >
+      {/* The app-wide "opens outside the app" glyph — the same one the
+        * folder menu and account links carry. A bare text arrow here rode
+        * the row's font metrics instead of the icon button's svg sizing
+        * and sat visibly off-grid. */}
+      <ExternalLinkIcon />
+    </TooltipButton>
+  );
+}
+
+function genericExtension(name: string): string {
+  const lastDot = name.lastIndexOf('.');
+  return lastDot > 0 ? name.slice(lastDot) : '';
+}
+
+function restrictedFileExplanation(meta: FileMeta, path: string): string {
+  // The platform-native name, not a generic "file manager": the action
+  // button one hover away says "Show in Finder", and two names for one
+  // destination in the same row reads as two different places.
+  const externalActionLabel = showInFileManagerLabel();
+  if (meta.availability === 'unreadable') {
+    return `This file cannot be read. Use ${externalActionLabel} for details. ${path}`;
+  }
+  if (meta.entryKind === 'cloud-placeholder') {
+    return `This cloud file is not downloaded. Use ${externalActionLabel} and download it before opening. ${path}`;
+  }
+  if (meta.entryKind === 'symlink') {
+    return `Symbolic links are shown but not followed by StashBase. ${path}`;
+  }
+  return `This filesystem entry cannot be opened as a regular file. ${path}`;
+}
+
+function agentRulesIcon(fileBasename: string) {
+  const normalized = fileBasename.toLowerCase();
   // The Claude mark keeps its baked-in brand coral. It is now the only
   // coloured glyph in the tree — the format icons went muted — but it is a
   // LOGO, not a state or a category, and CLAUDE.md appears at most once per

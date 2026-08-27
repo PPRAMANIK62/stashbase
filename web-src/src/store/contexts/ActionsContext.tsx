@@ -113,7 +113,6 @@ export interface AppActions {
     },
   ) => string;
   toggleEditMode: () => Promise<void>;
-  setUnsupportedModalOpen: (open: boolean) => void;
   /** Reveal an existing Agent Panel session or create its first tab. This only
    * changes renderer layout; permissions and Agent context remain unchanged. */
   openAgent: (agent: AgentKind) => void;

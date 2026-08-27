@@ -24,6 +24,7 @@ import type {
   HostedOAuthStatus,
   FileBody,
   FilesPayload,
+  GenericFilePreview,
   FolderState,
   IndexStatus,
   KeywordSearchResult,
@@ -143,6 +144,8 @@ export const api = {
   // File body ----------------------------------------------------
   getFile: (name: string, opts?: { folder?: string }) =>
     getJson<FileBody>('/api/files/' + encodePath(name) + folderQuery(opts?.folder)),
+  getGenericFilePreview: (name: string, opts?: { folder?: string }) =>
+    getJson<GenericFilePreview>('/api/file-preview/' + encodePath(name) + folderQuery(opts?.folder)),
   putFile: (name: string, content: string, baseVersion?: string) =>
     send<{ content: string; indexWarning?: string; version?: string }>(
       'PUT',

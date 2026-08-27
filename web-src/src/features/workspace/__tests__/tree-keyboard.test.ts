@@ -73,9 +73,9 @@ test('row order follows the visible path list, not registration order', () => {
   assert.deepEqual(orderedRows(visible, rows), ['row:folder', 'row:inner', 'row:top']);
 });
 
-test('rows inside a collapsed subtree stay registered but out of the order', () => {
-  // Collapsed rows are rendered and merely hidden, so the registry holds
-  // them; filtering by `visiblePaths` is what keeps them unreachable.
+test('stale registry rows outside the visible model stay out of keyboard order', () => {
+  // Ref teardown and a visible-model update can land in adjacent commits;
+  // keyboard order remains authoritative during that brief overlap.
   const rows = new Map([
     ['Guides', 'row:folder'],
     ['Guides/inner.md', 'row:inner'],

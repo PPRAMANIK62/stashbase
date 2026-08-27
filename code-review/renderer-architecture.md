@@ -128,7 +128,7 @@ Two variants exist and are not defects:
   component keeps its own name. Use this when the caller is a dispatch over
   several already-whole components rather than one gate over one body.
 - **Plain default exports behind a barrel.** `ChatPane`, `SidebarAccountRow`,
-  `UnsupportedFilesModal`, and the preparation callouts are ordinary
+  and the preparation callouts are ordinary
   components; the `lazyWithRetry` wrapper lives in the feature's `index.ts`,
   so the barrel export *is* the boundary and the file needs no prefix at all.
   `SessionHistoryMenu` is the same shape one level in: its wrapper sits in

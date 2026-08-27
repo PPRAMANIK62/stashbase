@@ -14,7 +14,7 @@ import { folderRefsEqual } from '@/store/lib/folderPath';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
 import { SidebarAccountRow } from '@/features/account';
 import { NewChatButton, ScopeHistoryButton } from '@/features/agent-panel';
-import { EmbeddingSetupCallout, UnsupportedFilesCallout } from '@/features/preparation';
+import { EmbeddingSetupCallout } from '@/features/preparation';
 import {
   ChooseFolderButton,
   FileTree,
@@ -271,9 +271,6 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
   const state = useWorkspace();
   const { actions, dispatch } = useAppActions();
   const semanticNotice = useSemanticIndexingNotice();
-  const unsupportedFilesVisible = Boolean(
-    (state.unsupportedFiles?.sourceCode ?? 0) + (state.unsupportedFiles?.other ?? 0),
-  );
   const { pendingRemoval, removing, requestRemoval, cancelRemoval, removeFolder } =
     useFolderRemoval(dispatch, actions.toast);
   const toggleFavorite = useFolderFavorite(dispatch, actions.toast);
@@ -331,11 +328,6 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
               {semanticNotice && (
                 <Suspense fallback={null}>
                   <SemanticIndexingNoticeView {...semanticNotice} />
-                </Suspense>
-              )}
-              {unsupportedFilesVisible && (
-                <Suspense fallback={null}>
-                  <UnsupportedFilesCallout />
                 </Suspense>
               )}
               <FileTree />

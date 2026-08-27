@@ -16,6 +16,7 @@ export interface FolderNode {
   type: 'folder';
   name: string;
   path: string;
+  kind?: FolderMeta['kind'];
   children: TreeNode[];
 }
 
@@ -45,9 +46,12 @@ export function buildTree(
   const folderMap = new Map<string, FolderNode>();
   folderMap.set('', root);
 
-  const ensureFolder = (folderPath: string): FolderNode => {
+  const ensureFolder = (folderPath: string, meta?: FolderMeta): FolderNode => {
     const cached = folderMap.get(folderPath);
-    if (cached) return cached;
+    if (cached) {
+      if (meta?.kind) cached.kind = meta.kind;
+      return cached;
+    }
     const segs = folderPath.split('/');
     const parentPath = segs.slice(0, -1).join('/');
     const parent = ensureFolder(parentPath);
@@ -55,13 +59,14 @@ export function buildTree(
       type: 'folder',
       name: segs[segs.length - 1],
       path: folderPath,
+      kind: meta?.kind,
       children: [],
     };
     parent.children.push(node);
     folderMap.set(folderPath, node);
     return node;
   };
-  for (const f of folders) ensureFolder(f.path);
+  for (const f of folders) ensureFolder(f.path, f);
 
   for (const f of files) {
     const segs = f.name.split('/');

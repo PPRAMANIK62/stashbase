@@ -2,6 +2,7 @@ import { useAppActions, useUiShell, useWorkspace } from '@/store/contexts/AppCon
 import { getPreparationProblem } from '@/store/lib/fileReadiness';
 import { openMoveFilePicker } from '@/features/workspace';
 import { Menu, type MenuItem } from '@/common/components/Menu';
+import { showInFileManagerLabel } from '@/common/lib/fileManager';
 
 /** Right-click menu for file and folder rows. Loaded only after state owns a
  *  context-menu request; positioning and dismissal stay in the shared Menu. */
@@ -13,6 +14,16 @@ export default function ContextMenu() {
   const { x, y, target, kind } = ctxMenu;
   const close = () => dispatch({ type: 'CTX_MENU', menu: null });
   const canReprocess = kind === 'file' && Boolean(getPreparationProblem({ preparationFailures }, target));
+
+  if (kind === 'restricted') {
+    return (
+      <Menu
+        anchor={{ x, y }}
+        items={[{ label: showInFileManagerLabel(), onSelect: () => actions.revealFile(target) }]}
+        onClose={close}
+      />
+    );
+  }
 
   const items: MenuItem[] = [
     {
@@ -36,7 +47,7 @@ export default function ContextMenu() {
           onSelect: () => actions.copyFileLink(target),
         } satisfies MenuItem]
       : []),
-    { label: revealLabel(), onSelect: () => actions.revealFile(target) },
+    { label: showInFileManagerLabel(), onSelect: () => actions.revealFile(target) },
     ...(canReprocess
       ? [{
           label: 'Reprocess',
@@ -53,11 +64,4 @@ export default function ContextMenu() {
   ];
 
   return <Menu anchor={{ x, y }} items={items} onClose={close} />;
-}
-
-function revealLabel(): string {
-  const platform = (navigator.platform || '').toLowerCase();
-  if (platform.includes('mac')) return 'Reveal in Finder';
-  if (platform.includes('win')) return 'Reveal in Explorer';
-  return 'Show in File Manager';
 }

@@ -49,11 +49,13 @@ export type {
   FileBody,
   FileMeta,
   FilesPayload,
+  GenericFilePreview,
   FolderMeta,
   FolderState,
-  UnsupportedFileSummary,
   UploadResult,
   UploadResultEntry,
+  WorkspaceEntryAvailability,
+  WorkspaceFileKind,
 } from '@shared/library-files';
 export type { SessionBlock, SessionInfo, SessionReplay } from '@shared/agent-sessions';
 export type { McpHttpStatus } from '@shared/mcp';

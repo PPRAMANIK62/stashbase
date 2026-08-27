@@ -151,6 +151,28 @@
   color: var(--muted);
 }
 
+/* Reduced in-app capability — a generic file Search and Chat do not
+ * consume, or an entry the app can show but not open (unreadable,
+ * undownloaded cloud placeholder, symlink, excluded folder). One dim for
+ * one meaning, on files and folders alike: `restricted` used to be spelled
+ * on both kinds of row but styled only on folders, so an unreadable FILE
+ * looked exactly like a working one. */
+.tree-row.file.non-retrievable,
+.tree-row.restricted {
+  color: var(--muted);
+}
+
+/* Selection restores full ink. Muted text is `--text-secondary`, which
+ * lands at 3.83:1 on the `--active` fill — under AA — and these rows are
+ * the common case now that the tree lists every file. The dim only has to
+ * carry meaning in the resting list; a selected row already has its own
+ * emphasis, so nothing is lost by paying the contrast back here. */
+.tree-row.active.non-retrievable,
+.tree-row.active.restricted,
+.tree-row.active-folder.restricted {
+  color: var(--fg);
+}
+
 /* Format glyphs are Phosphor `fill` assets painted with `currentColor`,
  * so the `.icon svg` rule above tints them like every other glyph in the
  * tree. There are deliberately no per-format colour rules: a hue per row
@@ -169,10 +191,6 @@
  * code-repo nesting depth. Library trees are shallow, indentation
  * plus chevrons carry the structure, and the sidebar stays quiet
  * (document-tool reference class: Notion/Craft/Finder draw none). */
-.tree-children.collapsed {
-  display: none;
-}
-
 /* Same recipe as the inline rename fields (RenameInput.tsx,
  * SessionHistoryMenu.tsx): control-tier radius (it is a bordered input
  * FIELD sitting in a row slot — the full-bleed row fill around it stays

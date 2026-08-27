@@ -15,7 +15,7 @@ import { useFolderActions } from './useFolderActions';
 import { useSearchActions } from './useSearchActions';
 
 type Dispatch = (action: Action) => void;
-const ACTIVATION_REVALIDATED_FORMATS = new Set(['md', 'pdf', 'image', 'docx', 'audio']);
+const ACTIVATION_REVALIDATED_FORMATS = new Set(['md', 'json', 'text', 'generic', 'pdf', 'image', 'docx', 'audio']);
 
 type Toast = (message: string, opts?: {
   level?: 'info' | 'success' | 'warning' | 'error';
@@ -50,7 +50,6 @@ export interface ActiveFolderWorkspace {
   consumePendingHighlight: () => void;
   toggleEditMode: () => Promise<void>;
   updateTabPdfPage: (tabId: string, page: number) => void;
-  setUnsupportedModalOpen: (open: boolean) => void;
   newNote: () => Promise<void>;
   newFolder: (path: string) => Promise<void>;
   deleteFile: (name: string) => Promise<void>;

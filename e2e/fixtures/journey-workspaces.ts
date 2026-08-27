@@ -13,6 +13,10 @@ export const MALFORMED_DOCX = 'broken.docx';
 export const JOURNEY_PDF = 'two-pages.pdf';
 export const JOURNEY_DOCX = 'valid-document.docx';
 export const LEGACY_DERIVED_NOTE = '.two-pages.pdf.md';
+export const JOURNEY_TEXT = 'plain-notes.txt';
+export const GENERIC_TEXT = 'script.ts';
+export const GENERIC_BINARY = 'archive.zip';
+export const EXCLUDED_FOLDER = 'node_modules';
 
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -84,6 +88,11 @@ export function seedJourneyWorkspaces(fixture: AppFixture): void {
   write(path.join(projectA, JOURNEY_PDF), twoPagePdf());
   write(path.join(projectA, JOURNEY_DOCX), VALID_DOCX);
   write(path.join(projectA, LEGACY_DERIVED_NOTE), '# Hidden derived regression phrase\n');
+  write(path.join(projectA, JOURNEY_TEXT), 'Plain text journey content.\r\n');
+  write(path.join(projectA, GENERIC_TEXT), 'export const genericJourney = "visible but not indexed";\n');
+  write(path.join(projectA, GENERIC_BINARY), Buffer.from('PK\u0003\u0004generic binary fixture', 'binary'));
+  write(path.join(projectA, '.env'), 'JOURNEY_VISIBLE_DOTFILE=true\n');
+  write(path.join(projectA, EXCLUDED_FOLDER, 'dependency.js'), 'export const dependency = true;\n');
   write(path.join(projectB, 'beta-pixel.png'), ONE_PIXEL_PNG);
   write(path.join(projectA, JOURNEY_MARKDOWN), [
     '---',

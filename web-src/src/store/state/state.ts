@@ -34,12 +34,12 @@ import type {
   FileBody,
   FileMeta,
   FolderMeta,
+  GenericFilePreview,
   PreparationFailure,
   ConversionProgress,
   IndexWarning,
   IndexStatus,
   Agent,
-  UnsupportedFileSummary,
 } from '@/common/api/api';
 
 export {
@@ -130,6 +130,9 @@ export interface OpenFile {
   /** Opaque server-side file version used to reject stale autosaves
    *  when another window or external editor changed the same file. */
   version?: string;
+  /** Selection-time result for a workbench-only generic file. Text is shown
+   * read-only; every other state renders an explicit unavailable placeholder. */
+  genericPreview?: GenericFilePreview;
   /** Absolute member-folder root when this file lives OUTSIDE the window's
    *  active folder (an "out-of-folder" tab, opened from a library-wide
    *  search hit). Such tabs are strictly read-only, never enter the tree's
@@ -142,7 +145,7 @@ export interface CtxMenu {
   x: number;
   y: number;
   target: string;
-  kind: 'file' | 'folder';
+  kind: 'file' | 'folder' | 'restricted';
 }
 
 export interface TabConflict {
@@ -269,8 +272,6 @@ export interface WorkspaceSlice {
 
   files: FileMeta[];
   folders: FolderMeta[];
-  unsupportedFiles?: UnsupportedFileSummary;
-  unsupportedModalOpen?: boolean;
 
   /** Manual sidebar ordering — map of `parentPath` → ordered list of
    *  child basenames. Empty map = use default (folders-first +
@@ -437,8 +438,6 @@ const initialWorkspace: WorkspaceSlice = {
   libraryFolderStatuses: {},
   files: [],
   folders: [],
-  unsupportedFiles: undefined,
-  unsupportedModalOpen: false,
   fileOrder: {},
   tabs: [],
   recentFilePaths: [],
@@ -498,7 +497,7 @@ export type Action =
   | { type: 'LIBRARY_FOLDER_STATUS'; path: string; status: LibraryFolderStatus }
   | { type: 'LIBRARY_FOLDER_STATUS_REMOVE'; path: string }
   | { type: 'FOLDER_CONTEXT'; folder: string; folderPath: string }
-  | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; folder: string; folderPath?: string; unsupportedFiles?: UnsupportedFileSummary }
+  | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; folder: string; folderPath?: string }
   | { type: 'FILE_ORDER_LOADED'; order: Record<string, string[]> }
   /** Replace one folder's ordered list (optimistic update before the
    *  PUT lands). Names list may include entries that no longer exist
@@ -508,7 +507,7 @@ export type Action =
    *  source's existing tab when present; otherwise it pushes a fresh tab and
    *  switches to it. Omitting `newTab` replaces the active tab in place
    *  (blank-tab reuse, back/forward, in-place anchor nav). */
-  | { type: 'FILE_OPEN'; body: FileBody; newTab?: boolean; libraryFolder?: string }
+  | { type: 'FILE_OPEN'; body: FileBody & { genericPreview?: GenericFilePreview }; newTab?: boolean; libraryFolder?: string }
   | { type: 'FILE_PATCH'; patch: Partial<OpenFile> }
   | { type: 'DOCUMENT_DIRTY'; dirty: boolean }
   | { type: 'PRUNE_MISSING_FILE_TABS'; names: string[] }
@@ -587,7 +586,6 @@ export type Action =
   | { type: 'FIND_OPEN' }
   | { type: 'FIND_CLOSE' }
   | { type: 'FIND_SET'; patch: Partial<FindState> }
-  | { type: 'UNSUPPORTED_MODAL'; open: boolean }
   | { type: 'SET_CONFLICT'; id: string; conflict: TabConflict | null }
   | { type: 'SET_CONFLICT_RESOLVING'; id: string; resolving: boolean }
   | { type: 'RESOLVE_CONFLICT_DISCARD'; id: string };

@@ -68,6 +68,8 @@ test('removing a chat folder preserves started work and opens a fresh Library ch
     await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
 
+    await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+    await app.page.getByRole('menuitem', { name: 'Codex' }).click();
     await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
     let panel = activeAgentPanel(app.page);
     let composer = panel.locator('[aria-label="Message agent"]');

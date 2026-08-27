@@ -147,19 +147,21 @@ See [J02 evidence](../code-review/journey-coverage.md#j02-folder).
 
 ### Outcome
 
-The user opens and navigates previewable ordinary source files, and edits
-content-editable formats with durable and explicit save behavior.
+The user sees the truthful active-folder source tree, opens ordinary files with
+their declared capability, and edits content-editable formats with durable and
+explicit save behavior.
 
 ### Entry State
 
-An authorized folder contains a source listed in the
+An authorized folder contains an ordinary source or excluded infrastructure
+described by the
 [Documents format capability matrix](design/documents.md#format-capability-matrix).
 
 ### Primary Flow
 
 1. Open the source in a persistent tab and receive only the preview or editing
    capabilities declared for that format.
-2. For content-editable Markdown or JSON, enter the appropriate editing state
+2. For content-editable Markdown, JSON, or plain text, enter the appropriate editing state
    and save through the shared durability path.
 3. Navigate with tabs, Quick Open, outlines, Find, local links, or search
    results.
@@ -174,11 +176,20 @@ An authorized folder contains a source listed in the
 - Preview-only formats never expose a content-editing affordance. Workbench
   content editing, Agent/MCP content writes, and file-level rename/move/delete
   remain distinguishable capabilities.
+- Generic files remain visible but muted, appear in Quick Open, and either
+  open as strict read-only UTF-8 text or retain their identity in an explicit
+  binary, oversized, or unavailable state. Muted means they are absent from
+  Search and automatic Chat context.
+- Excluded infrastructure is represented by a non-expandable folder row rather
+  than silently traversed or silently omitted. Its hover/focus action and
+  keyboard activation expose **Show in Finder / File Explorer**, so reduced
+  StashBase capability never implies that the source is unreachable. Hidden
+  derived artifacts never surface.
 - Writer/reader and JSON Tree/Source transitions preserve the same source
   content rather than creating a second document model.
 - Navigation, window retirement, and product-owned renderer recovery do not
   silently discard a live edit.
-- Parse, preview, or unsupported-format failure keeps the source identifiable
+- Parse, preview, decode, or availability failure keeps the source identifiable
   and recoverable.
 
 ### Degradation and Recovery

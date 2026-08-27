@@ -19,9 +19,10 @@ semantic readiness.
 - Every asynchronous folder open, file load, index refresh, and binary stat
   applies only while its captured folder, tab, and generation remain current.
 - Active-folder listing performs recursive directory I/O asynchronously and
-  yields during large flat-directory classification. Exact unsupported-file
-  disclosure cannot monopolize the shared Node request loop while a folder is
-  opening.
+  yields during large flat-directory classification. It lists generic files
+  without reading a preview prefix, represents excluded project directories
+  without descending, and cannot monopolize the shared Node request loop while
+  a folder is opening.
 - One source identity owns at most one document tab in a window. The workspace
   reducer resolves concurrent open completions against its latest state; an
   asynchronous caller's earlier duplicate check is never the uniqueness
@@ -64,11 +65,32 @@ semantic readiness.
   path's `TABS_REORDER`, and Delete closes the focused tab — the tab chip's
   visual close control stays presentational inside `role="tab"`.
 - Tree row order, visibility, and keyboard order all come from the one tree
-  model. Every row is rendered whether or not its folder is open, so rows
-  register their element with the roving-focus hook and navigation resolves
-  against the model's visible-path list. A row under a collapsed ancestor is
-  unreachable because it is absent from that list — never because a
-  stylesheet class was matched.
+  model. Collapsed descendants do not create DOM; expanded rows register with
+  the roving-focus hook and navigation resolves against the same visible-path
+  list. Excluded and unreadable folder placeholders are non-expandable but
+  stay actionable through the system file manager; reduced in-app capability
+  must not be styled or exposed as a disabled object.
+- A generic file's `format: generic` is one renderer capability signal: the
+  tree and Quick Open mute it and explain that Search and automatic Chat
+  context exclude it. Selection alone invokes bounded preview inspection.
+  Restricted entries expose reveal-only actions. Every restricted entry —
+  file or folder — carries the same muted ink and the same external-action
+  glyph revealed on row hover/focus; its delayed tooltip names the system
+  file manager, and the row's own explanation uses that same platform name
+  rather than a generic one. Row activation and the context menu expose the
+  action without requiring pointer hover. A reduced-capability row states it
+  in one vocabulary: marking the state on one kind of row while leaving
+  another kind visually identical to a fully working entry is a defect.
+- Muted row ink is a resting-state signal only. Selection restores full
+  foreground ink, because the muted role does not clear AA against the
+  selected-row fill and these rows are the common case once the tree lists
+  every file.
+- A row-level control sizes to the row's content budget rather than to the
+  icon-button recipe's own box; a control taller than that budget silently
+  grows the rows that carry it and breaks the whole-pixel drop-target math.
+  Reveal-on-hover is spelled in utilities against the row group, never as a
+  descendant rule in the tree stylesheet — that sheet is unlayered and would
+  defeat the control's own recipe.
 - JSON Tree/Source mode, expansion, selected path, and tree query are retained
   per recent tab. Only the active JSON tab owns Find/editor registration, and
   the bounded tree entry remains lazy.
@@ -82,7 +104,7 @@ semantic readiness.
 
 The initial renderer contains only window chrome and the minimum workspace
 shell. Feature surfaces that open on demand remain dynamic entries. The
-authoritative budget is `418 KiB` of initial static JavaScript, and the current
+authoritative budget is `436 KiB` of initial static JavaScript, and the current
 required dynamic-entry set lives in `scripts/check-renderer-chunks.mjs`.
 Change that list or budget only when the ownership of eager shell behavior
 changes, never to make an accidental dependency pass.
@@ -95,9 +117,9 @@ changes, never to make an accidental dependency pass.
 | Primary owners | `web-src/src/store/state/state.ts`, `state/stateReducer.ts` and the `state/workspaceReducer.ts`, `state/chatReducer.ts`, `state/uiShellReducer.ts` sub-reducers it composes, `state/stateHelpers.ts`, `lib/folderScopedReset.ts`, `lib/folderPath.ts`, `lib/folderTransition.ts`, and the internal `hooks/useDocumentActions.ts`, `hooks/useFileActions.ts`, `hooks/useFolderActions.ts`, `hooks/useSearchActions.ts` Modules |
 | Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx` |
 | Renderer tree model | `web-src/src/features/workspace/lib/fileTreeModel.ts` (nesting, manual-rank ordering, visible rows), `lib/treeKeyboard.ts` (roving-focus rules), `hooks/useTreeRoving.ts` (row registry and per-row binding) |
-| Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `server/routes/files.ts`, and the asynchronous request listing in `server/file-listing.ts` |
+| Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `shared/library-files.ts`, `server/routes/files.ts`, the asynchronous request listing in `server/file-listing.ts`, and bounded selection-time inspection in `server/generic-file-preview.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
-| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, and `scripts/check-renderer-chunks.mjs` |
+| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, `server/generic-file-preview.test.ts`, `e2e/journeys/formats-media.spec.ts`, and `scripts/check-renderer-chunks.mjs` |
 
 The four action hooks are private Seams inside the workspace Module. Do not make
 components depend on them directly; that would create a second transition

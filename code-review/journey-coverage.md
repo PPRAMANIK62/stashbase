@@ -64,7 +64,7 @@ aliases, and Journey E2E owns representative composition.
 
 ## J01: Onboarding
 
-**Status:** Partial and release-dependent.
+**Status:** Release-dependent.
 
 - **Contract Test:** renderer initialization, Settings state, workspace
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
@@ -133,6 +133,8 @@ aliases, and Journey E2E owns representative composition.
   [library mutations](../e2e/journeys/library-mutations.spec.ts), and
   [format and media](../e2e/journeys/formats-media.spec.ts) cover representative
   format classes and document work, including preview-only affordances,
+  truthful generic-file and excluded-folder visibility, Quick Open parity,
+  strict read-only text versus binary fallback, `.txt` authoring capability,
   explicit PDF/DOCX preview-failure identity, external-write conflict recovery,
   and a live edit flushed through recovery reload.
 - **AI Eval:** not required.
@@ -254,9 +256,8 @@ aliases, and Journey E2E owns representative composition.
   is outside StashBase ownership.
 - **Release Check:** packaged launcher, copied configuration, URL access, and
   one representative external client remain release evidence.
-- **Gap:** MCP `write_file` and `edit_file` descriptions currently name only
-  Markdown/HTML even though the shared operation also accepts JSON. See the
-  [MCP Access Known Gap](mcp-access.md#known-gap--json-tool-description).
+- **Gap:** none in the deterministic transport and format-capability boundary.
+  Packaged launcher and third-party client behavior remain release evidence.
 
 ## J09: Bug report
 

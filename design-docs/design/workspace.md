@@ -65,10 +65,25 @@ manager, or a primary graph-navigation tool.
 - Removing a member preserves Chat tabs. A completely blank Chat returns to
   Library without interruption; a Chat containing user work stays readable in
   its retired folder scope and offers a separate **New Library Chat**.
-- Files declared previewable in the
-  [Documents format matrix](documents.md#format-capability-matrix) open in
+- The active folder tree truthfully reports ordinary source entries rather
+  than filtering unknown formats. Generic files are muted with one stable
+  explanation—Search and automatic Chat context do not consume them—and still
+  open through Quick Open or their tree row. Ordinary user dotfiles remain
+  visible, while dot-notes retain the established hidden-note namespace;
+  exact app-derived artifacts, bundle resources, junk metadata, and
+  dot-directories remain infrastructure rather than workspace content.
+- Dependency caches and generated build directories such as `node_modules`
+  appear as non-expandable excluded-folder rows. StashBase does not recurse
+  into them, so a project can explain their presence without paying the cost
+  of rendering or indexing their contents. These rows are never presented as
+  dead: row hover or keyboard focus reveals an external-action arrow whose
+  delayed tooltip says **Show in Finder / File Explorer**. Row activation and
+  the context menu provide the same system-file-manager exit.
+- Files use the surface declared in the
+  [Documents format matrix](documents.md#format-capability-matrix) and open in
   persistent tabs with Quick Open, Command Palette, history, and
-  platform-appropriate shortcuts.
+  platform-appropriate shortcuts. Symlinks and special or unavailable entries
+  are shown but never followed; their only file action is reveal.
 - Search or Agent links to a file in another member folder open a read-only
   out-of-folder tab without switching the current folder. The user can open
   that folder in another window for full editing.
@@ -108,6 +123,10 @@ manager, or a primary graph-navigation tool.
   user's existing configuration for recovery.
 - Source and derived state remain distinguishable. The tree and tabs show
   source files, not generated representations.
+- Tree completeness is scoped to user workspace content: excluded directory
+  placeholders explain intentionally untraversed infrastructure, while hidden
+  product-derived artifacts never surface. A collapsed or excluded directory
+  does not create descendant DOM.
 - Repeated or concurrent navigation to one source focuses its existing
   persistent tab. The same relative path in different Library folders remains
   a distinct source.
@@ -115,7 +134,9 @@ manager, or a primary graph-navigation tool.
   expands an open Chat; hiding Chat stays respected until the user reopens it.
 - Keyboard focus, overlay dismissal, splitters, and reduced-motion behavior are
   consistent across supported platforms.
-- Quick Open stays active-folder navigation. Command Palette exposes existing
+- Quick Open covers every file visible in the active tree and preserves the
+  same muted retrieval explanation for generic files. It stays active-folder
+  navigation. Command Palette exposes existing
   safe actions; neither surface becomes search, Agent permission, or hidden
   destructive automation.
 - Update discovery is quiet, dismissible, and never blocks local work. One

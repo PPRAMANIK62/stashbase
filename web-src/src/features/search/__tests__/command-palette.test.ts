@@ -16,7 +16,7 @@ test('Command Palette filters unavailable commands and promotes session recency'
   const available = commandDefinitions.filter((command) => command.available({
     hasFolder: true,
     hasActiveTab: true,
-    activeFileIsMarkdown: true,
+    activeFileIsEditable: true,
   }));
   const ranked = rankCommandPalette(available, '', ['agent.show-codex']);
 
@@ -26,7 +26,7 @@ test('Command Palette filters unavailable commands and promotes session recency'
   assert.ok(!commandDefinitions.some((command) => command.id === 'document.new-note' && command.available({
     hasFolder: false,
     hasActiveTab: false,
-    activeFileIsMarkdown: false,
+    activeFileIsEditable: false,
   })));
 });
 
@@ -34,7 +34,7 @@ test('Command Palette matches labels, categories, and stable identities', () => 
   const commands = commandDefinitions.filter((command) => command.available({
     hasFolder: true,
     hasActiveTab: false,
-    activeFileIsMarkdown: false,
+    activeFileIsEditable: false,
   }));
 
   assert.deepEqual(rankCommandPalette(commands, 'settings', []).map((command) => command.id), ['settings.open']);

@@ -3,6 +3,7 @@
  * Runtime dependencies stay browser-safe and free of React side effects.
  */
 import type { FileMeta } from '@/common/api/api';
+import { isRetrievableViewerFormat } from '@shared/file-formats';
 import { VIEWABLE_FILE_EXTENSION_ALTERNATION } from '@shared/file-formats';
 import type { ChatSlice, ChatTab, NameSet, Tab, WorkspaceSlice } from './state';
 
@@ -216,7 +217,7 @@ export function forgetClosedTabs(history: string[], openIds: Set<string>): strin
  *  temporarily undercounting the backfill. */
 export function optimisticKeyBackfillPaths(files: FileMeta[]): string[] {
   return files
-    .filter((f) => f.format === 'md' || f.format === 'html' || f.format === 'json' || f.format === 'pdf' || f.format === 'image' || f.format === 'docx')
+    .filter((f) => isRetrievableViewerFormat(f.format))
     .map((f) => f.name)
     .filter((name) => !name.split('/').some((seg) => seg.startsWith('.')))
     .sort();
@@ -247,7 +248,9 @@ function splitPath(path: string): { parent: string; base: string } {
 
 export function renamedFilePath(oldName: string, newBaseName: string): string {
   const extMatch = oldName.match(VIEWABLE_EXTENSION_RE);
-  const ext = extMatch ? extMatch[0] : '';
+  const base = splitPath(oldName).base;
+  const lastDot = base.lastIndexOf('.');
+  const ext = extMatch ? extMatch[0] : lastDot > 0 ? base.slice(lastDot) : '';
   const lastSlash = oldName.lastIndexOf('/');
   const dir = lastSlash >= 0 ? oldName.slice(0, lastSlash + 1) : '';
   return dir + newBaseName + ext;

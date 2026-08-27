@@ -157,7 +157,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       folders: j.folders ?? [],
       folder: j.folder ?? 'notes',
       folderPath: expectedFolderPath,
-      unsupportedFiles: j.unsupportedFiles,
     });
     return files;
   }, []);
@@ -242,6 +241,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const sameDocument = (file: { name: string; folder?: string } | null | undefined) =>
       !!file && file.name === name && file.folder === libraryFolder;
     try {
+      if (tab.file.format === 'generic') {
+        const genericPreview = await api.getGenericFilePreview(name, readOpts);
+        if (stateRef.current.workspace.folderPath !== folderPathAtStart) return;
+        const latestActive = getActiveTab(stateRef.current.workspace);
+        const latestFile = latestActive?.file;
+        if (!sameDocument(latestFile) || latestActive?.dirty) return;
+        dispatch({
+          type: 'FILE_PATCH',
+          patch: {
+            genericPreview,
+            content: genericPreview.kind === 'text' ? genericPreview.content : '',
+            version: genericPreview.kind === 'text' ? genericPreview.version : undefined,
+          },
+        });
+        return;
+      }
       if (
         tab.file.format === 'pdf'
         || tab.file.format === 'image'
@@ -328,7 +343,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     alert: showAlert, confirm: askConfirm, resolveModal,
     toast,
     toggleEditMode: workspace.toggleEditMode,
-    setUnsupportedModalOpen: workspace.setUnsupportedModalOpen,
     openAgent: (agent) => {
       rememberPreferredAgent(agent);
       const current = stateRef.current.chat;

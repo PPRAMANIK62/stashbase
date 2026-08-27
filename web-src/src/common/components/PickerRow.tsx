@@ -14,13 +14,18 @@ import { emptyStateVariants } from '@/common/components/ui/empty-state';
  * Selection paints from `aria-selected`, so the ARIA state and the visual
  * state cannot drift apart — a quiet neutral surface, never an accent wash.
  */
-export function PickerRow({ id, selected, label, detail, onHover, onPick }: {
+export function PickerRow({ id, selected, label, detail, detailPrefix, onHover, onPick }: {
   id: string;
   selected: boolean;
   label: ReactNode;
   /** Muted right-hand annotation — a containing folder, a shortcut, a
    *  category. Omitted by pickers whose rows are a single label. */
   detail?: ReactNode;
+  /** A fixed status word that qualifies the row, held in its own
+   *  non-shrinking slot ahead of `detail`. Folded into the detail string it
+   *  would be the part that SURVIVES truncation, cutting the folder path —
+   *  the only part that differs between rows. */
+  detailPrefix?: ReactNode;
   onHover: () => void;
   onPick: () => void;
 }) {
@@ -33,9 +38,17 @@ export function PickerRow({ id, selected, label, detail, onHover, onPick }: {
       onMouseMove={onHover}
       onMouseDown={(event: MouseEvent) => { event.preventDefault(); onPick(); }}
     >
-      <span>{label}</span>
-      {detail !== undefined && (
-        <small className="overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground">{detail}</small>
+      <span className="min-w-0 truncate">{label}</span>
+      {(detail !== undefined || detailPrefix !== undefined) && (
+        /* `group-aria-selected:text-foreground` is a CONTRAST fix, not
+         * emphasis: muted ink (`--text-secondary`) lands at 3.83:1 on the
+         * selected row's `--active` fill, under AA. Selection already
+         * carries its own emphasis, so the dim only has to hold for the
+         * resting list. */
+        <small className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-muted-foreground group-aria-selected:text-foreground">
+          {detailPrefix !== undefined && <span className="shrink-0">{detailPrefix}</span>}
+          {detail !== undefined && <span className="min-w-0 truncate">{detail}</span>}
+        </small>
       )}
     </li>
   );

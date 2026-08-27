@@ -154,6 +154,11 @@ test('the root is a nameless folder at the empty path', () => {
   );
 });
 
+test('folder capability metadata survives nesting into the renderer model', () => {
+  const root = buildTree([], [{ path: 'node_modules', kind: 'excluded' }], {});
+  assert.equal(folderAt(root, 'node_modules').kind, 'excluded');
+});
+
 test('visible paths descend only into expanded folders, in render order', () => {
   const root = buildTree(
     files('Guides/inner.md', 'Guides/Deep/buried.md', 'top.md'),

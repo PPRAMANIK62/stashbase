@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import { AUDIO_SOURCE_EXTENSION_ALTERNATION } from '@shared/file-formats';
-import { api, ApiError } from '@/common/api/api';
+import { api, ApiError, type FileBody, type GenericFilePreview } from '@/common/api/api';
 import { folderRefsEqual } from '@/store/lib/folderPath';
 import { basename } from '@/common/lib/paths';
 import type { EditorHandle } from '@/store/state/editorTypes';
@@ -289,15 +289,33 @@ export function useDocumentActions(
     if (opts.expectedFolder && state.current.workspace.folderPath !== opts.expectedFolder) return;
     const readOpts = opts.libraryFolder ? { folder: opts.libraryFolder } : undefined;
 
-    let body;
-    if (/\.pdf$/i.test(name)) {
+    const genericBody = (preview: GenericFilePreview): FileBody & { genericPreview: GenericFilePreview } => ({
+      name,
+      format: 'generic',
+      content: preview.kind === 'text' ? preview.content : '',
+      version: preview.kind === 'text' ? preview.version : undefined,
+      genericPreview: preview,
+    });
+
+    let body: FileBody & { genericPreview?: GenericFilePreview };
+    const listed = opts.libraryFolder
+      ? undefined
+      : state.current.workspace.files.find((file) => file.name === name);
+    if (listed?.format === 'generic') {
+      try {
+        body = genericBody(await api.getGenericFilePreview(name, readOpts));
+      } catch (err: unknown) {
+        toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
+        return;
+      }
+    } else if (/\.pdf$/i.test(name)) {
       try {
         const stat = await api.statFile(name, readOpts);
         body = { name, format: 'pdf' as const, content: '', version: stat.version };
       } catch (err: unknown) {
-        // A failed open is navigation feedback, not the active document's
-        // save state — SAVE_STATUS would paint the error onto the tab the
-        // user is leaving (and is invisible outside edit mode).
+          // A failed open is navigation feedback, not the active document's
+          // save state — SAVE_STATUS would paint the error onto the tab the
+          // user is leaving (and is invisible outside edit mode).
         toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
         return;
       }
@@ -350,11 +368,23 @@ export function useDocumentActions(
       try {
         body = await api.getFile(name, readOpts);
       } catch (err: unknown) {
+        // Cross-folder navigation has no active-tree metadata. A 415 from the
+        // document route means the target is a generic workspace entry, so
+        // retry through the bounded, read-only inspection route.
+        if (err instanceof ApiError && err.status === 415) {
+          try {
+            body = genericBody(await api.getGenericFilePreview(name, readOpts));
+          } catch (previewErr: unknown) {
+            toast(`Could not open ${basename(name)}: ${previewErr instanceof Error ? previewErr.message : String(previewErr)}`, { level: 'error' });
+            return;
+          }
+        } else {
         // A failed open is navigation feedback, not the active document's
         // save state — SAVE_STATUS would paint the error onto the tab the
         // user is leaving (and is invisible outside edit mode).
-        toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
-        return;
+          toast(`Could not open ${basename(name)}: ${err instanceof Error ? err.message : String(err)}`, { level: 'error' });
+          return;
+        }
       }
     }
     if (opts.expectedFolder && state.current.workspace.folderPath !== opts.expectedFolder) return;
@@ -572,10 +602,6 @@ export function useDocumentActions(
     dispatch({ type: 'TAB_PDF_PAGE', id: tabId, page });
   }, [dispatch]);
 
-  const setUnsupportedModalOpen = useCallback((open: boolean) => {
-    dispatch({ type: 'UNSUPPORTED_MODAL', open });
-  }, [dispatch]);
-
   const settleConflict = useCallback((settlement: ConflictSettlement) => {
     const activeTab = getActiveTab(state.current.workspace);
     if (
@@ -704,7 +730,6 @@ export function useDocumentActions(
     scheduleSave,
     selectFile,
     selectFileWithHighlight,
-    setUnsupportedModalOpen,
     toggleEditMode,
     updateTabPdfPage,
     resolveConflictOverwrite,
@@ -725,7 +750,6 @@ export function useDocumentActions(
     scheduleSave,
     selectFile,
     selectFileWithHighlight,
-    setUnsupportedModalOpen,
     toggleEditMode,
     updateTabPdfPage,
     resolveConflictOverwrite,

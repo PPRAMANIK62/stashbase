@@ -1,3 +1,5 @@
+import type { ViewerFormat } from '@shared/file-formats';
+
 /** Per-format file glyph, from Phosphor's `fill` weight.
  *
  *  Fill, not the chrome set's `regular`: these carry a format label inside
@@ -9,9 +11,23 @@
  *  blue) and it made the sidebar the loudest surface in the app — a hue per
  *  row is exactly the repeated-element case the colour budget rules out.
  *  The silhouette and its letterform carry the format instead. */
-export type FileGlyphFormat = 'md' | 'html' | 'json' | 'pdf' | 'image' | 'docx' | 'audio';
+export type FileGlyphFormat = ViewerFormat;
 
 export function FileTypeIcon({ format }: { format: FileGlyphFormat }) {
+  if (format === 'text') {
+    return (
+      <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,176H96a8,8,0,0,1,0-16h64a8,8,0,0,1,0,16Zm0-32H96a8,8,0,0,1,0-16h64a8,8,0,0,1,0,16Zm-8-56V44l44,44Z"/></svg>
+    );
+  }
+  /* Unknown bytes get the BLANK page — the one silhouette in the set with
+   * nothing written on it, which is the whole statement. Sharing the
+   * ruled-page glyph with `text` said "this is a text file" about a file
+   * StashBase could not decode. */
+  if (format === 'generic') {
+    return (
+      <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM152,88V44l44,44Z"/></svg>
+    );
+  }
   if (format === 'image') {
     return (
       <svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M158.66,219.56A8,8,0,0,1,152,232H24a8,8,0,0,1-6.73-12.33l36-56a8,8,0,0,1,13.46,0l9.76,15.18,20.85-31.29a8,8,0,0,1,13.32,0ZM216,88V216a16,16,0,0,1-16,16h-8a8,8,0,0,1,0-16h8V96H152a8,8,0,0,1-8-8V40H56v88a8,8,0,0,1-16,0V40A16,16,0,0,1,56,24h96a8,8,0,0,1,5.66,2.34l56,56A8,8,0,0,1,216,88Zm-56-8h28.69L160,51.31Z"/></svg>

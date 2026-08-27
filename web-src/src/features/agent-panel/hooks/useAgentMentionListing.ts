@@ -5,6 +5,7 @@ import type { LibraryScope } from '@/common/lib/libraryScope';
 import type { WorkspaceState } from '@/store/contexts/AppContext';
 import { mentionListingPlan } from '@/features/agent-panel/lib/folderState';
 import { folderRefsEqual } from '@/store/lib/folderPath';
+import { isRetrievableViewerFormat } from '@shared/file-formats';
 
 /** Scope-specific file listing: `@` mentions, folder-file attachment
  *  validation, and context resolution run against the session's bound
@@ -60,8 +61,10 @@ export function useAgentMentionListing({
       });
     return () => { cancelled = true; };
   }, [listingRoot, sessionListingNonce]);
-  const mentionFiles = mentionsDisabled ? [] : listingRoot ? sessionListing?.files ?? [] : workspace.files;
-  const mentionFolders = mentionsDisabled ? [] : listingRoot ? sessionListing?.folders ?? [] : workspace.folders;
+  const listedFiles = mentionsDisabled ? [] : listingRoot ? sessionListing?.files ?? [] : workspace.files;
+  const listedFolders = mentionsDisabled ? [] : listingRoot ? sessionListing?.folders ?? [] : workspace.folders;
+  const mentionFiles = listedFiles.filter((file) => isRetrievableViewerFormat(file.format));
+  const mentionFolders = listedFolders.filter((folder) => !folder.kind || folder.kind === 'normal');
   const knownFilePaths = useMemo(() => new Set(mentionFiles.map((f) => f.name)), [mentionFiles]);
   // Mirrored for prompt sends driven from the once-bound WS handler
   // (queued prompts fire on `turn-end`): `resolveFolderContext` must

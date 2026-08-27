@@ -1,7 +1,7 @@
 # Troubleshooting and Reference
 
 This guide explains the first checks and safe fallbacks for common StashBase
-questions. It reflects Shipping behavior as of 2026-08-25.
+questions. It reflects Shipping behavior as of 2026-08-27.
 
 ## Search Returned No Results
 
@@ -30,6 +30,12 @@ Preview and retrieval are separate capabilities. PDF, DOCX, images, audio, and
 video may open before their prepared text is current. Continue browsing, then
 retry after Preparation completes. A preparation failure does not make the
 source itself a failed file.
+
+A muted generic file is different: it is deliberately outside Search and
+automatic Chat context. Strict UTF-8 content can still open read-only; binary,
+unsupported encoding, oversized, or unavailable content keeps an explicit
+cannot-open surface with a file-manager action. This state does not become
+searchable by waiting for Preparation.
 
 For audio or video, download a local model under **Settings → Transcription**.
 If optional native support is missing, StashBase should explain the blocked or
@@ -84,6 +90,8 @@ Previewability does not imply Agent readability or content editing. Consult
 - external MCP does not receive image bytes through `read_file`;
 - a built-in Agent may consume an explicitly supplied image;
 - preview-only binary formats reject content writes;
+- generic Workbench files do not appear in Agent/MCP directory, read, or
+  mutation tools;
 - rename, move, and delete are separate file-level operations.
 
 For `@` mentions, remember that selecting a result inserts only its
@@ -111,7 +119,7 @@ return, manual Sync, MCP reindex, Agent turn completion, and relevant settings
 changes. Use Sync or `reindex` when an external tool changed files and current
 retrieval has not caught up.
 
-An external change that conflicts with an unsaved Markdown or JSON edit is not
+An external change that conflicts with an unsaved Markdown, JSON, or `.txt` edit is not
 silently overwritten. Resolve the visible reload, overwrite, or merge decision.
 
 ## Removing a Folder or Start Here

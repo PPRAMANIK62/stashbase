@@ -12,7 +12,7 @@ import '@/common/__tests__/domEnvironment';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { act, createElement as h } from 'react';
-import { appState, mountApp, withDom } from '@/common/__tests__/renderHarness';
+import { appActions, appState, mountApp, withDom } from '@/common/__tests__/renderHarness';
 import { FileTree } from '@/features/workspace/components/FileTree';
 import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
 import { resizeChatByKeyboard, resizeSidebarByKeyboard } from '@/store/state/stateHelpers';
@@ -128,6 +128,64 @@ test('opening a tree row context menu moves DOM focus to that row first', async 
   }
 });
 
+test('generic files and excluded folders explain their reduced capabilities in the tree', async () => {
+  await withDom(async (dom) => {
+    const dispatched: Action[] = [];
+    const revealed: string[] = [];
+    await mountApp(dom, h(FileTree), {
+      state: appState({
+        workspace: {
+          folderPath: '/workspace',
+          folders: [{ path: 'node_modules', kind: 'excluded' }],
+          files: [{ name: 'script.ts', format: 'generic', heading: '', snippet: '', size: 12 }],
+        },
+      }),
+      actions: appActions({ revealFile: (path) => { revealed.push(path); } }),
+      dispatch: (action) => dispatched.push(action),
+    });
+
+    const [file] = dom.byLabel('script.ts, not included in Search or automatic Chat context');
+    assert.ok(file.classList.contains('non-retrievable'));
+    assert.match(file.title, /Not included in Search or automatic Chat context/);
+
+    const folder = dom.query('[data-path="node_modules"]');
+    assert.ok(folder);
+    assert.match(folder.getAttribute('aria-label') ?? '', /contents excluded, Show in/);
+    assert.equal(folder.hasAttribute('aria-disabled'), false, 'an externally reachable folder is not disabled');
+    assert.equal(folder.hasAttribute('aria-expanded'), false, 'an excluded folder does not pretend it can expand');
+    assert.equal(folder.hasAttribute('title'), false, 'the delayed arrow tooltip owns the action label');
+    const action = folder.querySelector('button');
+    assert.ok(action);
+    assert.match(action.getAttribute('aria-label') ?? '', /Show in/);
+    // Hidden at rest, revealed by the row's own hover/focus group. Asserted
+    // through the utilities that carry it, because the descendant CSS rule
+    // this replaced was unlayered and silently beat the button's own recipe.
+    assert.ok(
+      action.classList.contains('invisible') && action.classList.contains('opacity-0'),
+      'at rest the reveal is genuinely hidden, not merely transparent and still clickable',
+    );
+    assert.ok(
+      action.classList.contains('group-hover/row:opacity-100')
+        && action.classList.contains('group-focus-within/row:opacity-100'),
+      'the reveal keys off the row group, for pointer and keyboard alike',
+    );
+    assert.ok(
+      action.classList.contains('size-4'),
+      'the action fits the row\'s 22px content budget instead of growing it past 28px',
+    );
+    await dom.fire(folder, new MouseEvent('click', { bubbles: true }));
+    assert.deepEqual(revealed, ['node_modules'], 'the row itself reaches the folder through the OS');
+    await dom.fire(action, new MouseEvent('click', { bubbles: true }));
+    assert.deepEqual(revealed, ['node_modules', 'node_modules'], 'the arrow performs one action without bubbling to the row');
+    await dom.fire(folder, new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    assert.equal(
+      (dispatched.at(-1) as Extract<Action, { type: 'CTX_MENU' }>).menu?.kind,
+      'restricted',
+      'excluded infrastructure exposes reveal-only context actions',
+    );
+  });
+});
+
 /** One folder holding one file, beside a file at the root. */
 function nestedTree(expanded: string[]): State {
   return appState({
@@ -144,10 +202,8 @@ function nestedTree(expanded: string[]): State {
 }
 
 test('arrow keys rove the tree over the rows that are actually on screen', async () => {
-  // Every row is rendered whether or not its folder is open — collapsing
-  // only hides a subtree with CSS — so "which rows can I reach" is a real
-  // question. It is answered by the visible-path list the tree renders
-  // from (`useTreeRoving`), not by re-reading the DOM for a class name.
+  // Collapsed subtrees do not create hidden DOM. The visible-path list and
+  // rendered rows therefore share one source of truth for keyboard order.
   await withDom(async (dom) => {
     await mountApp(dom, h(FileTree), { state: nestedTree(['Guides']) });
     const row = (label: string) => {
@@ -180,7 +236,7 @@ test('arrow keys rove the tree over the rows that are actually on screen', async
   await withDom(async (dom) => {
     await mountApp(dom, h(FileTree), { state: nestedTree([]) });
     const [folder] = dom.byLabel('Guides');
-    assert.ok(dom.byLabel('inner.md')[0], 'a collapsed folder still renders its children');
+    assert.equal(dom.byLabel('inner.md')[0], undefined, 'a collapsed folder does not create hidden child DOM');
 
     await focus(folder);
     await dom.fire(document.activeElement!, keydown('ArrowDown'));

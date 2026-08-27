@@ -142,6 +142,12 @@ StashBase works directly with ordinary local folders. The Files sidebar,
 persistent tabs, Quick Open, and format-specific viewers keep source work in
 the same workspace as Chat.
 
+The Files tree reports ordinary local files even when StashBase cannot index
+their format. Muted files are excluded from Search and automatic Chat context:
+strict UTF-8 content opens read-only, while binary, oversized, unavailable, or
+restricted entries keep an explicit cannot-open surface. Dependency and build
+directories are represented without recursively loading their contents.
+
 Use **File → New Window** or Cmd/Ctrl+Shift+N to keep different folders and
 tools side by side. Window close follows VS Code's platform shortcuts;
 Cmd/Ctrl+W continues to close the active document tab.
@@ -165,6 +171,7 @@ Some formats need preparation before their contents can be searched. StashBase k
 | Markdown | The Markdown file | Source text |
 | HTML | The HTML file | Clean text extracted from the HTML |
 | JSON | The JSON file | Source-preserving tree and exact source text |
+| Plain text (`.txt`) | The plain-text file | Source text |
 | PDF | The original PDF | Derived Markdown |
 | DOCX | The original DOCX | Derived HTML |
 | Images | The original image | OCR text |
@@ -191,7 +198,7 @@ access is not required. Exact search needs neither option.
 
 StashBase builds its AI Index and exact text search over:
 
-- Markdown, HTML, and raw JSON text
+- Markdown, HTML, raw JSON, and `.txt` text
 - PDF-derived Markdown
 - DOCX-derived HTML
 - OCR text from images
