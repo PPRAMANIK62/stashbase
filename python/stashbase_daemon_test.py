@@ -4,6 +4,7 @@ import io
 import json
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -271,6 +272,285 @@ class StashbaseDaemonTests(unittest.TestCase):
             },
         )
 
+    def test_local_embedder_builds_via_onnx_provider_without_api_key(self) -> None:
+        class FakeOnnxProvider:
+            model_name = "gpahal/bge-m3-onnx-int8"
+            dimension = 1024
+            def embed(self, texts):
+                return [[0.0] * self.dimension for _ in texts]
+        calls = []
+        def fake_get_provider(name, **kwargs):
+            calls.append((name, kwargs))
+            return FakeOnnxProvider()
+        fake_mfs_embedder = types.SimpleNamespace(get_provider=fake_get_provider)
+        previous = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = fake_mfs_embedder
+        try:
+            embedder = stashbase_daemon.make_embedder("onnx")
+        finally:
+            if previous is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous
+        self.assertEqual(embedder.provider, "onnx")
+        self.assertEqual(embedder.model_name, "gpahal/bge-m3-onnx-int8")
+        self.assertEqual(embedder.dimension, 1024)
+        self.assertEqual(embedder.embed(["hi"]), [[0.0] * 1024])
+        self.assertEqual(calls, [("onnx", {})])
+
+    def test_onnx_embedder_bounds_a_hanging_download_with_a_timeout(self) -> None:
+        # Regression test: get_provider("onnx", ...) does real network I/O
+        # synchronously, and the daemon processes one request at a time --
+        # a hanging call must not freeze it indefinitely. Patches the
+        # timeout down to keep this test fast rather than waiting out the
+        # real 120s bound.
+        def hanging_get_provider(name, **kwargs):
+            time.sleep(5)
+            raise AssertionError("should have timed out before returning")
+        fake_mfs_embedder = types.SimpleNamespace(get_provider=hanging_get_provider)
+        previous = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = fake_mfs_embedder
+        try:
+            with mock.patch.object(stashbase_daemon._OnnxEmbedder, "_INIT_TIMEOUT_SECONDS", 0.2):
+                start = time.monotonic()
+                with self.assertRaises(RuntimeError) as ctx:
+                    stashbase_daemon.make_embedder("onnx")
+                elapsed = time.monotonic() - start
+            self.assertLess(elapsed, 2.0, "should fail near the timeout bound, not hang")
+            self.assertIn("did not become ready within", str(ctx.exception))
+        finally:
+            if previous is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous
+
+    def test_probe_embedder_reports_local_runtime_without_opening_a_store(self) -> None:
+        embedder = types.SimpleNamespace(
+            provider="onnx",
+            model_name="gpahal/bge-m3-onnx-int8",
+            dimension=1024,
+        )
+        svc = mock.Mock()
+        with mock.patch.object(stashbase_daemon, "make_embedder", return_value=embedder) as make:
+            result = stashbase_daemon.op_probe_embedder(svc, {
+                "provider": "onnx",
+                "model": "gpahal/bge-m3-onnx-int8",
+                "dimension": 1024,
+            })
+        self.assertEqual(result, {
+            "provider": "onnx",
+            "model": "gpahal/bge-m3-onnx-int8",
+            "dimension": 1024,
+        })
+        make.assert_called_once_with(
+            "onnx",
+            model="gpahal/bge-m3-onnx-int8",
+            api_key=None,
+            dimension=1024,
+            base_url=None,
+        )
+        svc.assert_not_called()
+
+    def test_collection_name_separates_local_from_openai_at_same_dimension(self) -> None:
+        self.assertEqual(stashbase_daemon._collection_name(1536), "vectors_openai_1536")
+        self.assertEqual(stashbase_daemon._collection_name(1536, "openai"), "vectors_openai_1536")
+        self.assertEqual(stashbase_daemon._collection_name(1536, "openrouter"), "vectors_openai_1536")
+        self.assertEqual(stashbase_daemon._collection_name(1536, "stashbase"), "vectors_openai_1536")
+        self.assertEqual(stashbase_daemon._collection_name(1536, "onnx"), "vectors_onnx_1536")
+        self.assertNotEqual(
+            stashbase_daemon._collection_name(1536, "openai"),
+            stashbase_daemon._collection_name(1536, "onnx"),
+        )
+
+    def test_no_key_local_bind_still_builds_an_embedder(self) -> None:
+        # Unlike other providers, "onnx" needs no API key to build an
+        # embedder — the no-key branch that only reopens an existing store
+        # for other providers must not swallow a local bind.
+        class FakeOnnxProvider:
+            model_name = "m"
+            dimension = 8
+            def embed(self, texts):
+                return []
+        fake_mfs_embedder = types.SimpleNamespace(get_provider=lambda name, **kw: FakeOnnxProvider())
+        previous = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = fake_mfs_embedder
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                svc = stashbase_daemon.StashbaseStore(tmp)
+                with mock.patch.object(svc, "_ensure_store") as ensure:
+                    svc.bind_root("/library", "onnx", root_identity="/library")
+                ensure.assert_called_once()
+                built_embedder = ensure.call_args[0][0]
+                self.assertEqual(built_embedder.provider, "onnx")
+        finally:
+            if previous is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous
+
+    def _fake_openai_module(self):
+        class FakeEmbeddingsResp:
+            def __init__(self, n):
+                self.data = [types.SimpleNamespace(embedding=[0.1] * 1536) for _ in range(n)]
+        class FakeEmbeddings:
+            def create(self, model, input, **kw):
+                return FakeEmbeddingsResp(len(input))
+        class FakeOpenAIClient:
+            def __init__(self, **kwargs):
+                self.embeddings = FakeEmbeddings()
+        return types.SimpleNamespace(
+            OpenAI=FakeOpenAIClient,
+            APITimeoutError=RuntimeError,
+            APIConnectionError=RuntimeError,
+            RateLimitError=RuntimeError,
+            InternalServerError=RuntimeError,
+        )
+
+    def _fake_mfs_embedder_module(self):
+        class FakeOnnxProvider:
+            model_name = "gpahal/bge-m3-onnx-int8"
+            dimension = 1024
+            def embed(self, texts):
+                return [[0.0] * self.dimension for _ in texts]
+        return types.SimpleNamespace(get_provider=lambda name, **kw: FakeOnnxProvider())
+
+    def test_local_bind_after_no_key_reopen_switches_collection_not_attaches(self) -> None:
+        # Regression test: a no-key reopen (leaving _embedder at None) used
+        # to let a following local bind attach without ever rechecking
+        # collection identity, silently landing local vectors in the
+        # OpenAI collection whenever dimensions happened to match.
+        try:
+            import milvus_lite  # noqa: F401
+        except ImportError:
+            self.skipTest("milvus_lite is not installed")
+        previous_openai = sys.modules.get("openai")
+        sys.modules["openai"] = self._fake_openai_module()
+        previous_mfs = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = self._fake_mfs_embedder_module()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                setup = stashbase_daemon.StashbaseStore(tmp)
+                try:
+                    setup.bind_root("/library", "openai", root_identity="/library", api_key="sk-fake-test-key")
+                finally:
+                    setup.close_all()
+
+                svc = stashbase_daemon.StashbaseStore(tmp)
+                try:
+                    svc.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                    self.assertIsNone(svc._embedder)
+
+                    svc.bind_root("/library", "onnx", root_identity="/library")
+                    self.assertEqual(svc._embedder.provider, "onnx")
+                    collection = getattr(getattr(svc._store, "_config", None), "collection_name", None)
+                    self.assertEqual(collection, "vectors_onnx_1024")
+                finally:
+                    svc.close_all()
+        finally:
+            if previous_openai is None:
+                sys.modules.pop("openai", None)
+            else:
+                sys.modules["openai"] = previous_openai
+            if previous_mfs is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous_mfs
+
+    def test_no_key_reopen_discovers_the_real_local_collection(self) -> None:
+        # Regression test: a credential-less reopen used to always default
+        # to the OpenAI collection name, silently opening a different,
+        # empty collection for a library indexed with the local provider --
+        # list/delete would report zero rows while the real ones sat
+        # orphaned in the actual collection.
+        try:
+            import milvus_lite  # noqa: F401
+        except ImportError:
+            self.skipTest("milvus_lite is not installed")
+        previous_mfs = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = self._fake_mfs_embedder_module()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                setup = stashbase_daemon.StashbaseStore(tmp)
+                try:
+                    setup.bind_root("/library", "onnx", root_identity="/library")
+                finally:
+                    setup.close_all()
+
+                cleanup = stashbase_daemon.StashbaseStore(tmp)
+                try:
+                    cleanup.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                    collection = getattr(getattr(cleanup._store, "_config", None), "collection_name", None)
+                    self.assertEqual(collection, "vectors_onnx_1024")
+                finally:
+                    cleanup.close_all()
+        finally:
+            if previous_mfs is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous_mfs
+
+    def test_no_key_reopen_uses_the_active_provider_when_multiple_collections_exist(self) -> None:
+        # Node persists the active embedding source and sends its provider and
+        # dimension on every bind. When historical collections coexist, that
+        # hint is the durable selection -- cleanup must reopen it rather than
+        # guessing or refusing all list/delete work.
+        try:
+            import milvus_lite  # noqa: F401
+        except ImportError:
+            self.skipTest("milvus_lite is not installed")
+        previous_openai = sys.modules.get("openai")
+        sys.modules["openai"] = self._fake_openai_module()
+        previous_mfs = sys.modules.get("mfs.embedder")
+        sys.modules["mfs.embedder"] = self._fake_mfs_embedder_module()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                setup1 = stashbase_daemon.StashbaseStore(tmp)
+                try:
+                    setup1.bind_root("/library", "openai", root_identity="/library", api_key="sk-fake-test-key")
+                finally:
+                    setup1.close_all()
+
+                setup2 = stashbase_daemon.StashbaseStore(tmp)
+                try:
+                    setup2.bind_root("/library", "onnx", root_identity="/library")
+                finally:
+                    setup2.close_all()
+
+                cleanup = stashbase_daemon.StashbaseStore(tmp)
+                try:
+                    cleanup.bind_root("/library", "openai", root_identity="/library", dimension=1536)
+                    collection = getattr(getattr(cleanup._store, "_config", None), "collection_name", None)
+                    self.assertEqual(collection, "vectors_openai_1536")
+                finally:
+                    cleanup.close_all()
+
+                local_cleanup = stashbase_daemon.StashbaseStore(tmp)
+                try:
+                    local_cleanup._ensure_store_for_dimension(1024, provider="onnx")
+                    collection = getattr(getattr(local_cleanup._store, "_config", None), "collection_name", None)
+                    self.assertEqual(collection, "vectors_onnx_1024")
+                    stores = local_cleanup.mutation_stores()
+                    self.assertEqual(
+                        {getattr(store._config, "collection_name", None) for _, _, store in stores},
+                        {"vectors_openai_1536", "vectors_onnx_1024"},
+                    )
+                    for _, _, store in stores:
+                        store.delete_by_prefix = mock.Mock(wraps=store.delete_by_prefix)
+                    stashbase_daemon.op_delete_prefix(local_cleanup, {"prefix": "/library"})
+                    for _, _, store in stores:
+                        store.delete_by_prefix.assert_called_once_with("/library/")
+                finally:
+                    local_cleanup.close_all()
+        finally:
+            if previous_openai is None:
+                sys.modules.pop("openai", None)
+            else:
+                sys.modules["openai"] = previous_openai
+            if previous_mfs is None:
+                sys.modules.pop("mfs.embedder", None)
+            else:
+                sys.modules["mfs.embedder"] = previous_mfs
+
     def test_stashbase_embedder_marks_query_purpose_for_loopback_broker(self) -> None:
         captured = {}
 
@@ -431,7 +711,7 @@ class StashbaseDaemonTests(unittest.TestCase):
                     root_identity="/library",
                     dimension=1536,
                 )
-            ensure.assert_called_once_with(1536)
+            ensure.assert_called_once_with(1536, provider="openai")
 
     def test_delete_acknowledgements_propagate_store_failures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

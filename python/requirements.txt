@@ -5,8 +5,10 @@
 # pyyaml, filelock, tree-sitter, numpy etc.) so we only have to add the bits
 # the sidecar uses directly:
 #   - openai:       OpenAI-compatible embedding client for the fixed
-#                   text-embedding-3-small family. No local model —
-#                   onnxruntime/tokenizers stay out of the default sidecar.
+#                   text-embedding-3-small family.
+#   - onnx extras:  CPU-only local embeddings. Runtime libraries ship with
+#                   the daemon; model weights download on first selection
+#                   and remain in the user's local model cache.
 #   - numpy:        vector handling (also pulled transitively by pymilvus).
 #   - blake3:       content + chunk-id hashing (faster + streaming-
 #                   friendly than SHA256; mfs's Scanner is patched to
@@ -14,9 +16,10 @@
 #
 # Optional local PDF/OCR extraction dependencies live in
 # `requirements-extract.txt`. Keep them out of the default venv and
-# packaged sidecar so normal setup/release avoids PyMuPDF, OpenCV and
-# ONNXRuntime weight.
-mfs-cli>=0.1.0
+# packaged daemon so normal setup/release avoids their document-parser and
+# computer-vision payloads.
+#
+mfs-cli[onnx]>=0.1.0
 openai>=1.0
 numpy>=1.26
 blake3>=1.0

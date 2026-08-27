@@ -14,8 +14,8 @@
  * deliberate, low-emphasis exit to "basic mode".
  *
  * Daily use is not tied to online auth (the check is a localhost call).
- * Activation persists (via the stored key) and clears only if the key is later
- * removed. The skip, by contrast, is per context within this window (see
+ * Activation persists as the selected source (and a credential when that
+ * source requires one). The skip, by contrast, is per context within this window (see
  * `embeddingAuth`): a fresh window or a different folder offers indexing
  * again rather than staying silently opted out, while a bare-window skip
  * carries into the first folder opened so one launch is one offer; the skip
@@ -26,7 +26,7 @@
  * files pending, and refreshing index state.
  *
  * Exits:
- *   • Save key — activates; dialog closes.
+ *   • Select a source or save a key — activates; dialog closes.
  *   • Skip for now — records basic mode; dialog closes. The
  *     Files-panel "Set up AI Index" entry (and Settings) reopen it later.
  */
@@ -70,6 +70,14 @@ export function EmbedderRequireKeyGate() {
     onLoaded,
   });
 
+  const finishSetup = useCallback((backfillStarted?: boolean) => {
+    dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
+    setAiIndexingSkipped(false, folder);
+    setOpen(false);
+    if (backfillStarted) void actions.markVisibleFilesPendingForSearch();
+    void actions.refreshIndexState();
+  }, [actions, dispatch, folder]);
+
   useEffect(() => {
     function onOpen() { setOpen(true); }
     window.addEventListener(OPEN_EMBEDDING_SETUP_EVENT, onOpen);
@@ -85,14 +93,10 @@ export function EmbedderRequireKeyGate() {
         isTopmost={layer.isTopmost}
         onSaved={(provider, model, backfillStarted, warning) => {
           patchEmbedder((s) => ({ ...s, provider, model, hasKey: true, authorized: true, source: provider }));
-          dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
           // Activated: clear any prior basic-mode choice so a future key
           // removal re-gates from a clean state instead of staying skipped.
-          setAiIndexingSkipped(false, folder);
-          setOpen(false);
           if (warning) actions.toast(`API key saved, but validation could not reach the provider: ${warning}`, { level: 'warning' });
-          if (backfillStarted) void actions.markVisibleFilesPendingForSearch();
-          void actions.refreshIndexState();
+          finishSetup(backfillStarted);
         }}
         onSignedIn={(backfillStarted) => {
           patchEmbedder((s) => ({
@@ -101,11 +105,11 @@ export function EmbedderRequireKeyGate() {
             source: 'stashbase-account',
             account: { ...s.account, signedIn: true, active: true },
           }));
-          dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-          setAiIndexingSkipped(false, folder);
-          setOpen(false);
-          if (backfillStarted) void actions.markVisibleFilesPendingForSearch();
-          void actions.refreshIndexState();
+          finishSetup(backfillStarted);
+        }}
+        onLocalSelected={(next) => {
+          patchEmbedder(() => next);
+          finishSetup(next.backfillStarted);
         }}
         onSkip={() => {
           // Deliberate opt-out to basic mode for THIS folder in this

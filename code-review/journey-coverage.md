@@ -69,6 +69,9 @@ aliases, and Journey E2E owns representative composition.
 - **Contract Test:** renderer initialization, Settings state, workspace
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
   `pnpm test:config`, `pnpm test:updates`, and `pnpm test:electron:smoke`.
+  The Settings and config suites cover hosted, BYOK, and keyless local AI Index
+  choices, their busy interlock, and transactional source activation that keeps
+  the prior source selected when runtime reset or binding fails.
   Account identity fixtures cover profile normalization, migration, privacy,
   and UI fallbacks.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
@@ -97,6 +100,8 @@ aliases, and Journey E2E owns representative composition.
 - **Gap:** no single Journey E2E currently proves that a first-time user sees
   the source/derived/hosted distinction, authorizes useful content, reaches a
   concrete first result, and returns without unnecessary onboarding replay.
+  The first local-model download and selection path is also lower-layer and
+  packaged-release evidence rather than a complete Journey E2E.
 
 ## J02: Folder
 
@@ -176,6 +181,9 @@ aliases, and Journey E2E owns representative composition.
 - **Contract Test:** `pnpm test:retrieval` and the data, scope, credential,
   and renderer suites cover exact filtering (including encoding-safe TXT), semantic mechanics, source
   remapping, access boundaries, account identity, and failure presentation.
+  Python daemon tests additionally lock the fixed ONNX model identity,
+  provider/dimension collection separation, and cross-collection cleanup for
+  renamed or deleted sources; Exact Search remains provider-independent.
 - **Journey E2E:** [semantic search UI](../e2e/journeys/semantic-search-ui.spec.ts)
   covers mode, scope, readiness, result presentation, and source navigation.
 - **AI Eval:** `pnpm eval:semantic-retrieval` runs the versioned, synthetic
@@ -190,12 +198,15 @@ aliases, and Journey E2E owns representative composition.
 - **Release Check:** the semantic AI Eval is credentialed BYOK release evidence,
   not required or scheduled CI, because it makes paid provider requests and
   allows bounded ranking variability. Hosted account behavior remains
-  lower-layer or release evidence.
+  lower-layer or release evidence. Packaged local ONNX model download and one
+  representative Similar Search result remain release evidence.
 - **Gap:** library-wide readiness is not yet Shipping. The semantic Eval is
   present but still in calibration: no baseline run is retained, so no
   semantic-quality gate is active yet. Completing the baselines and activating
   the thresholds is tracked in
-  [GitHub issue #176](https://github.com/liliu-z/stashbase/issues/176).
+  [GitHub issue #176](https://github.com/liliu-z/stashbase/issues/176). No
+  Journey E2E currently proves a Similar Search outcome through the packaged
+  local ONNX runtime.
 
 ## J06: Agent
 

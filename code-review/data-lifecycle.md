@@ -96,6 +96,12 @@ quota response stops the remainder of a batch. Pending work remains
 reconcilable and resumes after a quota refresh/reset or an available source
 switch.
 
+The local embedding source maps to the fixed ONNX model and its own
+provider/dimension collection identity. Settings probes model readiness before
+persisting the selection; first-use download and initialization are bounded at
+`120 s`, and a failure leaves the prior source selected. Runtime libraries ship
+with the daemon while model weights remain in the user's local model cache.
+
 Daemon retirement is single-flight across shutdown, credential/quota reset,
 and recovery callers. A replacement generation waits until the retiring child
 has exited and released the store lock; a late event from an older generation
@@ -126,8 +132,13 @@ search; only explicit Start clears it.
   current admission rules and every retained folder binding are acknowledged
   before a public daemon operation can run after initial spawn or respawn.
 - An existing local collection may reopen without an embedding credential for
-  list/delete cleanup. Store deletion failures propagate across the daemon
-  boundary; they are never converted into a successful zero-row result.
+  list/delete cleanup. The persisted active embedding source selects the
+  provider/dimension collection when historical provider collections coexist;
+  a legacy config with one collection may still discover that sole identity.
+  Delete and rename mutations enumerate every persisted embedding collection,
+  while search and indexing remain confined to the active collection. Store
+  deletion failures propagate across the daemon boundary; they are never
+  converted into a successful zero-row result.
 - Retrieval filters unavailable sources and always remaps evidence to a live
   visible source before it crosses HTTP or MCP.
 - Exact retrieval applies whole-token filtering before its per-file result cap;
@@ -176,7 +187,8 @@ contracts, not because every tuning value belongs in prose:
 - direct-text semantic admission is capped at `8 MiB` per source in both Node
   and Python;
 - media transcription uses ten-minute durable work units with `1.5 s` overlap;
-- durable DOCX extraction has a `60 s` worker deadline.
+- durable DOCX extraction has a `60 s` worker deadline;
+- local ONNX embedding model setup has a `120 s` readiness deadline.
 
 Keep the Node/Python admission bound synchronized. A change to capacity,
 chunking, or deadlines requires the focused liveness tests and an explanation

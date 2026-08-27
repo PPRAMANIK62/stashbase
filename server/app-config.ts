@@ -22,6 +22,7 @@ import type {
   UpdatePreferences,
 } from '../shared/preferences.ts';
 import type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
+import { LOCAL_EMBEDDING_SOURCE } from '../shared/embedding.ts';
 import type { LocalTranscriptionModelId } from '../shared/transcription.ts';
 import { normalizeHostedDisplayName, parseGoogleAvatarUrl } from './hosted-account-profile.ts';
 
@@ -332,7 +333,7 @@ export function setHostedAccountSession(session: HostedAccountSession | undefine
 export function getEmbeddingSource(): EmbeddingSource {
   const cfg = readAppConfig();
   const value = cfg.embeddingSource;
-  if (value === 'stashbase-account' || isEmbedderProvider(value)) return value;
+  if (value === 'stashbase-account' || value === LOCAL_EMBEDDING_SOURCE || isEmbedderProvider(value)) return value;
   const direct = getEmbedderConfig();
   if (direct.apiKey) return direct.provider;
   if (getHostedAccountSession()) return 'stashbase-account';
@@ -343,7 +344,7 @@ export function setEmbeddingSource(source: EmbeddingSource): EmbeddingSource {
   const cfg = readAppConfigStrict();
   if (source === 'stashbase-account') {
     if (!getHostedAccountSession()) throw new Error('Sign in before selecting the StashBase account allowance.');
-  } else {
+  } else if (source !== LOCAL_EMBEDDING_SOURCE) {
     const direct = getEmbedderConfig();
     if (!direct.apiKey || direct.provider !== source) throw new Error(`Add a ${source === 'openrouter' ? 'OpenRouter' : 'OpenAI'} key before selecting it.`);
   }
@@ -355,6 +356,7 @@ export function setEmbeddingSource(source: EmbeddingSource): EmbeddingSource {
 export function isEmbeddingConfigured(): boolean {
   const source = getEmbeddingSource();
   if (source === 'stashbase-account') return !!getHostedAccountSession();
+  if (source === LOCAL_EMBEDDING_SOURCE) return true;
   const direct = getEmbedderConfig();
   return direct.provider === source && !!direct.apiKey;
 }

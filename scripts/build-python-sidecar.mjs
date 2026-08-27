@@ -33,9 +33,6 @@ const pyinstallerEnv = {
   PYINSTALLER_CONFIG_DIR: cachePath,
 };
 const daemonExcludedModules = [
-  'onnxruntime',
-  'tokenizers',
-  'mfs.embedder.onnx',
   'pymupdf',
   'pymupdf4llm',
   'fitz',
@@ -49,8 +46,6 @@ const daemonExcludedModules = [
   'pyarrow.tests',
 ];
 const daemonForbiddenEntries = [
-  'onnxruntime',
-  'tokenizers',
   'pymupdf',
   'pymupdf4llm',
   'fitz',
@@ -202,9 +197,12 @@ execFileSync(
     '--hidden-import',
     'mfs.ingest.scanner',
     '--hidden-import',
+    'mfs.embedder.onnx',
+    '--hidden-import',
     'blake3',
-    // V1 is openai-only: the local ONNX embedder is never imported, so
-    // keep local model + document extraction deps out of the daemon bundle.
+    // Document extraction stays in its own optional sidecar. The daemon now
+    // includes the local ONNX embedder runtime; model weights remain a
+    // first-selection download rather than package payload.
     ...daemonExcludedModules.flatMap((moduleName) => ['--exclude-module', moduleName]),
     '--copy-metadata',
     'milvus-lite',

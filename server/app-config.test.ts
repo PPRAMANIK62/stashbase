@@ -174,6 +174,96 @@ test('credential and source mutations never overwrite malformed config through a
   }
 });
 
+test('local AI Index is selectable and persists without an API key', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-local-embedding-config-test-'));
+  const configPath = path.join(home, '.stashbase', 'config.json');
+  try {
+    const result = runConfigMutation(home, `
+      const assert = (await import('node:assert/strict')).default;
+      assert.equal(config.setEmbeddingSource('local'), 'local');
+      assert.equal(config.getEmbeddingSource(), 'local');
+      assert.equal(config.isEmbeddingConfigured(), true);
+    `);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).embeddingSource, 'local');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('local AI Index resolves to the keyless ONNX daemon runtime', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-local-embedding-runtime-test-'));
+  try {
+    const result = runConfigMutation(home, `
+      const assert = (await import('node:assert/strict')).default;
+      config.setEmbeddingSource('local');
+      const state = await import('./server/state.ts');
+      assert.deepEqual(state.resolveEmbedderRuntime(), {
+        provider: 'onnx',
+        model: 'gpahal/bge-m3-onnx-int8',
+        dimension: 1024,
+      });
+    `);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('embedding source activation persists only after reset and bind succeed', async () => {
+  const { activateEmbeddingSource } = await import('./routes/embedder.ts');
+  const runtime = {
+    provider: 'onnx' as const,
+    model: 'gpahal/bge-m3-onnx-int8',
+    dimension: 1024,
+  };
+  const events: string[] = [];
+
+  await activateEmbeddingSource('openai', 'local', runtime, {
+    resetRuntime: async () => { events.push('reset'); },
+    bindFolders: async (nextRuntime) => { events.push(`bind:${nextRuntime?.provider ?? 'previous'}`); },
+    persistSource: (source) => { events.push(`persist:${source}`); },
+  });
+  assert.deepEqual(events, ['reset', 'bind:onnx', 'persist:local']);
+
+  events.length = 0;
+  await assert.rejects(
+    activateEmbeddingSource('openai', 'local', runtime, {
+      resetRuntime: async () => {
+        events.push('reset');
+        throw new Error('reset failed');
+      },
+      bindFolders: async () => { events.push('bind'); },
+      persistSource: (source) => { events.push(`persist:${source}`); },
+    }),
+    /reset failed/,
+  );
+  assert.deepEqual(events, ['reset']);
+
+  events.length = 0;
+  let firstBind = true;
+  await assert.rejects(
+    activateEmbeddingSource('openai', 'local', runtime, {
+      resetRuntime: async () => { events.push('reset'); },
+      bindFolders: async (nextRuntime) => {
+        events.push(`bind:${nextRuntime?.provider ?? 'previous'}`);
+        if (firstBind) {
+          firstBind = false;
+          throw new Error('bind failed');
+        }
+      },
+      persistSource: (source) => { events.push(`persist:${source}`); },
+    }),
+    /bind failed/,
+  );
+  assert.deepEqual(events, [
+    'reset',
+    'bind:onnx',
+    'reset',
+    'bind:previous',
+  ]);
+});
+
 test('library membership mutations never overwrite malformed config through a fallback read', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-folder-config-corrupt-test-'));
   const configDir = path.join(home, '.stashbase');

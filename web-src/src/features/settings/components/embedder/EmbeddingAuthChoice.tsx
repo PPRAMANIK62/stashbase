@@ -1,10 +1,10 @@
 /**
  * The AI Index setup choice: how to power indexing.
  *
- * This is a two-option question, so it reads as two objects, not eight. Each
+ * This is a three-option question, so it reads as three objects, not a form. Each
  * option is ONE card with its explanation stacked inside it (title over a
  * muted subtitle), left-aligned to a single edge — so the eye reads
- * header → card → card → exit → disclosure, instead of hopping between a
+ * header → cards → exit → disclosure, instead of hopping between a
  * button and a caption line beneath it.
  *
  * Wording is layered: "AI Index" is the capability, the subtitles say how
@@ -19,6 +19,8 @@
  *     service owns PKCE and the shared hosted quota session.
  *     Deployments may still disable the card explicitly; the quiet corner
  *     mark keeps that state distinguishable from a broken control.
+ *   • Use this device — the bundled ONNX runtime, with a one-time model
+ *     setup before fully local embedding work.
  *   • Use your own API key — OpenAI or OpenRouter, for advanced users;
  *     choosing it reveals the key field in place (the parent owns that swap).
  *
@@ -35,25 +37,25 @@
  * without `onSkip`.
  *
  * Every layer here holds to one line of its own — title, subtitle, each
- * card's title and its four-word detail, skip, disclosure. The dialog asks
+ * card's title and its short detail, skip, disclosure. The dialog asks
  * one question; anything that has to be read rather than scanned belongs in
  * Settings, not in the way of the answer. The cards are padded for two
  * short lines, not for the paragraphs they used to hold: type left, box
  * unchanged is what makes a trimmed card look hollow.
  *
- * Width: both cards span the full dialog column (`w-full`). A `<button>`
+ * Width: all cards span the full dialog column (`w-full`). A `<button>`
  * shrinks to fit its own text even at `display: grid`, so without it the
- * pair sized to its longest subtitle and the two cards ended on different
- * right edges — a ragged edge reads as two unrelated controls rather than
- * one pair of peers, and the left-aligned stack depends on both edges
+ * list sized to its longest subtitle and the cards ended on different
+ * right edges — a ragged edge reads as unrelated controls rather than
+ * one set of peers, and the left-aligned stack depends on both edges
  * being shared.
  *
  * Corners: these are BOXES, so they take `--radius-container` (the
  * `rounded-xl` step) like the composer, the inputs, and the dialog around
  * them — not the smaller `--radius-ui` used by rows and menu items INSIDE
- * a box. Two boxes seen together are expected to wear the same corner.
+ * a box. Peer boxes seen together are expected to wear the same corner.
  *
- * The two cards are a standing exemption from the Button primitive, and
+ * The three cards are a standing exemption from the Button primitive, and
  * they are NOT a radio group. Nothing is selected here — each card fires
  * immediately (sign-in opens the system browser; the key card swaps the
  * view in place), there is no pending selection and no submit, and the
@@ -73,19 +75,21 @@
 import { Button } from '@/common/components/ui/button';
 import { cn } from '@/common/lib/utils';
 
-export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = false, onSkip }: {
+export function EmbeddingAuthChoice({ onUseOwnKey, onUseLocal, onSignIn, signInDisabled = false, localBusy = false, onSkip }: {
   onUseOwnKey: () => void;
+  onUseLocal: () => void;
   onSignIn?: () => void;
   /** Allows deployments without hosted accounts to hide the action while
    * retaining the finished layout. */
   signInDisabled?: boolean;
+  localBusy?: boolean;
   /** When provided (first-run gate only), renders the quiet exit to basic
    *  mode. Omitted in Settings, where continuing without indexing is moot. */
   onSkip?: () => void;
 }) {
   return (
     <div className="mt-1">
-      {/* Two peer options, so a real list: the pair announces its count and
+      {/* Three peer options, so a real list: the set announces its count and
         * its item boundaries instead of arriving as one run of text. Not a
         * radio group and not a listbox — each card FIRES on click and
         * nothing is ever pre-selected, so neither ARIA pattern supersedes
@@ -95,7 +99,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
         {/* Recommended — sign in. Brand-tinted card; title over its own subtitle. */}
         <button
           type="button"
-          disabled={signInDisabled}
+          disabled={signInDisabled || localBusy}
           onClick={onSignIn}
           className="relative grid w-full gap-0.5 rounded-xl border border-border bg-accent/8 px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-accent/14 enabled:active:scale-97 disabled:cursor-default"
         >
@@ -111,11 +115,24 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
         </li>
 
         <li>
+        <button
+          type="button"
+          disabled={localBusy}
+          onClick={onUseLocal}
+          className="grid w-full gap-0.5 rounded-xl border border-border bg-background px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-muted enabled:active:scale-97 disabled:cursor-wait disabled:opacity-70"
+        >
+          <span className="text-base font-semibold leading-snug text-foreground">{localBusy ? 'Setting up this device…' : 'Use this device'}</span>
+          <span className="text-xs leading-snug text-muted-foreground">Private, offline after model setup</span>
+        </button>
+        </li>
+
+        <li>
         {/* Secondary — bring your own key. Outlined card, same shape. */}
         <button
           type="button"
+          disabled={localBusy}
           onClick={onUseOwnKey}
-          className="grid w-full cursor-pointer gap-0.5 rounded-xl border border-border bg-background px-4 py-1.5 text-left transition-control hover:border-stroke-strong hover:bg-muted active:scale-97"
+          className="grid w-full gap-0.5 rounded-xl border border-border bg-background px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-muted enabled:active:scale-97 disabled:cursor-wait disabled:opacity-70"
         >
           <span className="text-base font-semibold leading-snug text-foreground">Use your own API key</span>
           <span className="text-xs leading-snug text-muted-foreground">OpenAI or OpenRouter</span>
@@ -130,7 +147,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
          * line of body copy; going smaller and fainter would only have
          * made it a caption. Position restores the role, so the type can
          * stay quiet. 20px below the cards — far enough not to read as a
-         * footnote on the second card, close enough to stay tied to the
+         * footnote on the last card, close enough to stay tied to the
          * choices it is an alternative to. */
         <div className="mt-5 flex justify-end">
           {/* `size="xs"` for the type step only; the height and padding
@@ -140,6 +157,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
           <Button
             variant="link"
             size="xs"
+            disabled={localBusy}
             className="h-auto cursor-pointer border-0 p-0 text-muted-foreground underline-offset-2 hover:text-foreground"
             onClick={onSkip}
           >
@@ -158,7 +176,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
         'm-0 border-t border-border pt-2 text-2xs leading-relaxed text-muted-foreground',
         onSkip ? 'mt-7' : 'mt-3',
       )}>
-        Files stay local. Only text is sent for embeddings.
+        Local mode keeps text on this device. Hosted and API-key modes send text for embeddings.
       </p>
     </div>
   );

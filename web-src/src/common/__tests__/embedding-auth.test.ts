@@ -62,9 +62,10 @@ test('a bare-window skip covers the first folder opened, later folders re-offer'
   assert.equal(hasSkippedAiIndexing('/work/alpha'), true);
 });
 
-test('AI Index authorization accepts either hosted account or BYOK source', () => {
+test('AI Index authorization accepts hosted, local, or BYOK sources', () => {
   assert.equal(isEmbeddingAuthorized(null), false);
   assert.equal(isEmbeddingAuthorized(state({ authorized: true, source: 'stashbase-account' })), true);
+  assert.equal(isEmbeddingAuthorized(state({ authorized: true, source: 'local' })), true);
   assert.equal(isEmbeddingAuthorized(state({ authorized: true, source: 'openrouter', hasKey: true })), true);
   assert.equal(isEmbeddingAuthorized(state({ authorized: false, source: 'stashbase-account' })), false);
 });

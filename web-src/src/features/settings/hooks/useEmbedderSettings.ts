@@ -21,7 +21,7 @@ export interface EmbedderSettingsController {
   addError: string | null;
   setAddKey: (key: string) => void;
   submitAddKey: () => Promise<void>;
-  /** A hosted-account request is running; its three buttons stay inert. */
+  /** A source or hosted-account request is running; related controls stay inert. */
   accountBusy: boolean;
   saveKey: (key: string) => Promise<void>;
   removeKey: () => Promise<void>;
@@ -29,15 +29,16 @@ export interface EmbedderSettingsController {
   signOut: () => Promise<void>;
   useAccountAllowance: () => Promise<void>;
   useApiKeySource: () => Promise<void>;
+  useLocalSource: () => Promise<void>;
   applySignedIn: (account: HostedAccountState) => void;
 }
 
 /**
  * The AI Index panel's embedder state and every command that changes which
  * source is authorized: a bring-your-own key, the signed-in StashBase
- * allowance, or neither.
+ * allowance, the local model, or neither.
  *
- * Six different commands authorize a source, and each owes the rest of the
+ * Every command that authorizes a source owes the rest of the
  * app the same three things — the shared `embedderHasKey` flag the search
  * popup and the Files callout gate on, a backfill mark when the server
  * started one, and an index-state refresh. `authorized` is that one
@@ -183,16 +184,30 @@ export function useEmbedderSettings(): EmbedderSettingsController {
   const useApiKeySource = useCallback(async () => {
     setAccountBusy(true);
     try {
-      const next = await api.useApiKeySource(selectedProvider);
+      const next = await api.useEmbeddingSource(selectedProvider);
       if (!mountedRef.current) return;
       setState(next);
-      authorized();
+      authorized({ backfillStarted: next.backfillStarted });
     } catch (err: unknown) {
       actions.toast(errorMessage(err), { level: 'error' });
     } finally {
       if (mountedRef.current) setAccountBusy(false);
     }
   }, [selectedProvider, authorized, actions]);
+
+  const useLocalSource = useCallback(async () => {
+    setAccountBusy(true);
+    try {
+      const next = await api.useEmbeddingSource('local');
+      if (!mountedRef.current) return;
+      setState(next);
+      authorized({ backfillStarted: next.backfillStarted });
+    } catch (err: unknown) {
+      actions.toast(errorMessage(err), { level: 'error' });
+    } finally {
+      if (mountedRef.current) setAccountBusy(false);
+    }
+  }, [authorized, actions]);
 
   const applySignedIn = useCallback((account: HostedAccountState) => {
     setState((current) => current ? { ...current, authorized: true, source: 'stashbase-account', account } : current);
@@ -222,6 +237,7 @@ export function useEmbedderSettings(): EmbedderSettingsController {
     signOut,
     useAccountAllowance,
     useApiKeySource,
+    useLocalSource,
     applySignedIn,
   };
 }

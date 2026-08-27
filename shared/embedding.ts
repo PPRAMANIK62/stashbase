@@ -12,7 +12,12 @@ import type { HostedAccountState } from './account.ts';
 
 export type EmbedderProvider = 'openai' | 'openrouter';
 
-export type EmbeddingSource = EmbedderProvider | 'stashbase-account';
+export const LOCAL_EMBEDDING_SOURCE = 'local' as const;
+export const LOCAL_EMBEDDING_PROVIDER = 'onnx' as const;
+export const LOCAL_EMBEDDING_MODEL = 'gpahal/bge-m3-onnx-int8' as const;
+export const LOCAL_EMBEDDING_DIMENSION = 1024 as const;
+
+export type EmbeddingSource = EmbedderProvider | 'stashbase-account' | typeof LOCAL_EMBEDDING_SOURCE;
 
 /** What saving a provider key reports back. `hasKey` is literal `true`:
  *  the endpoint only answers on success, so a caller never has to check it. */
@@ -45,4 +50,7 @@ export interface EmbedderState {
   source: EmbeddingSource;
   model: string;
   account: HostedAccountState;
+  /** Present only on a source-switch response when pending files should be
+   * presented as backfill work immediately. */
+  backfillStarted?: boolean;
 }

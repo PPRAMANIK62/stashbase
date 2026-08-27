@@ -74,6 +74,22 @@ test('Windows extractor build wires PyInstaller hide-console without switching o
   assert.doesNotMatch(source, /'--(?:no)?console'/);
 });
 
+test('packaged AI Index daemon includes the local ONNX embedding runtime', () => {
+  const requirements = fs.readFileSync(path.join(root, 'python', 'requirements.txt'), 'utf8');
+  const build = fs.readFileSync(path.join(root, 'scripts', 'build-python-sidecar.mjs'), 'utf8');
+  const daemonExcludes = build.match(/const daemonExcludedModules = \[([\s\S]*?)\n\];/)?.[1] ?? '';
+  const daemonForbidden = build.match(/const daemonForbiddenEntries = \[([\s\S]*?)\n\];/)?.[1] ?? '';
+
+  assert.match(requirements, /^mfs-cli\[onnx\]>=/m);
+  for (const runtime of ['onnxruntime', 'tokenizers', 'mfs.embedder.onnx']) {
+    assert.doesNotMatch(daemonExcludes, new RegExp(`['"]${runtime.replaceAll('.', '\\\\.')}['"]`));
+  }
+  for (const runtime of ['onnxruntime', 'tokenizers']) {
+    assert.doesNotMatch(daemonForbidden, new RegExp(`['"]${runtime}['"]`));
+  }
+  assert.match(build, /'--hidden-import',\s*'mfs\.embedder\.onnx'/);
+});
+
 test('bundled OpenCode runtime and SDK are pinned and executable outside asar', () => {
   assert.equal(pkg.dependencies?.['@opencode-ai/sdk'], '1.18.19');
   assert.equal(pkg.dependencies?.['opencode-ai'], '1.18.19');
