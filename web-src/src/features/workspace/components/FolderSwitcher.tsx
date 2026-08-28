@@ -96,8 +96,13 @@ export function FolderSwitcher() {
          * `size="sm"` is the 28px row this always was. The overrides are
          * the titlebar deltas: regular weight, the selected surface a
          * menu anchor takes while its menu is up, and a disabled state
-         * that stays hoverable so the "Opening …" title still appears. */
-        className="min-w-0 gap-1 px-1.5 text-base font-normal text-foreground aria-expanded:bg-active aria-expanded:text-foreground disabled:pointer-events-auto disabled:cursor-default disabled:opacity-60 [-webkit-app-region:no-drag]"
+         * that stays hoverable so the "Opening …" title still appears.
+         * `shrink` overrides the button recipe's `shrink-0`: this is the
+         * one elastic item in the titlebar cluster, so the cluster's
+         * max-width cap (app-shell.css) squeezes the label to an ellipsis
+         * here instead of bleeding the name past the sidebar edge onto
+         * the tab strip. `min-w-0` is what lets the squeeze reach zero. */
+        className="min-w-0 shrink gap-1 px-1.5 text-base font-normal text-foreground aria-expanded:bg-active aria-expanded:text-foreground disabled:pointer-events-auto disabled:cursor-default disabled:opacity-60 [-webkit-app-region:no-drag]"
         aria-label="Switch folder"
         aria-haspopup="menu"
         aria-expanded={anchor !== null}

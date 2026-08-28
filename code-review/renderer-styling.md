@@ -221,6 +221,21 @@ this file records the mechanics a change must respect.
    intermittently stale on windowed macOS and killed clicks across the
    whole band; do not reintroduce carving, and do not let the two rects
    start overlapping on the assumption that the ordinal will save it.
+
+   Geometry owns the band's right edge the same way. `.titlebar-controls`
+   caps itself at the sidebar column, so the cluster's box never reaches
+   the tab strip beside it — but a cap only contains the cluster if one
+   child can absorb the squeeze. The sidebar toggle, the search button and
+   the hairline are fixed by design, which leaves the folder switcher as
+   the single elastic item; it carries `min-w-0 shrink` against the button
+   recipe's default `shrink-0`, and its label truncates to an ellipsis.
+   Drop that override and the trigger overflows its capped parent at its
+   full intrinsic width, painting the folder name across the document tab
+   strip (or, with Chat as the workspace, the chat tab row). The narrow
+   window this leaves is real: at the 200px minimum sidebar width the
+   macOS traffic-light inset spends most of the budget, so the label can
+   truncate to nothing. Widening the band's usable space means reserving
+   the cluster's overhang in the neighbouring row, not relaxing the cap.
 4. **Colocated feature CSS** — exemption rules (below) that a component needs
    but Tailwind utilities can't express, living in a CSS file next to the
    feature it styles and imported directly from the component(s) that render
