@@ -1,9 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
 import { createAppFixture } from '../support/fixtures.ts';
 import { activeDocument, activeDocumentTab, dismissEmbeddingKeyPrompt, fileTreeRow, openLibraryFolder } from '../support/locators.ts';
-import { primaryKey } from './journey-helpers.ts';
+import { openFolderPickerMenu, primaryKey, stubOpenFolderDialog } from './journey-helpers.ts';
 
 test('Find transfers its query and active-folder scope to exact all-files search', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
@@ -106,6 +108,53 @@ test('J01 reduced motion keeps overlay feedback while removing transform movemen
     expect(motion.animationDurationMs).toBeLessThanOrEqual(0.01);
     expect(motion.transitionProperty).not.toMatch(/transform|translate|scale|rotate/);
     expect(motion.transitionProperty).toContain('opacity');
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
+/** The titlebar's left cluster floats over the sidebar column; the folder
+ *  name is its only elastic item. A name too long for the column must
+ *  ellipsize at the column edge — bleeding it right paints it over the
+ *  document tab strip (or, with Chat as the workspace, the chat tab row). */
+test('a narrowed sidebar truncates the titlebar folder name instead of bleeding it onto the tab strip', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  const longNamedFolder = path.join(fixture.root, 'workspaces', 'quarterly-planning-archive');
+  fs.mkdirSync(longNamedFolder, { recursive: true });
+  fs.writeFileSync(path.join(longNamedFolder, 'Plan.md'), '# Plan\n\nLong-name fixture.\n', 'utf8');
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await stubOpenFolderDialog(app.electron, { kind: 'success', path: longNamedFolder });
+    await openFolderPickerMenu(app.page);
+    await expect(app.page).toHaveTitle('quarterly-planning-archive — StashBase');
+    await dismissEmbeddingKeyPrompt(app.page);
+
+    // ArrowLeft steps 16px down from the 280px default and floors at the
+    // 200px minimum open width, so five presses park the panel there.
+    const sidebar = app.page.getByRole('separator', { name: 'Resize sidebar' });
+    await sidebar.focus();
+    for (let index = 0; index < 5; index += 1) await sidebar.press('ArrowLeft');
+    await expect(sidebar).toHaveAttribute('aria-valuenow', '200');
+
+    const switcher = await app.page.evaluate(() => {
+      const shell = document.querySelector('.app')!;
+      const trigger = document.querySelector('button[aria-label="Switch folder"]')!;
+      const label = trigger.querySelector('span')!;
+      const columnRight = Number.parseFloat(
+        getComputedStyle(shell).getPropertyValue('--sidebar-width'),
+      );
+      return {
+        bleedPastColumn: Math.round(trigger.getBoundingClientRect().right - columnRight),
+        labelWidth: label.clientWidth,
+        fullLabelWidth: label.scrollWidth,
+      };
+    });
+    expect(switcher.bleedPastColumn).toBeLessThanOrEqual(0);
+    expect(switcher.labelWidth).toBeGreaterThan(0);
+    expect(switcher.fullLabelWidth).toBeGreaterThan(switcher.labelWidth);
     app.errors.assertNone();
   } finally {
     await app?.close();
