@@ -174,37 +174,102 @@ test('credential and source mutations never overwrite malformed config through a
   }
 });
 
-test('local AI Index is selectable and persists without an API key', () => {
+test('retired local AI Index cannot be selected again', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-local-embedding-config-test-'));
-  const configPath = path.join(home, '.stashbase', 'config.json');
   try {
     const result = runConfigMutation(home, `
       const assert = (await import('node:assert/strict')).default;
-      assert.equal(config.setEmbeddingSource('local'), 'local');
-      assert.equal(config.getEmbeddingSource(), 'local');
-      assert.equal(config.isEmbeddingConfigured(), true);
+      assert.throws(() => config.setEmbeddingSource('local'), /no longer available/);
     `);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).embeddingSource, 'local');
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('local AI Index resolves to the keyless ONNX daemon runtime', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-local-embedding-runtime-test-'));
+test('retired local AI Index migrates to account, BYOK, or unconfigured state', () => {
+  const session = {
+    accessToken: 'access',
+    refreshToken: 'refresh',
+    expiresAt: 4_102_444_800,
+    userId: 'user',
+    email: 'person@example.com',
+  };
+  const cases = [
+    {
+      name: 'account takes priority when both credentials exist',
+      config: {
+        embeddingSource: 'local',
+        embedder: { provider: 'openrouter', apiKey: 'sk-or-test' },
+        account: { session },
+        appearance: { theme: 'dark' },
+      },
+      expectedSource: 'stashbase-account',
+      expectedResolved: 'stashbase-account',
+      expectedConfigured: true,
+    },
+    {
+      name: 'stored provider key becomes active without an account',
+      config: {
+        embeddingSource: 'local',
+        embedder: { provider: 'openrouter', apiKey: 'sk-or-test' },
+        appearance: { theme: 'dark' },
+      },
+      expectedSource: 'openrouter',
+      expectedResolved: 'openrouter',
+      expectedConfigured: true,
+    },
+    {
+      name: 'no credentials returns to setup',
+      config: {
+        embeddingSource: 'local',
+        appearance: { theme: 'dark' },
+      },
+      expectedSource: undefined,
+      expectedResolved: 'openai',
+      expectedConfigured: false,
+    },
+  ] as const;
+
+  for (const scenario of cases) {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-local-embedding-migration-test-'));
+    const configDir = path.join(home, '.stashbase');
+    const configPath = path.join(configDir, 'config.json');
+    fs.mkdirSync(configDir);
+    fs.writeFileSync(configPath, JSON.stringify(scenario.config, null, 2));
+    try {
+      const result = runConfigMutation(home, `
+        const assert = (await import('node:assert/strict')).default;
+        config.migrateRetiredLocalEmbeddingSource();
+        config.migrateRetiredLocalEmbeddingSource();
+        assert.equal(config.getEmbeddingSource(), ${JSON.stringify(scenario.expectedResolved)});
+        assert.equal(config.isEmbeddingConfigured(), ${scenario.expectedConfigured});
+      `);
+      assert.equal(result.status, 0, `${scenario.name}: ${result.stderr}`);
+      const persisted = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      assert.equal(persisted.embeddingSource, scenario.expectedSource, scenario.name);
+      assert.equal(persisted.appearance.theme, 'dark', scenario.name);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  }
+});
+
+test('retired local migration leaves current account and BYOK sources unchanged', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-current-embedding-migration-test-'));
+  const configDir = path.join(home, '.stashbase');
+  const configPath = path.join(configDir, 'config.json');
+  const serialized = JSON.stringify({
+    embeddingSource: 'openai',
+    embedder: { provider: 'openai', apiKey: 'sk-test' },
+    appearance: { theme: 'dark' },
+  }, null, 2);
+  fs.mkdirSync(configDir);
+  fs.writeFileSync(configPath, serialized);
   try {
-    const result = runConfigMutation(home, `
-      const assert = (await import('node:assert/strict')).default;
-      config.setEmbeddingSource('local');
-      const state = await import('./server/state.ts');
-      assert.deepEqual(state.resolveEmbedderRuntime(), {
-        provider: 'onnx',
-        model: 'gpahal/bge-m3-onnx-int8',
-        dimension: 1024,
-      });
-    `);
+    const result = runConfigMutation(home, 'config.migrateRetiredLocalEmbeddingSource();');
     assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(configPath, 'utf8'), serialized);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
@@ -213,22 +278,23 @@ test('local AI Index resolves to the keyless ONNX daemon runtime', () => {
 test('embedding source activation persists only after reset and bind succeed', async () => {
   const { activateEmbeddingSource } = await import('./routes/embedder.ts');
   const runtime = {
-    provider: 'onnx' as const,
-    model: 'gpahal/bge-m3-onnx-int8',
-    dimension: 1024,
+    provider: 'openai' as const,
+    apiKey: 'sk-test',
+    model: 'text-embedding-3-small',
+    dimension: 1536,
   };
   const events: string[] = [];
 
-  await activateEmbeddingSource('openai', 'local', runtime, {
+  await activateEmbeddingSource('stashbase-account', 'openai', runtime, {
     resetRuntime: async () => { events.push('reset'); },
     bindFolders: async (nextRuntime) => { events.push(`bind:${nextRuntime?.provider ?? 'previous'}`); },
     persistSource: (source) => { events.push(`persist:${source}`); },
   });
-  assert.deepEqual(events, ['reset', 'bind:onnx', 'persist:local']);
+  assert.deepEqual(events, ['reset', 'bind:openai', 'persist:openai']);
 
   events.length = 0;
   await assert.rejects(
-    activateEmbeddingSource('openai', 'local', runtime, {
+    activateEmbeddingSource('stashbase-account', 'openai', runtime, {
       resetRuntime: async () => {
         events.push('reset');
         throw new Error('reset failed');
@@ -243,7 +309,7 @@ test('embedding source activation persists only after reset and bind succeed', a
   events.length = 0;
   let firstBind = true;
   await assert.rejects(
-    activateEmbeddingSource('openai', 'local', runtime, {
+    activateEmbeddingSource('stashbase-account', 'openai', runtime, {
       resetRuntime: async () => { events.push('reset'); },
       bindFolders: async (nextRuntime) => {
         events.push(`bind:${nextRuntime?.provider ?? 'previous'}`);
@@ -258,7 +324,7 @@ test('embedding source activation persists only after reset and bind succeed', a
   );
   assert.deepEqual(events, [
     'reset',
-    'bind:onnx',
+    'bind:openai',
     'reset',
     'bind:previous',
   ]);

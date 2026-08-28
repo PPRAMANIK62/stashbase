@@ -107,10 +107,6 @@ export function EmbedderRequireKeyGate() {
           }));
           finishSetup(backfillStarted);
         }}
-        onLocalSelected={(next) => {
-          patchEmbedder(() => next);
-          finishSetup(next.backfillStarted);
-        }}
         onSkip={() => {
           // Deliberate opt-out to basic mode for THIS folder in this
           // window; another folder (or a relaunch) re-offers. The

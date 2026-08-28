@@ -96,12 +96,6 @@ quota response stops the remainder of a batch. Pending work remains
 reconcilable and resumes after a quota refresh/reset or an available source
 switch.
 
-The local embedding source maps to the fixed ONNX model and its own
-provider/dimension collection identity. Settings probes model readiness before
-persisting the selection; first-use download and initialization are bounded at
-`120 s`, and a failure leaves the prior source selected. Runtime libraries ship
-with the daemon while model weights remain in the user's local model cache.
-
 Daemon retirement is single-flight across shutdown, credential/quota reset,
 and recovery callers. A replacement generation waits until the retiring child
 has exited and released the store lock; a late event from an older generation
@@ -192,8 +186,6 @@ contracts, not because every tuning value belongs in prose:
   and Python;
 - media transcription uses ten-minute durable work units with `1.5 s` overlap;
 - durable DOCX extraction has a `60 s` worker deadline;
-- local ONNX embedding model setup has a `120 s` readiness deadline.
-
 Keep the Node/Python admission bound synchronized. A change to capacity,
 chunking, or deadlines requires the focused liveness tests and an explanation
 of the resource tradeoff.

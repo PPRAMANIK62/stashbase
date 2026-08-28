@@ -69,9 +69,10 @@ aliases, and Journey E2E owns representative composition.
 - **Contract Test:** renderer initialization, Settings state, workspace
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
   `pnpm test:config`, `pnpm test:updates`, and `pnpm test:electron:smoke`.
-  The Settings and config suites cover hosted, BYOK, and keyless local AI Index
-  choices, their busy interlock, and transactional source activation that keeps
-  the prior source selected when runtime reset or binding fails.
+  The Settings and config suites cover hosted and BYOK AI Index choices,
+  rejection of new local selection, deterministic retirement of persisted
+  local selection before daemon startup, and transactional source activation
+  that keeps the prior source selected when runtime reset or binding fails.
   Account identity fixtures cover profile normalization, migration, privacy,
   and UI fallbacks.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
@@ -198,15 +199,12 @@ aliases, and Journey E2E owns representative composition.
 - **Release Check:** the semantic AI Eval is credentialed BYOK release evidence,
   not required or scheduled CI, because it makes paid provider requests and
   allows bounded ranking variability. Hosted account behavior remains
-  lower-layer or release evidence. Packaged local ONNX model download and one
-  representative Similar Search result remain release evidence.
+  lower-layer or release evidence.
 - **Gap:** library-wide readiness is not yet Shipping. The semantic Eval is
   present but still in calibration: no baseline run is retained, so no
   semantic-quality gate is active yet. Completing the baselines and activating
   the thresholds is tracked in
-  [GitHub issue #176](https://github.com/liliu-z/stashbase/issues/176). No
-  Journey E2E currently proves a Similar Search outcome through the packaged
-  local ONNX runtime.
+  [GitHub issue #176](https://github.com/liliu-z/stashbase/issues/176).
 
 ## J06: Agent
 

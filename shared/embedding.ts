@@ -4,10 +4,9 @@ import type { HostedAccountState } from './account.ts';
  * Which source, if any, is authorized to produce embeddings.
  *
  * `EmbeddingSource` is deliberately wider than `EmbedderProvider`: a user
- * can bring their own provider key or spend the signed-in account
- * allowance, and those are different answers to "who pays for this
- * request". A provider is one of the direct APIs; a source includes the
- * hosted account as a peer of them.
+ * can bring their own provider key or spend the signed-in account allowance,
+ * and persisted configs may still contain the retired local source until the
+ * startup migration runs. A provider is one of the selectable direct APIs.
  */
 
 export type EmbedderProvider = 'openai' | 'openrouter';

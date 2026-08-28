@@ -38,8 +38,6 @@ import { SegmentedControl, SegmentedControlItem } from '@/common/components/ui/s
 import { FieldLegend, FieldSet } from '@/common/components/ui/field';
 import { StatusMessage } from '@/common/components/ui/status';
 import { AccountSignInForm } from '@/common/components/AccountSignInForm';
-import type { EmbedderState } from '@/common/api/apiTypes';
-import { useLocalEmbeddingSelection } from '@/features/settings/hooks/useLocalEmbeddingSelection';
 
 const PROVIDERS: Record<EmbedderProvider, { label: string; model: string; placeholder: string }> = {
   openai: {
@@ -98,19 +96,16 @@ export function RequireApiKeyModal({
   isTopmost,
   onSaved,
   onSignedIn,
-  onLocalSelected,
   onSkip,
 }: {
   initialProvider?: EmbedderProvider;
   isTopmost: boolean;
   onSaved: (provider: EmbedderProvider, model: string, backfillStarted?: boolean, warning?: string) => void;
   onSignedIn: (backfillStarted?: boolean) => void;
-  onLocalSelected: (state: EmbedderState) => void;
   onSkip: () => void;
 }) {
   const [provider, setProvider] = useState<EmbedderProvider>(initialProvider);
   const [view, setView] = useState<View>('choice');
-  const local = useLocalEmbeddingSelection(onLocalSelected);
   const { key, busy, error, setKey, clearError, submit } = useApiKeyEntry(
     provider,
     // `changeApiKey` server-side rejects definite provider auth failures,
@@ -153,16 +148,9 @@ export function RequireApiKeyModal({
         <div ref={choiceRef} tabIndex={-1} className="outline-none">
           <EmbeddingAuthChoice
             onSignIn={() => setView('signin')}
-            localBusy={local.busy}
-            onUseLocal={() => { void local.select(); }}
             onUseOwnKey={() => setView('key')}
             onSkip={onSkip}
           />
-          {local.error && (
-            <StatusMessage tone="error" className="mt-2.5 max-h-overlay-xs overflow-y-auto wrap-anywhere">
-              {local.error}
-            </StatusMessage>
-          )}
         </div>
       )}
 

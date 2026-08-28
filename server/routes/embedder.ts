@@ -2,10 +2,9 @@
  * Embedder routes: manage the global embedding provider key and validate
  * a key without persisting it.
  *
- * The source set is intentionally narrow: the hosted account broker,
- * OpenAI/OpenRouter BYOK, or one fixed local ONNX model. Each runtime uses a
- * provider/dimension collection identity so incompatible vector spaces never
- * mix.
+ * The source set is intentionally narrow: the hosted account broker or
+ * OpenAI/OpenRouter BYOK. Each runtime uses a provider/dimension collection
+ * identity so incompatible vector spaces never mix.
  */
 import express from 'express';
 import { logger, errorMessage } from '../log.ts';
@@ -27,14 +26,7 @@ import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from
 import { sendError, validateEmbedderKey } from '../http.ts';
 import { hostedAccountState } from '../hosted-account.ts';
 import type { ApiKeySaveResult, EmbedderState } from '../../shared/embedding.ts';
-import {
-  LOCAL_EMBEDDING_DIMENSION,
-  LOCAL_EMBEDDING_MODEL,
-  LOCAL_EMBEDDING_PROVIDER,
-  LOCAL_EMBEDDING_SOURCE,
-  type EmbeddingSource,
-} from '../../shared/embedding.ts';
-import { getDaemon } from '../mfs-daemon.ts';
+import type { EmbeddingSource } from '../../shared/embedding.ts';
 import type { EmbedderRuntimeConfig } from '../indexer.ts';
 
 const log = logger('routes/embedder');
@@ -48,7 +40,7 @@ function providerLabel(provider: EmbedderProvider): string {
   return provider === 'openrouter' ? 'OpenRouter' : 'OpenAI';
 }
 
-export type SelectableEmbeddingSource = Exclude<EmbeddingSource, 'stashbase-account'>;
+export type SelectableEmbeddingSource = EmbedderProvider;
 
 export interface EmbeddingSourceActivationDependencies {
   resetRuntime: () => Promise<void>;
@@ -97,12 +89,11 @@ export async function activateEmbeddingSource(
 
 function parseSelectableSource(raw: unknown, fallback: EmbedderProvider): SelectableEmbeddingSource | null {
   if (raw == null || raw === '') return fallback;
-  if (raw === LOCAL_EMBEDDING_SOURCE) return raw;
   return isEmbedderProvider(raw) ? raw : null;
 }
 
 function sourceLabel(source: SelectableEmbeddingSource): string {
-  return source === LOCAL_EMBEDDING_SOURCE ? 'Local model' : providerLabel(source);
+  return providerLabel(source);
 }
 
 export function mount(app: express.Express): void {
@@ -116,7 +107,7 @@ export function mount(app: express.Express): void {
       hasKey: !!cfg.apiKey,
       authorized: isEmbeddingConfigured(),
       source,
-      model: source === LOCAL_EMBEDDING_SOURCE ? LOCAL_EMBEDDING_MODEL : cfg.model,
+      model: cfg.model,
       account,
     };
     res.json(state);
@@ -185,7 +176,7 @@ export function mount(app: express.Express): void {
     const cfg = getEmbedderConfig();
     const source = parseSelectableSource(req.body?.source ?? req.body?.provider, cfg.provider);
     if (!source) return res.status(400).json({ error: 'unknown embedding source' });
-    if (source !== LOCAL_EMBEDDING_SOURCE && (!cfg.apiKey || cfg.provider !== source)) {
+    if (!cfg.apiKey || cfg.provider !== source) {
       return res.status(400).json({ error: `Add a ${providerLabel(source)} key before selecting it.` });
     }
     const previousSource = getEmbeddingSource();
@@ -195,22 +186,13 @@ export function mount(app: express.Express): void {
       isEmbeddingAvailable(),
     );
     try {
-      const runtime: EmbedderRuntimeConfig = source === LOCAL_EMBEDDING_SOURCE
-        ? {
-            provider: LOCAL_EMBEDDING_PROVIDER,
-            model: LOCAL_EMBEDDING_MODEL,
-            dimension: LOCAL_EMBEDDING_DIMENSION,
-          }
-        : {
-            provider: cfg.provider,
-            apiKey: cfg.apiKey,
-            model: cfg.model,
-            dimension: cfg.dimension,
-            baseUrl: cfg.baseUrl,
-          };
-      if (source === LOCAL_EMBEDDING_SOURCE) {
-        await getDaemon().probeEmbedder(runtime);
-      }
+      const runtime: EmbedderRuntimeConfig = {
+        provider: cfg.provider,
+        apiKey: cfg.apiKey,
+        model: cfg.model,
+        dimension: cfg.dimension,
+        baseUrl: cfg.baseUrl,
+      };
       const account = await hostedAccountState(false);
       await activateEmbeddingSource(previousSource, source, runtime);
       if (shouldBackfill) {
@@ -224,7 +206,7 @@ export function mount(app: express.Express): void {
         hasKey: !!cfg.apiKey,
         authorized: true,
         source,
-        model: source === LOCAL_EMBEDDING_SOURCE ? LOCAL_EMBEDDING_MODEL : cfg.model,
+        model: cfg.model,
         account,
         backfillStarted: shouldBackfill,
       });

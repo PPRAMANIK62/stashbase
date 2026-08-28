@@ -15,7 +15,6 @@ import type {
   ApiKeySaveResult,
   EmbedderState,
   EmbedderProvider,
-  EmbeddingSource,
   HostedAccountActivation,
   HostedAccountState,
   HostedAgentAllowance,
@@ -296,7 +295,7 @@ export const api = {
     send<{ ok: true }>('DELETE', `/api/transcription/models/${encodeURIComponent(id)}`),
   // Embedder ----------------------------------------------------
   getEmbedder: () => getJson<EmbedderState>('/api/embedder'),
-  useEmbeddingSource: (source: Exclude<EmbeddingSource, 'stashbase-account'>) =>
+  useEmbeddingSource: (source: EmbedderProvider) =>
     send<EmbedderState>('PUT', '/api/embedder/source', { source }),
   getAccount: (refresh = false) => getJson<HostedAccountState>(`/api/account${refresh ? '?refresh=1' : ''}`),
   getAgentAllowance: () => getJson<HostedAgentAllowance>('/api/account/agent-usage'),

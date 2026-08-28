@@ -779,7 +779,7 @@ const RAW_CONTROL_EXEMPTIONS: Record<string, { count: number; why: string }> = {
     why: 'A hidden `type="file"` picker with no rendered surface at all — the composer’s + button opens it. `Input` is typed for Base UI’s text input and its box treatment would be dead weight.',
   },
   'features/settings/components/embedder/EmbeddingAuthChoice.tsx': {
-    count: 3,
+    count: 2,
     why: 'AI Index setup cards. Not a radio group (each fires on click, nothing reads as pre-selected) and not `Button`s (that primitive is a centred single-line -ui-cornered ITEM; these are two-line, left-aligned, -container-cornered BOXES that keep full opacity when disabled).',
   },
   'features/settings/components/TranscriptionPanel.tsx': {

@@ -1,7 +1,7 @@
 /**
  * The AI Index setup choice: how to power indexing.
  *
- * This is a three-option question, so it reads as three objects, not a form. Each
+ * This is a two-option question, so it reads as two objects, not a form. Each
  * option is ONE card with its explanation stacked inside it (title over a
  * muted subtitle), left-aligned to a single edge — so the eye reads
  * header → cards → exit → disclosure, instead of hopping between a
@@ -19,8 +19,6 @@
  *     service owns PKCE and the shared hosted quota session.
  *     Deployments may still disable the card explicitly; the quiet corner
  *     mark keeps that state distinguishable from a broken control.
- *   • Use this device — the bundled ONNX runtime, with a one-time model
- *     setup before fully local embedding work.
  *   • Use your own API key — OpenAI or OpenRouter, for advanced users;
  *     choosing it reveals the key field in place (the parent owns that swap).
  *
@@ -29,11 +27,11 @@
  * underlined link at rest — a standing underline is browser furniture and
  * pulled the whole card stack toward web-page register; the underline appears
  * on hover, where it says "clickable" without the styling cost. It sits far
- * enough below the cards to read as the third choice and far enough above the
+ * enough below the cards to read as the alternative and far enough above the
  * hairline not to look like the footer's heading. It stays ONE line: a
  * reassurance note under it ("You can enable it later in Settings") was
  * logically true but gave the screen's lightest element a subtitle, making a
- * third borderless card out of the exit. Settings renders this component
+ * borderless card out of the exit. Settings renders this component
  * without `onSkip`.
  *
  * Every layer here holds to one line of its own — title, subtitle, each
@@ -55,7 +53,7 @@
  * them — not the smaller `--radius-ui` used by rows and menu items INSIDE
  * a box. Peer boxes seen together are expected to wear the same corner.
  *
- * The three cards are a standing exemption from the Button primitive, and
+ * The two cards are a standing exemption from the Button primitive, and
  * they are NOT a radio group. Nothing is selected here — each card fires
  * immediately (sign-in opens the system browser; the key card swaps the
  * view in place), there is no pending selection and no submit, and the
@@ -75,21 +73,19 @@
 import { Button } from '@/common/components/ui/button';
 import { cn } from '@/common/lib/utils';
 
-export function EmbeddingAuthChoice({ onUseOwnKey, onUseLocal, onSignIn, signInDisabled = false, localBusy = false, onSkip }: {
+export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = false, onSkip }: {
   onUseOwnKey: () => void;
-  onUseLocal: () => void;
   onSignIn?: () => void;
   /** Allows deployments without hosted accounts to hide the action while
    * retaining the finished layout. */
   signInDisabled?: boolean;
-  localBusy?: boolean;
   /** When provided (first-run gate only), renders the quiet exit to basic
    *  mode. Omitted in Settings, where continuing without indexing is moot. */
   onSkip?: () => void;
 }) {
   return (
     <div className="mt-1">
-      {/* Three peer options, so a real list: the set announces its count and
+      {/* Two peer options, so a real list: the set announces its count and
         * its item boundaries instead of arriving as one run of text. Not a
         * radio group and not a listbox — each card FIRES on click and
         * nothing is ever pre-selected, so neither ARIA pattern supersedes
@@ -99,7 +95,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onUseLocal, onSignIn, signInD
         {/* Recommended — sign in. Brand-tinted card; title over its own subtitle. */}
         <button
           type="button"
-          disabled={signInDisabled || localBusy}
+          disabled={signInDisabled}
           onClick={onSignIn}
           className="relative grid w-full gap-0.5 rounded-xl border border-border bg-accent/8 px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-accent/14 enabled:active:scale-97 disabled:cursor-default"
         >
@@ -115,22 +111,9 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onUseLocal, onSignIn, signInD
         </li>
 
         <li>
-        <button
-          type="button"
-          disabled={localBusy}
-          onClick={onUseLocal}
-          className="grid w-full gap-0.5 rounded-xl border border-border bg-background px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-muted enabled:active:scale-97 disabled:cursor-wait disabled:opacity-70"
-        >
-          <span className="text-base font-semibold leading-snug text-foreground">{localBusy ? 'Setting up this device…' : 'Use this device'}</span>
-          <span className="text-xs leading-snug text-muted-foreground">Private, offline after model setup</span>
-        </button>
-        </li>
-
-        <li>
         {/* Secondary — bring your own key. Outlined card, same shape. */}
         <button
           type="button"
-          disabled={localBusy}
           onClick={onUseOwnKey}
           className="grid w-full gap-0.5 rounded-xl border border-border bg-background px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-muted enabled:active:scale-97 disabled:cursor-wait disabled:opacity-70"
         >
@@ -157,7 +140,6 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onUseLocal, onSignIn, signInD
           <Button
             variant="link"
             size="xs"
-            disabled={localBusy}
             className="h-auto cursor-pointer border-0 p-0 text-muted-foreground underline-offset-2 hover:text-foreground"
             onClick={onSkip}
           >
@@ -176,7 +158,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onUseLocal, onSignIn, signInD
         'm-0 border-t border-border pt-2 text-2xs leading-relaxed text-muted-foreground',
         onSkip ? 'mt-7' : 'mt-3',
       )}>
-        Local mode keeps text on this device. Hosted and API-key modes send text for embeddings.
+        Hosted and API-key modes send text to the selected service for embeddings.
       </p>
     </div>
   );

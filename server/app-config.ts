@@ -344,7 +344,9 @@ export function setEmbeddingSource(source: EmbeddingSource): EmbeddingSource {
   const cfg = readAppConfigStrict();
   if (source === 'stashbase-account') {
     if (!getHostedAccountSession()) throw new Error('Sign in before selecting the StashBase account allowance.');
-  } else if (source !== LOCAL_EMBEDDING_SOURCE) {
+  } else if (source === LOCAL_EMBEDDING_SOURCE) {
+    throw new Error('The local AI Index source is no longer available.');
+  } else {
     const direct = getEmbedderConfig();
     if (!direct.apiKey || direct.provider !== source) throw new Error(`Add a ${source === 'openrouter' ? 'OpenRouter' : 'OpenAI'} key before selecting it.`);
   }
@@ -635,6 +637,27 @@ export function migrateLegacyEmbedderConfig(): void {
   delete cfg.embedder.openaiKey;
   writeAppConfig(cfg);
   log.info('migrated legacy embedder.openaiKey into active embedder config');
+}
+
+/** Retire the former keyless local embedding source before the daemon boots.
+ *  Account allowance is the primary replacement when a valid session exists;
+ *  otherwise a stored BYOK credential is restored. With neither credential,
+ *  deleting the explicit source returns the product to its unconfigured
+ *  state. The migration is idempotent and preserves every unrelated field. */
+export function migrateRetiredLocalEmbeddingSource(): void {
+  const cfg = readAppConfigStrict();
+  if (cfg.embeddingSource !== LOCAL_EMBEDDING_SOURCE) return;
+
+  const direct = getEmbedderConfig();
+  const next: EmbeddingSource | undefined = getHostedAccountSession()
+    ? 'stashbase-account'
+    : direct.apiKey
+      ? direct.provider
+      : undefined;
+  if (next) cfg.embeddingSource = next;
+  else delete cfg.embeddingSource;
+  writeAppConfigStrict(cfg);
+  log.info(`retired local AI Index source${next ? `; selected ${next}` : '; AI Index is not configured'}`);
 }
 
 export function getOnboardingPreferences(): OnboardingPreferences {

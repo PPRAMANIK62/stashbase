@@ -33,7 +33,12 @@ import {
 } from './agent-contract.ts';
 import { onClose, ensureFolderHome, memberFolderRoots } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { getEmbeddingSource, getHostedAccountSession, migrateLegacyEmbedderConfig } from './app-config.ts';
+import {
+  getEmbeddingSource,
+  getHostedAccountSession,
+  migrateLegacyEmbedderConfig,
+  migrateRetiredLocalEmbeddingSource,
+} from './app-config.ts';
 import { isEmbeddingAvailable } from './embedding-availability.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from './state.ts';
 import { reapOrphanDaemons, reclaimStaleServerPort } from './stale-lock.ts';
@@ -157,6 +162,9 @@ const PDFJS_DIST_DIR = path.resolve(APP_ROOT, 'node_modules', 'pdfjs-dist');
 
 // One-time migration from the old global-provider schema. Idempotent.
 migrateLegacyEmbedderConfig();
+// Retire the former local embedding source before the first daemon bind so an
+// upgraded app never downloads or loads its model. Idempotent.
+migrateRetiredLocalEmbeddingSource();
 // Ensure the default folder home exists and seed the built-in manual, and
 // prune any stale recent entries. There is no first-run picker — the home
 // is a fixed path, always ready.

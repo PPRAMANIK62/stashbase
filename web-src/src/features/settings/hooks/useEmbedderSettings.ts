@@ -29,14 +29,13 @@ export interface EmbedderSettingsController {
   signOut: () => Promise<void>;
   useAccountAllowance: () => Promise<void>;
   useApiKeySource: () => Promise<void>;
-  useLocalSource: () => Promise<void>;
   applySignedIn: (account: HostedAccountState) => void;
 }
 
 /**
  * The AI Index panel's embedder state and every command that changes which
  * source is authorized: a bring-your-own key, the signed-in StashBase
- * allowance, the local model, or neither.
+ * allowance or neither.
  *
  * Every command that authorizes a source owes the rest of the
  * app the same three things — the shared `embedderHasKey` flag the search
@@ -195,20 +194,6 @@ export function useEmbedderSettings(): EmbedderSettingsController {
     }
   }, [selectedProvider, authorized, actions]);
 
-  const useLocalSource = useCallback(async () => {
-    setAccountBusy(true);
-    try {
-      const next = await api.useEmbeddingSource('local');
-      if (!mountedRef.current) return;
-      setState(next);
-      authorized({ backfillStarted: next.backfillStarted });
-    } catch (err: unknown) {
-      actions.toast(errorMessage(err), { level: 'error' });
-    } finally {
-      if (mountedRef.current) setAccountBusy(false);
-    }
-  }, [authorized, actions]);
-
   const applySignedIn = useCallback((account: HostedAccountState) => {
     setState((current) => current ? { ...current, authorized: true, source: 'stashbase-account', account } : current);
     // No backfill mark: sign-in resolves through `GET /api/account`, which
@@ -237,7 +222,6 @@ export function useEmbedderSettings(): EmbedderSettingsController {
     signOut,
     useAccountAllowance,
     useApiKeySource,
-    useLocalSource,
     applySignedIn,
   };
 }
