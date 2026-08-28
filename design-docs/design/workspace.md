@@ -55,8 +55,10 @@ manager, or a primary graph-navigation tool.
   A created folder is an ordinary directory. Removing membership clears only
   StashBase-owned state.
 - The titlebar folder switcher keeps the window's current folder identity
-  visible and offers the full library membership. Folder-level actions remain
-  attributable to the active folder.
+  visible and offers the full library membership. A name wider than the
+  sidebar column truncates within that column instead of crossing onto the
+  document tab strip. Folder-level actions remain attributable to the active
+  folder.
 - Multiple windows share one library and runtime services while retaining
   independent active folders, tabs, search presentation, and Chat tabs.
 - Folder switches reset folder-scoped documents but preserve library search

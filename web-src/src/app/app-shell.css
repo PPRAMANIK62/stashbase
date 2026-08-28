@@ -111,8 +111,12 @@ body.is-electron.platform-darwin.is-fullscreen {
   left: var(--titlebar-controls-left);
   /* Cap the cluster to the sidebar column: a long folder name in the
    * switcher must ellipsize at the column edge, never bleed across
-   * the pane boundary onto the tab strip. The switcher's own spans
-   * carry min-width:0 + truncate, so the flex squeeze lands there.
+   * the pane boundary onto the tab strip. The cap alone does not do
+   * that — a flex child that refuses to shrink just overflows it — so
+   * the switcher trigger opts back in to `shrink` (FolderSwitcher.tsx,
+   * against the button recipe's `shrink-0`) and its label carries
+   * min-width:0 + truncate. Every other child here is fixed-width, so
+   * the squeeze lands on the name.
    * (Collapse keeps the stored --sidebar-width, so the cap holds.) */
   max-width: calc(var(--sidebar-width) - var(--titlebar-controls-left) - 8px);
 }
