@@ -4,8 +4,19 @@
 
 **Blocked by:** 06.
 
-Run Storybook with the replacement's real Tailwind, providers, themes, interface
-scale, forced-colors behavior, and reduced-motion behavior.
+**Status:** Complete.
+
+Storybook now builds through the replacement's Vite configuration and real
+Tailwind entry, imports the production foundation stylesheet, and mounts the
+same renderer provider composition. Its bounded controls apply the
+production `system`/`light`/`dark` theme and `small`/`default`/`large` interface
+scale attributes. Forced colors and reduced motion remain real browser media
+features in the shared stylesheet rather than story-only variants. The current
+foundation story proves the workbench without pre-empting the visual studies in
+10 or the canonical token system in 11.
+
+Evidence: `pnpm test:renderer`, `pnpm build:web`, `pnpm build:storybook`,
+`pnpm test:toolchain`, and `pnpm test:package-inputs`.
 
 ## 10 — Approve the StashBase visual direction
 

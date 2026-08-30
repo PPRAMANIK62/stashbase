@@ -34,10 +34,12 @@
   "scripts": {
     "dev": "concurrently -n web,srv -c cyan,green \"npm:dev:web\" \"npm:dev:server\"",
     "dev:web": "vp run @stashbase/renderer#dev",
+    "storybook": "pnpm --filter @stashbase/renderer storybook",
     "dev:server": "STASHBASE_DEV_VITE=1 tsx watch server/index.ts",
     "start": "tsx server/index.ts",
     "mcp": "tsx mcp/server.ts",
     "build:web": "pnpm check:renderer-architecture && vp run @stashbase/renderer#build",
+    "build:storybook": "pnpm --filter @stashbase/renderer build:storybook",
     "format:web": "vp run @stashbase/renderer#format",
     "build:server": "node scripts/build-server.mjs",
     "build:mcp": "node scripts/build-mcp.mjs",

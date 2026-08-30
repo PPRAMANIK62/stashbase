@@ -1,14 +1,39 @@
-:root {
+@import 'tailwindcss';
+
+:root,
+:root[data-theme='light'] {
   color-scheme: light dark;
   --foundation-canvas: #f4f4f4;
   --foundation-ink: #171717;
   --foundation-muted: #666666;
   --foundation-rail: #2f2f2f;
+  --foundation-ui-scale: 1;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: calc(100% * var(--foundation-ui-scale));
   background: var(--foundation-canvas);
   color: var(--foundation-ink);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --foundation-canvas: #111111;
+  --foundation-ink: #ededed;
+  --foundation-muted: #aaaaaa;
+  --foundation-rail: #d6d6d6;
+}
+
+:root[data-ui-scale='small'] {
+  --foundation-ui-scale: 0.9;
+}
+
+:root[data-ui-scale='large'] {
+  --foundation-ui-scale: 1.15;
 }
 
 * {
@@ -19,6 +44,8 @@ body {
   margin: 0;
   min-width: 20rem;
   min-height: 100vh;
+  background: var(--foundation-canvas);
+  color: var(--foundation-ink);
 }
 
 button,
@@ -31,7 +58,6 @@ select {
 .foundation {
   display: grid;
   grid-template-columns: 0.375rem minmax(0, 1fr);
-  min-height: 100vh;
   background: var(--foundation-canvas);
 }
 
@@ -72,10 +98,32 @@ select {
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]),
+  :root[data-theme='system'] {
+    color-scheme: dark;
     --foundation-canvas: #111111;
     --foundation-ink: #ededed;
     --foundation-muted: #aaaaaa;
     --foundation-rail: #d6d6d6;
+  }
+}
+
+@media (forced-colors: active) {
+  :root {
+    --foundation-canvas: Canvas;
+    --foundation-ink: CanvasText;
+    --foundation-muted: GrayText;
+    --foundation-rail: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

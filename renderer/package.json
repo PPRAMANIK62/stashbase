@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",
+    "storybook": "storybook dev --port 6006 --no-open",
+    "build:storybook": "storybook build --output-dir ../dist/storybook",
     "format": "vp fmt . --check",
-    "lint": "vp lint --config ../.oxlintrc.json src",
+    "lint": "vp lint --config ../.oxlintrc.json src .storybook vite.config.ts",
     "test": "vp test run",
     "typecheck": "tsc --noEmit"
   },
@@ -16,10 +18,14 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@storybook/react-vite": "10.5.10",
+    "@tailwindcss/vite": "4.3.3",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.1",
     "happy-dom": "20.11.2",
+    "storybook": "10.5.10",
+    "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.3.0",
     "vite-plus": "0.3.0"

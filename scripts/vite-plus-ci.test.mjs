@@ -62,6 +62,7 @@ test('source CI runs replacement checks before the broader application matrix', 
     'pnpm test:renderer',
     'pnpm typecheck:web',
     'pnpm build:web',
+    'pnpm build:storybook',
     'pnpm test:package-inputs',
   ]) {
     assert.match(runs, new RegExp(command.replaceAll(':', '\\:')), `source CI omits ${command}`);
@@ -71,7 +72,8 @@ test('source CI runs replacement checks before the broader application matrix', 
   assert.ok(
     stepIndex('Install dependencies') < stepIndex('Verify Vite+ inventory') &&
       stepIndex('Verify Vite+ inventory') < stepIndex('Check supported renderer') &&
-      stepIndex('Check supported renderer') < stepIndex('Test renderer packaging input') &&
+      stepIndex('Check supported renderer') < stepIndex('Build production-equivalent Storybook') &&
+      stepIndex('Build production-equivalent Storybook') < stepIndex('Test renderer packaging input') &&
       stepIndex('Test renderer packaging input') < stepIndex('Install Python sidecar dependencies'),
     'source CI must fail replacement gates before entering the broader application matrix',
   );

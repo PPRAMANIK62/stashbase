@@ -48,6 +48,9 @@ test('the supported renderer build is the only packaged renderer input', () => {
 
   assert.match(rendererConfig, /outDir:\s*['"]\.\.\/dist\/renderer['"]/);
   assert.ok(packagedFiles.includes('dist/renderer/**/*'));
+  assert.ok(
+    !packagedFiles.some((entry) => typeof entry === 'string' && entry.includes('dist/storybook')),
+  );
   assert.ok(!packagedFiles.some((entry) => typeof entry === 'string' && entry.includes('web-src')));
   assert.ok(
     !packagedFiles.some((entry) => typeof entry === 'string' && entry.includes('web/dist-app')),
