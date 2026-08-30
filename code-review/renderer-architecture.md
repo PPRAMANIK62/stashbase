@@ -17,6 +17,12 @@ CI and release jobs that build this workspace use the same commit-pinned Vite+
 setup with version 0.3.0. The repository keeps Node and dependency installation
 under their existing Actions and disables Vite+ task-result caching.
 
+The replacement dependency model is already enforced even though the product
+features have not been migrated. Dependency-cruiser owns graph direction and
+cycles, Oxlint rejects layer-specific APIs and imports, and the repository
+checker owns the approved feature map, feature shape, shared wire-schema
+registration, and isolation from implementation trees.
+
 `web-src/` remains in the repository only as read-only behavior reference. It
 is not built, linted, tested, typechecked, packaged, or scanned by supported
 renderer commands. Supported source and configuration must never import or
@@ -38,10 +44,20 @@ and must follow the target dependency model before they enter `renderer`.
   is permitted.
 - Shared behavior is introduced only through an intentional repository-owned
   Interface; copying a legacy module does not create one.
+- Features are declared with their owning product area and expose only their
+  public entry module; only app composition may consume that entry.
+- Features never import siblings. Domain, application, infrastructure, UI,
+  platform, and shared code follow the dependency direction in the migration
+  architecture, including in test files.
+- Repository wire modules must be registered before renderer code imports
+  them. Registration identifies the reviewed executable-schema owner; it is
+  not a validation waiver.
 
-`scripts/check-frontend-boundaries.mjs` holds the cross-tree isolation
-invariant. Its focused test proves that ordinary replacement files pass and a
-legacy reference fails.
+`pnpm check:renderer-architecture` runs the live graph and repository checks.
+`pnpm test:renderer-architecture` additionally proves accepted inward imports
+and negative fixtures for cycles, sibling access, deep imports, layer
+inversion, direct platform APIs, undeclared features, legacy access, and
+unregistered repository protocols. Tests receive the same production rules.
 
 ## Implementation Map
 
@@ -50,9 +66,10 @@ legacy reference fails.
 | Workspace package | `renderer/package.json` |
 | Browser entry | `renderer/index.html`, `renderer/src/main.tsx` |
 | Foundation surface | `renderer/src/app.tsx`, `renderer/src/foundation.css` |
-| Tool configuration | `renderer/vite.config.ts`, `renderer/tsconfig.json`, `.oxlintrc.json` |
+| Tool configuration | `renderer/vite.config.ts`, `renderer/tsconfig.json`, `.oxlintrc.json`, `dependency-cruiser.config.cjs`, `renderer-architecture.tsconfig.json` |
 | Production output | `dist/renderer/` |
-| Boundary enforcement | `scripts/check-frontend-boundaries.mjs` and `scripts/check-frontend-boundaries.test.mjs` |
+| Architecture declaration | `renderer/renderer-architecture.json` |
+| Boundary enforcement | `scripts/check-renderer-architecture.mjs` and `scripts/check-renderer-architecture.test.mjs` |
 | Test inventory | `scripts/check-test-inventory.mjs` |
 | CI setup contract | `scripts/vite-plus-ci.test.mjs` |
 | Packaging input contract | `scripts/package-inputs.test.mjs` |
@@ -61,6 +78,7 @@ legacy reference fails.
 
 ```bash
 pnpm format:web
+pnpm test:renderer-architecture
 pnpm lint:web
 pnpm test:renderer
 pnpm typecheck:web
@@ -70,8 +88,9 @@ pnpm test:package-inputs
 ```
 
 `pnpm lint:web`, `pnpm test:renderer`, and `pnpm build:web` also run the live
-replacement-to-reference boundary check. The repository-wide `pnpm typecheck`
-includes the replacement but deliberately excludes `web-src`.
+architecture gate. Source CI runs its focused negative-fixture suite before
+the broader application matrix. The repository-wide `pnpm typecheck` includes
+the replacement but deliberately excludes `web-src`.
 
 Related contracts: [Renderer Workspace](renderer-workspace.md),
 [Renderer Styling](renderer-styling.md), and [Agent Panel](agent-panel.md).

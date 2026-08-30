@@ -118,6 +118,7 @@ Every slice runs:
 ```bash
 pnpm typecheck
 pnpm format:web
+pnpm test:renderer-architecture
 pnpm lint:web
 pnpm test:renderer
 pnpm build:web
@@ -143,6 +144,7 @@ required by the repository, including:
 ```bash
 pnpm test:renderer
 pnpm test:renderer-quality-gates
+pnpm test:renderer-architecture
 pnpm typecheck
 pnpm lint:web
 pnpm build:web

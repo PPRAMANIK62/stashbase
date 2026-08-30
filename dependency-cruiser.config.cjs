@@ -1,0 +1,173 @@
+const electronRuntimePaths = [
+  '^electron(?:/|$)',
+  '^node_modules/[.]pnpm/[^/]+/node_modules/electron(?:/|$)',
+  '^node_modules/electron(?:/|$)',
+];
+const reactRuntimePaths = [
+  '^(?:react|react-dom)(?:/|$)',
+  '^node_modules/[.]pnpm/[^/]+/node_modules/(?:react|react-dom)(?:/|$)',
+  '^node_modules/(?:react|react-dom)(?:/|$)',
+];
+
+/** @type {import('dependency-cruiser').IConfiguration} */
+module.exports = {
+  forbidden: [
+    {
+      name: 'no-circular',
+      severity: 'error',
+      comment: 'Renderer modules must form an acyclic dependency graph.',
+      from: {},
+      to: { circular: true },
+    },
+    {
+      name: 'not-to-unresolvable',
+      severity: 'error',
+      comment: 'Every renderer import must resolve through the reviewed workspace configuration.',
+      from: {},
+      to: { couldNotResolve: true },
+    },
+    {
+      name: 'no-sibling-feature-imports',
+      severity: 'error',
+      comment: 'Features are isolated; app composition coordinates their public capabilities.',
+      from: { path: '^renderer/src/features/([^/]+)/' },
+      to: {
+        path: '^renderer/src/features/',
+        pathNot: '^renderer/src/features/$1/',
+      },
+    },
+    {
+      name: 'feature-public-entry-only',
+      severity: 'error',
+      comment: 'Code outside a feature may consume only that feature public.ts entry.',
+      from: { pathNot: '^renderer/src/features/' },
+      to: { path: '^renderer/src/features/[^/]+/(?!public[.]ts$)' },
+    },
+    {
+      name: 'feature-public-only-from-app',
+      severity: 'error',
+      comment: 'Only the app layer composes public feature capabilities.',
+      from: { path: '^renderer/src/(?!app/|features/)' },
+      to: { path: '^renderer/src/features/[^/]+/public[.]ts$' },
+    },
+    {
+      name: 'domain-is-pure',
+      severity: 'error',
+      comment: 'Feature domain code cannot depend on app, platform, React, UI, or outer feature layers.',
+      from: { path: '^renderer/src/features/[^/]+/domain/' },
+      to: {
+        path: [
+          '^renderer/src/app/',
+          '^renderer/src/platform/',
+          '^renderer/src/shared/(?:styling|ui)/',
+          '^renderer/src/features/[^/]+/(?:application|infrastructure|ui)/',
+          ...reactRuntimePaths,
+        ],
+      },
+    },
+    {
+      name: 'domain-has-no-node-access',
+      severity: 'error',
+      comment: 'Feature domain code is independent of Node and Electron runtime APIs.',
+      from: { path: '^renderer/src/features/[^/]+/domain/' },
+      to: { dependencyTypes: ['core'] },
+    },
+    {
+      name: 'application-depends-inward',
+      severity: 'error',
+      comment: 'Application code owns ports and cannot select concrete adapters or UI.',
+      from: { path: '^renderer/src/features/[^/]+/application/' },
+      to: {
+        path: [
+          '^renderer/src/app/',
+          '^renderer/src/platform/',
+          '^renderer/src/shared/(?:styling|ui)/',
+          '^renderer/src/features/[^/]+/(?:infrastructure|ui)/',
+          ...reactRuntimePaths,
+        ],
+      },
+    },
+    {
+      name: 'ui-has-no-platform-access',
+      severity: 'error',
+      comment: 'UI invokes application capabilities and never imports concrete transports.',
+      from: { path: '^renderer/src/features/[^/]+/ui/' },
+      to: {
+        path: [
+          '^renderer/src/app/',
+          '^renderer/src/platform/',
+          '^renderer/src/features/[^/]+/infrastructure/',
+        ],
+      },
+    },
+    {
+      name: 'infrastructure-has-no-ui-or-app-policy',
+      severity: 'error',
+      comment: 'Feature adapters implement ports without importing presentation or composition policy.',
+      from: { path: '^renderer/src/features/[^/]+/infrastructure/' },
+      to: {
+        path: [
+          '^renderer/src/app/',
+          '^renderer/src/shared/(?:styling|ui)/',
+          '^renderer/src/features/[^/]+/ui/',
+          ...reactRuntimePaths,
+        ],
+      },
+    },
+    {
+      name: 'platform-has-no-product-policy',
+      severity: 'error',
+      comment: 'Platform mechanisms cannot depend on app or feature-owned product policy.',
+      from: { path: '^renderer/src/platform/' },
+      to: {
+        path: [
+          '^renderer/src/(?:app|features)/',
+          '^renderer/src/shared/(?:styling|ui)/',
+          ...reactRuntimePaths,
+        ],
+      },
+    },
+    {
+      name: 'shared-is-a-leaf',
+      severity: 'error',
+      comment: 'Shared domain, UI, styling, and utilities cannot depend on app, features, or platform.',
+      from: { path: '^renderer/src/shared/' },
+      to: { path: '^renderer/src/(?:app|features|platform)/' },
+    },
+    {
+      name: 'shared-domain-and-utilities-are-pure',
+      severity: 'error',
+      comment: 'The shared domain kernel and utilities cannot depend on React or browser presentation.',
+      from: { path: '^renderer/src/shared/(?:domain|utilities)/' },
+      to: {
+        path: [
+          '^renderer/src/shared/(?:styling|ui)/',
+          ...reactRuntimePaths,
+        ],
+      },
+    },
+    {
+      name: 'renderer-does-not-import-implementation-trees',
+      severity: 'error',
+      comment: 'The renderer consumes reviewed protocols, never server, Electron, or legacy implementation.',
+      from: { path: '^renderer/' },
+      to: { path: '^(?:server|electron|web-src)/' },
+    },
+    {
+      name: 'renderer-does-not-import-electron-runtime',
+      severity: 'error',
+      comment: 'Sandboxed renderer code uses typed preload capabilities, not the Electron package.',
+      from: { path: '^renderer/' },
+      to: { path: electronRuntimePaths },
+    },
+  ],
+  options: {
+    doNotFollow: { path: 'node_modules' },
+    tsConfig: { fileName: 'renderer-architecture.tsconfig.json' },
+    enhancedResolveOptions: {
+      exportsFields: ['exports'],
+      conditionNames: ['import', 'types', 'default'],
+      extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+    },
+  },
+};

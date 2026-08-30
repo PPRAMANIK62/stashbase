@@ -101,7 +101,7 @@ jobs:
         run: pnpm test:toolchain
 
       - name: Check supported renderer
-        run: pnpm format:web && pnpm lint:web && pnpm test:renderer && pnpm typecheck:web && pnpm build:web
+        run: pnpm test:renderer-architecture && pnpm format:web && pnpm lint:web && pnpm test:renderer && pnpm typecheck:web && pnpm build:web
 
       - name: Test renderer packaging input
         run: pnpm test:package-inputs

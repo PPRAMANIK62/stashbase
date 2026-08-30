@@ -77,8 +77,19 @@ browser-test setup now land together as the first replacement task.
 
 **Blocked by:** 02.
 
-Add dependency, lint, and repository checks that reject layer inversion,
-sibling-feature access, deep imports, cycles, and unvalidated platform access.
+**Status:** Complete.
+
+Dependency-cruiser rejects cycles, sibling-feature access, feature deep
+imports, layer inversion, and imports of implementation trees. Oxlint rejects
+layer-specific imports and direct browser, transport, storage, Electron, and
+preload access. The repository checker owns the approved feature/product-area
+map, feature shape, legacy isolation, and registration of repository wire
+schema modules. The same rules apply to tests, and focused negative fixtures
+prove each boundary before the live graph check runs in stable frontend
+commands and source CI.
+
+Evidence: `pnpm test:renderer-architecture`, `pnpm lint:web`,
+`pnpm test:renderer`, `pnpm typecheck:web`, and `pnpm build:web`.
 
 ## 08 — Establish shared Zod protocol contracts
 

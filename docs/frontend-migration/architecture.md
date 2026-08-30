@@ -329,6 +329,11 @@ Architecture is enforced by complementary CI gates:
 - A focused repository checker enforces project-specific declarations such as
   feature ownership and registration of repository-owned wire schemas.
 
+These gates are active from the replacement foundation. The committed renderer
+architecture declaration records the approved feature owners and registered
+repository wire modules; adding a directory or importing a shared protocol
+without updating that reviewed declaration fails before feature tests run.
+
 Tests follow production boundaries. A test may cross one only through a named,
 narrow test entry point; blanket architecture-rule exemptions for test folders
 are forbidden. Suppressions and compatibility layers cannot bypass these gates.

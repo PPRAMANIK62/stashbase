@@ -57,6 +57,7 @@ test('source CI runs replacement checks before the broader application matrix', 
 
   for (const command of [
     'pnpm test:toolchain',
+    'pnpm test:renderer-architecture',
     'pnpm format:web',
     'pnpm lint:web',
     'pnpm test:renderer',

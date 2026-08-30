@@ -27,5 +27,102 @@
     "jsx-a11y/no-noninteractive-element-to-interactive-role": "warn",
     "jsx-a11y/no-static-element-interactions": "warn",
     "jsx-a11y/role-has-required-aria-props": "warn"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/renderer/src/features/*/domain/**",
+        "**/renderer/src/shared/domain/**",
+        "**/renderer/src/shared/utilities/**"
+      ],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "document", "message": "Domain code cannot access the DOM." },
+          { "name": "window", "message": "Domain code cannot access browser or preload APIs." },
+          { "name": "navigator", "message": "Domain code cannot access browser APIs." },
+          { "name": "fetch", "message": "External access belongs behind an application port." },
+          { "name": "XMLHttpRequest", "message": "External access belongs behind an application port." },
+          { "name": "WebSocket", "message": "External access belongs behind an application port." },
+          { "name": "EventSource", "message": "External access belongs behind an application port." },
+          { "name": "Worker", "message": "Worker access belongs behind an application port." },
+          { "name": "localStorage", "message": "Persistence belongs behind an application port." },
+          { "name": "sessionStorage", "message": "Persistence belongs behind an application port." },
+          { "name": "indexedDB", "message": "Persistence belongs behind an application port." }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:application|infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:application|infrastructure|styling|ui)(?:/|$))",
+                "message": "Domain modules are pure and may depend only on domain values and pure shared leaves."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/renderer/src/features/*/application/**"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "document", "message": "Application code cannot access the DOM." },
+          { "name": "window", "message": "Application code consumes injected ports, not browser globals." },
+          { "name": "navigator", "message": "Application code consumes injected ports, not browser globals." },
+          { "name": "fetch", "message": "Application code consumes injected ports, not transports." },
+          { "name": "XMLHttpRequest", "message": "Application code consumes injected ports, not transports." },
+          { "name": "WebSocket", "message": "Application code consumes injected ports, not transports." },
+          { "name": "EventSource", "message": "Application code consumes injected ports, not transports." },
+          { "name": "localStorage", "message": "Application code consumes injected ports, not storage." },
+          { "name": "sessionStorage", "message": "Application code consumes injected ports, not storage." },
+          { "name": "indexedDB", "message": "Application code consumes injected ports, not storage." }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:infrastructure|styling|ui)(?:/|$))",
+                "message": "Application modules own abstract ports and cannot select adapters or UI."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/renderer/src/features/*/ui/**"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "fetch", "message": "UI invokes application capabilities, not transports." },
+          { "name": "XMLHttpRequest", "message": "UI invokes application capabilities, not transports." },
+          { "name": "WebSocket", "message": "UI invokes application capabilities, not transports." },
+          { "name": "EventSource", "message": "UI invokes application capabilities, not transports." },
+          { "name": "localStorage", "message": "UI invokes application capabilities, not storage." },
+          { "name": "sessionStorage", "message": "UI invokes application capabilities, not storage." },
+          { "name": "indexedDB", "message": "UI invokes application capabilities, not storage." }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:node:|electron(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/features/[^/]+/infrastructure(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?infrastructure(?:/|$))",
+                "message": "UI invokes application capabilities and cannot import platform adapters."
+              }
+            ]
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          { "object": "window", "property": "stashbase", "message": "Use an injected platform adapter." },
+          { "object": "window", "property": "electron", "message": "Use an injected platform adapter." },
+          { "object": "window", "property": "ipcRenderer", "message": "Raw IPC is forbidden in renderer UI." }
+        ]
+      }
+    }
+  ]
 }

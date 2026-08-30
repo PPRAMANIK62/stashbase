@@ -166,7 +166,7 @@ credential-free and does not run this probabilistic check.
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
 | Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs` (including the explicit OpenCode resource version probe) and platform release verifiers |
-| Focused evidence | `scripts/check-vite-plus-toolchain.mjs`, `scripts/vite-plus-ci.test.mjs`, `scripts/check-frontend-boundaries.mjs`, `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
+| Focused evidence | `scripts/check-vite-plus-toolchain.mjs`, `scripts/vite-plus-ci.test.mjs`, `scripts/check-renderer-architecture.test.mjs`, `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
 
 ## Release Runbook
 
