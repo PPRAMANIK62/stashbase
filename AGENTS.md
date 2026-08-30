@@ -14,6 +14,10 @@ Code remains the source of truth for the current implementation.
 Keep the affected docs current in the same change as code. This is not a later
 documentation pass. All committed docs are English-only.
 
+Frontend replacement work planned under `docs/frontend-migration/` follows the
+staging rules in [`docs/frontend-migration/AGENTS.md`](docs/frontend-migration/AGENTS.md).
+Read that file before changing `renderer` or another migration-owned boundary.
+
 ## GitHub access for this repository
 
 For GitHub write operations on `liliu-z/stashbase` (including PR/issue

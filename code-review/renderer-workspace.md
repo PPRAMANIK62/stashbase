@@ -105,10 +105,12 @@ semantic readiness.
 
 ## Shell Performance Contract
 
-The replacement foundation contains only its semantic bootstrap marker. Its
-initial-JavaScript budget and required dynamic-entry set are not yet approved;
-Task 12 owns that evidence before product surfaces grow. Do not carry the
-legacy budget forward as an assumed replacement allowance.
+The initial renderer contains only window chrome and the minimum workspace
+shell. Feature surfaces that open on demand remain dynamic entries. The
+authoritative budget is `437 KiB` of initial static JavaScript, and the current
+required dynamic-entry set lives in `scripts/check-renderer-chunks.mjs`.
+Change that list or budget only when the ownership of eager shell behavior
+changes, never to make an accidental dependency pass.
 
 ## Implementation Map
 
@@ -120,7 +122,7 @@ legacy budget forward as an assumed replacement allowance.
 | Renderer tree model | `web-src/src/features/workspace/lib/fileTreeModel.ts` (nesting, manual-rank ordering, visible rows), `lib/treeKeyboard.ts` (roving-focus rules), `hooks/useTreeRoving.ts` (row registry and per-row binding) |
 | Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `shared/library-files.ts`, `server/routes/files.ts`, the asynchronous request listing in `server/file-listing.ts`, and bounded selection-time inspection in `server/generic-file-preview.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
-| Focused evidence | Legacy renderer tests remain reference-only under `web-src/`; replacement workspace evidence is not yet implemented. Server evidence remains in `server/__tests__/file-listing.test.ts` and `server/generic-file-preview.test.ts`. |
+| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, `server/generic-file-preview.test.ts`, `e2e/journeys/formats-media.spec.ts`, and `scripts/check-renderer-chunks.mjs` |
 
 The four action hooks are private Seams inside the workspace Module. Do not make
 components depend on them directly; that would create a second transition

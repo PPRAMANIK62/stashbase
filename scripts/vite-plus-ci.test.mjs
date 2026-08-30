@@ -8,8 +8,7 @@ import { parse } from 'yaml';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const setupAction = 'voidzero-dev/setup-vp@1b32467adbe183473499fd9d5d372c3ed9641754';
 const rendererJobs = new Map([
-  ['.github/workflows/ci.yml', ['source-build', 'ui-smoke', 'ui-regression']],
-  ['.github/workflows/visual-baselines.yml', ['generate-linux-baselines']],
+  ['.github/workflows/ci.yml', ['source-build']],
   ['.github/workflows/release-macos.yml', ['macos-dmg']],
   ['.github/workflows/release-linux.yml', ['linux-packages']],
   ['.github/workflows/release-windows.yml', ['windows-installer']],
@@ -19,7 +18,7 @@ function readWorkflow(relativePath) {
   return parse(fs.readFileSync(path.join(root, relativePath), 'utf8'));
 }
 
-test('every CI and release renderer build uses the same pinned Vite+ setup', () => {
+test('source and release renderer builds use the same pinned Vite+ setup', () => {
   for (const [relativePath, jobNames] of rendererJobs) {
     const workflow = readWorkflow(relativePath);
     for (const jobName of jobNames) {

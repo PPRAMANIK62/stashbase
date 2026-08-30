@@ -4,20 +4,6 @@ Implementation contract for how the renderer is styled. Design intent
 (voice, color language, density) lives in `design-docs/visual-style.md`;
 this file records the mechanics a change must respect.
 
-## Supported replacement foundation
-
-`renderer` is monochrome-only. Its current light and dark foundation values are
-grayscale semantic custom properties in `renderer/src/foundation.css`;
-components consume those roles rather than literal color. Hue is not an
-available styling tool until a later approved visual-language decision updates
-the product intent, token contract, and visual evidence together. State must
-remain understandable through text, iconography, shape, or position regardless
-of any future color.
-
-The detailed `web-src` mechanics below remain behavioral reference only and do
-not authorize copying its cyan, amber, status, syntax, or file-type palettes
-into the replacement.
-
 ## Layer model
 
 1. **Semantic theme variables** (`web-src/src/styles/globals.css` `:root`
@@ -115,8 +101,9 @@ into the replacement.
    only for `*.tsx`. `styles.css` now forwards each step
    (`--text-sm: var(--text-sm)`), the same pattern `--radius-*`,
    `--shadow-*` and `--font-*` already use, so the `text-*` utilities,
-   colocated CSS all read one definition. `--ui-font-size` is
-   `var(--text-base)` rather
+   colocated CSS, and `electron/tab-strip-layout-smoke.cjs` — which
+   concatenates globals.css with workspace.css and nothing else — all
+   read one definition. `--ui-font-size` is `var(--text-base)` rather
    than a fourth spelling of 13.
 
    `--spacing` is NOT reachable this way and deliberately stays where it
@@ -499,8 +486,8 @@ into the replacement.
    the primitive pulled Base UI's composite/roving-focus machinery — the
    `Tabs*` and `Composite*` modules plus the `react-dom` and
    `useOpenChangeComplete` chunks they drag behind them — into the initial
-   graph, measured at ~22.7 KB, about 5% of the former eager budget. It bought
-   nothing: unlike the other
+   graph, measured at ~22.7 KB, about 5% of the whole eager budget in
+   `scripts/check-renderer-chunks.mjs`. It bought nothing: unlike the other
    two, this strip already implemented arrow/Home/End/Enter/Space, roving
    tabindex, and select-on-move. So it keeps that keyboard contract locally
    and spells selection `data-active`, the way `ui/tabs.tsx` does, so the
@@ -914,9 +901,8 @@ opens fifty times a day must never feel like it is catching up with them.
 
 ## Icons
 
-`web-src/src/common/components/icons.tsx` is legacy reference material. Icons
-for the replacement require a new owned adapter and generation path; do not
-copy or regenerate this file. The reference icons were
+`web-src/src/common/components/icons.tsx` is generated — run `node scripts/gen-icons.mjs` and
+edit the map in that script, never the paths in the output. Icons are
 inlined from the `@phosphor-icons/core` devDependency rather than imported
 from `@phosphor-icons/react`, which ships six weights per icon and would not
 fit the entry-chunk budget. Phosphor assets are 256-viewBox filled paths, so
@@ -1169,8 +1155,10 @@ cross-feature, not because migrating them was skipped:
   `styles.css`): box-sizing, squircle corners, focus-visible, and the
   reduced-motion policy block — every surface depends on these, not any one
   feature.
-- **Tab strip** (`features/workspace/workspace.css`): legacy reference styling
-  only; replacement layout evidence must exercise the supported renderer.
+- **Tab strip** (`features/workspace/workspace.css`):
+  `electron/tab-strip-layout-smoke.cjs` reads this file raw (by path, bypassing
+  Vite) and asserts layout from it — update that script's file list before
+  moving this CSS again.
 - **Rendered-content typography**: Crepe variable bridge (`.crepe-shell`,
   `features/documents/documents.css`), `.agent-prose`
   (`features/agent-panel/agent-panel.css`), and the JSON value/type classes
@@ -1234,13 +1222,13 @@ deletes its CSS import in the same change.
 | Layer + motion ramps | `--layer-*` / `--motion-*` in `globals.css`; `@utility z-*`, `transition-*`, `origin-anchor` in `styles.css` |
 | Overlay + measure geometry | `--overlay-w-*` / `--overlay-h-*` / `--measure-*` in `globals.css`; `--container-overlay-*` / `--container-measure-*` and `@utility max-h-overlay-*` / `max-w-overlay-fit` in `styles.css` |
 | Pane chrome offsets | `--chrome-top` / `--chrome-banner-h` / `--chrome-top-banner` in `globals.css`; `@utility top-chrome` / `top-chrome-banner` in `styles.css` |
-| Legacy icon reference | `web-src/src/common/components/icons.tsx` (not a supported generator input) |
-| Focused evidence | `scripts/renderer-quality-gates.test.mjs` and `e2e/visual/`; replacement styling evidence is otherwise not yet implemented |
+| Generated icon Adapter | source map in `scripts/gen-icons.mjs` → `web-src/src/common/components/icons.tsx` |
+| Focused evidence | `web-src/src/common/__tests__/renderer-foundation.test.ts`, `scripts/renderer-quality-gates.test.mjs`, `electron/tab-strip-layout-smoke.cjs`, and `e2e/visual/` |
 
 ## Review checklist for styling changes
 
 - No new hex/rgb literals, radii, font sizes, or durations outside the token
-  layer; no `text-[calc(...)]`; replacement surface tints remain monochrome.
+  layer; no `text-[calc(...)]`; surface tints use the accent/status ramps.
 - Stacking names a layer role (`z-menu`, `z-toast`), never a number; spacing
   lands on the ramp; a transition names one of the three motion roles or
   carries a token duration.
