@@ -42,7 +42,7 @@ docs validation must reject incomplete rows at those statuses.
 | Dependency boundaries | Proven | `pnpm test:renderer-architecture` proves graph direction, cycles, feature isolation, layer APIs, legacy isolation, and wire-schema registration against the replacement graph. |
 | Runtime contract validation | Not assessed | Define validated protocol inventory in Phase 1 |
 | Accessibility and keyboard operation | Not assessed | Map rendered and E2E evidence |
-| Theme, scaling, reduced motion | Building | `renderer/src/shared/styling/appearance.test.ts` and `renderer/src/app.test.tsx` prove the bounded appearance attributes and foundation media policy; `pnpm build:storybook` proves the production Tailwind, provider, and stylesheet stack builds in Storybook. Visual direction, representative component states, and browser evidence remain Tasks 10–16. |
+| Theme, scaling, reduced motion | Building | `renderer/src/shared/styling/appearance.test.ts` proves the bounded appearance attributes. The permanent Foundation Introduction story and successful Storybook build exercise the production neutral surface, typography, elevation, motion, provider, and stylesheet stack in both themes. `pnpm test:renderer-styles` proves canonical token ownership and rejects unapproved styling paths. The Task 10 visual direction is approved in `frontend-design.md`; representative primitive states and final browser evidence remain Tasks 12–16. |
 | Initial JavaScript and lazy entries | Not assessed | Record isolated replacement baseline in Phase 0 |
 | Startup and interaction performance | Not assessed | Record measurement method in Phase 0 |
 | Electron titlebar and window lifecycle | Not assessed | Map smoke and contract evidence |

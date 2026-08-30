@@ -11,9 +11,9 @@ Tailwind entry, imports the production global stylesheet, and mounts the same
 renderer provider composition. Its bounded controls apply the
 production `system`/`light`/`dark` theme and `small`/`default`/`large` interface
 scale attributes. Forced colors and reduced motion remain real browser media
-features in the shared stylesheet rather than story-only variants. The current
-foundation story proves the workbench without pre-empting the visual studies in
-10 or the canonical token system in 11.
+features in the shared stylesheet rather than story-only variants. The durable
+Foundation Introduction story now demonstrates the approved visual language
+through the production token and provider stack.
 
 Evidence: `pnpm test:renderer`, `pnpm build:web`, `pnpm build:storybook`,
 `pnpm test:toolchain`, and `pnpm test:package-inputs`.
@@ -22,22 +22,52 @@ Evidence: `pnpm test:renderer`, `pnpm build:web`, `pnpm build:storybook`,
 
 **Blocked by:** 09.
 
+**Status:** Complete.
+
 Compare real shell, Workbench, Agent, overlay, theme, and narrow-window studies
 and approve one StashBase-specific monochrome visual foundation. Chromatic
 color requires a later approved decision if a concrete need emerges.
+
+The approved **Continuous Workbench** direction uses graphite-and-paper tonal
+planes, native interface typography, compact bordered chrome, and one
+signature spatial transition: the same Agent session recomposes from the main
+stage into its document-side dock. Production-backed Storybook studies covered
+the Agent-first workspace, document and Agent composition, Settings, light and
+dark themes, and narrow-window prioritization. Those temporary studies were
+removed after approval; the durable direction lives in `frontend-design.md`.
+Task 11 owns promotion of the approved values into the complete canonical
+token and enforcement system.
+
+Evidence: `pnpm typecheck:web`, `pnpm lint:web`, `pnpm test:renderer`,
+`pnpm build:web`, `pnpm build:storybook`, manual Storybook interaction, and
+1440×900 plus 700×760 Chromium inspection with no page errors or viewport
+overflow. E2E and permanent visual evidence remain deferred by the migration
+staging policy.
 
 ## 11 — Implement foundation and semantic tokens
 
 **Blocked by:** 10.
 
-**Status:** In progress.
+**Status:** Complete.
 
 The renderer is initialized as a Base UI shadcn workspace using the current
 `base-nova` registry convention, a renderer-local `@/` alias,
 `src/globals.css`, and the standard Tailwind v4 semantic color and radius
 vocabulary. All provisional token values remain monochrome. Final StashBase
-values and literal/token enforcement remain blocked on the approved visual
-direction in 10.
+values are now grounded in the approved neutral substrate ladder. Named
+surface, typography, radius, opacity, shadow-edge, elevation, easing, and
+duration roles are exposed through Tailwind. `renderer/style-contract.json`
+assigns every canonical CSS custom property to one foundation, semantic, or
+Tailwind role, while `scripts/check-renderer-styles.mjs` rejects undeclared
+tokens, unapproved declarations, raw colors and palette utilities, arbitrary
+visual utilities, inline style props, component stylesheets, and unnamed
+visual roles. The gate runs through renderer lint, test, and build commands.
+The permanent Foundation Introduction story consumes these production roles
+without duplicating their values in TypeScript.
+
+Evidence: `pnpm test:renderer-styles`, `pnpm format:web`, `pnpm lint:web`,
+`pnpm test:renderer`, `pnpm typecheck:web`, `pnpm build:web`, and
+`pnpm build:storybook`.
 
 Define canonical CSS tokens, expose semantic roles through Tailwind, and reject
 raw visual literals and undeclared tokens.
