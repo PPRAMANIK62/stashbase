@@ -12,7 +12,7 @@ Deliver:
 - approved goals, non-goals, and technology defaults;
 - pinned Vite+ replacement toolchain with resolved-tool inventory, task graph,
   CI installation, and version-control rollback evidence;
-- an independently buildable `web-next` workspace with replacement-only
+- an independently buildable `renderer` workspace with replacement-only
   formatting, lint, test, typecheck, build, and cross-tree boundary checks;
 - approved monochrome tonal system, typography, density, spatial composition,
   and restrained signature interaction expressed as foundation and semantic
@@ -29,7 +29,7 @@ Deliver:
 
 Exit when the maintainer has approved the replacement architecture and every
 new durable behavior, boundary, trust, or access decision; replacement
-enforcement runs in CI; Vite+ is exact and lockfile-pinned for `web-next`; and
+enforcement runs in CI; Vite+ is exact and lockfile-pinned for `renderer`; and
 no journey relies solely on undocumented legacy behavior.
 
 ## Phase 1 — Foundation and Shell
@@ -134,7 +134,7 @@ remaining renderer responsibilities in Journey Coverage are accounted for.
 
 Deliver:
 
-- confirmation that production and release paths target only `web-next`;
+- confirmation that production and release paths target only `renderer`;
 - complete validation and accepted performance comparison;
 - updated Shipping design, architecture, contracts, and Journey Coverage; and
 - version-control and release rollback evidence that does not require a live

@@ -1,6 +1,6 @@
 export function App() {
   return (
-    <main className="foundation" data-foundation="web-next">
+    <main className="foundation" data-foundation="renderer">
       <div className="foundation__rail" aria-hidden="true" />
       <section className="foundation__content" aria-labelledby="foundation-title">
         <p className="foundation__status">Replacement renderer · foundation active</p>

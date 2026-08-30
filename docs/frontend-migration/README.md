@@ -24,7 +24,7 @@ contract, compatibility, implementation, and evidence updates.
 
 The branch retains `web-src/` only while behavior is being discovered, but no
 migration task imports it, builds it, tests it, reformats it, or moves its
-commands onto the replacement toolchain. `web-next/` owns the stable frontend
+commands onto the replacement toolchain. `renderer/` owns the stable frontend
 commands, production output, and release-blocking evidence from its initial
 scaffold.
 

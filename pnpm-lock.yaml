@@ -219,7 +219,7 @@ importers:
         specifier: 1.18.0
         version: 1.18.0
 
-  web-next:
+  renderer:
     dependencies:
       react:
         specifier: 19.2.6

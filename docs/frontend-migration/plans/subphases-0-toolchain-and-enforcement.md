@@ -18,10 +18,10 @@ its machine-specific installation path.
 
 **Status:** Complete.
 
-Create `web-next` as an independently buildable workspace package with strict
+Create `renderer` as an independently buildable workspace package with strict
 TypeScript, React, Vite+, Vitest, Oxlint, Oxfmt, deterministic browser-test
 configuration, Oxlint-enforced kebab-case source names, and stable frontend
-commands. A repository check rejects any `web-next` reference to the inert
+commands. A repository check rejects any `renderer` reference to the inert
 `web-src` tree. Stable production commands now target only the replacement.
 
 Evidence: `pnpm format:web`, `pnpm lint:web`, `pnpm test:renderer`,
@@ -31,9 +31,20 @@ Evidence: `pnpm format:web`, `pnpm lint:web`, `pnpm test:renderer`,
 
 **Blocked by:** 02.
 
-Pin CI installation, verify the resolved inventory, run replacement checks,
-declare safe cache policy, and prove packaging remains on the Shipping input
-until the final atomic switch.
+**Status:** Complete.
+
+Every CI and release job that builds the renderer uses Vite+ 0.3.0 through the
+same setup Action commit while leaving Node, pnpm installation, and the pnpm
+store cache under their existing owners. Vite+ task-result caching is disabled
+repository-wide. The three-platform source job verifies the resolved inventory
+and runs the isolated format, lint, test, typecheck, build, boundary, and
+package-input gates before the broader application matrix. Packaging evidence
+proves the supported `renderer` workspace writes the only renderer input at
+`dist/renderer`; inert `web-src` is not an input.
+
+Evidence: `pnpm test:toolchain`, `pnpm test:package-inputs`,
+`pnpm format:web`, `pnpm lint:web`, `pnpm test:renderer`,
+`pnpm typecheck:web`, and `pnpm build:web`.
 
 ## 04 — Retired: legacy application proof
 
@@ -50,7 +61,7 @@ Vite+. Product contracts and Shipping evidence still inform replacement slices.
 
 **Status:** Retired by the approved single-PR replacement strategy.
 
-Oxfmt applies to `web-next` from its creation. Legacy and unrelated repository
+Oxfmt applies to `renderer` from its creation. Legacy and unrelated repository
 files receive no formatting baseline.
 
 ## 06 — Folded into the isolated replacement scaffold

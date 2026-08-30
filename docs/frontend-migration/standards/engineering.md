@@ -221,7 +221,7 @@ required CI gates. Tests receive no blanket boundary exemptions; intentional
 test access uses a narrow named entry point. Styling scans reject raw visual
 literals, arbitrary visual utilities, inline styles, and undeclared tokens.
 
-`web-next` does not inherit legacy source, aliases, CSS, or configuration.
+`renderer` does not inherit legacy source, aliases, CSS, or configuration.
 Dependencies are exact, responsibility-owned, and bundle/privilege reviewed;
 runtime CDN assets, registry fetches, and remote code are forbidden.
 
@@ -234,11 +234,14 @@ tasks rather than disappearing behind a generic toolchain check.
 
 - Stable frontend scripts prove only the isolated replacement from its initial
   scaffold; no supported command builds or validates `web-src`.
-- Oxfmt applies to `web-next` from creation and does not reformat legacy or
+- Oxfmt applies to `renderer` from creation and does not reformat legacy or
   unrelated repository files.
-- Cache only deterministic tasks with complete declared inputs, outputs,
-  versions, and environment. Native, E2E, visual, packaging, signing, release,
-  credentialed, and side-effecting tasks are never cached.
-- CI pins installation by commit and verifies the resolved tool inventory.
+- Vite+ task-result caching is disabled repository-wide. CI may reuse pnpm's
+  content-addressed dependency store, but native, E2E, visual, packaging,
+  signing, release, credentialed, and side-effecting tasks never restore task
+  outputs.
+- CI pins the Vite+ setup Action by commit, requests the exact version without
+  taking over Node or dependency installation, and verifies the resolved tool
+  inventory.
 - Vite+ is the sole accepted toolchain after its focused migration; rollback is
   version-control reversion, not permanent dual tooling.

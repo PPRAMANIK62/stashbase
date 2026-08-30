@@ -22,7 +22,7 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
-    outDir: '../web/dist-app',
+    outDir: '../dist/renderer',
     emptyOutDir: true,
     manifest: true,
   },

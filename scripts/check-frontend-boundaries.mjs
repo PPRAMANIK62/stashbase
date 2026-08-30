@@ -20,7 +20,7 @@ function sourceFiles(root) {
 
 export function findFrontendBoundaryViolations(root = repositoryRoot) {
   const checks = [
-    { directory: 'web-next', forbidden: 'web-src' },
+    { directory: 'renderer', forbidden: 'web-src' },
   ];
 
   return checks.flatMap(({ directory, forbidden }) => (

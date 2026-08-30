@@ -64,7 +64,7 @@ before opening, and sessions install explicit permission handlers.
 
 ## Module Shape
 
-The replacement starts in a sibling `web-next/` tree during migration. Its
+The replacement starts in a sibling `renderer/` tree during migration. Its
 source follows this shape:
 
 ```text
@@ -551,7 +551,7 @@ titlebar geometry, overlay layering, and Linux visual baselines.
 React and TypeScript remain the application foundation. Vite+ is the pinned
 replacement toolchain and unified entry for Vite/Rolldown builds, Vitest,
 Oxlint, formatting, and task orchestration. Its aliases are repository-level
-package-resolution policy, but its frontend tasks apply only to `web-next`.
+package-resolution policy, but its frontend tasks apply only to `renderer`.
 pnpm remains the underlying lockfile-backed package manager.
 
 Choose supporting libraries only after the relevant ownership model is
@@ -559,7 +559,7 @@ defined. In particular, a query library may implement server-state mechanics
 but does not own domain transitions; a form library may implement interaction
 mechanics but does not own settings policy.
 
-`web-next/` is an independent workspace package that owns Vite+, strict
+`renderer/` is an independent workspace package that owns Vite+, strict
 TypeScript, Vitest, Storybook, Tailwind, entry, and architecture configuration.
 Stable frontend commands validate and build it from the initial scaffold. No
 runtime or user setting selects between renderers, and `web-src/` is inert
@@ -581,21 +581,22 @@ affected matrix. Beta status is accepted deliberately and does not justify
 floating versions or bypassing repository-specific checks.
 
 Vite+ adoption pins the repository tool inventory and then starts with the
-isolated `web-next` package. Oxfmt applies to replacement files from their
+isolated `renderer` package. Oxfmt applies to replacement files from their
 creation; no repository-wide baseline reformats legacy, generated, vendored,
 fixture, snapshot, or intentionally literal files. Stable frontend commands
-target `web-next` immediately; direct `vp` remains available for focused
+target `renderer` immediately; direct `vp` remains available for focused
 diagnosis.
 
-Vite+ caching is opt-in for deterministic tasks whose inputs, outputs, tool
-versions, and relevant environment are complete. Electron smoke, E2E, visual,
+Vite+ task-result caching is disabled repository-wide. CI may reuse pnpm's
+content-addressed dependency store, but Electron smoke, E2E, visual,
 native/runtime, packaging, signing, release, credentialed, and undeclared-side-
-effect tasks never use cached results.
+effect tasks never restore task outputs.
 
 The exact local package is authoritative. The committed expected-toolchain
 record preserves the complete reported graph except for the machine-specific
-local package path. CI pins the official setup action by commit SHA, requests
-the chosen version, and runs the same local inventory comparison. Mutable
+local package path. CI pins the official setup Action by commit SHA, requests
+the chosen version without delegating Node or dependency installation, and
+runs the same local inventory comparison. Mutable
 installers and `latest` are forbidden in CI. The final PR leaves no production
 Vite/Vite+ or renderer selector; rollback is version-control or release
 reversion of the complete migration.

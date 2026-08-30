@@ -42,7 +42,7 @@ test('local renderer audit uses the same reviewed ShadScan floor as CI', () => {
 
   assert.equal(
     pkg.scripts['audit:renderer'],
-    'npx --yes @shadscan/cli@0.17.0 web-next --json --no-interactive --fail-under 45',
+    'npx --yes @shadscan/cli@0.17.0 renderer --json --no-interactive --fail-under 45',
   );
   assert.equal(
     pkg.scripts['test:renderer-quality-gates'],

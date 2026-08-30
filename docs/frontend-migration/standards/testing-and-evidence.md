@@ -95,7 +95,7 @@ replacement contract differs.
 
 ## Migration Test Harness
 
-The renderer test harness and stable E2E/build path target `web-next` directly;
+The renderer test harness and stable E2E/build path target `renderer` directly;
 there is no renderer selector and product tests do not fork between
 implementations. `web-src` tests are reference material outside the supported
 test inventory.
@@ -106,8 +106,10 @@ inherited `ELECTRON_RUN_AS_NODE`. Worktrees exercising indexing or sync provide
 
 Replacement CI records and checks the pinned Vite+ resolved-tool inventory and
 runs the isolated format, lint, test, typecheck, build, and boundary gates.
-Cache is disabled for Electron, E2E, visual, native/runtime, packaging,
-signing, release, credentialed, and side-effecting evidence.
+Vite+ task-result caching is disabled for all repository tasks. CI may reuse
+pnpm's content-addressed dependency store; Electron, E2E, visual,
+native/runtime, packaging, signing, release, credentialed, and side-effecting
+evidence never restores task outputs.
 
 ## Slice Gate
 

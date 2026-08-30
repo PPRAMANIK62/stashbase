@@ -1,5 +1,5 @@
 {
-  "name": "@stashbase/web-next",
+  "name": "@stashbase/renderer",
   "version": "0.0.0",
   "private": true,
   "type": "module",

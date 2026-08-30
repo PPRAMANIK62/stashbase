@@ -27,9 +27,17 @@ before its metadata and payloads coexist.
 
 ## Source CI
 
-- Stable renderer build, lint, test, and typecheck tasks target `web-next` only.
+- Stable renderer build, lint, test, and typecheck tasks target `renderer` only.
   `web-src` is inert reference material and is not a source-CI or packaging
   input.
+- Every source, journey, baseline-generation, and release job that builds the
+  renderer uses the same commit-pinned Vite+ setup, requests version 0.3.0,
+  and leaves Node and dependency installation to their existing steps. Vite+
+  task-result caching is disabled; only the package manager's content-addressed
+  dependency store is reused.
+- The renderer build writes `dist/renderer`, and that directory is the sole
+  renderer input served by the local server and included by desktop packaging.
+  Package-input tests fail if the inert legacy tree becomes an input.
 - The macOS, Windows, and Linux source matrix covers type/build gates plus
   release/update/signing contracts, config/account, scheduler, cancellation,
   retrieval, renderer, server, MCP, Python, and real Electron lifecycle
@@ -158,7 +166,7 @@ credential-free and does not run this probabilistic check.
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
 | Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs` (including the explicit OpenCode resource version probe) and platform release verifiers |
-| Focused evidence | `scripts/check-vite-plus-toolchain.mjs`, `scripts/check-frontend-boundaries.mjs`, `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
+| Focused evidence | `scripts/check-vite-plus-toolchain.mjs`, `scripts/vite-plus-ci.test.mjs`, `scripts/check-frontend-boundaries.mjs`, `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
 
 ## Release Runbook
 

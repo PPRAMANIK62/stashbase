@@ -26,6 +26,36 @@ function cjsFiles(directory) {
   });
 }
 
+test('the supported renderer build is the only packaged renderer input', () => {
+  const rendererPkg = JSON.parse(
+    fs.readFileSync(path.join(root, 'renderer', 'package.json'), 'utf8'),
+  );
+  const rendererConfig = fs.readFileSync(path.join(root, 'renderer', 'vite.config.ts'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'server', 'index.ts'), 'utf8');
+
+  assert.equal(rendererPkg.name, '@stashbase/renderer');
+  for (const scriptName of [
+    'dev:web',
+    'build:web',
+    'format:web',
+    'lint:web',
+    'test:renderer',
+    'typecheck:web',
+  ]) {
+    assert.match(pkg.scripts?.[scriptName] ?? '', /@stashbase\/renderer/);
+    assert.doesNotMatch(pkg.scripts?.[scriptName] ?? '', /web-src/);
+  }
+
+  assert.match(rendererConfig, /outDir:\s*['"]\.\.\/dist\/renderer['"]/);
+  assert.ok(packagedFiles.includes('dist/renderer/**/*'));
+  assert.ok(!packagedFiles.some((entry) => typeof entry === 'string' && entry.includes('web-src')));
+  assert.ok(
+    !packagedFiles.some((entry) => typeof entry === 'string' && entry.includes('web/dist-app')),
+  );
+  assert.match(server, /path\.resolve\(APP_ROOT, ['"]dist['"], ['"]renderer['"]\)/);
+  assert.doesNotMatch(server, /web\/dist-app/);
+});
+
 test('bundled Start Here filenames preserve the intended reading order', () => {
   const files = fs.readdirSync(path.join(root, 'assets', 'builtin-library'))
     .filter((name) => !name.startsWith('.'))

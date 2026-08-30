@@ -1,3 +1,7 @@
 export default {
-  defaultPackage: './web-next',
+  defaultPackage: './renderer',
+  run: {
+    // CI may restore pnpm's content-addressed store, but task outputs stay fresh.
+    cache: false,
+  },
 };

@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "web-next/src/foundation.css",
+    "css": "renderer/src/foundation.css",
     "baseColor": "zinc",
     "cssVariables": true,
     "prefix": ""

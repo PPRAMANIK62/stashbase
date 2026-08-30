@@ -20,11 +20,11 @@ const repoRoot = process.cwd();
 const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const commands = Object.values(pkg.scripts ?? {});
 const replacementViteConfig = fs.readFileSync(
-  path.join(repoRoot, 'web-next', 'vite.config.ts'),
+  path.join(repoRoot, 'renderer', 'vite.config.ts'),
   'utf8',
 );
 
-const SCAN_ROOTS = ['server', 'electron', 'shared', 'mcp', 'scripts', 'web-next', 'e2e'];
+const SCAN_ROOTS = ['server', 'electron', 'shared', 'mcp', 'scripts', 'renderer', 'e2e'];
 const TEST_FILE = /\.test\.(ts|tsx|cjs|mjs)$/;
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-app', 'runtime']);
 
@@ -58,10 +58,10 @@ const globMatchers = tokens
       .replace(/\u0000/g, '(?:[^/]+/)*')}$`,
   ));
 
-// Workspace-local Vitest includes are relative to web-next rather than the
+// Workspace-local Vitest includes are relative to renderer rather than the
 // repository root, so normalize them before matching the shared inventory.
 for (const match of replacementViteConfig.matchAll(/['"](src\/[^'"]*\*[^'"]*\.test\.(?:ts|tsx))['"]/g)) {
-  const token = `web-next/${match[1]}`;
+  const token = `renderer/${match[1]}`;
   globMatchers.push(new RegExp(
     `^${token
       .replace(/[.+^${}()|[\]\\]/g, '\\$&')

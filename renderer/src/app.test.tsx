@@ -12,7 +12,7 @@ describe('replacement foundation', () => {
     const markup = renderToStaticMarkup(<App />);
 
     expect(markup).toContain('<main');
-    expect(markup).toContain('data-foundation="web-next"');
+    expect(markup).toContain('data-foundation="renderer"');
     expect(markup).toContain('Replacement renderer · foundation active');
     expect(markup.match(/<main/g)).toHaveLength(1);
   });

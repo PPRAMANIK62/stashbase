@@ -6,8 +6,8 @@ this file records the mechanics a change must respect.
 
 ## Supported replacement foundation
 
-`web-next` is monochrome-only. Its current light and dark foundation values are
-grayscale semantic custom properties in `web-next/src/foundation.css`;
+`renderer` is monochrome-only. Its current light and dark foundation values are
+grayscale semantic custom properties in `renderer/src/foundation.css`;
 components consume those roles rather than literal color. Hue is not an
 available styling tool until a later approved visual-language decision updates
 the product intent, token contract, and visual evidence together. State must

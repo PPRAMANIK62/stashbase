@@ -157,7 +157,7 @@ const APP_ROOT = process.env.STASHBASE_APP_ROOT
 const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
   ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
   : APP_ROOT;
-const WEB_BUILD_DIR = path.resolve(APP_ROOT, 'web', 'dist-app');
+const WEB_BUILD_DIR = path.resolve(APP_ROOT, 'dist', 'renderer');
 const PDFJS_DIST_DIR = path.resolve(APP_ROOT, 'node_modules', 'pdfjs-dist');
 
 // One-time migration from the old global-provider schema. Idempotent.
@@ -305,7 +305,7 @@ if (!DEV_VITE) {
     });
   } else {
     throw new Error(
-      `web/dist-app/index.html not found. Run \`pnpm build:web\` first.`,
+      `dist/renderer/index.html not found. Run \`pnpm build:web\` first.`,
     );
   }
 }

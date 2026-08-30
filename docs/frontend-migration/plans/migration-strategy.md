@@ -2,19 +2,19 @@
 
 ## Approach
 
-Build the replacement in an isolated `web-next` workspace, reimplement complete
+Build the replacement in an isolated `renderer` workspace, reimplement complete
 journey slices against approved product and replacement-architecture contracts,
 with stable frontend commands targeting it from the initial scaffold. The old
 tree remains inert reference material. This is a greenfield replacement, not a
 dual frontend or an implementation-parity exercise.
 
 ```text
-Supported: web-next ── journey slices satisfy contracts ─→ Electron/server
+Supported: renderer ── journey slices satisfy contracts ─→ Electron/server
 Reference: web-src ── behavior discovery only; never built or imported
 ```
 
 There is no renderer selector. Stable build, dev, lint, test, typecheck,
-packaging, and release evidence target `web-next` even while journey work is
+packaging, and release evidence target `renderer` even while journey work is
 incomplete. `web-src` is excluded from supported commands and test inventory.
 
 The replacement does not embed or import legacy components, CSS, stores,
@@ -42,7 +42,7 @@ compatibility path, rollback, and evidence. Product outcomes and trust
 requirements may change only through their existing maintainer-owned approval
 route.
 
-Do not import implementation modules from `web-src/` into `web-next/`. Reuse a
+Do not import implementation modules from `web-src/` into `renderer/`. Reuse a
 shared asset, type, or utility only after moving it to an intentional stable
 owner with tests. Copying code into the replacement requires the same review as
 new code, must be rewritten to satisfy the new standards, and must not carry
@@ -57,7 +57,7 @@ forward an architectural pattern merely because it already exists.
 4. Fill the capability-ledger row with approved contracts, evidence, decisions,
    and gaps.
 5. Define the feature's domain, application Interface, ports, and recovery.
-6. Implement the smallest end-to-end usable slice in `web-next/`.
+6. Implement the smallest end-to-end usable slice in `renderer/`.
 7. Add focused evidence while implementing.
 8. Run the slice gate and the mapped journey evidence.
 9. Update affected docs and mark the ledger with evidence, not confidence.
@@ -83,18 +83,18 @@ typical sequence is:
 ```text
 chore(toolchain): pin the replacement Vite+ inventory
 docs(frontend): define migration architecture and gates
-feat(frontend-next): establish bootstrap and platform adapters
-feat(frontend-next): migrate workspace journey
-feat(frontend-next): migrate document workbench
-feat(frontend-next): migrate search and preparation
-feat(frontend-next): migrate agent journeys
+feat(renderer): establish bootstrap and platform adapters
+feat(renderer): migrate workspace journey
+feat(renderer): migrate document workbench
+feat(renderer): migrate search and preparation
+feat(renderer): migrate agent journeys
 refactor(frontend): atomically replace the production renderer
 ```
 
 This is illustrative grouping, not a release schedule. Leave work uncommitted
 until the maintainer requests commits.
 
-The Vite+ inventory precedes `web-next` scaffolding and applies to replacement
+The Vite+ inventory precedes `renderer` scaffolding and applies to replacement
 tasks. Stable frontend scripts target only the replacement from its scaffold.
 Rollback reverts the complete migration or release; it does not depend on dual
 toolchains.
