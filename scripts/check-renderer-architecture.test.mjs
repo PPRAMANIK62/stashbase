@@ -45,6 +45,11 @@ function fixture(context) {
     'renderer/renderer-architecture.json',
     `${JSON.stringify(architectureDeclaration, null, 2)}\n`,
   );
+  write(
+    root,
+    'renderer/tsconfig.json',
+    `${JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@/*': ['./src/*'] } } })}\n`,
+  );
   return root;
 }
 
@@ -105,7 +110,7 @@ test('dependency-cruiser accepts inward dependencies inside one feature', (conte
   write(
     root,
     'renderer/src/features/workspace/application/read-model.ts',
-    "import { model } from '../domain/model';\nexport { model };\n",
+    "import { model } from '@/features/workspace/domain/model';\nexport { model };\n",
   );
   write(
     root,

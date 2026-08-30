@@ -1,3 +1,6 @@
+const path = require('node:path');
+
+const rendererTsConfig = path.resolve(process.cwd(), 'renderer/tsconfig.json');
 const electronRuntimePaths = [
   '^electron(?:/|$)',
   '^node_modules/[.]pnpm/[^/]+/node_modules/electron(?:/|$)',
@@ -162,6 +165,9 @@ module.exports = {
     },
   ],
   options: {
+    tsConfig: {
+      fileName: rendererTsConfig,
+    },
     doNotFollow: { path: 'node_modules' },
     enhancedResolveOptions: {
       exportsFields: ['exports'],

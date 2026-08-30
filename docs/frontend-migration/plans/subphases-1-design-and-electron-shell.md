@@ -7,8 +7,8 @@
 **Status:** Complete.
 
 Storybook now builds through the replacement's Vite configuration and real
-Tailwind entry, imports the production foundation stylesheet, and mounts the
-same renderer provider composition. Its bounded controls apply the
+Tailwind entry, imports the production global stylesheet, and mounts the same
+renderer provider composition. Its bounded controls apply the
 production `system`/`light`/`dark` theme and `small`/`default`/`large` interface
 scale attributes. Forced colors and reduced motion remain real browser media
 features in the shared stylesheet rather than story-only variants. The current
@@ -29,6 +29,15 @@ color requires a later approved decision if a concrete need emerges.
 ## 11 — Implement foundation and semantic tokens
 
 **Blocked by:** 10.
+
+**Status:** In progress.
+
+The renderer is initialized as a Base UI shadcn workspace using the current
+`base-nova` registry convention, a renderer-local `@/` alias,
+`src/globals.css`, and the standard Tailwind v4 semantic color and radius
+vocabulary. All provisional token values remain monochrome. Final StashBase
+values and literal/token enforcement remain blocked on the approved visual
+direction in 10.
 
 Define canonical CSS tokens, expose semantic roles through Tailwind, and reject
 raw visual literals and undeclared tokens.

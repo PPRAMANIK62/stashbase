@@ -36,7 +36,15 @@ export function resolveRendererAppearance(
   };
 }
 
-export function applyRendererAppearance(root: HTMLElement, appearance: RendererAppearance): void {
+export function applyRendererAppearance(
+  root: HTMLElement,
+  appearance: RendererAppearance,
+  prefersDark = false,
+): void {
   root.dataset.theme = appearance.theme;
   root.dataset.uiScale = appearance.interfaceScale;
+  root.classList.toggle(
+    'dark',
+    appearance.theme === 'dark' || (appearance.theme === 'system' && prefersDark),
+  );
 }

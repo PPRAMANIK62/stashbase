@@ -1,7 +1,8 @@
 import type { Decorator, Preview } from '@storybook/react-vite';
 
 import { AppProviders } from '../src/app/composition/app-providers';
-import '../src/foundation.css';
+
+import '../src/globals.css';
 import {
   applyRendererAppearance,
   rendererInterfaceScales,
@@ -13,6 +14,7 @@ const withRendererEnvironment: Decorator = (Story, context) => {
   applyRendererAppearance(
     document.documentElement,
     resolveRendererAppearance(context.globals.theme, context.globals.interfaceScale),
+    window.matchMedia('(prefers-color-scheme: dark)').matches,
   );
 
   return (

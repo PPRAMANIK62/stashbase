@@ -1,11 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
+
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vite-plus/test';
 
 import { App } from './app';
 
-const foundationCss = fs.readFileSync(path.resolve(process.cwd(), 'src/foundation.css'), 'utf8');
+const globalCss = fs.readFileSync(path.resolve(process.cwd(), 'src/globals.css'), 'utf8');
+const shadcnConfig = JSON.parse(
+  fs.readFileSync(path.resolve(process.cwd(), 'components.json'), 'utf8'),
+) as {
+  style: string;
+  tailwind: { baseColor: string; css: string; cssVariables: boolean };
+};
 const browserEntry = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf8');
 
 describe('replacement foundation', () => {
@@ -26,27 +33,47 @@ describe('replacement foundation', () => {
 });
 
 describe('replacement color policy', () => {
-  it('keeps every foundation hex value monochrome', () => {
-    const colors = [...foundationCss.matchAll(/#([\da-f]{2})([\da-f]{2})([\da-f]{2})/gi)];
+  it('keeps every OKLCH token monochrome', () => {
+    const chromaValues = [...globalCss.matchAll(/oklch\(\s*[\d.]+\s+([\d.]+)/gi)].map(
+      ([, chroma]) => Number(chroma),
+    );
 
-    expect(colors.length).toBeGreaterThan(0);
-    for (const [, red, green, blue] of colors) {
-      expect(new Set([red, green, blue]).size).toBe(1);
+    expect(chromaValues.length).toBeGreaterThan(0);
+    for (const chroma of chromaValues) {
+      expect(chroma).toBe(0);
     }
   });
 });
 
 describe('replacement environment policy', () => {
-  it('uses Tailwind and preserves real operating-system media behavior', () => {
-    expect(foundationCss).toContain("@import 'tailwindcss'");
-    expect(foundationCss).toContain('@media (prefers-color-scheme: dark)');
-    expect(foundationCss).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(foundationCss).toContain('@media (forced-colors: active)');
+  it('uses the shadcn Tailwind v4 entry and semantic token convention', () => {
+    expect(globalCss).toContain("@import 'tailwindcss'");
+    expect(globalCss).toContain("@import 'shadcn/tailwind.css'");
+    expect(globalCss).toContain('@theme inline');
+    expect(globalCss).toContain('--color-background: var(--background)');
+    expect(globalCss).toContain('--color-sidebar: var(--sidebar)');
+  });
+
+  it('preserves real operating-system media behavior', () => {
+    expect(globalCss).toContain('@media (prefers-color-scheme: dark)');
+    expect(globalCss).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(globalCss).toContain('@media (forced-colors: active)');
   });
 
   it('defines every bounded interface-scale state', () => {
     for (const scale of ['small', 'large']) {
-      expect(foundationCss).toContain(`:root[data-ui-scale='${scale}']`);
+      expect(globalCss).toContain(`:root[data-ui-scale='${scale}']`);
     }
+  });
+
+  it('routes the Base UI shadcn registry to the renderer globals entry', () => {
+    expect(shadcnConfig).toMatchObject({
+      style: 'base-nova',
+      tailwind: {
+        baseColor: 'neutral',
+        css: 'src/globals.css',
+        cssVariables: true,
+      },
+    });
   });
 });

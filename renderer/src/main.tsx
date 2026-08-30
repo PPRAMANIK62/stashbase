@@ -2,7 +2,8 @@ import { createRoot } from 'react-dom/client';
 
 import { App } from './app';
 import { AppProviders } from './app/composition/app-providers';
-import './foundation.css';
+
+import './globals.css';
 
 const root = document.getElementById('root');
 
