@@ -2,9 +2,8 @@
 
 const path = require('node:path');
 const crypto = require('node:crypto');
-// Shared with the renderer (web-src/src/lib/externalLink.ts) so the Help
-// menu and the sidebar's Discord button can never point at different
-// invites. JSON, because this file runs unbuilt and cannot require a .ts.
+// Shared JSON keeps native and renderer surfaces on one external-link source;
+// this file runs unbuilt and cannot require a .ts module.
 const LINKS = require('../shared/links.json');
 
 const WINDOW_ID_ARG_PREFIX = '--stashbase-window-id=';

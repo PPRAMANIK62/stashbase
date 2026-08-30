@@ -2,34 +2,25 @@
 
 ## Approach
 
-Build the replacement beside the current renderer, reimplement complete
+Build the replacement in an isolated `web-next` workspace, reimplement complete
 journey slices against approved product and replacement-architecture contracts,
-switch the production entry after those contracts are proven, and then delete
-the legacy tree. This is a greenfield replacement with a controlled cutover,
-not a permanent dual frontend or an implementation-parity exercise.
+with stable frontend commands targeting it from the initial scaffold. The old
+tree remains inert reference material. This is a greenfield replacement, not a
+dual frontend or an implementation-parity exercise.
 
 ```text
-legacy web-src ────────────────┐
-                              ├─ selectable build/test entry ─→ Electron/server
-replacement web-next ─────────┘
-                    │
-                    └─ journey slices satisfy approved contracts one at a time
+Supported: web-next ── journey slices satisfy contracts ─→ Electron/server
+Reference: web-src ── behavior discovery only; never built or imported
 ```
 
-The selector must be explicit, deterministic, local to build/test plumbing,
-and absent from product state. It must not create two server APIs, preference
-formats, or Electron protocols.
+There is no renderer selector. Stable build, dev, lint, test, typecheck,
+packaging, and release evidence target `web-next` even while journey work is
+incomplete. `web-src` is excluded from supported commands and test inventory.
 
-One window always runs one complete renderer entry. The replacement does not
-embed legacy components, CSS, stores, or bundles; unfinished capabilities use
-explicit development gates rather than cross-renderer composition.
-
-After `web-next` is scaffolded, canonical typecheck and architecture commands
-always include both trees. Dedicated legacy/next lint, build, and renderer-test
-commands remain for diagnosis; canonical lint runs both, while canonical build
-produces the selected production renderer and verifies the replacement during
-coexistence. Storybook builds in CI but is never packaged. Cutover changes the
-canonical production target rather than renaming the evidence suite.
+The replacement does not embed or import legacy components, CSS, stores,
+configuration, or bundles. `web-src` is read-only behavioral evidence while the
+branch is developed; migration tasks do not move, reformat, lint, or modernize
+it. Storybook builds in CI once introduced but is never packaged.
 
 ## Compatibility Boundary
 
@@ -86,57 +77,47 @@ changes. A secondary worktree running sync/index journeys must link a working
 `python/.venv.nosync` or run `pnpm setup:python`; never commit the environment
 or symlink.
 
-Keep commits independently reviewable. A typical sequence is:
+Keep commits independently reviewable inside the single migration PR. A
+typical sequence is:
 
 ```text
-chore(toolchain): migrate repository tasks to pinned Vite+
-style: establish the Oxfmt formatting baseline
+chore(toolchain): pin the replacement Vite+ inventory
 docs(frontend): define migration architecture and gates
 feat(frontend-next): establish bootstrap and platform adapters
 feat(frontend-next): migrate workspace journey
 feat(frontend-next): migrate document workbench
 feat(frontend-next): migrate search and preparation
 feat(frontend-next): migrate agent journeys
-refactor(frontend): switch production renderer entry
-refactor(frontend): remove legacy renderer
+refactor(frontend): atomically replace the production renderer
 ```
 
 This is illustrative grouping, not a release schedule. Leave work uncommitted
 until the maintainer requests commits.
 
-The Vite+ change precedes `web-next` scaffolding and proves the unchanged
-Shipping application. Existing `pnpm` scripts stay as stable wrappers. Once
-accepted, no permanent Vite/Vite+ selector remains; rollback reverts that
-focused change.
+The Vite+ inventory precedes `web-next` scaffolding and applies to replacement
+tasks. Stable frontend scripts target only the replacement from its scaffold.
+Rollback reverts the complete migration or release; it does not depend on dual
+toolchains.
 
 ## Cutover
 
-Cutover is one focused change that:
+Completion is one focused landing gate that:
 
 - makes the replacement the only production renderer entry;
-- keeps a short-lived, explicit rollback commit available;
 - updates build, lint, typecheck, chunk, and test paths;
 - reconciles all current design and review documentation;
 - runs the complete cutover gate; and
-- does not yet delete evidence needed to diagnose the switch.
+- retains only durable black-box evidence needed to diagnose the replacement.
 
-After the cutover commit is accepted, remove the legacy renderer and selector
-in a separate focused change. Do not keep a dormant legacy build indefinitely.
+The inert `web-src` directory may remain for historical behavior discovery,
+but no supported code, command, CI job, package input, or evidence path may
+depend on it.
 
 ## Rollback
 
-Before legacy deletion, rollback means reverting the production-entry cutover,
-not synchronizing user state between two independently evolving products. No
-migration slice may introduce a persisted format the legacy renderer cannot
-safely ignore or read unless that cross-version behavior is explicitly
-designed and tested.
-
-Until the rollback point expires, every replacement persistence write is
-legacy-readable, safely ignorable, or covered by an approved forward/backward
-migration. No user or remote runtime flag selects the renderer. Rollback
-reverts the focused production-entry commit rather than synchronizing two live
-frontend implementations.
-
-After legacy deletion, normal version-control reversion and the release update
-process own recovery. The application must never select a renderer dynamically
-from user data or a remote flag.
+Rollback is normal version-control reversion and the release update process,
+not synchronization between independently evolving renderers. Every
+replacement persistence write is backward-readable, safely ignorable, or
+covered by an approved forward/backward migration so a previous release can
+recover safely. The application never selects a renderer from user data, a
+remote flag, or local runtime configuration.

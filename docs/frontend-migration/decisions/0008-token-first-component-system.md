@@ -13,4 +13,6 @@ integration overrides are the sole component-specific CSS exception, while
 typed custom properties support reviewed runtime geometry. Storybook documents
 and tests every shared primitive and other reusable or risky component through
 production providers. Phase 0 defines a recognizably StashBase visual identity
-rather than inheriting legacy CSS or generic shadcn defaults.
+rather than inheriting legacy CSS or generic shadcn defaults. That identity is
+monochrome by default; introducing chromatic roles requires a later approved
+visual-language decision.

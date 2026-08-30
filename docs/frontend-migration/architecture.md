@@ -501,10 +501,12 @@ announcements, 200% interface scaling, forced colors, reduced motion, and
 non-color status cues. Automated accessibility checks are a floor; focused
 interaction and Electron journeys own keyboard and focus evidence.
 
-Phase 0 defines and approves a StashBase-specific palette, typography, density,
+Phase 0 defines and approves a monochrome tonal system, typography, density,
 spatial composition, and one restrained signature interaction. The rewrite
 preserves recognizable product concepts and workflows but does not copy legacy
-CSS or accept a generic shadcn theme as its identity.
+CSS or accept a generic shadcn theme as its identity. Chromatic accents remain
+out of scope unless a later approved visual-language decision demonstrates a
+specific need.
 
 Phase 0 compares two or three Storybook-backed directions using real StashBase
 shell, file-tree, document, Agent, overlay, theme, and narrow-window states.
@@ -547,10 +549,9 @@ titlebar geometry, overlay layering, and Linux visual baselines.
 ## Technology Decisions
 
 React and TypeScript remain the application foundation. Vite+ is the pinned
-repository toolchain and unified entry for Vite/Rolldown builds, Vitest,
-Oxlint, formatting, and task orchestration. Its adoption is repository-wide
-because Vite and Vitest resolution, runtime expectations, and task graphs cross
-legacy renderer, replacement renderer, server, Electron, and CI boundaries.
+replacement toolchain and unified entry for Vite/Rolldown builds, Vitest,
+Oxlint, formatting, and task orchestration. Its aliases are repository-level
+package-resolution policy, but its frontend tasks apply only to `web-next`.
 pnpm remains the underlying lockfile-backed package manager.
 
 Choose supporting libraries only after the relevant ownership model is
@@ -558,12 +559,13 @@ defined. In particular, a query library may implement server-state mechanics
 but does not own domain transitions; a form library may implement interaction
 mechanics but does not own settings policy.
 
-`web-next/` owns independent Vite+, strict TypeScript, Vitest, Storybook,
-Tailwind, entry, and architecture configurations within the repository Vite+
-task graph. Root tasks select legacy or replacement builds explicitly;
-production remains legacy until cutover. The replacement shares only
-intentional repository protocols and assets, not legacy aliases, source, CSS,
-or configuration.
+`web-next/` is an independent workspace package that owns Vite+, strict
+TypeScript, Vitest, Storybook, Tailwind, entry, and architecture configuration.
+Stable frontend commands validate and build it from the initial scaffold. No
+runtime or user setting selects between renderers, and `web-src/` is inert
+reference material outside supported commands and evidence. The replacement
+shares only intentional repository protocols and assets, not legacy aliases,
+source, CSS, configuration, or tool tasks.
 
 Dependencies are exact and lockfile-pinned, justified by an owned
 responsibility, and reviewed for bundle and privilege effects. Copied shadcn
@@ -571,22 +573,19 @@ components become reviewed first-party source and are never updated blindly.
 Runtime CDN assets, registry access, and remote code are forbidden.
 
 The exact local Vite+ package, its bundled tool versions, the pnpm lockfile,
-and committed Vite, Rolldown, and Vitest resolution overrides are the toolchain
+and committed Vite-core and Vitest resolution aliases are the toolchain
 authority; no developer or CI result may depend on an unpinned global `vp`.
 Upgrades are focused changes that record the resolved Vite, Vitest, Rolldown,
 Oxlint, formatter, task-runner, and engine versions and rerun the complete
 affected matrix. Beta status is accepted deliberately and does not justify
 floating versions or bypassing repository-specific checks.
 
-Vite+ adoption is a focused Phase 0 change that proves the unchanged Shipping
-application before `web-next` is scaffolded. Existing documented `pnpm` scripts
-remain the stable repository interface and delegate frontend orchestration to
-pinned Vite+ tasks; direct `vp` commands support development and diagnosis.
-
-Oxfmt becomes the formatter only through a separate mechanical baseline after
-the toolchain is green. Generated, vendored, fixture, snapshot, and
-intentionally literal files use explicit reviewed exclusions. Formatting churn
-never shares a commit with toolchain configuration or architecture work.
+Vite+ adoption pins the repository tool inventory and then starts with the
+isolated `web-next` package. Oxfmt applies to replacement files from their
+creation; no repository-wide baseline reformats legacy, generated, vendored,
+fixture, snapshot, or intentionally literal files. Stable frontend commands
+target `web-next` immediately; direct `vp` remains available for focused
+diagnosis.
 
 Vite+ caching is opt-in for deterministic tasks whose inputs, outputs, tool
 versions, and relevant environment are complete. Electron smoke, E2E, visual,
@@ -597,5 +596,6 @@ The exact local package is authoritative. The committed expected-toolchain
 record preserves the complete reported graph except for the machine-specific
 local package path. CI pins the official setup action by commit SHA, requests
 the chosen version, and runs the same local inventory comparison. Mutable
-installers and `latest` are forbidden in CI. Vite and Vite+ do not remain
-selectable after adoption; rollback reverts the focused migration change.
+installers and `latest` are forbidden in CI. The final PR leaves no production
+Vite/Vite+ or renderer selector; rollback is version-control or release
+reversion of the complete migration.

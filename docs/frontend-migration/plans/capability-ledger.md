@@ -43,7 +43,7 @@ docs validation must reject incomplete rows at those statuses.
 | Runtime contract validation | Not assessed | Define validated protocol inventory in Phase 1 |
 | Accessibility and keyboard operation | Not assessed | Map rendered and E2E evidence |
 | Theme, scaling, reduced motion | Not assessed | Map visual and functional evidence |
-| Initial JavaScript and lazy entries | Not assessed | Record legacy baseline in Phase 0 |
+| Initial JavaScript and lazy entries | Not assessed | Record isolated replacement baseline in Phase 0 |
 | Startup and interaction performance | Not assessed | Record measurement method in Phase 0 |
 | Electron titlebar and window lifecycle | Not assessed | Map smoke and contract evidence |
 | Privacy and credential boundary | Not assessed | Map Settings, Agent, MCP, and bug-report evidence |

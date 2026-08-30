@@ -8,11 +8,13 @@ and its documentation and evidence are updated in the same change.
 ## Purpose
 
 Rebuild the complete frontend system under a new, mechanically enforced
-architecture, then remove the legacy implementation after the replacement
-proves the approved product contracts. This is a reimplementation, not a
-refactor or a source-compatible port. Legacy code is evidence for discovering
-Shipping behavior; its structure, dependencies, state model, and allocation of
-responsibilities are not constraints on the replacement.
+architecture and land it only when the replacement proves the approved product
+contracts. The old implementation remains under `web-src/` as inert reference
+material, not a supported build or validation target. This is a
+reimplementation, not a refactor or a source-compatible port. Legacy code is
+read-only evidence for discovering Shipping behavior; its structure,
+dependencies, state model, tooling, and allocation of responsibilities are not
+constraints on the replacement.
 
 The rewrite preserves approved product outcomes and trust requirements. It may
 redesign renderer, preload, shared wire, persistence, Electron, and server API
@@ -20,10 +22,11 @@ Interfaces when the existing boundary would compromise the target
 architecture. Such changes require an approved decision and coordinated
 contract, compatibility, implementation, and evidence updates.
 
-The migration must not begin by deleting `web-src/`. The existing renderer is
-an executable source for discovering current behavior and recovery, not the
-design template or acceptance target. A parallel renderer keeps that source
-runnable while each journey is reimplemented against newly approved contracts.
+The branch retains `web-src/` only while behavior is being discovered, but no
+migration task imports it, builds it, tests it, reformats it, or moves its
+commands onto the replacement toolchain. `web-next/` owns the stable frontend
+commands, production output, and release-blocking evidence from its initial
+scaffold.
 
 ## Agent Execution Route
 
@@ -78,8 +81,8 @@ and no Required behavior is hidden behind a passing broad command.
   frontend code must satisfy.
 - [Testing and Evidence](standards/testing-and-evidence.md) defines behavioral
   discovery, replacement proof, and validation expectations.
-- [Migration Strategy](plans/migration-strategy.md) defines how the old and
-  new renderers coexist and how cutover works.
+- [Migration Strategy](plans/migration-strategy.md) defines inert legacy
+  reference material, replacement validation, and the one-PR landing gate.
 - [Delivery Phases](plans/delivery-phases.md) orders the journey slices and
   gives their exit criteria.
 - [Implementation Subphases](plans/subphases-README.md) breaks those phases
@@ -119,15 +122,15 @@ and no Required behavior is hidden behind a passing broad command.
   authorization, CSP, build isolation, and dependency governance.
 - [Decision 0011](decisions/0011-accessible-shell-forms-and-notifications.md)
   records accessibility, pre-paint appearance, forms, Sonner notification
-  ownership, renderer coexistence, and rollback compatibility.
+  ownership, and rollback compatibility.
 - [Decision 0012](decisions/0012-persistence-commands-and-contract-evidence.md)
   records explicit session persistence, multi-window reconciliation, keyboard
-  command ownership, coexistence gates, protocol evidence, and ledger fields.
+  command ownership, replacement gates, protocol evidence, and ledger fields.
 - [Decision 0013](decisions/0013-adopt-vite-plus-toolchain.md) records the
-  repo-wide Vite+ adoption required by the replacement frontend.
+  pinned Vite+ toolchain adopted by the replacement frontend.
 - [Decision 0014](decisions/0014-vite-plus-rollout-and-task-policy.md) records
-  the isolated rollout, stable command interface, formatting baseline, cache
-  policy, pinned installation, and rollback.
+  the replacement-only rollout, stable command interface, formatting and
+  cache policy, pinned installation, and rollback.
 
 ## Authority
 
@@ -164,8 +167,10 @@ The rebuild is complete only when:
 - the existing release-blocking Electron and Playwright journeys run against
   the new production entry;
 - accessibility, visual composition, startup, and chunk budgets are accepted;
-- no production import or build entry references the legacy renderer;
-- the legacy renderer is removed in a focused, reviewable change; and
+- no supported command, production import, build entry, or evidence path
+  references the legacy renderer;
+- `web-src/` is clearly inert reference material rather than a supported
+  implementation; and
 - current architecture and evidence docs describe the replacement as Shipping.
 
 Framework novelty, file-count reduction, and line-count reduction are not

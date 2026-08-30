@@ -225,16 +225,17 @@ literals, arbitrary visual utilities, inline styles, and undeclared tokens.
 Dependencies are exact, responsibility-owned, and bundle/privilege reviewed;
 runtime CDN assets, registry fetches, and remote code are forbidden.
 
-Vite+ is the pinned repository toolchain. pnpm remains the lockfile-backed
-package manager; committed overrides keep direct Vite, Rolldown, and Vitest
-resolution aligned with the selected Vite+ release, while the expected
-inventory records its bundled and compiled tools. Repository-specific
+Vite+ is the pinned replacement toolchain. pnpm remains the lockfile-backed
+package manager; committed aliases keep Vite core and Vitest resolution aligned
+with the selected Vite+ release, while the expected inventory records its
+bundled and compiled tools. Repository-specific
 architecture, docs, Electron, E2E, packaging, and release gates remain explicit
 tasks rather than disappearing behind a generic toolchain check.
 
-- Existing `pnpm` scripts remain stable wrappers over pinned Vite+ tasks.
-- Oxfmt's initial repository baseline is a separate mechanical change with
-  explicit exclusions.
+- Stable frontend scripts prove only the isolated replacement from its initial
+  scaffold; no supported command builds or validates `web-src`.
+- Oxfmt applies to `web-next` from creation and does not reformat legacy or
+  unrelated repository files.
 - Cache only deterministic tasks with complete declared inputs, outputs,
   versions, and environment. Native, E2E, visual, packaging, signing, release,
   credentialed, and side-effecting tasks are never cached.

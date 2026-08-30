@@ -44,15 +44,10 @@ Source text is the correct artefact in exactly two cases, both in
   no render reaches. They walk the tree instead of naming paths, so a file
   moving between folders neither breaks them nor drops out of their coverage.
 
-Two Vite-only specifier forms cannot reach Node's resolver, so
-`scripts/vite-import-stub-loader.mjs` stands in for both: a colocated
-stylesheet import resolves to an empty module, and Vite's `?worker` suffix
-resolves to a constructible Worker-shaped stub. It is registered *after* `tsx` in
-`test:renderer`, because the most recently registered hook resolves first and
-`tsx` would otherwise strip the `?worker` query and load the bare worker
-entry, which exports nothing. `domEnvironment` additionally defines the canvas
-geometry interfaces (`DOMMatrix`, `DOMPoint`, `Path2D`, `ImageData`) that
-pdf.js reads at module scope and happy-dom does not implement.
+The supported renderer suite runs through Vite+ and Vitest, so Vite-only
+specifier forms use the production resolver rather than a Node loader shim.
+Environment-specific browser APIs belong in the replacement test setup and
+must be introduced only for a test that exercises the owning surface.
 
 No renderer component is asserted through source text any more. The PDF
 viewer was the last one: its six assertions pinned effect dependency arrays

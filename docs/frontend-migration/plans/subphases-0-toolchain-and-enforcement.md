@@ -6,59 +6,72 @@
 
 **Status:** Complete.
 
-Vite+ 0.3.0 is exact and lockfile-pinned. pnpm overrides align direct Vite,
-Rolldown, and Vitest resolution with the selected release, while the committed
-inventory also records Vite+'s bundled and compiled formatter, task-runner, and
-engine versions. `pnpm test:toolchain` compares the complete local inventory
-after removing only its machine-specific installation path. The unchanged
-legacy lint command remains on exact Oxlint 1.78.0 until task 02 moves and
-reconciles that command with Vite+'s pinned Oxlint 1.79.0.
+Vite+ 0.3.0 is exact and lockfile-pinned. pnpm aliases Vite to the matching
+Vite+ core and pins Vitest to the selected release, while the committed
+inventory records bundled and compiled tools, task runner, and engines.
+`pnpm test:toolchain` compares the complete local inventory after removing only
+its machine-specific installation path.
 
-## 02 — Move existing frontend commands onto Vite+ tasks
+## 02 — Scaffold the isolated replacement frontend
 
 **Blocked by:** 01.
 
-Keep stable `pnpm` commands while routing unchanged legacy lint, test, and build
-work through the pinned Vite+ task graph.
+**Status:** Complete.
+
+Create `web-next` as an independently buildable workspace package with strict
+TypeScript, React, Vite+, Vitest, Oxlint, Oxfmt, deterministic browser-test
+configuration, Oxlint-enforced kebab-case source names, and stable frontend
+commands. A repository check rejects any `web-next` reference to the inert
+`web-src` tree. Stable production commands now target only the replacement.
+
+Evidence: `pnpm format:web`, `pnpm lint:web`, `pnpm test:renderer`,
+`pnpm typecheck:web`, and `pnpm build:web`.
 
 ## 03 — Run Vite+ through CI and package-input checks
 
 **Blocked by:** 02.
 
-Pin CI installation, verify the resolved inventory, declare safe cache policy,
-and prove packaging consumes the same intended inputs.
+Pin CI installation, verify the resolved inventory, run replacement checks,
+declare safe cache policy, and prove packaging remains on the Shipping input
+until the final atomic switch.
 
-## 04 — Prove the unchanged application under Vite+
+## 04 — Retired: legacy application proof
 
-**Blocked by:** 03.
+**Blocked by:** None.
 
-Run legacy build, focused unit suites, Electron smoke, and representative E2E
-evidence so toolchain regressions have a clean rollback point.
+**Status:** Retired by the approved single-PR replacement strategy.
 
-## 05 — Apply the isolated Oxfmt baseline
+The migration does not move, reformat, or prove the legacy renderer under
+Vite+. Product contracts and Shipping evidence still inform replacement slices.
 
-**Blocked by:** 04.
+## 05 — Retired: repository Oxfmt baseline
 
-Land mechanical formatting separately, with reviewed exclusions for generated,
-vendored, fixture, snapshot, and intentionally literal files.
+**Blocked by:** None.
 
-## 06 — Scaffold the replacement browser entry
+**Status:** Retired by the approved single-PR replacement strategy.
 
-**Blocked by:** 04.
+Oxfmt applies to `web-next` from its creation. Legacy and unrelated repository
+files receive no formatting baseline.
 
-Create an independently buildable and testable replacement entry with strict
-TypeScript, Vitest, and deterministic browser-test setup.
+## 06 — Folded into the isolated replacement scaffold
+
+**Blocked by:** 02.
+
+**Status:** Complete through 02.
+
+The replacement browser entry, strict TypeScript, Vitest, and deterministic
+browser-test setup now land together as the first replacement task.
 
 ## 07 — Enforce replacement dependency boundaries
 
-**Blocked by:** 06.
+**Blocked by:** 02.
 
 Add dependency, lint, and repository checks that reject layer inversion,
 sibling-feature access, deep imports, cycles, and unvalidated platform access.
 
 ## 08 — Establish shared Zod protocol contracts
 
-**Blocked by:** 06.
+**Blocked by:** 02.
 
 Prove one real request, success, and classified-failure protocol from producer
 through runtime validation and adapter mapping, including compatibility fixtures.

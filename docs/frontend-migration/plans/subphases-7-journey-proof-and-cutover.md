@@ -14,18 +14,19 @@ assistance, and accepted durable document changes under real Interfaces.
 Prove J11 approval, project registration, scope rebinding, originating-window
 entry, transcript continuity, and meaningful recovery.
 
-## 59 — Cut production over to the replacement renderer
+## 59 — Complete the production replacement
 
 **Blocked by:** 36–54, 57, 58; 56 only when declared release-blocking.
 
-Make the replacement the sole production entry, run the complete validation and
-performance matrix, update Shipping contracts, and retain a tested rollback
-commit.
+Confirm the replacement is the sole supported production entry, run the
+complete validation and performance matrix, update Shipping contracts, and
+prove version-control and release rollback. The inert `web-src` reference must
+remain outside every supported command and evidence path.
 
-## 60 — Remove the legacy renderer
+## 60 — Retire migration-only artifacts
 
-**Blocked by:** 59 and expiry of the accepted rollback point.
+**Blocked by:** 59.
 
-Remove legacy source, selector, compatibility adapters, obsolete evidence, and
-temporary migration documentation after durable decisions move to their
+Remove migration-only compatibility adapters and obsolete evidence, then
+retire temporary migration documentation after durable decisions move to their
 permanent owners.

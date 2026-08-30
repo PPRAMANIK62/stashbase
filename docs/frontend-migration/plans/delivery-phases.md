@@ -10,26 +10,27 @@ The finer implementation sequence lives in
 Deliver:
 
 - approved goals, non-goals, and technology defaults;
-- pinned repo-wide Vite+ migration with resolved-tool inventory, task graph,
-  CI installation, and rollback evidence;
-- unchanged-application validation under Vite+, followed by a separate Oxfmt
-  baseline with reviewed exclusions;
-- approved StashBase palette, typography, density, spatial composition, and
-  restrained signature interaction expressed as foundation and semantic tokens;
+- pinned Vite+ replacement toolchain with resolved-tool inventory, task graph,
+  CI installation, and version-control rollback evidence;
+- an independently buildable `web-next` workspace with replacement-only
+  formatting, lint, test, typecheck, build, and cross-tree boundary checks;
+- approved monochrome tonal system, typography, density, spatial composition,
+  and restrained signature interaction expressed as foundation and semantic
+  tokens; chromatic color remains deferred unless separately approved;
 - two or three production-backed visual directions and approval of one token
   set before feature component work;
 - reproducible current and empty-shell bundle, staged-startup, interaction,
   long-task, and repeated-disposal memory measurements;
 - populated capability ledger with retained, changed, and unresolved behavior
   plus actual evidence;
-- renderer selection design for local builds and tests; and
+- an atomic production-entry and legacy-removal design; and
 - decision records for any changed product behavior, cross-process or persisted
   Interface, trust boundary, or foundational technology choice.
 
 Exit when the maintainer has approved the replacement architecture and every
-new durable behavior, boundary, trust, or access decision; enforcement runs in
-CI; Vite+ is the sole pinned toolchain with green unchanged-application
-evidence; and no journey relies solely on undocumented legacy behavior.
+new durable behavior, boundary, trust, or access decision; replacement
+enforcement runs in CI; Vite+ is exact and lockfile-pinned for `web-next`; and
+no journey relies solely on undocumented legacy behavior.
 
 ## Phase 1 — Foundation and Shell
 
@@ -129,28 +130,28 @@ Deliver:
 Exit when J08–J11 decisive Seams compose through their real Interfaces and all
 remaining renderer responsibilities in Journey Coverage are accounted for.
 
-## Phase 7 — Production Cutover
+## Phase 7 — Production Completion
 
 Deliver:
 
-- production entry switch;
+- confirmation that production and release paths target only `web-next`;
 - complete validation and accepted performance comparison;
 - updated Shipping design, architecture, contracts, and Journey Coverage; and
-- a reviewed rollback point.
+- version-control and release rollback evidence that does not require a live
+  renderer selector.
 
 Exit when the replacement is the only renderer exercised by production build
-and release-blocking tests.
+and release-blocking tests, and no supported source, script, manifest,
+documentation claim, or test path depends on the inert legacy reference.
 
-## Phase 8 — Legacy Removal
+## Phase 8 — Migration Retirement
 
 Deliver:
 
-- deletion of legacy `web-src` implementation and temporary selector;
-- rename of the replacement to the permanent renderer location if approved;
-- removal of compatibility-only code and tests;
+- removal of migration-only compatibility code and tests;
 - final architecture and dependency-boundary checks; and
 - retirement of this migration documentation after durable content moves to
   its owning product or review document.
 
-Exit when no source, script, manifest, documentation claim, or test path
-depends on the legacy renderer.
+Exit when every durable decision and validation route has a permanent owner and
+no migration-only artifact remains.

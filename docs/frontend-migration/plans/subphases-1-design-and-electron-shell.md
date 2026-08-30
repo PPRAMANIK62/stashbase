@@ -12,7 +12,8 @@ scale, forced-colors behavior, and reduced-motion behavior.
 **Blocked by:** 09.
 
 Compare real shell, Workbench, Agent, overlay, theme, and narrow-window studies
-and approve one StashBase-specific visual foundation.
+and approve one StashBase-specific monochrome visual foundation. Chromatic
+color requires a later approved decision if a concrete need emerges.
 
 ## 11 — Implement foundation and semantic tokens
 

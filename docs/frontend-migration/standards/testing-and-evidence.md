@@ -95,20 +95,19 @@ replacement contract differs.
 
 ## Migration Test Harness
 
-During coexistence, the renderer selector is a harness concern. Product tests
-must not fork into permanently different assertions for legacy and new
-implementations. Temporary exceptions require a named gap and removal
-condition in the capability ledger.
+The renderer test harness and stable E2E/build path target `web-next` directly;
+there is no renderer selector and product tests do not fork between
+implementations. `web-src` tests are reference material outside the supported
+test inventory.
 
 Fixtures remain deterministic and disposable. Electron launches remove an
 inherited `ELECTRON_RUN_AS_NODE`. Worktrees exercising indexing or sync provide
 `python/.venv.nosync`; a missing `mfs` module is environment failure.
 
-Before replacement scaffolding, the Vite+ migration runs the complete affected
-legacy matrix and compares build entries, production assets, chunk budgets,
-test discovery, and packaged inputs. CI records and checks the pinned resolved
-tool inventory. Cache is disabled for Electron, E2E, visual, native/runtime,
-packaging, signing, release, credentialed, and side-effecting evidence.
+Replacement CI records and checks the pinned Vite+ resolved-tool inventory and
+runs the isolated format, lint, test, typecheck, build, and boundary gates.
+Cache is disabled for Electron, E2E, visual, native/runtime, packaging,
+signing, release, credentialed, and side-effecting evidence.
 
 ## Slice Gate
 
@@ -116,7 +115,9 @@ Every slice runs:
 
 ```bash
 pnpm typecheck
+pnpm format:web
 pnpm lint:web
+pnpm test:renderer
 pnpm build:web
 ```
 

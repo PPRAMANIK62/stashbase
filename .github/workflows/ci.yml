@@ -32,7 +32,7 @@ jobs:
         id: shadscan
         uses: TheOrcDev/shadscan@1d4415ac799f453fe5ef192cf7f165433aa4e82b # v0.17.0
         with:
-          path: .
+          path: web-next
           version: '0.17.0'
           fail-under: '45'
           create-issue: 'false'

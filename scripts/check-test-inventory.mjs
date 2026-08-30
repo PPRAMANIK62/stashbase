@@ -4,12 +4,11 @@
 // Server-side suites enumerate their files explicitly, so a new *.test.*
 // file that is not added to a script silently never runs anywhere — six
 // files drifted that way before this check existed. A file counts as wired
-// when some script names it verbatim or matches it through a glob token
-// (e.g. `web-src/src/__tests__/*.test.ts`, or the recursive
-// `'web-src/src/**/*.test.ts'` the renderer suite passes through to Node's
-// own discovery). A recursive glob wires everything beneath it, which is
-// the point of using one — the renderer's tests live beside the feature
-// that owns them, so enumerating them here would go stale on every move.
+// when some script names it verbatim or matches it through a glob token.
+// A recursive glob wires everything beneath it, which is the point of using
+// one — the renderer's tests live beside the feature that owns them, so
+// enumerating them here would go stale on every move. The inert `web-src`
+// reference tree is intentionally outside the supported test inventory.
 // Playwright specs (*.spec.ts) are collected by playwright.config.ts and
 // Python tests by unittest discovery, so neither needs this check.
 
@@ -20,8 +19,12 @@ import process from 'node:process';
 const repoRoot = process.cwd();
 const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const commands = Object.values(pkg.scripts ?? {});
+const replacementViteConfig = fs.readFileSync(
+  path.join(repoRoot, 'web-next', 'vite.config.ts'),
+  'utf8',
+);
 
-const SCAN_ROOTS = ['server', 'electron', 'shared', 'mcp', 'scripts', 'web-src', 'e2e'];
+const SCAN_ROOTS = ['server', 'electron', 'shared', 'mcp', 'scripts', 'web-next', 'e2e'];
 const TEST_FILE = /\.test\.(ts|tsx|cjs|mjs)$/;
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-app', 'runtime']);
 
@@ -54,6 +57,19 @@ const globMatchers = tokens
       .replace(/\*/g, '[^/]*')
       .replace(/\u0000/g, '(?:[^/]+/)*')}$`,
   ));
+
+// Workspace-local Vitest includes are relative to web-next rather than the
+// repository root, so normalize them before matching the shared inventory.
+for (const match of replacementViteConfig.matchAll(/['"](src\/[^'"]*\*[^'"]*\.test\.(?:ts|tsx))['"]/g)) {
+  const token = `web-next/${match[1]}`;
+  globMatchers.push(new RegExp(
+    `^${token
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*\//g, '\u0000')
+      .replace(/\*/g, '[^/]*')
+      .replace(/\u0000/g, '(?:[^/]+/)*')}$`,
+  ));
+}
 
 const missing = testFiles
   .filter((file) => !verbatim.has(file) && !globMatchers.some((matcher) => matcher.test(file)))

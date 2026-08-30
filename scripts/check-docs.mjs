@@ -69,7 +69,7 @@ for (const [source, markdown] of contents) {
     const exists = fs.existsSync(exact)
       || repoFiles.some((candidate) => candidate === referencedPath || candidate.endsWith(suffix));
     const isReviewReference = path.relative(repoRoot, source).startsWith('code-review/');
-    const hasRepoPrefix = /^(?:\.github|code-review|design-docs|docs|e2e|electron|mcp|native|python|release-checklists|scripts|server|shared|web-src)\//.test(referencedPath);
+    const hasRepoPrefix = /^(?:\.github|code-review|design-docs|docs|e2e|electron|mcp|native|python|release-checklists|scripts|server|shared|web-next|web-src)\//.test(referencedPath);
     if (!exists && (isReviewReference || hasRepoPrefix)) {
       failures.push(`${path.relative(repoRoot, source)}: missing referenced path ${referencedPath}`);
     }
