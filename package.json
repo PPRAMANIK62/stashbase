@@ -29,7 +29,7 @@
   "type": "module",
   "main": "electron/main.cjs",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.11.0"
   },
   "scripts": {
     "dev": "concurrently -n web,srv -c cyan,green \"npm:dev:web\" \"npm:dev:server\"",
@@ -67,6 +67,7 @@
     "test:renderer-chunks": "node scripts/check-renderer-chunks.mjs",
     "test:docs": "node scripts/check-docs.mjs",
     "test:inventory": "node scripts/check-test-inventory.mjs",
+    "test:toolchain": "node --test scripts/check-vite-plus-toolchain.test.mjs && node scripts/check-vite-plus-toolchain.mjs",
     "test:conversion-scheduler": "node --import tsx --test server/html.test.ts server/filesystem-path.test.ts server/folder-relative-path.test.ts server/folder-window.test.ts server/window-context-route.test.ts server/internal-shutdown-route.test.ts server/stale-lock.test.ts server/parent-watchdog.test.ts server/files.test.ts server/file-formats.test.ts server/file-hash.test.ts server/http.test.ts server/markdown-source-format.test.ts server/keyword-search.test.ts server/index-status.test.ts server/indexer-mfs-path.test.ts server/semantic-workload.test.ts server/session-path.test.ts server/conversion-scheduler.test.ts server/conversion-auxiliary.test.ts server/conversion-status.test.ts server/conversion.test.ts server/extractor-process.test.ts server/audio-transcription.test.ts server/transcription-models.test.ts server/transcription-provider.test.ts server/transcription-runtime.test.ts server/transcription-tools.test.ts server/upload.test.ts server/client-error.test.ts server/semantic-indexing-state.test.ts",
     "test:library-files": "node --import tsx --test server/library-file-mutations.test.ts server/library-operations/index.test.ts server/routes/library-files.test.ts server/routes/attach.test.ts server/__tests__/file-listing.test.ts server/generic-file-preview.test.ts",
     "test:retrieval": "node --import tsx --test server/retrieval/index.test.ts scripts/semantic-retrieval-metrics.test.ts scripts/semantic-retrieval-dataset.test.ts scripts/semantic-retrieval-runner.test.ts",
@@ -297,13 +298,14 @@
     "esbuild": "^0.28.0",
     "happy-dom": "^20.11.2",
     "http-proxy-middleware": "^4.0.0",
-    "oxlint": "^1.78.0",
+    "oxlint": "1.78.0",
     "playwright": "1.62.1",
     "react-test-renderer": "19.2.6",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.20.0",
     "typescript": "^5.7.3",
-    "vite": "^8.0.12"
+    "vite": "8.2.2",
+    "vite-plus": "0.3.0"
   },
   "optionalDependencies": {
     "@vscode/ripgrep-darwin-arm64": "1.18.0",

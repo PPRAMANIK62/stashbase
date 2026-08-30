@@ -7,6 +7,10 @@ allowBuilds:
   # Copies the matching optional platform binary into opencode-ai/bin.
   # The exact package versions are pinned below and verified by package tests.
   opencode-ai: true
+overrides:
+  rolldown: 1.2.5
+  vite: 8.2.2
+  vitest: 4.1.11
 minimumReleaseAgeExclude:
   - '@opencode-ai/sdk@1.18.19'
   - opencode-ai@1.18.19
