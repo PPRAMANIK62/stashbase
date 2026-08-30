@@ -274,12 +274,6 @@ including backward/forward fixtures for each compatibility claim. Version a
 specific boundary only when parallel representations are genuinely required;
 do not introduce one global API version pre-emptively.
 
-The first active example is `GET /api/health`. Its version-one schema preserves
-the Shipping server response, deliberately tolerates additive fields, rejects
-an incompatible protocol version, and gives the replacement bootstrap adapter
-a classified failure path. The adapter exposes only protocol compatibility to
-application code; process paths and PID remain wire diagnostics.
-
 ## Navigation and Failures
 
 Features emit typed navigation intents; app composition resolves them. A
@@ -339,8 +333,6 @@ These gates are active from the replacement foundation. The committed renderer
 architecture declaration records the approved feature owners and registered
 repository wire modules; adding a directory or importing a shared protocol
 without updating that reviewed declaration fails before feature tests run.
-The registered inventory currently begins with
-`shared/protocols/http/server-health.ts`.
 
 Tests follow production boundaries. A test may cross one only through a named,
 narrow test entry point; blanket architecture-rule exemptions for test folders

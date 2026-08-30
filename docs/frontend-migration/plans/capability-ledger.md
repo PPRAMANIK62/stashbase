@@ -40,7 +40,7 @@ docs validation must reject incomplete rows at those statuses.
 | Gate | Status | Evidence / decision |
 |---|---|---|
 | Dependency boundaries | Proven | `pnpm test:renderer-architecture` proves graph direction, cycles, feature isolation, layer APIs, legacy isolation, and wire-schema registration against the replacement graph. |
-| Runtime contract validation | Proven | `server/routes/health.test.ts` under `pnpm test:conversion-scheduler` and `renderer/src/app/bootstrap/server-health-adapter.test.ts` under `pnpm test:renderer` prove the registered version-one request, success, classified failure, compatibility fixtures, producer validation, and adapter mapping. The adapter is not yet cut over into visible bootstrap. |
+| Runtime contract validation | Not assessed | Define validated protocol inventory in Phase 1 |
 | Accessibility and keyboard operation | Not assessed | Map rendered and E2E evidence |
 | Theme, scaling, reduced motion | Not assessed | Map visual and functional evidence |
 | Initial JavaScript and lazy entries | Not assessed | Record isolated replacement baseline in Phase 0 |

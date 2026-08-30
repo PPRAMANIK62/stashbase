@@ -1,8 +1,0 @@
-{
-  "app": "stashbase",
-  "ok": true,
-  "protocolVersion": 2,
-  "appRoot": "/fixture/app",
-  "resourcesPath": "/fixture/resources",
-  "pid": 43123
-}
