@@ -1,0 +1,36 @@
+# Subphase 4 — Retrieval and Preparation
+
+## 41 — Implement Quick Open
+
+**Blocked by:** 26, 29.
+
+Provide keyboard-driven scoped source selection and typed navigation intents
+without making the popup a workspace-state owner.
+
+## 42 — Implement exact library search
+
+**Blocked by:** 26, 29.
+
+Provide cancelled and scope-complete queries, evidence snippets, stable result
+identity, and active/out-of-folder source navigation.
+
+## 43 — Present Preparation status and recovery
+
+**Blocked by:** 26, 38, 39, 40.
+
+Show current, stale, pending, and failed derived state without blocking ordinary
+browsing or confusing Preparation with AI Index readiness.
+
+## 44 — Implement Preparation controls
+
+**Blocked by:** 43.
+
+Provide explicit preparation and capture actions, progress, cancellation,
+localized recovery, and hidden-derived-note guarantees.
+
+## 45 — Implement semantic retrieval
+
+**Blocked by:** 42, 44.
+
+Provide scoped AI Index readiness and semantic results with cancellation,
+source evidence, stable identities, and truthful unavailable states.
