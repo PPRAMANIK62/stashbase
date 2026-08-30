@@ -45,19 +45,6 @@ function fixture(context) {
     'renderer/renderer-architecture.json',
     `${JSON.stringify(architectureDeclaration, null, 2)}\n`,
   );
-  write(
-    root,
-    'renderer-architecture.tsconfig.json',
-    `${JSON.stringify({
-      compilerOptions: {
-        baseUrl: '.',
-        module: 'ESNext',
-        moduleResolution: 'bundler',
-        paths: { '@/*': ['renderer/src/*'] },
-      },
-      include: ['renderer/src'],
-    })}\n`,
-  );
   return root;
 }
 
