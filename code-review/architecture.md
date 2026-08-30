@@ -105,6 +105,10 @@ surface.
   cleanup failures.
 - Static renderer serving must bypass every API and asset route before serving
   the web bundle.
+- `GET /api/health` is a versioned repository-owned protocol. The server
+  validates its produced success or classified failure, and replacement
+  consumers validate the response before mapping a safe application value.
+  Additive fields are tolerated; an incompatible protocol version is not.
 - `shared/file-formats.ts` and `shared/library-files.ts` carry the exact
   renderer/server tree contract. `generic` widens Workbench visibility only;
   the server's known-format detector remains the narrower retrieval and Agent
@@ -141,6 +145,7 @@ The main ownership seams are intentionally narrower than this map:
 | Renderer workspace Interface | `ActiveFolderWorkspace` in `web-src/src/store/hooks/useActiveFolderWorkspace.ts` |
 | Window/context owners | `electron/main.cjs`, `electron/multi-window.cjs`, `server/folder.ts`, `server/routes/window-context.ts` |
 | Application server composition | `server/index.ts`, with focused behavior behind route and service Modules |
+| Server health protocol | `shared/protocols/http/server-health.ts`, `server/routes/health.ts`, and the replacement Adapter in `renderer/src/app/bootstrap/server-health-adapter.ts` |
 | Data lifecycle Interfaces | `server/conversion-dispatch.ts`, `server/conversion-scheduler.ts`, `server/indexer.ts`, `server/mfs-daemon.ts` |
 | Library/MCP Interface | `LibraryOperations` in `server/library-operations/index.ts` |
 | Agent Interface | `AgentAdapter` and normalized events in `server/agent-contract.ts` |
@@ -168,6 +173,9 @@ changes also run `pnpm test:electron` and `pnpm test:electron:smoke`; renderer
 boundary changes run `pnpm build:web`. Add the exact suites from every focused
 contract crossed by the change. Use [Journey Coverage](journey-coverage.md)
 before adding broad E2E coverage.
+
+Health protocol changes run through `pnpm test:conversion-scheduler` for the
+producer and `pnpm test:renderer` for the replacement adapter.
 
 Related journey: [J09](../design-docs/user-journeys.md#j09-prepare-and-hand-off-a-bug-report)
 for the bug-report review process boundary. Other architectural changes use the

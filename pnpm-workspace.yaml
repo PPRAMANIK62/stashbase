@@ -28,3 +28,4 @@ minimumReleaseAgeExclude:
   - opencode-windows-arm64@1.18.19
   - opencode-windows-x64-baseline@1.18.19
   - opencode-windows-x64@1.18.19
+  - zod@4.5.4

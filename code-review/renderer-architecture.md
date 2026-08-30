@@ -23,6 +23,11 @@ cycles, Oxlint rejects layer-specific APIs and imports, and the repository
 checker owns the approved feature map, feature shape, shared wire-schema
 registration, and isolation from implementation trees.
 
+The first registered wire boundary is version-one server health. Its shared
+Zod schema validates producer and replacement-adapter values before the
+adapter maps a smaller application-owned compatibility result. The adapter is
+not yet consumed by visible bootstrap UI.
+
 `web-src/` remains in the repository only as read-only behavior reference. It
 is not built, linted, tested, typechecked, packaged, or scanned by supported
 renderer commands. Supported source and configuration must never import or
@@ -66,10 +71,12 @@ unregistered repository protocols. Tests receive the same production rules.
 | Workspace package | `renderer/package.json` |
 | Browser entry | `renderer/index.html`, `renderer/src/main.tsx` |
 | Foundation surface | `renderer/src/app.tsx`, `renderer/src/foundation.css` |
-| Tool configuration | `renderer/vite.config.ts`, `renderer/tsconfig.json`, `.oxlintrc.json`, `dependency-cruiser.config.cjs`, `renderer-architecture.tsconfig.json` |
+| Tool configuration | `renderer/vite.config.ts`, `renderer/tsconfig.json`, `.oxlintrc.json`, `dependency-cruiser.config.cjs` |
 | Production output | `dist/renderer/` |
 | Architecture declaration | `renderer/renderer-architecture.json` |
+| Health protocol boundary | `shared/protocols/http/server-health.ts`, `server/routes/health.ts`, and `renderer/src/app/bootstrap/server-health-adapter.ts` |
 | Boundary enforcement | `scripts/check-renderer-architecture.mjs` and `scripts/check-renderer-architecture.test.mjs` |
+| Protocol evidence | `server/routes/health.test.ts` and `renderer/src/app/bootstrap/server-health-adapter.test.ts` |
 | Test inventory | `scripts/check-test-inventory.mjs` |
 | CI setup contract | `scripts/vite-plus-ci.test.mjs` |
 | Packaging input contract | `scripts/package-inputs.test.mjs` |

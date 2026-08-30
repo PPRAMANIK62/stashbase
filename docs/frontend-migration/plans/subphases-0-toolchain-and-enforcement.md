@@ -95,5 +95,19 @@ Evidence: `pnpm test:renderer-architecture`, `pnpm lint:web`,
 
 **Blocked by:** 02.
 
-Prove one real request, success, and classified-failure protocol from producer
-through runtime validation and adapter mapping, including compatibility fixtures.
+**Status:** Complete.
+
+The existing `GET /api/health` boundary is the first registered replacement
+protocol. Shared Zod schemas own its empty request, version-one success, and
+classified-failure representations. The server validates producer output, and
+the replacement bootstrap adapter validates responses before mapping only the
+safe protocol version into application state. Current, additive-forward,
+classified-failure, incompatible-version, invalid-JSON, transport, status, and
+cancellation fixtures prove the compatibility and recovery decisions. The
+adapter is production-composed but remains outside visible bootstrap until its
+journey slice is built.
+
+Evidence: `server/routes/health.test.ts`,
+`renderer/src/app/bootstrap/server-health-adapter.test.ts`,
+`pnpm test:conversion-scheduler`, `pnpm test:renderer`,
+`pnpm test:renderer-architecture`, `pnpm typecheck:web`, and `pnpm build:web`.

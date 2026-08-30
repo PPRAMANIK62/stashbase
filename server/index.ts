@@ -56,6 +56,7 @@ import { closeStateDb } from './state-db.ts';
 import { requireFolder, withWindowContext } from './http.ts';
 import { mount as mountWindowContextRoutes } from './routes/window-context.ts';
 import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
+import { mountHealthRoute } from './routes/health.ts';
 import { mount as mountLibraryRoutes } from './routes/library.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
 import { mount as mountAppearanceRoutes } from './routes/appearance.ts';
@@ -144,7 +145,6 @@ function parsePortArg(argv: string[], fallback: number): number {
   return fallback;
 }
 const PORT = parsePortArg(process.argv.slice(2), 8090);
-const SERVER_PROTOCOL_VERSION = 1;
 const VITE_PORT = Number(process.env.VITE_PORT ?? 5173);
 // In dev mode the React app is served by Vite (HMR, fast refresh) but
 // Electron still loads :8090 — so we proxy non-API requests through.
@@ -261,19 +261,13 @@ for (const dir of ['cmaps', 'standard_fonts', 'wasm']) {
   );
 }
 
-// Cheap identity probe for Electron's startup arbiter. A random process
-// can be listening on :8090 and even answer `/api/folder`; the main
-// process should only reuse a server that explicitly identifies itself
-// as StashBase.
-app.get('/api/health', (_req, res) => {
-  res.json({
-    app: 'stashbase',
-    ok: true,
-    protocolVersion: SERVER_PROTOCOL_VERSION,
-    appRoot: APP_ROOT,
-    resourcesPath: RESOURCES_ROOT,
-    pid: process.pid,
-  });
+// Cheap identity probe for Electron's startup arbiter. A random process can
+// be listening on :8090 and even answer `/api/folder`; the main process
+// should only reuse a server that satisfies the shared StashBase protocol.
+mountHealthRoute(app, {
+  appRoot: APP_ROOT,
+  resourcesPath: RESOURCES_ROOT,
+  pid: process.pid,
 });
 
 mountInternalShutdownRoute(app, {
