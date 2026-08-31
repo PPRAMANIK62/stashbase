@@ -363,13 +363,11 @@ function builtinFolderSource(): string | null {
  *
  *  Two distinct jobs, in order:
  *
- *   1. **Surface** — if the introduction is already on disk (`<root>/<name>`),
- *      make sure it's reachable from library membership. This is independent
- *      of the `builtinSeeded` latch: surfacing isn't re-seeding. It
- *      covers the "config/recents wiped but the folder is still there"
- *      case (e.g. the user deletes `~/.stashbase`) — otherwise the folder
- *      exists but never shows. Only re-adds when it has fallen off recents,
- *      so a normal boot doesn't keep bumping it to the top.
+ *   1. **Surface** — if the introduction is already on disk (`<root>/<name>`)
+ *      and the seed latch is absent, make sure it is reachable from library
+ *      membership. This covers a full config reset while preserving an
+ *      explicit later removal from the library: that removal keeps the latch,
+ *      so restart must not silently add the folder back.
  *
  *   2. **Seed** — otherwise, copy the bundled content in, but only into a
  *      brand-new empty library. The `builtinSeeded` latch means "we did
@@ -389,10 +387,14 @@ export function seedBuiltinFolder(): void {
     if (!c.builtinSeeded) { c.builtinSeeded = true; writeConfigStrict(c); }
   };
 
-  // (1) Already on disk → ensure it's in recents, regardless of the latch.
+  // (1) Already on disk after a full config reset → surface it once.
   if (fs.existsSync(dest)) {
     try {
-      const inRecents = (readConfigStrict().recentFolders ?? []).some((r) => storedFolderPathEquals(r.path, dest));
+      const config = readConfigStrict();
+      if (config.builtinSeeded) return;
+      const inRecents = (config.recentFolders ?? []).some((r) =>
+        storedFolderPathEquals(r.path, dest),
+      );
       if (!inRecents) pushRecent(dest);
       latch();
     } catch (err) {

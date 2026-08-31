@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import type { Server as HttpServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
 
 const isolatedEnvNames = [
   'HOME',
@@ -12,6 +14,49 @@ const isolatedEnvNames = [
   'XDG_DATA_HOME',
   'STASHBASE_LOCAL_DATA_ROOT',
 ] as const;
+
+test('a deliberately removed built-in folder stays out of library membership after restart', (t) => {
+  const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-library-seed-'));
+  t.after(() => fs.rmSync(testHome, { force: true, recursive: true }));
+
+  const folderHome = path.join(testHome, 'Documents', 'StashBase');
+  fs.mkdirSync(path.join(folderHome, '👋 Start Here'), { recursive: true });
+  const configDirectory = path.join(testHome, '.stashbase');
+  const configFile = path.join(configDirectory, 'config.json');
+  fs.mkdirSync(configDirectory, { recursive: true });
+  fs.writeFileSync(
+    configFile,
+    `${JSON.stringify({ builtinSeeded: true, recentFolders: [] }, null, 2)}\n`,
+  );
+
+  const folderModule = pathToFileURL(path.resolve('server', 'folder.ts')).href;
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      '--input-type=module',
+      '--eval',
+      `const folder = await import(${JSON.stringify(folderModule)}); folder.seedBuiltinFolder();`,
+    ],
+    {
+      cwd: path.resolve('.'),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: testHome,
+        USERPROFILE: testHome,
+        STASHBASE_APP_ROOT: path.resolve('.'),
+      },
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  const config = JSON.parse(fs.readFileSync(configFile, 'utf8')) as {
+    recentFolders?: unknown[];
+  };
+  assert.deepEqual(config.recentFolders, []);
+});
 
 test('library routes return authoritative membership and open the selected folder', async (t) => {
   const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-library-route-'));
