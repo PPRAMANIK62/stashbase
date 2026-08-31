@@ -19,13 +19,13 @@ The defining transition is:
 
 ## Workspace Composition
 
-With no document open:
+With no document open, the Files sidebar drives one Agent workspace:
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
-│ Scope and commands                                       │
+│ Files controls                                           │
 ├──────────────────┬───────────────────────────────────────┤
-│ Navigator        │ Agent workspace                       │
+│ Files            │ Agent workspace                       │
 │                  │                                       │
 │ Local file tree  │ Conversation and activity             │
 │                  │                                       │
@@ -46,11 +46,15 @@ With a document open:
 └──────────────────┴──────────────────────┴─────────────────┘
 ```
 
-The shell owns the scope and command bar, Navigator, main stage, and Agent
-dock. Settings opens as a focused modal over this workspace. Opening a source
-changes presentation only; it does not widen Agent context. Compact windows
-prioritize one usable work surface without discarding mounted document or
-Agent state.
+The shell begins with the Files sidebar and Agent workspace only. The sidebar
+drives the workspace: opening a source from its tree changes presentation by
+placing the document in the main canvas and moving the same Agent session into
+a conditional right dock. The dock is not persistent chrome and does not exist
+before a document is open. This presentation change does not widen Agent
+context. The Files sidebar sits on the lower application substrate; the whole
+workspace, titlebar included, is one elevated inset surface above it. Settings
+opens as a focused modal over the workspace. Compact windows prioritize one
+usable work surface without discarding mounted document or Agent state.
 
 ## Product Boundaries
 

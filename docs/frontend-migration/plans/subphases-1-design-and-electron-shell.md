@@ -51,9 +51,40 @@ designs.
 Evidence: `pnpm typecheck:web`, `pnpm lint:web`, `pnpm test:renderer`, and
 `pnpm build:web`.
 
-## 12 — Compose product forms and controls
+## 15 — Build the responsive application shell
 
 **Blocked by:** 11.
+
+**Status:** Complete.
+
+Build the first product-shaped surface before broad component integration. The
+initial shell is sidebar-driven: one Files sidebar controls a single Agent
+workspace, with minimal titlebar chrome and working collapse, resize, keyboard,
+and compact-window behavior supplied by the installed Fluid sidebar. The
+collapsed rail does not hover-peek over its titlebar control; that control stays
+clear and is the authoritative way to expand it.
+The Files sidebar belongs to the lower application substrate; the complete
+Agent workspace, including its titlebar, is one elevated inset surface above
+it rather than an equal edge-to-edge pane.
+Do not pre-compose a document canvas or right Agent dock. Those appear only
+after a user opens a file from the Files tree, when the document becomes the
+main canvas and the same Agent session moves into the conditional right dock.
+
+The shell owns geometry and presentation state only. It does not invent file,
+document, retrieval, or Agent policy, and it does not fill incomplete feature
+regions with explanatory placeholder copy.
+
+Current implementation: the replacement renderer mounts the Files rail, Agent
+workspace, native drag band, and sidebar controls. Feature content, conditional
+document composition, nested failure boundaries, and Electron shell evidence
+remain open.
+
+Evidence: `pnpm test:renderer`, `pnpm typecheck:web`, `pnpm lint:web`,
+`pnpm build:web`, and manual wide/compact renderer checks.
+
+## 12 — Compose product forms and controls
+
+**Blocked by:** 15.
 
 Use installed Fluid buttons, inputs, selects, checkbox and radio groups,
 switches, sliders, and related components in feature slices. Add focused
@@ -62,7 +93,7 @@ local primitive layer.
 
 ## 13 — Compose overlays and navigation
 
-**Blocked by:** 11.
+**Blocked by:** 15.
 
 Use installed Fluid dialogs, mobile drawers, dropdowns, tabs, tooltips, scroll
 areas, sidebars, and surface context. Prove dismissal, focus return, keyboard
@@ -78,16 +109,9 @@ component or introducing a second visual system. Any notification surface must
 compose Fluid primitives and preserve inline ownership for recovery,
 permissions, and durable decisions.
 
-## 15 — Build the responsive application shell
-
-**Blocked by:** 13, 14.
-
-Compose titlebar, sidebar, main stage, Agent docking, container-responsive
-layout, and nested failure boundaries without feature policy in the shell.
-
 ## 16 — Add accessibility and performance harnesses
 
-**Blocked by:** 15.
+**Blocked by:** 12, 13, 14, 15.
 
 Measure WCAG behavior, keyboard and focus paths, startup stages, bundle entries,
 long tasks, interactions, and resource disposal in repeatable environments.

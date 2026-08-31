@@ -1,0 +1,13 @@
+/* The shell is the Electron window surface: the titlebar accepts window drag,
+   while its explicit control island remains interactive. */
+html:has(.workspace-shell) {
+  scrollbar-gutter: auto;
+}
+
+.workspace-titlebar {
+  -webkit-app-region: drag;
+}
+
+.workspace-titlebar-controls {
+  -webkit-app-region: no-drag;
+}
