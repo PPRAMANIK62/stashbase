@@ -1,15 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderOpen, FolderPlus } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Folder, FolderOpen, FolderPlus, LoaderCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { addFolder } from '@/features/workspace/application/add-folder';
-import type {
-  FolderPickerOptions,
-  LibraryApi,
-  LibraryFolderPicker,
-} from '@/features/workspace/application/ports';
-import { libraryQuery, libraryQueryKey } from '@/features/workspace/application/queries';
+import type { LibraryApi, LibraryFolderPicker } from '@/features/workspace/application/ports';
+import { libraryQuery } from '@/features/workspace/application/queries';
+import { displayFolderPath, folderName } from '@/features/workspace/domain/library';
+import { useFolders } from '@/features/workspace/hooks/use-folders';
 import { Logo } from '@/shared/brand/logo';
 
 export interface LibraryWelcomeProps {
@@ -18,40 +14,14 @@ export interface LibraryWelcomeProps {
 }
 
 export function LibraryWelcome({ api, folderPicker }: LibraryWelcomeProps) {
-  const queryClient = useQueryClient();
   const library = useQuery(libraryQuery(api));
-  const operation = useRef<AbortController | null>(null);
-  const authorization = useMutation({
-    mutationFn: ({ options, signal }: { options?: FolderPickerOptions; signal: AbortSignal }) =>
-      addFolder(folderPicker, api, signal, options),
-    onSettled: () => {
-      operation.current = null;
-    },
-    onSuccess: (result) => {
-      if (result.status === 'opened') {
-        queryClient.setQueryData(libraryQueryKey, result.snapshot);
-      }
-    },
-  });
-
-  useEffect(
-    () => () => {
-      operation.current?.abort();
-    },
-    [],
-  );
-
-  const beginAuthorization = (options?: FolderPickerOptions) => {
-    operation.current?.abort();
-    operation.current = new AbortController();
-    authorization.mutate({ options, signal: operation.current.signal });
-  };
+  const folders = useFolders(api, folderPicker);
 
   if (!library.data || library.data.activeFolder) return null;
 
-  const failure = authorization.data?.status === 'failed' ? authorization.data.message : null;
-  const creating =
-    authorization.isPending && authorization.variables.options?.defaultPath !== undefined;
+  const hasMembers = library.data.members.length > 0;
+  const creating = folders.pendingRequest?.kind === 'create';
+  const opening = folders.pendingRequest?.kind === 'open';
 
   return (
     <div className="flex h-full items-center justify-center px-6 pb-11">
@@ -64,30 +34,81 @@ export function LibraryWelcome({ api, folderPicker }: LibraryWelcomeProps) {
 
         <div aria-hidden="true" className="my-7 h-px w-10 bg-border" />
 
-        <h2 className="text-title font-medium">Choose a folder to begin</h2>
-        <p className="mt-2 max-w-xs text-body leading-relaxed text-muted-foreground">
-          Open a folder you already use, or create a new one.
-        </p>
+        <h2 className="text-title font-medium">
+          {hasMembers ? 'Choose a folder' : 'Choose a folder to begin'}
+        </h2>
+        {!hasMembers && (
+          <p className="mt-2 max-w-xs text-body leading-relaxed text-muted-foreground">
+            Open a folder you already use, or create a new one.
+          </p>
+        )}
+
+        {hasMembers && (
+          <ul
+            aria-label="Library folders"
+            className="mt-4 flex max-h-56 w-full max-w-sm flex-col gap-1 overflow-y-auto p-1"
+          >
+            {library.data.members.map((member) => {
+              const isOpening =
+                folders.pendingRequest?.kind === 'select' &&
+                folders.pendingRequest.path === member.path;
+              return (
+                <li key={member.path}>
+                  <button
+                    className="group flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-left transition-colors duration-80 outline-none hover:bg-hover focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)] disabled:pointer-events-none disabled:opacity-50"
+                    disabled={folders.isPending}
+                    onClick={() => folders.select(member.path)}
+                    title={member.path}
+                    type="button"
+                  >
+                    <Folder
+                      aria-hidden="true"
+                      className="size-4 shrink-0 text-muted-foreground transition-[color,stroke-width] duration-80 group-hover:stroke-2 group-hover:text-foreground"
+                      strokeWidth={1.5}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-body font-medium">
+                        {folderName(member.path)}
+                      </span>
+                      <span className="mt-0.5 block truncate text-caption text-muted-foreground">
+                        {displayFolderPath(member.path, library.data.homeDirectory)}
+                      </span>
+                    </span>
+                    {isOpening && (
+                      <LoaderCircle
+                        aria-label="Opening"
+                        className="size-3.5 shrink-0 motion-safe:animate-spin"
+                      />
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
         <div className="mt-5 flex items-center gap-2">
           <Button
-            loading={authorization.isPending && !creating}
+            disabled={folders.isPending}
+            loading={folders.isPending && opening}
             leadingIcon={FolderOpen}
-            onClick={() => beginAuthorization()}
+            onClick={folders.open}
           >
             Open folder
           </Button>
           <Button
-            loading={creating}
+            disabled={folders.isPending}
+            loading={folders.isPending && creating}
             leadingIcon={FolderPlus}
-            onClick={() => beginAuthorization({ defaultPath: library.data.homeDirectory })}
+            onClick={() => folders.create(library.data.homeDirectory)}
             variant="tertiary"
           >
             Create folder
           </Button>
         </div>
-        {failure && (
+        {folders.failure && (
           <p className="mt-3 text-caption text-destructive" role="alert">
-            {failure}
+            {folders.failure}
           </p>
         )}
       </main>

@@ -30,6 +30,7 @@ app
   .whenReady()
   .then(async () => {
     let receivedLibraryRequest = null;
+    let libraryMembers = [];
     libraryServer = http.createServer((request, response) => {
       response.setHeader('Access-Control-Allow-Origin', APP_ORIGIN);
       response.setHeader('Access-Control-Allow-Headers', 'content-type');
@@ -45,7 +46,7 @@ app
         origin: request.headers.origin,
         windowId: request.headers['x-stashbase-window-id'],
       };
-      response.end(JSON.stringify({ current: null, homeDir: '/library', recent: [] }));
+      response.end(JSON.stringify({ current: null, homeDir: '/library', recent: libraryMembers }));
     });
     await new Promise((resolve, reject) => {
       libraryServer.once('error', reject);
@@ -178,6 +179,29 @@ app
       origin: APP_ORIGIN,
       windowId: 'replacement-smoke-window',
     });
+
+    libraryMembers = [
+      {
+        favorite: false,
+        openedAt: '2026-09-01T00:00:00.000Z',
+        path: '/library/engineering-blogs',
+      },
+    ];
+    const didReload = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
+    window.reload();
+    await didReload;
+    const folderCursor = await window.webContents.executeJavaScript(`
+      (async () => {
+        const deadline = Date.now() + 5000;
+        let row;
+        while (!row && Date.now() < deadline) {
+          row = document.querySelector('button[title="/library/engineering-blogs"]');
+          if (!row) await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        return row ? getComputedStyle(row).cursor : null;
+      })()
+    `);
+    assert.equal(folderCursor, 'pointer');
     console.log('replacement Electron boundary smoke passed');
     clearTimeout(timeout);
     window.destroy();

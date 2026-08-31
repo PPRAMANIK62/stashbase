@@ -20,10 +20,11 @@ a false empty state while the request is unresolved. Any settled window without
 an active folder presents one quiet workspace welcome: the StashBase mark,
 product name, and local-files promise lead into explicit Open folder and Create
 folder onboarding actions. Create starts the native picker at the user's home
-and uses its directory-creation capability. Known members awaiting Task 24 are
-not misrepresented as active. Cancellation stays quiet, failure and retry
-remain local, and a successful server response replaces the welcome with the
-Agent workspace while the sidebar shows the authoritative active-folder name.
+and uses its directory-creation capability. Known members are not
+misrepresented as active; Task 24 presents them as explicit choices.
+Cancellation stays quiet, failure and retry remain local, and a successful
+server response replaces the welcome with the Agent workspace while the
+sidebar shows the authoritative active-folder name.
 The app composition root constructs the query, HTTP, and native-dialog adapters.
 Electron authorizes exact-origin main frame requests from registered windows
 and injects the main-owned window identity on `/api/*`, so neither renderer code
@@ -41,8 +42,27 @@ Evidence: `pnpm test:protocols`, `pnpm test:electron-boundary`,
 
 **Blocked by:** 23.
 
+**Status:** Complete.
+
 Render the complete library membership list through the scoped query and add
 subsequent folders through the same authoritative, validated operation.
+
+A settled window with known members and no active folder now presents every
+member as a choice in the welcome workspace. Once a folder is active, its one
+sidebar row opens a compact chooser containing the complete authoritative
+membership plus Open folder and Create folder actions; the sidebar never
+renders multiple folder trees. Duplicate basenames gain their shortened path
+inside the chooser, while the welcome list always shows the shortened path.
+Choosing a known member or authorizing another local folder replaces the
+scoped membership query with the server response. Cancellation remains quiet,
+operations disable competing choices, and classified failures stay beside the
+surface that initiated them. This task changes the window's selected
+membership only; Task 25 still owns folder-scoped runtime creation, disposal,
+generation guards, and stale-completion rejection.
+
+Evidence: `pnpm test:renderer`, `pnpm test:protocols`, `pnpm typecheck`,
+`pnpm lint:web`, `pnpm build:web`, and
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`.
 
 ## 25 — Open and switch active-folder runtimes
 

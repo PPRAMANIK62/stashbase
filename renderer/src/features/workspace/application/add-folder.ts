@@ -1,16 +1,7 @@
-import type { LibrarySnapshot } from '@/features/workspace/domain/library';
+import { openFolder, type OpenFolderResult } from './open-folder';
+import { type FolderPickerOptions, type LibraryFolderPicker, type LibraryApi } from './ports';
 
-import {
-  type FolderPickerOptions,
-  type LibraryFolderPicker,
-  type LibraryApi,
-  LibraryError,
-} from './ports';
-
-export type AddFolderResult =
-  | { status: 'cancelled' }
-  | { status: 'failed'; message: string }
-  | { status: 'opened'; snapshot: LibrarySnapshot };
+export type AddFolderResult = OpenFolderResult;
 
 export async function addFolder(
   folderPicker: LibraryFolderPicker,
@@ -24,16 +15,5 @@ export async function addFolder(
     return { status: 'failed', message: selection.failure.message };
   }
   if (signal.aborted) return { status: 'cancelled' };
-  try {
-    return {
-      status: 'opened',
-      snapshot: await api.openFolder(selection.folderPath, signal),
-    };
-  } catch (error) {
-    if (signal.aborted) return { status: 'cancelled' };
-    if (error instanceof LibraryError) {
-      return { status: 'failed', message: error.message };
-    }
-    return { status: 'failed', message: 'The folder could not be opened.' };
-  }
+  return openFolder(api, selection.folderPath, signal);
 }

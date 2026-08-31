@@ -92,6 +92,42 @@ describe('library welcome', () => {
     expect(openFolder).toHaveBeenCalledWith('/home/person/Research', expect.any(AbortSignal));
   });
 
+  it('presents every known member when no folder is active', async () => {
+    const knownLibrary: LibrarySnapshot = {
+      ...emptyLibrary,
+      members: [
+        {
+          favorite: false,
+          openedAt: '2026-08-31T12:00:00.000Z',
+          path: '/home/person/Research',
+        },
+        {
+          favorite: false,
+          openedAt: '2026-08-30T12:00:00.000Z',
+          path: '/home/person/Writing',
+        },
+      ],
+    };
+    const openedLibrary: LibrarySnapshot = {
+      ...knownLibrary,
+      activeFolder: { name: 'Writing', path: '/home/person/Writing' },
+    };
+    const openFolder = vi.fn(async () => openedLibrary);
+    renderWelcome({
+      folderPicker: { chooseFolder: vi.fn() },
+      api: { load: vi.fn(async () => knownLibrary), openFolder },
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Choose a folder' })).not.toBeNull();
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Writing/u }));
+
+    expect(openFolder).toHaveBeenCalledWith('/home/person/Writing', expect.any(AbortSignal));
+    expect(screen.queryByRole('heading', { name: 'StashBase' })).toBeNull();
+  });
+
   it('keeps open failure local and allows another attempt', async () => {
     const opened: LibrarySnapshot = {
       ...emptyLibrary,
