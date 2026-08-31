@@ -48,6 +48,8 @@ test('the supported renderer build is the only packaged renderer input', () => {
 
   assert.match(rendererConfig, /outDir:\s*['"]\.\.\/dist\/renderer['"]/);
   assert.ok(packagedFiles.includes('dist/renderer/**/*'));
+  assert.ok(packagedFiles.includes('dist/electron/**/*'));
+  assert.ok(packagedFiles.includes('!electron/preload.cjs'));
   assert.ok(
     !packagedFiles.some((entry) => typeof entry === 'string' && entry.includes('dist/storybook')),
   );
@@ -57,6 +59,13 @@ test('the supported renderer build is the only packaged renderer input', () => {
   );
   assert.match(server, /path\.resolve\(APP_ROOT, ['"]dist['"], ['"]renderer['"]\)/);
   assert.doesNotMatch(server, /web\/dist-app/);
+
+  const electronBuild = fs.readFileSync(
+    path.join(root, 'scripts', 'build-electron-boundary.mjs'),
+    'utf8',
+  );
+  assert.match(electronBuild, /['"]replacement-preload['"]:\s*['"]electron\/replacement-preload\.ts['"]/);
+  assert.match(pkg.scripts?.build ?? '', /build:electron-boundary/);
 });
 
 test('bundled Start Here filenames preserve the intended reading order', () => {

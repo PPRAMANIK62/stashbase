@@ -95,5 +95,15 @@ Evidence: `pnpm test:renderer-architecture`, `pnpm lint:web`,
 
 **Blocked by:** 02.
 
-Prove one real request, success, and classified-failure protocol from producer
-through runtime validation and adapter mapping, including compatibility fixtures.
+**Status:** Complete.
+
+The workspace folder-dialog operation establishes the first executable shared
+protocol under `shared/protocols/electron/`. Its strict request, success,
+and classified failure schemas infer their wire types from Zod. Main and the
+bundled preload validate their respective sides of the boundary, and the
+renderer platform adapter maps the validated response into selected,
+cancelled, or classified-failure outcomes. Pinned original and additive
+response fixtures state the initial compatibility policy.
+
+Evidence: `pnpm test:protocols`, `pnpm test:electron-boundary`,
+`pnpm test:renderer`, and `pnpm typecheck`.

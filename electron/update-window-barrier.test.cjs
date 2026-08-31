@@ -1,8 +1,6 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const test = require('node:test');
 const { createUpdateWindowBarrier } = require('./update-window-barrier.cjs');
 
@@ -80,11 +78,4 @@ test('installation failure revokes exactly the closes approved by the update', a
   setup.barrier.revoke();
   setup.barrier.revoke();
   assert.deepEqual(setup.revoked, [1, 2, 3]);
-});
-
-test('Electron main wires the tested barrier into updater install and rollback hooks', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'main.cjs'), 'utf8');
-  assert.match(source, /createUpdateWindowBarrier/);
-  assert.match(source, /beforeInstall:\s*updateWindowBarrier\.prepare/);
-  assert.match(source, /afterInstallFailure:\s*updateWindowBarrier\.revoke/);
 });

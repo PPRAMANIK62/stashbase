@@ -120,19 +120,60 @@ long tasks, interactions, and resource disposal in repeatable environments.
 
 **Blocked by:** 06.
 
-Register the privileged production UI origin with restrictive CSP while keeping
-authenticated loopback server capabilities on their own boundary.
+**Status:** Complete.
+
+The `app` scheme is registered before Electron readiness as a standard, secure,
+fetch-capable origin. Normal source and packaged windows load only
+`app://renderer/` assets rooted under `dist/renderer`; explicit Vite development
+continues through the loopback origin. Every application-protocol response
+overrides upstream policy with a CSP beginning at `default-src 'none'`,
+self-hosted scripts and styles, narrow asset schemes, and only the exact
+Electron-owned loopback HTTP/WebSocket endpoint for server capabilities.
+
+Evidence: `pnpm test:electron-boundary`,
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`, and
+`pnpm test:package-inputs`.
 
 ## 18 — Bundle a sandbox-compatible typed preload
 
 **Blocked by:** 08, 17.
 
-Expose one capability-specific context bridge using Zod validation, explicit
-subscription cleanup, and no raw IPC or product policy.
+**Status:** Complete.
+
+The TypeScript preload is bundled with its runtime schemas and keeps Electron
+as its only sandbox-provided external. It exposes one frozen
+`stashbase.workspace` capability containing only the validated folder-dialog
+method. Raw IPC, Electron events, window identity, filesystem access, and
+product policy do not cross the bridge. The renderer-side adapter consumes the
+bridge without UI importing Electron or the global capability. The broad
+legacy `window.electron` preload is retired from runtime and package inputs,
+and its renderer-facing main-process handlers are removed. Its inert source
+remains only to keep Shipping documentation verifiable until Task 60 retires
+obsolete evidence; future capabilities are added with the feature slice that
+owns them.
+
+Evidence: `pnpm test:electron-boundary`, `pnpm test:renderer`,
+`pnpm typecheck`, and
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`.
 
 ## 19 — Enforce IPC sender authorization
 
 **Blocked by:** 18.
 
-Validate sender window, frame, origin, capability, and payload; deny navigation,
-new windows, permissions, and external URLs unless explicitly authorized.
+**Status:** Complete.
+
+The folder-dialog handler derives its window from the IPC sender and requires a
+live registered window, the sender's main frame, the configured renderer
+origin, a main-owned workspace capability grant, and a valid Zod payload before
+native UI can open. Replacement windows enable sandboxing, context isolation,
+web security, and disable Node integration, webviews, experimental features,
+and insecure content. Popups, unexpected navigation and redirects, webview
+attachment, and session permissions deny by default; external URLs can leave
+the application only through separately owned, explicit main-process actions.
+The superseded untyped renderer handlers are removed rather than kept as a
+parallel boundary. Native menu actions and independently owned services remain
+main-process responsibilities.
+
+Evidence: `pnpm test:electron-boundary`, `pnpm test:electron`,
+`pnpm typecheck`, and
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`.

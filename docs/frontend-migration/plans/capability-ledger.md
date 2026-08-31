@@ -40,12 +40,12 @@ docs validation must reject incomplete rows at those statuses.
 | Gate | Status | Evidence / decision |
 |---|---|---|
 | Dependency boundaries | Proven | `pnpm test:renderer-architecture` proves graph direction, cycles, feature isolation, layer APIs, legacy isolation, and wire-schema registration against the replacement graph. |
-| Runtime contract validation | Not assessed | Define validated protocol inventory in Phase 1 |
+| Runtime contract validation | Building | The workspace folder-dialog reference protocol has shared Zod request, success, and classified-failure schemas. `pnpm test:protocols`, `pnpm test:electron-boundary`, and the renderer adapter tests prove this first inventory entry; remaining HTTP, IPC, event, WebSocket, worker, and persisted protocols are added with their owning slices. |
 | Accessibility and keyboard operation | Not assessed | Map rendered and E2E evidence |
 | Theme, scaling, reduced motion | Building | Decision 0015 adopts Fluid Functionalism and its Base UI flavors. `renderer/src/app/composition/app-providers.tsx` mounts the Fluid shape, size, surface, icon, tooltip, and reduced-motion providers; `renderer/src/globals.css` and the bundled Inter Variable font carry the production theme. Typecheck and build prove integration only. Representative theme, shape, size, focus, motion, and final product visual evidence remain Tasks 12–16. |
 | Initial JavaScript and lazy entries | Not assessed | Record isolated replacement baseline in Phase 0 |
 | Startup and interaction performance | Not assessed | Record measurement method in Phase 0 |
-| Electron titlebar and window lifecycle | Not assessed | Map smoke and contract evidence |
+| Electron titlebar and window lifecycle | Building | `pnpm test:electron-boundary` and `env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke` prove the replacement `app://` origin, production CSP, sandboxed typed preload, window/frame/origin/capability/payload authorization, and default-deny window policy. The legacy renderer save/update handshake is removed; reload stays blocked and a typed save barrier returns with the document slice, before editable state exists. Full replacement lifecycle and final journey evidence remain deferred. |
 | Privacy and credential boundary | Not assessed | Map Settings, Agent, MCP, and bug-report evidence |
 
 ## Update Rule

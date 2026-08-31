@@ -1,16 +1,15 @@
 /**
  * Electron main process for StashBase.
  *
- * Boots the Express server as a child process, waits for :8090 to
- * answer, then opens the window pointed at localhost. Server logs are
- * inherited to this terminal so `tsx watch` rebuilds + diagnostics
- * surface naturally. Quitting the app kills the server.
+ * Boots the Express server as a child process and serves the application UI
+ * from its privileged app:// origin. Explicit Vite development keeps using
+ * the loopback development origin. Quitting the app kills the server.
  *
- * The renderer is sandboxed; all main → renderer surfaces are exposed
- * through the narrow IPC bridge in preload.cjs.
+ * The renderer is sandboxed; replacement capabilities cross only through the
+ * bundled, typed preload bridge.
  */
 
-const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -31,27 +30,32 @@ const { captureWindowScreenshot } = require('./bug-report-screenshot.cjs');
 const { createBugReportHandoff } = require('./bug-report-handoff.cjs');
 const { registerBugReportReviewIpc } = require('./bug-report-review-ipc.cjs');
 const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs');
-const { shouldOfferClipboardImage } = require('./clipboard-watch-policy.cjs');
 const { createUpdateInstaller } = require('./update-install-strategy.cjs');
 const { createUpdateManager } = require('./update-manager.cjs');
-const { createUpdateWindowBarrier } = require('./update-window-barrier.cjs');
 const {
-  WINDOW_ID_ARG_PREFIX,
+  APP_ORIGIN,
+  APP_URL,
+  installAppProtocol,
+  registerAppScheme,
+} = require('./app-protocol.cjs');
+const {
+  applicationWindowWebPreferences,
+  secureApplicationWindow,
+} = require('./window-security.cjs');
+const {
   classifyProtocolLaunch,
   createApplicationMenuTemplate,
-  createRendererFlushCoordinator,
-  createRendererFlushReadiness,
-  createSafeReloadCoordinator,
   createSingleFlight,
   createWindowRegistry,
   focusWindow,
   isOAuthReturnUrl,
   isStashBaseProtocolUrl,
-  openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
   windowLifecycleShortcutAction,
 } = require('./multi-window.cjs');
+
+registerAppScheme(protocol);
 
 function parsePortArg(argv, fallback) {
   for (let i = 0; i < argv.length; i++) {
@@ -126,6 +130,8 @@ function stopSpawnedServer() {
 // "can't connect" race.
 const SERVER_HOST = '127.0.0.1';
 const SERVER_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
+const USE_DEV_VITE = !app.isPackaged && process.env.STASHBASE_DEV_VITE === '1';
+const RENDERER_ORIGIN = USE_DEV_VITE ? SERVER_URL : APP_ORIGIN;
 const SERVER_PROTOCOL_VERSION = 1;
 const SERVER_SHUTDOWN_TOKEN = crypto.randomBytes(32).toString('hex');
 const OAUTH_RETURN_TOKEN = crypto.randomBytes(32).toString('hex');
@@ -144,34 +150,38 @@ const mainWindows = new Set();
 const bugReportReviewWindows = new Set();
 const bugReportReviewDraftBySender = new Map();
 const windowRegistry = createWindowRegistry({ platform: process.platform });
-const rendererFlush = createRendererFlushCoordinator();
-const rendererFlushReadinessByWebContents = new Map();
-const safeReload = createSafeReloadCoordinator({
-  requestFlush: (win, reason) => rendererFlush.request(win, reason),
-  confirmWithoutSaveBarrier: async (win) => {
-    const result = await dialog.showMessageBox(win, {
-      type: 'warning',
-      title: 'Reload without save confirmation?',
-      message: 'StashBase cannot confirm that the current edit is saved.',
-      detail: 'Reloading may discard unsaved changes. Continue only if the window cannot recover.',
-      buttons: ['Cancel', 'Reload Anyway'],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-    });
-    return result.response === 1;
-  },
-  reloadWindow: (win) => win.webContents.reload(),
-});
-const approvedWindowCloses = new WeakSet();
-const pendingWindowCloses = new WeakSet();
-let lastMainWindow = null;
+const replacementWindowCapabilities = new WeakMap();
+let workspaceFolderDialogCapability = null;
+let replacementBoundaryInstalled = false;
 
-function broadcastUpdateState(state) {
-  for (const win of mainWindows) {
-    if (isLiveMainWindow(win)) win.webContents.send('updates:state', state);
-  }
+function installReplacementBoundary() {
+  if (replacementBoundaryInstalled) return;
+  installAppProtocol({
+    protocol,
+    net,
+    rendererRoot: path.join(PROJECT_ROOT, 'dist', 'renderer'),
+    serverOrigin: SERVER_URL,
+  });
+  const boundary = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'workspace-folder-dialog-ipc.cjs',
+  ));
+  workspaceFolderDialogCapability = boundary.WORKSPACE_FOLDER_DIALOG_CAPABILITY;
+  boundary.registerWorkspaceFolderDialogIpc({
+    BrowserWindow,
+    dialog,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
+  });
+  replacementBoundaryInstalled = true;
 }
+let lastMainWindow = null;
 
 async function readAutoUpdatePreference() {
   const response = await fetch(`${SERVER_URL}/api/updates/preferences`);
@@ -179,29 +189,6 @@ async function readAutoUpdatePreference() {
   const preferences = await response.json();
   return preferences?.autoCheck === true;
 }
-
-const updateWindowBarrier = createUpdateWindowBarrier({
-  getWindows: () => mainWindows,
-  isLiveWindow: (win) => isLiveMainWindow(win),
-  shouldRequestFlush: (win) => {
-    const readiness = rendererFlushReadinessByWebContents.get(win.webContents.id);
-    return readiness?.shouldRequest() === true;
-  },
-  requestFlush: (win) => rendererFlush.request(win, 'update-install'),
-  approveClose: (win) => approvedWindowCloses.add(win),
-  revokeCloseApproval: (win) => approvedWindowCloses.delete(win),
-  onBlocked: async () => {
-    const parent = isLiveMainWindow(lastMainWindow) ? lastMainWindow : undefined;
-    const options = {
-      type: 'error',
-      title: 'Could not install update',
-      message: 'StashBase could not confirm that every open edit was saved.',
-      detail: 'Resolve the save error and try the update again.',
-    };
-    if (parent) await dialog.showMessageBox(parent, options);
-    else await dialog.showMessageBox(options);
-  },
-});
 
 const installDesktopUpdate = createUpdateInstaller({
   updater: autoUpdater,
@@ -217,11 +204,12 @@ const desktopUpdates = createUpdateManager({
   platform: process.platform,
   isPackaged: app.isPackaged,
   readAutoCheck: readAutoUpdatePreference,
-  beforeInstall: updateWindowBarrier.prepare,
+  // The current replacement workspace has no editable documents. The
+  // document slice will reconnect update installation to a typed save
+  // capability when unsaved state exists again.
+  beforeInstall: async () => true,
   installUpdate: installDesktopUpdate,
-  afterInstallFailure: updateWindowBarrier.revoke,
   openReleasePage: (url) => openHttpExternal(url, 'update release URL'),
-  onStateChange: broadcastUpdateState,
   debugEnabled: !app.isPackaged,
 });
 const bugReports = createBugReportService({
@@ -667,14 +655,6 @@ function isHttpUrl(rawUrl) {
   }
 }
 
-function isAppUrl(rawUrl) {
-  try {
-    return new URL(rawUrl).origin === new URL(SERVER_URL).origin;
-  } catch {
-    return false;
-  }
-}
-
 async function openExternalUnchecked(rawUrl, label = 'external URL') {
   try {
     await shell.openExternal(rawUrl);
@@ -773,108 +753,6 @@ async function openBugReportReview(win) {
   }
 }
 
-// --- Clipboard image offer ---------------------------------------------
-// When a main window regains focus we peek at the clipboard: if it holds
-// an image we haven't offered yet (e.g. the user just took a screenshot
-// with Cmd+Ctrl+Shift+4, which copies to the clipboard, then switched
-// back), we ping the renderer to ask "add this to the library?". Reading
-// the clipboard is cheap; we hash the PNG bytes so the same image is only
-// offered once — dismiss is final until the clipboard content changes.
-// Fail closed. The renderer enables this only after reading the durable,
-// explicit Settings opt-in from the server.
-let clipboardWatchEnabled = false;
-let lastClipboardOfferHash = null;
-const agentComposerFocusedContents = new Set();
-
-function clipboardImageFilename() {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return `clipboard-${stamp}.png`;
-}
-
-function markCurrentClipboardImageHandled() {
-  let img;
-  try {
-    img = clipboard.readImage();
-  } catch {
-    return false;
-  }
-  if (!img || img.isEmpty()) return false;
-  let png;
-  try {
-    png = img.toPNG();
-  } catch {
-    return false;
-  }
-  if (!png || !png.length) return false;
-  lastClipboardOfferHash = crypto.createHash('sha1').update(png).digest('hex');
-  return true;
-}
-
-function offerClipboardImage(win, focused = win?.isFocused?.() === true) {
-  if (!win || win.isDestroyed()) return;
-  // A focused Agent composer claims clipboard images as transient chat
-  // context, so do not race the explicit paste with a library-import offer.
-  if (!shouldOfferClipboardImage({
-    enabled: clipboardWatchEnabled,
-    focused,
-    composerFocused: agentComposerFocusedContents.has(win.webContents.id),
-  })) return;
-  let img;
-  try {
-    img = clipboard.readImage();
-  } catch {
-    return;
-  }
-  if (!img || img.isEmpty()) return;
-  let png;
-  try {
-    png = img.toPNG();
-  } catch {
-    return;
-  }
-  if (!png || !png.length) return;
-  const hash = crypto.createHash('sha1').update(png).digest('hex');
-  // Same image we've already offered (or one the renderer just imported,
-  // which calls clipboard:markHandled). Don't re-prompt on every focus.
-  if (hash === lastClipboardOfferHash) return;
-  lastClipboardOfferHash = hash;
-  const size = img.getSize();
-  win.webContents.send('clipboard:image-available', {
-    dataUrl: img.toDataURL(),
-    mime: 'image/png',
-    width: size.width,
-    height: size.height,
-    hash,
-    filename: clipboardImageFilename(),
-  });
-}
-
-// Poll the clipboard while a StashBase window is focused so a system
-// screenshot taken *while browsing* (⌘⇧⌃4 copies to the clipboard) is
-// offered the instant macOS finishes writing it. The bare 'focus' read
-// alone raced that async write — the bytes often land just after focus
-// returns, so the single read came up empty and the offer didn't appear
-// until the user manually clicked away and back. The timer self-stops
-// once focus leaves a main window, so we never poll while the user is in
-// another app. `offerClipboardImage` already dedups by hash, so a clip
-// sitting in the clipboard is encoded+offered once, not every tick.
-let clipboardPollTimer = null;
-const CLIPBOARD_POLL_MS = 600;
-function startClipboardPolling() {
-  if (clipboardPollTimer || !clipboardWatchEnabled) return;
-  clipboardPollTimer = setInterval(() => {
-    const win = BrowserWindow.getFocusedWindow();
-    if (win && mainWindows.has(win) && !win.isDestroyed()) offerClipboardImage(win, true);
-    else stopClipboardPolling();
-  }, CLIPBOARD_POLL_MS);
-}
-function stopClipboardPolling() {
-  if (clipboardPollTimer) {
-    clearInterval(clipboardPollTimer);
-    clipboardPollTimer = null;
-  }
-}
-
 async function createWindow(initialFolder) {
   try {
     await ensureServer();
@@ -905,51 +783,21 @@ async function createWindow(initialFolder) {
     backgroundColor: '#fafafa',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 12 },
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false, // preload needs `require` for ipcRenderer
-      additionalArguments: [`${WINDOW_ID_ARG_PREFIX}${windowId}`],
-    },
+    webPreferences: applicationWindowWebPreferences({
+      preloadPath: path.join(PROJECT_ROOT, 'dist', 'electron', 'replacement-preload.cjs'),
+    }),
   });
   const webContentsId = win.webContents.id;
-  const rendererFlushReadiness = createRendererFlushReadiness();
-  rendererFlushReadinessByWebContents.set(webContentsId, rendererFlushReadiness);
   mainWindows.add(win);
   windowRegistry.add(windowId, win, initialFolder);
+  if (workspaceFolderDialogCapability) {
+    replacementWindowCapabilities.set(win, new Set([workspaceFolderDialogCapability]));
+  }
   lastMainWindow = win;
   win.on('focus', () => {
     lastMainWindow = win;
-    offerClipboardImage(win, true);
-    startClipboardPolling();
-  });
-  win.on('close', (event) => {
-    if (approvedWindowCloses.has(win) || !rendererFlushReadiness.shouldRequest()) return;
-    event.preventDefault();
-    if (pendingWindowCloses.has(win)) return;
-    pendingWindowCloses.add(win);
-    void rendererFlush.request(win, 'window-close').then((ok) => {
-      pendingWindowCloses.delete(win);
-      if (!ok || win.isDestroyed()) {
-        if (!win.isDestroyed() && process.env.STASHBASE_MULTI_WINDOW_SMOKE !== '1') {
-          void dialog.showMessageBox(win, {
-            type: 'error',
-            title: 'Could not close window',
-            message: 'StashBase could not confirm that the current edit was saved.',
-            detail: 'Resolve the save error and close the window again.',
-          });
-        }
-        return;
-      }
-      approvedWindowCloses.add(win);
-      win.close();
-    });
   });
   win.on('closed', () => {
-    agentComposerFocusedContents.delete(webContentsId);
-    rendererFlush.cancel(webContentsId);
-    rendererFlushReadinessByWebContents.delete(webContentsId);
     bugReports.discardUnreviewedDraftsForSource(webContentsId);
     mainWindows.delete(win);
     windowRegistry.remove(windowId);
@@ -962,39 +810,10 @@ async function createWindow(initialFolder) {
     }
   });
 
-  // External links → OS default browser. Anything else (popups,
-  // accidental navigation away from the app shell) gets denied so the
-  // main window stays anchored at SERVER_URL.
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!isAppUrl(url)) void openHttpExternal(url, 'window-open URL');
-    return { action: 'deny' };
-  });
-  win.webContents.on('will-navigate', (event, url) => {
-    if (isAppUrl(url)) return;
-    event.preventDefault();
-    void openHttpExternal(url, 'navigation URL');
-  });
+  secureApplicationWindow(win, RENDERER_ORIGIN);
 
-  // macOS fullscreen hides the traffic lights, so the sidebar shouldn't
-  // reserve its top drag-zone clearance for them. Push state to the
-  // renderer so CSS can flip a body class. Send the initial state once
-  // the renderer is up in case the window started fullscreen (rare but
-  // possible via `Restore Window` on relaunch).
-  function pushFullscreen() {
-    if (win.isDestroyed()) return;
-    win.webContents.send('fullscreen-change', win.isFullScreen());
-  }
-  win.on('enter-full-screen', pushFullscreen);
-  win.on('leave-full-screen', pushFullscreen);
-  win.webContents.on('did-finish-load', () => {
-    rendererFlushReadiness.markDocumentLoaded();
-    pushFullscreen();
-    win.webContents.send('updates:state', desktopUpdates.getState());
-  });
-
-  // Reload is a destructive renderer-context transition. Native reload and
-  // force-reload chords stay blocked; the recovery UI invokes main's awaited
-  // save barrier and receives an explicit failure instead.
+  // Reload is a destructive renderer-context transition. Keep native reload
+  // chords blocked until the document slice owns a typed save/recovery path.
   win.webContents.on('before-input-event', (event, input) => {
     // Own window-level input before it reaches the renderer. The native menu
     // still advertises the platform accelerator, while this boundary prevents
@@ -1013,9 +832,10 @@ async function createWindow(initialFolder) {
     if (windowAction === 'block-reload') event.preventDefault();
   });
 
-  const url = initialFolder
+  const serverRendererUrl = initialFolder
     ? `${SERVER_URL}/?folder=${encodeURIComponent(initialFolder)}`
     : SERVER_URL;
+  const url = USE_DEV_VITE ? serverRendererUrl : APP_URL;
   win.loadURL(url);
   return win;
 }
@@ -1063,230 +883,6 @@ function installApplicationMenu() {
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
-
-// Folder picker for Open/New folder flows. `defaultPath` lets New
-// folder start at `~/Documents/StashBase`, while the OS panel owns the
-// actual directory creation affordance.
-ipcMain.handle('dialog:openFolder', async (event, opts = {}) => {
-  const properties = ['openDirectory'];
-  if (opts.allowCreateDirectory !== false) properties.push('createDirectory');
-  const dialogOpts = {
-    title: opts.title || 'Choose a folder',
-    properties,
-  };
-  if (typeof opts.buttonLabel === 'string' && opts.buttonLabel) {
-    dialogOpts.buttonLabel = opts.buttonLabel;
-  }
-  if (typeof opts.defaultPath === 'string' && opts.defaultPath) {
-    dialogOpts.defaultPath = opts.defaultPath;
-  }
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  const parent = isLiveMainWindow(senderWindow) ? senderWindow : BrowserWindow.getFocusedWindow();
-  const result = parent
-    ? await dialog.showOpenDialog(parent, dialogOpts)
-    : await dialog.showOpenDialog(dialogOpts);
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths[0];
-});
-
-// Renderer-initiated external link → OS default browser. Validates the
-// scheme so an injected `file://` / `javascript:` URL can't smuggle a
-// local navigation through us.
-ipcMain.handle('shell:openExternal', async (_e, url) => {
-  return openHttpExternal(url, 'renderer external URL');
-});
-
-// Renderer-initiated bug reporting: the sidebar button is the same deliberate
-// entry as Help → Report a Bug…. The source window is derived from the IPC
-// sender, never from renderer-supplied identity, and only a live main window
-// may start a report.
-ipcMain.handle('bug-report:open', async (event) => {
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return false;
-  await openBugReportReview(senderWindow);
-  return true;
-});
-
-ipcMain.handle('window:setFolder', (event, folder) => {
-  if (folder !== null && (typeof folder !== 'string' || !folder.trim())) return false;
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  const windowId = windowRegistry.idForWindow(senderWindow);
-  if (!windowId) return false;
-  return windowRegistry.setFolder(windowId, folder);
-});
-
-ipcMain.handle('window:openFolder', async (event, name) => {
-  if (typeof name !== 'string' || !name.trim()) return false;
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  const result = await openOrFocusFolder({
-    registry: windowRegistry,
-    folder: name.trim(),
-    senderWindow,
-    createWindow,
-  });
-  if (result.ok && result.win) lastMainWindow = result.win;
-  return result.ok;
-});
-
-ipcMain.handle('window:safeReload', async (event) => {
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return false;
-  const saveBarrierReady = rendererFlushReadinessByWebContents
-    .get(event.sender.id)
-    ?.shouldRequest() === true;
-  const result = await safeReload.request(senderWindow, { saveBarrierReady });
-  if (!result.reloaded && result.reason === 'save-failed' && isLiveMainWindow(senderWindow)) {
-    await dialog.showMessageBox(senderWindow, {
-      type: 'error',
-      title: 'Could not reload window',
-      message: 'StashBase could not confirm that the current edit was saved.',
-      detail: 'Resolve the save error and try again.',
-    });
-  }
-  if (!result.reloaded && result.reason === 'reload-failed' && isLiveMainWindow(senderWindow)) {
-    await dialog.showMessageBox(senderWindow, {
-      type: 'error',
-      title: 'Could not reload window',
-      message: 'StashBase could not reload this window.',
-    });
-  }
-  return result.reloaded;
-});
-
-ipcMain.on('window:context-release-ready', (event, payload) => {
-  rendererFlush.handleResponse(event.sender.id, payload);
-});
-
-ipcMain.on('window:context-release-handler-state', (event, payload) => {
-  rendererFlushReadinessByWebContents
-    .get(event.sender.id)
-    ?.markHandlerReady(payload?.ready === true);
-});
-
-ipcMain.handle('window:prepareFolderRemoval', async (event, folder) => {
-  if (typeof folder !== 'string' || !folder.trim()) return false;
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return false;
-  const affected = windowRegistry.windowsByFolder(folder.trim())
-    .filter((win) => isLiveMainWindow(win));
-  const saved = await Promise.all(
-    affected.map((win) => rendererFlush.request(win, 'folder-removal')),
-  );
-  return saved.every(Boolean);
-});
-
-ipcMain.handle('window:notifyFolderRemoved', (event, folder) => {
-  if (typeof folder !== 'string' || !folder.trim()) return false;
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return false;
-  for (const win of mainWindows) {
-    if (isLiveMainWindow(win)) {
-      win.webContents.send('window:folder-removed', folder.trim());
-    }
-  }
-  return true;
-});
-
-// A folder joined the library without any window opening it (Agent
-// create_project). Broadcast so every window's sidebar refreshes its
-// membership list; only the notifying (chat-owning) window navigates.
-ipcMain.handle('window:notifyLibraryFolderAdded', (event, folder) => {
-  if (typeof folder !== 'string' || !folder.trim()) return false;
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return false;
-  for (const win of mainWindows) {
-    if (isLiveMainWindow(win) && win !== senderWindow) {
-      win.webContents.send('window:library-folder-added', folder.trim());
-    }
-  }
-  return true;
-});
-
-// Renderer asks main to refresh clipboard-image watching after startup or a
-// Settings write. Main re-reads server-owned durable truth so a slow renderer
-// cannot overwrite a newer choice made in another window.
-ipcMain.handle('clipboard:refreshWatch', async (event) => {
-  const wasEnabled = clipboardWatchEnabled;
-  let enabled = false;
-  try {
-    const response = await fetch(`${SERVER_URL}/api/capture`);
-    if (response.ok) {
-      const preferences = await response.json();
-      enabled = preferences?.clipboardImageImport === true;
-    }
-  } catch {
-    // Ambient capture fails closed when config cannot be read.
-  }
-  clipboardWatchEnabled = enabled;
-  if (clipboardWatchEnabled) {
-    if (!wasEnabled) lastClipboardOfferHash = null;
-    // The Settings click can momentarily race Electron's global focus sample.
-    // The invoking renderer is stable authority for where to surface the first
-    // offer; later focus events continue to move polling between windows.
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (isLiveMainWindow(win) && win.isFocused()) {
-      offerClipboardImage(win, true);
-      startClipboardPolling();
-    }
-  } else {
-    stopClipboardPolling();
-  }
-  return clipboardWatchEnabled;
-});
-
-ipcMain.handle('updates:getState', (event) => {
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  return isLiveMainWindow(senderWindow) ? desktopUpdates.getState() : null;
-});
-
-ipcMain.handle('updates:check', async (event) => {
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return null;
-  return desktopUpdates.check({ manual: true });
-});
-
-ipcMain.handle('updates:primaryAction', async (event) => {
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return null;
-  return desktopUpdates.primaryAction();
-});
-
-ipcMain.handle('updates:openDownloadPage', async (event) => {
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return false;
-  return desktopUpdates.openDownloadPage();
-});
-
-ipcMain.handle('updates:refreshPreference', async (event) => {
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return null;
-  return desktopUpdates.refreshPreference();
-});
-
-ipcMain.handle('updates:setSimulation', (event, simulation) => {
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(senderWindow)) return null;
-  return desktopUpdates.setUpdateSimulation(simulation);
-});
-
-// Renderer confirms it imported (or chose to keep ignoring) a clipboard
-// image; remember the hash so re-focus doesn't re-offer the same one.
-ipcMain.on('clipboard:markHandled', (_event, hash) => {
-  if (typeof hash === 'string' && hash) lastClipboardOfferHash = hash;
-});
-
-ipcMain.on('clipboard:markCurrentImageHandled', (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(win)) return;
-  markCurrentClipboardImageHandled();
-});
-
-ipcMain.on('clipboard:setAgentComposerFocused', (event, focused) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!isLiveMainWindow(win)) return;
-  if (focused === true) agentComposerFocusedContents.add(event.sender.id);
-  else agentComposerFocusedContents.delete(event.sender.id);
-});
 
 const initialWindowFlight = createSingleFlight(() => app.whenReady().then(() => createWindow()));
 
@@ -1358,6 +954,7 @@ if (!hasSingleInstanceLock) {
       app.quit();
       return;
     }
+    installReplacementBoundary();
     try {
       await bugReportHandoff.initializeSession();
     } catch {
