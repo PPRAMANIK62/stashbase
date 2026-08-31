@@ -34,29 +34,29 @@ no journey relies solely on undocumented legacy behavior.
 
 Deliver:
 
-- replacement build and bootstrap;
+- replacement build and minimum safe shell bootstrap;
 - privileged custom renderer protocol, sandbox-compatible bundled preload,
   strict CSP, IPC authorization, and explicit permission/navigation policy;
 - platform mechanisms, feature-owned ports, adapters, and shared executable
-  Zod runtime schemas;
-- error and recovery boundary;
+  Zod runtime schemas as their first product slices consume them;
 - the complete Fluid Functionalism registry inventory, bundled Inter Variable,
   Base UI-only components, providers, overlays, and accessibility foundation;
-- WCAG 2.2 AA foundation, pre-paint appearance bootstrap, React Hook Form/Zod
-  mechanics, and one root headless Sonner notification adapter;
+- the component and test foundations needed for consuming slices to add WCAG,
+  appearance, form, overlay, and notification behavior without a parallel UI
+  system;
 - native titlebar and app shell composition;
 - lazy-loading and architectural boundary enforcement;
-- explicit construction, subscription, and disposal of representative scoped
-  Zustand runtimes;
-- TanStack Query setup with representative scoped keys and cancellation; and
+- explicit construction, subscription, and disposal rules for scoped Zustand
+  runtimes;
+- TanStack Query ownership, scoped-key, and cancellation rules; and
 - Vitest, Testing Library, user-event, MSW, axe, Playwright, and focused
   renderer runtime harnesses targeting the replacement.
 
-Exit when the new shell starts through the real Electron/server path, reports
-fatal startup failure safely, Dependency-cruiser, Oxlint, and repository checks
-block representative violations, independent bootstrap capabilities settle
-without a global readiness gate, the approved performance budgets pass, and
-representative Linux visual evidence exists.
+Exit when the new shell starts through the real Electron path and
+Dependency-cruiser, Oxlint, and repository checks block representative
+violations. Capability-local recovery, appearance, accessibility, performance,
+and visual evidence land with the product slices that consume them and remain
+required before production completion.
 
 ## Phase 2 — Onboarding and Workspace (J01, J02)
 
@@ -131,6 +131,9 @@ remaining renderer responsibilities in Journey Coverage are accounted for.
 Deliver:
 
 - confirmation that production and release paths target only `renderer`;
+- completion of cross-cutting appearance, accessibility, startup recovery,
+  capability-local settlement, and update behavior through their real product
+  consumers;
 - complete validation and accepted performance comparison;
 - updated Shipping design, architecture, contracts, and Journey Coverage; and
 - version-control and release rollback evidence that does not require a live

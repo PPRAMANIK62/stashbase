@@ -20,8 +20,11 @@ entry, transcript continuity, and meaningful recovery.
 
 Confirm the replacement is the sole supported production entry, run the
 complete validation and performance matrix, update Shipping contracts, and
-prove version-control and release rollback. The inert `web-src` reference must
-remain outside every supported command and evidence path.
+prove version-control and release rollback. Complete remaining cross-cutting
+startup work through its real consumers: pre-paint appearance, update-state
+settlement, fatal shell recovery, and the composed J01 first-value and returning
+launch outcome. The inert `web-src` reference must remain outside every
+supported command and evidence path.
 
 ## 60 — Retire migration-only artifacts
 

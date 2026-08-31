@@ -2,10 +2,11 @@
 
 ## 46 — Configure Agent runtime and credentials
 
-**Blocked by:** 12, 22.
+**Blocked by:** 12.
 
 Expose the Agent catalog and Settings-owned credentials with runtime validation,
-truthful availability, and no renderer environment-variable authority.
+truthful capability-local loading and availability, and no renderer
+environment-variable authority.
 
 ## 47 — Create and restore Agent sessions
 
