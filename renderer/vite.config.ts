@@ -7,9 +7,13 @@ import { defineConfig } from 'vite-plus';
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+    alias: [
+      {
+        find: /^@\/protocols\//u,
+        replacement: fileURLToPath(new URL('../shared/protocols/', import.meta.url)),
+      },
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+    ],
   },
   fmt: {
     arrowParens: 'always',

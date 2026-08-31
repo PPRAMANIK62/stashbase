@@ -1,18 +1,48 @@
 # Subphase 2 — Bootstrap and Workspace
 
-## 23 — Complete first-run onboarding
+## 23 — Authorize the first library folder
 
-**Blocked by:** 22.
+**Blocked by:** 19.
 
-Deliver J01 first-run and returning launch outcomes, first folder authorization,
-truthful recovery, and replacement evidence.
+**Status:** Complete.
+
+Deliver the first J01 onboarding tracer bullet: distinguish unresolved library
+membership from a settled no-folder state, welcome the user in the workspace,
+let them open an ordinary local folder or create one through the authorized
+native dialog, register and open it through a validated server Interface, and
+keep the shell usable with local loading and retry. Do not introduce a global
+bootstrap gate or claim the complete J01 first-value and returning-launch
+outcome before its later Workspace, Settings, Retrieval, and Agent slices
+exist.
+
+The Files sidebar now queries validated library membership without presenting
+a false empty state while the request is unresolved. Any settled window without
+an active folder presents one quiet workspace welcome: the StashBase mark,
+product name, and local-files promise lead into explicit Open folder and Create
+folder onboarding actions. Create starts the native picker at the user's home
+and uses its directory-creation capability. Known members awaiting Task 24 are
+not misrepresented as active. Cancellation stays quiet, failure and retry
+remain local, and a successful server response replaces the welcome with the
+Agent workspace while the sidebar shows the authoritative active-folder name.
+The app composition root constructs the query, HTTP, and native-dialog adapters.
+Electron authorizes exact-origin main frame requests from registered windows
+and injects the main-owned window identity on `/api/*`, so neither renderer code
+nor preload receives it. The server recognizes the exact packaged renderer
+origin without wildcarding and validates the additive replacement library
+routes; the legacy folder routes remain available until cutover.
+
+Evidence: `pnpm test:protocols`, `pnpm test:electron-boundary`,
+`pnpm test:renderer`, `pnpm test:renderer-architecture`,
+`node --import tsx --test server/middleware/renderer-origin.test.ts server/routes/library.test.ts`,
+`pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`, and
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`.
 
 ## 24 — List and add library folders
 
 **Blocked by:** 23.
 
-Expose library membership through scoped TanStack queries and authoritative,
-validated folder addition.
+Render the complete library membership list through the scoped query and add
+subsequent folders through the same authoritative, validated operation.
 
 ## 25 — Open and switch active-folder runtimes
 

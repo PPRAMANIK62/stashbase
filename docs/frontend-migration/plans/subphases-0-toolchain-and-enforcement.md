@@ -97,13 +97,16 @@ Evidence: `pnpm test:renderer-architecture`, `pnpm lint:web`,
 
 **Status:** Complete.
 
-The workspace folder-dialog operation establishes the first executable shared
+The library folder-dialog operation establishes the first executable shared
 protocol under `shared/protocols/electron/`. Its strict request, success,
 and classified failure schemas infer their wire types from Zod. Main and the
 bundled preload validate their respective sides of the boundary, and the
 renderer platform adapter maps the validated response into selected,
 cancelled, or classified-failure outcomes. Pinned original and additive
 response fixtures state the initial compatibility policy.
+
+Task 23 adds the validated renderer runtime configuration and library HTTP
+request, snapshot, and failure protocols when their first consumer arrives.
 
 Evidence: `pnpm test:protocols`, `pnpm test:electron-boundary`,
 `pnpm test:renderer`, and `pnpm typecheck`.

@@ -39,8 +39,26 @@ import { deleteDerivedForSource, deleteDerivedUnderFolder, type DerivedCleanupSt
 import { deleteFileOrderForRoot } from '../file-order.ts';
 import { ensureAgentsFile } from '../agent-rules.ts';
 import { stopAgentRuntimeForFolder } from '../agent-contract.ts';
+import {
+  libraryOpenFolderRequestSchema,
+  librarySnapshotSchema,
+} from '../../shared/protocols/http/library.ts';
 
 const log = logger('routes/folder');
+
+function librarySnapshot() {
+  const current = getCurrentFolder();
+  return librarySnapshotSchema.parse({
+    current: current
+      ? {
+          path: filesystemPath.absolute(current),
+          name: getCurrentFolderLabel() ?? path.basename(current),
+        }
+      : null,
+    homeDir: os.homedir(),
+    recent: getRecentFolders(),
+  });
+}
 
 function addDerivedCleanupStats(a: DerivedCleanupStats, b: DerivedCleanupStats): DerivedCleanupStats {
   return { sources: a.sources + b.sources, artifacts: a.artifacts + b.artifacts };
@@ -88,6 +106,34 @@ async function cleanupRemovedLibraryFolder(abs: string): Promise<void> {
 }
 
 export function mount(app: express.Express): void {
+  app.get('/api/library', (_req, res) => {
+    res.json(librarySnapshot());
+  });
+
+  app.post('/api/library/folders/open', (req, res) => {
+    const request = libraryOpenFolderRequestSchema.safeParse(req.body);
+    if (!request.success) {
+      res.status(400).json({ error: 'path required', code: 'INVALID_FOLDER' });
+      return;
+    }
+    try {
+      const changed = setCurrentFolder(request.data.path);
+      const folderRoot = getCurrentFolder()!;
+      if (ensureAgentsFile(folderRoot)) noteTreeChanged();
+      const windowId = currentWindowId();
+      if (changed) {
+        res.once('finish', () => notifyFolderSwitch(folderRoot, windowId));
+      }
+      res.json(librarySnapshot());
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code === 'WINDOW_CLOSED') {
+        res.status(410).json({ error: 'window is closed', code: 'WINDOW_CLOSED' });
+        return;
+      }
+      sendFolderOperationError(res, err);
+    }
+  });
+
   // List the open + recent folders. Powers the Welcome screen. Includes
   // homeDir so the renderer can shorten `/Users/<name>/foo` to `~/foo`
   // (less personal info in screenshots).

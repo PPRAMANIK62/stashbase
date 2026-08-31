@@ -9,7 +9,7 @@
  * bundled, typed preload bridge.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -42,6 +42,7 @@ const {
   applicationWindowWebPreferences,
   secureApplicationWindow,
 } = require('./window-security.cjs');
+const { installRequestAuthorization } = require('./renderer/requests.cjs');
 const {
   classifyProtocolLaunch,
   createApplicationMenuTemplate,
@@ -151,7 +152,7 @@ const bugReportReviewWindows = new Set();
 const bugReportReviewDraftBySender = new Map();
 const windowRegistry = createWindowRegistry({ platform: process.platform });
 const replacementWindowCapabilities = new WeakMap();
-let workspaceFolderDialogCapability = null;
+let libraryFolderDialogCapability = null;
 let replacementBoundaryInstalled = false;
 
 function installReplacementBoundary() {
@@ -166,10 +167,11 @@ function installReplacementBoundary() {
     PROJECT_ROOT,
     'dist',
     'electron',
-    'workspace-folder-dialog-ipc.cjs',
+    'library',
+    'dialog.cjs',
   ));
-  workspaceFolderDialogCapability = boundary.WORKSPACE_FOLDER_DIALOG_CAPABILITY;
-  boundary.registerWorkspaceFolderDialogIpc({
+  libraryFolderDialogCapability = boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY;
+  boundary.registerDialog({
     BrowserWindow,
     dialog,
     ipcMain,
@@ -784,14 +786,15 @@ async function createWindow(initialFolder) {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 12 },
     webPreferences: applicationWindowWebPreferences({
-      preloadPath: path.join(PROJECT_ROOT, 'dist', 'electron', 'replacement-preload.cjs'),
+      preloadPath: path.join(PROJECT_ROOT, 'dist', 'electron', 'renderer', 'preload.cjs'),
+      additionalArguments: [`--stashbase-server-origin=${SERVER_URL}`],
     }),
   });
   const webContentsId = win.webContents.id;
   mainWindows.add(win);
   windowRegistry.add(windowId, win, initialFolder);
-  if (workspaceFolderDialogCapability) {
-    replacementWindowCapabilities.set(win, new Set([workspaceFolderDialogCapability]));
+  if (libraryFolderDialogCapability) {
+    replacementWindowCapabilities.set(win, new Set([libraryFolderDialogCapability]));
   }
   lastMainWindow = win;
   win.on('focus', () => {
@@ -955,6 +958,14 @@ if (!hasSingleInstanceLock) {
       return;
     }
     installReplacementBoundary();
+    installRequestAuthorization({
+      rendererOrigins: new Set([RENDERER_ORIGIN]),
+      serverOrigin: SERVER_URL,
+      session: session.defaultSession,
+      windowRegistrationForWebContentsId: (webContentsId) => (
+        windowRegistry.registrationForWebContentsId(webContentsId)
+      ),
+    });
     try {
       await bugReportHandoff.initializeSession();
     } catch {

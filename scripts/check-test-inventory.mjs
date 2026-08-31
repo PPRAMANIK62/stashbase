@@ -43,9 +43,18 @@ for (const root of SCAN_ROOTS) {
 }
 
 // A glob reaching Node's runner is quoted so the shell forwards it intact.
+function expandBraces(token) {
+  const match = token.match(/^(?<before>[^{}]*)\{(?<choices>[^{}]+)\}(?<after>.*)$/);
+  if (!match?.groups) return [token];
+  return match.groups.choices
+    .split(',')
+    .flatMap((choice) => expandBraces(`${match.groups.before}${choice}${match.groups.after}`));
+}
+
 const tokens = commands
   .flatMap((command) => command.split(/\s+/))
-  .map((token) => token.replace(/^['"]|['"]$/g, ''));
+  .map((token) => token.replace(/^['"]|['"]$/g, ''))
+  .flatMap(expandBraces);
 const verbatim = new Set(tokens.filter((token) => TEST_FILE.test(token)));
 const globMatchers = tokens
   .filter((token) => token.includes('*'))

@@ -429,6 +429,21 @@ test('folder registry finds an existing context, excludes the sender, and retire
   assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes'), null);
 });
 
+test('window registry resolves main-owned request authorization records', () => {
+  const registry = createWindowRegistry({ platform: 'linux' });
+  const window = { webContents: { id: 41 } };
+  registry.add('window-41', window);
+
+  assert.deepEqual(registry.registrationForWebContentsId(41), {
+    windowId: 'window-41',
+    window,
+  });
+  assert.equal(registry.registrationForWebContentsId(99), null);
+
+  registry.remove('window-41');
+  assert.equal(registry.registrationForWebContentsId(41), null);
+});
+
 test('focusing an existing folder window restores it before bringing it forward', () => {
   const calls = [];
   const win = {

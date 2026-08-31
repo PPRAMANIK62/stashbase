@@ -7,5 +7,9 @@
     { "name": "settings", "productArea": "Workspace / Agent Panel" },
     { "name": "workspace", "productArea": "Workspace" }
   ],
-  "wireSchemaModules": ["shared/protocols/electron/workspace-folder-dialog.ts"]
+  "wireSchemaModules": [
+    "shared/protocols/electron/library.ts",
+    "shared/protocols/electron/runtime.ts",
+    "shared/protocols/http/library.ts"
+  ]
 }

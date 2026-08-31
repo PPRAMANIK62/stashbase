@@ -13,6 +13,12 @@ approved architecture decision first.
 ## Modules and Interfaces
 
 - Each module has one reason to change and a deliberately small public API.
+- Repository automation keeps stable pnpm command names as its Interface and
+  groups migration-owned implementations under `scripts/<owner>/`; quoted
+  directory-owned test globs replace repeated file inventories.
+- Imports use `./` within one directory and `@/` across renderer directories;
+  parent-relative `../` imports are forbidden. `@/protocols/*` is the explicit
+  alias for registered repository-owned wire schemas.
 - Each feature exposes only `public.ts`; consumers do not deep-import.
 - Features never import another feature; cross-feature workflows and wiring
   belong to the app layer.

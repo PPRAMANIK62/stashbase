@@ -77,6 +77,7 @@ import { mount as mountSessionsRoutes } from './routes/sessions.ts';
 import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
 import { mount as mountOnboardingRoutes } from './routes/onboarding.ts';
+import { createRendererOriginPolicy } from './middleware/renderer-origin.ts';
 import { mount as mountAccountRoutes } from './routes/account.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from './agent-adapters.ts';
 import {
@@ -196,6 +197,7 @@ app.use(withWindowContext);
 //      from a webpage.
 
 const ALLOWED_ORIGINS = new Set([
+  'app://renderer',
   `http://127.0.0.1:${PORT}`,
   `http://localhost:${PORT}`,
 ]);
@@ -244,12 +246,7 @@ app.use((_req, res, next) => {
   next();
 });
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (!origin) return next(); // Electron loadURL / MCP / curl have none.
-  if (ALLOWED_ORIGINS.has(origin)) return next();
-  res.status(403).json({ error: 'cross-origin request rejected', code: 'BAD_ORIGIN' });
-});
+app.use(createRendererOriginPolicy(ALLOWED_ORIGINS));
 
 // pdf.js fetches CMaps, fallback fonts, and WASM by URL at render time.
 // Serve the bundled package assets from the app server so dev, packaged,

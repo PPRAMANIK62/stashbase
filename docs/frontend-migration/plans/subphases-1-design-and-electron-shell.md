@@ -141,11 +141,13 @@ Evidence: `pnpm test:electron-boundary`,
 **Status:** Complete.
 
 The TypeScript preload is bundled with its runtime schemas and keeps Electron
-as its only sandbox-provided external. It exposes one frozen
-`stashbase.workspace` capability containing only the validated folder-dialog
-method. Raw IPC, Electron events, window identity, filesystem access, and
-product policy do not cross the bridge. The renderer-side adapter consumes the
-bridge without UI importing Electron or the global capability. The broad
+as its only sandbox-provided external. It exposes a frozen
+`stashbase.library` capability containing only the validated folder-dialog
+method and a frozen `stashbase.runtime` value containing only the validated,
+uncredentialed loopback server origin. Raw IPC, Electron events, window
+identity, filesystem access, and product policy do not cross the bridge. The
+renderer-side adapters consume the bridge without UI importing Electron or the
+global capability. The broad
 legacy `window.electron` preload is retired from runtime and package inputs,
 and its renderer-facing main-process handlers are removed. Its inert source
 remains only to keep Shipping documentation verifiable until Task 60 retires
@@ -164,7 +166,7 @@ Evidence: `pnpm test:electron-boundary`, `pnpm test:renderer`,
 
 The folder-dialog handler derives its window from the IPC sender and requires a
 live registered window, the sender's main frame, the configured renderer
-origin, a main-owned workspace capability grant, and a valid Zod payload before
+origin, a main-owned library capability grant, and a valid Zod payload before
 native UI can open. Replacement windows enable sandboxing, context isolation,
 web security, and disable Node integration, webviews, experimental features,
 and insecure content. Popups, unexpected navigation and redirects, webview

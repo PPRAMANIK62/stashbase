@@ -2,13 +2,23 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { App } from '@/app';
-import { AppProviders } from '@/app/composition/app-providers';
+import type { AppDependencies } from '@/app/dependencies';
+import { Providers } from '@/app/providers';
+import { App } from '@/app/shell';
 
 describe('workspace shell', () => {
   let container: HTMLDivElement;
   let root: Root;
   let getAnimationsDescriptor: PropertyDescriptor | undefined;
+  const dependencies: AppDependencies = {
+    library: {
+      folderPicker: { chooseFolder: vi.fn() },
+      api: {
+        load: () => new Promise(() => {}),
+        openFolder: vi.fn(),
+      },
+    },
+  };
 
   beforeEach(async () => {
     vi.stubGlobal(
@@ -36,9 +46,9 @@ describe('workspace shell', () => {
 
     await act(async () => {
       root.render(
-        <AppProviders>
-          <App />
-        </AppProviders>,
+        <Providers>
+          <App dependencies={dependencies} />
+        </Providers>,
       );
     });
   });
@@ -54,12 +64,13 @@ describe('workspace shell', () => {
     vi.unstubAllGlobals();
   });
 
-  it('starts with only the Files sidebar and Agent workspace', () => {
+  it('starts with one folder sidebar and the Agent workspace', () => {
     const sidebar = container.querySelector('[data-slot="sidebar"]');
 
     expect(container.querySelectorAll('[data-slot="sidebar"]')).toHaveLength(1);
     expect(sidebar?.getAttribute('data-variant')).toBe('inset');
     expect(container.querySelector('[aria-label="Agent workspace"]')).not.toBeNull();
+    expect(sidebar?.textContent).not.toContain('Files');
     expect(container.textContent).not.toContain('Document');
   });
 

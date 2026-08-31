@@ -175,6 +175,14 @@ function createWindowRegistry({ platform = process.platform } = {}) {
       }
       return null;
     },
+    registrationForWebContentsId(webContentsId) {
+      for (const [windowId, record] of records) {
+        if (record.win?.webContents?.id === webContentsId) {
+          return { windowId, window: record.win };
+        }
+      }
+      return null;
+    },
     windowForId(windowId) {
       return records.get(windowId)?.win ?? null;
     },

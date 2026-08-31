@@ -1,7 +1,8 @@
 import { createRoot } from 'react-dom/client';
 
-import { App } from './app';
-import { AppProviders } from './app/composition/app-providers';
+import { createDependencies } from '@/app/dependencies';
+import { Providers } from '@/app/providers';
+import { App } from '@/app/shell';
 
 import './globals.css';
 
@@ -11,8 +12,10 @@ if (!root) {
   throw new Error('StashBase renderer root is missing');
 }
 
+const dependencies = createDependencies();
+
 createRoot(root).render(
-  <AppProviders>
-    <App />
-  </AppProviders>,
+  <Providers>
+    <App dependencies={dependencies} />
+  </Providers>,
 );
