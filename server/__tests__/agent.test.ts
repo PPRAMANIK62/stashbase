@@ -52,6 +52,19 @@ test('Claude sends a structured scope-retirement exit before closing', () => {
   assert.equal(ws.readyState, 3);
 });
 
+test('Claude applies Similarity Search as live session policy', () => {
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(ws as unknown as WebSocket, 'similarity-policy-window');
+
+  assert.equal(session.similaritySearchEnabled(), true);
+  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: false }));
+  assert.equal(session.similaritySearchEnabled(), false);
+  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: true }));
+  assert.equal(session.similaritySearchEnabled(), true);
+
+  session.dispose();
+});
+
 async function settle(): Promise<void> {
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));

@@ -11,8 +11,9 @@ engineering contracts rather than being copied into every journey.
 
 J01 Onboarding and J10 Core Loop are the two product-level critical journeys.
 J01 proves that a new user can understand the product and reach first value;
-J10 proves that the resulting environment supports durable repeated work. J11
-Conversation to Project is the Chat-first activation branch between them. The
+J10 proves that the resulting environment supports durable repeated work. J12
+AI Wiki creation is the default folder activation path, while J11 Conversation to
+Project is the Chat-first branch between them. The
 other journeys own the capabilities and recovery paths they compose.
 
 ## J01: Complete onboarding and reach first value
@@ -41,20 +42,21 @@ folder. No account, AI Index source, active folder, or Agent runtime is assumed.
    Library-scoped Chat a question grounded in its detailed guides, or add an
    existing folder. An existing folder home is never seeded or modified by
    onboarding.
-3. **Choose AI Index deliberately.** See why meaning-based retrieval is
-   recommended, whether a hosted or bring-your-own-key source would be used,
-   and what remains local. Configure it or deliberately skip for now without
-   losing local functionality.
-4. **Enter the workspace.** Select a library folder and begin browsing before
+3. **Enter the workspace.** Select a library folder and begin browsing before
    preparation or indexing completes. A fresh window does not silently choose
    a folder on the user's behalf.
+4. **Choose optional AI.** The first activated folder offers hosted or
+   bring-your-own-key setup. Configure it or choose **Not now** without losing
+   local functionality or structured Wiki creation. Either choice is
+   remembered across folders and relaunches; Similar Search, the persistent
+   AI action, and Settings remain manual routes back.
 5. **Reach first value.** Open a real source and complete at least one useful
    action: inspect the document, retrieve source evidence, or explicitly set up
    a scoped Agent Chat. The next useful action stays visible without requiring
    every optional capability first.
 6. **Return.** Close and relaunch StashBase. The library, durable settings, and
-   completed setup remain available; transient skips and active-folder choice
-   follow their documented scope rather than becoming hidden global state. A
+   completed setup remain available; the handled onboarding choice is not
+   replayed, while active-folder choice follows its documented scope. A
    packaged build may quietly check the stable release channel when the saved
    default-on preference permits it. One deliberate Update action may then
    download, install, and relaunch after open edits are saved; Linux package
@@ -74,10 +76,12 @@ folder. No account, AI Index source, active folder, or Agent runtime is assumed.
   home, gives people a concise Welcome, makes detailed grounded product context
   available to Agents, remains an ordinary user-owned folder, is not
   overwritten by app updates, and is never recreated after deletion.
-- A fresh window does not silently select a folder, send a prompt, or install
-  an Agent runtime.
-- A deliberate AI Index skip does not immediately repeat during the first
-  folder entry in the same launch and remains reversible.
+- A fresh window does not silently select another folder, send a prompt,
+  install an Agent runtime, or open AI setup. The first folder activation may
+  open the one-time setup invitation, but no later folder or relaunch repeats
+  it after the user completes or declines it.
+- A deliberate AI Index skip remains reversible through the persistent action
+  and does not prevent a pending structured Wiki from being built.
 - Reaching first value leaves a clear route into Search, scoped Chat, or the
   J10 durable core loop without forcing one universal workflow.
 - Returning users recognize their library and completed durable setup without
@@ -328,10 +332,12 @@ disconnected, or recoverable.
    continue**. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
    finish the provider-owned browser flow started by that same runtime.
 4. Connect StashBase context and send a prompt.
-5. Inspect streaming output, tool activity, permissions, runtime-supported
+5. Optionally turn **Similarity Search** Off to constrain Agent retrieval to
+   text matching, or leave it On to add meaning-based retrieval.
+6. Inspect streaming output, tool activity, permissions, runtime-supported
    attachments, failures, and file artifacts.
-6. Continue, edit and resend, or open a source beside the same mounted Chat.
-7. Switch workspace folders without silently rebinding started work.
+7. Continue, edit and resend, or open a source beside the same mounted Chat.
+8. Switch workspace folders without silently rebinding started work.
 
 ### Required Observable Results
 
@@ -366,6 +372,10 @@ disconnected, or recoverable.
   turn failure.
 - Tool and source use remain inspectable without turning generated artifacts
   or transcripts into hidden product state.
+- Similarity Search affects only the live Chat's retrieval strategy. Off keeps
+  `search_library` available across the authorized scope using direct and
+  current prepared text, while On may additionally use AI Index. Neither state
+  controls background indexing or exposes derived paths.
 - A source is presented as Agent-readable only when the selected Agent surface
   can consume that format's source or current prepared representation. Built-in
   attachment behavior must not be implied for an external MCP client.
@@ -640,3 +650,69 @@ See [J11 evidence](../code-review/journey-coverage.md#j11-conversation-to-projec
 This Journey composes the Chat entry from J01, project registration and entry
 from J02, Agent lifecycle from J06, explicit persistence from J07, and the
 durable continuation described by J10.
+
+## J12: Build an AI Wiki over a local folder
+
+### Outcome
+
+An existing local folder gains a visible, source-linked structured Wiki and,
+when AI Index is configured, an invisible meaning-based index. Together they
+make the folder easier for people and Agents to navigate without replacing or
+reorganizing its source files.
+
+### Entry State
+
+The user has opened a Library folder and is in a blank folder-scoped Chat. The
+folder may contain no Wiki files, or it may already have pages under `wiki/`.
+AI setup may have been completed or declined independently; selected Agent
+readiness may be absent.
+
+### Primary Flow
+
+1. See **Create Wiki** as the fixed first action directly below the empty Chat
+   composer; rotating folder prompt suggestions do not compete with it.
+2. Choose Create Wiki. The tab pins to that folder and retains one pending
+   intent while any selected-Agent setup completes. AI setup neither opens nor
+   blocks this action.
+3. If the selected Agent still needs installation or sign-in, complete that
+   stage. The original Create Wiki intent resumes once, in the original tab and
+   folder; the user may cancel while waiting.
+4. The Agent inspects the folder and creates or improves `wiki/index.md`,
+   adding focused pages under `wiki/` only when a single map would be
+   unwieldy. Wiki pages use relative links to visible sources.
+5. Review the resulting files and the Agent's summary of changed Wiki files
+   and uncovered sources.
+
+### Required Observable Results
+
+- The visible transcript records the concise user intent while the Agent
+  receives the stable safety and output contract.
+- The default write scope is only `wiki/`, with `wiki/index.md` as its entry.
+  The Agent does not modify anything outside that directory. A physical
+  reorganization is a separate proposal requiring explicit approval.
+- Structured Wiki creation and AI Index activation can succeed independently.
+  Skipping or failing AI Index does not discard the structured Wiki intent.
+- A pending intent is renderer-local, folder-pinned, cancellable, and sent at
+  most once after runtime readiness. It is not restored after an app
+  restart and cannot follow an unrelated window-folder switch.
+- Wiki Markdown is an ordinary visible source and re-enters browsing, exact
+  search, indexing, and future Agent work. Machine-derived text, chunks, and
+  vectors remain invisible AppData.
+- The first release does not claim persistent built, ready, or stale Wiki
+  state, does not change the button to Update Wiki, and does not schedule
+  background Wiki rewriting.
+
+### Degradation and Recovery
+
+AI setup state does not affect structured Wiki creation. The waiting capsule
+retains a clear cancel path during selected-Agent setup. Agent setup failure
+keeps the pending capability visible beside its
+stage-specific recovery. Folder removal cancels the pending intent rather than
+silently widening it to Library. A partial Agent write remains an ordinary,
+inspectable file transaction and never authorizes source reorganization.
+
+### Evidence
+
+See [J12 evidence](../code-review/journey-coverage.md#j12-build-ai-wiki). This
+journey composes J02 folder scope, J05 AI Index activation, J06 Agent lifecycle,
+and J07 ordinary file writeback.

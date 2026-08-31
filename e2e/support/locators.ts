@@ -133,23 +133,23 @@ export function saveStatus(page: Page): Locator {
 
 export async function dismissEmbeddingKeyPrompt(
   page: Page,
-  options: { waitForOffer?: boolean } = {},
 ): Promise<void> {
-  // The AI Index prompt re-offers PER FOLDER within a window (the skip is
-  // folder-scoped), so this can no longer cache per page. The launch harness
-  // waits for the initial offer; later journey calls only dismiss a prompt
-  // that is already visible and otherwise return immediately.
-  // `bootSettled` can precede the lazy prompt chunk on slower CI hosts. Its
-  // modal fallback owns pointer events, so wait for that boundary before
-  // deciding whether the real prompt exists.
-  await page.getByRole('dialog', { name: 'Getting things ready…', exact: true })
-    .waitFor({ state: 'hidden', timeout: 20_000 });
-  const skip = page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
-  if (options.waitForOffer) {
-    await skip.waitFor({ state: 'visible', timeout: 20_000 });
-  } else if (!(await skip.isVisible())) {
-    return;
-  }
+  // The first active folder offers AI setup once. Most journeys are about a
+  // different capability, so this compatibility helper deliberately takes
+  // the durable Not now path before they continue. Query the same localhost
+  // state the gate is resolving before deciding whether to wait: checking
+  // whether the lazy dialog happens to be mounted races the gate's request
+  // and can return just before the modal opens over the next test action.
+  const shouldOffer = await page.evaluate(async () => {
+    if (window.localStorage.getItem('stashbase.ai-setup-seen') === '1') return false;
+    const response = await fetch('/api/embedder');
+    if (!response.ok) throw new Error(`Could not resolve AI setup state: ${response.status}`);
+    const embedder = await response.json() as { authorized?: unknown };
+    return embedder.authorized !== true;
+  });
+  if (!shouldOffer) return;
+  const skip = page.getByRole('button', { name: 'Not now', exact: true });
+  await skip.waitFor({ state: 'visible', timeout: 20_000 });
   await skip.click();
   await skip.waitFor({ state: 'hidden' });
 }

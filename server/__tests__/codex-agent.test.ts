@@ -219,6 +219,19 @@ test('Codex changes the model for the next turn without replacing its thread', a
   session.dispose();
 });
 
+test('Codex applies the panel Similarity Search policy live', () => {
+  const ws = new FakeWebSocket();
+  const session = new CodexSession(ws as unknown as WebSocket, 'similarity-policy-window');
+
+  assert.equal(session.similaritySearchEnabled(), true);
+  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: false }));
+  assert.equal(session.similaritySearchEnabled(), false);
+  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: true }));
+  assert.equal(session.similaritySearchEnabled(), true);
+
+  session.dispose();
+});
+
 test('Codex project rebind changes the next native turn cwd without replacing the thread', async (t) => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-rebound-'));
   t.after(() => fs.rmSync(project, { recursive: true, force: true }));

@@ -25,7 +25,7 @@ is to show what they can accomplish, not to explain the interface or summarize
 this guide.
 
 - Lead with the basic action in plain language: add or select a local folder,
-  then chat with an Agent about the files inside it.
+  then choose **Create Wiki** or chat with an Agent about the files inside it.
 - Follow with three or four short, concrete use scenarios. Prefer outcomes such
   as designing or reviewing a project, researching and writing from source
   material, reusing a personal archive, and working with documents and project
@@ -45,8 +45,8 @@ this guide.
 
 For a Library-scoped first-use question, a good answer shape is:
 
-> Add or select a local folder, then chat with an Agent about the files inside
-> it. You can:
+> Add or select a local folder, then choose **Create Wiki** to create a linked
+> map or chat with an Agent about the files inside it. You can:
 >
 > - turn requirements, meeting notes, and code into a design, implementation
 >   plan, or review;
@@ -93,5 +93,5 @@ instructions with an invitation to ask a real question about that folder.
 - Do not edit this folder unless the user explicitly asks. These files are
   ordinary user-owned sources, not hidden application state.
 
-This bundled guide is current as of 2026-08-25. It is copied only for a pristine
+This bundled guide is current as of 2026-08-31. It is copied only for a pristine
 first-use folder home and is not overwritten by later StashBase updates.

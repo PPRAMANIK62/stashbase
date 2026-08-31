@@ -20,7 +20,7 @@ manager, or a primary graph-navigation tool.
 
 - A new window opens directly into the workspace with no folder selected and
   one expanded, reusable blank library Chat. It never silently restores a
-  folder or installs an Agent runtime.
+  folder, installs an Agent runtime, or opens account/AI Index setup.
 - On first launch with a brand-new empty default folder home, StashBase seeds
   the ordinary local **👋 Start Here** folder and adds it to the library
   without automatically opening it. Its `00 Welcome.html` is the human entry;
@@ -48,8 +48,9 @@ manager, or a primary graph-navigation tool.
   preference surface.
 - A signed-in account is recognizable by its Google display name and avatar in
   Files, with the full email retained in the account menu. Missing or failed
-  profile display data falls back without changing account controls; signed
-  out remains the complete Anonymous local-workspace state.
+  profile display data falls back without changing account controls; **Sign
+  in** names the complete signed-out local-workspace state and its optional
+  route to Built-in and AI Index.
 - Users can open or create a local folder, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
   A created folder is an ordinary directory. Removing membership clears only
@@ -63,7 +64,8 @@ manager, or a primary graph-navigation tool.
   independent active folders, tabs, search presentation, and Chat tabs.
 - Folder switches reset folder-scoped documents but preserve library search
   state and scope-pinned chats. A blank welcome chat may follow the new folder;
-  started work and unsent drafts never silently rebind.
+  started work, unsent drafts, and a pending Create Wiki intent never silently
+  rebind.
 - Removing a member preserves Chat tabs. A completely blank Chat returns to
   Library without interruption; a Chat containing user work stays readable in
   its retired folder scope and offers a separate **New Library Chat**.
@@ -191,7 +193,9 @@ Cross-area
 routes also include [J05](../user-journeys.md#j05-search-and-open-source-evidence)
 and [J08](../user-journeys.md#j08-connect-an-external-agent-through-mcp).
 Chat-first project entry is
-[J11](../user-journeys.md#j11-turn-a-conversation-into-a-project).
+[J11](../user-journeys.md#j11-turn-a-conversation-into-a-project). Folder-first
+Wiki activation is
+[J12](../user-journeys.md#j12-build-an-ai-wiki-over-a-local-folder).
 
 Contracts: [Architecture](../../code-review/architecture.md),
 [Renderer Workspace](../../code-review/renderer-workspace.md),

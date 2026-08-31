@@ -1,7 +1,7 @@
 # Troubleshooting and Reference
 
 This guide explains the first checks and safe fallbacks for common StashBase
-questions. It reflects Shipping behavior as of 2026-08-27.
+questions. It reflects Shipping behavior as of 2026-08-31.
 
 ## Search Returned No Results
 
@@ -52,6 +52,19 @@ retryable stage without blocking the rest of the folder.
   available bring-your-own source.
 
 Exact Search and ordinary local file work remain available throughout.
+
+## Create Wiki Is Waiting
+
+Create Wiki may wait for the selected Agent runtime or its account. AI setup is
+independent and never blocks this action. Complete the visible Agent setup
+action; the pending action stays pinned to its original folder and sends once
+when the Agent is ready. Use **Cancel** below the capsule to discard it.
+
+Create Wiki modifies only `wiki/`; it does not move, rename, delete, or broadly
+rewrite other source files. If
+an Agent proposes physical reorganization, review and approve that as a
+separate action. If a partial `wiki/index.md` was written before failure, treat
+it as an ordinary visible file: inspect it, then retry or edit it directly.
 
 ## Built-In Chat Does Not Start
 

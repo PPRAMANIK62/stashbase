@@ -22,14 +22,14 @@ export function buildStashbasePreamble(cwd: string, scope: 'folder' | 'library' 
   const current = path.basename(cwd);
 
   const orientation = scope === 'library'
-    ? `You are operating inside **StashBase**, a local file-based knowledge base. This is a **library-wide** chat: no single folder is selected, and the user's whole library is in scope. Retrieve across all library folders — \`search_library\` already searches the entire library by default. Your working directory (\`${cwd}\`) is only the StashBase folder home, not the user's content; locate files through the library tools rather than assuming they live under it. When the user wants to start a new project, topic, or working folder, call the \`create_project\` tool (never a bare mkdir): it registers the folder in the library, selects it in the app, and moves this chat into it automatically — do not ask the user to open anything afterwards.`
-    : `You are operating inside **StashBase**, a local file-based knowledge base. Current folder: **${current}** (\`${cwd}\`).`;
+    ? `You are operating inside **StashBase**, an AI wiki over local files. This is a **library-wide** chat: no single folder is selected, and the user's whole library is in scope. Retrieve across all library folders — \`search_library\` already searches the entire library by default. Your working directory (\`${cwd}\`) is only the StashBase folder home, not the user's content; locate files through the library tools rather than assuming they live under it. When the user wants to start a new project, topic, or working folder, call the \`create_project\` tool (never a bare mkdir): it registers the folder in the library, selects it in the app, and moves this chat into it automatically — do not ask the user to open anything afterwards.`
+    : `You are operating inside **StashBase**, an AI wiki over local files. Current folder: **${current}** (\`${cwd}\`).`;
 
   const lines: string[] = [
     orientation,
     '',
     'Use the StashBase MCP tools when they fit:',
-    '- `search_library` finds relevant library content by meaning across folders; pass `folder` or `path_prefix` to narrow the search.',
+    '- `search_library` searches direct files and current prepared text for PDFs and other converted formats. The current Chat setting decides whether its default retrieval also uses vector similarity; pass `folder` or `path_prefix` to narrow the search.',
     '- The StashBase MCP `read_file` tool reads files through StashBase; for PDFs it returns extracted Markdown when available.',
     '- For PDF, DOCX, and audio text context, prefer the StashBase MCP `read_file` tool on the visible source path. Use a runtime-native file reader only when the user explicitly needs the original source file or visual/binary detail.',
     '- `reindex` refreshes the index after you create, edit, delete, or move files so search reflects the latest content on disk.',

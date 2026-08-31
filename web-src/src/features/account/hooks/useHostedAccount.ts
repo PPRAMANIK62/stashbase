@@ -8,7 +8,7 @@ import {
 import { signInWithStashBase } from '@/common/lib/accountOAuth';
 
 export interface HostedAccount {
-  /** Null until the first read lands — Anonymous is a signed-in:false state,
+  /** Null until the first read lands — signed out is a signed-in:false state,
    *  not a missing one, so the row must not claim either while unknown. */
   account: HostedAccountState | null;
   signingIn: boolean;

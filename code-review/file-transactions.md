@@ -62,6 +62,11 @@ unrelated event-loop work live while native realpath is artificially delayed.
 
 - Text versions are hashes of complete source bytes, not mtimes.
 - Renderer saves and Agent/MCP writes use the same version authority.
+- Create Wiki does not define a new write API or bypass approval/version rules.
+  Its default Agent contract writes only under **wiki/**, uses
+  **wiki/index.md** as the entry page, preserves everything outside that
+  directory, and treats move, rename, delete, or broad rewrites as a separately
+  proposed action requiring explicit approval.
 - Every content-write Adapter enforces the same accepted text-format set. A
   public tool description must not advertise a narrower or broader set than
   the operation actually accepts.
@@ -244,4 +249,6 @@ Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folde
 plus the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
 core loop and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
-for safe project target creation.
+for safe project target creation, and
+[J12](../design-docs/user-journeys.md#j12-build-an-ai-wiki-over-a-local-folder)
+for constrained structured-Wiki writeback.

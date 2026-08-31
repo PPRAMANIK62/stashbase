@@ -211,6 +211,10 @@ it is not a third scope.
   library MCP. It does not create member-folder instruction files.
 - A folder session uses that folder's cwd. `AGENTS.md` is create-only;
   Claude's `CLAUDE.md` bridge is create-only. Both remain visible user files.
+- Each live panel session owns one Similarity Search policy. The renderer sends
+  it over the normalized protocol before a ready-transition prompt; attributed
+  MCP search reads it from the session registry. It changes retrieval strategy
+  only and never owns Preparation or index lifecycle.
 - Window folder switching does not tear down or rebind started sessions.
 - Folder removal ends every session bound to that member across windows but
   does not end library sessions. Before closing each affected transport, the
@@ -267,6 +271,9 @@ assumed CLI versions.
   thread. The Adapter ignores model changes while a turn is active; returning
   to `Default` omits the next turn's model override.
 - Attachments are explicit; the current source is never implicit context.
+- `set-similarity-search` changes the session's product retrieval policy for
+  subsequent attributed `search_library` calls. Every Adapter implements the
+  event, while the operation layer owns the semantic-to-keyword resolution.
 - Permission callbacks normalize into one renderer approval flow. Access policy
   remains outside transport/process modules.
 - Runtime errors settle only the matching active turn once. Retry-in-progress

@@ -90,11 +90,11 @@ test('an unauthorized folder gets one quiet line that opens setup', async () => 
     await withDom(async (dom) => {
       await dom.render(h(EmbeddingSetupCallout));
       await dom.flush();
-      assert.match(visibleText(), /AI Index isn’t enabled/);
+      assert.match(visibleText(), /AI is off/);
 
       const buttons = dom.queryAll('button');
       assert.equal(buttons.length, 1, 'one action, no dismiss — the line IS the calm route');
-      assert.equal(buttons[0].textContent, 'Set up');
+      assert.equal(buttons[0].textContent, 'Enable');
 
       // It asks the Settings gate to open rather than owning a dialog.
       const opened: Event[] = [];
@@ -118,7 +118,7 @@ test('signing in re-reads the embedder so the offer clears itself', async () => 
     await withDom(async (dom) => {
       await dom.render(h(EmbeddingSetupCallout));
       await dom.flush();
-      assert.match(visibleText(), /AI Index isn’t enabled/);
+      assert.match(visibleText(), /AI is off/);
       const before = stub.reads();
 
       // An account change can authorize indexing without this component

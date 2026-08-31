@@ -45,7 +45,7 @@ test('Library Operations keeps search result identity at the visible source path
 
   assert.deepEqual(
     await operations.search({ query: 'paper', topK: 8 }),
-    { hits: [{ fileName: '/library/paper.pdf', chunkIndex: 0, content: 'derived evidence', heading: '', score: 1 }] },
+    { mode: 'semantic', hits: [{ fileName: '/library/paper.pdf', chunkIndex: 0, content: 'derived evidence', heading: '', score: 1 }] },
   );
 });
 
@@ -71,20 +71,59 @@ test('Library Operations forwards file-type filters to Retrieval', async () => {
   assert.deepEqual(searchInput?.types, ['pdf', 'docx']);
 });
 
-test('Library Operations requires a folder scope for keyword search', async () => {
-  let reached = false;
+test('Library Operations fans whole-library keyword search across member folders', async () => {
+  const reached: string[] = [];
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
-    retrieval: { search: async () => { reached = true; return { evidence: [], availability: { state: 'ready' as const }, truncated: false }; } },
+    memberFolderRoots: () => ['/library/one', '/library/two'],
+    retrieval: { search: async (input) => {
+      reached.push(input.folderRoot ?? 'none');
+      return {
+        evidence: [{
+          sourcePath: `${input.folderRoot}/answer.md`,
+          snippet: `answer from ${input.folderRoot}`,
+          locator: { line: 1 },
+        }],
+        availability: { state: 'ready' as const },
+        truncated: false,
+      };
+    } },
   });
 
-  // Keyword search walks a folder subtree, so a library-wide keyword call is
-  // rejected before retrieval rather than silently widening.
-  await assert.rejects(
-    operations.search({ query: 'answer', mode: 'keyword' }),
-    (error: unknown) => error instanceof LibraryOperationError && error.status === 400,
-  );
-  assert.equal(reached, false);
+  const result = await operations.search({ query: 'answer', mode: 'keyword', topK: 8 });
+  assert.deepEqual(reached, ['/library/one', '/library/two']);
+  assert.equal(result.mode, 'keyword');
+  assert.deepEqual(result.hits.map((hit) => hit.fileName), [
+    '/library/one/answer.md',
+    '/library/two/answer.md',
+  ]);
+});
+
+test('Library Operations resolves an attributed Similarity Search Off request to lexical retrieval', async () => {
+  const modes: string[] = [];
+  const operations = createLibraryOperations({
+    getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
+    similaritySearchEnabled: () => false,
+    normalizeSearchScope: async () => ({ folderRoot: '/library' }),
+    retrieval: { search: async (input) => {
+      modes.push(input.mode);
+      return {
+        evidence: [{ sourcePath: '/library/paper.pdf', snippet: 'prepared text match', locator: { line: 7, page: 2 } }],
+        availability: { state: 'ready' as const },
+        truncated: false,
+      };
+    } },
+  });
+
+  const result = await operations.search({
+    query: 'prepared text',
+    mode: 'semantic',
+    agentSessionId: 'panel-session',
+  });
+
+  assert.deepEqual(modes, ['keyword']);
+  assert.equal(result.mode, 'keyword');
+  assert.equal(result.hits[0]?.fileName, '/library/paper.pdf');
 });
 
 test('Library Operations forwards keyword mode, options, and a prefix-only scope to Retrieval', async () => {

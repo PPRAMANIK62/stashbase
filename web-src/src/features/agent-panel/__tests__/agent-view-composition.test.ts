@@ -4,6 +4,8 @@ import * as React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { AgentView } from '@/features/agent-panel/components/AgentView';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
+import { CreateWikiAction } from '@/features/agent-panel/components/AgentEmptyState';
+import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { AGENT_META } from '@/common/lib/agentCatalog';
 import { AppProviders, type AppActions } from '@/store/contexts/AppContext';
 import { initialState, type State } from '@/store/state/state';
@@ -42,7 +44,7 @@ function actionsStub(): AppActions {
 function rendererState(withRuntime: boolean): State {
   return {
     ...initialState,
-    workspace: { ...initialState.workspace, folder: 'workspace', folderPath: '/workspace' },
+    workspace: { ...initialState.workspace, folder: 'workspace', folderPath: '/workspace', embedderHasKey: withRuntime ? true : null },
     chat: { ...initialState.chat, agents: withRuntime ? [{
       id: 'codex',
       label: 'Codex',
@@ -102,6 +104,7 @@ test('AgentRuntimeGate renders the checking card while useAgentSession has no ru
   const output = JSON.stringify(renderer.toJSON());
   assert.match(output, /Checking whether its local CLI is installed/);
   assert.match(output, /"Codex"/);
+  assert.match(output, /Create Wiki/);
   assert.throws(() => renderer.root.findByType(AgentComposer));
 });
 
@@ -119,4 +122,58 @@ test('useAgentSession wires connected scope/model/effort state into the composer
   assert.equal(composer.props.scope.current.kind, 'folder');
   assert.deepEqual(composer.props.attachments.items, []);
   assert.equal(composer.props.attachments.uploading, false);
+});
+
+/** The retrieval policy rides the session scope popup's footer slot, which
+ *  only mounts while the menu is open. Reading the slot element's props is
+ *  what proves the wiring without driving a portal open. */
+function similarityPolicy(renderer: ReactTestRenderer): {
+  enabled: boolean;
+  availabilityKnown: boolean;
+  onChange: (enabled: boolean) => void;
+} {
+  const { footer } = renderer.root.findByType(ScopeMenu).props;
+  return (footer as React.ReactElement<{
+    enabled: boolean;
+    availabilityKnown: boolean;
+    onChange: (enabled: boolean) => void;
+  }>).props;
+}
+
+test('Similarity Search is a live product policy carried by session scope, not the Agent mode control', async (t) => {
+  const { renderer, first } = await mountAgentView(t, true);
+  await act(async () => { first!.event({ t: 'ready' }); });
+
+  const control = similarityPolicy(renderer);
+  assert.equal(control.enabled, true);
+  assert.equal(control.availabilityKnown, true);
+  assert.ok(first!.sent.some((value) => {
+    const event = JSON.parse(value) as { t: string; enabled?: boolean };
+    return event.t === 'set-similarity-search' && event.enabled === true;
+  }));
+
+  await act(async () => { control.onChange(false); });
+  assert.equal(similarityPolicy(renderer).enabled, false);
+  assert.ok(first!.sent.some((value) => {
+    const event = JSON.parse(value) as { t: string; enabled?: boolean };
+    return event.t === 'set-similarity-search' && event.enabled === false;
+  }));
+  assert.equal(renderer.root.findByType(AgentComposer).props.mode.value, 'auto');
+});
+
+test('Create Wiki sends the full safe preset immediately but keeps the transcript concise', async (t) => {
+  const { renderer, first } = await mountAgentView(t, true);
+  await act(async () => { first!.event({ t: 'ready' }); });
+
+  const action = renderer.root.findByType(CreateWikiAction);
+  assert.equal(action.props.pending, false);
+  await act(async () => { action.props.onCreate(); });
+
+  const prompt = first!.sent.map((value) => JSON.parse(value) as { t: string; text?: string }).find((message) => message.t === 'prompt');
+  assert.ok(prompt?.text);
+  assert.match(prompt.text, /wiki\/index\.md/);
+  assert.match(prompt.text, /Do not modify anything outside wiki\//);
+  const output = JSON.stringify(renderer.toJSON());
+  assert.match(output, /Create a Wiki for this folder\./);
+  assert.doesNotMatch(output, /Do not modify anything outside wiki\//);
 });

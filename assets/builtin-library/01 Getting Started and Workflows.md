@@ -1,7 +1,7 @@
 # Getting Started and Workflows
 
 This guide begins after StashBase is installed. It reflects Shipping behavior
-as of 2026-08-25.
+as of 2026-08-31.
 
 ## What First Launch Looks Like
 
@@ -13,10 +13,12 @@ On a brand-new empty default folder home, StashBase creates the ordinary
 `👋 Start Here` folder and adds it to the Library without opening it. If that
 home already contains user folders, onboarding does not seed or modify it.
 
-AI Index setup is recommended for meaning-based retrieval but remains optional.
-The user may sign in for hosted capacity, configure an OpenAI/OpenRouter key, or
-choose **Skip AI Index for now**. Skipping does not disable browsing, preview,
-editing, Preparation, or Exact Search.
+AI setup is recommended for meaning-based retrieval but remains optional. The
+empty Library stays quiet; the first folder you activate offers hosted sign-in
+or an OpenAI/OpenRouter key. **Not now** keeps browsing, preview, editing,
+Preparation, Exact Search, and structured Wiki creation available, and is
+remembered across folders and relaunches. The Files-panel **Enable** action,
+Similar Search, and Settings remain available later.
 
 ## Fastest Local-Only First Result
 
@@ -31,6 +33,19 @@ editing, Preparation, or Exact Search.
 
 That is a complete useful session. It requires no StashBase account, AI Index,
 transcription model, or Agent runtime.
+
+## Build an AI Wiki over a Folder
+
+After opening one of your folders, a blank folder-scoped Chat shows **Create
+Wiki** directly below the composer. Choosing it asks the Agent to inspect the
+folder and create or improve source-linked `wiki/index.md`. It may add focused
+pages under `wiki/` only when one map would become unwieldy.
+
+Create Wiki preserves the existing layout and modifies only `wiki/`. It does
+not move, rename, delete, or broadly rewrite other source files; a physical
+reorganization must be proposed and approved separately. AI setup does not
+appear or block this action. If selected-Agent setup is needed, the original
+action stays pinned to the same folder and resumes once the Agent is ready.
 
 ## Ask Chat How StashBase Works
 
@@ -64,7 +79,8 @@ Exact Search is best when the wording is known. Similar Search is useful when
 the same idea may be expressed with different words or buried among many
 documents.
 
-1. Open **Settings → AI Index**.
+1. Choose Similar Search, the Files-panel **Enable** action, or open **Settings
+   → AI Index**.
 2. Sign in to StashBase for the current hosted allowance, or configure an
    OpenAI/OpenRouter key.
 3. Confirm which source is selected and understand its data-handling terms.

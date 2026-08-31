@@ -17,7 +17,7 @@ Current online FAQ: <https://stashbase.ai/docs/faq/>
 | AI project uploads | A small, disposable context set | Copies are added to one AI conversation or project | StashBase is for a long-lived local Library whose current source files serve several Agents |
 | Spotlight, Everything, or text search | A known filename or wording | Local metadata or lexical lookup | StashBase adds format Preparation, Similar Search, visible evidence, and Agent access |
 | Vector database or RAG framework | Building a custom application | Developer-owned ingestion and retrieval infrastructure | StashBase supplies the end-user workbench, lifecycle, permissions, recovery, and MCP boundary |
-| LLM wiki or knowledge graph | A chosen way to organize knowledge | A structured representation created in files or another system | StashBase is the underlying file, retrieval, and Agent workbench; it does not require one representation |
+| LLM wiki or knowledge graph | A chosen way to organize knowledge | A structured representation created in files or another system | StashBase builds a source-linked Markdown Wiki plus AI Index over the existing local files, without requiring a graph or proprietary store |
 
 ## Claude Code and Codex Already Read Files. Why Would I Need StashBase?
 
@@ -80,15 +80,18 @@ Optional online choices still matter:
 local workflow; it does not mean that every optional Agent or AI Index request
 is offline.
 
-## What About an LLM Wiki or Knowledge Graph?
+## Is StashBase an LLM Wiki or Knowledge Graph?
 
-An LLM-maintained wiki or knowledge graph is a useful organization method, not
-a competing storage foundation. An Agent can create and maintain that
-structure as ordinary files inside a StashBase folder.
+StashBase is an AI Wiki over local files. Its structured part is ordinary,
+source-linked `wiki/index.md` plus optional pages beside it; its unstructured
+part is the invisible AI Index used for meaning-based retrieval. Create Wiki asks an
+Agent to create the structured part without replacing the folder as source of
+truth.
 
-StashBase deliberately does not require one representation. A Markdown wiki,
-a generated graph, a code-and-doc project, or plain folders can all use the
-same source ownership, Preparation, retrieval, scope, and Agent access model.
+It does not require a generated knowledge graph, a proprietary Wiki format, or
+a new storage foundation. Existing Markdown vaults, code-and-doc projects, and
+plain folders use the same source ownership, Preparation, retrieval, scope, and
+Agent access model.
 
 ## How Is StashBase Different from NotebookLM?
 

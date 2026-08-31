@@ -71,6 +71,7 @@ function fakeSession(options: {
     boundFolder: () => options.bound ?? null,
     isLibraryScoped: () => options.library ?? false,
     nativeSessionId: () => options.nativeId ?? null,
+    similaritySearchEnabled: () => true,
     rebindToFolder(folderAbs: string) {
       options.events?.push('rebind');
       if (options.rebindResult === false) return false;

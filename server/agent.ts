@@ -290,6 +290,7 @@ export class AgentSession implements AttributedAgentSession {
   private rebound: string | null = null;
   private models: AgentModel[] = [];
   private skills = new Set<string>();
+  private similaritySearch = true;
   private pumpTask: Promise<void> | null = null;
   private nativeMigrationTask: Promise<void> | null = null;
   private retirementTask: Promise<void> | null = null;
@@ -347,6 +348,10 @@ export class AgentSession implements AttributedAgentSession {
 
   nativeSessionId(): string | null {
     return this.sessionId;
+  }
+
+  similaritySearchEnabled(): boolean {
+    return this.similaritySearch;
   }
 
   /** Migrate this LIBRARY-scoped session to a member folder (create_project).
@@ -832,6 +837,10 @@ export class AgentSession implements AttributedAgentSession {
           this.access = msg.mode;
           void this.q?.setPermissionMode(msg.mode).catch((err) => log.debug(errorMessage(err)));
         }
+        break;
+      }
+      case 'set-similarity-search': {
+        if (typeof msg.enabled === 'boolean') this.similaritySearch = msg.enabled;
         break;
       }
       case 'interrupt': {

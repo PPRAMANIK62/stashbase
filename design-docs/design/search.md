@@ -28,6 +28,11 @@ user-managed results.
 - AI Index provides meaning-based retrieval when an embedding source is
   configured. Product copy says **AI Index**; engineering terms such as
   semantic indexing and embeddings appear only where technically necessary.
+- Chat exposes one product-owned **Similarity Search** control. On lets Agent
+  retrieval combine AI Index similarity with text matching. Off uses text
+  matching only, including current prepared PDF, DOCX, image, and media text.
+  It changes retrieval for that Chat; it never pauses background Preparation
+  or AI Index maintenance.
 - AI Index setup offers hosted account access as the primary path and
   OpenAI/OpenRouter keys as an advanced path. The active source remains
   explicit, and browser sign-in returns to the initiating window or offers a
@@ -37,10 +42,12 @@ user-managed results.
 - The search popup searches the whole library by default and can narrow to one
   member folder. It remembers query, mode, options, scope, and results across
   close, reopen, and folder switches, then refreshes against current content.
-- MCP retrieval mirrors the popup: semantic search defaults to the whole
-  library, while MCP keyword search requires a member folder or a path prefix
-  whose owning member can be derived. Both narrow by folder root and path
-  prefix; MCP additionally narrows by source file-type categories.
+- MCP retrieval uses one `search_library` operation across the whole library
+  by default. Meaning-based and text-only strategies share the same visible
+  source-hit shape and may both narrow by folder root, path prefix, and source
+  file-type categories. An attributed panel Chat's Similarity Search choice
+  resolves the operation's strategy without asking the Agent to select a
+  different tool.
 - Exact and Similar modes share one query surface. Results preserve rank while
   grouping evidence by folder when needed.
 - A result always identifies a source file. Evidence may come from PDF, DOCX,
@@ -49,11 +56,15 @@ user-managed results.
 - Readiness distinguishes disabled, preparing, partial, paused, failed, and
   ready states. Exact search remains usable while AI Index is absent or
   deferred.
-- AI Index setup is strongly recommended but never gates local browsing,
-  editing, preview, or exact search. Activation persists, while a deliberate
-  skip is local to the current window context and remains reversible. The
-  observable setup sequence lives in
-  [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-value).
+- AI setup is strongly recommended but never gates local browsing, editing,
+  preview, exact search, or structured Wiki creation. An empty Library stays
+  quiet; the first activated folder offers setup once. Completing it or
+  choosing **Not now** is remembered across folders and relaunches, while
+  Similar Search, the persistent Files-panel **Enable** action, and Settings
+  remain explicit routes back. Create Wiki never opens or waits for setup. The
+  observable activation paths live
+  in [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-value)
+  and [J12](../user-journeys.md#j12-build-an-ai-wiki-over-a-local-folder).
 - AI Index runtime refreshes after account, quota, or key changes remain
   background work. Overlapping refresh and folder-removal activity does not
   interrupt local browsing or surface native process errors as user actions.
@@ -82,9 +93,12 @@ user-managed results.
 - Previewability alone never claims retrievable text. Each result comes from a
   direct-text or current prepared-text capability and resolves to the visible
   source.
+- Similarity Search is a use-time retrieval choice. Turning it off must neither
+  make prepared documents unreadable nor stop, remove, or foreground the
+  background AI Index lifecycle.
 - BYOK credentials and account source selection are managed through Settings.
-  Account login starts only
-  from an explicit Sign in action in setup, Settings, or the account menu.
+  Account login starts only from an explicit Sign in action in first-folder or
+  Similar Search setup, Settings, or the account menu.
   Browsing local files and serving an existing local index never depends on
   online authentication.
 - Account and credential ownership remains outside renderer and indexing

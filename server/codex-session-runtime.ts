@@ -107,6 +107,9 @@ export class CodexSession implements AttributedAgentSession {
   private models: AgentModel[] = [];
   private skills = new Map<string, { name: string; path: string }>();
   private skillSequence = 0;
+  /** Renderer-owned product policy. Search remains available when false;
+   * the host operation swaps vector retrieval for lexical retrieval. */
+  private similaritySearch = true;
 
   readonly windowId: string;
   readonly agentId = 'codex' as const;
@@ -150,6 +153,10 @@ export class CodexSession implements AttributedAgentSession {
 
   nativeSessionId(): string | null {
     return this.threadId;
+  }
+
+  similaritySearchEnabled(): boolean {
+    return this.similaritySearch;
   }
 
   /** Migrate this LIBRARY-scoped session to a member folder (create_project).
@@ -347,6 +354,9 @@ export class CodexSession implements AttributedAgentSession {
         break;
       case 'set-mode':
         this.accessMode = isAgentAccessMode(msg.mode) ? msg.mode : this.accessMode;
+        break;
+      case 'set-similarity-search':
+        if (typeof msg.enabled === 'boolean') this.similaritySearch = msg.enabled;
         break;
     }
   }

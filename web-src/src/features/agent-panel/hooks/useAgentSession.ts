@@ -4,6 +4,7 @@ import { AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
 import { errorMessage } from '@/common/api/apiTransport';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { openSettings } from '@/common/lib/settingsTrigger';
+import { openEmbeddingSetup } from '@/common/lib/embeddingSetupTrigger';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useStateWithRef } from '@/common/hooks/useStateWithRef';
 import type { Action, AppActions, ChatState, WorkspaceState } from '@/store/contexts/AppContext';
@@ -46,7 +47,13 @@ import { useAgentRuntimeCatalog } from '@/features/agent-panel/hooks/useAgentRun
 import { useAgentSkills } from '@/features/agent-panel/hooks/useAgentSkills';
 import { useAgentTabRegistration } from '@/features/agent-panel/hooks/useAgentTabRegistration';
 import { useSessionFolderReconcile } from '@/features/agent-panel/hooks/useSessionFolderReconcile';
+import { CREATE_WIKI_VISIBLE_PROMPT, createWikiPrompt } from '@/features/agent-panel/lib/createWikiPrompt';
 import type { Attachment, Block, RetiredAgentScope, ServerEvent } from '@/features/agent-panel/lib/types';
+
+interface PendingCreateWiki {
+  scope: Extract<LibraryScope, { kind: 'folder' }>;
+  previousPickedScope: LibraryScope | undefined;
+}
 
 /** The whole "talk to the runtime" concern for one AgentView tab: WebSocket
  *  connection lifecycle, server-event routing, session reset/resume, and
@@ -164,6 +171,18 @@ export function useAgentSession({
   // recovery stuck, a fresh failure card when it did not. Any other session
   // reset clears it so a stale retry can never land in a different session.
   const pendingRetryRef = useRef<{ text: string; attachments: Attachment[] } | null>(null);
+  // A Create Wiki click is a tab-local intent. It survives Agent setup and
+  // runtime reconnect, but never app restart, and pins the folder scope until
+  // it sends or the user cancels. AI indexing has an independent lifecycle.
+  const [pendingCreateWiki, setPendingCreateWiki, pendingCreateWikiRef] = useStateWithRef<PendingCreateWiki | null>(null);
+  // null follows product availability: configured AI starts on; an
+  // explicitly disabled chat stays off even if credentials later change.
+  // The effective policy is always false while no embedding source exists,
+  // but text retrieval (including prepared documents) remains available.
+  const [similaritySearchPreference, setSimilaritySearchPreference] = useState<boolean | null>(null);
+  const similaritySearchEnabled = workspace.embedderHasKey === true
+    && similaritySearchPreference !== false;
+  const similaritySearchEnabledRef = useLatestRef(similaritySearchEnabled);
   // The permission mode the live connection was opened with (rode the
   // connect URL); `ready` re-sends `set-mode` only when the mode moved
   // while the connection was coming up.
@@ -185,6 +204,24 @@ export function useAgentSession({
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
   const turnErrorTrackerRef = useRef(new TurnErrorTracker());
+
+  function sendSimilaritySearchPolicy(enabled = similaritySearchEnabledRef.current) {
+    wsRef.current?.send(JSON.stringify({ t: 'set-similarity-search', enabled }));
+  }
+
+  function changeSimilaritySearch(enabled: boolean) {
+    setSimilaritySearchPreference(enabled);
+    const effective = enabled && workspace.embedderHasKey === true;
+    sendSimilaritySearchPolicy(effective);
+    if (enabled && workspace.embedderHasKey !== true) openEmbeddingSetup();
+  }
+
+  // Completing or removing AI setup changes the effective policy without a
+  // new Chat connection. Re-apply it live; the ready handler below covers
+  // initial connection ordering.
+  useEffect(() => {
+    if (readyRef.current) sendSimilaritySearchPolicy(similaritySearchEnabled);
+  }, [similaritySearchEnabled]);
 
   // The sub-hooks below take the refs above only where the core genuinely
   // co-owns them. `blocksRef`, `turnActiveRef`, `wsRef`, and `sessionIdRef`
@@ -233,6 +270,38 @@ export function useAgentSession({
     knownFilePathsRef: mentions.knownFilePathsRef,
     sessionFolder,
   });
+
+  function maybeSendPendingCreateWiki() {
+    const pending = pendingCreateWikiRef.current;
+    if (!pending || !readyRef.current || turnActiveRef.current) return;
+    if (!libraryScopesEqual(controls.connectedScopeRef.current, pending.scope)) return;
+    // Clear before the send so a repeated ready event cannot duplicate the
+    // product-owned turn.
+    setPendingCreateWiki(null);
+    promptQueue.sendPreset(createWikiPrompt(), CREATE_WIKI_VISIBLE_PROMPT);
+  }
+
+  /** Pin this blank chat to its folder and arm one Create Wiki turn. */
+  function requestCreateWiki(): boolean {
+    const scope = controls.sessionScope;
+    if (scope.kind !== 'folder' || pendingCreateWikiRef.current) return false;
+    setPendingCreateWiki({
+      scope,
+      previousPickedScope: controls.pickedScopeRef.current,
+    });
+    // Even when this is the window-default folder, retain an explicit pick so
+    // Agent setup or a window-folder switch cannot redirect the intent.
+    controls.setPickedScope(scope);
+    maybeSendPendingCreateWiki();
+    return true;
+  }
+
+  function cancelCreateWiki() {
+    const pending = pendingCreateWikiRef.current;
+    if (!pending) return;
+    controls.setPickedScope(pending.previousPickedScope);
+    setPendingCreateWiki(null);
+  }
   const skills = useAgentSkills({ phase, wsRef });
   const reconcileSessionFolder = useSessionFolderReconcile({
     sessionFolder,
@@ -429,6 +498,7 @@ export function useAgentSession({
    * Library sessions in place; every form of user work stays visible in a
    * retired, non-reconnectable conversation. */
   function retireRemovedScope(folder: string) {
+    if (pendingCreateWikiRef.current?.scope.path === folder) setPendingCreateWiki(null);
     const completelyBlank = isBlankChatTab({
       hasContent: blocksRef.current.length > 0 || queuedPromptsRef.current.length > 0,
       turnActive: turnActiveRef.current,
@@ -659,6 +729,9 @@ export function useAgentSession({
     switch (ev.t) {
       case 'ready':
         readyRef.current = true;
+        // Policy precedes every prompt sent from this ready transition, so a
+        // pending Create Wiki or recovery turn cannot race the server default.
+        sendSimilaritySearchPolicy();
         setPhase('live');
         runtimeCatalog.refreshRuntimes();
         // Starting a built-in agent can create root-level instruction files
@@ -687,6 +760,7 @@ export function useAgentSession({
           pendingRetryRef.current = null;
           if (retry) promptQueue.resendFailedPrompt(retry);
         }
+        maybeSendPendingCreateWiki();
         break;
       case 'session-id':
         sessionIdRef.current = ev.id;
@@ -801,6 +875,7 @@ export function useAgentSession({
           (message) => setBlocks((bs) => [...bs, { kind: 'error', id: nextBlockId(), text: message }]),
           promptQueue.runNextQueuedPrompt,
         );
+        maybeSendPendingCreateWiki();
         break;
       }
       case 'error':
@@ -941,6 +1016,16 @@ export function useAgentSession({
     queue: promptQueue,
     mentions,
     skills,
+    wiki: {
+      pending: pendingCreateWiki !== null,
+      requestCreateWiki,
+      cancelCreateWiki,
+    },
+    similaritySearch: {
+      enabled: similaritySearchEnabled,
+      availabilityKnown: workspace.embedderHasKey !== null,
+      change: changeSimilaritySearch,
+    },
     transcript: {
       blocks,
       turnActive,

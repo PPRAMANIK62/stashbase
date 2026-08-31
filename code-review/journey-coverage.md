@@ -61,6 +61,7 @@ aliases, and Journey E2E owns representative composition.
 | [J09 Bug report](../design-docs/user-journeys.md#j09-prepare-and-hand-off-a-bug-report) | [Bug Reporting](../design-docs/design/bug-reporting.md) | [Bug Reporting](bug-reporting.md), [Window Lifecycle](window-lifecycle.md), [Architecture](architecture.md) |
 | [J10 Core loop](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work) | [Workspace](../design-docs/design/workspace.md), [Documents](../design-docs/design/documents.md), [Preparation](../design-docs/design/preparation.md), [Search](../design-docs/design/search.md), [Agent Panel](../design-docs/design/agent-panel.md) | [Renderer Workspace](renderer-workspace.md), [Data Lifecycle](data-lifecycle.md), [Agent Runtime](agent-runtime.md), [Agent Panel](agent-panel.md), [MCP Access](mcp-access.md), [File Transactions](file-transactions.md), [Markdown Rendering](markdown-rendering.md) |
 | [J11 Conversation to project](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project) | [Workspace](../design-docs/design/workspace.md), [Agent Panel](../design-docs/design/agent-panel.md) | [Renderer Workspace](renderer-workspace.md), [Settings and Config](settings-config.md), [MCP Access](mcp-access.md), [Agent Runtime](agent-runtime.md), [Agent Panel](agent-panel.md), [File Transactions](file-transactions.md), [Data Lifecycle](data-lifecycle.md) |
+| [J12 Build AI Wiki](../design-docs/user-journeys.md#j12-build-an-ai-wiki-over-a-local-folder) | [Agent Panel](../design-docs/design/agent-panel.md), [Search](../design-docs/design/search.md), [Workspace](../design-docs/design/workspace.md) | [Agent Panel](agent-panel.md), [Settings and Config](settings-config.md), [Renderer Workspace](renderer-workspace.md), [File Transactions](file-transactions.md), [Data Lifecycle](data-lifecycle.md) |
 
 ## J01: Onboarding
 
@@ -85,8 +86,8 @@ aliases, and Journey E2E owns representative composition.
   utilities.
 - **Journey E2E:** [launch smoke](../e2e/smoke/launch.spec.ts) and
   [library navigation](../e2e/journeys/library-navigation.spec.ts) exercise
-  blank-workspace entry, AI Index skip behavior, folder selection, and local
-  availability. [Navigation layout](../e2e/journeys/navigation-layout.spec.ts)
+  blank-workspace entry, quiet AI Index state, explicit setup/skip behavior,
+  folder selection, and local availability. [Navigation layout](../e2e/journeys/navigation-layout.spec.ts)
   verifies that Appearance Settings remains usable with the operating system's
   reduced-motion preference while transform movement is removed and quiet
   state feedback remains, and that a folder name too long for a narrowed
@@ -220,6 +221,9 @@ aliases, and Journey E2E owns representative composition.
   recovery, transcript, layout state, and structured folder-scope retirement
   for blank, draft-only, queued, and active-tool Chats. Workspace reset tests
   pin Chat preservation through both direct folder loss and 412 recovery.
+  Library-operation, route, keyword-search, and renderer composition tests pin
+  the per-session Similarity Search policy, library-wide text fallback, and
+  prepared-PDF source remapping while the switch is Off.
   `pnpm test:opencode:native` starts the
   exact bundled OpenCode binary and completes an SDK session against a local
   fake OpenAI-compatible gateway; broker tests cover token isolation, streaming,
@@ -230,7 +234,8 @@ aliases, and Journey E2E owns representative composition.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
   the Built-in Agent account gate and bring-your-own choices, then
   exercises the built-in panel against the deterministic fake Codex runtime,
-  including
+  including the session-scope Similarity Search switch before and after scope
+  binding, and
   retaining a started cross-folder Chat through Library removal and opening a
   fresh explicitly Library-scoped Chat.
 - **AI Eval:** not required for panel and runtime correctness; actual
@@ -342,6 +347,37 @@ aliases, and Journey E2E owns representative composition.
   MCP path, but OpenCode cannot yet migrate its native history/cwd; its restored
   row remains under Library and this path needs separate evidence after that
   native limitation is resolved.
+
+## J12: Build AI Wiki
+
+**Status:** Partial and release-dependent.
+
+- **Contract Test:** renderer tests cover the fixed folder CTA, concise visible
+  turn versus safe wire preset, the one-time first-folder setup offer and
+  durable **Not now**, manual setup reopening, and Create Wiki's independence
+  from embedding authorization. Agent, file-transaction, and data-lifecycle
+  suites cover approval, source confinement, write reconciliation, and index
+  admission.
+- **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
+  handles the first-folder AI offer, invokes Create Wiki independently through
+  the deterministic fake Codex runtime, approves a real MCP
+  **wiki/index.md** write, observes the directory in the tree, and proves an
+  original source stayed
+  byte-identical. [Library navigation](../e2e/journeys/library-navigation.spec.ts)
+  separately proves the bare Library remains quiet, the first active folder
+  offers setup, later folder switches stay quiet after **Not now**, and the
+  persistent Enable route can reopen setup.
+- **AI Eval:** Gap. The deterministic Agent proves orchestration and safety,
+  not whether a real model produces a useful, complete, well-linked Wiki over
+  representative mixed-format folders.
+- **Release Check:** one packaged Built-in flow should cover independent
+  account-required Agent setup, hosted AI activation/backfill, and review of a
+  real generated Wiki. Bring-your-own-key plus a real external Agent is
+  representative secondary evidence.
+- **Gap:** no real-Agent quality Eval yet covers folder-map completeness,
+  source-link correctness, or preservation under ambiguous existing Wiki
+  content. The first release intentionally claims no persistent ready/stale
+  state, Update Wiki label, or scheduled regeneration.
 
 ## Maintenance Rule
 

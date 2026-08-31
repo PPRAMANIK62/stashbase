@@ -23,6 +23,20 @@ and uses a hosted service only as its metered model provider.
 - Chat begins expanded. With no document it is the primary work surface;
   opening a source docks the same mounted session beside it, and closing the
   last source expands an open Chat again.
+- A blank Chat keeps the durable greeting **Your knowledge is here**. In folder
+  scope, one fixed **Create Wiki** capsule sits directly below the composer and
+  sends a complete product-owned preset immediately. The greeting, composer,
+  and capsule remain one vertically centered action group rather than
+  inheriting the Library suggestion layout. Library-scoped Chat retains
+  rotating prompt templates, which prefill rather than send.
+- **Similarity Search** is a single switch inside the Chat's session scope
+  picker, below the folder list and outside the Agent's Mode and model
+  settings. It sits with scope because scope decides what a lookup may reach
+  and this decides how it matches. On adds meaning-based retrieval on top of
+  text matching; turning it Off never stops search. It is On when AI Index
+  is available and can be turned Off per Chat to keep `search_library`
+  text-only. Both states retain direct and prepared document retrieval; asking
+  to turn it On before AI setup opens the explicit setup path.
 - New users start with **Built-in** selected. The New Chat picker lists Codex,
   Claude Code, then Built-in. Its second line says **Sign in for free credits**
   while signed out and **Free credits included** after sign-in, keeping the
@@ -56,7 +70,8 @@ and uses a hosted service only as its metered model provider.
   An idle Codex conversation can change the model used by its next turn without
   replacing its native thread; the picker pauses while a turn is active. Claude
   keeps its selected model fixed after the conversation has content.
-  Suggestions prefill rather than send.
+  Suggestions prefill rather than send; Create Wiki is the deliberate exception
+  because it is a complete capability action rather than an editable template.
 - Streaming, tool activity, permissions, runtime-supported attachments, skills, recovery, and
   file artifacts remain inspectable. Collapsed tool summaries omit exact
   counts while using grammatical singular or plural category labels. Editing
@@ -103,6 +118,20 @@ and uses a hosted service only as its metered model provider.
 - Opening, switching, or resuming an Agent tab is not installation consent.
   The included runtime needs no install action; each missing bring-your-own
   runtime waits for its own explicit setup action.
+- Create Wiki pins its blank tab to the shown folder and retains one
+  cancellable, renderer-local pending intent across selected-Agent setup or
+  reconnect. Once the runtime is ready, the preset sends exactly once in that
+  tab. AI setup is independent and never blocks this intent. Folder removal
+  cancels it; app restart never restores it.
+- Similarity Search is live session policy, not Agent permission mode. The
+  renderer sends the effective value before any ready-transition prompt and
+  reapplies it when AI Index availability changes. Turning it Off leaves
+  prepared PDF and document text searchable and does not alter background
+  indexing.
+- The Create Wiki preset may create or improve `wiki/index.md` and focused
+  pages under `wiki/`. It may not modify anything outside `wiki/`; moves,
+  renames, deletions, or broad source rewrites are separate proposals requiring
+  explicit approval.
 - A runtime, transport, or turn failure leaves one persistent explanation and
   a truthful, stage-specific recovery path. Retrying preparation resumes from
   the first incomplete stage. After an installation failure, **Check again**
@@ -199,7 +228,8 @@ Codex and Claude Code retain the full native cwd and history migration contract.
 
 Journeys: [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-value),
 [J06](../user-journeys.md#j06-start-and-continue-an-agent-chat), and
-[J07](../user-journeys.md#j07-converge-chat-into-a-document). The complete
+[J07](../user-journeys.md#j07-converge-chat-into-a-document), plus
+[J12](../user-journeys.md#j12-build-an-ai-wiki-over-a-local-folder). The complete
 source-to-Agent-to-source route is the
 [J10](../user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
 core loop. A Library Chat becomes a new durable project through

@@ -1,7 +1,7 @@
 # Capabilities and Boundaries
 
 This is the detailed product-facing capability reference bundled on
-2026-08-27. Use the narrow capability names below: preview, Workbench content
+2026-08-31. Use the narrow capability names below: preview, Workbench content
 editing, retrieval text, Agent/MCP access, and file mutation are not
 interchangeable.
 
@@ -59,6 +59,8 @@ Preparation creates the representation needed for retrieval or Agent reading:
 
 Prepared text, compatible media previews, checkpoints, and indexes stay in
 StashBase application data. They never appear as extra workspace files.
+Agent-authored `wiki/` pages are different: they are visible,
+ordinary user-owned Markdown sources.
 
 Preparation runs in the background and does not block folder entry or ordinary
 preview. A result counts as current only when the format-specific work is
@@ -149,6 +151,7 @@ Keep these separate when explaining setup or recovery:
 |---|---|
 | Hosted AI Index | StashBase account session |
 | Bring-your-own AI Index | OpenAI or OpenRouter key stored through StashBase Settings |
+| Structured Wiki creation | The selected Built-in, Claude Code, or Codex Agent; no separate credential |
 | Built-in Claude Code | Claude runtime/provider authentication |
 | Built-in Codex | Codex runtime/provider authentication, including the runtime's ChatGPT sign-in flow |
 | External MCP client | That client's account plus the StashBase MCP connection configuration |

@@ -8,7 +8,7 @@
 
 | State | Owner | Truth rule |
 |---|---|---|
-| Source files and Agent instruction files | User filesystem | Durable source of truth |
+| Source files, Agent instructions, and structured Wiki Markdown | User filesystem | Durable source of truth |
 | Library membership, credentials, preferences | App config | Durable product configuration |
 | Prepared text and assets | AppData | Rebuildable; valid only for the current source |
 | Preparation failures and explicit cancellation | AppData state database | Durable attention and user intent |
@@ -37,6 +37,13 @@
 - Conversion completion is independent of semantic indexing. Current prepared
   text can serve exact retrieval while semantic indexing is disabled, pending,
   paused, or failed.
+- A Chat's Similarity Search switch is consumption policy only. Off routes its
+  attributed retrieval through direct and current prepared text without
+  pausing Preparation, reconcile, or semantic indexing.
+- **wiki/** pages are ordinary source Markdown, not derived state.
+  Agent write reconciliation admits them through the same exact/semantic paths
+  as other Markdown. AI Index activation/backfill and structured Wiki creation
+  may complete independently.
 
 ## Scheduler and Cancellation
 
@@ -246,6 +253,8 @@ Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folde
 plus the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
 core loop and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
-for registration and initial sync of an Agent-created member.
+for registration and initial sync of an Agent-created member, and
+[J12](../design-docs/user-journeys.md#j12-build-an-ai-wiki-over-a-local-folder)
+for structured Wiki admission and independent AI Index activation.
 Related contracts: [File Transactions](file-transactions.md),
 [MCP Access](mcp-access.md), and [Release Pipeline](release-pipeline.md).

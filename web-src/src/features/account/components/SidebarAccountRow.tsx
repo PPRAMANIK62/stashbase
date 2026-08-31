@@ -21,14 +21,14 @@ import { cn } from '@/common/lib/utils';
 
 /**
  * Bottom sidebar chrome: identity on the left and persistent utilities on the
- * right. Anonymous is a complete local-workspace state; the account menu adds
+ * right. Signed out is a complete local-workspace state; the account menu adds
  * sign-in and hosted-usage details without gating files or Exact search.
  */
 export function SidebarAccountRow() {
   const { account, signingIn, signInError, refresh, signIn, signOut } = useHostedAccount();
 
   const email = account?.signedIn ? account.email ?? '' : '';
-  const label = account?.signedIn ? accountDisplayLabel(account) : 'Anonymous';
+  const label = account?.signedIn ? accountDisplayLabel(account) : 'Sign in';
   const accessibleLabel = account?.signedIn && email && label !== email ? `${label} (${email})` : label;
   const quota = account?.quota;
   const remainingPercent = quota ? hostedQuotaRemainingPercent(quota) : null;
@@ -49,7 +49,7 @@ export function SidebarAccountRow() {
             {account?.signedIn
               ? <AccountAvatar account={account} className="size-4" initialsClassName="text-2xs" />
               : (
-                // Preserve the long-standing anonymous affordance. Hosted
+                // Preserve the long-standing signed-out affordance. Hosted
                 // identity owns the new avatar/initial fallback only after
                 // sign-in, so an account feature does not restyle local mode.
                 <span className="relative inline-flex size-4 flex-none items-center justify-center">
@@ -123,7 +123,7 @@ export function SidebarAccountRow() {
                   <div role="presentation" className="p-1">
                     <MenuItem
                       className="items-start py-2"
-                      label="Sign in to StashBase — Free monthly AI Index usage"
+                      label="Sign in to StashBase — Built-in Agent and AI features"
                       disabled={signingIn}
                       onClick={signIn}
                     >
@@ -131,7 +131,7 @@ export function SidebarAccountRow() {
                         <ExternalLinkIcon className="mt-0.5 size-4 flex-none" />
                         <span className="grid min-w-0 gap-0.5">
                           <span>{signingIn ? 'Waiting for browser…' : 'Sign in to StashBase'}</span>
-                          <span className="text-xs leading-snug text-muted-foreground">Free monthly AI Index usage</span>
+                          <span className="text-xs leading-snug text-muted-foreground">Built-in Agent and AI features</span>
                         </span>
                       </span>
                     </MenuItem>

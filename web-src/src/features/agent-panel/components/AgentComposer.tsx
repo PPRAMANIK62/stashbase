@@ -21,6 +21,7 @@ import {
 } from '@/common/lib/libraryScope';
 import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { MentionComposer, type MentionComposerHandle } from '@/features/agent-panel/components/MentionComposer';
+import { SimilaritySearchControl } from '@/features/agent-panel/components/SimilaritySearchControl';
 import {
   ModelEffortMenu, ModeMenu, nextPermMode,
   type ComposerEffortControl, type ComposerModeControl, type ComposerModelControl,
@@ -99,6 +100,16 @@ export interface ComposerScopeControl {
   onSet: (scope: LibraryScope) => void;
 }
 
+/** StashBase's retrieval policy for the mounted session. It rides the
+ * composer bar's context half with scope rather than the Agent's run
+ * settings, and stays owned by AgentView because the live session — not
+ * the composer — holds the policy. */
+export interface ComposerSimilaritySearch {
+  enabled: boolean;
+  availabilityKnown: boolean;
+  onChange: (enabled: boolean) => void;
+}
+
 /** Context attachments — owned by AgentView so panel drops, the `+`
  * picker, and the send path share one list. */
 export interface ComposerAttachments {
@@ -112,7 +123,7 @@ export interface ComposerAttachments {
 
 export function AgentComposer({
   phase, disabled, turnActive, active, agentShortName, hero, prefill,
-  mode, effort, model, scope, mentions, skills, attachments,
+  mode, effort, model, scope, similaritySearch, mentions, skills, attachments,
   closedPlaceholder, onDraftChange, onFocusChange, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
@@ -134,6 +145,7 @@ export function AgentComposer({
   effort: ComposerEffortControl;
   model: ComposerModelControl;
   scope: ComposerScopeControl;
+  similaritySearch: ComposerSimilaritySearch;
   mentions: ComposerMentionSources;
   skills: ComposerSkillSource;
   attachments: ComposerAttachments;
@@ -306,8 +318,14 @@ export function AgentComposer({
               <PlusIcon />
             </Button>
           )}
-          {/* Scope reads left (with the attach control); the run settings
-            * — model, mode — group right next to send. */}
+          {/* The bar splits by ownership, not by control type: what
+            * StashBase supplies as library context — the attach control and
+            * the scope — reads left; the Agent's own run settings (model,
+            * mode) group right next to send. Retrieval mode is library
+            * context too, but it rides INSIDE the scope popup rather than
+            * beside it: scope is what a lookup may reach and matching is
+            * how it compares, and only one of those two is worth the
+            * docked bar's width. */}
           <ScopeMenu
             scope={scope.current}
             entries={scope.entries}
@@ -317,6 +335,13 @@ export function AgentComposer({
             ariaLabel={scopePillAriaLabel(scope.current, scope.locked)}
             locked={scope.locked}
             disabled={disabled}
+            footer={(
+              <SimilaritySearchControl
+                enabled={similaritySearch.enabled}
+                availabilityKnown={similaritySearch.availabilityKnown}
+                onChange={similaritySearch.onChange}
+              />
+            )}
             onSetScope={scope.onSet}
           />
           <span className="flex-1" />

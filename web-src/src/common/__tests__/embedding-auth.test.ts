@@ -2,10 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { EmbedderState } from '@/common/api/api';
 import {
-  hasSkippedAiIndexing,
+  hasSeenAiSetup,
   isEmbeddingAuthorized,
-  setAiIndexingSkipped,
+  setAiSetupSeen,
+  type AiSetupPreferenceStorage,
 } from '@/common/lib/embeddingAuth';
+
+class MemoryStorage implements AiSetupPreferenceStorage {
+  private readonly values = new Map<string, string>();
+  getItem(key: string): string | null { return this.values.get(key) ?? null; }
+  setItem(key: string, value: string): void { this.values.set(key, value); }
+  removeItem(key: string): void { this.values.delete(key); }
+}
 
 function state(patch: Partial<EmbedderState>): EmbedderState {
   return {
@@ -19,47 +27,17 @@ function state(patch: Partial<EmbedderState>): EmbedderState {
   };
 }
 
-test('the AI Index skip is per folder: another folder re-offers, activation clears all', () => {
-  assert.equal(hasSkippedAiIndexing('/work/alpha'), false);
+test('handling the first-folder AI setup persists globally', () => {
+  const storage = new MemoryStorage();
+  assert.equal(hasSeenAiSetup(storage), false);
+  setAiSetupSeen(true, storage);
+  assert.equal(hasSeenAiSetup(storage), true);
 
-  // Skipping alpha quiets alpha only — switching to beta must re-offer
-  // (the titlebar switcher made in-place switching the primary flow, so a
-  // window-wide skip silently became a permanent opt-out).
-  setAiIndexingSkipped(true, '/work/alpha');
-  assert.equal(hasSkippedAiIndexing('/work/alpha'), true);
-  assert.equal(hasSkippedAiIndexing('/work/beta'), false);
-
-  // Returning to a folder skipped in this window stays quiet.
-  setAiIndexingSkipped(true, '/work/beta');
-  assert.equal(hasSkippedAiIndexing('/work/alpha'), true);
-  assert.equal(hasSkippedAiIndexing('/work/beta'), true);
-
-  // Activation clears every prior skip, so a later key removal re-gates
-  // from a clean state instead of staying silently skipped.
-  setAiIndexingSkipped(false, '/work/alpha');
-  assert.equal(hasSkippedAiIndexing('/work/alpha'), false);
-  assert.equal(hasSkippedAiIndexing('/work/beta'), false);
-});
-
-test('a bare-window skip covers the first folder opened, later folders re-offer', () => {
-  // Fresh state for this test: activation clears every prior skip.
-  setAiIndexingSkipped(false, '');
-
-  // The bare window ('' — no folder open yet) is its own context, so a
-  // fresh window offers setup before any folder is chosen.
-  assert.equal(hasSkippedAiIndexing(''), false);
-  setAiIndexingSkipped(true, '');
-  assert.equal(hasSkippedAiIndexing(''), true);
-
-  // The launch offer and the first folder are one continuous flow: the
-  // bare-window skip carries into the first folder instead of re-nagging
-  // seconds after an explicit "not now"…
-  assert.equal(hasSkippedAiIndexing('/work/alpha'), true);
-
-  // …and is consumed by it: a DIFFERENT folder still re-offers, while the
-  // first folder stays quiet on return.
-  assert.equal(hasSkippedAiIndexing('/work/beta'), false);
-  assert.equal(hasSkippedAiIndexing('/work/alpha'), true);
+  // A new helper call over the same durable storage models a relaunch: the
+  // choice is installation-wide rather than tied to one folder or window.
+  assert.equal(hasSeenAiSetup(storage), true);
+  setAiSetupSeen(false, storage);
+  assert.equal(hasSeenAiSetup(storage), false);
 });
 
 test('AI Index authorization accepts hosted or BYOK sources', () => {

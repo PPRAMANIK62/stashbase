@@ -11,8 +11,9 @@ export function createHttpLibraryOperations(
   const headers = (extra?: Record<string, string>): Record<string, string> => ({
     ...(extra ?? {}),
     ...(windowId ? { 'x-stashbase-window-id': windowId } : {}),
-    // Per-session attribution for host-side tools (create_project). Comes
-    // from the spawning session's environment, never from tool arguments.
+    // Per-session attribution for host-side policy and tools (Similarity
+    // Search and create_project). Comes from the spawning session's
+    // environment, never from tool arguments.
     ...(agentSessionId ? { [AGENT_SESSION_ID_HEADER]: agentSessionId } : {}),
   });
   const json = async <T>(url: string, init?: RequestInit): Promise<T> => {

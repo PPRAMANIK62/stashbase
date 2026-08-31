@@ -234,6 +234,7 @@ export class OpenCodePanelSession {
   private sessionId: string | null = null;
   private client: Awaited<ReturnType<typeof openCodeClient>> | null = null;
   private disposed = false;
+  private similaritySearch = true;
   private readonly stopRuntimeExitListener: () => void;
   private readonly onMessage = (data: RawData) => { void this.handleMessage(data); };
   private readonly onClose = () => this.dispose();
@@ -270,6 +271,7 @@ export class OpenCodePanelSession {
   boundFolder(): string | null { return this.rebound ?? (this.libraryScoped ? null : this.cwd); }
   isLibraryScoped(): boolean { return this.libraryScoped && !this.rebound; }
   turnInFlight(): boolean { return this.translator.isTurnActive(); }
+  similaritySearchEnabled(): boolean { return this.similaritySearch; }
   /** OpenCode cannot yet move a native session between directory projects,
    * so no durable history override is claimed during project creation. */
   nativeSessionId(): null { return null; }
@@ -343,6 +345,10 @@ export class OpenCodePanelSession {
     try { event = JSON.parse(raw.toString()) as AgentClientEvent; } catch { return; }
     if (event.t === 'close') { this.dispose(); return; }
     if (event.t === 'set-mode') return;
+    if (event.t === 'set-similarity-search') {
+      if (typeof event.enabled === 'boolean') this.similaritySearch = event.enabled;
+      return;
+    }
     if (!this.client || !this.sessionId) return;
     try {
       switch (event.t) {

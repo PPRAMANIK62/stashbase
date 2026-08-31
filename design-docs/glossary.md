@@ -37,6 +37,22 @@ useful without it. Use `semantic indexing`, `semantic retrieval`, and
 `embedding` only in engineering contracts or a disclosure that needs the
 technical mechanism.
 
+**Similarity Search** is the per-Chat use control for this capability, not a
+second name for the index. On lets Agent retrieval combine AI Index similarity
+with text matches. Off keeps Agent retrieval on direct and prepared text only;
+it does not delete, pause, or expose the AI Index.
+
+## AI Wiki
+
+The product-level layer StashBase builds over local files. It combines a
+**structured Wiki**—visible, source-linked `wiki/index.md` and optional pages
+beside it—with the invisible **AI Index**. Both help Agents use the same local
+sources; neither replaces the folder as source of truth.
+
+Use **Create Wiki** for the explicit first action that asks an Agent to create
+or improve the structured part. Do not use AI Wiki as a synonym for only the
+vector index, only generated Markdown, or a separate hosted knowledge store.
+
 ## Canvas
 
 A role played by a normal user-visible Markdown document that holds the

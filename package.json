@@ -2,7 +2,7 @@
   "name": "stashbase",
   "version": "2.0.0",
   "packageManager": "pnpm@11.5.1",
-  "description": "Local-first knowledge base desktop app.",
+  "description": "StashBase builds an AI wiki over your local files.",
   "author": {
     "name": "liliu-z",
     "email": "bingwuthu@gmail.com"

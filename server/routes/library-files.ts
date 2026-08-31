@@ -43,10 +43,11 @@ const log = logger('routes/library-files');
 
 
 export function mount(app: express.Express, operations: LibraryOperations = createLibraryOperations()): void {
-  // Hybrid search over the whole library (optional `folder`, `path_prefix`,
-  // and source `types` filters). Powers MCP's `search_library`. Hidden `.md`
-  // files are remapped or dropped (same rule as /api/search) so an external
-  // client never sees an internal path.
+  // Unified source search over the whole library (optional `folder`,
+  // `path_prefix`, and source `types` filters). Powers MCP's
+  // `search_library`; an attributed panel-session policy may resolve the
+  // request to lexical retrieval. Hidden derived text is searched but always
+  // remapped to its visible source identity.
   app.post('/api/library/search', async (req, res) => {
     try {
       const query = typeof req.body?.query === 'string' ? req.body.query : '';
@@ -74,6 +75,11 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
         mode,
         caseStrict: req.body?.case_strict === true,
         wholeWord: req.body?.whole_word === true,
+        // Retrieval policy is a property of the live panel session, never a
+        // model-controlled tool argument. Older native MCP hosts may retain
+        // only the window id; the operation layer owns the safe fallbacks.
+        agentSessionId: req.header(AGENT_SESSION_ID_HEADER)?.trim() || undefined,
+        windowId: currentWindowId(),
       }));
     } catch (err: unknown) {
       sendError(res, err);

@@ -23,6 +23,29 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
+test('OpenCode applies Similarity Search before native client readiness', () => {
+  const ws = new FakeWebSocket();
+  const runtime: OpenCodeSessionRuntime = {
+    client: async () => new Promise<never>(() => {}),
+    beginTurn: () => {},
+    endTurn: () => {},
+    onExit: () => () => {},
+    close: async () => {},
+  };
+  const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
+    windowId: 'similarity-policy-window',
+    folder: '/workspace',
+  }, runtime);
+
+  assert.equal(session.similaritySearchEnabled(), true);
+  ws.emit('message', Buffer.from(JSON.stringify({ t: 'set-similarity-search', enabled: false })));
+  assert.equal(session.similaritySearchEnabled(), false);
+  ws.emit('message', Buffer.from(JSON.stringify({ t: 'set-similarity-search', enabled: true })));
+  assert.equal(session.similaritySearchEnabled(), true);
+
+  session.dispose();
+});
+
 test('bundled OpenCode inherits launch plumbing but no ambient credentials or injection flags', () => {
   assert.deepEqual(safeOpenCodeInheritedEnvironment({
     PATH: '/usr/bin',

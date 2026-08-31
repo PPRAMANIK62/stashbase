@@ -233,9 +233,10 @@ this file records the mechanics a change must respect.
    full intrinsic width, painting the folder name across the document tab
    strip (or, with Chat as the workspace, the chat tab row). The narrow
    window this leaves is real: at the 200px minimum sidebar width the
-   macOS traffic-light inset spends most of the budget, so the label can
-   truncate to nothing. Widening the band's usable space means reserving
-   the cluster's overhang in the neighbouring row, not relaxing the cap.
+   macOS traffic-light inset spends most of the budget, so the label keeps
+   only a small truncated fragment. The cap ends exactly at the sidebar
+   edge; widening it further means reserving the cluster's overhang in the
+   neighbouring row, not relaxing the cap in isolation.
 4. **Colocated feature CSS** — exemption rules (below) that a component needs
    but Tailwind utilities can't express, living in a CSS file next to the
    feature it styles and imported directly from the component(s) that render
@@ -282,6 +283,9 @@ this file records the mechanics a change must respect.
    literal, which is what the spacing guard reads.
 5. **Primitives** (`web-src/src/common/components/ui/`) — shadcn adapters
    over Base UI: button, input, textarea, select, checkbox, collapsible,
+   (a standalone `switch` was retired when its last caller moved into a menu;
+   the track-and-thumb look now lives as `menu-radio`'s switch indicator, so
+   restore the primitive only for a real form-row switch, not for a menu row)
    segmented-control, tabs, field, label, progress, dialog, alert-dialog,
    menu (+ `menu-radio`), popover, toast, tooltip, status, plus the
    non-Base-UI recipes badge, card, section, empty-state, pill, and
@@ -651,6 +655,17 @@ it":
   terminal action). Every short box was quietly spending the one shape the
   language had set aside. At 16 it keeps its corner and stays a box, so the
   capsule means something again wherever it does appear.
+  **Create Wiki** is one such terminal capability action: its `rounded-full`
+  capsule marks the fixed folder activation path, directly below the empty
+  composer, rather than styling an ordinary button as a pill. The capsule is
+  all it adds — it is otherwise the default solid-accent `Button`, the same
+  primary the zero-folder sidebar and the empty main pane put under their own
+  invitations, because a hero's one action should not be a second dialect of
+  primary. A tinted outline is not that dialect: a pale fill under a pale
+  stroke under pale text is three washes of one hue, and it reads as a status
+  badge rather than as the thing to press. The cancellable waiting state
+  retains the capsule's identity, and its progress arc sits on the caption
+  below rather than inside the fill the accent arc would vanish against.
 - **An item inside a box** — takes a hover or selected background: `-ui`.
   Tree rows, menu items, mention rows, buttons, the segmented control.
   Buttons are the trap here: at `-container` a 32px button becomes a

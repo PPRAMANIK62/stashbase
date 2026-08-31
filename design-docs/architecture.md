@@ -7,14 +7,18 @@ source of truth for file, module, route, and function-level detail.
 ## System Shape
 
 ```text
-Local files → Convert → Index → Retrieve → MCP → Agents
-     ↑                                          │
-     └──────────── Agent-written files ─────────┘
+Local files → Structured Wiki ────────────────┐
+     │                                        ├→ Agents
+     └→ Convert → AI Index → Retrieve → MCP ──┘
+     ↑                                        │
+     └────────── Agent-written Wiki/files ─────┘
 ```
 
-The Document Workbench is the user-facing surface over local files.
-Preparation and Search and Retrieval form the local RAG layer, while the Agent
-Panel is the built-in Agent client over the same authorized context.
+The Document Workbench is the user-facing surface over local files. Visible
+structured Wiki files and the invisible AI Index form the AI Wiki over those
+sources. Preparation and Search and Retrieval own the local RAG part, while the
+Agent Panel creates structured Wiki files and consumes the same authorized
+context.
 
 The desktop application owns file access, user interaction, format
 preparation, the MCP boundary, and Agent execution. A local indexing runtime
@@ -28,6 +32,7 @@ operate as one local library per installation.
 | Data | Owner | Rule |
 |---|---|---|
 | Local files and folders | User | They remain the source of truth. |
+| `wiki/` pages | User | They are ordinary visible Wiki files created or edited through an explicit Agent action. `wiki/index.md` is the entry page. |
 | `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never overwritten by StashBase. |
 | Extracted text, previews, indexes, preparation records | StashBase | They are rebuildable derived state. |
 | Included OpenCode runtime | StashBase | It is pinned, packaged, private application state and never resolved from the user's PATH. |
@@ -63,9 +68,10 @@ update payload; a Linux package may request administrator approval; and
 AppImage relaunch waits until the old process releases its single-instance
 lock.
 
-Derived artifacts must not appear as ordinary files in the workspace. When
+Machine-derived artifacts must not appear as ordinary files in the workspace. When
 search finds derived evidence, the result still identifies and opens the
-user-visible source file.
+user-visible source file. Structured Wiki Markdown is not machine-derived
+AppData: it is a visible user-owned file and follows ordinary file transactions.
 
 ## Scope And Access
 
@@ -86,6 +92,10 @@ user-visible source file.
   Built-in session. Bring-your-own readiness is demand-driven: opening
   the app or a folder does not install an Agent runtime; explicit Chat actions
   own preparation and recovery.
+- Create Wiki pins one blank Chat to its folder while selected-Agent setup or
+  reconnect completes. The pending intent is renderer-local, independent from
+  AI setup, and sends at most once; it is not durable application state and
+  cannot widen to Library implicitly.
 - Closing a window releases only its UI and folder context. Shared application
   resources remain alive until the application session quits, and a window is
   retired only after its current edit is durable.

@@ -1,12 +1,13 @@
 /**
  * Empty-chat hero pieces. While a chat has no turns, AgentView centers the
  * composer in the panel: a title (plus a connecting status when
- * applicable) sits above it and a single rotating, clickable usage
- * suggestion sits toward the pane's bottom edge below it.
+ * applicable) sits above it. A folder-scoped chat puts the fixed Create Wiki
+ * action directly below the composer; a library chat keeps a rotating usage
+ * suggestion toward the pane's bottom edge.
  * Pressing the suggestion only prefills the composer draft with that
  * suggestion's full prompt — sending always stays an explicit user action.
- * Copy follows the chat's scope: a folder-bound chat talks about "this
- * folder", a library chat talks about the whole library.
+ * Folder chats intentionally have no rotating prompt competing with their
+ * single first action. Library suggestions talk about the whole library.
  */
 import { useEffect, useState } from 'react';
 import { Button } from '@/common/components/ui/button';
@@ -26,49 +27,6 @@ interface Suggestion {
 /* Every entry must carry a useful prompt to prefill. Labels stay short and
  * action-first; prompts expand them into the source-aware journeys StashBase
  * supports. Templates that need user input end at the insertion point. */
-const FOLDER_SUGGESTIONS: Suggestion[] = [
-  {
-    label: 'Turn requirements into a checklist',
-    prompt: 'Review the requirements in this folder and create a checklist of constraints, acceptance criteria, and open questions. Cite the source files.',
-  },
-  {
-    label: 'Find related specs and decisions',
-    prompt: 'Find the specifications, meeting notes, and prior decisions related to: ',
-  },
-  {
-    label: 'Compare technical options',
-    prompt: 'Compare these technical options using evidence from this folder. Show the trade-offs, risks, and recommendation: ',
-  },
-  {
-    label: 'Build a design Canvas',
-    prompt: 'Create a Markdown Canvas with the goal, confirmed decisions, alternatives, trade-offs, and open questions.',
-  },
-  {
-    label: 'Check delivery against requirements',
-    prompt: 'Compare the current work with the original requirements. Mark each item satisfied, missing, or unclear, with evidence.',
-  },
-  {
-    label: 'Compare papers and methods',
-    prompt: 'Compare the papers or methods in this folder. Summarize their evidence, limitations, and disagreements.',
-  },
-  {
-    label: 'Create a source-linked reading note',
-    prompt: 'Create a reading note with the main claims, evidence, limitations, open questions, and source references about: ',
-  },
-  {
-    label: 'Build a research plan',
-    prompt: 'Turn the material in this folder into a research plan with a question, approach, experiments, milestones, and risks.',
-  },
-  {
-    label: 'Summarize progress and blockers',
-    prompt: 'Summarize recent progress from this folder. Separate completed work, findings, blockers, and next steps.',
-  },
-  {
-    label: 'Outline a presentation',
-    prompt: 'Turn the settled work in this folder into a presentation outline with an audience, core message, slide order, and supporting evidence.',
-  },
-];
-
 const LIBRARY_SUGGESTIONS: Suggestion[] = [
   {
     label: 'Find something I vaguely remember',
@@ -126,11 +84,10 @@ const HINT_FADE_MS = 700;
  * degrades to a plain crossfade there. Hover or focus pauses the rotation:
  * a moving press target would swap under the pointer, and a focused
  * button's accessible name must hold still. */
-export function EmptyChatSuggestion({ onPrefill, libraryScoped }: {
+export function EmptyChatSuggestion({ onPrefill }: {
   onPrefill: (text: string) => void;
-  libraryScoped?: boolean;
 }) {
-  const suggestions = libraryScoped ? LIBRARY_SUGGESTIONS : FOLDER_SUGGESTIONS;
+  const suggestions = LIBRARY_SUGGESTIONS;
   const count = suggestions.length;
   const [index, setIndex] = useState(0);
   const [leaving, setLeaving] = useState(false);
@@ -190,6 +147,50 @@ export function EmptyChatSuggestion({ onPrefill, libraryScoped }: {
           <ArrowInsertIcon className="size-3 shrink-0" aria-hidden="true" />
         </span>
       </Button>
+    </div>
+  );
+}
+
+/** The primary first action for a folder. It sends immediately — unlike the
+ * rotating library suggestions, this is a complete product action rather
+ * than a prompt template that still needs editing.
+ *
+ * So it wears the app's primary action, unmodified: a solid accent
+ * `Button`, the same one the zero-folder sidebar and the empty main pane
+ * put under their own one-line invitations. The capsule is the only thing
+ * it adds, and it is semantic (see renderer-styling's corner rules) — this
+ * is the fixed folder activation path, not an ordinary button drawn as a
+ * pill. The tinted-outline treatment it replaces stacked a pale fill, a
+ * pale stroke, and pale text: three washes of one hue that together read
+ * as a status badge rather than as the thing to press.
+ *
+ * No leading glyph. The panel's other two hero actions carry none, and the
+ * bolt this used to wear is the Auto permission mode's mark two rows
+ * below — one glyph cannot mean both. */
+export function CreateWikiAction({
+  pending,
+  onCreate,
+  onCancel,
+}: {
+  pending: boolean;
+  onCreate: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-2 pt-4 text-center">
+      <Button className="rounded-full px-4" disabled={pending} onClick={onCreate}>
+        {pending ? 'Creating Wiki…' : 'Create Wiki'}
+      </Button>
+      {pending && (
+        // The waiting state's motion lives HERE rather than inside the
+        // disabled button: the panel's one connecting arc is an accent
+        // stroke, which is invisible on an accent fill, and a dimmed
+        // button is the wrong place to look for progress anyway.
+        <p className="m-0 flex max-w-measure-sm items-center gap-1.5 text-xs leading-snug text-muted-foreground" role="status">
+          <span className={spinnerClass} aria-hidden="true" />
+          Waiting for Agent setup. <Button type="button" variant="link" size="xs" className="h-auto border-0 p-0 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground" onClick={onCancel}>Cancel</Button>
+        </p>
+      )}
     </div>
   );
 }

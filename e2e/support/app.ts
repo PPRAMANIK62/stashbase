@@ -7,7 +7,6 @@ import type { TestInfo } from '@playwright/test';
 import { _electron, type ElectronApplication, type Page } from 'playwright';
 import { AppErrorCollector } from './errors.ts';
 import { serverLogFileForPlatform, type AppFixture } from './fixtures.ts';
-import { dismissEmbeddingKeyPrompt } from './locators.ts';
 
 const SUPPORT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(SUPPORT_DIR, '..', '..');
@@ -23,10 +22,6 @@ export interface LaunchedApp {
 
 export interface LaunchAppOptions {
   readinessTimeoutMs?: number;
-  /** Most journeys are not onboarding tests: make their deliberate basic-mode
-   * choice in the harness. First-launch coverage preserves the prompt and
-   * asserts the shipping choice explicitly. */
-  aiIndexSetup?: 'skip' | 'preserve';
 }
 
 function descendantsOf(rootPid: number): number[] {
@@ -151,10 +146,6 @@ export async function launchApp(
       undefined,
       { timeout: readinessTimeoutMs },
     );
-    if ((options.aiIndexSetup ?? 'skip') === 'skip') {
-      await dismissEmbeddingKeyPrompt(page, { waitForOffer: true });
-    }
-
     let closed = false;
     const session: LaunchedApp = {
       electron: electronApplication,

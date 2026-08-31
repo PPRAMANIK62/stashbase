@@ -18,6 +18,9 @@ export interface QueuedPrompt {
 
 interface PromptToSend {
   text: string;
+  /** Optional concise text for the transcript. Presets use this to keep the
+   * user-visible turn natural while sending a fuller operating contract. */
+  displayText?: string;
   attachments: Attachment[];
   titleHint?: string;
   skill?: string;
@@ -116,6 +119,16 @@ export function useAgentPromptQueue({
     void sendPromptNow({ text, attachments: atts, titleHint, skill, appendBlock: true, clearAttachments: true });
   }
 
+  /** Send a product-owned preset whose wire instructions are intentionally
+   * fuller than the action the user sees in the transcript. Presets are only
+   * fired while idle, so they never join the user-authored follow-up queue. */
+  function sendPreset(text: string, displayText: string) {
+    if (turnActiveRef.current) return false;
+    const titleHint = capabilitiesRef.current?.titleHint && isDefaultChatTitle(titleRef.current) ? displayText : undefined;
+    void sendPromptNow({ text, displayText, attachments: [], titleHint, appendBlock: true });
+    return true;
+  }
+
   function resend(text: string) {
     if (!turnActiveRef.current) {
       send(text);
@@ -190,6 +203,7 @@ export function useAgentPromptQueue({
 
   async function sendPromptNow({
     text,
+    displayText,
     attachments: atts,
     titleHint,
     skill,
@@ -203,7 +217,7 @@ export function useAgentPromptQueue({
       return;
     }
     if (appendBlock) {
-      setBlocks((bs) => [...bs, { kind: 'user', id: nextBlockId(), text, attachments: atts.length ? atts : undefined, at: Date.now() }]);
+      setBlocks((bs) => [...bs, { kind: 'user', id: nextBlockId(), text: displayText ?? text, attachments: atts.length ? atts : undefined, at: Date.now() }]);
     }
     setTurnBusy(true);
     openKindRef.current = null;
@@ -268,6 +282,7 @@ export function useAgentPromptQueue({
     runNextQueuedPrompt,
     steerQueuedPrompt,
     send,
+    sendPreset,
     resend,
     resendFailedPrompt,
   };

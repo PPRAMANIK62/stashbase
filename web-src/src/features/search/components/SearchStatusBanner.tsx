@@ -4,6 +4,7 @@ import { SectionHeading } from '@/common/components/ui/section';
 import { StatusMessage } from '@/common/components/ui/status';
 import { openSettings } from '@/common/lib/settingsTrigger';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { openEmbeddingSetup } from '@/common/lib/embeddingSetupTrigger';
 
 /** One readiness/problem banner: title + detail copy on the left, optional
  *  compact actions on the right, on the status token ramp. */
@@ -116,7 +117,27 @@ export function SearchStatusBanner({ semanticMode, onNavigateAway }: {
     );
   }
 
-  if (semanticMode && semanticDisabled) return null;
+  if (semanticMode && semanticDisabled) {
+    return (
+      <SearchBanner
+        tone="info"
+        title="AI setup required"
+        detail="Set up AI to search by meaning. Exact Search stays available without it."
+        actions={
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => {
+              onNavigateAway();
+              openEmbeddingSetup();
+            }}
+          >
+            Enable
+          </Button>
+        }
+      />
+    );
+  }
 
   if (pendingCount > 0) {
     const readyLabel = `${readyCount} file${readyCount === 1 ? '' : 's'} ${readyCount === 1 ? 'is' : 'are'} ready to search.`;

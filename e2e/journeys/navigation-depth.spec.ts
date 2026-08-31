@@ -159,9 +159,8 @@ test('Favorites pin above recents and removing the active folder returns to Home
     // Selecting a member in the open menu switches this window in place.
     await switcherFolderItem(app.page, 'project-alpha').click();
     await expect(app.page).toHaveTitle('project-alpha — StashBase');
-    // The AI Index offer follows the folder: alpha was never skipped in
-    // this window, so the switch re-offers before the header is usable.
-    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
+    // Folder switching remains uninterrupted when AI Index is off.
+    await dismissEmbeddingKeyPrompt(app.page);
 
     await openFolderMenu(app, 'project-alpha');
     await app.page.getByRole('menuitem', { name: 'Remove from Library' }).click();
@@ -169,9 +168,8 @@ test('Favorites pin above recents and removing the active folder returns to Home
     await expect(app.page).toHaveTitle('StashBase');
     await expect(app.page.getByRole('button', { name: 'Select project-alpha folder root' })).toHaveCount(0);
     await expect(app.page.getByText('Chat and search cover your whole library')).toBeVisible();
-    // Removing the active folder creates a new bare-window context, which
-    // makes its own AI Index offer before titlebar controls are interactive.
-    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
+    // Returning to the bare window stays uninterrupted too.
+    await dismissEmbeddingKeyPrompt(app.page);
     // Members remain but none is open, so the sidebar carries the Choose
     // Folder invitation below New Chat.
     await expect(app.page.getByRole('button', { name: 'Choose Folder' })).toBeVisible();

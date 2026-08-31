@@ -42,6 +42,13 @@ access surface external clients copy from.
   actions, but only the Node server persists its session. Environment
   variables may isolate automated tests or select runtime plumbing, but are
   never the product credential source of truth.
+- Launch into a bare Library only resolves authorization state. The first
+  active folder opens the one-time AI setup invitation when authorization is
+  absent. Completing it or choosing **Not now** records a durable renderer
+  preference across folders and relaunches; Similar Search, the persistent
+  Files-panel Enable action, and Settings remain explicit reopen routes.
+  Create Wiki has no setup request or correlated result and remains independent
+  from embedding authorization.
 - Every OAuth flow records its initiating purpose. Account-menu and Agent
   sign-in establish identity only; only the explicit hosted AI Index choice
   may activate `stashbase-account`, reset the indexer, or begin backfill.
@@ -129,7 +136,7 @@ access surface external clients copy from.
 | Appearance Adapter | `web-src/src/features/settings/lib/appearance.ts`, applied to a window by `hooks/useAppliedAppearance.ts` |
 | Capture runtime Adapter | `web-src/src/app/hooks/useClipboardImageOffer.ts`, `electron/preload.cjs`, and the clipboard boundary in `electron/main.cjs` |
 | Update runtime Adapter | `electron/update-manager.cjs`, `electron/main.cjs`, `electron/preload.cjs`, `web-src/src/common/hooks/useDesktopUpdate.ts`, and `web-src/src/common/components/DesktopUpdateBanner.tsx` — the hook and banner sit in `common/` because Settings and the sidebar account row both render update state, and a feature may not import a sibling |
-| Open-request Interfaces | `web-src/src/common/lib/settingsTrigger.ts` (Settings), `web-src/src/common/lib/embeddingSetupTrigger.ts` (AI Index setup), `web-src/src/common/lib/embeddingAuth.ts` (authorization and basic-mode facts) — shared so no surface reaches into the Settings feature to ask it to open |
+| Open-request Interfaces | `web-src/src/common/lib/settingsTrigger.ts` (Settings), `web-src/src/common/lib/embeddingSetupTrigger.ts` (manual AI setup), `web-src/src/common/lib/embeddingAuth.ts` (authorization and durable one-time-onboarding preference) — shared so no surface reaches into the Settings feature to ask it to open |
 | Focused evidence | `server/app-config.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/hosted-agent-broker.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, renderer account/appearance/embedding tests, `web-src/src/common/__tests__/desktop-update-hook.test.ts`, `web-src/src/features/settings/__tests__/appearance.test.ts`, `web-src/src/common/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts`, and J04 in `e2e/journeys/preparation-capture.spec.ts` |
 
 ## Validation
@@ -155,6 +162,8 @@ Related journeys: [J01](../design-docs/user-journeys.md#j01-complete-onboarding-
 [J06](../design-docs/user-journeys.md#j06-start-and-continue-an-agent-chat), and
 [J08](../design-docs/user-journeys.md#j08-connect-an-external-agent-through-mcp),
 plus [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
-for the owned default project location.
+for the owned default project location and
+[J12](../design-docs/user-journeys.md#j12-build-an-ai-wiki-over-a-local-folder)
+for first-folder AI activation and independent Wiki creation.
 Related contracts: [MCP Access](mcp-access.md), [Agent Runtime](agent-runtime.md),
 and [Data Lifecycle](data-lifecycle.md).

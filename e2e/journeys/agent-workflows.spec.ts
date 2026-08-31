@@ -37,6 +37,57 @@ async function selectCodex(page: LaunchedApp['page']): Promise<void> {
   await page.getByRole('menuitem', { name: 'Codex' }).click();
 }
 
+test('J12 creates a source-linked Wiki independently from first-folder AI setup', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  configureFakeAgent(fixture);
+  const sourceFile = path.join(fixture.workspaces.projectA, 'Welcome.md');
+  const originalSource = fs.readFileSync(sourceFile, 'utf8');
+  const wikiFile = path.join(fixture.workspaces.projectA, 'wiki', 'index.md');
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(app.page.getByRole('heading', { name: 'Enable AI for your files' })).toBeVisible();
+    await app.page.getByRole('button', { name: 'Not now', exact: true }).click();
+    await selectCodex(app.page);
+    await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
+
+    const panel = activeAgentPanel(app.page);
+    const heading = panel.getByRole('heading', { name: 'Your knowledge is here.' });
+    const createWiki = panel.getByRole('button', { name: 'Create Wiki', exact: true });
+    await expect(heading).toBeVisible();
+    await expect(createWiki).toBeVisible();
+    const [panelBox, headingBox, createWikiBox] = await Promise.all([
+      panel.boundingBox(),
+      heading.boundingBox(),
+      createWiki.boundingBox(),
+    ]);
+    expect(panelBox).not.toBeNull();
+    expect(headingBox).not.toBeNull();
+    expect(createWikiBox).not.toBeNull();
+    if (!panelBox || !headingBox || !createWikiBox) throw new Error('Create Wiki empty-state geometry is unavailable');
+    const panelCenter = panelBox.y + panelBox.height / 2;
+    const actionGroupCenter = (headingBox.y + createWikiBox.y + createWikiBox.height) / 2;
+    expect(Math.abs(actionGroupCenter - panelCenter)).toBeLessThan(panelBox.height * 0.15);
+
+    await createWiki.click();
+    await expect(app.page.getByRole('heading', { name: 'Enable AI for your files' })).toHaveCount(0);
+    await expect(panel.getByText('Create a Wiki for this folder.', { exact: true })).toBeVisible();
+    await expect(panel.getByText('Allow Codex to write wiki/index.md?')).toBeVisible();
+
+    await panel.getByRole('button', { name: 'Allow', exact: true }).click();
+    await expect(panel.getByText('wiki/index.md now maps the folder.')).toBeVisible();
+    await expect(fileTreeRow(app.page, 'wiki')).toBeVisible();
+    await expect.poll(() => fs.readFileSync(wikiFile, 'utf8')).toContain('[Welcome](../Welcome.md)');
+    expect(fs.existsSync(path.join(fixture.workspaces.projectA, 'WIKI.md'))).toBe(false);
+    expect(fs.readFileSync(sourceFile, 'utf8')).toBe(originalSource);
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
 test('J07 converges an approved Agent write into a reviewed durable Canvas', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   configureFakeAgent(fixture);
@@ -121,6 +172,9 @@ test('J11 creates a project only after approval and continues the same conversat
     await expect(panel.getByText(`${projectName} is ready and this conversation moved into it.`)).toBeVisible();
 
     await expect(app.page).toHaveTitle(`${projectName} — StashBase`);
+    // This is the first folder activated in the Library-scoped journey, so
+    // the independent one-time AI setup offer may open after project rebind.
+    await dismissEmbeddingKeyPrompt(app.page);
     await expect(folderSwitcherTrigger(app.page)).toContainText(projectName);
     panel = activeAgentPanel(app.page);
     composer = panel.locator('[aria-label="Message agent"]');

@@ -7,9 +7,9 @@
  * header → cards → exit → disclosure, instead of hopping between a
  * button and a caption line beneath it.
  *
- * Wording is layered: "AI Index" is the capability, the subtitles say how
- * each option provides it, and "embeddings" appears only in the bottom
- * disclosure line (and the key form) — implementation detail, never headline.
+ * Wording keeps the first-run choice at the product level; "embeddings"
+ * appears only in the bottom disclosure line (and the key form), while the
+ * technical AI Index name remains in Settings.
  *   • Sign in to StashBase — hosted, free monthly indexing; the low-friction
  *     default. The recommended card carries a soft brand TINT and the same
  *     neutral border as its sibling: tint plus a brand-toned border read as
@@ -22,8 +22,8 @@
  *   • Use your own API key — OpenAI or OpenRouter, for advanced users;
  *     choosing it reveals the key field in place (the parent owns that swap).
  *
- * `onSkip`, when present (first-run gate only), renders the deliberate exit to
- * basic mode: a low-emphasis "Skip for now" text button. NOT an
+ * `onSkip`, when present (first-run gate only), renders the deliberate exit: a
+ * low-emphasis "Not now" text button. NOT an
  * underlined link at rest — a standing underline is browser furniture and
  * pulled the whole card stack toward web-page register; the underline appears
  * on hover, where it says "clickable" without the styling cost. It sits far
@@ -100,7 +100,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
           className="relative grid w-full gap-0.5 rounded-xl border border-border bg-accent/8 px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-accent/14 enabled:active:scale-97 disabled:cursor-default"
         >
           <span className="text-base font-semibold leading-snug text-foreground">Sign in to StashBase</span>
-          <span className="text-xs leading-snug text-muted-foreground">Free monthly AI Index usage</span>
+          <span className="text-xs leading-snug text-muted-foreground">Included monthly AI usage</span>
           {signInDisabled && (
             /* Corner mark, not a chip: a filled badge would compete with
              * the card's own title for the eye that is choosing. Sits on
@@ -143,7 +143,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
             className="h-auto cursor-pointer border-0 p-0 text-muted-foreground underline-offset-2 hover:text-foreground"
             onClick={onSkip}
           >
-            Skip AI Index for now
+            Not now
           </Button>
         </div>
       )}

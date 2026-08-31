@@ -14,6 +14,11 @@
   required. Otherwise it creates a new tab. No started tab is hijacked.
 - A blank tab may follow a window folder switch. Draft or attachments freeze
   the scope visible to the user; content and resumed history remain pinned.
+- Create Wiki promotes the shown folder to an explicit pick immediately. Its
+  renderer-local pending intent counts as non-blank, locks the scope control,
+  survives the setup/runtime reconnects it initiated, and clears before its
+  one preset send. Cancel restores the prior pick; folder retirement drops the
+  intent; no reducer or native history persists it across restart.
 - A structured `scope-removed` exit retires only Chats bound to that member. A
   completely blank tab reconnects in place with an explicit Library scope. A
   tab containing any user work preserves its tab, draft, attachments,
@@ -72,8 +77,8 @@
   control — changes preference without creating a chat. The row carries no
   hover surface of its own: each target in it highlights only its own box,
   and a rule separates the New Chat/agent pair from chat history.
-- The scope picker is available before session binding and remains visible but
-  locked after binding. Model and effort come from runtime capabilities, and
+- The scope picker is available before session binding and remains visible and
+  openable after binding, with its scope rows locked in place. Model and effort come from runtime capabilities, and
   Default remains an omitted override. An idle Codex conversation applies a
   model choice to its next turn on the same thread; its row is disabled only
   during an active turn. Before a fresh Codex thread reports its actual model,
@@ -91,8 +96,38 @@
   explicitly overridden; a default or inherited effort claims no bar space.
   When a runtime advertises only one of the two settings, the pill opens that
   list directly.
+- Similarity Search is one switch row pinned under the session scope popup's
+  folder list, never an entry in Mode or the model settings menu. The switch is
+  required, not stylistic: the scope rows above it are a radio list whose
+  selected row wears a check, so a check on this row would make one glyph mean
+  "the one selected" and "on" inside a single popup. The row stays ONE control
+  semantically — a `menuitemcheckbox` whose indicator is drawn as a track and
+  thumb — rather than a menu item with a second focusable switch inside it. It
+  belongs with scope because the two are one question in halves — scope is what
+  a lookup may reach, this is how it matches — and it belongs INSIDE that popup
+  rather than beside it on the composer bar, because the bar's width is the
+  docked panel's width and this is the row's least-touched setting. A checkbox
+  is load-bearing, not cosmetic: checked ADDS meaning-based retrieval on top of
+  text matching that never goes away, so the control must never present as a
+  switch over search itself. Off does not stop search. Its explicit state
+  belongs to the mounted Chat session. Checking it without an available AI Index
+  opens setup; unchecked keeps library search available through direct and
+  current prepared text.
+- Hosting a live setting makes the scope popup openable for the life of the
+  conversation. The binding lock is a rule about the scope VALUE, so a bound
+  Chat dims and disables the scope rows in place and says why, rather than
+  killing the trigger and taking the retrieval setting down with it.
 - CodeMirror owns composer text, selection, undo, and `@`/`/` key handoff. The
   UI remains a capped-height chat input, not an editor workbench.
+- An empty folder-scoped composition renders one fixed Create Wiki capsule
+  directly below the composer and no rotating folder suggestion. It disappears
+  for a draft or attachment. Library scope keeps rotating suggestions, which
+  prefill; Create Wiki sends immediately because it is a complete action.
+- The preset has separate display and wire text. The transcript and title hint
+  use the concise user intent; the wire prompt owns the stable **wiki/**-only,
+  **wiki/index.md**, relative-link, source-preservation, and approval contract.
+  It must never authorize embeddings or hidden index-file creation by the
+  Agent.
 - Suggestions only prefill a draft; they never send. Their rotation pauses
   while hovered or focused.
 - File and image context is explicit through mentions and each runtime's
@@ -200,8 +235,8 @@
 | Window-level catalog prime | `web-src/src/features/agent-panel/hooks/useAgentCatalogPrime.ts` — the one eager runtime read, called from `app/App.tsx` because every chat surface is lazy |
 | Account-state projection | `web-src/src/common/lib/accountEvents.ts` publishes the last resolved signed-in state from the lazy `useHostedAccount` owner; eager `NewChatButton.tsx` subscribes to that narrow snapshot so its Built-in credit line changes with identity without pulling account API or OAuth code into the initial bundle |
 | Sidebar entry points | `web-src/src/features/agent-panel/components/NewChatButton.tsx` (the split button, and the only reader of the next-chat agent preference) and `ScopeHistoryButton.tsx` (the per-scope history clock, which owns the `SessionHistoryMenu` lazy boundary). Both are exported from the feature barrel and merely placed by `app/components/Sidebar.tsx`; the sidebar holds no Agent logic of its own |
-| Session state Interface | `web-src/src/features/agent-panel/hooks/useAgentSession.ts` owns transport, event routing, and session reset/resume, and composes the focused sub-hooks beside it in `web-src/src/features/agent-panel/hooks/`. It returns those sub-hooks as owner-named groups (controls, queue, mentions, skills, runtime, transcript) rather than one flat surface; the transcript rules its events imply are pure Modules in `lib/transcriptEvents.ts` |
-| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx` owns the block list and turn layout over the pure turn model in `lib/turnModel.ts`, with the user half in `AgentUserTurn.tsx` and the tool surface in `AgentToolActivity.tsx`; `AgentComposer.tsx` owns the draft and its send predicate, with the suggestion popup in `MentionSuggestions.tsx` and the session pills in `ComposerPills.tsx`; `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` over `hooks/useSessionHistory.ts`, which merges every registered agent's listings and routes a rename or delete through the row's own agent and scope |
+| Session state Interface | `web-src/src/features/agent-panel/hooks/useAgentSession.ts` owns transport, event routing, session reset/resume, and the tab-local pending Create Wiki intent, and composes the focused sub-hooks beside it in `web-src/src/features/agent-panel/hooks/`. It returns those owners as named groups (controls, queue, mentions, skills, runtime, transcript, wiki) rather than one flat surface; the transcript rules its events imply are pure Modules in `lib/transcriptEvents.ts` |
+| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx` owns the block list and turn layout over the pure turn model in `lib/turnModel.ts`, with the user half in `AgentUserTurn.tsx` and the tool surface in `AgentToolActivity.tsx`; `AgentComposer.tsx` owns the draft, its send predicate, and the control bar, passing `SimilaritySearchControl.tsx` (the product retrieval row) into the shared `ScopeMenu`'s footer slot, `AgentEmptyState.tsx` owns Create Wiki and library suggestions, and `lib/createWikiPrompt.ts` owns the preset contract; `MentionComposer.tsx`, `ComposerPills.tsx`, and `SessionHistoryMenu.tsx` own their focused controls |
 | State Interfaces | Chat tab state/actions in `web-src/src/store/state/state.ts` and `state/stateReducer.ts`; activation consent in the `activateChatTab` action (`store/contexts/AppContext.tsx`) over `store/lib/chatTabPlan.ts`; focused pure state Modules under `features/agent-panel/lib/` |
 | Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `features/agent-panel/lib/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
 | Attachment HTTP Adapter | `web-src/src/common/api/api.ts` and `server/routes/attach.ts` |
@@ -226,7 +261,8 @@ clipboard/native Seams remain in release sanity.
 
 Related journeys: [J01](../design-docs/user-journeys.md#j01-complete-onboarding-and-reach-first-value),
 [J06](../design-docs/user-journeys.md#j06-start-and-continue-an-agent-chat), and
-[J07](../design-docs/user-journeys.md#j07-converge-chat-into-a-document), plus
+[J07](../design-docs/user-journeys.md#j07-converge-chat-into-a-document),
+[J12](../design-docs/user-journeys.md#j12-build-an-ai-wiki-over-a-local-folder), plus
 the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
 core loop and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)

@@ -24,8 +24,15 @@ clients and are not a general host-filesystem API.
   never silently widens.
 - `search_library(query, mode?, folder?, path_prefix?, types?, case_strict?,
   whole_word?, top_k?)` searches in semantic mode by default or exact keyword
-  mode, returning the same source-hit shape; keyword mode requires `folder` or
-  `path_prefix`, and `types` accepts the shared source categories.
+  mode, returning the same source-hit shape and the strategy actually used.
+  Both strategies default to the whole library and `types` accepts the shared
+  source categories. Library-wide keyword search fans through member roots at
+  the operation boundary rather than exposing that folder-rooted mechanism to
+  callers.
+- An attributable panel session may resolve any `search_library` request to
+  keyword mode while its Similarity Search control is Off. This policy comes
+  from trusted transport attribution, never model-controlled tool arguments;
+  ambiguous or external callers retain their requested strategy.
 - Results retain absolute visible-source identity for Agent tools. Converted
   evidence never exposes an AppData path.
 - `library_info` returns folder identity and provider state, not a second

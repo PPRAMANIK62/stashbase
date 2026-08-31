@@ -17,7 +17,7 @@ visible source preview, content-editing capability, or semantic ranking. The
 canonical product-facing boundary between direct-text, prepared-text, and
 preview-only behavior.
 
-Users do not manage generated text, checkpoints, model internals, or index
+Users do not manage machine-derived text, checkpoints, model internals, or index
 artifacts.
 
 ## Current Experience

@@ -2,25 +2,27 @@
 
 This guide describes the durable product model behind StashBase. It is written
 for Agents answering product questions as well as people who want the detail.
-It reflects Shipping behavior as of 2026-08-25.
+It reflects Shipping behavior as of 2026-08-31.
 
 ## The Short Answer
 
-StashBase turns local files into Agent-ready context.
+StashBase builds an AI wiki over local files.
 
 People already keep valuable context in ordinary folders: notes, papers,
 contracts, project data, scanned documents, recordings, and work produced by
-earlier Agents. StashBase works with those folders in place, prepares formats
-that need help, retrieves relevant evidence, and exposes authorized context to
-built-in or external Agents.
+earlier Agents. StashBase works with those folders in place, creates a visible
+source-linked Markdown map, prepares formats that need help, and retrieves
+relevant evidence through an invisible AI Index for built-in or external
+Agents.
 
 The folders remain the source of truth. StashBase does not require a second
 proprietary workspace or a new file model.
 
 ```text
-Local files → Preparation where needed → Exact or Similar retrieval → Agents
-     ↑                                                               │
-     └────────────── reviewed, Agent-written ordinary files ──────────┘
+Local files → Structured Wiki ───────────────────────────────────┐
+     └→ Preparation → AI Index / Exact retrieval → Agents ───────┤
+     ↑                                                           │
+     └──────── reviewed, Agent-written ordinary files ────────────┘
 ```
 
 ## Who It Is For
@@ -40,7 +42,12 @@ Typical uses include:
 - beginning with a Library conversation and creating an ordinary project only
   when the idea becomes worth keeping.
 
-## The Three Product Capabilities
+## The AI Wiki and Three Product Capabilities
+
+The AI Wiki combines two forms. The **structured Wiki** is visible,
+source-linked `wiki/index.md` plus optional pages beside it. The **AI Index** is
+invisible, rebuildable meaning-based retrieval state. Together with the local
+files, they form the Agent-ready knowledge base.
 
 ### Document Workbench
 
@@ -109,6 +116,14 @@ AI Index is the optional meaning-based index used by Similar Search. It can use
 hosted StashBase capacity after sign-in or a user-provided OpenAI/OpenRouter key.
 Exact Search and ordinary local file work do not require it.
 
+### Structured Wiki
+
+Create Wiki is the explicit folder-level action that asks the selected Agent to
+create or improve `wiki/index.md` and focused pages under `wiki/`. These are
+ordinary user-owned Markdown sources. The default action links to existing
+files and modifies only `wiki/`; moves, renames, deletion, and broad source
+rewrites require a separate explicit decision.
+
 ### Canvas
 
 A Canvas is an ordinary Markdown document used to hold accepted project state:
@@ -125,7 +140,7 @@ project state.
 | Prepared text, previews, indexes, and status | StashBase | Rebuildable application-owned state outside the workspace. |
 | StashBase account session and AI Index credentials | StashBase Settings | Used only for the selected indexing source. |
 | Claude Code or Codex credentials and history | The selected Agent runtime | Separate from StashBase sign-in and AI Index configuration. |
-| Agent-created source files | User after an explicit write | Visible ordinary files that re-enter browsing, search, and future Agent work. |
+| Structured Wiki and other Agent-created source files | User after an explicit write | Visible ordinary files that re-enter browsing, search, and future Agent work. |
 
 Local browsing, preview, editing, Preparation, and Exact Search do not require
 a cloud account. When hosted AI Index is selected, extracted text may be sent
@@ -147,8 +162,8 @@ rather than hidden expansion of the Library boundary.
 - It does not expose generated chunks, transcripts, or vector records as files
   the user must organize.
 - It does not ask an Agent to reorganize files autonomously in the background.
-- It does not require a knowledge graph, wiki, tagging discipline, or one
-  preferred Agent.
+- It does not require a knowledge graph, tagging discipline, proprietary Wiki
+  format, or one preferred Agent.
 - Its MCP tools are not a general-purpose host filesystem API.
 
 ## What Makes Work Durable

@@ -1,9 +1,16 @@
 # Product Direction
 
-StashBase is evolving toward three connected capabilities:
+StashBase is evolving toward one AI Wiki over local files, delivered through
+three connected capabilities:
 
 > A VS Code-like Document Workbench, a Codex-like Agent Panel, and a local
 > RAG layer for document retrieval.
+
+The visible structured Wiki and the invisible AI Index are complementary, not
+competing representations. The first helps people and Agents navigate durable
+knowledge; the second helps Agents retrieve relevant material when wording and
+file layout are insufficient. Local files plus both forms make the Agent-ready
+knowledge base.
 
 ## AI-native Product Scope
 
@@ -38,6 +45,13 @@ document appears, the same Chat adapts into a side panel alongside the source.
 It is a convenient client of StashBase context, not a separate AI workspace
 and not a replacement for external Agent clients.
 
+For a blank folder-scoped Chat, **Create Wiki** is the fixed first action. It
+asks the selected Agent to create or improve source-linked `wiki/index.md` and,
+only when needed, focused pages beside it. The first release does not infer a
+persistent built/stale state or schedule refreshes. It preserves source files:
+moving, renaming, deletion, and broad source rewrites require a separate
+explicit user decision.
+
 Built-in is the included path: a pinned local OpenCode runtime uses the
 signed-in account's included model allowance without asking the user to install
 an Agent or configure a model key. It remains the initial selection while the
@@ -70,6 +84,12 @@ retrieval as one first-class RAG layer instead of relying on exact terms alone.
 
 StashBase should strongly recommend meaning-based indexing because document
 libraries often need it, while keeping no-index mode a supported local state.
+Launch into an empty Library remains quiet. The first activated folder offers
+setup once; completing it or choosing **Not now** prevents automatic replays
+across folders and relaunches. Similar Search, the persistent AI action, and
+Settings remain deliberate routes back. AI Index activation automatically
+backfills Library folders and keeps eligible files synchronized; Create Wiki
+remains an independent visible-file action.
 Hosted service and bring-your-own-key sources are choices, not gates to local
 files. Browsing, editing, preview, exact retrieval, and an existing local index
 must remain usable through authentication, provider, network, or quota failure.

@@ -122,12 +122,13 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
       );
       const searchResult = await operations.search({ query, topK: k, folder, pathPrefix, types, mode, caseStrict, wholeWord });
       const hits = annotateSearchHitsForMcp(searchResult.hits);
+      const effectiveMode = searchResult.mode ?? mode;
       return {
         content: [{
           type: 'text',
           text: JSON.stringify({
             query,
-            mode,
+            mode: effectiveMode,
             folder: folder ?? null,
             path_prefix: pathPrefix ?? null,
             types: types ?? null,
@@ -348,15 +349,17 @@ const BUILTIN_TOOLS = [
     {
       name: 'search_library',
       description:
-        'Search opened local folders. Two modes: `semantic` (default) is hybrid ' +
+        'Search opened local folders, including current prepared text for PDFs, DOCX, images, and media. ' +
+        'Two modes: `semantic` (default) is hybrid ' +
         '(vector + full-text) meaning-based search and needs AI Index; `keyword` is ' +
         'exact literal search (ripgrep) for identifiers, error codes, config keys, or quoted ' +
         'phrases that semantic search blurs, and it works before AI Index is set up. ' +
+        'In a StashBase panel chat, turning Similarity Search off resolves this tool to ' +
+        'keyword mode even when semantic mode was requested; the response `mode` is the strategy actually used. ' +
         'Searches the **whole library** by default — every member folder from ' +
         '`library_info` — and scopes to one folder when `folder` is its absolute root (e.g. ' +
         '"/Users/me/notes"). For finer control, `path_prefix` restricts hits to sources ' +
-        'starting with that prefix (e.g. "/Users/me/notes/transcripts/"). Keyword mode requires ' +
-        'a folder scope (`folder` or `path_prefix`). Each hit returns the absolute file path, ' +
+        'starting with that prefix (e.g. "/Users/me/notes/transcripts/"). Each hit returns the absolute file path, ' +
         'the matching content, optional heading and source line range, and (semantic) a fused ' +
         'relevance score. PDF hits include a `read_hint`; use `read_file` on the PDF path to get ' +
         'extracted Markdown. Read full text documents with `read_file`.',
@@ -369,7 +372,7 @@ const BUILTIN_TOOLS = [
             enum: [...SEARCH_MODES],
             description:
               'Search mode. "semantic" (default) is meaning-based and needs AI Index. ' +
-              '"keyword" is exact literal matching that works before AI Index setup but requires a folder scope.',
+              '"keyword" is exact literal matching over source and prepared text and works before AI Index setup.',
           },
           folder: {
             type: 'string',

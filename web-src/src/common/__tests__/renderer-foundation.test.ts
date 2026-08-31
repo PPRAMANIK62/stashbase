@@ -238,7 +238,7 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
   assert.match(appShell, /\.sidebar-drag-zone \{[^}]*width: var\(--titlebar-controls-left\)/s);
   // The left cluster ellipsizes at the sidebar column edge instead of
   // bleeding onto the tab strip…
-  assert.match(appShell, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\) - 8px\)/s);
+  assert.match(appShell, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\)\)/s);
   // …and the collapsed-sidebar budget is ONE token shared by the cluster
   // cap and both tab-row reserves, so the floating controls never overlap
   // a tab.
