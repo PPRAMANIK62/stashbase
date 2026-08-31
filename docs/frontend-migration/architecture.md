@@ -100,6 +100,7 @@ feature/
   domain/          pure identities, policies, state, and transitions
   application/     commands, queries, workflows, and port definitions
   infrastructure/  feature-specific port adapters
+  hooks/           React orchestration over application state and commands
   ui/              React views and view adapters
   public.ts         the complete external surface
 ```
@@ -129,7 +130,8 @@ Search is one surface that invokes it.
 ```text
 app composition ───────→ feature public surfaces
                               │
-feature UI ─────────────→ application ───────────→ domain
+feature UI ──→ hooks ───→ application ───────────→ domain
+      └─────────────────→ application
                               │
                               ↓ ports
 platform / infrastructure adapters
@@ -142,6 +144,8 @@ Required rules:
 - Domain code imports no React, DOM, network, Electron, storage, or feature UI.
 - Application code depends on domain code and abstract ports, not concrete
   transport clients.
+- Feature hooks coordinate React state and application capabilities for views;
+  they do not import feature UI, infrastructure, or concrete platform adapters.
 - UI invokes application commands and renders state; it does not sequence
   transport calls or encode domain recovery.
 - A feature never imports another feature's internals or public surface.

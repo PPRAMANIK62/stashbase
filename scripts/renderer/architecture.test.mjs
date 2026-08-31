@@ -68,6 +68,8 @@ test('the approved empty renderer architecture passes the repository checker', (
   const root = fixture(context);
   write(root, 'renderer/src/main.ts', "import './app';\n");
   write(root, 'renderer/src/app.ts', 'export const app = true;\n');
+  write(root, 'renderer/src/features/workspace/hooks/use-workspace.ts', 'export const hook = true;\n');
+  write(root, 'renderer/src/features/workspace/public.ts', 'export const workspace = true;\n');
 
   assert.deepEqual(findRendererArchitectureViolations(root), []);
 });
@@ -116,6 +118,16 @@ test('dependency-cruiser accepts inward dependencies inside one feature', (conte
     root,
     'renderer/src/features/workspace/application/read-model.ts',
     "import { model } from '@/features/workspace/domain/model';\nexport { model };\n",
+  );
+  write(
+    root,
+    'renderer/src/features/workspace/hooks/use-model.ts',
+    "import { model } from '@/features/workspace/application/read-model';\nexport { model };\n",
+  );
+  write(
+    root,
+    'renderer/src/features/workspace/ui/view.ts',
+    "import { model } from '@/features/workspace/hooks/use-model';\nexport { model };\n",
   );
   write(
     root,
@@ -168,6 +180,16 @@ test('dependency-cruiser rejects cycles, sibling access, deep imports, and layer
     'renderer/src/features/workspace/ui/view.ts',
     "import { client } from '../../../platform/api/client';\nexport { client };\n",
   );
+  write(
+    root,
+    'renderer/src/features/workspace/hooks/use-client.ts',
+    "import { client } from '@/features/workspace/infrastructure/client';\nexport { client };\n",
+  );
+  write(
+    root,
+    'renderer/src/features/workspace/infrastructure/client.ts',
+    'export const client = true;\n',
+  );
 
   const result = runNodeTool(
     dependencyCruiserBin,
@@ -181,13 +203,14 @@ test('dependency-cruiser rejects cycles, sibling access, deep imports, and layer
     'feature-public-entry-only',
     'feature-public-only-from-app',
     'domain-is-pure',
+    'hooks-have-no-platform-or-view-access',
     'ui-has-no-platform-access',
   ]) {
     assert.match(result.output, new RegExp(rule), `missing ${rule}:\n${result.output}`);
   }
 });
 
-test('Oxlint rejects platform APIs in domain, application, and UI layers', (context) => {
+test('Oxlint rejects platform APIs in protected feature layers', (context) => {
   const root = fixture(context);
   write(
     root,
@@ -204,6 +227,11 @@ test('Oxlint rejects platform APIs in domain, application, and UI layers', (cont
     'renderer/src/features/workspace/ui/unsafe-view.ts',
     'export const bridge = window.stashbase;\n',
   );
+  write(
+    root,
+    'renderer/src/features/workspace/hooks/use-unsafe.ts',
+    'export const bridge = window.stashbase;\n',
+  );
 
   const result = runNodeTool(
     oxlintBin,
@@ -212,6 +240,7 @@ test('Oxlint rejects platform APIs in domain, application, and UI layers', (cont
       oxlintConfig,
       'renderer/src/features/workspace/domain/unsafe-domain.ts',
       'renderer/src/features/workspace/application/unsafe-command.ts',
+      'renderer/src/features/workspace/hooks/use-unsafe.ts',
       'renderer/src/features/workspace/ui/unsafe-view.ts',
     ],
     root,
@@ -219,5 +248,6 @@ test('Oxlint rejects platform APIs in domain, application, and UI layers', (cont
   assert.notEqual(result.status, 0, result.output);
   assert.match(result.output, /Domain modules are pure/);
   assert.match(result.output, /Application code consumes injected ports/);
+  assert.match(result.output, /Feature hooks coordinate application capabilities/);
   assert.match(result.output, /Use an injected platform adapter/);
 });

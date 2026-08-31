@@ -55,7 +55,7 @@
           {
             "patterns": [
               {
-                "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:application|infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:application|infrastructure|styling|ui)(?:/|$))",
+                "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:application|hooks|infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:application|hooks|infrastructure|styling|ui)(?:/|$))",
                 "message": "Domain modules are pure and may depend only on domain values and pure shared leaves."
               }
             ]
@@ -84,8 +84,46 @@
           {
             "patterns": [
               {
-                "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:infrastructure|styling|ui)(?:/|$))",
+                "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:hooks|infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:hooks|infrastructure|styling|ui)(?:/|$))",
                 "message": "Application modules own abstract ports and cannot select adapters or UI."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/renderer/src/features/*/hooks/**"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "window",
+            "message": "Feature hooks coordinate application capabilities, not browser or preload APIs."
+          },
+          {
+            "name": "document",
+            "message": "Feature hooks coordinate application capabilities, not the global DOM."
+          },
+          {
+            "name": "navigator",
+            "message": "Feature hooks coordinate application capabilities, not browser APIs."
+          },
+          { "name": "fetch", "message": "Feature hooks invoke application capabilities, not transports." },
+          { "name": "XMLHttpRequest", "message": "Feature hooks invoke application capabilities, not transports." },
+          { "name": "WebSocket", "message": "Feature hooks invoke application capabilities, not transports." },
+          { "name": "EventSource", "message": "Feature hooks invoke application capabilities, not transports." },
+          { "name": "localStorage", "message": "Feature hooks invoke application capabilities, not storage." },
+          { "name": "sessionStorage", "message": "Feature hooks invoke application capabilities, not storage." },
+          { "name": "indexedDB", "message": "Feature hooks invoke application capabilities, not storage." }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:node:|electron(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/features/[^/]+/(?:infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:infrastructure|ui)(?:/|$))",
+                "message": "Feature hooks coordinate application capabilities and cannot import platform adapters or view implementations."
               }
             ]
           }
@@ -97,13 +135,22 @@
       "rules": {
         "no-restricted-globals": [
           "error",
-          { "name": "fetch", "message": "UI invokes application capabilities, not transports." },
-          { "name": "XMLHttpRequest", "message": "UI invokes application capabilities, not transports." },
-          { "name": "WebSocket", "message": "UI invokes application capabilities, not transports." },
-          { "name": "EventSource", "message": "UI invokes application capabilities, not transports." },
-          { "name": "localStorage", "message": "UI invokes application capabilities, not storage." },
-          { "name": "sessionStorage", "message": "UI invokes application capabilities, not storage." },
-          { "name": "indexedDB", "message": "UI invokes application capabilities, not storage." }
+          {
+            "name": "window",
+            "message": "UI must receive typed capabilities instead of reading the Electron bridge."
+          },
+          {
+            "name": "document",
+            "message": "UI components must use React refs instead of global DOM access."
+          },
+          {
+            "name": "localStorage",
+            "message": "Durable state belongs behind an application port."
+          },
+          {
+            "name": "fetch",
+            "message": "UI must invoke application capabilities instead of transport APIs."
+          }
         ],
         "no-restricted-imports": [
           "error",

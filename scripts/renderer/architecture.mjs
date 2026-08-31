@@ -8,7 +8,14 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const sourceExtensions = new Set(['.css', '.html', '.js', '.jsx', '.json', '.mjs', '.ts', '.tsx']);
 const moduleExtensions = ['.js', '.jsx', '.mjs', '.ts', '.tsx'];
 const skippedDirectories = new Set(['dist', 'node_modules']);
-const featureEntries = new Set(['application', 'domain', 'infrastructure', 'public.ts', 'ui']);
+const featureEntries = new Set([
+  'application',
+  'domain',
+  'hooks',
+  'infrastructure',
+  'public.ts',
+  'ui',
+]);
 const approvedFeatures = new Map([
   ['agent', 'Agent Panel'],
   ['documents', 'Documents'],
