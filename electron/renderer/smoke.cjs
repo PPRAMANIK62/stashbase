@@ -148,6 +148,9 @@ app
           .filter((label) => label === 'Open folder' || label === 'Create folder')
           .sort(),
         welcomeTitle: document.querySelector('h1')?.textContent?.trim(),
+        workspaceMarginLeft: getComputedStyle(
+          document.querySelector('[data-slot="sidebar-inset"]'),
+        ).marginLeft,
         url: location.href,
         libraryKeys: Object.keys(window.stashbase.library).sort(),
       };
@@ -166,6 +169,7 @@ app
       inlineScriptDenied: true,
       welcomeActions: ['Create folder', 'Open folder'],
       welcomeTitle: 'StashBase',
+      workspaceMarginLeft: '0px',
       url: APP_URL,
       libraryKeys: ['chooseFolder'],
     });

@@ -66,9 +66,16 @@ describe('workspace shell', () => {
 
   it('starts with one folder sidebar and the Agent workspace', () => {
     const sidebar = container.querySelector('[data-slot="sidebar"]');
+    const workspace = container.querySelector('[data-slot="sidebar-inset"]');
 
     expect(container.querySelectorAll('[data-slot="sidebar"]')).toHaveLength(1);
     expect(sidebar?.getAttribute('data-variant')).toBe('inset');
+    expect(workspace?.classList.contains('!m-2')).toBe(false);
+    expect(workspace?.className).toContain('peer-data-[variant=inset]:peer-data-[side=left]:ml-0');
+    expect(sidebar?.textContent).toContain('StashBase');
+    expect(sidebar?.querySelector('[data-sidebar="header"]')?.classList.contains('border-b')).toBe(
+      false,
+    );
     expect(container.querySelector('[aria-label="Agent workspace"]')).not.toBeNull();
     expect(sidebar?.textContent).not.toContain('Files');
     expect(container.textContent).not.toContain('Document');

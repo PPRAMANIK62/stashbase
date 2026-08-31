@@ -65,7 +65,9 @@ collapsed rail does not hover-peek over its titlebar control; that control stays
 clear and is the authoritative way to expand it.
 The Files sidebar belongs to the lower application substrate; the complete
 Agent workspace, including its titlebar, is one elevated inset surface above
-it rather than an equal edge-to-edge pane.
+it rather than an equal edge-to-edge pane. The expanded sidebar and workspace
+meet directly at their inner edge; the workspace retains its outer top, right,
+and bottom inset, and restores the left inset when the sidebar collapses.
 Do not pre-compose a document canvas or right Agent dock. Those appear only
 after a user opens a file from the Files tree, when the document becomes the
 main canvas and the same Agent session moves into the conditional right dock.
@@ -75,9 +77,10 @@ document, retrieval, or Agent policy, and it does not fill incomplete feature
 regions with explanatory placeholder copy.
 
 Current implementation: the replacement renderer mounts the Files rail, Agent
-workspace, native drag band, and sidebar controls. Feature content, conditional
-document composition, nested failure boundaries, and Electron shell evidence
-remain open.
+workspace, native drag band, and sidebar controls. The sidebar drag band carries
+the StashBase mark and name without separating itself from the lower substrate
+with a divider. Feature content, conditional document composition, nested
+failure boundaries, and Electron shell evidence remain open.
 
 Evidence: `pnpm test:renderer`, `pnpm typecheck:web`, `pnpm lint:web`,
 `pnpm build:web`, and manual wide/compact renderer checks.

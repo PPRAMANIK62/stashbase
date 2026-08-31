@@ -8,6 +8,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { LibrarySidebar, LibraryWelcome } from '@/features/workspace/public';
+import { Logo } from '@/shared/brand/logo';
 
 import type { AppDependencies } from './dependencies';
 
@@ -21,18 +22,18 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
       width="15rem"
     >
       <Sidebar className="bg-surface-1" variant="inset">
-        <SidebarHeader
-          aria-hidden="true"
-          className="workspace-titlebar h-11 border-b border-border p-0"
-        />
+        <SidebarHeader className="workspace-titlebar h-11 flex-row items-center gap-2.5 px-4 py-0">
+          <Logo aria-hidden="true" className="size-7 shrink-0" />
+          <span className="text-title font-semibold tracking-tight">StashBase</span>
+        </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
-            <LibrarySidebar api={dependencies.library.api} />
+            <LibrarySidebar {...dependencies.library} />
           </SidebarGroup>
         </SidebarContent>
       </Sidebar>
 
-      <SidebarInset className="!m-2 min-h-0 overflow-hidden">
+      <SidebarInset className="min-h-0 overflow-hidden">
         <header className="workspace-titlebar flex h-11 shrink-0 items-center border-b border-border px-2">
           <div className="workspace-titlebar-controls">
             <SidebarTrigger aria-label="Toggle files sidebar" />
