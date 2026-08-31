@@ -52,6 +52,7 @@ export type {
   GenericFilePreview,
   FolderMeta,
   FolderState,
+  GitHubImportResult,
   UploadResult,
   UploadResultEntry,
   WorkspaceEntryAvailability,

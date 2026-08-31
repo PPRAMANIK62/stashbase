@@ -84,9 +84,13 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * before a row can be rendered or opened. The reveal also moved from a
  * tree.css descendant rule onto the row group, which is utilities rather
  * than a stylesheet the budget never counted.
+ * 437 → 439 for GitHub repository import trigger and lazy boundary:
+ * `ManagedImportGitHubModal` is a required dynamic entry, while the pinned action
+ * in `addFolderMenuItems` and the boundary on the switcher / bare-window
+ * Choose Folder button are eager chrome.
  * Raise it only for shell UI that must load with the window — anything a
  * user can open on demand belongs in a dynamic entry above. */
-const initialJsBudgetBytes = 437 * 1024;
+const initialJsBudgetBytes = 439 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
@@ -102,6 +106,7 @@ const expectedEntries = [
   'src/features/search/components/ManagedQuickOpen.tsx',
   'src/features/documents/components/ManagedLinkFilePicker.tsx',
   'src/features/workspace/components/ManagedMoveFilePicker.tsx',
+  'src/features/workspace/components/ManagedImportGitHubModal.tsx',
   'src/app/components/ContextMenu.tsx',
   'src/common/components/DocumentOutline.tsx',
   'src/common/components/SemanticIndexingNotice.tsx',

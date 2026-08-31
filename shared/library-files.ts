@@ -120,3 +120,7 @@ export interface UploadResultEntry {
 export interface UploadResult {
   files: UploadResultEntry[];
 }
+
+export interface GitHubImportResult {
+  path: string;
+}

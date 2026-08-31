@@ -109,20 +109,22 @@ its ownership, layout, or storage model.
 
 ### Entry State
 
-The user has a local folder to open, or chooses a location in which to create
-one.
+The user has a local folder to open, chooses a location in which to create
+one, or has a public GitHub repository URL to import into their folder home.
 
 ### Primary Flow
 
-1. Open or create a folder through the Library switcher.
+1. Open, create, or import a public GitHub repository through the Library switcher.
 2. Enter the folder before recursive preparation or indexing finishes.
 3. Browse supported source files and switch among authorized member folders.
 4. When no longer needed, deliberately remove a folder from the library.
 
 ### Required Observable Results
 
-- Opening or creating a folder does not migrate its contents into managed
-  storage.
+- Opening, creating, or importing a folder does not migrate its contents into managed
+  storage or dirty foreign working trees.
+- GitHub repository import executes shallow single-branch clones into isolated staging,
+  validates against submodules and Git LFS, and publishes cleanly into the folder home.
 - Folder entry prioritizes navigation; recursive background work does not hold
   the workspace closed.
 - Switching folders preserves library-level state while keeping folder-scoped
@@ -133,11 +135,11 @@ one.
 ### Degradation and Recovery
 
 A failed or slow open remains retryable and does not strand another window or
-folder context. Removal either finishes its owned cleanup before membership is
-committed or remains recoverable without deleting user files. Shipping folder
-entry currently has one documented source-mutation exception: it seeds a
-missing `AGENTS.md` create-only. See the
-[instruction-seeding Known Gap](../code-review/file-transactions.md#known-gap--instruction-seeding-on-folder-entry).
+folder context. Failed, cancelled, or rejected GitHub imports clean up staging
+directories completely without corrupting existing library members. Removal
+either finishes its owned cleanup before membership is committed or remains
+recoverable without deleting user files. Folder entry maintains pristine working
+trees without automatic instruction seeding.
 
 ### Evidence
 

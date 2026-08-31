@@ -50,12 +50,14 @@ manager, or a primary graph-navigation tool.
   Files, with the full email retained in the account menu. Missing or failed
   profile display data falls back without changing account controls; signed
   out remains the complete Anonymous local-workspace state.
-- Users can open or create a local folder, switch folders in place, favorite a
+- Users can open or create a local folder, import a public GitHub repository
+  directly into the default folder home, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
-  A created folder is an ordinary directory. Removing membership clears only
+  A created folder or imported repository is an ordinary directory. Removing membership clears only
   StashBase-owned state.
 - The titlebar folder switcher keeps the window's current folder identity
-  visible and offers the full library membership. A name wider than the
+  visible and offers the full library membership alongside pinned "New Folder…",
+  "Import from GitHub…", and "Open Local Folder…" actions. A name wider than the
   sidebar column truncates within that column instead of crossing onto the
   document tab strip. Folder-level actions remain attributable to the active
   folder.
@@ -99,11 +101,9 @@ manager, or a primary graph-navigation tool.
   do not surface as workspace content.
 - Durable folder purpose, organization guidance, and Agent working rules live
   in the visible, user-owned `AGENTS.md`, not separate Library metadata.
-- Current folder entry makes one create-only exception to explicit mutation:
-  it seeds `AGENTS.md` when missing. This accepted Shipping behavior is tracked
-  as an invasive-design
-  [Known Gap](../../code-review/file-transactions.md#known-gap--instruction-seeding-on-folder-entry),
-  not as precedent for other automatic source writes.
+- Folder entry preserves the working tree pristine and performs no automatic
+  source writes: opening a folder does not seed `AGENTS.md`. Instruction
+  seeding occurs only upon explicit Agent session initiation or project creation.
 
 ## Experience Contract
 

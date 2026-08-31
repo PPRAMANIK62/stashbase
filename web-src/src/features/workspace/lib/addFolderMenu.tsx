@@ -1,64 +1,78 @@
 import { api, errorMessage } from '@/common/api/api';
 import { electronBridge } from '@/common/lib/electronBridge';
-import { FolderIcon, NewFolderIcon } from '@/common/components/icons';
+import { FolderIcon, GithubLogoIcon, NewFolderIcon } from '@/common/components/icons';
 import type { useAppActions } from '@/store/contexts/AppContext';
 import type { MenuItem } from '@/common/components/Menu';
 
-/** The two add-folder flows shared by the switcher (and the zero-folder
+/** The add-folder flows shared by the switcher (and the zero-folder
  *  hero button, which keeps its own copy of the first). "Open Folder…"
  *  picks any folder on disk and opens it in place (nothing is copied; it
  *  is indexed where it lives). "New Folder…" opens the same native picker
  *  at the default StashBase home so the OS panel's New Folder button
- *  lands in the expected place. Browser mode (no Electron bridge) has no
- *  portable absolute-path picker, so the list is empty. */
+ *  lands in the expected place. "Import from GitHub…" opens the in-app
+ *  repository import modal to clone into folder home. */
 export function addFolderMenuItems(
   actions: ReturnType<typeof useAppActions>['actions'],
   bridge: ReturnType<typeof electronBridge>,
+  opts?: { onImportGitHub?: () => void },
 ): MenuItem[] {
-  if (typeof bridge?.openFolderDialog !== 'function') return [];
+  const items: MenuItem[] = [];
 
-  async function openExistingFolder() {
-    try {
-      const picked = await bridge!.openFolderDialog!({
-        title: 'Select folder',
-        buttonLabel: 'Select folder',
-        allowCreateDirectory: true,
-      });
-      if (picked) await actions.openFolder(picked);
-    } catch (err) {
-      actions.toast('Could not open the folder: ' + errorMessage(err), { level: 'error' });
+  if (typeof bridge?.openFolderDialog === 'function') {
+    async function openExistingFolder() {
+      try {
+        const picked = await bridge!.openFolderDialog!({
+          title: 'Select folder',
+          buttonLabel: 'Select folder',
+          allowCreateDirectory: true,
+        });
+        if (picked) await actions.openFolder(picked);
+      } catch (err) {
+        actions.toast('Could not open the folder: ' + errorMessage(err), { level: 'error' });
+      }
     }
+
+    async function newFolderFromHome() {
+      try {
+        const { path } = await api.getFolderHome();
+        const picked = await bridge!.openFolderDialog!({
+          title: 'Create or select folder',
+          buttonLabel: 'Select folder',
+          defaultPath: path,
+          allowCreateDirectory: true,
+        });
+        if (picked) await actions.openFolder(picked);
+      } catch (err) {
+        actions.toast('New folder failed: ' + errorMessage(err), { level: 'error' });
+      }
+    }
+
+    items.push(
+      {
+        label: 'Open Folder…',
+        icon: <FolderIcon />,
+        detail: 'Any folder on your disk, indexed in place',
+        onSelect: () => { void openExistingFolder(); },
+      },
+      {
+        label: 'New Folder…',
+        icon: <NewFolderIcon />,
+        detail: 'Created under the StashBase folder home',
+        onSelect: () => { void newFolderFromHome(); },
+      },
+    );
   }
 
-  async function newFolderFromHome() {
-    try {
-      const { path } = await api.getFolderHome();
-      const picked = await bridge!.openFolderDialog!({
-        title: 'Create or select folder',
-        buttonLabel: 'Select folder',
-        defaultPath: path,
-        allowCreateDirectory: true,
-      });
-      if (picked) await actions.openFolder(picked);
-    } catch (err) {
-      actions.toast('New folder failed: ' + errorMessage(err), { level: 'error' });
-    }
+  if (opts?.onImportGitHub) {
+    items.push({
+      label: 'Import from GitHub…',
+      icon: <GithubLogoIcon />,
+      detail: 'Clone a public repository into your StashBase folder home',
+      onSelect: () => { opts.onImportGitHub!(); },
+    });
   }
 
-  return [
-    {
-      label: 'Open Folder…',
-      icon: <FolderIcon />,
-      detail: 'Any folder on your disk, indexed in place',
-      onSelect: () => { void openExistingFolder(); },
-    },
-    {
-      label: 'New Folder…',
-      icon: <NewFolderIcon />,
-      detail: 'Created under the StashBase folder home',
-      onSelect: () => { void newFolderFromHome(); },
-    },
-  ];
+  return items;
 }
 
 /**

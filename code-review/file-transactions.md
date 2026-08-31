@@ -108,20 +108,13 @@ blocked until that decision succeeds, fails, or is cancelled:
 - Merge opens a dirty draft with conflict markers and saves it against the disk
   snapshot through the ordinary versioned path.
 
-### Known gap — instruction seeding on folder entry
+### Clean folder entry — no automatic instruction seeding
 
-The Shipping `/api/folder` path creates a missing root `AGENTS.md` create-only
-when an ordinary existing folder joins or re-enters the library. The file is
-visible, user-owned, and never overwrites an existing instruction, but the
-write occurs before the user explicitly starts a folder Agent and is therefore
-more invasive than J02's navigation promise and this contract's normal
-explicit-mutation rule.
-
-This exception is accepted for the current release so every opened folder is
-Agent-ready. Future design should move seeding to an attributable Agent-start
-or project-setup decision, or introduce an equally explicit folder-level
-choice. Reviewers must not use this exception to justify other source writes on
-folder open.
+Folder entry is navigation-only and performs no unsolicited filesystem mutations:
+opening a folder never seeds `AGENTS.md` or modifies foreign working trees.
+Instruction seeding is strictly scoped to explicit Agent session initiation or
+rebind (`server/agent.ts`, `server/codex-session-runtime.ts`) and explicit project
+creation (`server/agent-projects.ts`).
 
 ## Mutation Sequence
 
@@ -176,6 +169,7 @@ keep resolving after the identity change.
 
 ## Import Publication
 
+### Clipboard and File Import
 - A clipboard image reaches publication only after the default-off capture
   setting is enabled and the user accepts that specific offer. Dismissal and
   clipboard observation never create a source file.
@@ -190,6 +184,20 @@ keep resolving after the identity change.
   ambiguously owned destination.
 - A successful publication is not rolled back because optional indexing fails.
   Direct-text indexing has its own bounded read budget.
+
+### GitHub Repository Import
+- Public HTTPS GitHub repositories (`https://github.com/<owner>/<repo>`) import
+  directly into the user's folder home via `server/github-import.ts`.
+- Clones execute shallow single-branch clones (`--depth 1 --single-branch --no-tags`)
+  into isolated staging directories (`.import-staging-${uuid}`).
+- Pre-publication inspection rejects repositories containing submodules (`.gitmodules`)
+  or Git LFS filter configurations (`.gitattributes`) to prevent incomplete or
+  stalled working trees.
+- Publication renames staging atomically into destination, registers library
+  membership, triggers background folder sync, and preserves the pristine working tree
+  without seeding instruction files.
+- Import cancellation or failure immediately aborts the clone process and removes
+  the staging directory without affecting existing library members.
 
 ## Folder Removal vs Filesystem Delete
 
