@@ -141,29 +141,27 @@ approved architecture decision first.
 
 ## Styling and Components
 
-- Define foundation values first, map them to semantic role tokens, and expose
-  those roles through Tailwind.
-- Keep canonical runtime token values as CSS custom properties in one
-  foundation file mapped through Tailwind; do not duplicate them in TypeScript.
-- Add component tokens only for repeated primitive anatomy. Components consume
-  semantic or approved component tokens, never foundation values.
-- Build interactive product UI from repository-owned Base UI-backed shadcn
-  primitives and Tailwind utility composition. Features do not import Base UI;
-  noninteractive structure uses native semantic elements.
-- Express primitive appearance through typed CVA variants and slots. Consumer
-  classes may affect external layout but not primitive-owned visual anatomy.
-- Raw values, arbitrary visual utilities, and inline visual styles are
-  forbidden. Reviewed dynamic geometry uses typed CSS custom properties and
-  named Tailwind utilities.
-- Do not add component, app, or feature stylesheets. Global CSS contains only
-  Tailwind entry, tokens, themes, and unavoidable foundations.
+- Use Fluid Functionalism as the complete visual and component system. Do not
+  recreate its tokens, primitives, component anatomy, or motion in a local
+  StashBase layer.
+- Install Fluid source through the configured `@fluid` shadcn registry. Use the
+  Base UI flavor for every dual-flavor component; stock shadcn and Radix UI
+  components are forbidden.
+- Features compose Fluid components and do not import Base UI directly.
+  Noninteractive structure uses native semantic elements.
+- Keep Fluid's global CSS, Inter Variable font, providers, springs, surface
+  ladder, shape, size, focus, and icon contracts intact. A host adaptation must
+  be narrow, required by the Vite/Electron boundary, and documented.
+- Feature classes may control external layout. Visual anatomy remains owned by
+  the installed Fluid component unless a demonstrated product requirement
+  justifies an upstream-compatible extension.
+- Do not add a second token file, primitive directory, or story-only
+  stylesheet. Storybook may catalog installed Fluid components only when it
+  mounts production CSS and providers and adds no alternate visual system.
 - Colocated Milkdown overrides are the sole component-specific CSS exception;
   they target third-party editor internals and consume semantic tokens.
-- Storybook uses production providers and styling. Story-only component forks
-  and visual CSS are forbidden.
-- Every shared primitive and reusable, stateful, accessibility-sensitive, or
-  visually risky component has meaningful state stories; trivial private
-  layout fragments do not require them.
+- Prove reusable, stateful, accessibility-sensitive, or visually risky
+  components through focused production-backed tests and runtime harnesses.
 - Prefer container queries for panes and overlays. Density tokens preserve
   minimum interaction geometry and essential actions at every supported size.
 - Meet WCAG 2.2 AA across keyboard, focus, semantics, announcements, 200%

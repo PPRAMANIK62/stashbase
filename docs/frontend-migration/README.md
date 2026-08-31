@@ -112,8 +112,7 @@ and no Required behavior is hidden behind a passing broad command.
   records failure containment, crash-recovery direction, reconnect behavior,
   and the replacement test foundation.
 - [Decision 0008](decisions/0008-token-first-component-system.md) records the
-  Base UI-backed shadcn layer, token hierarchy, Tailwind enforcement, Storybook
-  coverage, and product-specific visual foundation.
+  superseded repository-owned token and primitive system.
 - [Decision 0009](decisions/0009-token-runtime-and-desktop-composition.md)
   records canonical CSS tokens, typed primitive variants, container-based
   responsiveness, visual approval, typography, and crash-journal ownership.
@@ -131,6 +130,10 @@ and no Required behavior is hidden behind a passing broad command.
 - [Decision 0014](decisions/0014-vite-plus-rollout-and-task-policy.md) records
   the replacement-only rollout, stable command interface, formatting and
   cache policy, pinned installation, and rollback.
+- [Decision 0015](decisions/0015-adopt-fluid-functionalism-base-ui.md) records
+  complete Fluid Functionalism adoption, the Base UI-only flavor rule,
+  registry inventory, removal of the local visual system, and the Fluid-only
+  Storybook catalog.
 
 ## Authority
 

@@ -14,11 +14,9 @@ Deliver:
   CI installation, and version-control rollback evidence;
 - an independently buildable `renderer` workspace with replacement-only
   formatting, lint, test, typecheck, build, and cross-tree boundary checks;
-- approved monochrome tonal system, typography, density, spatial composition,
-  and restrained signature interaction expressed as foundation and semantic
-  tokens; chromatic color remains deferred unless separately approved;
-- two or three production-backed visual directions and approval of one token
-  set before feature component work;
+- approved Continuous Workbench composition using Fluid Functionalism's
+  complete visual, component, type, surface, shape, density, icon, and motion
+  system through its Base UI flavor;
 - reproducible current and empty-shell bundle, staged-startup, interaction,
   long-task, and repeated-disposal memory measurements;
 - populated capability ledger with retained, changed, and unresolved behavior
@@ -42,19 +40,17 @@ Deliver:
 - platform mechanisms, feature-owned ports, adapters, and shared executable
   Zod runtime schemas;
 - error and recovery boundary;
-- tokens, typography, primitives, overlays, and accessibility foundation;
-- Base UI-backed shadcn primitives and Tailwind-only component composition with
-  enforced Milkdown and dynamic-geometry exceptions;
+- the complete Fluid Functionalism registry inventory, bundled Inter Variable,
+  Base UI-only components, providers, overlays, and accessibility foundation;
 - WCAG 2.2 AA foundation, pre-paint appearance bootstrap, React Hook Form/Zod
   mechanics, and one root headless Sonner notification adapter;
-- production-equivalent Storybook with representative component states;
 - native titlebar and app shell composition;
 - lazy-loading and architectural boundary enforcement;
 - explicit construction, subscription, and disposal of representative scoped
   Zustand runtimes;
 - TanStack Query setup with representative scoped keys and cancellation; and
-- Vitest, Testing Library, user-event, MSW, axe, Storybook/Playwright, and
-  renderer test harnesses targeting the replacement.
+- Vitest, Testing Library, user-event, MSW, axe, Playwright, and focused
+  renderer runtime harnesses targeting the replacement.
 
 Exit when the new shell starts through the real Electron/server path, reports
 fatal startup failure safely, Dependency-cruiser, Oxlint, and repository checks

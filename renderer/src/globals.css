@@ -1,58 +1,272 @@
 @import 'tailwindcss';
-@import 'tw-animate-css';
-@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/inter';
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================================
+   1. DESIGN TOKENS
+   ----------------------------------------------------------------------------
+   Every color token is written ONCE, as light-dark(light, dark). Which side
+   renders is driven by `color-scheme`: the root follows the OS, and a `.light`
+   or `.dark` class (on <html> via ThemeProvider, or on any subtree for a
+   forced-theme preview) pins it.
+
+   The selector is `:root, .light, .dark` — not just `:root` — because
+   light-dark() inside a custom property resolves against the color-scheme of
+   the element the property is *declared on*, not the element that uses it.
+   Re-declaring the same block on forced-scope elements makes each scope its
+   own resolution point, so a `.dark` preview nested in a light page (see
+   /docs/surfaces) gets dark tokens.
+
+   Two exceptions can't ride light-dark() and keep a small per-theme switch in
+   section 2: the --overlay RGB triplet (consumed as rgb(var(--overlay) / α)
+   by components, so the format is a public contract) and the shadow ladder
+   (light and dark use structurally different recipes, not just different
+   colors).
+============================================================================ */
+
+:root {
+  color-scheme: light dark;
+}
+
+:root,
+.light,
+.dark {
+  /* ── Surfaces (8-level ladder) ──
+     Light: 2 color steps (floor, sunken) then flat #FFFFFF; shadow does the
+     work. Dark: additive white-opacity ladder over #171717. Each surface
+     pairs 1:1 with a shadow recipe (--shadow-1 .. --shadow-8). */
+  --surface-1: light-dark(#fafafa, #171717);
+  --surface-2: light-dark(#fcfcfc, #1e1e1e);
+  --surface-3: light-dark(#ffffff, #252525);
+  --surface-4: light-dark(#ffffff, #2c2c2c);
+  --surface-5: light-dark(#ffffff, #333333);
+  --surface-6: light-dark(#ffffff, #3a3a3a);
+  --surface-7: light-dark(#ffffff, #414141);
+  --surface-8: light-dark(#ffffff, #484848);
+
+  /* ── Semantic tokens ── */
+  --background: var(--surface-1);
+  --foreground: light-dark(#171717, #f5f5f5);
+  --card: var(--surface-3);
+  --card-foreground: light-dark(#171717, #f5f5f5);
+  /* Light `muted` decouples from surface-2: the light surface ladder is so
+     compressed (#FAFAFA → #FCFCFC → #FFFFFF) that bg-muted would read as
+     near-white, making anything sitting on it (Tabs track, etc.) blend
+     together. A slightly more grey value gives muted real semantic presence.
+     Dark keeps the ladder value (#1E1E1E = surface-2). */
+  --muted: light-dark(#f4f4f5, #1e1e1e);
+  --muted-foreground: light-dark(#737373, #a3a3a3);
+
+  /* ── Interactive states ── */
+  --accent: light-dark(#e5e5e5, #525252);
+  --accent-foreground: light-dark(#171717, #f5f5f5);
+  --selected: light-dark(#d4d4d4, #525252);
+
+  /* ── Borders ──
+     --border mixes from --foreground, so it tracks the theme automatically —
+     including inside nested forced scopes, where light-dark() re-resolves
+     --foreground before the mix happens. */
+  --border: color-mix(in oklab, var(--foreground) 12%, transparent);
+  --ring: light-dark(#e5e5e5, #404040);
+  --input: light-dark(#e5e5e5, #404040);
+
+  /* ── Error / Destructive ── */
+  --destructive: light-dark(#ef4444, #f87171);
+  --destructive-light: light-dark(#fef2f2, #450a0a);
+
+  /* ── Focus indicator ──
+     Every component focus ring reads var(--focus-ring, #6B97FF), so this is
+     the single theming point. The literal fallback keeps registry components
+     self-contained when installed into projects without the variable. */
+  --focus-ring: #6b97ff;
+
+  /* ── Alpha checkerboard (color-picker swatches) ── */
+  --checker-a: light-dark(#bbbbbb, #1f1f1f);
+  --checker-b: light-dark(#ffffff, #2a2a2a);
+
+  /* ── Surface-relative interactive overlays (work on any elevation) ──
+     --overlay is the *tint direction* triplet — black for light surfaces,
+     white for dark. Components consume it as rgb(var(--overlay) / α), so it
+     stays an RGB triplet and switches per theme in section 2. --hover and
+     --active are the pre-mixed conveniences. */
+  --overlay: 0 0 0;
+  --hover: light-dark(rgb(0 0 0 / 0.04), rgb(255 255 255 / 0.06));
+  --active: light-dark(rgb(0 0 0 / 0.07), rgb(255 255 255 / 0.1));
+
+  /* ── Shadow recipes ──
+     Light: additive stacked drops, halving offsets (1/3/6/12/24/48/96 px).
+     Dark: inset highlight + inset ring + stacked drops (per CodePen).
+     Structurally different, so each ladder is written out once here and the
+     active --shadow-N is selected per theme in section 2.
+     --shadow-color is intentionally static: it is also consumed directly by
+     components (input-message edge drop) and has never varied by theme. */
+  --shadow-color: rgb(0 0 0 / 0.06);
+  --shadow-light-1: 0 0 0 1px var(--shadow-color);
+  --shadow-light-2: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color);
+  --shadow-light-3:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color);
+  --shadow-light-4:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color);
+  --shadow-light-5:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color);
+  --shadow-light-6:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color);
+  --shadow-light-7:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color),
+    0 48px 48px -24px var(--shadow-color);
+  --shadow-light-8:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color),
+    0 48px 48px -24px var(--shadow-color), 0 96px 96px -48px var(--shadow-color);
+  /* Surface-2/3 with the hairline moved INSIDE the box — for cards whose
+     border must stay within their own edge (the sidebar's stacked footer
+     callouts). Dark's recipes already draw their ring inset, so the dark
+     scopes alias --shadow-dark-2/3 directly. */
+  --shadow-light-2-inset: inset 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color);
+  --shadow-light-3-inset:
+    inset 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color);
+
+  --dm-hi-base: rgba(255, 255, 255, 0.01);
+  --dm-hi-mid: rgba(255, 255, 255, 0.02);
+  --dm-hi-high: rgba(255, 255, 255, 0.04);
+  --dm-hi-peak: rgba(255, 255, 255, 0.06);
+  --dm-ring-base: rgba(255, 255, 255, 0.02);
+  --dm-ring-mid: rgba(255, 255, 255, 0.04);
+  --dm-ring-high: rgba(255, 255, 255, 0.06);
+  --dm-drop: rgba(0, 0, 0, 0.18);
+  --shadow-dark-1: inset 0 0 0 1px var(--dm-ring-base);
+  --shadow-dark-2:
+    inset 0 1px 0 0 var(--dm-hi-base), inset 0 0 0 1px var(--dm-ring-base),
+    0 1px 1px -0.5px var(--dm-drop);
+  --shadow-dark-3:
+    inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 1px var(--dm-ring-base),
+    0 0 0 1px rgba(0, 0, 0, 0.12), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop);
+  --shadow-dark-4:
+    inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 1px var(--dm-ring-mid),
+    0 0 0 1px rgba(0, 0, 0, 0.14), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop);
+  --shadow-dark-5:
+    inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 1px var(--dm-ring-mid),
+    0 0 0 1px rgba(0, 0, 0, 0.16), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop);
+  --shadow-dark-6:
+    inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 1px var(--dm-ring-high),
+    0 0 0 1px rgba(0, 0, 0, 0.18), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop), 0 24px 24px -12px var(--dm-drop);
+  --shadow-dark-7:
+    inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 1px var(--dm-ring-high),
+    0 0 0 1px rgba(0, 0, 0, 0.2), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop),
+    0 24px 24px -12px var(--dm-drop), 0 48px 48px -24px var(--dm-drop);
+  --shadow-dark-8:
+    inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 1px var(--dm-ring-high),
+    0 0 0 1px rgba(0, 0, 0, 0.22), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop),
+    0 24px 24px -12px var(--dm-drop), 0 48px 48px -24px var(--dm-drop),
+    0 96px 96px -48px var(--dm-drop);
+
+  --shadow-1: var(--shadow-light-1);
+  --shadow-2: var(--shadow-light-2);
+  --shadow-3: var(--shadow-light-3);
+  --shadow-4: var(--shadow-light-4);
+  --shadow-5: var(--shadow-light-5);
+  --shadow-6: var(--shadow-light-6);
+  --shadow-7: var(--shadow-light-7);
+  --shadow-8: var(--shadow-light-8);
+  --shadow-2-inset: var(--shadow-light-2-inset);
+  --shadow-3-inset: var(--shadow-light-3-inset);
+}
+
+/* ============================================================================
+   2. THEME SWITCHING
+   ----------------------------------------------------------------------------
+   `color-scheme` is what flips every light-dark() token above; the classes
+   work on <html> (ThemeProvider) and on any subtree (forced-theme previews).
+   The only values that need manual switching are the --overlay triplet and
+   the shadow recipe selection — see the section-1 note.
+============================================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --overlay: 255 255 255;
+    --shadow-1: var(--shadow-dark-1);
+    --shadow-2: var(--shadow-dark-2);
+    --shadow-3: var(--shadow-dark-3);
+    --shadow-4: var(--shadow-dark-4);
+    --shadow-5: var(--shadow-dark-5);
+    --shadow-6: var(--shadow-dark-6);
+    --shadow-7: var(--shadow-dark-7);
+    --shadow-8: var(--shadow-dark-8);
+    --shadow-2-inset: var(--shadow-dark-2);
+    --shadow-3-inset: var(--shadow-dark-3);
+  }
+}
+
+.light {
+  color-scheme: light;
+  --overlay: 0 0 0;
+  --shadow-2-inset: var(--shadow-light-2-inset);
+  --shadow-3-inset: var(--shadow-light-3-inset);
+  --shadow-1: var(--shadow-light-1);
+  --shadow-2: var(--shadow-light-2);
+  --shadow-3: var(--shadow-light-3);
+  --shadow-4: var(--shadow-light-4);
+  --shadow-5: var(--shadow-light-5);
+  --shadow-6: var(--shadow-light-6);
+  --shadow-7: var(--shadow-light-7);
+  --shadow-8: var(--shadow-light-8);
+}
+
+.dark {
+  color-scheme: dark;
+  --overlay: 255 255 255;
+  --shadow-2-inset: var(--shadow-dark-2);
+  --shadow-3-inset: var(--shadow-dark-3);
+  --shadow-1: var(--shadow-dark-1);
+  --shadow-2: var(--shadow-dark-2);
+  --shadow-3: var(--shadow-dark-3);
+  --shadow-4: var(--shadow-dark-4);
+  --shadow-5: var(--shadow-dark-5);
+  --shadow-6: var(--shadow-dark-6);
+  --shadow-7: var(--shadow-dark-7);
+  --shadow-8: var(--shadow-dark-8);
+}
+
+/* ============================================================================
+   3. TAILWIND THEME MAPPING
+============================================================================ */
+
 @theme inline {
-  --font-heading: var(--typeface-sans);
-  --font-sans: var(--typeface-sans);
-  --font-mono: var(--typeface-mono);
-  --font-weight-medium: var(--type-weight-medium);
-  --font-weight-semibold: var(--type-weight-semibold);
-  --text-caption: var(--type-size-caption);
-  --text-caption--line-height: var(--type-leading-caption);
-  --text-body-sm: var(--type-size-body-sm);
-  --text-body-sm--line-height: var(--type-leading-body-sm);
-  --text-body: var(--type-size-body);
-  --text-body--line-height: var(--type-leading-body);
-  --text-heading: var(--type-size-heading);
-  --text-heading--line-height: var(--type-leading-heading);
-  --text-title: var(--type-size-title);
-  --text-title--line-height: var(--type-leading-title);
-  --text-display: var(--type-size-display);
-  --text-display--line-height: var(--type-leading-display);
-  --text-display-large: var(--type-size-display-large);
-  --text-display-large--line-height: var(--type-leading-display-large);
-  --text-hero: var(--type-size-hero);
-  --text-hero--line-height: var(--type-leading-hero);
-  --leading-comfortable: var(--type-leading-comfortable);
-  --leading-reading: var(--type-leading-reading);
-  --tracking-tight: var(--letter-spacing-tight);
-  --tracking-wide: var(--letter-spacing-wide);
+  --font-sans: 'Inter', system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
+  --color-selected: var(--selected);
   --color-border: var(--border);
-  --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
+  --color-input: var(--input);
+  --color-destructive: var(--destructive);
+  --color-destructive-light: var(--destructive-light);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+
+  /* Surface ladder — bg-surface-1..8 utilities */
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
@@ -61,344 +275,486 @@
   --color-surface-6: var(--surface-6);
   --color-surface-7: var(--surface-7);
   --color-surface-8: var(--surface-8);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --radius-sm: var(--corner-sm);
-  --radius-md: var(--corner-md);
-  --radius-lg: var(--corner-lg);
-  --radius-xl: var(--corner-xl);
-  --radius-2xl: var(--corner-2xl);
-  --radius-3xl: var(--corner-3xl);
-  --radius-4xl: var(--corner-4xl);
-  --radius-full: var(--corner-full);
-  --opacity-disabled: var(--state-disabled-opacity);
-  --ease-workspace-out: var(--motion-ease-out);
-  --ease-workspace-spatial: var(--motion-ease-in-out);
-  --shadow-seam: var(--elevation-seam);
-  --shadow-raised: var(--elevation-raised);
-  --shadow-overlay: var(--elevation-overlay);
+
+  /* Shadow ladder — shadow-surface-1..8 utilities. Monotonic with surfaces. */
+  --shadow-surface-1: var(--shadow-1);
+  --shadow-surface-2: var(--shadow-2);
+  --shadow-surface-3: var(--shadow-3);
+  --shadow-surface-4: var(--shadow-4);
+  --shadow-surface-5: var(--shadow-5);
+  --shadow-surface-6: var(--shadow-6);
+  --shadow-surface-7: var(--shadow-7);
+  --shadow-surface-8: var(--shadow-8);
+
+  /* Reserved for /compare shadcn theme only — DO NOT use these utilities
+     (bg-primary, bg-secondary, bg-popover, *-foreground variants) in Fluid
+     Functionalism components. The variables below are undefined at :root and
+     only get values inside `.shadcn-theme` (see app/compare/shadcn-theme.css).
+     ESLint enforces this. */
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
 }
 
-@utility duration-fast {
-  transition-duration: var(--motion-duration-fast);
+/* ============================================================================
+   4. BASE STYLES
+============================================================================ */
+
+/* No explicit overflow here: scrollbar-gutter applies to the viewport when
+   set on the root, and an explicit `overflow-y: auto` would stop dialog
+   scroll locks (`body { overflow: hidden }`) from propagating to the
+   viewport — body would become a clip container instead, which breaks
+   position: sticky for the sidebar and right panel (they snap to the
+   document top the moment a dialog opens). */
+html {
+  scrollbar-gutter: stable;
 }
 
-@utility duration-standard {
-  transition-duration: var(--motion-duration-standard);
+html,
+body {
+  margin: 0;
+  min-height: 100vh;
+  overscroll-behavior-y: none;
+  background-color: var(--background);
+  /* Explicit text color so unstyled text follows the theme (and so the UA's
+     color-scheme-driven canvastext default never shows through). */
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  /* Inherited by everything (portals included) — a `subpixel-antialiased`
+     utility on a subtree is the only way to opt back out. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@utility duration-spatial {
-  transition-duration: var(--motion-duration-spatial);
-}
-
-:root {
-  color-scheme: light dark;
-  --typeface-sans: ui-sans-serif, system-ui, sans-serif;
-  --typeface-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
-  --type-size-caption: 0.75rem;
-  --type-size-body-sm: 0.875rem;
-  --type-size-body: 1rem;
-  --type-size-heading: 1.125rem;
-  --type-size-title: 1.875rem;
-  --type-size-display: 2.25rem;
-  --type-size-display-large: 3rem;
-  --type-size-hero: 3.75rem;
-  --type-leading-caption: 1rem;
-  --type-leading-body-sm: 1.25rem;
-  --type-leading-body: 1.5rem;
-  --type-leading-heading: 1.75rem;
-  --type-leading-title: 2.25rem;
-  --type-leading-display: 2.5rem;
-  --type-leading-display-large: 1;
-  --type-leading-hero: 1;
-  --type-leading-comfortable: 1.5rem;
-  --type-leading-reading: 1.75rem;
-  --type-weight-medium: 500;
-  --type-weight-semibold: 600;
-  --letter-spacing-tight: -0.025em;
-  --letter-spacing-wide: 0.025em;
-  --interface-scale-small: 0.9;
-  --interface-scale-default: 1;
-  --interface-scale-large: 1.15;
-  --duration-1: 120ms;
-  --duration-2: 180ms;
-  --duration-3: 240ms;
-  --easing-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --easing-spatial: cubic-bezier(0.77, 0, 0.175, 1);
-  --neutral-0: oklch(1 0 0);
-  --neutral-50: oklch(0.99107 0 0);
-  --neutral-100: oklch(0.9851 0 0);
-  --neutral-200: oklch(0.97015 0 0);
-  --neutral-300: oklch(0.92191 0 0);
-  --neutral-350: oklch(0.87 0 0);
-  --neutral-400: oklch(0.75 0 0);
-  --neutral-450: oklch(0.71547 0 0);
-  --neutral-500: oklch(0.55553 0 0);
-  --neutral-550: oklch(0.4386 0 0);
-  --neutral-600: oklch(0.40167 0 0);
-  --neutral-650: oklch(0.3753 0 0);
-  --neutral-700: oklch(0.34846 0 0);
-  --neutral-750: oklch(0.32109 0 0);
-  --neutral-800: oklch(0.29313 0 0);
-  --neutral-850: oklch(0.26448 0 0);
-  --neutral-900: oklch(0.23503 0 0);
-  --neutral-950: oklch(0.20463 0 0);
-  --neutral-1000: oklch(0 0 0);
-  --corner-base: 0.375rem;
-  --opacity-1: 50%;
-  --ui-scale: var(--interface-scale-default);
-  --motion-duration-fast: var(--duration-1);
-  --motion-duration-standard: var(--duration-2);
-  --motion-duration-spatial: var(--duration-3);
-  --motion-ease-out: var(--easing-out);
-  --motion-ease-in-out: var(--easing-spatial);
-  --surface-1: var(--neutral-100);
-  --surface-2: var(--neutral-50);
-  --surface-3: var(--neutral-0);
-  --surface-4: var(--neutral-0);
-  --surface-5: var(--neutral-0);
-  --surface-6: var(--neutral-0);
-  --surface-7: var(--neutral-0);
-  --surface-8: var(--neutral-0);
-  --shadow-edge-color: color-mix(in oklch, var(--neutral-950) 12%, transparent);
-  --shadow-low-color: color-mix(in oklch, var(--neutral-950) 8%, transparent);
-  --shadow-high-color: color-mix(in oklch, var(--neutral-950) 14%, transparent);
-  --elevation-seam: inset 0 0 0 1px var(--shadow-edge-color);
-  --elevation-raised:
-    inset 0 0 0 1px var(--shadow-edge-color), 0 1px 2px var(--shadow-low-color),
-    0 4px 12px var(--shadow-low-color);
-  --elevation-overlay:
-    inset 0 0 0 1px var(--shadow-edge-color), 0 8px 24px var(--shadow-high-color),
-    0 24px 64px var(--shadow-high-color);
-  --corner-sm: calc(var(--corner-base) * 0.6);
-  --corner-md: calc(var(--corner-base) * 0.8);
-  --corner-lg: var(--corner-base);
-  --corner-xl: calc(var(--corner-base) * 1.4);
-  --corner-2xl: calc(var(--corner-base) * 1.8);
-  --corner-3xl: calc(var(--corner-base) * 2.2);
-  --corner-4xl: calc(var(--corner-base) * 2.6);
-  --corner-full: 9999px;
-  --state-disabled-opacity: var(--opacity-1);
-  --background: var(--surface-1);
-  --foreground: var(--neutral-950);
-  --card: var(--surface-3);
-  --card-foreground: var(--foreground);
-  --popover: var(--surface-3);
-  --popover-foreground: var(--foreground);
-  --primary: var(--foreground);
-  --primary-foreground: var(--surface-1);
-  --secondary: var(--neutral-200);
-  --secondary-foreground: var(--foreground);
-  --muted: var(--neutral-200);
-  --muted-foreground: var(--neutral-500);
-  --accent: var(--neutral-300);
-  --accent-foreground: var(--foreground);
-  --destructive: var(--neutral-600);
-  --border: var(--shadow-edge-color);
-  --input: color-mix(in oklch, var(--neutral-950) 16%, transparent);
-  --ring: var(--neutral-550);
-  --chart-1: var(--neutral-350);
-  --chart-2: var(--neutral-500);
-  --chart-3: var(--neutral-550);
-  --chart-4: var(--neutral-650);
-  --chart-5: var(--neutral-850);
-  --sidebar: var(--surface-1);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
-  font-size: calc(100% * var(--ui-scale));
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-}
-
-:root[data-theme='light'] {
-  color-scheme: light;
-}
-
-:root[data-theme='dark'],
-:root.dark {
-  color-scheme: dark;
-  --surface-1: var(--neutral-950);
-  --surface-2: var(--neutral-900);
-  --surface-3: var(--neutral-850);
-  --surface-4: var(--neutral-800);
-  --surface-5: var(--neutral-750);
-  --surface-6: var(--neutral-700);
-  --surface-7: var(--neutral-650);
-  --surface-8: var(--neutral-600);
-  --shadow-edge-color: color-mix(in oklch, var(--neutral-200) 10%, transparent);
-  --shadow-low-color: color-mix(in oklch, var(--neutral-1000) 22%, transparent);
-  --shadow-high-color: color-mix(in oklch, var(--neutral-1000) 42%, transparent);
-  --background: var(--surface-1);
-  --foreground: var(--neutral-200);
-  --card: var(--surface-2);
-  --card-foreground: var(--foreground);
-  --popover: var(--surface-3);
-  --popover-foreground: var(--foreground);
-  --primary: var(--foreground);
-  --primary-foreground: var(--surface-1);
-  --secondary: var(--surface-2);
-  --secondary-foreground: var(--foreground);
-  --muted: var(--surface-2);
-  --muted-foreground: var(--neutral-450);
-  --accent: var(--neutral-550);
-  --accent-foreground: var(--foreground);
-  --destructive: var(--neutral-400);
-  --border: color-mix(in oklch, var(--neutral-200) 12%, transparent);
-  --input: color-mix(in oklch, var(--neutral-200) 16%, transparent);
-  --ring: var(--neutral-650);
-  --chart-1: var(--neutral-350);
-  --chart-2: var(--neutral-450);
-  --chart-3: var(--neutral-500);
-  --chart-4: var(--neutral-550);
-  --chart-5: var(--neutral-650);
-  --sidebar: var(--surface-1);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--surface-3);
-  --sidebar-accent-foreground: var(--foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
-}
-
-:root[data-ui-scale='small'] {
-  --ui-scale: var(--interface-scale-small);
-}
-
-:root[data-ui-scale='large'] {
-  --ui-scale: var(--interface-scale-large);
-}
-
+/* @layer base so a utility can still win: unlayered, these outrank
+   `truncate` on the text-wrap-mode longhand (white-space is a shorthand for
+   white-space-collapse + text-wrap-mode), which silently un-truncates every
+   <p> that asks for it — CardDescription among them. */
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
   }
 
-  html {
-    @apply font-sans;
+  p {
+    text-wrap: pretty;
   }
 
-  body {
-    @apply m-0 min-h-screen min-w-80 bg-background text-foreground;
-  }
-
-  button,
-  input,
-  select,
-  textarea {
-    font: inherit;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]),
-  :root[data-theme='system'] {
-    color-scheme: dark;
-    --surface-1: var(--neutral-950);
-    --surface-2: var(--neutral-900);
-    --surface-3: var(--neutral-850);
-    --surface-4: var(--neutral-800);
-    --surface-5: var(--neutral-750);
-    --surface-6: var(--neutral-700);
-    --surface-7: var(--neutral-650);
-    --surface-8: var(--neutral-600);
-    --shadow-edge-color: color-mix(in oklch, var(--neutral-200) 10%, transparent);
-    --shadow-low-color: color-mix(in oklch, var(--neutral-1000) 22%, transparent);
-    --shadow-high-color: color-mix(in oklch, var(--neutral-1000) 42%, transparent);
-    --background: var(--surface-1);
-    --foreground: var(--neutral-200);
-    --card: var(--surface-2);
-    --card-foreground: var(--foreground);
-    --popover: var(--surface-3);
-    --popover-foreground: var(--foreground);
-    --primary: var(--foreground);
-    --primary-foreground: var(--surface-1);
-    --secondary: var(--surface-2);
-    --secondary-foreground: var(--foreground);
-    --muted: var(--surface-2);
-    --muted-foreground: var(--neutral-450);
-    --accent: var(--neutral-550);
-    --accent-foreground: var(--foreground);
-    --destructive: var(--neutral-400);
-    --border: color-mix(in oklch, var(--neutral-200) 12%, transparent);
-    --input: color-mix(in oklch, var(--neutral-200) 16%, transparent);
-    --ring: var(--neutral-650);
-    --chart-1: var(--neutral-350);
-    --chart-2: var(--neutral-450);
-    --chart-3: var(--neutral-500);
-    --chart-4: var(--neutral-550);
-    --chart-5: var(--neutral-650);
-    --sidebar: var(--surface-1);
-    --sidebar-foreground: var(--foreground);
-    --sidebar-primary: var(--primary);
-    --sidebar-primary-foreground: var(--primary-foreground);
-    --sidebar-accent: var(--surface-3);
-    --sidebar-accent-foreground: var(--foreground);
-    --sidebar-border: var(--border);
-    --sidebar-ring: var(--ring);
+  /* Inline code chips: bare <code> in prose gets its own ground (the same
+     recipe the motion/scrollbars pages hand-rolled). Excludes code inside
+     <pre> — shiki blocks style themselves. Base layer, so a page can still
+     override with utilities. */
+  code:not(pre code) {
+    background: light-dark(#ebebed, #2c2c2c);
+    border-radius: 4px;
+    padding: 1px 4px;
+    font-size: var(--fs-caption, 12px);
+    color: var(--color-foreground, inherit);
   }
 }
 
-@media (forced-colors: active) {
+/* ── Type-scale roles ─────────────────────────────────────────────────────
+   Site-chrome font sizes ride these variables instead of fixed px so the
+   whole site follows the size ladder. The docs-only SizeAttribute component
+   (lib/docs/size-attribute.tsx) mirrors the active step onto
+   <html data-size>; values must stay in sync with `typeScale` in
+   registry/default/lib/size-context.tsx. `display` keeps its responsive
+   pair (mobile / ≥sm) from the old text-[22px] sm:text-[28px] titles. */
+:root {
+  --fs-display: 22px;
+  --fs-title: 16px;
+  --fs-subtitle: 14px;
+  --fs-body: 13px;
+  --fs-caption: 12px;
+}
+
+@media (min-width: 640px) {
   :root {
-    --surface-1: Canvas;
-    --surface-2: Canvas;
-    --surface-3: Canvas;
-    --surface-4: Canvas;
-    --surface-5: Canvas;
-    --surface-6: Canvas;
-    --surface-7: Canvas;
-    --surface-8: Canvas;
-    --shadow-edge-color: ButtonBorder;
-    --shadow-low-color: transparent;
-    --shadow-high-color: transparent;
-    --background: Canvas;
-    --foreground: CanvasText;
-    --card: Canvas;
-    --card-foreground: CanvasText;
-    --popover: Canvas;
-    --popover-foreground: CanvasText;
-    --primary: CanvasText;
-    --primary-foreground: Canvas;
-    --secondary: ButtonFace;
-    --secondary-foreground: ButtonText;
-    --muted: Canvas;
-    --muted-foreground: GrayText;
-    --accent: Highlight;
-    --accent-foreground: HighlightText;
-    --destructive: CanvasText;
-    --border: ButtonBorder;
-    --input: ButtonBorder;
-    --ring: Highlight;
-    --sidebar: Canvas;
-    --sidebar-foreground: CanvasText;
-    --sidebar-primary: CanvasText;
-    --sidebar-primary-foreground: Canvas;
-    --sidebar-accent: Highlight;
-    --sidebar-accent-foreground: HighlightText;
-    --sidebar-border: ButtonBorder;
-    --sidebar-ring: Highlight;
+    --fs-display: 28px;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+html[data-size='compact'] {
+  --fs-display: 20px;
+  --fs-title: 15px;
+  --fs-subtitle: 13px;
+  --fs-body: 12px;
+  --fs-caption: 11px;
+}
+
+@media (min-width: 640px) {
+  html[data-size='compact'] {
+    --fs-display: 24px;
+  }
+}
+
+@utility text-display {
+  font-size: var(--fs-display, 28px);
+}
+@utility text-title {
+  font-size: var(--fs-title, 16px);
+}
+@utility text-subtitle {
+  font-size: var(--fs-subtitle, 14px);
+}
+@utility text-body {
+  font-size: var(--fs-body, 13px);
+}
+@utility text-caption {
+  font-size: var(--fs-caption, 12px);
+}
+
+/* Theme-toggle cross-fade: ThemeProvider adds `.transitioning` around the
+   class swap so colors tween instead of snapping. */
+html.transitioning *,
+html.transitioning *::before,
+html.transitioning *::after {
+  transition:
+    border-radius 180ms ease-in-out,
+    background-color 180ms ease-in-out,
+    color 180ms ease-in-out,
+    border-color 180ms ease-in-out,
+    fill 180ms ease-in-out,
+    stroke 180ms ease-in-out !important;
+}
+
+/* Focus fallback — natively focusable elements no component styles (scroll
+   containers Chrome makes tabbable, prose links, demo boxes) get the same
+   token ring as the components instead of the UA default, which follows the
+   OS accent color. Lives in @layer base so `outline-none` (utilities layer)
+   still wins — components that draw their own ring aren't double-ringed,
+   and elements with their own radius utility keep it. The radius rides
+   --shape-input-radius (published by ShapeProvider) so the ring corners
+   match the borderless select in both shape modes; 8px = the rounded-mode
+   default for pre-hydration paint. Enforced by the focus-ring lint rule in
+   eslint.config.mjs. */
+@layer base {
+  :focus-visible {
+    outline: 1px solid var(--focus-ring, #6b97ff);
+    outline-offset: 2px;
+    border-radius: var(--shape-input-radius, 8px);
+  }
+
+  /* Prose links are inline text boxes — the shape-system radius reads
+     pill-ish at text height, so their ring takes a tight 2px corner
+     instead. Component links (NavItem, Button asChild) carry their own
+     radius utilities, which win over this base-layer rule. */
+  a:focus-visible {
+    border-radius: 2px;
+  }
+}
+
+/* ============================================================================
+   5. NATIVE SCROLLBAR THEME
+   ----------------------------------------------------------------------------
+   Matches the ScrollArea thumb language (narrow, low-contrast, darkens on
+   hover) so surfaces that fall back to native scrollbars (the root page,
+   touch-device viewports) stay consistent with the custom scrollbar. Rides
+   the same fixed surface-relative overlay ramp as the ScrollArea thumb
+   (rest 8%, hover 12%, drag 16%) — adapts to dark mode through --overlay.
+   Only on fine pointers; touch devices keep their overlay momentum bars.
+   `.scrollbar-hide` still wins (higher specificity). Chromium 121+ renders
+   scrollbar-color and ignores the ::-webkit-* block, so both ramps must
+   stay in sync.
+============================================================================ */
+
+@media (pointer: fine) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--overlay) / 0.08) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    /* Transparent borders + content-box clip leave a ~4px visible thumb
+       inside the 10px hit area, mirroring the custom thumb's resting width.
+       The asymmetric edge-side border (5px outer / 1px inner, set per
+       orientation below) slides the visible thumb 2px away from the edge,
+       matching the ScrollArea thumb's -translate nudge. */
+    background-color: rgb(var(--overlay) / 0.08);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:vertical {
+    border-left-width: 1px;
+    border-right-width: 5px;
+  }
+
+  ::-webkit-scrollbar-thumb:horizontal {
+    border-top-width: 1px;
+    border-bottom-width: 5px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--overlay) / 0.12);
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background-color: rgb(var(--overlay) / 0.16);
+  }
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================================
+   6. UTILITIES
+============================================================================ */
+
+/* ── shimmer-text (thinking-indicator, thinking-steps) ── */
+
+@keyframes shimmer {
+  0% {
+    background-position: 0% 0;
+  }
+  100% {
+    background-position: 100% 0;
+  }
+}
+
+.shimmer-text {
+  color: transparent;
+  background: linear-gradient(
+    90deg,
+    light-dark(#a3a3a3, #525252) 0%,
+    light-dark(#a3a3a3, #525252) 35%,
+    light-dark(#525252, #a3a3a3) 50%,
+    light-dark(#a3a3a3, #525252) 65%,
+    light-dark(#a3a3a3, #525252) 100%
+  );
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ── Spinner keyframes ── */
+
+@keyframes spinner-move {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes spinner-dash {
+  0%,
+  100% {
+    stroke-dasharray: 15 85;
+  }
+  50% {
+    stroke-dasharray: 40 60;
+  }
+}
+
+/* ── scroll-fade — vendored equivalent of shadcn's scroll-fade utility ──
+   (https://ui.shadcn.com/docs/utils/scroll-fade). A mask-image dissolves the
+   content toward the edges that have more to scroll. CSS scroll-driven
+   animations make it scroll-aware: the true start/end edge stays crisp until
+   you scroll past it. Browsers without scroll-driven animations fall back to a
+   static fade on both edges. Apply to a scroll container, or to a ScrollArea
+   via `viewportClassName`. */
+
+@property --sf-start {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+@property --sf-end {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
+@keyframes sf-reveal-start {
+  from {
+    --sf-start: 1;
+  }
+  to {
+    --sf-start: 0;
+  }
+}
+@keyframes sf-reveal-end {
+  from {
+    --sf-end: 0;
+  }
+  to {
+    --sf-end: 1;
+  }
+}
+
+.scroll-fade,
+.scroll-fade-x {
+  --scroll-fade-size: 48px;
+}
+
+/* Static fallback: fade both edges. */
+.scroll-fade {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--scroll-fade-size),
+    #000 calc(100% - var(--scroll-fade-size)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--scroll-fade-size),
+    #000 calc(100% - var(--scroll-fade-size)),
+    transparent 100%
+  );
+}
+.scroll-fade-x {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--scroll-fade-size),
+    #000 calc(100% - var(--scroll-fade-size)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--scroll-fade-size),
+    #000 calc(100% - var(--scroll-fade-size)),
+    transparent 100%
+  );
+}
+
+/* ── scroll-divider — a hairline marking a scroll edge ──────────────────────
+   Pairs with .scroll-fade on a descendant viewport: where the fade dissolves
+   content, this draws the line that says "the region continues". The line
+   can't live inside the scroller — the fade's own mask would erase it at
+   exactly the edge it belongs on — so it rides the parent's pseudo-elements
+   and borrows the scroller's timeline by name. Browsers without scroll-driven
+   timelines simply get the fade, as before. */
+@keyframes sf-divider-start {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sf-divider-end {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@supports (timeline-scope: --sf) {
+  .scroll-divider {
+    position: relative;
+    timeline-scope: --sf-scroller;
+    --scroll-divider-size: 48px;
+  }
+  .scroll-divider .scroll-fade {
+    scroll-timeline-name: --sf-scroller;
+  }
+  .scroll-divider::before,
+  .scroll-divider::after {
+    content: '';
+    position: absolute;
+    /* Inset so the line can hug the content's own gutter rather than the
+       panel edge — the sidebar's inset variant sets this to 8px. */
+    left: var(--scroll-divider-inset, 0px);
+    right: var(--scroll-divider-inset, 0px);
+    height: 1px;
+    background-color: var(--border);
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+  }
+  /* Top edge: absent at rest, fading in as content passes above. */
+  .scroll-divider::before {
+    top: 0;
+    animation: sf-divider-start both linear;
+    animation-timeline: --sf-scroller;
+    animation-range: 0 var(--scroll-divider-size);
+  }
+  /* A region flush with the panel's own top edge has nothing above for
+     content to pass under, so the start line would read as a stray border. */
+  .scroll-divider:first-child::before {
+    content: none;
+  }
+  /* Bottom edge: present while content continues below, gone at the end. */
+  .scroll-divider::after {
+    bottom: 0;
+    animation: sf-divider-end both linear;
+    animation-timeline: --sf-scroller;
+    animation-range: calc(100% - var(--scroll-divider-size)) 100%;
+  }
+}
+
+/* Scroll-aware: the start/end edge stays solid until there's content past it. */
+@supports (animation-timeline: scroll()) {
+  .scroll-fade {
+    mask-image: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, var(--sf-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgba(0, 0, 0, var(--sf-end)) 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, var(--sf-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgba(0, 0, 0, var(--sf-end)) 100%
+    );
+    animation:
+      sf-reveal-start both linear,
+      sf-reveal-end both linear;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%;
+  }
+  .scroll-fade-x {
+    mask-image: linear-gradient(
+      to right,
+      rgba(0, 0, 0, var(--sf-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgba(0, 0, 0, var(--sf-end)) 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      rgba(0, 0, 0, var(--sf-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgba(0, 0, 0, var(--sf-end)) 100%
+    );
+    animation:
+      sf-reveal-start both linear,
+      sf-reveal-end both linear;
+    animation-timeline: scroll(self inline), scroll(self inline);
+    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%;
   }
 }

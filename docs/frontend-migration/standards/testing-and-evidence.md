@@ -23,16 +23,17 @@ prefer port fakes over transport mocks. Component tests construct real scoped
 Zustand runtimes and isolated QueryClients. Playwright Electron journeys remain
 the authority for real cross-process behavior.
 
-Storybook owns discoverable primitive and component states and uses the
-production provider and token stack. Playwright exercises its stories for
-visual composition and focused interaction without treating a story render as
-journey evidence.
-
-Story evidence covers meaningful default, focus, disabled, loading, empty,
-error, long-content, narrow-window, theme, interface-scale, and reduced-motion
-states as applicable. Source gates prove Base UI access stays inside the
-primitive layer and reject raw visual literals, arbitrary visual utilities,
-inline styles, and undeclared tokens.
+Focused component tests and temporary production-backed runtime harnesses cover
+meaningful default, focus, disabled, loading, empty, error, long-content,
+narrow-window, theme, size, shape, and reduced-motion states as applicable.
+The Storybook catalog demonstrates the installed Fluid public-component surface
+under the same global CSS and provider stack as the renderer. Its local,
+deterministic fixtures document focused variants and compositions; Autodocs,
+the accessibility addon, and interaction plays make component contracts
+inspectable but do not replace product test or journey evidence. Source checks
+prove Fluid's Base UI flavor remains exclusive and Base UI access stays inside
+the installed component layer. Final Playwright visual evidence targets
+representative product composition rather than a parallel design system.
 
 Accessibility evidence combines axe with semantic queries, keyboard-only
 interaction, focus order and return, announcements, forced colors, reduced
@@ -143,7 +144,6 @@ required by the repository, including:
 
 ```bash
 pnpm test:renderer
-pnpm test:renderer-quality-gates
 pnpm test:renderer-architecture
 pnpm typecheck
 pnpm lint:web

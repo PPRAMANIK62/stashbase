@@ -20,7 +20,9 @@ incomplete. `web-src` is excluded from supported commands and test inventory.
 The replacement does not embed or import legacy components, CSS, stores,
 configuration, or bundles. `web-src` is read-only behavioral evidence while the
 branch is developed; migration tasks do not move, reformat, lint, or modernize
-it. Storybook builds in CI once introduced but is never packaged.
+it. Storybook catalogs the installed Fluid components under production styling
+and providers; it is not a second design system and is never packaged with the
+application.
 
 ## Compatibility Boundary
 

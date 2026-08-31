@@ -9,6 +9,7 @@ views while preserving healthy runtimes and unsaved buffers; local-server loss
 uses bounded reconnect without renderer reload. Protected unsaved-draft crash
 recovery is approved Direction pending a separate storage and key-ownership
 decision. The replacement adopts Vitest, React Testing Library, user-event,
-MSW, axe, Storybook, and Playwright at their appropriate evidence boundaries.
+MSW, axe, focused runtime harnesses, and Playwright at their appropriate
+evidence boundaries.
 This accepts new tooling and explicit recovery ownership to isolate failures
 and test frontend behavior through stable user-facing Interfaces.

@@ -1,97 +1,82 @@
 # Subphase 1 — Design and Electron Shell
 
-## 09 — Set up production-equivalent Storybook
+## 09 — Replace the local design-system showcase with a Fluid catalog
 
 **Blocked by:** 06.
 
 **Status:** Complete.
 
-Storybook now builds through the replacement's Vite configuration and real
-Tailwind entry, imports the production global stylesheet, and mounts the same
-renderer provider composition. Its bounded controls apply the
-production `system`/`light`/`dark` theme and `small`/`default`/`large` interface
-scale attributes. Forced colors and reduced motion remain real browser media
-features in the shared stylesheet rather than story-only variants. The durable
-Foundation Introduction story now demonstrates the approved visual language
-through the production token and provider stack.
+The repository-owned design-system showcase is removed. Storybook now catalogs
+the installed Fluid source only: every public component has a colocated story;
+compound internals appear through their public parent; and the catalog mounts
+production CSS and Fluid providers rather than a story-only surface. Its static
+build is checked in CI but excluded from packaged app inputs. Product component
+tests, focused runtime harnesses, and final visual evidence continue to
+exercise production source.
 
-Evidence: `pnpm test:renderer`, `pnpm build:web`, `pnpm build:storybook`,
-`pnpm test:toolchain`, and `pnpm test:package-inputs`.
+Evidence: `pnpm test:renderer`, `pnpm typecheck:web`, `pnpm lint:web`,
+`pnpm build:web`, and `pnpm build:storybook`.
 
-## 10 — Approve the StashBase visual direction
+## 10 — Adopt Fluid Functionalism
 
 **Blocked by:** 09.
 
 **Status:** Complete.
 
-Compare real shell, Workbench, Agent, overlay, theme, and narrow-window studies
-and approve one StashBase-specific monochrome visual foundation. Chromatic
-color requires a later approved decision if a concrete need emerges.
+Continuous Workbench remains the product composition. Fluid Functionalism now
+owns the complete visual language: surfaces, typography, density, shape,
+focus, icons, motion, and component anatomy. No visual or component system is
+derived from `web-src/`.
 
-The approved **Continuous Workbench** direction uses graphite-and-paper tonal
-planes, native interface typography, compact bordered chrome, and one
-signature spatial transition: the same Agent session recomposes from the main
-stage into its document-side dock. Production-backed Storybook studies covered
-the Agent-first workspace, document and Agent composition, Settings, light and
-dark themes, and narrow-window prioritization. Those temporary studies were
-removed after approval; the durable direction lives in `frontend-design.md`.
-Task 11 owns promotion of the approved values into the complete canonical
-token and enforcement system.
+Decision: [0015](../decisions/0015-adopt-fluid-functionalism-base-ui.md).
 
-Evidence: `pnpm typecheck:web`, `pnpm lint:web`, `pnpm test:renderer`,
-`pnpm build:web`, `pnpm build:storybook`, manual Storybook interaction, and
-1440×900 plus 700×760 Chromium inspection with no page errors or viewport
-overflow. E2E and permanent visual evidence remain deferred by the migration
-staging policy.
-
-## 11 — Implement foundation and semantic tokens
+## 11 — Install the complete Fluid Base UI registry
 
 **Blocked by:** 10.
 
 **Status:** Complete.
 
-The renderer is initialized as a Base UI shadcn workspace using the current
-`base-nova` registry convention, a renderer-local `@/` alias,
-`src/globals.css`, and the standard Tailwind v4 semantic color and radius
-vocabulary. All provisional token values remain monochrome. Final StashBase
-values are now grounded in the approved neutral substrate ladder. Named
-surface, typography, radius, opacity, shadow-edge, elevation, easing, and
-duration roles are exposed through Tailwind. `renderer/style-contract.json`
-assigns every canonical CSS custom property to one foundation, semantic, or
-Tailwind role, while `scripts/check-renderer-styles.mjs` rejects undeclared
-tokens, unapproved declarations, raw colors and palette utilities, arbitrary
-visual utilities, inline style props, component stylesheets, and unnamed
-visual roles. The gate runs through renderer lint, test, and build commands.
-The permanent Foundation Introduction story consumes these production roles
-without duplicating their values in TypeScript.
+The `@fluid` registry is configured in `renderer/components.json`. Every
+unique published Fluid component and its registry dependencies are installed.
+Every dual-flavor component is overwritten with its Base UI path; the renderer
+contains no Radix UI package or import. Fluid's Inter Variable font, global
+theme and surface rules, providers, and utilities replace the former local
+token/style contract.
 
-Evidence: `pnpm test:renderer-styles`, `pnpm format:web`, `pnpm lint:web`,
-`pnpm test:renderer`, `pnpm typecheck:web`, `pnpm build:web`, and
-`pnpm build:storybook`.
+The generated Card is adapted from Next.js Link to a native anchor. The
+generated FileThumbnail bundles its PDF.js worker through Vite rather than
+loading a CDN script. These are host-boundary changes, not alternate component
+designs.
 
-Define canonical CSS tokens, expose semantic roles through Tailwind, and reject
-raw visual literals and undeclared tokens.
+Evidence: `pnpm typecheck:web`, `pnpm lint:web`, `pnpm test:renderer`, and
+`pnpm build:web`.
 
-## 12 — Build form and control primitives
+## 12 — Compose product forms and controls
 
 **Blocked by:** 11.
 
-Create tokenized Base UI-backed shadcn buttons, fields, selects, checkboxes,
-toggles, and form anatomy with accessible Storybook states.
+Use installed Fluid buttons, inputs, selects, checkbox and radio groups,
+switches, sliders, and related components in feature slices. Add focused
+semantic tests for the product behavior being implemented; do not recreate a
+local primitive layer.
 
-## 13 — Build overlay and navigation primitives
+## 13 — Compose overlays and navigation
 
-**Blocked by:** 12.
+**Blocked by:** 11.
 
-Create dialogs, menus, popovers, tooltips, tabs, portals, dismissal, focus
-return, and keyboard behavior under one primitive owner.
+Use installed Fluid dialogs, mobile drawers, dropdowns, tabs, tooltips, scroll
+areas, sidebars, and surface context. Prove dismissal, focus return, keyboard
+behavior, nested elevation, reduced motion, and compact-window behavior in the
+product surfaces that consume them.
 
-## 14 — Build the Sonner notification adapter
+## 14 — Build the notification adapter
 
 **Blocked by:** 13.
 
-Mount one root Toaster and expose semantic, stable-ID notifications through a
-headless Tailwind/shadcn shell without giving features direct Sonner access.
+Expose semantic, stable-ID notifications without installing a stock shadcn
+component or introducing a second visual system. Any notification surface must
+compose Fluid primitives and preserve inline ownership for recovery,
+permissions, and durable decisions.
 
 ## 15 — Build the responsive application shell
 
@@ -127,24 +112,3 @@ subscription cleanup, and no raw IPC or product policy.
 
 Validate sender window, frame, origin, capability, and payload; deny navigation,
 new windows, permissions, and external URLs unless explicitly authorized.
-
-## 20 — Launch the replacement shell in real Electron
-
-**Blocked by:** 15, 16, 19.
-
-Launch the selectable replacement entry with effective sandboxing, custom
-origin, CSP, staged paint, fatal recovery, and Electron smoke evidence.
-
-## 21 — Apply appearance before first React paint
-
-**Blocked by:** 11, 20.
-
-Apply theme, scale, density, contrast, and reduced motion from a non-secret
-snapshot without waiting for the local server.
-
-## 22 — Settle bootstrap capabilities independently
-
-**Blocked by:** 20, 21.
-
-Settle server health, Settings, Agent discovery, indexing, and updates behind
-local loading and recovery rather than one global readiness gate.

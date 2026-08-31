@@ -1,0 +1,25 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Overview/Fluid Functionalism" />
+
+# Fluid Functionalism for StashBase
+
+This catalogue renders the installed Fluid Functionalism source directly. It is
+not a second component implementation or token system.
+
+## Runtime contract
+
+- Use the `@fluid` registry through the shadcn CLI only as the installer.
+- Every dual-flavor component uses Fluid's Base UI implementation; there are
+  no Radix UI dependencies or imports.
+- The global preview loads the real renderer stylesheet, Inter package, and
+  Fluid shape, size, surface, icon, tooltip, and reduced-motion providers.
+- Stories use deterministic local fixtures. File examples do not fetch network
+  assets, and no story relies on Electron or a user document.
+
+## Reading this catalogue
+
+Each public component has a typed CSF entry with a representative default,
+focused variants or constrained states, and a realistic composition where its
+contract requires child parts. Internal menu and sidebar modules appear under
+their public owners rather than as disconnected entries.

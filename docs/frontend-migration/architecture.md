@@ -452,53 +452,27 @@ absent unless separately designed and approved.
 
 ## Styling
 
-The replacement is token-first. Foundation values feed semantic role tokens,
-which Tailwind exposes to primitives and components. Component tokens exist
-only for repeated primitive anatomy that needs a stable role across variants.
-Components consume semantic or approved component tokens, never foundation
-values. Themes, interface scale, density, contrast, and reduced motion change
-token mappings rather than component markup.
+Fluid Functionalism is the complete visual and component system. Its global
+CSS owns semantic colors, the eight-level substrate/shadow ladder, Inter
+Variable typography, focus, type roles, scrollbar treatment, and component
+utilities. Its React providers own shape, size, icon, substrate, tooltip, and
+reduced-motion behavior. The replacement does not create a parallel StashBase
+token hierarchy or primitive library.
 
-One foundation stylesheet is the canonical token source. CSS custom properties
-define runtime values and Tailwind v4's theme mapping exposes them to utilities;
-TypeScript does not import or duplicate token values. Repository checks verify
-that every consumed token is declared and every declaration has an approved
-role.
+Components are installed as reviewed source through the configured `@fluid`
+shadcn registry. The CLI is transport only; stock shadcn components are not an
+application dependency. Every dual-flavor Fluid component uses Base UI.
+Features compose Fluid components and never import Base UI directly. Native
+semantic elements remain appropriate for noninteractive structure.
 
-The repository owns one shadcn component layer backed exclusively by Base UI.
-Features never import Base UI directly. Interactive controls compose these
-repository primitives so focus, portals, dismissal, keyboard behavior, motion,
-and tokens have one owner. Plain headings, text, lists, landmarks, and layout
-use native semantic elements. Product code styles every primitive, component,
-and layout through Tailwind utilities backed by tokens; shadcn defaults are
-scaffolding, not the StashBase visual language.
+Registry source may be adapted only at a host boundary that Fluid does not
+own, such as replacing Next.js Link with a native anchor or bundling a worker
+under the Electron content-security policy. Such changes preserve the public
+component contract and are recorded with the installed source snapshot.
 
-Primitive appearance is varied through typed semantic variants and slots built
-with `class-variance-authority` and `tailwind-merge`. Feature-supplied classes
-may control only the primitive's external layout participation, such as grid
-placement, flex behavior, or available width. Color, typography, focus, radius,
-elevation, motion, and internal spacing remain primitive-owned.
-
-Handwritten component and feature CSS is forbidden. Global CSS is limited to
-the Tailwind entry, token and theme declarations, and unavoidable document
-foundation rules. The only component-specific CSS exception is colocated
-Milkdown integration overrides for third-party editor internals that Tailwind
-cannot address; those overrides still consume semantic tokens and may not
-become a second styling system.
-
-Raw arbitrary colors, sizes, radii, stacking values, shadows, type sizes, and
-durations are forbidden, as are inline visual styles. Reviewed runtime geometry
-that cannot be expressed statically—such as measured pane positions or virtual
-row transforms—flows through typed CSS custom properties consumed by named
-Tailwind utilities. Repository scans enforce literals, arbitrary utilities,
-inline styles, and undeclared-token rules.
-
-Storybook is the design-system workbench and renders through the same Tailwind,
-token, theme, scaling, reduced-motion, and provider setup as production. It
-does not maintain parallel component implementations or story-only styling.
-Every shared primitive and every reusable, stateful, accessibility-sensitive,
-or visually risky component has stories for its meaningful states. Trivial
-private layout fragments do not earn stories merely to satisfy a count.
+There is no separate design-system workbench or story-only styling layer.
+Focused component tests, product runtime harnesses, and final migration visual
+evidence exercise the same source and providers as the renderer.
 
 The replacement targets WCAG 2.2 AA, including keyboard-only operation,
 visible focus, programmatic names/roles/states, focus return, screen-reader
@@ -506,19 +480,11 @@ announcements, 200% interface scaling, forced colors, reduced motion, and
 non-color status cues. Automated accessibility checks are a floor; focused
 interaction and Electron journeys own keyboard and focus evidence.
 
-Phase 0 defines and approves a monochrome tonal system, typography, density,
-spatial composition, and one restrained signature interaction. The rewrite
-preserves recognizable product concepts and workflows but does not copy legacy
-CSS or accept a generic shadcn theme as its identity. Chromatic accents remain
-out of scope unless a later approved visual-language decision demonstrates a
-specific need.
-
-Phase 0 compares two or three Storybook-backed directions using real StashBase
-shell, file-tree, document, Agent, overlay, theme, and narrow-window states.
-The approved direction must read as a focused local-document workbench rather
-than a generic dashboard. Interface typography starts with a carefully tuned
-native system stack and code/data use a monospace stack; a bundled interface
-font requires visual and startup evidence before approval.
+The Continuous Workbench product composition remains approved, while Fluid
+Functionalism owns its visual expression. Legacy `web-src` styling is not an
+input. Fluid's bundled Inter face, shape and density providers, surface ladder,
+focus color, semantic status colors, and springs are adopted without a second
+StashBase visual layer.
 
 Workspace, Workbench, Agent Panel, and overlay composition respond primarily to
 their container rather than viewport breakpoints. Tokens define compact and
@@ -565,7 +531,7 @@ but does not own domain transitions; a form library may implement interaction
 mechanics but does not own settings policy.
 
 `renderer/` is an independent workspace package that owns Vite+, strict
-TypeScript, Vitest, Storybook, Tailwind, entry, and architecture configuration.
+TypeScript, Vitest, Tailwind, entry, and architecture configuration.
 Stable frontend commands validate and build it from the initial scaffold. No
 runtime or user setting selects between renderers, and `web-src/` is inert
 reference material outside supported commands and evidence. The replacement
@@ -573,7 +539,7 @@ shares only intentional repository protocols and assets, not legacy aliases,
 source, CSS, configuration, or tool tasks.
 
 Dependencies are exact and lockfile-pinned, justified by an owned
-responsibility, and reviewed for bundle and privilege effects. Copied shadcn
+responsibility, and reviewed for bundle and privilege effects. Installed Fluid
 components become reviewed first-party source and are never updated blindly.
 Runtime CDN assets, registry access, and remote code are forbidden.
 
