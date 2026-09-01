@@ -1,4 +1,5 @@
 import type { LibraryFailureKind, LibrarySnapshot } from '@/features/workspace/domain/library';
+import type { WorkspaceListing } from '@/features/workspace/domain/tree';
 
 export type LibraryFolderPickerResult =
   | { status: 'cancelled' }
@@ -28,12 +29,27 @@ export interface WorkspaceQueryScope {
   cancel(): Promise<void>;
 }
 
+export interface FilesApi {
+  load(folderPath: string, signal: AbortSignal): Promise<WorkspaceListing>;
+  reveal(entryPath: string, signal: AbortSignal): Promise<void>;
+}
+
 export class LibraryError extends Error {
   readonly kind: LibraryFailureKind;
 
   constructor(kind: LibraryFailureKind, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'LibraryError';
+    this.kind = kind;
+  }
+}
+
+export class FilesError extends Error {
+  readonly kind: LibraryFailureKind;
+
+  constructor(kind: LibraryFailureKind, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'FilesError';
     this.kind = kind;
   }
 }

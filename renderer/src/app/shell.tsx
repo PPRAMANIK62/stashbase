@@ -7,7 +7,12 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { LibrarySidebar, LibraryWelcome, useWorkspace } from '@/features/workspace/public';
+import {
+  FileTree,
+  LibrarySidebar,
+  LibraryWelcome,
+  useWorkspace,
+} from '@/features/workspace/public';
 import { Logo } from '@/shared/brand/logo';
 
 import type { AppDependencies } from './dependencies';
@@ -15,7 +20,7 @@ import type { AppDependencies } from './dependencies';
 import './shell.css';
 
 export function App({ dependencies }: { dependencies: AppDependencies }) {
-  useWorkspace(dependencies.library.api);
+  const workspace = useWorkspace(dependencies.library.api);
 
   return (
     <SidebarProvider
@@ -31,6 +36,13 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         <SidebarContent>
           <SidebarGroup>
             <LibrarySidebar {...dependencies.library} />
+            {workspace && (
+              <FileTree
+                {...dependencies.workspace}
+                key={workspace.scope.generation}
+                runtime={workspace}
+              />
+            )}
           </SidebarGroup>
         </SidebarContent>
       </Sidebar>

@@ -24,6 +24,7 @@ import { readGenericFilePreview } from '../generic-file-preview.ts';
 import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
 import { mountFileOrderRoutes } from './file-order.ts';
+import { workspaceFilesSchema } from '../../shared/protocols/http/files.ts';
 
 export { prepareFileOperation } from '../file-operation-guard.ts';
 export { saveFileContent, validateEditableFileWrite } from '../file-save.ts';
@@ -99,19 +100,19 @@ export function mount(app: express.Express): void {
           folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
           files: await listFilesAndFoldersAsync(),
         }));
-        res.json({
+        res.json(workspaceFilesSchema.parse({
           folder: result.folder,
           files: result.files.files,
           folders: result.files.folders,
-        });
+        }));
         return;
       }
       const listing = await listFilesAndFoldersAsync();
-      res.json({
+      res.json(workspaceFilesSchema.parse({
         folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
         files: listing.files,
         folders: listing.folders,
-      });
+      }));
     } catch (err: unknown) {
       sendError(res, err);
     }

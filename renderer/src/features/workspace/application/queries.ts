@@ -1,13 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import type { WorkspaceQueryScope } from './ports';
-import type { LibraryApi } from './ports';
+import type { FilesApi, LibraryApi, WorkspaceQueryScope } from './ports';
 
 export const libraryQueryKey = ['library', 'membership'] as const;
 
 export const workspaceQueryKeys = {
   all: ['workspace'] as const,
   folder: (folderPath: string) => ['workspace', 'folder', folderPath] as const,
+  files: (folderPath: string) => [...workspaceQueryKeys.folder(folderPath), 'files'] as const,
 };
 
 export function libraryQuery(api: LibraryApi) {
@@ -27,4 +27,13 @@ export function createWorkspaceQueryScope(
   return {
     cancel: () => queryClient.cancelQueries({ queryKey }),
   };
+}
+
+export function filesQuery(api: FilesApi, folderPath: string) {
+  return {
+    queryFn: ({ signal }: { signal: AbortSignal }) => api.load(folderPath, signal),
+    queryKey: workspaceQueryKeys.files(folderPath),
+    retry: false,
+    staleTime: 5_000,
+  } as const;
 }

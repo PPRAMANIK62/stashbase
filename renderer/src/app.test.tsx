@@ -18,6 +18,10 @@ describe('workspace shell', () => {
         openFolder: vi.fn(),
       },
     },
+    workspace: {
+      api: { load: vi.fn(), reveal: vi.fn() },
+      revealLabel: 'Show in file manager',
+    },
   };
 
   beforeEach(async () => {

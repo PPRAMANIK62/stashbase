@@ -100,8 +100,48 @@ Evidence: `pnpm test:renderer`, `pnpm test:renderer-architecture`,
 
 **Blocked by:** 25.
 
+**Status:** Complete.
+
 Use one visible-tree model for order, semantics, keyboard navigation, restricted
 entries, and bounded large-folder rendering.
+
+The active `WorkspaceRuntime` now owns serializable expansion and selection
+state while TanStack Query owns the folder-explicit listing. A shared strict
+schema validates the server producer and renderer adapter before the feature
+maps the wire response into folder-scoped domain values. The pure tree model
+builds implied parents, sorts folders before files with natural names, and
+produces the sole visible-row order consumed by rendering, ARIA position, and
+keyboard movement. Collapsed descendants do not enter that model.
+
+The Files sidebar exposes one roving tab stop and supports Up, Down, Home, End,
+Right, and Left navigation plus Enter/Space activation. Excluded and unreadable
+folders, symlinks, special entries, cloud placeholders, and unreadable files
+remain visible but reveal in the platform file manager instead of expanding or
+opening. Generic regular files remain selectable and state that Search and
+automatic Chat context exclude them. Loading, empty, error, retry, and reveal
+failure stay local to Files. Large visible trees initially render 240 rows and
+extend in 240-row pages while preserving positions from the same complete
+visible model. Tree rows and pagination compose the shared compact Button
+primitive, retaining tree-owned ARIA and keyboard semantics without importing
+the Sidebar Menu's wrapping navigation or per-row overlay measurement.
+Restrained monochrome file-format glyphs carry recognition without adding
+another header. Quiet ancestor rails and a wider child offset make nesting
+legible without changing the compact row scale. A single Fluid proximity-hover
+layer travels across visible rows while selected backgrounds and tree-owned
+focus behavior remain distinct. Opening selected documents remains with the
+document-runtime tasks; folder loss/removal and restored expansion/selection
+remain Tasks 27–28.
+
+Evidence: `renderer/src/features/workspace/domain/tree.test.ts`,
+`renderer/src/features/workspace/domain/workspace.test.ts`,
+`renderer/src/features/workspace/infrastructure/files-api.test.ts`,
+`renderer/src/features/workspace/ui/file-tree.test.tsx`,
+`renderer/src/platform/electron/file-manager.test.ts`, and
+`shared/protocols/http/files.test.ts`; `pnpm test:library-files`,
+`node --import tsx --test server/files.test.ts`, `pnpm test:protocols`,
+`pnpm test:renderer`, `pnpm typecheck`, `pnpm format:web`,
+`pnpm lint:web`, `pnpm build:web`, and
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`.
 
 ## 27 — Handle folder loss and removal
 

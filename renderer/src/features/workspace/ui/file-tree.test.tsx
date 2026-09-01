@@ -1,0 +1,198 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+
+import type { FilesApi } from '@/features/workspace/application/ports';
+import {
+  createWorkspaceRuntime,
+  type WorkspaceRuntime,
+} from '@/features/workspace/application/runtime';
+import type { WorkspaceListing } from '@/features/workspace/domain/tree';
+
+import { FileTree } from './file-tree';
+
+const listing: WorkspaceListing = {
+  files: [
+    {
+      availability: 'available',
+      format: 'md',
+      heading: 'Plan',
+      importedAt: '',
+      kind: 'regular',
+      path: 'docs/plan.md',
+      size: 42,
+      snippet: '',
+    },
+    {
+      availability: 'available',
+      format: 'generic',
+      heading: '',
+      importedAt: '',
+      kind: 'regular',
+      path: 'archive.zip',
+      size: 7,
+      snippet: '',
+    },
+    {
+      availability: 'available',
+      format: 'generic',
+      heading: '',
+      importedAt: '',
+      kind: 'symlink',
+      path: 'linked-file',
+      size: 0,
+      snippet: '',
+    },
+  ],
+  folderName: 'Research',
+  folders: [
+    { kind: 'normal', path: 'docs' },
+    { kind: 'excluded', path: 'vendor' },
+  ],
+};
+
+const runtimes: WorkspaceRuntime[] = [];
+
+function renderTree(api: FilesApi) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const runtime = createWorkspaceRuntime({
+    folder: { name: 'Research', path: '/library/research' },
+    generation: runtimes.length + 1,
+    queries: { cancel: () => queryClient.cancelQueries() },
+  });
+  runtimes.push(runtime);
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <FileTree api={api} revealLabel="Show in file manager" runtime={runtime} />
+    </QueryClientProvider>,
+  );
+}
+
+function filesApi(value: WorkspaceListing = listing): FilesApi {
+  return {
+    load: vi.fn(async () => value),
+    reveal: vi.fn(async () => undefined),
+  };
+}
+
+afterEach(() => {
+  cleanup();
+  for (const runtime of runtimes.splice(0)) runtime.dispose();
+});
+
+describe('file tree', () => {
+  it('renders one semantic visible-row model and omits collapsed descendants', async () => {
+    const api = filesApi();
+    renderTree(api);
+
+    const tree = await screen.findByRole('tree', { name: 'Files' });
+    expect(api.load).toHaveBeenCalledWith('/library/research', expect.any(AbortSignal));
+    expect(tree.tabIndex).toBe(-1);
+    expect(screen.queryByRole('treeitem', { name: 'plan.md' })).toBeNull();
+    const rows = screen.getAllByRole('treeitem');
+    expect(rows.filter((row) => row.tabIndex === 0)).toHaveLength(1);
+
+    const docs = screen.getByRole('treeitem', { name: 'docs' });
+    expect(docs.getAttribute('aria-level')).toBe('1');
+    expect(docs.getAttribute('data-proximity-index')).toBe('0');
+    expect(docs.style.paddingLeft).toBe('8px');
+    await userEvent.setup().click(docs);
+
+    const plan = await screen.findByRole('treeitem', { name: 'plan.md' });
+    expect(plan.getAttribute('aria-level')).toBe('2');
+    expect(plan.getAttribute('aria-posinset')).toBe('1');
+    expect(plan.getAttribute('data-proximity-index')).toBe('1');
+    expect(plan.style.getPropertyValue('--hover')).toBe('transparent');
+    expect(docs.style.getPropertyValue('--hover')).toBe('');
+    expect(plan.style.paddingLeft).toBe('34px');
+    expect(plan.parentElement?.querySelectorAll('[data-tree-rail]')).toHaveLength(1);
+    expect(tree.contains(plan)).toBe(true);
+  });
+
+  it('uses arrows, Home, and End over the same rendered order', async () => {
+    renderTree(filesApi());
+    const user = userEvent.setup();
+    const docs = await screen.findByRole('treeitem', { name: 'docs' });
+    docs.focus();
+
+    await user.keyboard('{ArrowRight}');
+    const plan = await screen.findByRole('treeitem', { name: 'plan.md' });
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => expect(docs.ownerDocument.activeElement).toBe(plan));
+
+    await user.keyboard('{ArrowLeft}');
+    await waitFor(() => expect(docs.ownerDocument.activeElement).toBe(docs));
+    await user.keyboard('{End}');
+    expect(docs.ownerDocument.activeElement).toBe(
+      screen.getByRole('treeitem', { name: /linked-file/ }),
+    );
+    await user.keyboard('{Home}');
+    expect(docs.ownerDocument.activeElement).toBe(docs);
+  });
+
+  it('explains generic files and reveals restricted entries without expanding them', async () => {
+    const api = filesApi();
+    renderTree(api);
+    const user = userEvent.setup();
+
+    expect(
+      await screen.findByRole('treeitem', {
+        name: 'archive.zip, excluded from Search and automatic Chat context',
+      }),
+    ).not.toBeNull();
+    const restrictedFolder = screen.getByRole('treeitem', {
+      name: 'vendor, restricted, Show in file manager',
+    });
+    expect(restrictedFolder.hasAttribute('aria-expanded')).toBe(false);
+    expect(restrictedFolder.title).toBe('Show in file manager');
+    await user.click(restrictedFolder);
+
+    expect(api.reveal).toHaveBeenCalledWith('vendor', expect.any(AbortSignal));
+    await user.click(
+      screen.getByRole('treeitem', {
+        name: 'linked-file, restricted, Show in file manager',
+      }),
+    );
+    expect(api.reveal).toHaveBeenCalledWith('linked-file', expect.any(AbortSignal));
+  });
+
+  it('keeps initial rendering bounded and progressively reveals more rows', async () => {
+    const manyFiles: WorkspaceListing = {
+      files: Array.from({ length: 250 }, (_, index) => ({
+        availability: 'available',
+        format: 'txt',
+        heading: '',
+        importedAt: '',
+        kind: 'regular',
+        path: `file-${String(index).padStart(3, '0')}.txt`,
+        size: index,
+        snippet: '',
+      })),
+      folderName: 'Large',
+      folders: [],
+    };
+    renderTree(filesApi(manyFiles));
+
+    await screen.findByRole('tree');
+    expect(screen.getAllByRole('treeitem')).toHaveLength(240);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Show 10 more' }));
+    expect(screen.getAllByRole('treeitem')).toHaveLength(250);
+  });
+
+  it('keeps listing failure and retry local to Files', async () => {
+    const load = vi
+      .fn<FilesApi['load']>()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(listing);
+    renderTree({ load, reveal: vi.fn(async () => undefined) });
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Files unavailable.');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByRole('tree', { name: 'Files' })).not.toBeNull();
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+});
