@@ -2,25 +2,25 @@
 
 This guide describes the durable product model behind StashBase. It is written
 for Agents answering product questions as well as people who want the detail.
-It reflects Shipping behavior as of 2026-08-25.
+It reflects Shipping behavior as of 2026-08-31.
 
 ## The Short Answer
 
-StashBase turns local files into Agent-ready context.
+StashBase is a Wiki for local files.
 
 People already keep valuable context in ordinary folders: notes, papers,
 contracts, project data, scanned documents, recordings, and work produced by
-earlier Agents. StashBase works with those folders in place, prepares formats
-that need help, retrieves relevant evidence, and exposes authorized context to
-built-in or external Agents.
+earlier Agents. StashBase works with those folders in place, builds visible
+source-linked Wiki Pages, prepares formats that need help, and retrieves
+relevant evidence for built-in or external Agents.
 
 The folders remain the source of truth. StashBase does not require a second
 proprietary workspace or a new file model.
 
 ```text
-Local files → Preparation where needed → Exact or Similar retrieval → Agents
-     ↑                                                               │
-     └────────────── reviewed, Agent-written ordinary files ──────────┘
+Sources ────────────────→ Document Workbench
+   ├→ Build Wiki → Wiki Pages ───────────────────┐
+   └→ Prepare → Exact / Similarity Search ───────┴→ Agents
 ```
 
 ## Who It Is For
@@ -40,7 +40,12 @@ Typical uses include:
 - beginning with a Library conversation and creating an ordinary project only
   when the idea becomes worth keeping.
 
-## The Three Product Capabilities
+## The Wiki and Three Product Capabilities
+
+The Wiki brings together **Sources**, visible source-linked **Wiki Pages**,
+Search, and Agent work. Wiki Pages begin at `wiki/index.md`, with optional
+focused pages beside it. Similarity Search adds meaning-based retrieval without
+becoming a second knowledge store.
 
 ### Document Workbench
 
@@ -51,12 +56,12 @@ format-specific viewers keep source work in the same workspace as Chat.
 ### Local RAG Layer
 
 Preparation turns hard-to-read formats into current derived text. Exact Search
-finds matching words without AI Index. Similar Search uses the optional AI
-Index to find related meaning even when the wording differs. Search evidence
-always resolves back to the visible source file.
+finds matching words without additional setup. Similarity Search finds related
+meaning even when the wording differs. Search evidence always resolves back to
+the visible Source.
 
 "Local" describes ownership of source files, derived state, and index
-lifecycle. A configured hosted AI Index may process extracted text outside the
+lifecycle. A configured hosted Similarity Search may process extracted text outside the
 computer; that choice must remain explicit.
 
 ### Agent Panel
@@ -86,9 +91,9 @@ Every built-in conversation is scoped to the whole Library or one member
 folder. Once a draft, attachment, turn, or restored conversation has started,
 switching the window's current folder does not silently rebind that Chat.
 
-### Source file
+### Source
 
-A source file is the user-owned, visible, authoritative file on disk. Tabs,
+A Source is the user-owned, visible, authoritative original file on disk. Tabs,
 links, search results, and Agent artifacts resolve to this identity.
 
 ### Derived data
@@ -100,14 +105,23 @@ visible workspace and never become replacement source files.
 ### Preparation
 
 Preparation is the format-specific work that makes PDF, DOCX, images, audio,
-and video useful as search or Agent context. It is separate from AI Index
+and video useful as search or Agent context. It is separate from Similarity Search
 readiness. A file may be previewable before its derived text is ready.
 
-### AI Index
+### Similarity Search
 
-AI Index is the optional meaning-based index used by Similar Search. It can use
-hosted StashBase capacity after sign-in or a user-provided OpenAI/OpenRouter key.
-Exact Search and ordinary local file work do not require it.
+Similarity Search is optional meaning-based retrieval across Sources and Wiki
+Pages. It can use hosted StashBase capacity after sign-in or a user-provided
+OpenAI/OpenRouter key. Exact Search and ordinary local file work do not require
+it.
+
+### Wiki Pages
+
+Build Wiki is the explicit folder-level action that asks the selected
+Agent to create or improve `wiki/index.md` and focused pages under `wiki/`.
+These are ordinary user-owned Markdown files. The action links to Sources and
+modifies only `wiki/`; moving, renaming, deleting, or broadly rewriting Sources
+requires a separate explicit decision.
 
 ### Canvas
 
@@ -123,13 +137,13 @@ project state.
 |---|---|---|
 | Local folders and source files | User | They remain ordinary files and the source of truth. |
 | Prepared text, previews, indexes, and status | StashBase | Rebuildable application-owned state outside the workspace. |
-| StashBase account session and AI Index credentials | StashBase Settings | Used only for the selected indexing source. |
-| Claude Code or Codex credentials and history | The selected Agent runtime | Separate from StashBase sign-in and AI Index configuration. |
-| Agent-created source files | User after an explicit write | Visible ordinary files that re-enter browsing, search, and future Agent work. |
+| StashBase account session and Similarity Search credentials | StashBase Settings | Used only for the selected provider. |
+| Claude Code or Codex credentials and history | The selected Agent runtime | Separate from StashBase sign-in and Similarity Search configuration. |
+| Wiki Pages and other Agent-created source files | User after an explicit write | Visible ordinary files that re-enter browsing, search, and future Agent work. |
 
 Local browsing, preview, editing, Preparation, and Exact Search do not require
-a cloud account. When hosted AI Index is selected, extracted text may be sent
-to that provider for indexing and Similar Search. When an Agent is used, the
+a cloud account. When hosted Similarity Search is selected, extracted text may
+be sent to that provider for indexing and retrieval. When an Agent is used, the
 context it reads is handled according to that Agent provider's account and
 data terms.
 
@@ -147,8 +161,8 @@ rather than hidden expansion of the Library boundary.
 - It does not expose generated chunks, transcripts, or vector records as files
   the user must organize.
 - It does not ask an Agent to reorganize files autonomously in the background.
-- It does not require a knowledge graph, wiki, tagging discipline, or one
-  preferred Agent.
+- It does not require a knowledge graph, tagging discipline, proprietary Wiki
+  format, or one preferred Agent.
 - Its MCP tools are not a general-purpose host filesystem API.
 
 ## What Makes Work Durable

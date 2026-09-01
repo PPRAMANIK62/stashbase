@@ -8,8 +8,8 @@
 
 | State | Owner | Truth rule |
 |---|---|---|
-| Source files and Agent instruction files | User filesystem | Durable source of truth |
-| Library membership, credentials, preferences | App config | Durable product configuration |
+| Sources and Wiki Page Markdown | User filesystem | Durable source of truth |
+| Library membership, Agent Instructions, credentials, preferences | App config | Durable product configuration |
 | Prepared text and assets | AppData | Rebuildable; valid only for the current source |
 | Preparation failures and explicit cancellation | AppData state database | Durable attention and user intent |
 | Queued, yielded, and running work | Process-wide scheduler | Disposable; reconcile must rediscover loss |
@@ -24,8 +24,9 @@
   semantic row and reports the decode failure. Generic workspace files remain
   outside Preparation, exact retrieval, semantic admission, and automatic Agent
   context.
-- Image OCR is complete only when current, searchable derived text carries its
-  completion marker. Empty OCR is a failure, not success.
+- Image OCR is complete when its current derived result carries the completion
+  marker. The result may contain no text: that is a stable, non-searchable
+  success and must not create a preparation failure or retry loop.
 - PDF text is complete only when current derived Markdown has the terminal
   completion marker. Batch scratch is resumable work, never truth.
 - Durable DOCX text is complete only when current sanitized derived HTML has
@@ -37,6 +38,13 @@
 - Conversion completion is independent of semantic indexing. Current prepared
   text can serve exact retrieval while semantic indexing is disabled, pending,
   paused, or failed.
+- A Chat's Similarity Search switch is consumption policy only. Off routes its
+  attributed retrieval through direct and current prepared text without
+  pausing Preparation, reconcile, or semantic indexing.
+- **wiki/** pages are ordinary visible Markdown, not AppData-derived state.
+  Agent write reconciliation admits them through the same exact/semantic paths
+  as other Markdown. Similarity Search activation/backfill and Build Wiki
+  may complete independently.
 
 ## Scheduler and Cancellation
 
@@ -246,6 +254,8 @@ Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folde
 plus the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
 core loop and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
-for registration and initial sync of an Agent-created member.
+for registration and initial sync of an Agent-created member, and
+[J12](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder)
+for Wiki Page admission and independent Similarity Search activation.
 Related contracts: [File Transactions](file-transactions.md),
 [MCP Access](mcp-access.md), and [Release Pipeline](release-pipeline.md).

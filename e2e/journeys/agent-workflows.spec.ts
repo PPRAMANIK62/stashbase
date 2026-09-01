@@ -37,6 +37,57 @@ async function selectCodex(page: LaunchedApp['page']): Promise<void> {
   await page.getByRole('menuitem', { name: 'Codex' }).click();
 }
 
+test('J12 builds source-linked Wiki Pages independently from first-folder Similarity Search setup', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  configureFakeAgent(fixture);
+  const sourceFile = path.join(fixture.workspaces.projectA, 'Welcome.md');
+  const originalSource = fs.readFileSync(sourceFile, 'utf8');
+  const wikiFile = path.join(fixture.workspaces.projectA, 'wiki', 'index.md');
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(app.page.getByRole('heading', { name: 'Set up Similarity Search' })).toBeVisible();
+    await app.page.getByRole('button', { name: 'Not now', exact: true }).click();
+    await selectCodex(app.page);
+    await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
+
+    const panel = activeAgentPanel(app.page);
+    const heading = panel.getByRole('heading', { name: 'Your Wiki is here.' });
+    const buildWikiPages = panel.getByRole('button', { name: 'Build Wiki', exact: true });
+    await expect(heading).toBeVisible();
+    await expect(buildWikiPages).toBeVisible();
+    const [panelBox, headingBox, buildWikiPagesBox] = await Promise.all([
+      panel.boundingBox(),
+      heading.boundingBox(),
+      buildWikiPages.boundingBox(),
+    ]);
+    expect(panelBox).not.toBeNull();
+    expect(headingBox).not.toBeNull();
+    expect(buildWikiPagesBox).not.toBeNull();
+    if (!panelBox || !headingBox || !buildWikiPagesBox) throw new Error('Build Wiki empty-state geometry is unavailable');
+    const panelCenter = panelBox.y + panelBox.height / 2;
+    const actionGroupCenter = (headingBox.y + buildWikiPagesBox.y + buildWikiPagesBox.height) / 2;
+    expect(Math.abs(actionGroupCenter - panelCenter)).toBeLessThan(panelBox.height * 0.15);
+
+    await buildWikiPages.click();
+    await expect(app.page.getByRole('heading', { name: 'Set up Similarity Search' })).toHaveCount(0);
+    await expect(panel.getByText('Build or update Wiki Pages from these Sources.', { exact: true })).toBeVisible();
+    await expect(panel.getByText('Allow Codex to write wiki/index.md?')).toBeVisible();
+
+    await panel.getByRole('button', { name: 'Allow', exact: true }).click();
+    await expect(panel.getByText('wiki/index.md now maps the folder.')).toBeVisible();
+    await expect(fileTreeRow(app.page, 'wiki')).toBeVisible();
+    await expect.poll(() => fs.readFileSync(wikiFile, 'utf8')).toContain('[Welcome](../Welcome.md)');
+    expect(fs.existsSync(path.join(fixture.workspaces.projectA, 'WIKI.md'))).toBe(false);
+    expect(fs.readFileSync(sourceFile, 'utf8')).toBe(originalSource);
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
 test('J07 converges an approved Agent write into a reviewed durable Canvas', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   configureFakeAgent(fixture);
@@ -121,13 +172,17 @@ test('J11 creates a project only after approval and continues the same conversat
     await expect(panel.getByText(`${projectName} is ready and this conversation moved into it.`)).toBeVisible();
 
     await expect(app.page).toHaveTitle(`${projectName} — StashBase`);
+    // This is the first folder activated in the Library-scoped journey, so
+    // the independent one-time Similarity Search setup offer may open after project rebind.
+    await dismissEmbeddingKeyPrompt(app.page);
     await expect(folderSwitcherTrigger(app.page)).toContainText(projectName);
     panel = activeAgentPanel(app.page);
     composer = panel.locator('[aria-label="Message agent"]');
     await expect(panel.getByRole('button', { name: `Session folder: ${projectName}` })).toBeVisible();
     await expect(panel.getByText('journey:j11 create project denied', { exact: true })).toBeVisible();
     await expect(panel.getByText('journey:j11 create project approved', { exact: true })).toBeVisible();
-    await expect.poll(() => fs.existsSync(path.join(projectFolder, 'AGENTS.md'))).toBe(true);
+    await expect.poll(() => fs.existsSync(projectFolder)).toBe(true);
+    expect(fs.existsSync(path.join(projectFolder, 'AGENTS.md'))).toBe(false);
 
     await expect(composer).toHaveAttribute('contenteditable', 'true');
     await composer.fill('journey:j11 continue in project');

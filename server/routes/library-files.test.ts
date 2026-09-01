@@ -6,6 +6,7 @@ import { mount } from './library-files.ts';
 
 test('library search validates and forwards file-type filters', async () => {
   let searchInput: Record<string, unknown> | undefined;
+  let attributedSession: string | undefined;
   const operations = createLibraryOperations({
     normalizeSearchScope: async (_folder, pathPrefix) => ({
       folderRoot: '/library',
@@ -19,6 +20,10 @@ test('library search validates and forwards file-type filters', async () => {
         truncated: false,
       };
     } },
+    similaritySearchEnabled: (sessionId) => {
+      attributedSession = sessionId;
+      return sessionId === 'panel-session' ? false : null;
+    },
   });
   const app = express();
   app.use(express.json());
@@ -66,6 +71,20 @@ test('library search validates and forwards file-type filters', async () => {
       caseStrict: true,
       wholeWord: true,
     });
+
+    searchInput = undefined;
+    const policySearch = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-stashbase-agent-session-id': 'panel-session',
+      },
+      body: JSON.stringify({ query: 'prepared evidence', mode: 'semantic', folder: '/library' }),
+    });
+    assert.equal(policySearch.status, 200);
+    assert.equal(attributedSession, 'panel-session');
+    assert.equal((searchInput as Record<string, unknown> | undefined)?.mode, 'keyword');
+    assert.equal((await policySearch.json() as { mode: string }).mode, 'keyword');
 
     searchInput = undefined;
     const invalid = await fetch(url, {

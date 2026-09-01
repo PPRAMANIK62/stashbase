@@ -36,6 +36,9 @@
 - App-maintained derived paths are never writable source targets. Dot-directory
   Agent configuration remains writable even though dot-directories stay out of
   the knowledge index.
+- Folder entry, Agent startup, and `create_project` never create or edit
+  runtime instruction files. StashBase-managed Agent Instructions are
+  application config, not a filesystem transaction.
 - Request-handling Adapters perform potentially slow realpath,
   canonicalization, existence, and type checks asynchronously. A sync path
   resolver is allowed only where its caller is already outside the shared Node
@@ -62,6 +65,11 @@ unrelated event-loop work live while native realpath is artificially delayed.
 
 - Text versions are hashes of complete source bytes, not mtimes.
 - Renderer saves and Agent/MCP writes use the same version authority.
+- Build Wiki does not define a new write API or bypass approval/version rules.
+  Its default Agent contract writes only under **wiki/**, uses
+  **wiki/index.md** as the entry page, preserves everything outside that
+  directory, and treats move, rename, delete, or broad rewrites as a separately
+  proposed action requiring explicit approval.
 - Every content-write Adapter enforces the same accepted text-format set. A
   public tool description must not advertise a narrower or broader set than
   the operation actually accepts.
@@ -108,13 +116,11 @@ blocked until that decision succeeds, fails, or is cancelled:
 - Merge opens a dirty draft with conflict markers and saves it against the disk
   snapshot through the ordinary versioned path.
 
-### Clean folder entry — no automatic instruction seeding
+### Clean folder entry — no instruction-file writes
 
-Folder entry is navigation-only and performs no unsolicited filesystem mutations:
-opening a folder never seeds `AGENTS.md` or modifies foreign working trees.
-Instruction seeding is strictly scoped to explicit Agent session initiation or
-rebind (`server/agent.ts`, `server/codex-session-runtime.ts`) and explicit project
-creation (`server/agent-projects.ts`).
+Folder entry is navigation-only and performs no unsolicited filesystem
+mutations: opening or re-entering a folder never creates, migrates, or edits
+Agent instruction files in the user's source tree.
 
 ## Mutation Sequence
 
@@ -269,4 +275,6 @@ Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folde
 plus the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
 core loop and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
-for safe project target creation.
+for safe project target creation, and
+[J12](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder)
+for constrained Wiki Page writeback.

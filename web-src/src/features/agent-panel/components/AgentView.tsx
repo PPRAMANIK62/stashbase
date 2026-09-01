@@ -24,7 +24,7 @@ import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContex
 import { Button } from '@/common/components/ui/button';
 import { AgentComposer } from '@/features/agent-panel/components/AgentComposer';
 import { AgentRuntimeGate } from '@/features/agent-panel/components/AgentRuntimeGate';
-import { EmptyChatGreeting, EmptyChatSuggestion } from '@/features/agent-panel/components/AgentEmptyState';
+import { BuildWikiPagesAction, EmptyChatGreeting } from '@/features/agent-panel/components/AgentEmptyState';
 import { MessageList } from '@/features/agent-panel/components/AgentMessages';
 import { useAgentAttachments } from '@/features/agent-panel/hooks/useAgentAttachments';
 import { useAgentSession } from '@/features/agent-panel/hooks/useAgentSession';
@@ -69,7 +69,7 @@ export function AgentView({
   });
   // The session groups its state by owner; destructure the namespaces once
   // so the JSX below reads as composition rather than prop threading.
-  const { controls, mentions, queue, runtime, skills, transcript } = session;
+  const { controls, mentions, queue, runtime, similaritySearch, skills, transcript, wiki } = session;
 
   const [dragOver, setDragOver] = useState(false);
 
@@ -116,11 +116,34 @@ export function AgentView({
   const showRuntimeGate = !runtime.runtime || runtime.bootstrapActive || runtime.bootstrapFailed || runtime.runtimeUnavailable;
 
   // Empty chat (no turns yet, session usable) renders the hero layout:
-  // greeting + centered composer + starter templates. Any transcript
+  // greeting + centered composer. Any transcript
   // content, a queued prompt, or a closed/failed session falls back to the
   // standard transcript-over-bottom-composer layout. The composer keeps its
   // `key` so the same mounted instance moves between the two layouts.
   const emptyChat = transcript.blocks.length === 0 && queue.queuedTurns.length === 0 && transcript.phase !== 'closed' && !transcript.fatal;
+  const folderScoped = controls.sessionScope.kind === 'folder';
+  const canOfferBuildWikiPages = folderScoped
+    && transcript.blocks.length === 0
+    && queue.queuedTurns.length === 0
+    && !transcript.fatal
+    && (!controls.hasDraftText && attach.attachments.length === 0 || wiki.pending);
+
+  function requestBuildWikiPages() {
+    if (!wiki.requestBuildWikiPages()) return;
+    // Building the Wiki is independent of semantic indexing, but the
+    // Built-in Agent still needs its own model source before it can write.
+    if (agent === 'stashbase' && runtime.runtime?.bootstrap?.failure?.code === 'account-required') {
+      openSettings('agents');
+    }
+  }
+
+  const buildWikiPagesAction = canOfferBuildWikiPages ? (
+    <BuildWikiPagesAction
+      pending={wiki.pending}
+      onBuild={requestBuildWikiPages}
+      onCancel={wiki.cancelBuildWikiPages}
+    />
+  ) : null;
 
   return (
     // `agent-view` stays as a routing hook: useGlobalDragDrop uses
@@ -160,15 +183,16 @@ export function AgentView({
           onOpenAccount={() => openSettings('agents')}
           onCopyInstall={runtime.copyInstallHint}
           onOpenMcpSetup={() => openSettings('mcp')}
+          footer={buildWikiPagesAction}
         />
       ) : <>
         {emptyChat ? (
           // Empty chat: the composer is the hero. The greeting bottoms out
-          // this flex-[3] band and the rotating suggestion bottoms out the
-          // flex-[4] band below the composer, so the input rests just above
-          // the vertical center (Cursor-style) at every panel height. Only
-          // the VERTICAL placement changes on send — the composer holds one
-          // width in both states, and the transcript adopts it.
+          // this flex-[3] band. Folder scope balances it with an equal empty
+          // band below the fixed composer + Build Wiki action, centering the
+          // whole action group. Only the VERTICAL placement changes on send — the
+          // composer holds one width in both states, and the transcript
+          // adopts it.
           <div key="empty-above" className="flex min-h-0 flex-[3] flex-col justify-end overflow-hidden px-2">
             <div className="mx-auto w-measure-md">
               <EmptyChatGreeting
@@ -193,6 +217,7 @@ export function AgentView({
             onTurnFailureAction={transcript.handleTurnFailureAction}
             onPermission={transcript.replyPermission}
             onSteerQueued={queue.steerQueuedPrompt}
+            onDeleteQueued={queue.deleteQueuedPrompt}
             onCopyUserMessage={transcript.copyUserMessage}
             onResendUserMessage={queue.resend}
             onRetry={transcript.reconnectAfterFatal}
@@ -214,7 +239,6 @@ export function AgentView({
         turnActive={transcript.turnActive}
         active={active}
         agentShortName={session.meta.shortName}
-        prefill={transcript.prefill}
         closedPlaceholder={transcript.scopeRetired ? 'Folder removed — start a Library chat to continue…' : undefined}
         mode={{ show: runtime.capabilities?.modes === true, value: controls.mode, onSet: controls.changeMode }}
         effort={{
@@ -240,8 +264,13 @@ export function AgentView({
           current: controls.sessionScope,
           entries: controls.folderEntries,
           homeDir: workspace.homeDir,
-          locked: controls.folderLocked,
+          locked: controls.folderLocked || wiki.pending,
           onSet: controls.changeScope,
+        }}
+        similaritySearch={{
+          enabled: similaritySearch.enabled,
+          availabilityKnown: similaritySearch.availabilityKnown,
+          onChange: similaritySearch.change,
         }}
         mentions={{ files: mentions.mentionFiles, folders: mentions.mentionFolders }}
         skills={{ list: skills.skills, state: skills.skillState, onRefresh: skills.refreshSkills }}
@@ -258,19 +287,8 @@ export function AgentView({
         onSend={queue.send}
         onStop={transcript.stop}
       />
-      {emptyChat && (
-        <div key="empty-below" className="scrollbar-quiet flex min-h-0 flex-[4] flex-col overflow-y-auto px-2">
-          {/* mt-auto pins the suggestion toward the pane's bottom edge when
-            * there is room, turning the leftover space into deliberate
-            * composition; on short panels it simply sits below the composer. */}
-          <div className="mt-auto shrink-0">
-            <EmptyChatSuggestion
-              onPrefill={(text) => transcript.setPrefill({ text, nonce: Date.now() })}
-              libraryScoped={controls.sessionScope.kind === 'library'}
-            />
-          </div>
-        </div>
-      )}
+      {emptyChat && folderScoped && buildWikiPagesAction}
+      {emptyChat && <div key="empty-below" className="min-h-0 flex-[3]" aria-hidden="true" />}
       </>}
     </div>
   );

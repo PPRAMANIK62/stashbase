@@ -1,25 +1,19 @@
 /**
- * Owns the AI Index setup dialog. Mounted once at the app root, always —
+ * Owns the Similarity Search setup dialog. Mounted once at the app root, always —
  * not only when a folder is open — so it can resolve the app-wide
  * `embedderHasKey` fact even in a bare window, which is what lets the standing
  * Files-panel callout (and its "Set up" action) work before any folder opens.
  *
- * The dialog AUTO-OPENS whenever AI Index is neither authorized nor skipped
- * for the window's current context — including the bare window a fresh
- * launch boots into (J01: a fresh window does not resume a folder), so the
- * first open of a new window makes the offer without waiting for a folder.
- * Setting up a source is strongly recommended — an unindexed library has a
- * degraded Agent — but not forced: browsing, editing, preview, and keyword
- * search are local computations and stay available, so the dialog has a
- * deliberate, low-emphasis exit to "basic mode".
+ * The dialog opens once when the first folder becomes active and no embedding
+ * source is authorized. A bare Library never prompts. Explicit capability actions
+ * and the standing Files-panel entry can reopen it later; a durable Not now
+ * choice prevents automatic re-prompts without hiding those manual routes.
  *
  * Daily use is not tied to online auth (the check is a localhost call).
  * Activation persists as the selected source (and a credential when that
- * source requires one). The skip, by contrast, is per context within this window (see
- * `embeddingAuth`): a fresh window or a different folder offers indexing
- * again rather than staying silently opted out, while a bare-window skip
- * carries into the first folder opened so one launch is one offer; the skip
- * clears on activation, so removing a key re-gates cleanly.
+ * source requires one). Completing or declining this invitation records it
+ * as seen across folders and relaunches. Deliberately removing a source later
+ * exposes the standing setup actions without replaying onboarding.
  *
  * The gate owns the dialog rather than the card, because the post-save work
  * is app-level: reducer state, the validation-warning toast, marking visible
@@ -27,13 +21,13 @@
  *
  * Exits:
  *   • Select a source or save a key — activates; dialog closes.
- *   • Skip for now — records basic mode; dialog closes. The
- *     Files-panel "Set up AI Index" entry (and Settings) reopen it later.
+ *   • Not now — records that onboarding was handled; dialog closes. The
+ *     Files-panel Set up entry (and Settings) can reopen it later.
  */
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { useEmbedderState } from '@/common/hooks/useEmbedderState';
-import { hasSkippedAiIndexing, isEmbeddingAuthorized, setAiIndexingSkipped } from '@/common/lib/embeddingAuth';
+import { hasSeenSimilaritySearchSetup, isEmbeddingAuthorized, setSimilaritySearchSetupSeen } from '@/common/lib/embeddingAuth';
 import { type EmbedderState } from '@/common/api/apiTypes';
 import { lazyWithRetry } from '@/common/components/ErrorBoundary';
 import { useOverlayLayer } from '@/common/components/OverlayStack';
@@ -53,17 +47,16 @@ export function EmbedderRequireKeyGate() {
   // Fetch regardless of folder so `embedderHasKey` is an app-wide fact: the
   // Files-panel callout must be able to show (and its "Set up" must work)
   // even in a bare window with nothing open yet. embedderHasKey is part of
-  // the key: removing the key in Settings must re-gate right away
-  // ("removing a key later re-gates cleanly"), not wait for the next folder
-  // switch.
+  // the key: removing a key must update the standing setup surfaces right
+  // away, even though the one-time onboarding dialog does not replay.
   const onLoaded = useCallback((embedder: EmbedderState) => {
     dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: embedder.authorized });
-    // Recommend, don't force. Auto-open in the bare window too — the first
-    // open of a new window makes the offer without waiting for a folder.
-    // The skip is per context within the window (see embeddingAuth), so a
-    // different folder — or a fresh window — re-offers rather than staying
-    // silently skipped.
-    setOpen(!isEmbeddingAuthorized(embedder) && !hasSkippedAiIndexing(folder));
+    // An already-authorized installation has necessarily handled setup,
+    // including installations upgraded from before this preference existed.
+    if (isEmbeddingAuthorized(embedder)) setSimilaritySearchSetupSeen(true);
+    if (folder && !isEmbeddingAuthorized(embedder) && !hasSeenSimilaritySearchSetup()) {
+      setOpen(true);
+    }
   }, [dispatch, folder]);
   const { embedder: state, patchEmbedder } = useEmbedderState({
     refreshKey: `${folder ?? ''}|${appState.embedderHasKey}`,
@@ -72,11 +65,11 @@ export function EmbedderRequireKeyGate() {
 
   const finishSetup = useCallback((backfillStarted?: boolean) => {
     dispatch({ type: 'EMBEDDER_KEY_STATE', hasKey: true });
-    setAiIndexingSkipped(false, folder);
+    setSimilaritySearchSetupSeen(true);
     setOpen(false);
     if (backfillStarted) void actions.markVisibleFilesPendingForSearch();
     void actions.refreshIndexState();
-  }, [actions, dispatch, folder]);
+  }, [actions, dispatch]);
 
   useEffect(() => {
     function onOpen() { setOpen(true); }
@@ -93,8 +86,6 @@ export function EmbedderRequireKeyGate() {
         isTopmost={layer.isTopmost}
         onSaved={(provider, model, backfillStarted, warning) => {
           patchEmbedder((s) => ({ ...s, provider, model, hasKey: true, authorized: true, source: provider }));
-          // Activated: clear any prior basic-mode choice so a future key
-          // removal re-gates from a clean state instead of staying skipped.
           if (warning) actions.toast(`API key saved, but validation could not reach the provider: ${warning}`, { level: 'warning' });
           finishSetup(backfillStarted);
         }}
@@ -108,10 +99,9 @@ export function EmbedderRequireKeyGate() {
           finishSetup(backfillStarted);
         }}
         onSkip={() => {
-          // Deliberate opt-out to basic mode for THIS folder in this
-          // window; another folder (or a relaunch) re-offers. The
-          // Files-panel entry reopens it any time.
-          setAiIndexingSkipped(true, folder);
+          // One deliberate dismissal quiets automatic onboarding across
+          // folders and relaunches; manual setup routes remain available.
+          setSimilaritySearchSetupSeen(true);
           setOpen(false);
         }}
       />

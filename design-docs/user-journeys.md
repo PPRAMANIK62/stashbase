@@ -11,8 +11,9 @@ engineering contracts rather than being copied into every journey.
 
 J01 Onboarding and J10 Core Loop are the two product-level critical journeys.
 J01 proves that a new user can understand the product and reach first value;
-J10 proves that the resulting environment supports durable repeated work. J11
-Conversation to Project is the Chat-first activation branch between them. The
+J10 proves that the resulting environment supports durable repeated work. J12
+Build Wiki is the default folder activation path, while J11 Conversation
+to Project is the Chat-first branch between them. The
 other journeys own the capabilities and recovery paths they compose.
 
 ## J01: Complete onboarding and reach first value
@@ -20,7 +21,7 @@ other journeys own the capabilities and recovery paths they compose.
 ### Outcome
 
 A first-time user understands StashBase's local-file model, authorizes useful
-context, makes informed optional AI choices, and reaches a concrete first
+context, makes an informed optional Similarity Search choice, and reaches a concrete first
 result without completing unnecessary setup. On the next launch, completed
 choices and authorized content remain recognizable without replaying
 onboarding.
@@ -29,7 +30,8 @@ onboarding.
 
 StashBase starts in a first-use window. The default folder home may be pristine,
 may already contain user content, or the user may want to add an existing
-folder. No account, AI Index source, active folder, or Agent runtime is assumed.
+folder. No account, Similarity Search configuration, active folder, or Agent
+runtime is assumed.
 
 ### Primary Flow
 
@@ -41,20 +43,21 @@ folder. No account, AI Index source, active folder, or Agent runtime is assumed.
    Library-scoped Chat a question grounded in its detailed guides, or add an
    existing folder. An existing folder home is never seeded or modified by
    onboarding.
-3. **Choose AI Index deliberately.** See why meaning-based retrieval is
-   recommended, whether a hosted or bring-your-own-key source would be used,
-   and what remains local. Configure it or deliberately skip for now without
-   losing local functionality.
-4. **Enter the workspace.** Select a library folder and begin browsing before
+3. **Enter the workspace.** Select a library folder and begin browsing before
    preparation or indexing completes. A fresh window does not silently choose
    a folder on the user's behalf.
+4. **Choose optional Similarity Search.** The first activated folder offers
+   hosted or bring-your-own-key setup. Configure it or choose **Not now**
+   without losing local functionality or the ability to build Wiki Pages. Either choice is
+   remembered across folders and relaunches; Similarity Search, the persistent
+   setup action, and Settings remain manual routes back.
 5. **Reach first value.** Open a real source and complete at least one useful
    action: inspect the document, retrieve source evidence, or explicitly set up
    a scoped Agent Chat. The next useful action stays visible without requiring
    every optional capability first.
 6. **Return.** Close and relaunch StashBase. The library, durable settings, and
-   completed setup remain available; transient skips and active-folder choice
-   follow their documented scope rather than becoming hidden global state. A
+   completed setup remain available; the handled onboarding choice is not
+   replayed, while active-folder choice follows its documented scope. A
    packaged build may quietly check the stable release channel when the saved
    default-on preference permits it. One deliberate Update action may then
    download, install, and relaunch after open edits are saved; Linux package
@@ -62,29 +65,31 @@ folder. No account, AI Index source, active folder, or Agent runtime is assumed.
 
 ### Required Observable Results
 
-- Before granting access or configuring AI, the user can distinguish source
-  files, StashBase-derived data, and optional hosted processing well enough to
-  make the next decision deliberately.
+- Before granting access or configuring Similarity Search, the user can
+  distinguish Sources, StashBase-derived data, and optional hosted processing
+  well enough to make the next decision deliberately.
 - The shortest path to first value is authorizing or selecting useful content,
   not creating an account, installing an Agent, or waiting for all background
   work.
 - Local browsing, editing, preview, and Exact Search do not depend on online
-  authentication, AI Index readiness, transcription, or an Agent runtime.
+  authentication, Similarity Search readiness, transcription, or an Agent runtime.
 - The seeded Start Here content appears only for a pristine default folder
   home, gives people a concise Welcome, makes detailed grounded product context
   available to Agents, remains an ordinary user-owned folder, is not
   overwritten by app updates, and is never recreated after deletion.
-- A fresh window does not silently select a folder, send a prompt, or install
-  an Agent runtime.
-- A deliberate AI Index skip does not immediately repeat during the first
-  folder entry in the same launch and remains reversible.
+- A fresh window does not silently select another folder, send a prompt,
+  install an Agent runtime, or open Similarity Search setup. The first folder activation may
+  open the one-time setup invitation, but no later folder or relaunch repeats
+  it after the user completes or declines it.
+- A deliberate Similarity Search skip remains reversible through the
+  persistent action and does not prevent pending Wiki Pages from being built.
 - Reaching first value leaves a clear route into Search, scoped Chat, or the
   J10 durable core loop without forcing one universal workflow.
 - Returning users recognize their library and completed durable setup without
   replaying first-use explanation or losing access when an optional online
   capability is unavailable.
-- When a user chooses Google sign-in for hosted AI Index, the sidebar, account
-  menu, and Settings consistently identify the connected person by optional
+- When a user chooses Google sign-in for hosted Similarity Search, the sidebar,
+  account menu, and Settings consistently identify the connected person by optional
   provider profile data plus the full email, without making profile loading a
   prerequisite for local or hosted work.
 
@@ -140,8 +145,8 @@ A failed or slow open remains retryable and does not strand another window or
 folder context. Failed, cancelled, or rejected GitHub imports clean up staging
 directories completely without corrupting existing library members. Removal
 either finishes its owned cleanup before membership is committed or remains
-recoverable without deleting user files. Folder entry maintains pristine working
-trees without automatic instruction seeding.
+recoverable without deleting user files. Opening or re-entering a folder never
+creates or edits an Agent instruction file.
 
 ### Evidence
 
@@ -247,7 +252,7 @@ new knowledge and has opted into clipboard-image offers in Settings.
   derived state and never appears as a second workspace file.
 - Completion means format-specific output is both complete and fresh for the
   current source bytes.
-- Preparation readiness and AI Index readiness remain distinguishable.
+- Preparation readiness and Similarity Search readiness remain distinguishable.
 - Generated text, checkpoints, and indexes never become workspace files.
 
 ### Degradation and Recovery
@@ -273,13 +278,13 @@ the visible source that supports it.
 The library contains direct-text readable or currently prepared sources as
 classified by the
 [Documents format capability matrix](design/documents.md#format-capability-matrix).
-AI Index may be ready, partially ready, disabled, or unavailable.
+Similarity Search may be ready, partially ready, not set up, or unavailable.
 
 ### Primary Flow
 
 1. Enter one query in library search.
-2. Use Exact Search without AI Index or Similar Search with an explicitly
-   selected hosted or bring-your-own-key source.
+2. Use Exact Search without additional setup, or use Similarity Search with an
+   explicitly selected hosted or bring-your-own-key provider.
 3. Optionally narrow the query to one member folder.
 4. Review ranked evidence and readiness guidance.
 5. Open a result in its visible source context.
@@ -332,10 +337,15 @@ disconnected, or recoverable.
    continue**. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
    finish the provider-owned browser flow started by that same runtime.
 4. Connect StashBase context and send a prompt.
-5. Inspect streaming output, tool activity, permissions, runtime-supported
+5. Optionally customize **Agent Instructions** for the Chat's working folder.
+   The readable default already applies; StashBase stores a
+   customization without writing to the source folder.
+6. Optionally turn **Similarity Search** Off to constrain Agent retrieval to
+   text matching, or leave it On to add meaning-based retrieval.
+7. Inspect streaming output, tool activity, permissions, runtime-supported
    attachments, failures, and file artifacts.
-6. Continue, edit and resend, or open a source beside the same mounted Chat.
-7. Switch workspace folders without silently rebinding started work.
+8. Continue, edit and resend, or open a source beside the same mounted Chat.
+9. Switch workspace folders without silently rebinding started work.
 
 ### Required Observable Results
 
@@ -344,7 +354,7 @@ disconnected, or recoverable.
 - Built-in uses only its included pinned runtime and account allowance;
   its account token is absent from the renderer and OpenCode state.
 - Signing in for Built-in establishes account identity without silently
-  activating hosted AI Index; that source remains an explicit setup or
+  activating hosted Similarity Search; that source remains an explicit setup or
   Settings choice.
 - Built-in does not offer transient attachments until its isolated
   runtime can read their bytes through an authorized scope. Bring-your-own
@@ -357,6 +367,16 @@ disconnected, or recoverable.
   provider credential.
 - A started draft, turn, attachment set, or restored conversation retains its
   visible scope.
+- A follow-up submitted during an active turn remains visibly waiting and can
+  be deleted individually before send without interrupting that turn or
+  removing another queued follow-up. Steering remains available only when the
+  selected runtime supports it.
+- Agent Instructions use a concrete working folder. The packaged default
+  applies until that folder is customized, while Library-wide Chats use the
+  default without exposing a Library-wide customization. A save persists in
+  StashBase application config and reaches matching folder Chats from their
+  next message without creating or changing `AGENTS.md`, `CLAUDE.md`, or
+  another source file.
 - Removing that scope silently returns only a completely blank Chat to
   Library. Any Chat containing user work remains readable, cancels unfinished
   work without presenting a transport failure, and offers **New Library Chat**
@@ -370,6 +390,10 @@ disconnected, or recoverable.
   turn failure.
 - Tool and source use remain inspectable without turning generated artifacts
   or transcripts into hidden product state.
+- Similarity Search affects only the live Chat's retrieval strategy. Off keeps
+  `search_library` available across the authorized scope using direct and
+  current prepared text, while On may additionally use meaning-based evidence. Neither state
+  controls background indexing or exposes derived paths.
 - A source is presented as Agent-readable only when the selected Agent surface
   can consume that format's source or current prepared representation. Built-in
   attachment behavior must not be implied for an external MCP client.
@@ -532,8 +556,8 @@ Agent.
 ### Primary Flow
 
 1. Add or select the folder without migrating its contents.
-2. Inspect a source and retrieve relevant evidence through Exact or Similar
-   Search.
+2. Inspect a Source and retrieve relevant evidence through Exact Search or
+   Similarity Search.
 3. Start an explicitly scoped Agent task that uses the same source identity and
    authorized context.
 4. Inspect the Agent's evidence, tool activity, and proposed file changes.
@@ -591,9 +615,9 @@ but no project folder or durable project document is assumed.
    an authorized location.
 3. The Agent uses the StashBase `create_project` operation rather than a bare
    filesystem command.
-4. StashBase creates one new ordinary folder under the default folder home or
-   another authorized root, seeds missing Agent instructions create-only, and
-   registers the folder in the Library.
+4. StashBase creates one new empty ordinary folder under the default folder
+   home or another authorized root and registers it in the Library. It does
+   not seed instruction files.
 5. The live initiating Library Chat keeps its transcript, changes scope to the
    new project, and causes its owning window to enter that folder. Other
    windows observe Library membership without being redirected.
@@ -610,8 +634,9 @@ but no project folder or durable project document is assumed.
   one cross-platform-safe segment, its resolved location remains inside an
   owned root, and an existing destination is a conflict rather than a folder
   to reuse or overwrite.
-- Existing Agent instruction files are never overwritten. Any seeded
-  instruction remains a visible user-owned source file.
+- Existing `AGENTS.md`, `CLAUDE.md`, and other runtime-native instruction files
+  are never created, migrated, or overwritten. Folder-scoped Agent
+  Instructions can be added later from the Chat scope menu.
 - Only the live, attributable Library Chat that initiated creation may rebind.
   A folder-bound, stale, unattributed, or external caller may create and
   register an authorized project but cannot redirect an unrelated built-in
@@ -644,3 +669,70 @@ See [J11 evidence](../code-review/journey-coverage.md#j11-conversation-to-projec
 This Journey composes the Chat entry from J01, project registration and entry
 from J02, Agent lifecycle from J06, explicit persistence from J07, and the
 durable continuation described by J10.
+
+## J12: Build Wiki Pages from a local folder
+
+### Outcome
+
+An existing local folder gains visible, source-linked Wiki Pages that make its
+Sources easier for people and Agents to navigate without replacing or
+reorganizing them. Similarity Search may independently make the same Sources
+and Wiki Pages retrievable by meaning.
+
+### Entry State
+
+The user has opened a Library folder and is in a blank folder-scoped Chat. The
+folder may contain no Wiki Pages, or it may already have pages under `wiki/`.
+Similarity Search setup may have been completed or declined independently;
+selected Agent readiness may be absent.
+
+### Primary Flow
+
+1. See **Build Wiki** as the fixed first action directly below the empty
+   Chat composer; no secondary prompt carousel competes with it.
+2. Choose Build Wiki. The tab pins to that folder and retains one pending
+   intent while any selected-Agent setup completes. Similarity Search setup
+   neither opens nor blocks this action.
+3. If the selected Agent still needs installation or sign-in, complete that
+   stage. The original Build Wiki intent resumes once, in the original
+   tab and folder; the user may cancel while waiting.
+4. The Agent inspects the folder and creates or improves `wiki/index.md`,
+   adding focused pages under `wiki/` only when a single map would be
+   unwieldy. Wiki Pages use relative links to visible Sources.
+5. Review the resulting files and the Agent's summary of changed Wiki Pages
+   and uncovered Sources.
+
+### Required Observable Results
+
+- The visible transcript records the concise user intent while the Agent
+  receives the stable safety and output contract.
+- The default write scope is only `wiki/`, with `wiki/index.md` as its entry.
+  The Agent does not modify anything outside that directory. A physical
+  reorganization is a separate proposal requiring explicit approval.
+- Building Wiki Pages and activating Similarity Search can succeed
+  independently. Skipping or failing Similarity Search does not discard the
+  Build Wiki intent.
+- A pending intent is renderer-local, folder-pinned, cancellable, and sent at
+  most once after runtime readiness. It is not restored after an app
+  restart and cannot follow an unrelated window-folder switch.
+- Wiki Page Markdown is ordinary visible content and re-enters browsing, Exact
+  Search, semantic indexing, and future Agent work. Machine-derived text, chunks, and
+  vectors remain invisible AppData.
+- The first release does not claim persistent built, ready, or stale Wiki
+  state, does not change the button to Update Wiki Pages, and does not schedule
+  background Wiki Page rewriting.
+
+### Degradation and Recovery
+
+Similarity Search setup state does not affect building Wiki Pages. The waiting capsule
+retains a clear cancel path during selected-Agent setup. Agent setup failure
+keeps the pending capability visible beside its
+stage-specific recovery. Folder removal cancels the pending intent rather than
+silently widening it to Library. A partial Agent write remains an ordinary,
+inspectable file transaction and never authorizes source reorganization.
+
+### Evidence
+
+See [J12 evidence](../code-review/journey-coverage.md#j12-build-wiki-pages). This
+journey composes J02 folder scope, J05 Similarity Search activation, J06 Agent lifecycle,
+and J07 ordinary file writeback.

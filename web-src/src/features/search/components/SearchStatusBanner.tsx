@@ -4,6 +4,7 @@ import { SectionHeading } from '@/common/components/ui/section';
 import { StatusMessage } from '@/common/components/ui/status';
 import { openSettings } from '@/common/lib/settingsTrigger';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
+import { openEmbeddingSetup } from '@/common/lib/embeddingSetupTrigger';
 
 /** One readiness/problem banner: title + detail copy on the left, optional
  *  compact actions on the right, on the status token ramp. */
@@ -116,7 +117,27 @@ export function SearchStatusBanner({ semanticMode, onNavigateAway }: {
     );
   }
 
-  if (semanticMode && semanticDisabled) return null;
+  if (semanticMode && semanticDisabled) {
+    return (
+      <SearchBanner
+        tone="info"
+        title="Similarity Search setup required"
+        detail="Set up Similarity Search to match by meaning. Exact Search stays available without it."
+        actions={
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => {
+              onNavigateAway();
+              openEmbeddingSetup();
+            }}
+          >
+            Set up
+          </Button>
+        }
+      />
+    );
+  }
 
   if (pendingCount > 0) {
     const readyLabel = `${readyCount} file${readyCount === 1 ? '' : 's'} ${readyCount === 1 ? 'is' : 'are'} ready to search.`;
@@ -126,7 +147,7 @@ export function SearchStatusBanner({ semanticMode, onNavigateAway }: {
     return (
       <SearchBanner
         tone="info"
-        title={semanticMode ? 'Making files searchable' : 'Preparing text for exact search'}
+        title={semanticMode ? 'Preparing files for Similarity Search' : 'Preparing text for Exact Search'}
         detail={<>{readyLabel} {pendingLabel}</>}
       />
     );

@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { LaunchedApp } from '../support/app.ts';
 import { launchApp } from '../support/app.ts';
@@ -29,12 +31,16 @@ test('folder switching resets the workspace while library membership remains ava
   try {
     app = await launchApp(fixture, testInfo);
     await openLibraryFolder(app.page, 'project-alpha');
+    expect(fs.existsSync(path.join(fixture.workspaces.projectA, 'AGENTS.md'))).toBe(false);
+    expect(fs.existsSync(path.join(fixture.workspaces.projectA, 'CLAUDE.md'))).toBe(false);
     await dismissEmbeddingKeyPrompt(app.page);
     await fileTreeRow(app.page, 'Welcome.md').click();
     await expect(activeDocument(app.page)).toContainText('Project Alpha');
     await expect(app.page.getByRole('tab', { name: 'Welcome.md' })).toHaveAttribute('aria-selected', 'true');
 
     await openLibraryFolder(app.page, 'project-beta');
+    expect(fs.existsSync(path.join(fixture.workspaces.projectB, 'AGENTS.md'))).toBe(false);
+    expect(fs.existsSync(path.join(fixture.workspaces.projectB, 'CLAUDE.md'))).toBe(false);
     await expect(app.page).toHaveTitle('project-beta — StashBase');
     await dismissEmbeddingKeyPrompt(app.page);
     await expect(fileTreeRow(app.page, 'Notes.md')).toBeVisible();
@@ -103,44 +109,32 @@ test('persistent document tabs and Quick Open remain keyboard-operable and resto
   }
 });
 
-// Intent: J01 — a fresh window with neither a key nor a signed-in account
-// offers AI Index setup right away; the offer does not wait for a folder.
-// One launch is one offer: a bare-window skip covers the FIRST folder
-// opened afterwards. Past that the offer follows the FOLDER, not the
-// window — a different folder re-offers, while returning to a folder
-// skipped in this window stays quiet (in-place switching through the
-// titlebar switcher is the primary flow now).
-test('the AI Index prompt offers at launch, follows folders, and stays quiet on return', async ({}, testInfo) => {
+// Intent: J01/J12 — a bare Library stays interruption-free, while the first
+// active folder offers the one app-wide Similarity Search setup choice. Not now is durable;
+// the Files-panel action keeps setup manually reachable.
+test('Similarity Search setup is offered on the first active folder and Not now suppresses later automatic prompts', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   let app: LaunchedApp | undefined;
   try {
-    app = await launchApp(fixture, testInfo, { aiIndexSetup: 'preserve' });
-    const skip = app.page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
+    app = await launchApp(fixture, testInfo);
+    const skip = app.page.getByRole('button', { name: 'Not now', exact: true });
 
-    // The fresh bare window makes the offer before any folder is chosen.
+    await expect(skip).toBeHidden();
+    await expect(app.page.getByText("Similarity Search isn't set up", { exact: true })).toBeVisible();
+
+    await openLibraryFolder(app.page, 'project-alpha');
+    await expect(app.page).toHaveTitle('project-alpha — StashBase');
     await expect(skip).toBeVisible();
     await skip.click();
     await expect(skip).toBeHidden();
 
-    // The bare-window skip carries into the first folder — no double nag
-    // seconds after an explicit "not now".
-    await openLibraryFolder(app.page, 'project-alpha');
-    await expect(app.page).toHaveTitle('project-alpha — StashBase');
-    await app.page.waitForTimeout(1500);
-    await expect(skip).toBeHidden();
-
-    // A DIFFERENT folder re-offers: skipping one folder must not silence
-    // the rest of the library.
+    // A folder switch remains quiet after that explicit local-only choice.
     await openLibraryFolder(app.page, 'project-beta');
-    await expect(skip).toBeVisible();
-    await skip.click();
     await expect(skip).toBeHidden();
+    await expect(app.page.getByText("Similarity Search isn't set up", { exact: true })).toBeVisible();
 
-    // Returning to a folder skipped in this window does not re-nag.
-    await openLibraryFolder(app.page, 'project-alpha');
-    await expect(app.page).toHaveTitle('project-alpha — StashBase');
-    await app.page.waitForTimeout(1500);
-    await expect(skip).toBeHidden();
+    await app.page.getByRole('button', { name: 'Set up', exact: true }).click();
+    await expect(skip).toBeVisible();
     app.errors.assertNone();
   } finally {
     await app?.close();

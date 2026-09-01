@@ -8,7 +8,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import readline from 'node:readline';
 import type { WebSocket } from 'ws';
-import { buildStashbasePreamble } from './agent-preamble.ts';
+import { resolveAgentInstructions } from './agent-instructions.ts';
 import {
   consumeAgentTurnFailure,
   simulatedTurnFailureScript,
@@ -58,9 +58,7 @@ import {
   type AttributedAgentSession,
 } from './agent-session-registry.ts';
 import { getCurrentFolder, getFolderHome, runWithWindowId } from './folder.ts';
-import { ensureAgentsFile } from './agent-rules.ts';
 import { errorMessage, logger } from './log.ts';
-import { noteTreeChanged } from './watcher.ts';
 
 const log = logger('codex-agent');
 
@@ -107,6 +105,9 @@ export class CodexSession implements AttributedAgentSession {
   private models: AgentModel[] = [];
   private skills = new Map<string, { name: string; path: string }>();
   private skillSequence = 0;
+  /** Renderer-owned product policy. Search remains available when false;
+   * the host operation swaps vector retrieval for lexical retrieval. */
+  private similaritySearch = true;
 
   readonly windowId: string;
   readonly agentId = 'codex' as const;
@@ -150,6 +151,10 @@ export class CodexSession implements AttributedAgentSession {
 
   nativeSessionId(): string | null {
     return this.threadId;
+  }
+
+  similaritySearchEnabled(): boolean {
+    return this.similaritySearch;
   }
 
   /** Migrate this LIBRARY-scoped session to a member folder (create_project).
@@ -205,9 +210,6 @@ export class CodexSession implements AttributedAgentSession {
     });
     const cwd = binding.cwd;
     this.libraryScoped = binding.libraryScoped;
-    // Instruction files belong to member folders; a library-wide session
-    // must not write them into the folder home container.
-    if (!this.libraryScoped && ensureAgentsFile(cwd)) noteTreeChanged();
     this.cwd = cwd;
     // Model choice belongs to the first turn, so publish the native catalog
     // before the renderer enables its composer. Otherwise a fresh Codex chat
@@ -347,6 +349,9 @@ export class CodexSession implements AttributedAgentSession {
         break;
       case 'set-mode':
         this.accessMode = isAgentAccessMode(msg.mode) ? msg.mode : this.accessMode;
+        break;
+      case 'set-similarity-search':
+        if (typeof msg.enabled === 'boolean') this.similaritySearch = msg.enabled;
         break;
     }
   }
@@ -596,7 +601,12 @@ export class CodexSession implements AttributedAgentSession {
       approvalPolicy: access.approvalPolicy,
       approvalsReviewer: access.approvalsReviewer,
       sandbox: access.sandbox,
-      developerInstructions: buildStashbasePreamble(cwd, this.rebound || !this.libraryScoped ? 'folder' : 'library'),
+      // Agent Instructions are the only StashBase-owned prompt. The Adapter
+      // selects the concrete working folder, if any, and passes the resolved
+      // text verbatim.
+      developerInstructions: resolveAgentInstructions(
+        this.rebound || !this.libraryScoped ? cwd : null,
+      ),
     };
     const result = await this.request(
       this.resumeThreadId ? 'thread/resume' : 'thread/start',

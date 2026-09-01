@@ -61,6 +61,85 @@ test('J06 lists bring-your-own Agents before the zero-install Built-in Agent', a
   }
 });
 
+test('J06 keeps Similarity Search in session scope and Agent Instructions in the panel toolbar', async ({}, testInfo) => {
+  const fixture = await createAppFixture({ membership: 'one-folder' });
+  const protocolLog = path.join(fixture.artifacts, 'fake-codex-instructions.jsonl');
+  fixture.env.STASHBASE_CODEX_BIN = FAKE_CODEX;
+  fixture.env.STASHBASE_AGENT_DISCOVERY_POLICY = 'system-only';
+  fixture.env.STASHBASE_FAKE_CODEX_LOG = protocolLog;
+  let app: LaunchedApp | undefined;
+  try {
+    app = await launchApp(fixture, testInfo);
+    await app.page.route('**/api/embedder', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        provider: 'openai', hasKey: true, authorized: true, source: 'openai',
+        model: 'fixture-model', account: { signedIn: false, active: false },
+      }) });
+    });
+    // Install the deterministic Similarity Search response before folder activation so
+    // the Chat starts with the retrieval policy genuinely available.
+    await app.page.reload();
+    await app.page.waitForFunction(() => document.body.dataset.bootSettled === '1');
+    await openLibraryFolder(app.page, 'project-alpha');
+
+    await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
+    await app.page.getByRole('menuitem', { name: 'Codex' }).click();
+    await app.page.getByRole('button', { name: 'New Chat', exact: true }).click();
+    const panel = activeAgentPanel(app.page);
+    const scope = panel.getByRole('button', { name: /Session folder: project-alpha/ });
+    await expect(scope).toBeVisible();
+
+    const instructionsButton = app.page.getByRole('button', { name: 'Agent Instructions' });
+    await expect(instructionsButton).toBeVisible();
+    await instructionsButton.click();
+    const instructions = app.page.getByRole('dialog', { name: 'Agent Instructions' });
+    await expect(instructions).toBeVisible();
+    await instructions.getByRole('textbox', { name: 'Agent Instructions' }).fill('Prefer the primary sources in this folder.');
+    await instructions.getByRole('button', { name: 'Save' }).click();
+    await expect(instructions).toBeHidden();
+    await expect(instructionsButton).toHaveAttribute('data-customized', 'true');
+    const savedConfig = JSON.parse(fs.readFileSync(fixture.configFile, 'utf8')) as {
+      agentInstructions?: { folders?: Array<{ path: string; text: string }> };
+    };
+    expect(savedConfig.agentInstructions?.folders).toEqual([{
+      path: fixture.workspaces.projectA,
+      text: 'Prefer the primary sources in this folder.',
+    }]);
+    expect(fs.existsSync(path.join(fixture.workspaces.projectA, 'AGENTS.md'))).toBe(false);
+    expect(fs.existsSync(path.join(fixture.workspaces.projectA, 'CLAUDE.md'))).toBe(false);
+
+    await scope.click();
+    let similarity = app.page.getByRole('menuitemcheckbox', { name: 'Similarity Search' });
+    await expect(similarity).toHaveAttribute('aria-checked', 'true');
+    await similarity.click();
+    await expect(similarity).toHaveAttribute('aria-checked', 'false');
+    await expect(app.page.getByRole('menu')).toBeVisible();
+    await app.page.keyboard.press('Escape');
+
+    const composer = panel.locator('[aria-label="Message agent"]');
+    await composer.fill('math reply');
+    await panel.getByRole('button', { name: 'Send message' }).click();
+    await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
+    await expect.poll(() => protocolRecords(protocolLog)
+      .find((entry) => entry.event === 'thread-start')?.params?.developerInstructions)
+      .toBe('Prefer the primary sources in this folder.');
+
+    await scope.click();
+    await expect(app.page.getByText('Set for this conversation', { exact: true })).toBeVisible();
+    const scopeRows = app.page.getByRole('menuitemradio');
+    await expect(scopeRows.first()).toBeDisabled();
+    similarity = app.page.getByRole('menuitemcheckbox', { name: 'Similarity Search' });
+    await expect(similarity).toBeEnabled();
+    await expect(similarity).toHaveAttribute('aria-checked', 'false');
+    await expect(app.page.getByRole('menuitem', { name: 'Agent Instructions' })).toHaveCount(0);
+    await expect(instructionsButton).toBeEnabled();
+    app.errors.assertNone();
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+  }
+});
+
 test('removing a chat folder preserves started work and opens a fresh Library chat', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   fixture.env.STASHBASE_CODEX_BIN = FAKE_CODEX;
@@ -95,7 +174,7 @@ test('removing a chat folder preserves started work and opens a fresh Library ch
     await removal.getByRole('button', { name: 'Remove' }).click();
 
     await expect(removal).toBeHidden();
-    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
+    await dismissEmbeddingKeyPrompt(app.page);
     await expect(startedTab).toBeVisible();
     await startedTab.click();
     await expect(startedTab).toHaveAttribute('aria-selected', 'true');
@@ -174,7 +253,7 @@ test('Codex chat keeps its folder-bound transcript through approval and interrup
 
     await openLibraryFolder(app.page, 'project-beta');
     await expect(app.page).toHaveTitle('project-beta — StashBase');
-    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
+    await dismissEmbeddingKeyPrompt(app.page);
     const approvalTab = app.page.getByRole('tab', { name: /approval turn/i });
     await expect(approvalTab).toBeVisible();
     await expect(approvalTab).toHaveAttribute('aria-selected', 'false');
@@ -254,7 +333,7 @@ test('Agent chooser reuses only blank chats, drafts freeze scope, and history re
     await expect(composer).toHaveAttribute('contenteditable', 'true');
     await composer.fill('unsent alpha draft');
     await openLibraryFolder(app.page, 'project-beta');
-    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
+    await dismissEmbeddingKeyPrompt(app.page);
     await expect(chatTabs.getByRole('tab')).toHaveCount(initialCount + 1);
     // The pointer-only close × is aria-hidden now, so it no longer
     // leaks into the tab's accessible name.

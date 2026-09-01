@@ -151,7 +151,7 @@ test('library removal interrupts an unfinished large-folder reconcile', async ({
   enableFixtureSemanticIndex(fixture.configFile);
   let app: LaunchedApp | undefined;
   try {
-    app = await launchApp(fixture, testInfo, { aiIndexSetup: 'preserve' });
+    app = await launchApp(fixture, testInfo);
     await openLibraryFolder(app.page, 'project-alpha');
     // Keep the regression scoped to unfinished semantic indexing: the user's
     // visible folder open/listing has already completed before removal.

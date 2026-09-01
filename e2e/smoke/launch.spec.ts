@@ -16,16 +16,14 @@ test('user can launch into the empty library workspace', async ({}, testInfo) =>
   const fixture = await createAppFixture({ membership: 'empty' });
   let app: LaunchedApp | undefined;
   try {
-    app = await launchApp(fixture, testInfo, { aiIndexSetup: 'preserve' });
-    const skipAiIndex = app.page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
-    await expect(skipAiIndex).toBeVisible();
-    await skipAiIndex.click();
+    app = await launchApp(fixture, testInfo);
+    const skipAiIndex = app.page.getByRole('button', { name: 'Not now', exact: true });
     await expect(skipAiIndex).toBeHidden();
     await expect(app.page).toHaveTitle('StashBase');
     await expect(appShell(app.page)).toBeVisible();
     await expect(app.page.getByRole('button', { name: 'New Chat', exact: true })).toBeVisible();
     await expect(settingsButton(app.page)).toBeVisible();
-    await expect(app.page.getByText('Add a folder to build your searchable library.')).toBeVisible();
+    await expect(app.page.getByText('Add a folder to your Wiki.')).toBeVisible();
     await expectChatExpanded(app.page);
     app.errors.assertNone();
   } finally {
@@ -41,6 +39,10 @@ test('user launches an existing library with Chat expanded', async ({}, testInfo
     app = await launchApp(fixture, testInfo);
     await expectChatExpanded(app.page);
     await openLibraryFolder(app.page, 'project-alpha');
+    const notNow = app.page.getByRole('button', { name: 'Not now', exact: true });
+    await expect(notNow).toBeVisible();
+    await notNow.click();
+    await expect(notNow).toBeHidden();
     await expectChatExpanded(app.page);
     app.errors.assertNone();
   } finally {

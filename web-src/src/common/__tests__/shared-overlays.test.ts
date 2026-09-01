@@ -29,6 +29,7 @@ import { TooltipButton } from '@/common/components/TooltipButton';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle } from '@/common/components/ui/alert-dialog';
 import { buttonVariants } from '@/common/components/ui/button';
 import { Checkbox } from '@/common/components/ui/checkbox';
+import { MenuCheckboxItem } from '@/common/components/ui/menu-radio';
 import { Popover, PopoverContent } from '@/common/components/ui/popover';
 import { OPEN_SETTINGS_EVENT } from '@/common/lib/settingsTrigger';
 import { pillVariants } from '@/common/components/ui/pill';
@@ -422,6 +423,47 @@ test('the scope picker is one radio group named by its visible heading', async (
       [['Library', 'false'], ['notes', 'true'], ['work', 'false']],
     );
     assert.equal(dom.byRole('menuitem').length, 0, 'no plain menuitem rows remain in the picker');
+  });
+});
+
+test('a locked scope stays inspectable while its independent retrieval switch stays live', async () => {
+  await withDom(async (dom) => {
+    let nextChecked: boolean | undefined;
+    await dom.render(h(ScopeMenu, {
+      scope: { kind: 'folder', path: '/home/u/notes' } as never,
+      entries: [{ path: '/home/u/notes' }, { path: '/home/u/work' }] as never,
+      homeDir: '/home/u',
+      heading: 'Session scope',
+      libraryDetail: 'Chat across your whole library',
+      locked: true,
+      footer: h(MenuCheckboxItem, {
+        indicator: 'switch',
+        checked: true,
+        closeOnClick: false,
+        onCheckedChange: (checked: boolean) => { nextChecked = checked; },
+      }, 'Similarity Search'),
+      onSetScope: () => assert.fail('a locked scope must not change'),
+    }));
+
+    const trigger = dom.byLabel('Session scope')[0] as HTMLButtonElement | undefined;
+    assert.ok(trigger, 'the scope trigger remains available for the retrieval setting');
+    assert.equal(trigger.disabled, false);
+    await dom.fire(trigger, new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await dom.flush();
+
+    const scopeRows = dom.byRole('menuitemradio');
+    assert.ok(scopeRows.every((row) => row.matches('[data-disabled], [aria-disabled="true"]')),
+      'the bound scope values stay inert');
+    const retrieval = dom.byRole('menuitemcheckbox')[0];
+    assert.ok(retrieval, 'the retrieval policy is one checkable menu row');
+    assert.equal(retrieval.getAttribute('aria-checked'), 'true');
+    assert.ok(retrieval.querySelector('[data-slot="menu-checkbox-item-indicator"] [aria-hidden="true"]'),
+      'the state is drawn as a presentational switch without nesting a second control');
+
+    await dom.fire(retrieval, new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await dom.flush();
+    assert.equal(nextChecked, false);
+    assert.ok(dom.query('[role="menu"]'), 'the popup stays open after changing retrieval policy');
   });
 });
 

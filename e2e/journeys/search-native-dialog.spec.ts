@@ -56,7 +56,7 @@ test('native folder dialog success, cancellation, and failure preserve their bou
     await stubOpenFolderDialog(app.electron, { kind: 'cancel' });
     await openFolderPickerMenu(app.page);
     await expect(app.page).toHaveTitle('StashBase');
-    await expect(app.page.getByText('Add a folder to build your searchable library.')).toBeVisible();
+    await expect(app.page.getByText('Add a folder to your Wiki.')).toBeVisible();
 
     await stubOpenFolderDialog(app.electron, { kind: 'error', message: 'fixture picker failed' });
     await openFolderPickerMenu(app.page);
@@ -94,7 +94,7 @@ test('exact search remembers state, distinguishes duplicate paths, and resolves 
     await dialog.getByRole('combobox').press('Escape');
 
     await openLibraryFolder(app.page, 'project-beta');
-    await dismissEmbeddingKeyPrompt(app.page, { waitForOffer: true });
+    await dismissEmbeddingKeyPrompt(app.page);
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     dialog = app.page.getByRole('dialog', { name: 'Search library' });
     await expect(dialog.getByRole('combobox')).toHaveValue(EXACT_SEARCH_PHRASE);

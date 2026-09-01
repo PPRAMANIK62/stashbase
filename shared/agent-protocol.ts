@@ -56,7 +56,11 @@ export type AgentClientEvent =
   /** Select the model for the next turn of a runtime that supports live
    * conversation model changes. Missing `model` means native Default. */
   | { t: 'set-model'; model?: string }
-  | { t: 'set-mode'; mode: string };
+  | { t: 'set-mode'; mode: string }
+  /** Product retrieval policy for this panel session. Disabling similarity
+   * search keeps `search_library` available through its lexical path; it
+   * never disables prepared-text access or background indexing. */
+  | { t: 'set-similarity-search'; enabled: boolean };
 
 export type AgentServerEvent =
   | { t: 'ready' }

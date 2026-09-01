@@ -1,5 +1,5 @@
 /**
- * The first-run AI Index setup dialog (see `EmbedderRequireKeyGate`).
+ * The first-folder Similarity Search setup dialog (see `EmbedderRequireKeyGate`).
  *
  * Setting up an indexing source is strongly recommended, not forced: an
  * unindexed library still browses, edits, previews, and keyword-searches —
@@ -11,21 +11,20 @@
  *
  * Two views:
  *   • choice — sign in (recommended, hosted) · use your own key · a quiet
- *     "Skip for now" exit.
+ *     "Not now" exit.
  *   • key    — provider toggle + key field; "Save key" activates. A Back link
  *     returns to the choice.
  *
- * The exit is one deliberate, low-emphasis button, not a confirm hop: "for
- * now" already says the choice is reversible and the Files-panel entry
- * reopens this, while a confirm that itemised the surviving local abilities
+ * The exit is one deliberate, low-emphasis button, not a confirm hop. The
+ * Files-panel entry reopens this later, while a confirm that itemised the surviving local abilities
  * would package keyword search as a peer feature — which it is not meant to
  * be.
  *
  * Exits:
  *   • Save key — validates + persists via `/api/embedder/key`, daemon
  *     hot-swap; the dialog closes and the library is activated.
- *   • Skip AI Index for now — the caller records the choice for this window;
- *     the Files panel keeps a quiet "Set up AI Index" entry for later.
+ *   • Not now — the caller remembers the one-time dismissal; the Files panel
+ *     and Settings keep explicit setup routes for later.
  */
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { type EmbedderProvider } from '@/common/api/apiTypes';
@@ -57,7 +56,7 @@ const PROVIDER_ORDER: EmbedderProvider[] = ['openai', 'openrouter'];
 type View = 'choice' | 'signin' | 'key';
 
 const TITLES: Record<View, string> = {
-  choice: 'Set up AI Index',
+  choice: 'Set up Similarity Search',
   signin: 'Sign in to StashBase',
   key: 'Add your API key',
 };
@@ -67,7 +66,7 @@ const TITLES: Record<View, string> = {
  * dialog whose job is a choice, and the sentence that started every layer
  * of this screen running two lines deep. */
 const DESCRIPTIONS: Record<View, ReactNode> = {
-  choice: 'Help Agents find context across your files.',
+  choice: 'Find related Sources and Wiki Pages even when the wording differs.',
   /* The free allowance is the one thing this view has to say, so it takes
    * the view's single accent moment: the same `accent/8` wash the tinted
    * card that led here wears at rest, laid over the operative phrase.
@@ -84,11 +83,11 @@ const DESCRIPTIONS: Record<View, ReactNode> = {
     <>
       Use your{' '}
       <mark className="rounded-xs bg-accent/8 box-decoration-clone px-px text-inherit">
-        free monthly AI Index allowance
+        included monthly Similarity Search allowance
       </mark>.
     </>
   ),
-  key: 'Paste an OpenAI or OpenRouter key.',
+  key: 'Paste an OpenAI or OpenRouter API key for Similarity Search.',
 };
 
 export function RequireApiKeyModal({
@@ -139,7 +138,7 @@ export function RequireApiKeyModal({
       initialFocus={view === 'key' ? inputRef : choiceRef}
       // No casual dismiss. Backdrop clicks are disabled and the close request
       // (Escape) is swallowed — the way out is an explicit choice: activate,
-      // or take the deliberate "Skip for now" path.
+      // or take the deliberate "Not now" path.
       closeOnBackdrop={false}
       onCancel={() => { /* no casual dismiss — choose activate or skip */ }}
       isTopmost={isTopmost}
@@ -173,7 +172,7 @@ export function RequireApiKeyModal({
         * reads as "these two words are different sizes", and it stretched
         * to the dialog width so the two providers got unequal shares. */}
       <FieldSet className="mb-2 w-fit">
-      <FieldLegend className="sr-only">Embedding provider</FieldLegend>
+      <FieldLegend className="sr-only">Similarity Search provider</FieldLegend>
       <SegmentedControl
         disabled={busy}
         value={[provider]}
@@ -224,7 +223,7 @@ export function RequireApiKeyModal({
         </StatusMessage>
       )}
       <div className="mt-3.5 flex items-center justify-between gap-2">
-        {/* Same quiet text exit as the choice view's "Skip for now": both
+        {/* Same quiet text exit as the choice view's "Not now": both
           * are the low-emphasis way OUT of this dialog, so they read as
           * one control at two moments — no resting underline, no button
           * box beside the primary action, underline on hover only. */}

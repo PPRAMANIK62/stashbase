@@ -82,10 +82,10 @@ test('semantic search UI renders deterministic loading, grouped, empty, and erro
   }
 });
 
-// Intent: removing the API key re-gates AI Index IMMEDIATELY — the setup
-// dialog re-offers while the folder is still open, instead of waiting for
-// the next folder switch. Fully route-stubbed: no real key or provider.
-test('removing the API key re-offers the AI Index dialog right away', async ({}, testInfo) => {
+// Intent: removing the API key updates the persistent Similarity Search state right
+// away without interrupting the user. Setup opens only after an explicit
+// Set up action. Fully route-stubbed: no real key or provider.
+test('removing the API key exposes the quiet Similarity Search action without auto-opening setup', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   let app: LaunchedApp | undefined;
   try {
@@ -113,13 +113,12 @@ test('removing the API key re-offers the AI Index dialog right away', async ({},
       }) });
     });
 
-    // The normal launch harness deliberately chooses basic mode for unrelated
-    // journeys. Reload after installing the keyed response so this test starts
-    // from the real persisted-key state instead of inheriting that choice.
+    // Reload after installing the keyed response so this test starts from the
+    // real persisted-key state.
     await app.page.reload();
     await app.page.waitForFunction(() => document.body.dataset.bootSettled === '1');
 
-    const skip = app.page.getByRole('button', { name: 'Skip AI Index for now', exact: true });
+    const skip = app.page.getByRole('button', { name: 'Not now', exact: true });
     await openLibraryFolder(app.page, 'project-alpha');
     // Keyed: no prompt.
     await app.page.waitForTimeout(1200);
@@ -127,12 +126,14 @@ test('removing the API key re-offers the AI Index dialog right away', async ({},
 
     // Remove the key through Settings.
     await app.page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await app.page.getByRole('tab', { name: 'AI Index' }).click();
+    await app.page.getByRole('tab', { name: 'Similarity Search' }).click();
     await app.page.getByRole('button', { name: 'Remove key…' }).click();
     await app.page.getByRole('button', { name: 'Remove key', exact: true }).click();
 
-    // The gate re-evaluates on the key-state change: the dialog re-offers
-    // now, not on the next folder switch.
+    await app.page.getByRole('button', { name: 'Close settings' }).click();
+    await expect(skip).toBeHidden();
+    await expect(app.page.getByText("Similarity Search isn't set up", { exact: true })).toBeVisible();
+    await app.page.getByRole('button', { name: 'Set up', exact: true }).click();
     await expect(skip).toBeVisible();
     app.errors.assertNone();
   } finally {

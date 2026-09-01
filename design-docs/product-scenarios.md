@@ -38,9 +38,10 @@ Related journeys: [J03](user-journeys.md#j03-read-and-edit-source-documents),
 ## Turn a Personal Archive into Long-Term Agent Context
 
 A user already has years of notes, PDFs, images, recordings, and earlier Agent
-output. StashBase indexes selected folders in place, keeps generated
-representations invisible, and lets built-in or external Agents retrieve the
-visible sources and write useful new files back.
+output. StashBase can first build visible, source-linked Wiki Pages from
+selected folders, keep machine-derived representations invisible, and let
+built-in or external Agents retrieve the visible Sources through Similarity
+Search and write useful new files back.
 
 The outcome is a local archive that becomes more useful over time while the
 user keeps its existing folder structure and ownership.
@@ -48,7 +49,8 @@ user keeps its existing folder structure and ownership.
 Related journeys: [J02](user-journeys.md#j02-add-and-open-a-folder),
 [J04](user-journeys.md#j04-prepare-a-hard-to-read-file),
 [J05](user-journeys.md#j05-search-and-open-source-evidence), and
-[J08](user-journeys.md#j08-connect-an-external-agent-through-mcp).
+[J08](user-journeys.md#j08-connect-an-external-agent-through-mcp), and
+[J12](user-journeys.md#j12-build-wiki-pages-from-a-local-folder).
 
 ## Maintain Project Data beside Documents
 
@@ -65,7 +67,7 @@ and [J05](user-journeys.md#j05-search-and-open-source-evidence).
 
 ## Core Product Scenario
 
-Across these scenarios, work can begin with a question or task for an Agent
+Across these scenarios, work can begin with **Build Wiki**, a question, or a task for an Agent
 against an explicit scope. The user may open a source document at any point to
 inspect evidence or continue the same work beside it, or may complete the task
 entirely in Chat. Documents are optional working surfaces rather than required

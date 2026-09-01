@@ -233,9 +233,10 @@ this file records the mechanics a change must respect.
    full intrinsic width, painting the folder name across the document tab
    strip (or, with Chat as the workspace, the chat tab row). The narrow
    window this leaves is real: at the 200px minimum sidebar width the
-   macOS traffic-light inset spends most of the budget, so the label can
-   truncate to nothing. Widening the band's usable space means reserving
-   the cluster's overhang in the neighbouring row, not relaxing the cap.
+   macOS traffic-light inset spends most of the budget, so the label keeps
+   only a small truncated fragment. The cap ends exactly at the sidebar
+   edge; widening it further means reserving the cluster's overhang in the
+   neighbouring row, not relaxing the cap in isolation.
 4. **Colocated feature CSS** — exemption rules (below) that a component needs
    but Tailwind utilities can't express, living in a CSS file next to the
    feature it styles and imported directly from the component(s) that render
@@ -282,6 +283,9 @@ this file records the mechanics a change must respect.
    literal, which is what the spacing guard reads.
 5. **Primitives** (`web-src/src/common/components/ui/`) — shadcn adapters
    over Base UI: button, input, textarea, select, checkbox, collapsible,
+   (a standalone `switch` was retired when its last caller moved into a menu;
+   the track-and-thumb look now lives as `menu-radio`'s switch indicator, so
+   restore the primitive only for a real form-row switch, not for a menu row)
    segmented-control, tabs, field, label, progress, dialog, alert-dialog,
    menu (+ `menu-radio`), popover, toast, tooltip, status, plus the
    non-Base-UI recipes badge, card, section, empty-state, pill, and
@@ -426,7 +430,7 @@ this file records the mechanics a change must respect.
    palette as a className (the lightbox's white-on-dark stage controls) and
    still gets the press, the ring, and the transition from the recipe.
 
-   The AI Index setup cards (`EmbeddingAuthChoice`) are the second standing
+   The Similarity Search setup cards (`EmbeddingAuthChoice`) are the second standing
    exemption, and the reason is worth stating because the surface looks
    like two things it is not. They are not a radio group: each card fires
    on click, there is no pending selection and no submit, and the screen is
@@ -439,8 +443,8 @@ this file records the mechanics a change must respect.
    is duplicated at the call site, the same deliberate copy `ErrorBoundary`
    and the lightbox toolbar make.
 
-   A text button that sits INSIDE a sentence (`Back`, `Skip AI Index for
-   now`, the preparation callouts) is `variant="link"` with the size taken
+   A text button that sits INSIDE a sentence (`Back`, `Not now`, the
+   preparation callouts) is `variant="link"` with the size taken
    for its type step alone and the height and padding removed — one shared
    shape, not a per-site recipe. That shape is for ACTIONS in prose; an
    in-sentence navigation to an external page (Settings → MCP's `See setup
@@ -651,6 +655,17 @@ it":
   terminal action). Every short box was quietly spending the one shape the
   language had set aside. At 16 it keeps its corner and stays a box, so the
   capsule means something again wherever it does appear.
+  **Build Wiki** is one such terminal capability action: its `rounded-full`
+  capsule marks the fixed folder activation path, directly below the empty
+  composer, rather than styling an ordinary button as a pill. The capsule is
+  all it adds — it is otherwise the default solid-accent `Button`, the same
+  primary the zero-folder sidebar and the empty main pane put under their own
+  invitations, because a hero's one action should not be a second dialect of
+  primary. A tinted outline is not that dialect: a pale fill under a pale
+  stroke under pale text is three washes of one hue, and it reads as a status
+  badge rather than as the thing to press. The cancellable waiting state
+  retains the capsule's identity, and its progress arc sits on the caption
+  below rather than inside the fill the accent arc would vanish against.
 - **An item inside a box** — takes a hover or selected background: `-ui`.
   Tree rows, menu items, mention rows, buttons, the segmented control.
   Buttons are the trap here: at `-container` a 32px button becomes a
@@ -751,7 +766,7 @@ that carried no accessible name at all and gained one.
   Text emphasised mid-sentence stays a `<span>`, a card's numeric read-out
   stays a value, and a title that sits inside a `<button>` or a `role="menu"`
   popup stays what it is — neither element may contain a heading, so the
-  scope menu's title is named through `aria-labelledby` and the AI Index
+  scope menu's title is named through `aria-labelledby` and the Similarity Search
   setup cards keep theirs as card text. The sidebar's Document Outline strip
   is the opposite case: it always WAS a disclosure heading, so the heading
   element now wraps its toggle, carrying the level and none of the look.
@@ -834,7 +849,7 @@ that carried no accessible name at all and gained one.
 - **State that is conveyed visually is conveyed programmatically.** The
   download bar reports a number through `Progress`, rather than being a
   coloured rectangle only sighted users can read. The two hosted-allowance
-  bars — Settings → AI Index and the sidebar account menu — were the same
+  bars — Settings → Similarity Search and the sidebar account menu — were the same
   shape of silence (a nested `div` with an inline `width`, no role and no
   value) sitting beside the finished primitive, and now run on it too. A
   bar that needs the full width of its container overrides the track's
@@ -1072,7 +1087,7 @@ because the layer is only worth its cost while both halves are true.
   written out fails on its own length. The eleven entries are the
   ErrorBoundary pair plus its lazy-boundary sibling, the three palette
   query fields, the two tree-row inline editors, the composer's hidden
-  file picker, the two AI Index setup cards, the transcription radios, the
+  file picker, the two Similarity Search setup cards, the transcription radios, the
   two outline row controls, and the sidebar section-header toggle — every
   one of them reasoned above and repeated inline where it lives.
 - *`cn()` is the only way class names are composed* — no `className={…}`

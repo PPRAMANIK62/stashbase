@@ -238,7 +238,7 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
   assert.match(appShell, /\.sidebar-drag-zone \{[^}]*width: var\(--titlebar-controls-left\)/s);
   // The left cluster ellipsizes at the sidebar column edge instead of
   // bleeding onto the tab strip…
-  assert.match(appShell, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\) - 8px\)/s);
+  assert.match(appShell, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\)\)/s);
   // …and the collapsed-sidebar budget is ONE token shared by the cluster
   // cap and both tab-row reserves, so the floating controls never overlap
   // a tab.
@@ -780,7 +780,7 @@ const RAW_CONTROL_EXEMPTIONS: Record<string, { count: number; why: string }> = {
   },
   'features/settings/components/embedder/EmbeddingAuthChoice.tsx': {
     count: 2,
-    why: 'AI Index setup cards. Not a radio group (each fires on click, nothing reads as pre-selected) and not `Button`s (that primitive is a centred single-line -ui-cornered ITEM; these are two-line, left-aligned, -container-cornered BOXES that keep full opacity when disabled).',
+    why: 'Similarity Search setup cards. Not a radio group (each fires on click, nothing reads as pre-selected) and not `Button`s (that primitive is a centred single-line -ui-cornered ITEM; these are two-line, left-aligned, -container-cornered BOXES that keep full opacity when disabled).',
   },
   'features/settings/components/TranscriptionPanel.tsx': {
     count: 1,

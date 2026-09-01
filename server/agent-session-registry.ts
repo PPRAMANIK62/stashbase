@@ -19,7 +19,7 @@ export const AGENT_SESSION_ID_HEADER = 'x-stashbase-agent-session-id';
 
 export type AttributedAgentId = 'stashbase' | 'claude' | 'codex';
 
-/** The narrow live-session surface `create_project` needs. */
+/** The narrow live-session surface attributed host operations need. */
 export interface AttributedAgentSession {
   readonly agentId: AttributedAgentId;
   /** The window that owns this panel session. */
@@ -33,6 +33,9 @@ export interface AttributedAgentSession {
   turnInFlight(): boolean;
   /** Native session/thread id (history identity), when known. */
   nativeSessionId(): string | null;
+  /** Whether this panel session may add vector similarity to
+   * `search_library`. Lexical retrieval remains available either way. */
+  similaritySearchEnabled(): boolean;
   /** Migrate a library-scoped session's binding to a member folder and
    * notify its renderer (`scope-changed`). Returns false when the session
    * is closed or already folder-bound — a bound chat is NEVER rebound. */
@@ -86,6 +89,20 @@ export function attributedTurnActiveSession(): AttributedAgentSession | null {
     if (session.turnInFlight()) candidates.push(session);
   }
   return candidates.length === 1 ? candidates[0] : null;
+}
+
+/** Resolve the calling panel session from strongest to weakest attribution.
+ * Exact session ids win, then a window's sole active turn, then the app-wide
+ * sole active turn for native clients that sanitize their MCP environment.
+ * Ambiguity always resolves to no session, so external callers keep their
+ * requested retrieval mode rather than inheriting another chat's switch. */
+export function attributedRequestSession(
+  sessionId: string | null | undefined,
+  windowId: string | null | undefined,
+): AttributedAgentSession | null {
+  return attributedAgentSession(sessionId)
+    ?? attributedSessionForWindow(windowId)
+    ?? attributedTurnActiveSession();
 }
 
 export type CreateProjectRebindPlan =

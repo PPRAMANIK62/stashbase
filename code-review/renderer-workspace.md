@@ -106,7 +106,10 @@ semantic readiness.
   navigation. A published-path open failure remains in the dialog with a
   retry-open action that never starts a second clone.
 - The blank-chat lifecycle follows [Agent Panel](agent-panel.md); the workspace
-  may reveal or dock it but does not redefine Agent session scope.
+  may reveal or dock it but does not redefine Agent session scope. A pending
+  Build Wiki intent is started and pinned by the Agent Panel; window-folder
+  transitions must neither redirect it nor count that tab as reusable blank
+  state.
 
 ## Shell Performance Contract
 
@@ -181,7 +184,9 @@ search presentation and result navigation, and
 [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
 for the complete cross-surface loop, and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
-for project registration and originating-window entry.
+for project registration and originating-window entry, and
+[J12](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder)
+for pending folder-pinned activation.
 Related contracts: [Window Lifecycle](window-lifecycle.md),
 [File Transactions](file-transactions.md), [Agent Panel](agent-panel.md), and
 [UI Regression Testing](ui-regression-testing.md).

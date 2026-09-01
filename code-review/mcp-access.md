@@ -24,13 +24,22 @@ clients and are not a general host-filesystem API.
   never silently widens.
 - `search_library(query, mode?, folder?, path_prefix?, types?, case_strict?,
   whole_word?, top_k?)` searches in semantic mode by default or exact keyword
-  mode, returning the same source-hit shape; keyword mode requires `folder` or
-  `path_prefix`, and `types` accepts the shared source categories.
+  mode, returning the same source-hit shape and the strategy actually used.
+  Both strategies default to the whole library and `types` accepts the shared
+  source categories. Library-wide keyword search fans through member roots at
+  the operation boundary rather than exposing that folder-rooted mechanism to
+  callers.
+- An attributable panel session may resolve any `search_library` request to
+  keyword mode while its Similarity Search control is Off. This policy comes
+  from trusted transport attribution, never model-controlled tool arguments;
+  ambiguous or external callers retain their requested strategy.
 - Results retain absolute visible-source identity for Agent tools. Converted
   evidence never exposes an AppData path.
 - `library_info` returns folder identity and provider state, not a second
-  folder-description store. Durable folder purpose and working instructions
-  remain visible, user-owned source in `AGENTS.md`.
+  folder-description or Agent Instructions store. StashBase Chat instructions
+  are injected verbatim by the panel Runtime Adapter. The MCP server publishes
+  capability and tool descriptions but no second top-level instruction prompt;
+  user-owned portable rules may remain visible source in `AGENTS.md`.
 - File mutations use the shared transaction/version boundary and schedule or
   reconcile index maintenance after success.
 - `list_directory` enumerates only the requested directory surface and does
@@ -53,7 +62,7 @@ clients and are not a general host-filesystem API.
 - `create_project` creates only beneath the default folder home or an already
   authorized location. Both the selected location and creatable target must
   remain inside that owned root after symlinks are resolved. The operation
-  seeds missing Agent instructions create-only and registers the folder.
+  registers an empty folder and never seeds Agent instruction files.
   Session rebind requires trusted live-session attribution; ambiguous or
   external callers only create and register.
 

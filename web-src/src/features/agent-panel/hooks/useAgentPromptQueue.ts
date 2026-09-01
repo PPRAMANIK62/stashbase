@@ -18,6 +18,9 @@ export interface QueuedPrompt {
 
 interface PromptToSend {
   text: string;
+  /** Optional concise text for the transcript. Presets use this to keep the
+   * user-visible turn natural while sending a fuller operating contract. */
+  displayText?: string;
   attachments: Attachment[];
   titleHint?: string;
   skill?: string;
@@ -105,6 +108,12 @@ export function useAgentPromptQueue({
     mutateQueue((queue) => queue.map((p) => (p.id === promptId ? { ...p, status } : p)));
   }
 
+  /** Remove one prompt only while it is still local and unsent. A stale
+   * click must not discard a steer that already moved in flight. */
+  function deleteQueuedPrompt(promptId: string) {
+    mutateQueue((queue) => queue.filter((prompt) => prompt.id !== promptId || prompt.status !== 'waiting'));
+  }
+
   function send(text: string, skill?: string) {
     const atts = attachmentsRef.current;
     const titleHint = capabilitiesRef.current?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
@@ -114,6 +123,15 @@ export function useAgentPromptQueue({
       return;
     }
     void sendPromptNow({ text, attachments: atts, titleHint, skill, appendBlock: true, clearAttachments: true });
+  }
+
+  /** Send a product action while idle without borrowing composer attachments.
+   * Its visible transcript text and wire text are deliberately identical. */
+  function sendPreset(text: string) {
+    if (turnActiveRef.current) return false;
+    const titleHint = capabilitiesRef.current?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
+    void sendPromptNow({ text, attachments: [], titleHint, appendBlock: true });
+    return true;
   }
 
   function resend(text: string) {
@@ -190,6 +208,7 @@ export function useAgentPromptQueue({
 
   async function sendPromptNow({
     text,
+    displayText,
     attachments: atts,
     titleHint,
     skill,
@@ -203,7 +222,7 @@ export function useAgentPromptQueue({
       return;
     }
     if (appendBlock) {
-      setBlocks((bs) => [...bs, { kind: 'user', id: nextBlockId(), text, attachments: atts.length ? atts : undefined, at: Date.now() }]);
+      setBlocks((bs) => [...bs, { kind: 'user', id: nextBlockId(), text: displayText ?? text, attachments: atts.length ? atts : undefined, at: Date.now() }]);
     }
     setTurnBusy(true);
     openKindRef.current = null;
@@ -265,9 +284,11 @@ export function useAgentPromptQueue({
     clearQueue,
     retireQueue,
     setQueuedPromptStatus,
+    deleteQueuedPrompt,
     runNextQueuedPrompt,
     steerQueuedPrompt,
     send,
+    sendPreset,
     resend,
     resendFailedPrompt,
   };

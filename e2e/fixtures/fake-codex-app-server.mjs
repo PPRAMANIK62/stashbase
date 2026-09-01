@@ -188,6 +188,28 @@ function startTurn(requestId, params) {
     });
     return;
   }
+  if (/Build or update Wiki Pages from these Sources\./i.test(prompt)) {
+    requestMcpApproval({
+      turnId,
+      threadId: String(params.threadId || 'fake-thread-1'),
+      tool: 'write_file',
+      title: 'Allow Codex to write wiki/index.md?',
+      args: {
+        path: path.join(String(params.cwd || process.cwd()), 'wiki', 'index.md'),
+        content: [
+          '# Project Wiki',
+          '',
+          '## Start here',
+          '',
+          '- [Welcome](../Welcome.md) — project overview.',
+          '- [Nested details](../nested/Details.md) — supporting detail.',
+          '',
+        ].join('\n'),
+      },
+      successMessage: 'wiki/index.md now maps the folder.',
+    });
+    return;
+  }
   if (/journey:j07 converge canvas/i.test(prompt)) {
     requestMcpApproval({
       turnId,

@@ -4,6 +4,8 @@ import { AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
 import { errorMessage } from '@/common/api/apiTransport';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { openSettings } from '@/common/lib/settingsTrigger';
+import { openEmbeddingSetup } from '@/common/lib/embeddingSetupTrigger';
+import { onAgentInstructionsSaved } from '@/common/lib/agentInstructionsTrigger';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useStateWithRef } from '@/common/hooks/useStateWithRef';
 import type { Action, AppActions, ChatState, WorkspaceState } from '@/store/contexts/AppContext';
@@ -46,7 +48,13 @@ import { useAgentRuntimeCatalog } from '@/features/agent-panel/hooks/useAgentRun
 import { useAgentSkills } from '@/features/agent-panel/hooks/useAgentSkills';
 import { useAgentTabRegistration } from '@/features/agent-panel/hooks/useAgentTabRegistration';
 import { useSessionFolderReconcile } from '@/features/agent-panel/hooks/useSessionFolderReconcile';
+import { BUILD_WIKI_PAGES_PROMPT } from '@/features/agent-panel/lib/buildWikiPagesPrompt';
 import type { Attachment, Block, RetiredAgentScope, ServerEvent } from '@/features/agent-panel/lib/types';
+
+interface PendingBuildWikiPages {
+  scope: Extract<LibraryScope, { kind: 'folder' }>;
+  previousPickedScope: LibraryScope | undefined;
+}
 
 /** The whole "talk to the runtime" concern for one AgentView tab: WebSocket
  *  connection lifecycle, server-event routing, session reset/resume, and
@@ -164,6 +172,18 @@ export function useAgentSession({
   // recovery stuck, a fresh failure card when it did not. Any other session
   // reset clears it so a stale retry can never land in a different session.
   const pendingRetryRef = useRef<{ text: string; attachments: Attachment[] } | null>(null);
+  // A Build Wiki click is a tab-local intent. It survives Agent setup and
+  // runtime reconnect, but never app restart, and pins the folder scope until
+  // it sends or the user cancels. Semantic indexing has an independent lifecycle.
+  const [pendingBuildWikiPages, setPendingBuildWikiPages, pendingBuildWikiPagesRef] = useStateWithRef<PendingBuildWikiPages | null>(null);
+  // null follows product availability: configured Similarity Search starts
+  // on; an explicitly disabled chat stays off even if credentials later change.
+  // The effective policy is always false while no embedding source exists,
+  // but text retrieval (including prepared documents) remains available.
+  const [similaritySearchPreference, setSimilaritySearchPreference] = useState<boolean | null>(null);
+  const similaritySearchEnabled = workspace.embedderHasKey === true
+    && similaritySearchPreference !== false;
+  const similaritySearchEnabledRef = useLatestRef(similaritySearchEnabled);
   // The permission mode the live connection was opened with (rode the
   // connect URL); `ready` re-sends `set-mode` only when the mode moved
   // while the connection was coming up.
@@ -174,9 +194,6 @@ export function useAgentSession({
   const sessionIdRef = useRef<string | null>(null);
   const idRef = useLatestRef(id);
   const titleRef = useLatestRef(title);
-  // Empty-state starter suggestion → composer draft. Prefill only; the
-  // nonce lets the same template be re-applied after the user edits it.
-  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
   const exitReceivedRef = useRef(false);
@@ -185,6 +202,24 @@ export function useAgentSession({
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
   const turnErrorTrackerRef = useRef(new TurnErrorTracker());
+
+  function sendSimilaritySearchPolicy(enabled = similaritySearchEnabledRef.current) {
+    wsRef.current?.send(JSON.stringify({ t: 'set-similarity-search', enabled }));
+  }
+
+  function changeSimilaritySearch(enabled: boolean) {
+    setSimilaritySearchPreference(enabled);
+    const effective = enabled && workspace.embedderHasKey === true;
+    sendSimilaritySearchPolicy(effective);
+    if (enabled && workspace.embedderHasKey !== true) openEmbeddingSetup();
+  }
+
+  // Completing or removing Similarity Search setup changes the effective policy without a
+  // new Chat connection. Re-apply it live; the ready handler below covers
+  // initial connection ordering.
+  useEffect(() => {
+    if (readyRef.current) sendSimilaritySearchPolicy(similaritySearchEnabled);
+  }, [similaritySearchEnabled]);
 
   // The sub-hooks below take the refs above only where the core genuinely
   // co-owns them. `blocksRef`, `turnActiveRef`, `wsRef`, and `sessionIdRef`
@@ -233,6 +268,75 @@ export function useAgentSession({
     knownFilePathsRef: mentions.knownFilePathsRef,
     sessionFolder,
   });
+
+  function maybeSendPendingBuildWikiPages() {
+    const pending = pendingBuildWikiPagesRef.current;
+    if (!pending || !readyRef.current || turnActiveRef.current) return;
+    if (!libraryScopesEqual(controls.connectedScopeRef.current, pending.scope)) return;
+    // Clear before the send so a repeated ready event cannot duplicate the
+    // product-owned turn.
+    setPendingBuildWikiPages(null);
+    promptQueue.sendPreset(BUILD_WIKI_PAGES_PROMPT);
+  }
+
+  /* Agent Instructions edited for some scope. The resolved text is injected
+   * when a native session MOUNTS, so there is no live setter to call — applying
+   * an edit means remounting, exactly the move a thinking-effort change
+   * makes. Resume in place when the conversation has content so the
+   * transcript survives; a blank chat just starts again.
+   *
+   * Deferred rather than immediate while a turn is in flight: remounting
+   * mid-turn would strand the reply being streamed. The armed flag then
+   * lands at turn-end, which is the next moment the guidance can matter. */
+  const [, setInstructionsStale, instructionsStaleRef] = useStateWithRef(false);
+
+  function maybeApplyAgentInstructions() {
+    if (!instructionsStaleRef.current || !readyRef.current || turnActiveRef.current) return;
+    // Cleared BEFORE the reset so the `ready` this triggers cannot arm a
+    // second remount and loop.
+    setInstructionsStale(false);
+    if (blocksRef.current.length > 0 && sessionIdRef.current) {
+      resetSessionState({ resumeId: sessionIdRef.current });
+    } else {
+      reconnect();
+    }
+  }
+
+  function handleAgentInstructionsSaved(scope: Extract<LibraryScope, { kind: 'folder' }>) {
+    // The editor edits a scope; this session only cares when that scope is
+    // the one it actually connected with.
+    if (!libraryScopesEqual(controls.connectedScopeRef.current, scope)) return;
+    setInstructionsStale(true);
+    maybeApplyAgentInstructions();
+  }
+
+  const agentInstructionsSavedRef = useLatestRef(handleAgentInstructionsSaved);
+  useEffect(
+    () => onAgentInstructionsSaved((scope) => agentInstructionsSavedRef.current(scope)),
+    [agentInstructionsSavedRef],
+  );
+
+  /** Pin this blank chat to its folder and arm one Build Wiki turn. */
+  function requestBuildWikiPages(): boolean {
+    const scope = controls.sessionScope;
+    if (scope.kind !== 'folder' || pendingBuildWikiPagesRef.current) return false;
+    setPendingBuildWikiPages({
+      scope,
+      previousPickedScope: controls.pickedScopeRef.current,
+    });
+    // Even when this is the window-default folder, retain an explicit pick so
+    // Agent setup or a window-folder switch cannot redirect the intent.
+    controls.setPickedScope(scope);
+    maybeSendPendingBuildWikiPages();
+    return true;
+  }
+
+  function cancelBuildWikiPages() {
+    const pending = pendingBuildWikiPagesRef.current;
+    if (!pending) return;
+    controls.setPickedScope(pending.previousPickedScope);
+    setPendingBuildWikiPages(null);
+  }
   const skills = useAgentSkills({ phase, wsRef });
   const reconcileSessionFolder = useSessionFolderReconcile({
     sessionFolder,
@@ -429,6 +533,7 @@ export function useAgentSession({
    * Library sessions in place; every form of user work stays visible in a
    * retired, non-reconnectable conversation. */
   function retireRemovedScope(folder: string) {
+    if (pendingBuildWikiPagesRef.current?.scope.path === folder) setPendingBuildWikiPages(null);
     const completelyBlank = isBlankChatTab({
       hasContent: blocksRef.current.length > 0 || queuedPromptsRef.current.length > 0,
       turnActive: turnActiveRef.current,
@@ -659,6 +764,9 @@ export function useAgentSession({
     switch (ev.t) {
       case 'ready':
         readyRef.current = true;
+        // Policy precedes every prompt sent from this ready transition, so a
+        // pending Build Wiki or recovery turn cannot race the server default.
+        sendSimilaritySearchPolicy();
         setPhase('live');
         runtimeCatalog.refreshRuntimes();
         // Starting a built-in agent can create root-level instruction files
@@ -687,6 +795,8 @@ export function useAgentSession({
           pendingRetryRef.current = null;
           if (retry) promptQueue.resendFailedPrompt(retry);
         }
+        maybeSendPendingBuildWikiPages();
+        maybeApplyAgentInstructions();
         break;
       case 'session-id':
         sessionIdRef.current = ev.id;
@@ -801,6 +911,8 @@ export function useAgentSession({
           (message) => setBlocks((bs) => [...bs, { kind: 'error', id: nextBlockId(), text: message }]),
           promptQueue.runNextQueuedPrompt,
         );
+        maybeSendPendingBuildWikiPages();
+        maybeApplyAgentInstructions();
         break;
       }
       case 'error':
@@ -941,6 +1053,16 @@ export function useAgentSession({
     queue: promptQueue,
     mentions,
     skills,
+    wiki: {
+      pending: pendingBuildWikiPages !== null,
+      requestBuildWikiPages,
+      cancelBuildWikiPages,
+    },
+    similaritySearch: {
+      enabled: similaritySearchEnabled,
+      availabilityKnown: workspace.embedderHasKey !== null,
+      change: changeSimilaritySearch,
+    },
     transcript: {
       blocks,
       turnActive,
@@ -949,8 +1071,6 @@ export function useAgentSession({
       fatal,
       fatalRecoveryLabel,
       scopeRetired,
-      prefill,
-      setPrefill,
       stop,
       reconnect,
       reconnectAfterFatal,
