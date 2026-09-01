@@ -15,6 +15,23 @@ import {
   snippetForLine,
 } from './keyword-search.ts';
 
+function removeTempTree(testRoot: string): void {
+  try {
+    fs.rmSync(testRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: process.platform === 'win32' ? 10 : 0,
+      retryDelay: 100,
+    });
+  } catch (error: unknown) {
+    // Windows runners can retain a directory handle briefly after the final
+    // derived-file read. The assertion already completed; an ephemeral runner
+    // temp root must not turn that successful behavior check into a failure.
+    if (process.platform === 'win32' && (error as { code?: string }).code === 'EPERM') return;
+    throw error;
+  }
+}
+
 test('ripgrep paths use one folder-relative identity on POSIX and Windows', () => {
   assert.equal(normalizeRipgrepPath('./data.JSON'), 'data.JSON');
   assert.equal(normalizeRipgrepPath('.\\data.JSON'), 'data.JSON');
@@ -86,12 +103,7 @@ test('keyword search reads current prepared PDF Markdown without exposing its de
     if (previous == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
     else process.env.STASHBASE_LOCAL_DATA_ROOT = previous;
     fs.rmSync(root, { recursive: true, force: true });
-    fs.rmSync(dataRoot, {
-      recursive: true,
-      force: true,
-      maxRetries: process.platform === 'win32' ? 5 : 0,
-      retryDelay: 100,
-    });
+    removeTempTree(dataRoot);
   }
 });
 
