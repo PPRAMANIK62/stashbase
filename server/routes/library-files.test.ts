@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import express from 'express';
+import { applyLineRange } from '../library-file-reader.ts';
 import { createLibraryOperations } from '../library-operations/index.ts';
 import { mount } from './library-files.ts';
 
@@ -106,6 +107,84 @@ test('library search validates and forwards file-type filters', async () => {
       error: 'unknown search mode; mode must be one of: semantic, keyword',
       code: 'INVALID_SEARCH_MODE',
     });
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test('read windows return only the requested lines and drop the version token', () => {
+  const whole = {
+    path: '/library/notes/long.md',
+    format: 'md',
+    content: 'one\ntwo\nthree\nfour\n',
+    version: 'v1',
+  };
+
+  assert.deepEqual(applyLineRange(whole, undefined), whole);
+  assert.deepEqual(applyLineRange(whole, { offset: 1 }), whole);
+
+  assert.deepEqual(applyLineRange(whole, { offset: 2, limit: 2 }), {
+    path: whole.path,
+    format: 'md',
+    content: 'two\nthree\n',
+    partial: true,
+    totalLines: 4,
+    nextOffset: 4,
+  });
+
+  // A window that ends the file reports no next offset and keeps the source's
+  // trailing-newline convention.
+  assert.deepEqual(applyLineRange(whole, { offset: 4, limit: 10 }), {
+    path: whole.path,
+    format: 'md',
+    content: 'four\n',
+    partial: true,
+    totalLines: 4,
+  });
+  assert.equal(
+    applyLineRange({ ...whole, content: 'one\ntwo' }, { offset: 2, limit: 5 }).content,
+    'two',
+  );
+
+  // Past the end is an empty window, not an error and not a whole-file read.
+  assert.equal(applyLineRange(whole, { offset: 99, limit: 5 }).content, '');
+});
+
+test('read route forwards a line window and rejects a malformed one', async () => {
+  let readArgs: unknown[] = [];
+  const operations = createLibraryOperations({
+    read: (async (...args: unknown[]) => {
+      readArgs = args;
+      return { path: '/library/notes/long.md', format: 'md', content: 'two\n' };
+    }) as never,
+  });
+  const app = express();
+  app.use(express.json());
+  mount(app, operations);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve, reject) => {
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const url = `http://127.0.0.1:${address.port}/api/library/file`;
+
+  try {
+    const windowed = await fetch(`${url}?path=%2Flibrary%2Fnotes%2Flong.md&offset=2&limit=1`);
+    assert.equal(windowed.status, 200);
+    assert.deepEqual(readArgs[1], { offset: 2, limit: 1 });
+
+    readArgs = [];
+    const whole = await fetch(`${url}?path=%2Flibrary%2Fnotes%2Flong.md`);
+    assert.equal(whole.status, 200);
+    assert.deepEqual(readArgs[1], { offset: undefined, limit: undefined });
+
+    readArgs = [];
+    const bad = await fetch(`${url}?path=%2Flibrary%2Fnotes%2Flong.md&offset=0`);
+    assert.equal(bad.status, 400);
+    assert.match((await bad.json() as { error: string }).error, /offset must be a positive integer/);
+    assert.deepEqual(readArgs, []);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

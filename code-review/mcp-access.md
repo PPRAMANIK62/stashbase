@@ -46,6 +46,16 @@ clients and are not a general host-filesystem API.
   not read file bodies. `read_file` has an `8 MiB` response ceiling for source
   and current derived text; oversized content fails explicitly rather than
   consuming unbounded server memory.
+- `read_file` accepts an optional 1-based `offset`/`limit` line window over
+  every readable family, direct and derived alike. The window is applied after
+  the bounded read, so it narrows what a caller receives and never widens what
+  the server admits: a source above the read ceiling stays unreadable in every
+  window. A malformed bound is a `400`, never a silent whole-file read.
+- A windowed response is self-describing — `partial`, `totalLines`, and a
+  `nextOffset` that is absent once the window ends the file — and omits
+  `version`. Dropping the version token keeps a window outside the optimistic
+  write path, so a partial read cannot be laundered into a version-checked
+  full-file overwrite.
 - The Workbench tree is intentionally wider than the Agent file surface.
   Generic files, user dotfiles admitted only by the Workbench, excluded-folder
   placeholders, symlinks, and special entries do not appear in

@@ -13,7 +13,7 @@ import {
   routeError,
 } from '../library-file-access.ts';
 import { listLibraryDirectory } from '../library-directory.ts';
-import { readLibraryFile } from '../library-file-reader.ts';
+import { readLibraryFile, type LibraryFileLineRange } from '../library-file-reader.ts';
 import {
   deleteLibraryFile,
   editLibraryFile,
@@ -80,7 +80,7 @@ export interface LibraryOperations {
    * project; folder-bound and unattributed callers only create + register. */
   createProject(input: { name: unknown; location?: unknown; agentSessionId?: string; windowId?: string }): Promise<unknown>;
   listDirectory(path?: unknown): Promise<unknown>;
-  read(path: unknown): Promise<unknown>;
+  read(path: unknown, range?: LibraryFileLineRange): Promise<unknown>;
   write(input: { path: unknown; content: unknown; baseVersion?: string }): Promise<unknown>;
   edit(input: { path: unknown; oldText: unknown; newText: unknown; replaceAll?: boolean; baseVersion?: string }): Promise<unknown>;
   move(input: { path: unknown; newPath: unknown; cascade?: boolean }): Promise<unknown>;
@@ -272,7 +272,7 @@ export function createLibraryOperations(
     createProject: (input) => asLibraryOperation(() => deps.createProject(input)),
 
     listDirectory: (path) => asLibraryOperation(() => deps.listDirectory(path)),
-    read: (path) => asLibraryOperation(() => deps.read(path)),
+    read: (path, range) => asLibraryOperation(() => deps.read(path, range)),
     write: ({ path, content, baseVersion }) => asLibraryOperation(() => {
       if (typeof content !== 'string') throw routeError('content (string) required', 400);
       return deps.write(path, content, { baseVersion });

@@ -11,6 +11,7 @@ import { indexer } from '../state.ts';
 import { sendError } from '../http.ts';
 import {
   requireLibraryStatusFolder,
+  routeError,
 } from '../library-file-access.ts';
 import { agentContextFile } from '../library-file-reader.ts';
 import { currentWindowId } from '../folder.ts';
@@ -205,7 +206,9 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
 
   app.get('/api/library/file', async (req, res) => {
     try {
-      res.json(await operations.read(req.query.path));
+      const offset = positiveIntQuery(req.query.offset, 'offset');
+      const limit = positiveIntQuery(req.query.limit, 'limit');
+      res.json(await operations.read(req.query.path, { offset, limit }));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -249,4 +252,15 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
       sendError(res, err);
     }
   });
+}
+
+/** Read-window query params are optional, but a malformed one is an error rather
+ * than a silent whole-file read that would flood the caller's context. */
+function positiveIntQuery(raw: unknown, name: string): number | undefined {
+  if (raw == null || raw === '') return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw routeError(`${name} must be a positive integer`, 400);
+  }
+  return value;
 }

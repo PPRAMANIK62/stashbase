@@ -68,7 +68,12 @@ export function createHttpLibraryOperations(
       body: JSON.stringify({ name, ...(location != null ? { location } : {}) }),
     }),
     listDirectory: (path) => json(`${webBase}/api/library/directory?${pathQuery(path)}`, { headers: headers() }),
-    read: (path) => json(`${webBase}/api/library/file?${pathQuery(path)}`, { headers: headers() }),
+    read: (path, range) => json(
+      `${webBase}/api/library/file?${pathQuery(path)}`
+        + (range?.offset != null ? `&offset=${range.offset}` : '')
+        + (range?.limit != null ? `&limit=${range.limit}` : ''),
+      { headers: headers() },
+    ),
     write: ({ path, content, baseVersion }) => json(`${webBase}/api/library/file`, {
       method: 'PUT', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify({ path, content, ...(typeof baseVersion === 'string' ? { baseVersion } : {}) }),
     }),
