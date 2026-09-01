@@ -4,38 +4,41 @@ import { ModalShell } from '@/common/components/ModalShell';
 import { Button } from '@/common/components/ui/button';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/common/components/ui/field';
 import { Input } from '@/common/components/ui/input';
-import { api, errorMessage } from '@/common/api/api';
+import { errorMessage } from '@/common/api/apiTransport';
 import { useAppActions } from '@/store/contexts/AppContext';
 import { useWorkspace } from '@/store/contexts/WorkspaceContext';
 import { shortenFolderPath } from '@/common/lib/paths';
+import { useGitHubImportRequest } from '@/features/workspace/hooks/useGitHubImportRequest';
+import type { ManagedImportGitHubModalProps } from './ImportGitHubModal';
 import {
   extractGitHubRepoName,
   isValidGitHubRepoUrl,
-  type ManagedImportGitHubModalProps,
-} from './ImportGitHubModal';
+} from '@/features/workspace/lib/githubImportValidation';
+import { validateFolderName } from '@shared/folder-name';
 
 export default function ManagedImportGitHubModal({ onClose }: ManagedImportGitHubModalProps) {
   const { actions } = useAppActions();
   const workspace = useWorkspace();
+  const { cancelImport, getFolderHome, importRepository } = useGitHubImportRequest();
   const [url, setUrl] = useState('');
   const [folderName, setFolderName] = useState('');
   const [isCustomName, setIsCustomName] = useState(false);
-  const [homeDir, setHomeDir] = useState<string>(workspace.homeDir ?? '');
+  const [folderHome, setFolderHome] = useState('');
+  const [folderHomeError, setFolderHomeError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [publishedPath, setPublishedPath] = useState<string | null>(null);
+  const urlInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (!homeDir) {
-      let active = true;
-      void api.getFolderHome().then((res) => {
-        if (active && res.path) setHomeDir(res.path);
-      }).catch(() => {
-        /* best-effort home dir fallback */
-      });
-      return () => { active = false; };
-    }
-  }, [homeDir]);
+    let active = true;
+    void getFolderHome().then((res) => {
+      if (active && res.path) setFolderHome(res.path);
+    }).catch((err: unknown) => {
+      if (active) setFolderHomeError(`Could not determine the folder home: ${errorMessage(err)}`);
+    });
+    return () => { active = false; };
+  }, [getFolderHome]);
 
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newUrl = e.target.value;
@@ -56,24 +59,23 @@ export default function ManagedImportGitHubModal({ onClose }: ManagedImportGitHu
   };
 
   const handleCancel = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    cancelImport();
     onClose();
   };
 
   const trimmedUrl = url.trim();
   const trimmedName = folderName.trim();
   const isUrlValid = isValidGitHubRepoUrl(trimmedUrl);
-  const isNameValid = trimmedName.length > 0;
-  const canSubmit = isUrlValid && isNameValid && !importing;
+  const folderNameError = validateFolderName(trimmedName);
+  const canSubmit = !importing && (publishedPath
+    ? true
+    : Boolean(folderHome) && isUrlValid && folderNameError == null);
 
-  const destinationPath = homeDir
-    ? (trimmedName ? `${homeDir.replace(/[/\\]+$/, '')}/${trimmedName}` : homeDir)
-    : (trimmedName || '…');
-  const destinationDisplay = homeDir
-    ? shortenFolderPath(destinationPath, homeDir)
+  const destinationPath = publishedPath ?? (folderHome
+    ? (trimmedName ? `${folderHome.replace(/[/\\]+$/, '')}/${trimmedName}` : folderHome)
+    : (trimmedName || '…'));
+  const destinationDisplay = folderHome
+    ? shortenFolderPath(destinationPath, workspace.homeDir)
     : destinationPath;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -82,23 +84,36 @@ export default function ManagedImportGitHubModal({ onClose }: ManagedImportGitHu
 
     setError(null);
     setImporting(true);
-    const ac = new AbortController();
-    abortControllerRef.current = ac;
+    if (publishedPath) {
+      try {
+        await actions.openFolder(publishedPath);
+        onClose();
+      } catch (err: unknown) {
+        setError(`The repository remains at ${publishedPath}. StashBase could not open it: ${errorMessage(err)}`);
+        setImporting(false);
+      }
+      return;
+    }
+
+    let importedPath: string | null = null;
+    let requestAborted = false;
 
     try {
-      const result = await api.importPublicGitHubRepository(
-        { url: trimmedUrl, folderName: trimmedName },
-        { signal: ac.signal },
-      );
-      onClose();
+      const result = await importRepository({ url: trimmedUrl, folderName: trimmedName });
+      importedPath = result.path;
+      setPublishedPath(result.path);
       await actions.openFolder(result.path);
+      onClose();
     } catch (err: unknown) {
-      if (ac.signal.aborted) {
-        setImporting(false);
+      if (err instanceof Error && err.name === 'AbortError') {
+        requestAborted = true;
         return;
       }
-      setError(errorMessage(err));
-      setImporting(false);
+      setError(importedPath
+        ? `The repository remains at ${importedPath}. StashBase could not open it: ${errorMessage(err)}`
+        : errorMessage(err));
+    } finally {
+      if (!requestAborted) setImporting(false);
     }
   };
 
@@ -107,18 +122,25 @@ export default function ManagedImportGitHubModal({ onClose }: ManagedImportGitHu
       title="Import from GitHub"
       description="Clone a public repository into your StashBase folder home."
       onCancel={handleCancel}
+      initialFocus={urlInputRef}
     >
-      <form onSubmit={(e) => { void handleSubmit(e); }} className="flex flex-col gap-4">
+      <form
+        onSubmit={(e) => { void handleSubmit(e); }}
+        className="flex flex-col gap-4"
+        aria-busy={importing}
+      >
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="github-import-url">Repository URL</FieldLabel>
             <Input
               id="github-import-url"
+              ref={urlInputRef}
               placeholder="https://github.com/owner/repo"
               value={url}
               onChange={handleUrlChange}
-              disabled={importing}
-              autoFocus
+              disabled={importing || publishedPath != null}
+              required
+              aria-invalid={trimmedUrl.length > 0 && !isUrlValid}
             />
           </Field>
 
@@ -129,8 +151,14 @@ export default function ManagedImportGitHubModal({ onClose }: ManagedImportGitHu
               placeholder="folder-name"
               value={folderName}
               onChange={handleFolderNameChange}
-              disabled={importing}
+              disabled={importing || publishedPath != null}
+              required
+              aria-invalid={trimmedName.length > 0 && folderNameError != null}
+              aria-describedby={trimmedName.length > 0 && folderNameError ? 'github-import-folder-error' : undefined}
             />
+            {trimmedName.length > 0 && folderNameError && (
+              <FieldError id="github-import-folder-error">{folderNameError}</FieldError>
+            )}
           </Field>
 
           <Field>
@@ -143,6 +171,7 @@ export default function ManagedImportGitHubModal({ onClose }: ManagedImportGitHu
             </div>
           </Field>
 
+          {folderHomeError && <FieldError>{folderHomeError}</FieldError>}
           {error && <FieldError>{error}</FieldError>}
         </FieldGroup>
 
@@ -158,7 +187,7 @@ export default function ManagedImportGitHubModal({ onClose }: ManagedImportGitHu
             type="submit"
             disabled={!canSubmit}
           >
-            {importing ? 'Importing…' : 'Import and Open'}
+            {importing ? 'Importing…' : publishedPath ? 'Open Imported Folder' : 'Import and Open'}
           </Button>
         </div>
       </form>

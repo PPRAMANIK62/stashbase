@@ -88,6 +88,7 @@ import { createClientErrorHandler } from './client-error.ts';
 import { startHostedEmbeddingBroker, stopHostedEmbeddingBroker } from './hosted-embedding-broker.ts';
 import { hostedAccountState, setHostedQuotaAvailableHandler } from './hosted-account.ts';
 import { stopOpenCodeRuntime } from './opencode-runtime.ts';
+import { cancelAllGitHubImports } from './github-import.ts';
 
 const log = logger('server');
 
@@ -659,6 +660,7 @@ async function shutdown(reason: string): Promise<void> {
       cancelAgentInstalls: cancelAgentRuntimeInstalls,
       closeBundledAgent: stopOpenCodeRuntime,
       closeHostedBroker: stopHostedEmbeddingBroker,
+      cancelGitHubImports: cancelAllGitHubImports,
       cancelModelDownloads: cancelAllTranscriptionModelDownloads,
       cancelConversions: cancelAllConversions,
       closeStateDb,
@@ -671,6 +673,9 @@ async function shutdown(reason: string): Promise<void> {
       },
       onAgentInstallsCancelled: (cancelled) => {
         if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} Agent install(s)`);
+      },
+      onGitHubImportsCancelled: (cancelled) => {
+        if (cancelled > 0) log.info(`shutdown: cancelled ${cancelled} GitHub import(s)`);
       },
       onError: (step, err) => {
         log.warn(`shutdown: ${step} cleanup failed: ${err instanceof Error ? err.message : String(err)}`);

@@ -101,8 +101,8 @@ surface.
 - Application quit is an authenticated owner-to-server shutdown handshake.
   Signals are timeout fallbacks, not the normal cleanup path.
 - The shutdown ladder closes hosted-broker listening, active, and idle sockets
-  independently of MCP, Agent-install, conversion, database, and indexer
-  cleanup failures.
+  independently of MCP, Agent-install, GitHub-import, conversion, database, and
+  indexer cleanup failures.
 - Static renderer serving must bypass every API and asset route before serving
   the web bundle.
 - `shared/file-formats.ts` and `shared/library-files.ts` carry the exact

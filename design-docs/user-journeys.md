@@ -114,17 +114,19 @@ one, or has a public GitHub repository URL to import into their folder home.
 
 ### Primary Flow
 
-1. Open, create, or import a public GitHub repository through the Library switcher.
+1. Open or create a folder, or import a public GitHub repository, through the
+   Library switcher.
 2. Enter the folder before recursive preparation or indexing finishes.
 3. Browse supported source files and switch among authorized member folders.
 4. When no longer needed, deliberately remove a folder from the library.
 
 ### Required Observable Results
 
-- Opening, creating, or importing a folder does not migrate its contents into managed
-  storage or dirty foreign working trees.
-- GitHub repository import executes shallow single-branch clones into isolated staging,
-  validates against submodules and Git LFS, and publishes cleanly into the folder home.
+- Opening, creating, or importing a folder does not migrate its contents into
+  managed storage or dirty foreign working trees.
+- GitHub repository import executes shallow single-branch clones into isolated
+  staging, validates against submodules and Git LFS, and publishes without
+  changing an existing destination in the folder home.
 - Folder entry prioritizes navigation; recursive background work does not hold
   the workspace closed.
 - Switching folders preserves library-level state while keeping folder-scoped

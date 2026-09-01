@@ -18,6 +18,7 @@ import { logger, errorMessage } from './log.ts';
 import { copyDirectoryDereferenced } from './fs-move.ts';
 import { isIndexExcludedDirName } from './indexable.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import { validateFolderName as validatePortableFolderName } from '../shared/folder-name.ts';
 import {
   readAppConfig as readConfig,
   readAppConfigAsync as readConfigAsync,
@@ -251,16 +252,7 @@ export function getFolderHome(): string {
  *  cloud sync — symmetric with `sanitizeFilename` on the upload path.
  *  Returns null when valid, error message otherwise. */
 export function validateFolderName(name: string): string | null {
-  if (typeof name !== 'string' || !name.trim()) return 'name required';
-  const n = name.trim();
-  if (n === '.' || n === '..') return 'name cannot be "." or ".."';
-  if (n.startsWith('.')) return 'name cannot start with "."';
-  if (n.endsWith('.')) return 'name cannot end with "."';
-  if (n.includes('/') || n.includes('\\')) return 'name cannot contain slashes';
-  // eslint-disable-next-line no-control-regex
-  if (/[<>:"|?*\u0000-\u001f]/.test(n)) return 'name cannot contain < > : " | ? * or control characters';
-  if (n.length > 64) return 'name too long (max 64 chars)';
-  return null;
+  return validatePortableFolderName(name);
 }
 
 /** Direct-child directory names under the default folder home. This is

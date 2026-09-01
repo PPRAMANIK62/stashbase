@@ -53,11 +53,11 @@ manager, or a primary graph-navigation tool.
 - Users can open or create a local folder, import a public GitHub repository
   directly into the default folder home, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
-  A created folder or imported repository is an ordinary directory. Removing membership clears only
-  StashBase-owned state.
+  A created folder or imported repository is an ordinary directory. Removing
+  membership clears only StashBase-owned state.
 - The titlebar folder switcher keeps the window's current folder identity
   visible and offers the full library membership alongside pinned "New Folder…",
-  "Import from GitHub…", and "Open Local Folder…" actions. A name wider than the
+  "Import from GitHub…", and "Open Folder…" actions. A name wider than the
   sidebar column truncates within that column instead of crossing onto the
   document tab strip. Folder-level actions remain attributable to the active
   folder.
@@ -110,6 +110,10 @@ manager, or a primary graph-navigation tool.
 - Folder entry is navigation first; listing, preparation, and indexing continue
   in the background. Code-heavy project infrastructure that cannot surface in
   the Workbench does not make those background scans hold navigation closed.
+- GitHub import accepts one public repository URL and one portable folder-home
+  child name. Import fields remain locked while Git runs; cancellation leaves
+  no partial published folder. A completed clone is retained and its local path
+  stays actionable if the later folder-open transition fails.
 - Closing a window either makes its live edit durable or leaves the window open
   with an actionable failure. Closing one window never tears down another.
 - Folder removal never deletes user files. Every affected window saves first

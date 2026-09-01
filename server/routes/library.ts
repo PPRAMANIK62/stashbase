@@ -167,9 +167,10 @@ export function mount(app: express.Express): void {
   // Works before any folder is open.
   app.post('/api/github/import', async (req, res) => {
     const ac = new AbortController();
-    req.on('close', () => {
-      if (!res.writableEnded) ac.abort();
-    });
+    const abort = () => ac.abort(new Error('GitHub import request closed'));
+    const abortOnPrematureClose = () => { if (!res.writableEnded) abort(); };
+    req.once('aborted', abort);
+    res.once('close', abortOnPrematureClose);
     try {
       const result = await importPublicGitHubRepository({
         url: req.body?.url,
@@ -178,10 +179,14 @@ export function mount(app: express.Express): void {
       });
       res.json(result);
     } catch (err: unknown) {
+      if (ac.signal.aborted || res.destroyed) return;
       if (err instanceof GitHubImportError) {
         return res.status(err.status).json({ error: err.message, code: err.code });
       }
       sendFolderOperationError(res, err);
+    } finally {
+      req.removeListener('aborted', abort);
+      res.removeListener('close', abortOnPrematureClose);
     }
   });
 

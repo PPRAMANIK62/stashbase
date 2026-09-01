@@ -108,7 +108,7 @@ aliases, and Journey E2E owns representative composition.
 
 ## J02: Folder
 
-**Status:** Release-dependent.
+**Status:** Partial and release-dependent.
 
 - **Contract Test:** workspace transitions, library mutation, cleanup, GitHub
   repository import (`server/__tests__/github-import.test.ts`,
@@ -121,6 +121,9 @@ aliases, and Journey E2E owns representative composition.
 - **AI Eval:** not required.
 - **Release Check:** real operating-system folder picking, Git cloning of public
   repositories, and file drop remain release evidence.
+- **Gap:** repository publication reserves the final directory without
+  clobbering concurrent user state, but Node lacks a cross-platform atomic
+  no-replace directory rename; see the File Transactions Known Gap.
 
 ## J03: Documents
 
