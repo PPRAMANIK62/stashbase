@@ -7,7 +7,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { LibrarySidebar, LibraryWelcome } from '@/features/workspace/public';
+import { LibrarySidebar, LibraryWelcome, useWorkspace } from '@/features/workspace/public';
 import { Logo } from '@/shared/brand/logo';
 
 import type { AppDependencies } from './dependencies';
@@ -15,6 +15,8 @@ import type { AppDependencies } from './dependencies';
 import './shell.css';
 
 export function App({ dependencies }: { dependencies: AppDependencies }) {
+  useWorkspace(dependencies.library.api);
+
   return (
     <SidebarProvider
       className="workspace-shell h-svh min-h-0 overflow-hidden bg-surface-1"

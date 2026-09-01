@@ -24,6 +24,10 @@ export interface LibraryFolderPicker {
   chooseFolder(options?: FolderPickerOptions): Promise<LibraryFolderPickerResult>;
 }
 
+export interface WorkspaceQueryScope {
+  cancel(): Promise<void>;
+}
+
 export class LibraryError extends Error {
   readonly kind: LibraryFailureKind;
 

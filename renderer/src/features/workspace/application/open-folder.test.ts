@@ -32,4 +32,24 @@ describe('open library folder', () => {
       message: 'The library is unavailable.',
     });
   });
+
+  it('rejects a completion that arrives after its operation was cancelled', async () => {
+    let resolveOpen: ((value: typeof snapshot) => void) | undefined;
+    const controller = new AbortController();
+    const api = {
+      load: vi.fn(),
+      openFolder: vi.fn(
+        () =>
+          new Promise<typeof snapshot>((resolve) => {
+            resolveOpen = resolve;
+          }),
+      ),
+    };
+    const result = openFolder(api, '/library/notes', controller.signal);
+
+    controller.abort();
+    resolveOpen?.(snapshot);
+
+    await expect(result).resolves.toEqual({ status: 'cancelled' });
+  });
 });

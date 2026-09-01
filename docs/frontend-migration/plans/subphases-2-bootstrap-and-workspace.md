@@ -68,8 +68,33 @@ Evidence: `pnpm test:renderer`, `pnpm test:protocols`, `pnpm typecheck`,
 
 **Blocked by:** 24.
 
+**Status:** Complete.
+
 Create and dispose folder-scoped Workspace runtimes with cancellation,
 generation guards, query ownership, and stale-completion rejection.
+
+App composition now projects the authoritative active folder from the window's
+library query and constructs exactly one folder-scoped `WorkspaceRuntime` when
+that identity settles. Each runtime owns an immutable folder-plus-generation
+scope, a Zustand vanilla store, a runtime abort signal, guarded completion, and
+idempotent disposal. The app composition root invokes the Workspace lifecycle
+hook; no provider or global store exists before a consumer needs one. A
+successful switch disposes the prior scope before mounting the replacement; a
+pending, cancelled, or failed switch leaves the current runtime intact.
+Reopening a folder receives a fresh window-local generation.
+
+Folder commands now pair cancellation with operation generations, so an older
+response cannot replace the membership query after a newer choice wins. Runtime
+completion also requires the captured folder identity and generation to remain
+current. Workspace owns a typed folder query prefix; disposal cancels only that
+folder's in-flight queries while retaining bounded cached data for ordinary
+navigation. Library membership and other folders remain untouched. Task 26
+consumes this scope for listing and tree state; Task 27 owns loss/removal
+eviction rather than treating an ordinary switch as authorization loss.
+
+Evidence: `pnpm test:renderer`, `pnpm test:renderer-architecture`,
+`pnpm format:web`, `pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`, and
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`.
 
 ## 26 — Render the accessible file tree
 

@@ -17,12 +17,19 @@ type FolderRequest =
 
 interface FolderOperation {
   controller: AbortController;
+  generation: number;
   request: FolderRequest;
+}
+
+interface CurrentFolderOperation {
+  controller: AbortController;
+  generation: number;
 }
 
 export function useFolders(api: LibraryApi, folderPicker: LibraryFolderPicker) {
   const queryClient = useQueryClient();
-  const currentOperation = useRef<AbortController | null>(null);
+  const currentOperation = useRef<CurrentFolderOperation | null>(null);
+  const nextGeneration = useRef(0);
   const operation = useMutation({
     mutationFn: ({ controller, request }: FolderOperation) => {
       if (request.kind === 'select') {
@@ -36,9 +43,23 @@ export function useFolders(api: LibraryApi, folderPicker: LibraryFolderPicker) {
       );
     },
     onSettled: (_result, _error, variables) => {
-      if (currentOperation.current === variables.controller) currentOperation.current = null;
+      if (
+        currentOperation.current?.controller === variables.controller &&
+        currentOperation.current.generation === variables.generation
+      ) {
+        currentOperation.current = null;
+      }
     },
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
+      const current = currentOperation.current;
+      if (
+        !current ||
+        current.controller !== variables.controller ||
+        current.generation !== variables.generation ||
+        variables.controller.signal.aborted
+      ) {
+        return;
+      }
       if (result.status === 'opened') {
         queryClient.setQueryData(libraryQueryKey, result.snapshot);
       }
@@ -47,16 +68,17 @@ export function useFolders(api: LibraryApi, folderPicker: LibraryFolderPicker) {
 
   useEffect(
     () => () => {
-      currentOperation.current?.abort();
+      currentOperation.current?.controller.abort();
     },
     [],
   );
 
   const run = (request: FolderRequest) => {
-    currentOperation.current?.abort();
+    currentOperation.current?.controller.abort();
     const controller = new AbortController();
-    currentOperation.current = controller;
-    operation.mutate({ controller, request });
+    const generation = ++nextGeneration.current;
+    currentOperation.current = { controller, generation };
+    operation.mutate({ controller, generation, request });
   };
 
   return {

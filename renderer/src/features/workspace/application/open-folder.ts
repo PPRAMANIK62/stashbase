@@ -15,7 +15,8 @@ export async function openFolder(
   if (signal.aborted) return { status: 'cancelled' };
 
   try {
-    return { status: 'opened', snapshot: await api.openFolder(path, signal) };
+    const snapshot = await api.openFolder(path, signal);
+    return signal.aborted ? { status: 'cancelled' } : { status: 'opened', snapshot };
   } catch (error) {
     if (signal.aborted) return { status: 'cancelled' };
     if (error instanceof LibraryError) {
