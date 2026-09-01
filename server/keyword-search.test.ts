@@ -86,7 +86,12 @@ test('keyword search reads current prepared PDF Markdown without exposing its de
     if (previous == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
     else process.env.STASHBASE_LOCAL_DATA_ROOT = previous;
     fs.rmSync(root, { recursive: true, force: true });
-    fs.rmSync(dataRoot, { recursive: true, force: true });
+    fs.rmSync(dataRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: process.platform === 'win32' ? 5 : 0,
+      retryDelay: 100,
+    });
   }
 });
 
