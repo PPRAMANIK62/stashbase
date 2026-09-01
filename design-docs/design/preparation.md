@@ -39,7 +39,8 @@ artifacts.
   search preparation.
 - Users see preparing, ready, blocked, failed, cancelled, and retryable states
   only when they change the next action. Missing optional capabilities do not
-  turn the source itself into a failed file.
+  turn the source itself into a failed file. An image with no recognizable text
+  is a normal completed OCR result, not a failure or a reason to Reprocess.
 - Reprocess is explicit. Large PDF and media work can reuse valid resumable
   checkpoints after transient interruption while manual retry resets the work
   that must be recomputed.

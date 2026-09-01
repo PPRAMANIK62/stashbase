@@ -24,8 +24,9 @@
   semantic row and reports the decode failure. Generic workspace files remain
   outside Preparation, exact retrieval, semantic admission, and automatic Agent
   context.
-- Image OCR is complete only when current, searchable derived text carries its
-  completion marker. Empty OCR is a failure, not success.
+- Image OCR is complete when its current derived result carries the completion
+  marker. The result may contain no text: that is a stable, non-searchable
+  success and must not create a preparation failure or retry loop.
 - PDF text is complete only when current derived Markdown has the terminal
   completion marker. Batch scratch is resumable work, never truth.
 - Durable DOCX text is complete only when current sanitized derived HTML has
