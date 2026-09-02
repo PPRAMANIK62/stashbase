@@ -15,6 +15,10 @@ const workspaceSession = {
   read: async () => ({ ok: true as const, session: null }),
   write: async () => ({ ok: true as const }),
 };
+const windowLifecycle = {
+  onPrepareContextRelease: () => () => undefined,
+  reload: async () => ({ ok: true as const, reloaded: false }),
+};
 
 describe('Electron bridge', () => {
   it('returns only the validated library and runtime capabilities', () => {
@@ -23,12 +27,14 @@ describe('Electron bridge', () => {
         library,
         runtime: { serverOrigin: 'http://127.0.0.1:8090' },
         workspaceSession,
+        windowLifecycle,
       },
     } as unknown as Window);
     expect(bridge).toEqual({
       library,
       runtime: { serverOrigin: 'http://127.0.0.1:8090' },
       workspaceSession,
+      windowLifecycle,
     });
   });
 
@@ -43,6 +49,7 @@ describe('Electron bridge', () => {
             windowId: 'renderer-owned',
           },
           workspaceSession,
+          windowLifecycle,
         },
       } as unknown as Window),
     ).toThrow();

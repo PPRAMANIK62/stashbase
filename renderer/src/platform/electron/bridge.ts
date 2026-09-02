@@ -5,6 +5,7 @@ import {
 
 import type { LibraryBridge } from './folder-picker';
 import type { LibraryLifecycleBridge } from './library-lifecycle';
+import type { WindowLifecycleBridge } from './window-lifecycle';
 
 interface DesktopWorkspaceSessionBridge {
   read(): Promise<unknown>;
@@ -17,6 +18,7 @@ interface DesktopBridge {
   library: DesktopLibraryBridge;
   runtime: RendererRuntimeConfig;
   workspaceSession: DesktopWorkspaceSessionBridge;
+  windowLifecycle: WindowLifecycleBridge;
 }
 
 declare global {
@@ -25,6 +27,7 @@ declare global {
       library?: DesktopLibraryBridge;
       runtime?: unknown;
       workspaceSession?: DesktopWorkspaceSessionBridge;
+      windowLifecycle?: WindowLifecycleBridge;
     };
   }
 }
@@ -33,6 +36,7 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   const runtime = rendererRuntimeConfigSchema.parse(globalWindow.stashbase?.runtime);
   const library = globalWindow.stashbase?.library;
   const workspaceSession = globalWindow.stashbase?.workspaceSession;
+  const windowLifecycle = globalWindow.stashbase?.windowLifecycle;
   if (
     !library ||
     typeof library.chooseFolder !== 'function' ||
@@ -51,5 +55,12 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   ) {
     throw new Error('Workspace session persistence is unavailable.');
   }
-  return { library, runtime, workspaceSession };
+  if (
+    !windowLifecycle ||
+    typeof windowLifecycle.onPrepareContextRelease !== 'function' ||
+    typeof windowLifecycle.reload !== 'function'
+  ) {
+    throw new Error('The window lifecycle is unavailable.');
+  }
+  return { library, runtime, windowLifecycle, workspaceSession };
 }

@@ -10,6 +10,7 @@
   "wireSchemaModules": [
     "shared/protocols/electron/library.ts",
     "shared/protocols/electron/runtime.ts",
+    "shared/protocols/electron/window-lifecycle.ts",
     "shared/protocols/electron/workspace-session.ts",
     "shared/protocols/http/files.ts",
     "shared/protocols/http/library.ts"

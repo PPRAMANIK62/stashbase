@@ -155,6 +155,8 @@ const replacementWindowCapabilities = new WeakMap();
 let libraryFolderDialogCapability = null;
 let libraryLifecycleCapability = null;
 let workspaceSessionCapability = null;
+let windowLifecycleCapability = null;
+let replacementWindowLifecycle = null;
 let workspaceSessionRestoreWindow = null;
 let replacementBoundaryInstalled = false;
 
@@ -187,9 +189,17 @@ function installReplacementBoundary() {
     'workspace',
     'session.cjs',
   ));
+  const windowLifecycle = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'window',
+    'lifecycle.cjs',
+  ));
   libraryFolderDialogCapability = boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY;
   libraryLifecycleCapability = lifecycle.LIBRARY_LIFECYCLE_CAPABILITY;
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
+  windowLifecycleCapability = windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY;
   boundary.registerDialog({
     BrowserWindow,
     dialog,
@@ -229,6 +239,15 @@ function installReplacementBoundary() {
     store: workspaceSession.createWorkspaceSessionStore({
       filePath: path.join(app.getPath('userData'), 'workspace-session.json'),
     }),
+  });
+  replacementWindowLifecycle = windowLifecycle.registerWindowLifecycle({
+    BrowserWindow,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
   });
   replacementBoundaryInstalled = true;
 }
@@ -846,7 +865,8 @@ async function createWindow(initialFolder) {
   if (
     libraryFolderDialogCapability &&
     libraryLifecycleCapability &&
-    workspaceSessionCapability
+    workspaceSessionCapability &&
+    windowLifecycleCapability
   ) {
     replacementWindowCapabilities.set(
       win,
@@ -854,10 +874,12 @@ async function createWindow(initialFolder) {
         libraryFolderDialogCapability,
         libraryLifecycleCapability,
         workspaceSessionCapability,
+        windowLifecycleCapability,
       ]),
     );
   }
   lastMainWindow = win;
+  replacementWindowLifecycle?.attach(win);
   win.on('focus', () => {
     lastMainWindow = win;
   });

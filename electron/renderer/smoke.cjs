@@ -198,13 +198,15 @@ app
         libraryKeys: Object.keys(window.stashbase.library).sort(),
         workspaceSession: await window.stashbase.workspaceSession.read(),
         workspaceSessionFrozen: Object.isFrozen(window.stashbase.workspaceSession),
+        windowLifecycleFrozen: Object.isFrozen(window.stashbase.windowLifecycle),
+        windowLifecycleKeys: Object.keys(window.stashbase.windowLifecycle).sort(),
       };
     })()
   `);
 
     assert.deepEqual(result, {
       folderResult: { ok: true, folderPath: null },
-      globalKeys: ['runtime', 'library', 'workspaceSession'],
+      globalKeys: ['runtime', 'library', 'workspaceSession', 'windowLifecycle'],
       nodeGlobal: 'undefined',
       popupDenied: true,
       preloadFrozen: true,
@@ -226,6 +228,8 @@ app
       ],
       workspaceSession: { ok: true, session: null },
       workspaceSessionFrozen: true,
+      windowLifecycleFrozen: true,
+      windowLifecycleKeys: ['onPrepareContextRelease', 'reload'],
     });
     assert.deepEqual(receivedLibraryRequest, {
       method: 'POST',
