@@ -25,8 +25,22 @@ replacement Electron smoke.
 
 **Blocked by:** 29.
 
+**Status:** Complete.
+
 Load versioned source bytes with encoding, in-folder editing, out-of-folder
 read-only, and retryable-failure rules intact.
+
+Documents now validates and loads explicitly folder-scoped Markdown and TXT
+source with versioned query ownership. Active-folder sources retain edit
+eligibility; cross-folder and unsupported-encoding sources stay read-only.
+Closing or retiring a document cancels and removes its source query, while
+failed opens remain in place with Retry.
+
+Evidence: focused protocol, adapter, query, runtime, and component tests;
+`pnpm test:protocols`, `node --import tsx --test server/files.test.ts`,
+`pnpm test:renderer`, `pnpm test:renderer-architecture`, `pnpm typecheck`,
+`pnpm format:web`, `pnpm lint:web`, `pnpm build:web`, and the replacement
+Electron smoke.
 
 ## 31 — Save text through the version authority
 
