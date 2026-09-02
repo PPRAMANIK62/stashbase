@@ -64,8 +64,17 @@ HTTP-client, and server save tests; `pnpm test:protocols`,
 
 **Blocked by:** 19, 31.
 
-Route tab, folder, reload, and native-window transitions through the current
-editor save barrier without discarding recoverable buffers.
+**Status:** Complete.
+
+Tab open, activation, and close plus folder change, removal, reload, and native
+window close now await one serialized live-document flush. A failed save blocks
+the transition and retains the mounted draft; typed correlated Electron
+requests exclude competing close and reload actions.
+
+Evidence: focused document-runtime, tab UI, folder-transition, lifecycle,
+protocol, preload, Electron coordinator, and replacement bridge tests;
+`pnpm test:protocols`, `pnpm test:renderer`, `pnpm test:electron-boundary`,
+`pnpm typecheck`, `pnpm format:web`, `pnpm lint:web`, and `pnpm build:web`.
 
 ## 33 — Resolve external-write conflicts
 
