@@ -23,6 +23,7 @@ describe('Workspace runtime', () => {
     const completion = vi.fn();
 
     expect(runtime.store.getState()).toEqual({
+      activeTabId: null,
       expanded: {},
       lifecycle: 'active',
       selectedPath: null,
@@ -30,6 +31,7 @@ describe('Workspace runtime', () => {
         folder: { name: 'Notes', path: '/library/notes' },
         generation: 7,
       },
+      tabs: [],
     });
     expect(runtime.accept(runtime.scope, completion)).toBe(true);
     expect(completion).toHaveBeenCalledOnce();

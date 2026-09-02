@@ -6,11 +6,17 @@ import {
 import type { LibraryBridge } from './folder-picker';
 import type { LibraryLifecycleBridge } from './library-lifecycle';
 
+interface DesktopWorkspaceSessionBridge {
+  read(): Promise<unknown>;
+  write(snapshot: unknown): Promise<unknown>;
+}
+
 interface DesktopLibraryBridge extends LibraryBridge, LibraryLifecycleBridge {}
 
 interface DesktopBridge {
   library: DesktopLibraryBridge;
   runtime: RendererRuntimeConfig;
+  workspaceSession: DesktopWorkspaceSessionBridge;
 }
 
 declare global {
@@ -18,6 +24,7 @@ declare global {
     stashbase?: {
       library?: DesktopLibraryBridge;
       runtime?: unknown;
+      workspaceSession?: DesktopWorkspaceSessionBridge;
     };
   }
 }
@@ -25,6 +32,7 @@ declare global {
 export function readBridge(globalWindow: Window = window): DesktopBridge {
   const runtime = rendererRuntimeConfigSchema.parse(globalWindow.stashbase?.runtime);
   const library = globalWindow.stashbase?.library;
+  const workspaceSession = globalWindow.stashbase?.workspaceSession;
   if (
     !library ||
     typeof library.chooseFolder !== 'function' ||
@@ -36,5 +44,12 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   ) {
     throw new Error('The library folder picker is unavailable.');
   }
-  return { library, runtime };
+  if (
+    !workspaceSession ||
+    typeof workspaceSession.read !== 'function' ||
+    typeof workspaceSession.write !== 'function'
+  ) {
+    throw new Error('Workspace session persistence is unavailable.');
+  }
+  return { library, runtime, workspaceSession };
 }

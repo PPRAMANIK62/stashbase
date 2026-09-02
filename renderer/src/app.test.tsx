@@ -26,6 +26,10 @@ describe('workspace shell', () => {
         setActiveFolder: vi.fn(async () => undefined),
       },
     },
+    session: {
+      load: vi.fn(async () => null),
+      save: vi.fn(async () => undefined),
+    },
     workspace: {
       api: { load: vi.fn(), reveal: vi.fn() },
       revealLabel: 'Show in file manager',
@@ -33,6 +37,10 @@ describe('workspace shell', () => {
   };
 
   beforeEach(async () => {
+    dependencies.session = {
+      load: vi.fn(async () => null),
+      save: vi.fn(async () => undefined),
+    };
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockReturnValue({
@@ -104,6 +112,38 @@ describe('workspace shell', () => {
 
     await act(async () => toggle?.click());
 
+    expect(sidebar?.getAttribute('data-state')).toBe('collapsed');
+    await act(async () => Promise.resolve());
+    expect(dependencies.session.save).toHaveBeenCalledWith(
+      expect.objectContaining({ shell: { sidebarOpen: false, sidebarWidth: 240 } }),
+    );
+  });
+
+  it('applies restored sidebar geometry through the Fluid provider', async () => {
+    await act(async () => root.unmount());
+    dependencies.session = {
+      load: vi.fn(async () => ({
+        activeFolderPath: null,
+        folders: [],
+        shell: { sidebarOpen: false, sidebarWidth: 312 },
+        version: 1 as const,
+      })),
+      save: vi.fn(async () => undefined),
+    };
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <Providers>
+          <App dependencies={dependencies} />
+        </Providers>,
+      );
+      await Promise.resolve();
+    });
+
+    const wrapper = container.querySelector<HTMLElement>('[data-slot="sidebar-wrapper"]');
+    const sidebar = container.querySelector('[data-slot="sidebar"]');
+    expect(wrapper?.style.getPropertyValue('--sidebar-width')).toBe('312px');
     expect(sidebar?.getAttribute('data-state')).toBe('collapsed');
   });
 

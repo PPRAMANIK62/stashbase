@@ -2,6 +2,7 @@ import {
   createFilesApi,
   createLibraryApi,
   createLibraryLifecycle,
+  createWorkspaceSessionPersistence,
   type FileTreeProps,
   type LibrarySidebarProps,
   type LibraryWelcomeProps,
@@ -13,6 +14,7 @@ import { createHttpClient } from '@/platform/http/client';
 
 export interface AppDependencies {
   library: LibrarySidebarProps & LibraryWelcomeProps;
+  session: ReturnType<typeof createWorkspaceSessionPersistence>;
   workspace: Omit<FileTreeProps, 'runtime'>;
 }
 
@@ -25,6 +27,7 @@ export function createDependencies(): AppDependencies {
       folderPicker: createFolderPicker(bridge.library),
       lifecycle: createLibraryLifecycle(bridge.library),
     },
+    session: createWorkspaceSessionPersistence(bridge.workspaceSession),
     workspace: {
       api: createFilesApi(http),
       revealLabel: fileManagerLabel(),

@@ -19,4 +19,32 @@ describe('workspace tree state', () => {
     expect(toggleTreeFolder(selected, 'drafts').expanded).toEqual({});
     expect(initial).toMatchObject({ expanded: {}, selectedPath: null });
   });
+
+  it('hydrates only approved tree and tab identities into a fresh runtime scope', () => {
+    const restored = createWorkspaceState(
+      {
+        folder: { name: 'Notes', path: '/library/notes' },
+        generation: 9,
+      },
+      {
+        activeTabId: 'tab-1',
+        expandedPaths: ['drafts'],
+        folderPath: '/library/notes',
+        selectedPath: 'drafts/plan.md',
+        tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
+      },
+    );
+
+    expect(restored).toEqual({
+      activeTabId: 'tab-1',
+      expanded: { drafts: true },
+      lifecycle: 'active',
+      scope: {
+        folder: { name: 'Notes', path: '/library/notes' },
+        generation: 9,
+      },
+      selectedPath: 'drafts/plan.md',
+      tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
+    });
+  });
 });

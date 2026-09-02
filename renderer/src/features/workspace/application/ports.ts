@@ -1,4 +1,5 @@
 import type { LibraryFailureKind, LibrarySnapshot } from '@/features/workspace/domain/library';
+import type { WorkspaceSessionSnapshot } from '@/features/workspace/domain/session';
 import type { WorkspaceListing } from '@/features/workspace/domain/tree';
 
 export type LibraryFolderPickerResult =
@@ -29,6 +30,11 @@ export interface LibraryFolderPicker {
 export interface WorkspaceQueryScope {
   cancel(): Promise<void>;
   remove(): void;
+}
+
+export interface WorkspaceSessionPersistence {
+  load(): Promise<WorkspaceSessionSnapshot | null>;
+  save(snapshot: WorkspaceSessionSnapshot): Promise<void>;
 }
 
 export interface LibraryLifecycle {

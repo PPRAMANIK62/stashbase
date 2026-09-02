@@ -69,6 +69,9 @@ app
     const lifecycle = require(
       path.join(repositoryRoot, 'dist', 'electron', 'library', 'lifecycle.cjs'),
     );
+    const workspaceSession = require(
+      path.join(repositoryRoot, 'dist', 'electron', 'workspace', 'session.cjs'),
+    );
     const authorizedWindows = new Set();
     const activeFolders = new WeakMap();
     const isLiveWindow = (window) =>
@@ -76,7 +79,8 @@ app
     const hasCapability = (window, capability) =>
       isLiveWindow(window) &&
       (capability === boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY ||
-        capability === lifecycle.LIBRARY_LIFECYCLE_CAPABILITY);
+        capability === lifecycle.LIBRARY_LIFECYCLE_CAPABILITY ||
+        capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY);
     boundary.registerDialog({
       BrowserWindow,
       dialog: {
@@ -104,6 +108,19 @@ app
         [...authorizedWindows].filter(
           (window) => isLiveWindow(window) && activeFolders.get(window) === folder,
         ),
+    });
+    let persistedWorkspaceSession = null;
+    workspaceSession.registerWorkspaceSession({
+      BrowserWindow,
+      ipcMain,
+      expectedOrigins: new Set([APP_ORIGIN]),
+      isLiveWindow,
+      hasCapability,
+      claimRestore: () => true,
+      store: {
+        read: async () => persistedWorkspaceSession,
+        write: async (snapshot) => { persistedWorkspaceSession = snapshot; },
+      },
     });
 
     const webPreferences = applicationWindowWebPreferences({
@@ -179,13 +196,15 @@ app
         ).marginLeft,
         url: location.href,
         libraryKeys: Object.keys(window.stashbase.library).sort(),
+        workspaceSession: await window.stashbase.workspaceSession.read(),
+        workspaceSessionFrozen: Object.isFrozen(window.stashbase.workspaceSession),
       };
     })()
   `);
 
     assert.deepEqual(result, {
       folderResult: { ok: true, folderPath: null },
-      globalKeys: ['runtime', 'library'],
+      globalKeys: ['runtime', 'library', 'workspaceSession'],
       nodeGlobal: 'undefined',
       popupDenied: true,
       preloadFrozen: true,
@@ -205,6 +224,8 @@ app
         'prepareFolderRemoval',
         'setActiveFolder',
       ],
+      workspaceSession: { ok: true, session: null },
+      workspaceSessionFrozen: true,
     });
     assert.deepEqual(receivedLibraryRequest, {
       method: 'POST',

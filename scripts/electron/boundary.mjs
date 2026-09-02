@@ -14,6 +14,8 @@ await build({
     'library/preload': 'electron/library/preload.ts',
     'renderer/preload': 'electron/renderer/preload.ts',
     'renderer/runtime': 'electron/renderer/runtime.ts',
+    'workspace/preload': 'electron/workspace/preload.ts',
+    'workspace/session': 'electron/workspace/session.ts',
   },
   external: ['electron'],
   format: 'cjs',

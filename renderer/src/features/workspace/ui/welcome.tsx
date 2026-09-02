@@ -11,13 +11,18 @@ import { Logo } from '@/shared/brand/logo';
 export interface LibraryWelcomeProps {
   api: LibraryApi;
   folderPicker: LibraryFolderPicker;
+  isRestoringSession?: boolean;
 }
 
-export function LibraryWelcome({ api, folderPicker }: LibraryWelcomeProps) {
+export function LibraryWelcome({
+  api,
+  folderPicker,
+  isRestoringSession = false,
+}: LibraryWelcomeProps) {
   const library = useQuery(libraryQuery(api));
   const folders = useFolders(api, folderPicker);
 
-  if (!library.data || library.data.activeFolder) return null;
+  if (!library.data || library.data.activeFolder || isRestoringSession) return null;
 
   const hasMembers = library.data.members.length > 0;
   const creating = folders.pendingRequest?.kind === 'create';

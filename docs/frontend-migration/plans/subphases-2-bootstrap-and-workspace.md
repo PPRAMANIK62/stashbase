@@ -194,5 +194,49 @@ Evidence: `renderer/src/features/workspace/application/remove-folder.test.ts`,
 
 **Blocked by:** 25.
 
+**Status:** Complete.
+
 Restore versioned folder and tab identities, pane geometry, and safe view
 preferences without persisting query state, pending commands, or private data.
+
+Workspace now owns a window-lifetime `WorkspaceSessionRuntime` backed by a
+concept-specific persistence port rather than Zustand persistence middleware.
+Its strict v1 snapshot contains only the last active member identity, bounded
+per-folder expansion and selection, tab IDs plus relative source paths, and the
+existing Files sidebar's open state and clamped desktop width. Query results,
+runtime generations, lifecycle and failure state, pending commands,
+credentials, Agent data, source bytes, dirty buffers, and conflicts cannot
+enter the strict schema. Format-specific tab view preferences remain with the
+document tasks that define them; adding one requires an explicit compatible
+session-version change rather than a generic preference drawer.
+
+The typed sandbox preload exposes only validated read and write operations.
+Electron authorizes the live main frame, exact renderer origin, and a
+main-owned session capability before using an atomic, owner-only file under
+the platform user-data directory. Corrupt or unsupported snapshots are
+ignored. Only the first application window claims durable launch restoration;
+later windows start clean, while reloads of an existing native window retain
+that window's in-memory snapshot. Independent renderers never synchronize
+stores directly, and the latest explicit session write becomes the next
+launch candidate.
+
+Restoration settles independently from the first shell paint. A potential
+folder is intersected with authoritative library membership and opened through
+the normal validated `LibraryApi`; removal prunes only the lost folder's
+persisted state. A captured membership snapshot prevents a late restore from
+replacing a newer user choice. The welcome remains absent only while that
+decision is unresolved. An approved folder creates a fresh runtime generation
+and hydrates only its serialized tree and tab identities. The Fluid Sidebar
+primitive remains the geometry owner, now reporting controlled open and
+drag-resize changes through its existing provider boundary.
+
+Evidence: `renderer/src/features/workspace/domain/session.test.ts`,
+`renderer/src/features/workspace/application/session-runtime.test.ts`,
+`renderer/src/features/workspace/hooks/use-workspace-session.test.ts`,
+`renderer/src/features/workspace/infrastructure/session-persistence.test.ts`,
+`electron/workspace/session.test.cjs`,
+`electron/workspace/preload.test.cjs`, and the shared workspace-session
+protocol tests; `pnpm test:renderer`, `pnpm test:protocols`,
+`pnpm test:electron-boundary`, `pnpm typecheck`, `pnpm format:web`,
+`pnpm lint:web`, `pnpm build:web`, and
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`.

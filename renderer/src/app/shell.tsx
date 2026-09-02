@@ -12,7 +12,9 @@ import {
   LibrarySidebar,
   LibraryWelcome,
   useLibraryLifecycle,
+  usePersistWorkspaceSession,
   useWorkspace,
+  useWorkspaceSession,
 } from '@/features/workspace/public';
 import { Logo } from '@/shared/brand/logo';
 
@@ -21,7 +23,9 @@ import type { AppDependencies } from './dependencies';
 import './shell.css';
 
 export function App({ dependencies }: { dependencies: AppDependencies }) {
-  const workspace = useWorkspace(dependencies.library.api);
+  const session = useWorkspaceSession(dependencies.library.api, dependencies.session);
+  const workspace = useWorkspace(dependencies.library.api, session.restoredFolder, session.isReady);
+  usePersistWorkspaceSession(session.runtime, workspace);
   const libraryLifecycle = useLibraryLifecycle(
     dependencies.library.api,
     dependencies.library.lifecycle,
@@ -32,7 +36,13 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     <SidebarProvider
       className="workspace-shell h-svh min-h-0 overflow-hidden bg-surface-1"
       persist={false}
-      width="15rem"
+      onOpenChange={session.runtime.setSidebarOpen}
+      onWidthChange={(width) => {
+        const pixels = Number.parseFloat(width);
+        if (Number.isFinite(pixels)) session.runtime.setSidebarWidth(pixels);
+      }}
+      open={session.shell.sidebarOpen}
+      width={`${session.shell.sidebarWidth}px`}
     >
       <Sidebar className="bg-surface-1" variant="inset">
         <SidebarHeader className="workspace-titlebar h-11 flex-row items-center gap-2.5 px-4 py-0">
@@ -66,7 +76,10 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         </header>
 
         <section aria-label="Agent workspace" className="min-h-0 flex-1">
-          <LibraryWelcome {...dependencies.library} />
+          <LibraryWelcome
+            {...dependencies.library}
+            isRestoringSession={session.isRestoringFolder}
+          />
         </section>
       </SidebarInset>
     </SidebarProvider>

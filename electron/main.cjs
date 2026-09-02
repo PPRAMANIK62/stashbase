@@ -154,6 +154,8 @@ const windowRegistry = createWindowRegistry({ platform: process.platform });
 const replacementWindowCapabilities = new WeakMap();
 let libraryFolderDialogCapability = null;
 let libraryLifecycleCapability = null;
+let workspaceSessionCapability = null;
+let workspaceSessionRestoreWindow = null;
 let replacementBoundaryInstalled = false;
 
 function installReplacementBoundary() {
@@ -178,8 +180,16 @@ function installReplacementBoundary() {
     'library',
     'lifecycle.cjs',
   ));
+  const workspaceSession = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'workspace',
+    'session.cjs',
+  ));
   libraryFolderDialogCapability = boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY;
   libraryLifecycleCapability = lifecycle.LIBRARY_LIFECYCLE_CAPABILITY;
+  workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
   boundary.registerDialog({
     BrowserWindow,
     dialog,
@@ -206,6 +216,19 @@ function installReplacementBoundary() {
     windowsForFolder: (folder) => windowRegistry
       .windowsByFolder(folder)
       .filter((win) => isLiveMainWindow(win)),
+  });
+  workspaceSession.registerWorkspaceSession({
+    BrowserWindow,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
+    claimRestore: (win) => win === workspaceSessionRestoreWindow,
+    store: workspaceSession.createWorkspaceSessionStore({
+      filePath: path.join(app.getPath('userData'), 'workspace-session.json'),
+    }),
   });
   replacementBoundaryInstalled = true;
 }
@@ -817,12 +840,21 @@ async function createWindow(initialFolder) {
     }),
   });
   const webContentsId = win.webContents.id;
+  if (!workspaceSessionRestoreWindow) workspaceSessionRestoreWindow = win;
   mainWindows.add(win);
   windowRegistry.add(windowId, win, initialFolder);
-  if (libraryFolderDialogCapability && libraryLifecycleCapability) {
+  if (
+    libraryFolderDialogCapability &&
+    libraryLifecycleCapability &&
+    workspaceSessionCapability
+  ) {
     replacementWindowCapabilities.set(
       win,
-      new Set([libraryFolderDialogCapability, libraryLifecycleCapability]),
+      new Set([
+        libraryFolderDialogCapability,
+        libraryLifecycleCapability,
+        workspaceSessionCapability,
+      ]),
     );
   }
   lastMainWindow = win;

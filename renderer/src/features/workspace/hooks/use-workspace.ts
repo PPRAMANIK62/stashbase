@@ -7,8 +7,13 @@ import {
   createWorkspaceRuntime,
   type WorkspaceRuntime,
 } from '@/features/workspace/application/runtime';
+import type { FolderSessionState } from '@/features/workspace/domain/session';
 
-export function useWorkspace(api: LibraryApi): WorkspaceRuntime | null {
+export function useWorkspace(
+  api: LibraryApi,
+  restored: FolderSessionState | null = null,
+  sessionReady = true,
+): WorkspaceRuntime | null {
   const queryClient = useQueryClient();
   const folder = useQuery({
     ...libraryQuery(api),
@@ -16,11 +21,13 @@ export function useWorkspace(api: LibraryApi): WorkspaceRuntime | null {
   }).data;
   const nextGeneration = useRef(0);
   const [runtime, setRuntime] = useState<WorkspaceRuntime | null>(null);
+  const restoredRef = useRef(restored);
+  restoredRef.current = restored;
   const folderName = folder?.name ?? null;
   const folderPath = folder?.path ?? null;
 
   useLayoutEffect(() => {
-    if (!folderName || !folderPath) {
+    if (!folderName || !folderPath || !sessionReady) {
       setRuntime(null);
       return;
     }
@@ -29,10 +36,11 @@ export function useWorkspace(api: LibraryApi): WorkspaceRuntime | null {
       folder: { name: folderName, path: folderPath },
       generation: ++nextGeneration.current,
       queries: createWorkspaceQueryScope(queryClient, folderPath),
+      restored: restoredRef.current?.folderPath === folderPath ? restoredRef.current : null,
     });
     setRuntime(nextRuntime);
     return () => nextRuntime.dispose();
-  }, [folderName, folderPath, queryClient]);
+  }, [folderName, folderPath, queryClient, sessionReady]);
 
   return folderPath && runtime?.scope.folder.path === folderPath ? runtime : null;
 }

@@ -134,6 +134,8 @@ export interface SidebarProviderProps extends HTMLAttributes<HTMLDivElement> {
   defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Reports live desktop drag-resize changes. */
+  onWidthChange?: (width: string) => void;
   /** Persist the desktop open state to the `sidebar_state` cookie so a server
    *  layout can read it back into `defaultOpen`. Mobile state never persists. */
   persist?: boolean;
@@ -156,6 +158,7 @@ const SidebarProvider = forwardRef<HTMLDivElement, SidebarProviderProps>(
       defaultOpen = true,
       open: openProp,
       onOpenChange,
+      onWidthChange,
       persist = true,
       shortcut: shortcutProp,
       mobileBreakpoint = 768,
@@ -187,8 +190,15 @@ const SidebarProvider = forwardRef<HTMLDivElement, SidebarProviderProps>(
 
     // Live width: the prop is the starting point, the rail's drag-resize
     // updates it at runtime.
-    const [width, setWidth] = useState(widthProp);
-    useEffect(() => setWidth(widthProp), [widthProp]);
+    const [width, setInternalWidth] = useState(widthProp);
+    useEffect(() => setInternalWidth(widthProp), [widthProp]);
+    const setWidth = useCallback(
+      (nextWidth: string) => {
+        setInternalWidth(nextWidth);
+        onWidthChange?.(nextWidth);
+      },
+      [onWidthChange],
+    );
     const [isResizing, setIsResizing] = useState(false);
 
     // Default shortcut mirrors the sidebar's edge: "[" left, "]" right.
@@ -344,6 +354,7 @@ const SidebarProvider = forwardRef<HTMLDivElement, SidebarProviderProps>(
         isMobile,
         toggleSidebar,
         width,
+        setWidth,
         widthMobile,
         mobileBreakpoint,
         side,

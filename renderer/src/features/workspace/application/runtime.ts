@@ -2,6 +2,7 @@ import { createStore, type StoreApi } from 'zustand/vanilla';
 
 import type { WorkspaceQueryScope } from '@/features/workspace/application/ports';
 import type { ActiveLibraryFolder } from '@/features/workspace/domain/library';
+import type { FolderSessionState } from '@/features/workspace/domain/session';
 import {
   createWorkspaceState,
   disposeWorkspaceState,
@@ -22,12 +23,14 @@ export interface WorkspaceRuntimeOptions {
   folder: ActiveLibraryFolder;
   generation: number;
   queries: WorkspaceQueryScope;
+  restored?: FolderSessionState | null;
 }
 
 export function createWorkspaceRuntime({
   folder,
   generation,
   queries,
+  restored = null,
 }: WorkspaceRuntimeOptions): WorkspaceRuntime {
   if (!Number.isSafeInteger(generation) || generation < 1) {
     throw new Error('Workspace runtime generation must be a positive safe integer.');
@@ -37,7 +40,7 @@ export function createWorkspaceRuntime({
     generation,
   });
   const controller = new AbortController();
-  const store = createStore<WorkspaceState>(() => createWorkspaceState(scope));
+  const store = createStore<WorkspaceState>(() => createWorkspaceState(scope, restored));
   let disposed = false;
   let queriesRemoved = false;
 

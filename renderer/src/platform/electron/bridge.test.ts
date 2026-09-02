@@ -11,6 +11,10 @@ const library = {
   prepareFolderRemoval: async () => ({ ok: true as const, ready: true }),
   setActiveFolder: async () => ({ ok: true as const }),
 };
+const workspaceSession = {
+  read: async () => ({ ok: true as const, session: null }),
+  write: async () => ({ ok: true as const }),
+};
 
 describe('Electron bridge', () => {
   it('returns only the validated library and runtime capabilities', () => {
@@ -18,11 +22,13 @@ describe('Electron bridge', () => {
       stashbase: {
         library,
         runtime: { serverOrigin: 'http://127.0.0.1:8090' },
+        workspaceSession,
       },
     } as unknown as Window);
     expect(bridge).toEqual({
       library,
       runtime: { serverOrigin: 'http://127.0.0.1:8090' },
+      workspaceSession,
     });
   });
 
@@ -36,8 +42,9 @@ describe('Electron bridge', () => {
             serverOrigin: 'http://127.0.0.1:8090',
             windowId: 'renderer-owned',
           },
+          workspaceSession,
         },
-      } as Window),
+      } as unknown as Window),
     ).toThrow();
   });
 });
