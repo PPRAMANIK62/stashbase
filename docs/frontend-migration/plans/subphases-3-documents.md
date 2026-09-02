@@ -46,8 +46,19 @@ Electron smoke.
 
 **Blocked by:** 30.
 
-Preserve live dirty authority, expected versions, no-op saves, byte conventions,
-pending feedback, and authoritative reconciliation.
+**Status:** Complete.
+
+Active-folder Markdown and TXT now keep a live versioned draft and autosave
+through the shared source authority. Saves retain byte conventions, reconcile
+the returned source/version without overwriting newer typing, and leave failed
+or conflicting drafts recoverable; ordinary failures expose compact retry
+feedback.
+
+Evidence: focused protocol, save-adapter, document-domain/runtime, source UI,
+HTTP-client, and server save tests; `pnpm test:protocols`,
+`node --import tsx --test server/files.test.ts`, `pnpm test:renderer`,
+`pnpm test:renderer-architecture`, `pnpm typecheck`, `pnpm format:web`,
+`pnpm lint:web`, and `pnpm build:web`.
 
 ## 32 — Enforce save barriers during navigation and close
 
