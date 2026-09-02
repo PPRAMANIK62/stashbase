@@ -31,13 +31,19 @@ import { RemoveFolderDialog } from './remove-folder-dialog';
 
 export interface LibrarySidebarProps {
   api: LibraryApi;
+  beforeFolderChange?: () => Promise<boolean>;
   folderPicker: LibraryFolderPicker;
   lifecycle: LibraryLifecycle;
 }
 
-export function LibrarySidebar({ api, folderPicker, lifecycle }: LibrarySidebarProps) {
+export function LibrarySidebar({
+  api,
+  beforeFolderChange,
+  folderPicker,
+  lifecycle,
+}: LibrarySidebarProps) {
   const library = useQuery(libraryQuery(api));
-  const folders = useFolders(api, folderPicker);
+  const folders = useFolders(api, folderPicker, beforeFolderChange);
   const removal = useRemoveFolder(api, lifecycle);
   const [chooserOpen, setChooserOpen] = useState(false);
 

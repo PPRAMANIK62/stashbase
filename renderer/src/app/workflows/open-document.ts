@@ -2,14 +2,14 @@ import type { DocumentRuntime, DocumentTabsRuntime } from '@/features/documents/
 import type { WorkspaceRuntime } from '@/features/workspace/public';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-export function openDocument(
+export async function openDocument(
   workspace: WorkspaceRuntime,
   documents: DocumentTabsRuntime,
   source: SourceReference,
-): DocumentRuntime | null {
+): Promise<DocumentRuntime | null> {
   const workspaceScope = workspace.scope;
   const documentScope = documents.scope;
-  let opened: DocumentRuntime | null = null;
+  let opening: Promise<DocumentRuntime | null> | null = null;
 
   if (
     documentScope.folderPath !== workspaceScope.folder.path ||
@@ -20,9 +20,9 @@ export function openDocument(
 
   workspace.accept(workspaceScope, () => {
     documents.accept(documentScope, () => {
-      opened = documents.open(source);
+      opening = documents.open(source);
     });
   });
 
-  return opened;
+  return opening;
 }

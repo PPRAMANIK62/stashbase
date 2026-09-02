@@ -32,19 +32,21 @@ describe('document workspace composition', () => {
     });
     let nextId = 0;
     const createId = () => `new-tab-${++nextId}`;
+    const api = { load: vi.fn(), save: vi.fn() };
 
     const queryClient = new QueryClient();
     const wrapper = ({ children }: PropsWithChildren) =>
       createElement(QueryClientProvider, { client: queryClient }, children);
     const { result, rerender } = renderHook(
-      ({ currentWorkspace }) => useDocumentWorkspace(currentWorkspace, restored, session, createId),
+      ({ currentWorkspace }) =>
+        useDocumentWorkspace(currentWorkspace, restored, session, api, createId),
       { initialProps: { currentWorkspace: workspace as typeof workspace | null }, wrapper },
     );
 
     expect(result.current?.store.getState().activeTabId).toBe('restored-tab');
     const restoredDocument = result.current?.getDocument('restored-tab');
-    act(() => {
-      result.current?.open({ folderPath: '/library/notes', path: 'other.md' });
+    await act(async () => {
+      await result.current?.open({ folderPath: '/library/notes', path: 'other.md' });
     });
     await session.flush();
 

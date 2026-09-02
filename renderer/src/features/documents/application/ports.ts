@@ -19,6 +19,10 @@ export interface DocumentQueryScope {
   replaceSource(source: DocumentTextSource): void;
 }
 
+export interface DocumentWindowLifecycle {
+  onPrepareContextRelease(handler: () => boolean | Promise<boolean>): () => void;
+}
+
 export type DocumentSourceFailureKind =
   | 'invalid-response'
   | 'scope-lost'

@@ -8,9 +8,10 @@ import { createDocumentTabsRuntime } from '@/features/documents/application/tabs
 import { DocumentTabs } from './document-tabs';
 import { DocumentWorkspace } from './document-workspace';
 
-function createRuntime() {
-  let next = 0;
+function createRuntime(api = sourceApi) {
+  let next = 2;
   const runtime = createDocumentTabsRuntime({
+    api,
     createId: () => `tab-${++next}`,
     createQueries: () => ({
       cancel: vi.fn(async () => undefined),
@@ -19,9 +20,17 @@ function createRuntime() {
     }),
     folderPath: '/library/notes',
     generation: 1,
+    restored: {
+      activeTabId: 'tab-2',
+      tabs: [
+        { id: 'tab-1', source: { folderPath: '/library/notes', path: 'plan.md' } },
+        {
+          id: 'tab-2',
+          source: { folderPath: '/library/notes', path: 'drafts/other.md' },
+        },
+      ],
+    },
   });
-  runtime.open({ folderPath: '/library/notes', path: 'plan.md' });
-  runtime.open({ folderPath: '/library/notes', path: 'drafts/other.md' });
   return runtime;
 }
 
@@ -115,7 +124,7 @@ describe('document tabs', () => {
     expect(screen.queryByRole('region', { name: 'Document workspace' })).toBeNull();
   });
 
-  it('keeps a newly opened active tab visible in an overflowing tab list', () => {
+  it('keeps a newly opened active tab visible in an overflowing tab list', async () => {
     const runtime = createRuntime();
     runtimes.push(runtime);
     const scrollIntoView = vi.fn();
@@ -130,8 +139,8 @@ describe('document tabs', () => {
     render(<DocumentTabs runtime={runtime} />);
     scrollIntoView.mockClear();
 
-    act(() => {
-      runtime.open({ folderPath: '/library/notes', path: 'newly-opened.md' });
+    await act(async () => {
+      await runtime.open({ folderPath: '/library/notes', path: 'newly-opened.md' });
     });
 
     const newlyOpened = screen.getByRole('tab', { name: 'newly-opened.md' });
@@ -140,8 +149,6 @@ describe('document tabs', () => {
   });
 
   it('replaces the close glyph with a filled circle until an edit is saved', async () => {
-    const runtime = createRuntime();
-    runtimes.push(runtime);
     let acceptSave: ((value: { content: string; format: 'md'; version: string }) => void) | null =
       null;
     const api = {
@@ -153,6 +160,8 @@ describe('document tabs', () => {
           }),
       ),
     };
+    const runtime = createRuntime(api);
+    runtimes.push(runtime);
     render(
       <QueryClientProvider client={testQueryClient()}>
         <DocumentTabs runtime={runtime} />

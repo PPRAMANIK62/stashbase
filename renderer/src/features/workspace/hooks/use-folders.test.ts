@@ -18,6 +18,24 @@ function queryWrapper(queryClient: QueryClient) {
 afterEach(cleanup);
 
 describe('folder operation generations', () => {
+  it('keeps the active folder when the document save barrier fails', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const openFolder = vi.fn();
+    const beforeFolderChange = vi.fn(async () => false);
+    const api: LibraryApi = { load: vi.fn(), openFolder, removeFolder: vi.fn() };
+    const folders = renderHook(
+      () => useFolders(api, { chooseFolder: vi.fn() }, beforeFolderChange),
+      { wrapper: queryWrapper(queryClient) },
+    );
+
+    act(() => folders.result.current.select('/library/notes'));
+
+    await waitFor(() => expect(folders.result.current.isPending).toBe(false));
+    expect(beforeFolderChange).toHaveBeenCalledOnce();
+    expect(openFolder).not.toHaveBeenCalled();
+    expect(folders.result.current.failure).toContain('document could not be saved');
+  });
+
   it('keeps the latest selection authoritative when an older request resolves last', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const initial: LibrarySnapshot = {

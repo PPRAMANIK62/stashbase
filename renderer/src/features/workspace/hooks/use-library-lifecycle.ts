@@ -15,6 +15,7 @@ export function useLibraryLifecycle(
   api: LibraryApi,
   lifecycle: LibraryLifecycle,
   runtime: WorkspaceRuntime | null,
+  beforeRelease: (folderPath: string) => Promise<boolean> = async () => true,
 ) {
   const queryClient = useQueryClient();
   const runtimeRef = useRef(runtime);
@@ -51,10 +52,14 @@ export function useLibraryLifecycle(
   const retireFolder = useCallback(
     async (folderPath: string) => {
       const current = runtimeRef.current;
-      if (current?.scope.folder.path === folderPath) current.retire();
+      if (current?.scope.folder.path === folderPath) {
+        if (!(await beforeRelease(folderPath))) return false;
+        current.retire();
+      }
       await retireWorkspaceQueries(queryClient, folderPath);
+      return true;
     },
-    [queryClient],
+    [beforeRelease, queryClient],
   );
 
   const reconcileRemovedFolder = useCallback(
@@ -65,7 +70,7 @@ export function useLibraryLifecycle(
         .then(async (snapshot) => {
           if (!isCurrent(generation)) return;
           const remainsAuthorized = snapshot.members.some((member) => member.path === folderPath);
-          if (!remainsAuthorized) await retireFolder(folderPath);
+          if (!remainsAuthorized && !(await retireFolder(folderPath))) return;
           if (!isCurrent(generation)) return;
           queryClient.setQueryData(libraryQueryKey, snapshot);
         })
@@ -96,7 +101,7 @@ export function useLibraryLifecycle(
             (member) => member.path === capturedScope.folder.path,
           );
           if (!remainsAuthorized) {
-            await retireFolder(capturedScope.folder.path);
+            if (!(await retireFolder(capturedScope.folder.path))) return;
             if (isCurrent(generation)) queryClient.setQueryData(libraryQueryKey, snapshot);
             return;
           }
@@ -121,13 +126,13 @@ export function useLibraryLifecycle(
   );
 
   useEffect(() => {
-    const unsubscribePreparation = lifecycle.onPrepareFolderRemoval(() => true);
+    const unsubscribePreparation = lifecycle.onPrepareFolderRemoval(beforeRelease);
     const unsubscribeRemoval = lifecycle.onFolderRemoved(reconcileRemovedFolder);
     return () => {
       unsubscribePreparation();
       unsubscribeRemoval();
     };
-  }, [lifecycle, reconcileRemovedFolder]);
+  }, [beforeRelease, lifecycle, reconcileRemovedFolder]);
 
   useEffect(() => {
     void lifecycle.setActiveFolder(runtime?.scope.folder.path ?? null).catch(() => undefined);

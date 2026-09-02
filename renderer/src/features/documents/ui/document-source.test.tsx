@@ -41,12 +41,16 @@ function renderSource(
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const runtime = createDocumentTabsRuntime({
+    api,
     createId: () => 'tab-1',
     createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
     folderPath: '/library/notes',
     generation: 1,
+    restored: {
+      activeTabId: 'tab-1',
+      tabs: [{ id: 'tab-1', source }],
+    },
   });
-  runtime.open(source);
   runtimes.push(runtime);
   render(
     <QueryClientProvider client={queryClient}>
@@ -132,7 +136,9 @@ describe('document text source', () => {
     const { runtime } = renderSource(api);
     await waitFor(() => expect(capturedSignal).not.toBeNull());
 
-    act(() => runtime.close('tab-1'));
+    await act(async () => {
+      await runtime.close('tab-1');
+    });
 
     await waitFor(() => expect(capturedSignal?.aborted).toBe(true));
   });

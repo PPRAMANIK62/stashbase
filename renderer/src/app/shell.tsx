@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+
 import {
   Sidebar,
   SidebarContent,
@@ -7,7 +9,11 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { DocumentTabs, DocumentWorkspace } from '@/features/documents/public';
+import {
+  DocumentTabs,
+  DocumentWorkspace,
+  useDocumentSaveBarrier,
+} from '@/features/documents/public';
 import {
   FileTree,
   LibrarySidebar,
@@ -33,12 +39,20 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     workspace,
     session.restoredFolder,
     session.runtime,
+    dependencies.documents.api,
     dependencies.documents.createId,
+  );
+  useDocumentSaveBarrier(documents, dependencies.documents.lifecycle);
+  const saveDocumentsForFolder = useCallback(
+    (folderPath: string) =>
+      documents?.scope.folderPath === folderPath ? documents.flush() : Promise.resolve(true),
+    [documents],
   );
   const libraryLifecycle = useLibraryLifecycle(
     dependencies.library.api,
     dependencies.library.lifecycle,
     workspace,
+    saveDocumentsForFolder,
   );
 
   return (
@@ -60,13 +74,20 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
-            <LibrarySidebar {...dependencies.library} />
+            <LibrarySidebar
+              {...dependencies.library}
+              beforeFolderChange={() =>
+                workspace
+                  ? saveDocumentsForFolder(workspace.scope.folder.path)
+                  : Promise.resolve(true)
+              }
+            />
             {workspace && (
               <FileTree
                 {...dependencies.workspace}
                 key={workspace.scope.generation}
                 onOpenSource={(source) => {
-                  if (documents) openDocument(workspace, documents, source);
+                  if (documents) void openDocument(workspace, documents, source);
                 }}
                 onScopeLost={libraryLifecycle.recoverLostScope}
                 runtime={workspace}

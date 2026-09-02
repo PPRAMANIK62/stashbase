@@ -50,6 +50,38 @@ function lifecycleHarness() {
 afterEach(cleanup);
 
 describe('library lifecycle recovery', () => {
+  it('keeps a removed-folder scope mounted when its document barrier fails', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const active: LibrarySnapshot = {
+      activeFolder: { name: 'Notes', path: '/library/notes' },
+      homeDirectory: '/library',
+      members: [{ favorite: false, openedAt: '2026-09-01T00:00:00.000Z', path: '/library/notes' }],
+    };
+    const api: LibraryApi = {
+      load: vi.fn(async () => ({ ...active, activeFolder: null, members: [] })),
+      openFolder: vi.fn(),
+      removeFolder: vi.fn(),
+    };
+    const native = lifecycleHarness();
+    const runtime = createWorkspaceRuntime({
+      folder: active.activeFolder!,
+      generation: 1,
+      queries: createWorkspaceQueryScope(queryClient, '/library/notes'),
+    });
+    const beforeRelease = vi.fn(async () => false);
+    renderHook(() => useLibraryLifecycle(api, native.lifecycle, runtime, beforeRelease), {
+      wrapper: wrapper(queryClient),
+    });
+
+    await expect(native.prepare('/library/notes')).resolves.toBe(false);
+    act(() => native.remove('/library/notes'));
+    await waitFor(() => expect(api.load).toHaveBeenCalledOnce());
+    await waitFor(() => expect(beforeRelease).toHaveBeenCalledTimes(2));
+
+    expect(runtime.signal.aborted).toBe(false);
+    expect(queryClient.getQueryData(libraryQueryKey)).toBeUndefined();
+  });
+
   it('retires only a removed folder runtime and evicts its scoped queries', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const active: LibrarySnapshot = {

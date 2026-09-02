@@ -18,6 +18,7 @@ describe('workspace shell', () => {
         save: vi.fn(),
       },
       createId: vi.fn(() => 'tab-1'),
+      lifecycle: { onPrepareContextRelease: vi.fn(() => () => undefined) },
     },
     library: {
       folderPicker: { chooseFolder: vi.fn() },
@@ -181,6 +182,7 @@ describe('workspace shell', () => {
           save: vi.fn(),
         },
         createId: vi.fn(() => 'document-tab'),
+        lifecycle: dependencies.documents.lifecycle,
       },
       library: {
         ...dependencies.library,

@@ -16,7 +16,7 @@ import {
 } from '@/features/documents/domain/tabs';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-import type { DocumentQueryScope } from './ports';
+import type { DocumentQueryScope, DocumentSourceApi } from './ports';
 
 export interface DocumentTabsScope {
   readonly folderPath: string;
@@ -33,15 +33,17 @@ export interface DocumentTabsRuntime {
   readonly signal: AbortSignal;
   readonly store: StoreApi<DocumentTabsState>;
   accept(capturedScope: DocumentTabsScope, completion: () => void): boolean;
-  activate(tabId: string): void;
-  close(tabId: string): void;
+  activate(tabId: string): Promise<boolean>;
+  close(tabId: string): Promise<boolean>;
   dispose(): void;
+  flush(): Promise<boolean>;
   getDocument(tabId: string): DocumentRuntime | null;
-  open(source: SourceReference): DocumentRuntime | null;
+  open(source: SourceReference): Promise<DocumentRuntime | null>;
   toSession(): DocumentSessionProjection;
 }
 
 export interface DocumentTabsRuntimeOptions {
+  api: DocumentSourceApi;
   createId: () => string;
   createQueries: (scope: DocumentScope) => DocumentQueryScope;
   folderPath: string;
@@ -50,6 +52,7 @@ export interface DocumentTabsRuntimeOptions {
 }
 
 export function createDocumentTabsRuntime({
+  api,
   createId,
   createQueries,
   folderPath,
@@ -71,6 +74,23 @@ export function createDocumentTabsRuntime({
   const sourceIds = new Map<string, string>();
   let nextDocumentGeneration = 0;
   let disposed = false;
+  let transitionTail: Promise<void> = Promise.resolve();
+
+  function enqueueTransition<Result>(operation: () => Promise<Result>): Promise<Result> {
+    const result = transitionTail.then(operation, operation);
+    transitionTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  const saveDocuments = async (items: Iterable<DocumentRuntime>): Promise<boolean> => {
+    for (const document of items) {
+      if (!(await document.save(api))) return false;
+    }
+    return true;
+  };
 
   const createChild = (id: string, source: SourceReference) => {
     const childGeneration = ++nextDocumentGeneration;
@@ -105,17 +125,30 @@ export function createDocumentTabsRuntime({
       return true;
     },
     activate(tabId) {
-      if (disposed) return;
-      store.setState((state) => activateDocumentTab(state, tabId));
+      return enqueueTransition(async () => {
+        if (disposed) return false;
+        const state = store.getState();
+        if (state.activeTabId === tabId) return documents.has(tabId);
+        if (!documents.has(tabId)) return false;
+        const active = state.activeTabId ? documents.get(state.activeTabId) : null;
+        if (active && !(await active.save(api))) return false;
+        if (disposed || !documents.has(tabId)) return false;
+        store.setState((current) => activateDocumentTab(current, tabId));
+        return true;
+      });
     },
     close(tabId) {
-      if (disposed) return;
-      const document = documents.get(tabId);
-      if (!document) return;
-      document.dispose();
-      documents.delete(tabId);
-      sourceIds.delete(sourceIdentity(document.scope.source));
-      store.setState((state) => closeDocumentTab(state, tabId));
+      return enqueueTransition(async () => {
+        if (disposed) return false;
+        const document = documents.get(tabId);
+        if (!document || !(await document.save(api))) return false;
+        if (disposed || documents.get(tabId) !== document) return false;
+        document.dispose();
+        documents.delete(tabId);
+        sourceIds.delete(sourceIdentity(document.scope.source));
+        store.setState((state) => closeDocumentTab(state, tabId));
+        return true;
+      });
     },
     dispose() {
       if (disposed) return;
@@ -126,23 +159,37 @@ export function createDocumentTabsRuntime({
       sourceIds.clear();
       store.setState(disposeDocumentTabsState);
     },
+    flush() {
+      return enqueueTransition(async () => {
+        if (disposed) return false;
+        return saveDocuments([...documents.values()]);
+      });
+    },
     getDocument(tabId) {
       return documents.get(tabId) ?? null;
     },
     open(source) {
-      if (disposed) return null;
-      const existingId = sourceIds.get(sourceIdentity(source));
-      if (existingId) {
-        runtime.activate(existingId);
-        return documents.get(existingId) ?? null;
-      }
-      const id = createId();
-      if (id.trim().length === 0 || documents.has(id)) {
-        throw new Error('Document tab IDs must be non-empty and unique.');
-      }
-      const document = createChild(id, source);
-      store.setState((state) => openDocumentTab(state, { id, source }));
-      return document;
+      return enqueueTransition(async () => {
+        if (disposed) return null;
+        const state = store.getState();
+        const existingId = sourceIds.get(sourceIdentity(source));
+        if (existingId === state.activeTabId) return documents.get(existingId) ?? null;
+        const active = state.activeTabId ? documents.get(state.activeTabId) : null;
+        if (active && !(await active.save(api))) return null;
+        if (disposed) return null;
+        if (existingId) {
+          const existing = documents.get(existingId) ?? null;
+          if (existing) store.setState((current) => activateDocumentTab(current, existingId));
+          return existing;
+        }
+        const id = createId();
+        if (id.trim().length === 0 || documents.has(id)) {
+          throw new Error('Document tab IDs must be non-empty and unique.');
+        }
+        const document = createChild(id, source);
+        store.setState((current) => openDocumentTab(current, { id, source }));
+        return document;
+      });
     },
     toSession() {
       const state = store.getState();

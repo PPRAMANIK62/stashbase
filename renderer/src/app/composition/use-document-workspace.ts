@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   createDocumentQueryScope,
   createDocumentTabsRuntime,
+  type DocumentSourceApi,
   type DocumentTabsRuntime,
 } from '@/features/documents/public';
 import type {
@@ -16,6 +17,7 @@ export function useDocumentWorkspace(
   workspace: WorkspaceRuntime | null,
   restored: FolderSessionState | null,
   session: WorkspaceSessionRuntime,
+  api: DocumentSourceApi,
   createId: () => string,
 ): DocumentTabsRuntime | null {
   const queryClient = useQueryClient();
@@ -34,6 +36,7 @@ export function useDocumentWorkspace(
     const restoredFolder =
       restoredRef.current?.folderPath === folderPath ? restoredRef.current : null;
     const nextRuntime = createDocumentTabsRuntime({
+      api,
       createId,
       createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
       folderPath,
@@ -50,7 +53,7 @@ export function useDocumentWorkspace(
     });
     setRuntime(nextRuntime);
     return () => nextRuntime.dispose();
-  }, [createId, folderPath, generation, queryClient, workspace]);
+  }, [api, createId, folderPath, generation, queryClient, workspace]);
 
   const current =
     workspace &&

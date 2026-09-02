@@ -26,12 +26,23 @@ interface CurrentFolderOperation {
   generation: number;
 }
 
-export function useFolders(api: LibraryApi, folderPicker: LibraryFolderPicker) {
+export function useFolders(
+  api: LibraryApi,
+  folderPicker: LibraryFolderPicker,
+  beforeFolderChange: () => Promise<boolean> = async () => true,
+) {
   const queryClient = useQueryClient();
   const currentOperation = useRef<CurrentFolderOperation | null>(null);
   const nextGeneration = useRef(0);
   const operation = useMutation({
-    mutationFn: ({ controller, request }: FolderOperation) => {
+    mutationFn: async ({ controller, request }: FolderOperation) => {
+      if (!(await beforeFolderChange())) {
+        return {
+          status: 'failed' as const,
+          message: 'The folder could not be changed because a document could not be saved.',
+        };
+      }
+      if (controller.signal.aborted) return { status: 'cancelled' as const };
       if (request.kind === 'select') {
         return openFolder(api, request.path, controller.signal);
       }

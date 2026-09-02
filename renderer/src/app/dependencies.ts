@@ -1,4 +1,9 @@
-import { createDocumentSourceApi, type DocumentSourceApi } from '@/features/documents/public';
+import {
+  createDocumentSourceApi,
+  createDocumentWindowLifecycle,
+  type DocumentSourceApi,
+  type DocumentWindowLifecycle,
+} from '@/features/documents/public';
 import {
   createFilesApi,
   createLibraryApi,
@@ -14,7 +19,11 @@ import { createFolderPicker } from '@/platform/electron/folder-picker';
 import { createHttpClient } from '@/platform/http/client';
 
 export interface AppDependencies {
-  documents: { api: DocumentSourceApi; createId: () => string };
+  documents: {
+    api: DocumentSourceApi;
+    createId: () => string;
+    lifecycle: DocumentWindowLifecycle;
+  };
   library: LibrarySidebarProps & LibraryWelcomeProps;
   session: ReturnType<typeof createWorkspaceSessionPersistence>;
   workspace: Omit<FileTreeProps, 'runtime'>;
@@ -27,6 +36,7 @@ export function createDependencies(): AppDependencies {
     documents: {
       api: createDocumentSourceApi(http),
       createId: () => globalThis.crypto.randomUUID(),
+      lifecycle: createDocumentWindowLifecycle(bridge.windowLifecycle),
     },
     library: {
       api: createLibraryApi(http),
