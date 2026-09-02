@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
 const relativePathSchema = z.string().trim().min(1).max(4096);
+const folderPathSchema = z.string().trim().min(1).max(4096);
+const sourceVersionSchema = z.string().trim().min(1).max(256);
+const boundedSourceTextSchema = z.string().max(8 * 1024 * 1024);
 
 export const viewerFormatSchema = z.enum([
   'md',
@@ -51,4 +54,44 @@ export const workspaceFailureSchema = z
 
 export const workspaceRevealResponseSchema = z.object({}).strict();
 
+export const documentTextSourceRequestSchema = z
+  .object({
+    folderPath: folderPathSchema,
+    path: relativePathSchema,
+  })
+  .strict();
+
+const documentTextSourceBaseSchema = {
+  content: boundedSourceTextSchema,
+  format: z.enum(['md', 'html', 'json', 'txt']),
+  name: relativePathSchema,
+  version: sourceVersionSchema,
+};
+
+export const documentTextSourceResponseSchema = z.union([
+  z.object(documentTextSourceBaseSchema).strict(),
+  z
+    .object({
+      ...documentTextSourceBaseSchema,
+      content: z.literal(''),
+      format: z.literal('txt'),
+      error: z
+        .object({
+          code: z.literal('UNSUPPORTED_ENCODING'),
+          message: z.string().trim().min(1).max(500),
+        })
+        .strict(),
+    })
+    .strict(),
+]);
+
+export const documentTextSourceFailureSchema = z
+  .object({
+    code: z.string().trim().min(1).max(64).optional(),
+    error: z.string().trim().min(1).max(500),
+  })
+  .strict();
+
 export type WorkspaceFilesWire = z.infer<typeof workspaceFilesSchema>;
+export type DocumentTextSourceRequestWire = z.infer<typeof documentTextSourceRequestSchema>;
+export type DocumentTextSourceResponseWire = z.infer<typeof documentTextSourceResponseSchema>;

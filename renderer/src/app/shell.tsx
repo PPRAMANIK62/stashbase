@@ -102,7 +102,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         </header>
 
         <section aria-label="Agent workspace" className="min-h-0 flex-1">
-          {documents && <DocumentWorkspace runtime={documents} />}
+          {documents && <DocumentWorkspace api={dependencies.documents.api} runtime={documents} />}
           <LibraryWelcome
             {...dependencies.library}
             isRestoringSession={session.isRestoringFolder}

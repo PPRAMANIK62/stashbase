@@ -1,4 +1,6 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
+import { createElement, type PropsWithChildren } from 'react';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import {
@@ -31,9 +33,12 @@ describe('document workspace composition', () => {
     let nextId = 0;
     const createId = () => `new-tab-${++nextId}`;
 
+    const queryClient = new QueryClient();
+    const wrapper = ({ children }: PropsWithChildren) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
     const { result, rerender } = renderHook(
       ({ currentWorkspace }) => useDocumentWorkspace(currentWorkspace, restored, session, createId),
-      { initialProps: { currentWorkspace: workspace as typeof workspace | null } },
+      { initialProps: { currentWorkspace: workspace as typeof workspace | null }, wrapper },
     );
 
     expect(result.current?.store.getState().activeTabId).toBe('restored-tab');

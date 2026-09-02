@@ -4,7 +4,7 @@ import {
   createDocumentRuntime,
   type DocumentRuntime,
 } from '@/features/documents/application/document-runtime';
-import { sourceIdentity } from '@/features/documents/domain/document';
+import { sourceIdentity, type DocumentScope } from '@/features/documents/domain/document';
 import {
   activateDocumentTab,
   closeDocumentTab,
@@ -15,6 +15,8 @@ import {
   type RestoredDocumentTabs,
 } from '@/features/documents/domain/tabs';
 import type { SourceReference } from '@/shared/domain/source-reference';
+
+import type { DocumentQueryScope } from './ports';
 
 export interface DocumentTabsScope {
   readonly folderPath: string;
@@ -41,6 +43,7 @@ export interface DocumentTabsRuntime {
 
 export interface DocumentTabsRuntimeOptions {
   createId: () => string;
+  createQueries: (scope: DocumentScope) => DocumentQueryScope;
   folderPath: string;
   generation: number;
   restored?: RestoredDocumentTabs | null;
@@ -48,6 +51,7 @@ export interface DocumentTabsRuntimeOptions {
 
 export function createDocumentTabsRuntime({
   createId,
+  createQueries,
   folderPath,
   generation,
   restored = null,
@@ -69,9 +73,13 @@ export function createDocumentTabsRuntime({
   let disposed = false;
 
   const createChild = (id: string, source: SourceReference) => {
+    const childGeneration = ++nextDocumentGeneration;
+    const childScope = { generation: childGeneration, id, source };
     const runtime = createDocumentRuntime({
-      generation: ++nextDocumentGeneration,
+      activeFolderPath: folderPath,
+      generation: childGeneration,
       id,
+      queries: createQueries(childScope),
       source,
     });
     documents.set(id, runtime);

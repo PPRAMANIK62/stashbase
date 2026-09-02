@@ -29,7 +29,10 @@ import { readGenericFilePreview } from '../generic-file-preview.ts';
 import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
 import { mountFileOrderRoutes } from './file-order.ts';
-import { workspaceFilesSchema } from '../../shared/protocols/http/files.ts';
+import {
+  documentTextSourceResponseSchema,
+  workspaceFilesSchema,
+} from '../../shared/protocols/http/files.ts';
 
 export { prepareFileOperation } from '../file-operation-guard.ts';
 export { saveFileContent, validateEditableFileWrite } from '../file-save.ts';
@@ -244,20 +247,32 @@ export function mount(app: express.Express): void {
           content = await readTextAsync(name);
         } catch (err: unknown) {
           if ((err as { code?: unknown })?.code !== 'UNSUPPORTED_ENCODING') throw err;
-          return res.json({
-            name,
-            format,
-            content: '',
-            version: (await fileVersionAsync(name)) ?? undefined,
-            error: { code: 'UNSUPPORTED_ENCODING', message: err instanceof Error ? err.message : String(err) },
-          });
+          return res.json(
+            documentTextSourceResponseSchema.parse({
+              name,
+              format,
+              content: '',
+              version: (await fileVersionAsync(name)) ?? undefined,
+              error: {
+                code: 'UNSUPPORTED_ENCODING',
+                message: err instanceof Error ? err.message : String(err),
+              },
+            }),
+          );
         }
         if (content == null) return res.status(404).json({ error: 'not found' });
         // Raw HTML in `content` (what the editor needs); the preview iframe
         // loads its prepared version via `/asset/*` — keeping injected ids +
         // bootstrap script out of the bytes that round-trip through the
         // editor (otherwise autosave would rewrite the file to include them).
-        res.json({ name, format, content, version: (await fileVersionAsync(name)) ?? undefined });
+        res.json(
+          documentTextSourceResponseSchema.parse({
+            name,
+            format,
+            content,
+            version: (await fileVersionAsync(name)) ?? undefined,
+          }),
+        );
       } catch (err: unknown) {
         sendError(res, err);
       }

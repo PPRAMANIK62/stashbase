@@ -12,7 +12,12 @@ describe('workspace shell', () => {
   let root: Root;
   let getAnimationsDescriptor: PropertyDescriptor | undefined;
   const dependencies: AppDependencies = {
-    documents: { createId: vi.fn(() => 'tab-1') },
+    documents: {
+      api: {
+        load: vi.fn<AppDependencies['documents']['api']['load']>(() => new Promise(() => {})),
+      },
+      createId: vi.fn(() => 'tab-1'),
+    },
     library: {
       folderPicker: { chooseFolder: vi.fn() },
       api: {
@@ -169,7 +174,12 @@ describe('workspace shell', () => {
     await act(async () => root.unmount());
     const activeDependencies: AppDependencies = {
       ...dependencies,
-      documents: { createId: vi.fn(() => 'document-tab') },
+      documents: {
+        api: {
+          load: vi.fn(async () => ({ content: '# Plan', format: 'md' as const, version: 'v1' })),
+        },
+        createId: vi.fn(() => 'document-tab'),
+      },
       library: {
         ...dependencies.library,
         api: {
@@ -233,5 +243,10 @@ describe('workspace shell', () => {
     expect(
       container.querySelector('[aria-label="Document workspace"] [role="tablist"]'),
     ).toBeNull();
+    await waitFor(() => {
+      expect(container.querySelector('[aria-label="plan.md source"]')?.textContent).toContain(
+        '# Plan',
+      );
+    });
   });
 });

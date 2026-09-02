@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import {
   createDocumentState,
+  documentAccess,
+  documentTextFormat,
   disposeDocumentState,
   sameSource,
   sourceIdentity,
@@ -25,9 +27,26 @@ describe('document identity', () => {
       id: 'tab-1',
       source: { folderPath: '/library/notes', path: 'plan.md' },
     };
-    const disposed = disposeDocumentState(createDocumentState(scope));
+    const disposed = disposeDocumentState(createDocumentState(scope, 'editable'));
 
-    expect(disposed).toEqual({ lifecycle: 'disposed', scope });
+    expect(disposed).toEqual({ access: 'editable', lifecycle: 'disposed', scope });
     expect(disposeDocumentState(disposed)).toBe(disposed);
+  });
+
+  it('classifies only Markdown and TXT source names for direct loading', () => {
+    expect(documentTextFormat('notes/plan.md')).toBe('md');
+    expect(documentTextFormat('notes/plan.MARKDOWN')).toBe('md');
+    expect(documentTextFormat('notes/literal.TXT')).toBe('txt');
+    expect(documentTextFormat('notes/data.json')).toBeNull();
+    expect(documentTextFormat('notes/no-extension')).toBeNull();
+  });
+
+  it('grants edit capability only to sources in the active folder scope', () => {
+    expect(
+      documentAccess({ folderPath: '/library/notes', path: 'plan.md' }, '/library/notes'),
+    ).toBe('editable');
+    expect(
+      documentAccess({ folderPath: '/library/archive', path: 'plan.md' }, '/library/notes'),
+    ).toBe('read-only');
   });
 });

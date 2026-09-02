@@ -1,6 +1,7 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 
@@ -11,6 +12,7 @@ function createRuntime() {
   let next = 0;
   const runtime = createDocumentTabsRuntime({
     createId: () => `tab-${++next}`,
+    createQueries: () => ({ cancel: vi.fn(async () => undefined), remove: vi.fn() }),
     folderPath: '/library/notes',
     generation: 1,
   });
@@ -19,8 +21,25 @@ function createRuntime() {
   return runtime;
 }
 
+const sourceApi = {
+  load: vi.fn(async () => ({ content: '# Loaded', format: 'md' as const, version: 'v1' })),
+};
+
+function testQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
 const runtimes: ReturnType<typeof createRuntime>[] = [];
 let scrollIntoViewDescriptor: PropertyDescriptor | undefined;
+let getAnimationsDescriptor: PropertyDescriptor | undefined;
+
+beforeEach(() => {
+  getAnimationsDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
+  Object.defineProperty(Element.prototype, 'getAnimations', {
+    configurable: true,
+    value: vi.fn(() => []),
+  });
+});
 
 afterEach(() => {
   cleanup();
@@ -31,6 +50,12 @@ afterEach(() => {
     Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
   }
   scrollIntoViewDescriptor = undefined;
+  if (getAnimationsDescriptor) {
+    Object.defineProperty(Element.prototype, 'getAnimations', getAnimationsDescriptor);
+  } else {
+    Reflect.deleteProperty(Element.prototype, 'getAnimations');
+  }
+  getAnimationsDescriptor = undefined;
 });
 
 describe('document tabs', () => {
@@ -38,10 +63,10 @@ describe('document tabs', () => {
     const runtime = createRuntime();
     runtimes.push(runtime);
     render(
-      <>
+      <QueryClientProvider client={testQueryClient()}>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace runtime={runtime} />
-      </>,
+        <DocumentWorkspace api={sourceApi} runtime={runtime} />
+      </QueryClientProvider>,
     );
 
     const tabList = screen.getByRole('tablist', { name: 'Open documents' });
@@ -63,10 +88,10 @@ describe('document tabs', () => {
     runtimes.push(runtime);
     const user = userEvent.setup();
     render(
-      <>
+      <QueryClientProvider client={testQueryClient()}>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace runtime={runtime} />
-      </>,
+        <DocumentWorkspace api={sourceApi} runtime={runtime} />
+      </QueryClientProvider>,
     );
 
     const other = screen.getByRole('tab', { name: 'other.md' });

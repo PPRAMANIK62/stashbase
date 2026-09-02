@@ -1,6 +1,11 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { createDocumentTabsRuntime, type DocumentTabsRuntime } from '@/features/documents/public';
+import {
+  createDocumentQueryScope,
+  createDocumentTabsRuntime,
+  type DocumentTabsRuntime,
+} from '@/features/documents/public';
 import type {
   FolderSessionState,
   WorkspaceRuntime,
@@ -13,6 +18,7 @@ export function useDocumentWorkspace(
   session: WorkspaceSessionRuntime,
   createId: () => string,
 ): DocumentTabsRuntime | null {
+  const queryClient = useQueryClient();
   const [runtime, setRuntime] = useState<DocumentTabsRuntime | null>(null);
   const restoredRef = useRef(restored);
   restoredRef.current = restored;
@@ -29,6 +35,7 @@ export function useDocumentWorkspace(
       restoredRef.current?.folderPath === folderPath ? restoredRef.current : null;
     const nextRuntime = createDocumentTabsRuntime({
       createId,
+      createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
       folderPath,
       generation,
       restored: restoredFolder
@@ -43,7 +50,7 @@ export function useDocumentWorkspace(
     });
     setRuntime(nextRuntime);
     return () => nextRuntime.dispose();
-  }, [createId, folderPath, generation, workspace]);
+  }, [createId, folderPath, generation, queryClient, workspace]);
 
   const current =
     workspace &&

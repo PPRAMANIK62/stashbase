@@ -2,12 +2,15 @@ import { createStore, type StoreApi } from 'zustand/vanilla';
 
 import {
   createDocumentState,
+  documentAccess,
   disposeDocumentState,
   sameSource,
   type DocumentScope,
   type DocumentState,
 } from '@/features/documents/domain/document';
 import type { SourceReference } from '@/shared/domain/source-reference';
+
+import type { DocumentQueryScope } from './ports';
 
 export interface DocumentRuntime {
   readonly scope: DocumentScope;
@@ -18,14 +21,18 @@ export interface DocumentRuntime {
 }
 
 export interface DocumentRuntimeOptions {
+  activeFolderPath: string;
   generation: number;
   id: string;
+  queries: DocumentQueryScope;
   source: SourceReference;
 }
 
 export function createDocumentRuntime({
+  activeFolderPath,
   generation,
   id,
+  queries,
   source,
 }: DocumentRuntimeOptions): DocumentRuntime {
   if (!Number.isSafeInteger(generation) || generation < 1) {
@@ -42,7 +49,9 @@ export function createDocumentRuntime({
     source: Object.freeze({ ...source }),
   });
   const controller = new AbortController();
-  const store = createStore<DocumentState>(() => createDocumentState(scope));
+  const store = createStore<DocumentState>(() =>
+    createDocumentState(scope, documentAccess(source, activeFolderPath)),
+  );
   let disposed = false;
 
   return {
@@ -65,6 +74,8 @@ export function createDocumentRuntime({
       if (disposed) return;
       disposed = true;
       controller.abort();
+      void queries.cancel().catch(() => undefined);
+      queries.remove();
       store.setState(disposeDocumentState);
     },
   };

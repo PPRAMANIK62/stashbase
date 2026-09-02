@@ -7,10 +7,15 @@ function idFactory() {
   return () => `tab-${++next}`;
 }
 
+function createQueries() {
+  return { cancel: vi.fn(async () => undefined), remove: vi.fn() };
+}
+
 describe('Document tabs runtime', () => {
   it('restores fresh document runtimes and one active source', () => {
     const runtime = createDocumentTabsRuntime({
       createId: idFactory(),
+      createQueries,
       folderPath: '/library/notes',
       generation: 3,
       restored: {
@@ -36,6 +41,7 @@ describe('Document tabs runtime', () => {
     const createId = vi.fn(idFactory());
     const runtime = createDocumentTabsRuntime({
       createId,
+      createQueries,
       folderPath: '/library/notes',
       generation: 1,
     });
@@ -52,6 +58,7 @@ describe('Document tabs runtime', () => {
   it('cancels only the closed document and rejects its stale work', () => {
     const runtime = createDocumentTabsRuntime({
       createId: idFactory(),
+      createQueries,
       folderPath: '/library/notes',
       generation: 1,
     });
@@ -71,6 +78,7 @@ describe('Document tabs runtime', () => {
   it('disposes every child and rejects completions from an older folder scope', () => {
     const runtime = createDocumentTabsRuntime({
       createId: idFactory(),
+      createQueries,
       folderPath: '/library/notes',
       generation: 2,
     });
@@ -91,6 +99,7 @@ describe('Document tabs runtime', () => {
   it('projects only active-folder relative identities for Workspace persistence', () => {
     const runtime = createDocumentTabsRuntime({
       createId: idFactory(),
+      createQueries,
       folderPath: '/library/notes',
       generation: 1,
     });
