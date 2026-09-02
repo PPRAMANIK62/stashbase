@@ -44,4 +44,26 @@ describe('library API', () => {
       unavailable.openFolder('/library/missing', new AbortController().signal),
     ).rejects.toMatchObject({ kind: 'unavailable', message: 'The library is unavailable.' });
   });
+
+  it('posts validated removal and maps its authoritative snapshot', async () => {
+    const client: HttpClient = {
+      request: vi.fn(async () => ({
+        body: { current: null, homeDir: '/library', recent: [] },
+        status: 200,
+      })),
+    };
+    const signal = new AbortController().signal;
+
+    await expect(createLibraryApi(client).removeFolder('/library/notes', signal)).resolves.toEqual({
+      activeFolder: null,
+      homeDirectory: '/library',
+      members: [],
+    });
+    expect(client.request).toHaveBeenCalledWith({
+      body: { path: '/library/notes' },
+      method: 'POST',
+      path: '/api/library/folders/remove',
+      signal,
+    });
+  });
 });

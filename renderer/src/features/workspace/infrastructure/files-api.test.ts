@@ -73,4 +73,18 @@ describe('files API', () => {
       signal,
     });
   });
+
+  it('classifies a cleared window context as scope loss', async () => {
+    const api = createFilesApi({
+      request: vi.fn(async () => ({
+        body: { code: 'NO_FOLDER', error: 'no folder open' },
+        status: 412,
+      })),
+    });
+
+    await expect(api.load('/library/notes', new AbortController().signal)).rejects.toMatchObject({
+      kind: 'scope-lost',
+      message: 'This folder is no longer available in this window.',
+    });
+  });
 });

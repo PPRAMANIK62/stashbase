@@ -26,7 +26,7 @@ import {
 } from 'react';
 
 import { Button } from '@/components/ui/button';
-import type { FilesApi } from '@/features/workspace/application/ports';
+import { FilesError, type FilesApi } from '@/features/workspace/application/ports';
 import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
 import {
   fileIsRestricted,
@@ -36,6 +36,7 @@ import {
   type TreeRow,
   type WorkspaceListing,
 } from '@/features/workspace/domain/tree';
+import type { WorkspaceScope } from '@/features/workspace/domain/workspace';
 import { useFiles } from '@/features/workspace/hooks/use-files';
 import { useReveal } from '@/features/workspace/hooks/use-reveal';
 import { useTree } from '@/features/workspace/hooks/use-tree';
@@ -65,11 +66,12 @@ const FILE_ICONS: Record<FileFormat, LucideIcon> = {
 
 export interface FileTreeProps {
   api: FilesApi;
+  onScopeLost?: (scope: WorkspaceScope) => void;
   revealLabel: string;
   runtime: WorkspaceRuntime;
 }
 
-export function FileTree({ api, revealLabel, runtime }: FileTreeProps) {
+export function FileTree({ api, onScopeLost, revealLabel, runtime }: FileTreeProps) {
   const files = useFiles(runtime, api);
   const tree = useTree(runtime, files.data ?? EMPTY_LISTING);
   const reveal = useReveal(runtime, api);
@@ -89,6 +91,12 @@ export function FileTree({ api, revealLabel, runtime }: FileTreeProps) {
     registerItem,
     sessionRef,
   } = useProximityHover(treeElement);
+
+  useEffect(() => {
+    if (files.error instanceof FilesError && files.error.kind === 'scope-lost') {
+      onScopeLost?.(runtime.scope);
+    }
+  }, [files.error, onScopeLost, runtime]);
 
   useEffect(() => {
     setLimit(TREE_PAGE_SIZE);

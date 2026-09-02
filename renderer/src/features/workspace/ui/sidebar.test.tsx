@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import type { LibraryApi, LibraryLifecycle } from '@/features/workspace/application/ports';
 import type { LibrarySnapshot } from '@/features/workspace/domain/library';
 
 import { LibrarySidebar, type LibrarySidebarProps } from './sidebar';
@@ -13,13 +14,32 @@ const emptyLibrary: LibrarySnapshot = {
   members: [],
 };
 
-function renderLibrary(props: LibrarySidebarProps) {
+type SidebarTestProps = Omit<LibrarySidebarProps, 'api' | 'lifecycle'> & {
+  api: Omit<LibraryApi, 'removeFolder'> & Partial<Pick<LibraryApi, 'removeFolder'>>;
+  lifecycle?: LibraryLifecycle;
+};
+
+function lifecycle(): LibraryLifecycle {
+  return {
+    notifyFolderRemoved: vi.fn(async () => undefined),
+    onFolderRemoved: vi.fn(() => () => undefined),
+    onPrepareFolderRemoval: vi.fn(() => () => undefined),
+    prepareFolderRemoval: vi.fn(async () => true),
+    setActiveFolder: vi.fn(async () => undefined),
+  };
+}
+
+function renderLibrary({ api, lifecycle: lifecycleOverride, ...props }: SidebarTestProps) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LibrarySidebar {...props} />
+      <LibrarySidebar
+        {...props}
+        api={{ removeFolder: vi.fn(), ...api }}
+        lifecycle={lifecycleOverride ?? lifecycle()}
+      />
     </QueryClientProvider>,
   );
 }
@@ -166,5 +186,59 @@ describe('library sidebar', () => {
     expect(chooseFolder).toHaveBeenCalledWith(undefined);
     expect(openFolder).toHaveBeenCalledWith('/library/writing', expect.any(AbortSignal));
     expect(await screen.findByRole('button', { name: 'Writing' })).not.toBeNull();
+  });
+
+  it('uses a trailing folder action and confirms the complete retained path', async () => {
+    const activeLibrary: LibrarySnapshot = {
+      activeFolder: { name: 'Research', path: '/home/person/Research' },
+      homeDirectory: '/home/person',
+      members: [
+        {
+          favorite: false,
+          openedAt: '2026-08-31T12:00:00.000Z',
+          path: '/home/person/Research',
+        },
+        {
+          favorite: false,
+          openedAt: '2026-08-30T12:00:00.000Z',
+          path: '/home/person/Notes',
+        },
+      ],
+    };
+    const removeFolder = vi.fn(async () => ({
+      ...activeLibrary,
+      members: activeLibrary.members.slice(0, 1),
+    }));
+    const prepareFolderRemoval = vi.fn(async () => true);
+    const notifyFolderRemoved = vi.fn(async () => undefined);
+    renderLibrary({
+      folderPicker: { chooseFolder: vi.fn() },
+      api: { load: vi.fn(async () => activeLibrary), openFolder: vi.fn(), removeFolder },
+      lifecycle: {
+        ...lifecycle(),
+        notifyFolderRemoved,
+        prepareFolderRemoval,
+      },
+    });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Research' }));
+    expect(
+      (await screen.findByRole('menuitemradio', { name: 'Notes' })).getAttribute(
+        'aria-keyshortcuts',
+      ),
+    ).toBe('Delete');
+    await user.click(await screen.findByRole('button', { name: 'Remove Notes from Library' }));
+
+    expect(await screen.findByRole('heading', { name: 'Remove from Library?' })).not.toBeNull();
+    expect(screen.getByText('~/Notes').getAttribute('title')).toBe('/home/person/Notes');
+    expect(screen.getByText(/The folder and its files will stay on disk/u)).not.toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(removeFolder).toHaveBeenCalledOnce());
+    expect(prepareFolderRemoval).toHaveBeenCalledWith('/home/person/Notes');
+    expect(removeFolder).toHaveBeenCalledWith('/home/person/Notes', expect.any(AbortSignal));
+    expect(notifyFolderRemoved).toHaveBeenCalledWith('/home/person/Notes');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

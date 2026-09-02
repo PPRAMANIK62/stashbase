@@ -14,7 +14,7 @@ describe('authorize first folder', () => {
     await expect(
       addFolder(
         { chooseFolder: async () => ({ status: 'selected', folderPath: '/library/notes' }) },
-        { load: vi.fn(), openFolder },
+        { load: vi.fn(), openFolder, removeFolder: vi.fn() },
         new AbortController().signal,
       ),
     ).resolves.toEqual({ status: 'opened', snapshot });
@@ -26,7 +26,7 @@ describe('authorize first folder', () => {
     await expect(
       addFolder(
         { chooseFolder: async () => ({ status: 'cancelled' }) },
-        { load: vi.fn(), openFolder },
+        { load: vi.fn(), openFolder, removeFolder: vi.fn() },
         new AbortController().signal,
       ),
     ).resolves.toEqual({ status: 'cancelled' });
@@ -37,7 +37,7 @@ describe('authorize first folder', () => {
     const chooseFolder = vi.fn(async () => ({ status: 'cancelled' as const }));
     await addFolder(
       { chooseFolder },
-      { load: vi.fn(), openFolder: vi.fn() },
+      { load: vi.fn(), openFolder: vi.fn(), removeFolder: vi.fn() },
       new AbortController().signal,
       { defaultPath: '/home/person' },
     );

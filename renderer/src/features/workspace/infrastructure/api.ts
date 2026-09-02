@@ -4,6 +4,7 @@ import type { HttpClient, HttpResponse } from '@/platform/http/client';
 import {
   libraryFailureSchema,
   libraryOpenFolderRequestSchema,
+  libraryRemoveFolderRequestSchema,
   librarySnapshotSchema,
 } from '@/protocols/http/library';
 import type { LibrarySnapshotWire } from '@/protocols/http/library';
@@ -62,5 +63,11 @@ export function createLibraryApi(client: HttpClient): LibraryApi {
     load: (signal) => request('/api/library', signal),
     openFolder: (path, signal) =>
       request('/api/library/folders/open', signal, libraryOpenFolderRequestSchema.parse({ path })),
+    removeFolder: (path, signal) =>
+      request(
+        '/api/library/folders/remove',
+        signal,
+        libraryRemoveFolderRequestSchema.parse({ path }),
+      ),
   };
 }

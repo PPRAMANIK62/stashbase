@@ -11,6 +11,7 @@ import {
   FileTree,
   LibrarySidebar,
   LibraryWelcome,
+  useLibraryLifecycle,
   useWorkspace,
 } from '@/features/workspace/public';
 import { Logo } from '@/shared/brand/logo';
@@ -21,6 +22,11 @@ import './shell.css';
 
 export function App({ dependencies }: { dependencies: AppDependencies }) {
   const workspace = useWorkspace(dependencies.library.api);
+  const libraryLifecycle = useLibraryLifecycle(
+    dependencies.library.api,
+    dependencies.library.lifecycle,
+    workspace,
+  );
 
   return (
     <SidebarProvider
@@ -40,6 +46,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
               <FileTree
                 {...dependencies.workspace}
                 key={workspace.scope.generation}
+                onScopeLost={libraryLifecycle.recoverLostScope}
                 runtime={workspace}
               />
             )}

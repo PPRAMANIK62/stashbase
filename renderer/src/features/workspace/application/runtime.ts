@@ -15,6 +15,7 @@ export interface WorkspaceRuntime {
   readonly store: StoreApi<WorkspaceState>;
   accept(capturedScope: WorkspaceScope, completion: () => void): boolean;
   dispose(): void;
+  retire(): void;
 }
 
 export interface WorkspaceRuntimeOptions {
@@ -38,6 +39,20 @@ export function createWorkspaceRuntime({
   const controller = new AbortController();
   const store = createStore<WorkspaceState>(() => createWorkspaceState(scope));
   let disposed = false;
+  let queriesRemoved = false;
+
+  const finish = (removeQueries: boolean) => {
+    if (!disposed) {
+      disposed = true;
+      controller.abort();
+      store.setState(disposeWorkspaceState);
+      void queries.cancel().catch(() => undefined);
+    }
+    if (removeQueries && !queriesRemoved) {
+      queriesRemoved = true;
+      queries.remove();
+    }
+  };
 
   return {
     scope,
@@ -55,11 +70,10 @@ export function createWorkspaceRuntime({
       return true;
     },
     dispose() {
-      if (disposed) return;
-      disposed = true;
-      controller.abort();
-      store.setState(disposeWorkspaceState);
-      void queries.cancel().catch(() => undefined);
+      finish(false);
+    },
+    retire() {
+      finish(true);
     },
   };
 }

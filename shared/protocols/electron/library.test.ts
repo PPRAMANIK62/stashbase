@@ -4,6 +4,11 @@ import test from 'node:test';
 import {
   libraryFolderDialogRequestSchema,
   libraryFolderDialogResponseSchema,
+  libraryFolderRemovalReadySchema,
+  libraryFolderRemovalRequestedSchema,
+  libraryLifecycleResponseSchema,
+  libraryPrepareFolderRemovalResponseSchema,
+  librarySetActiveFolderRequestSchema,
 } from './library.ts';
 
 test('library folder dialog protocol accepts the pinned original request fixture', () => {
@@ -52,4 +57,38 @@ test('library folder dialog request rejects unowned fields and invalid paths', (
     false,
   );
   assert.equal(libraryFolderDialogRequestSchema.safeParse({ defaultPath: '' }).success, false);
+});
+
+test('library lifecycle protocol validates folder identity and correlated release responses', () => {
+  assert.deepEqual(librarySetActiveFolderRequestSchema.parse({ folderPath: null }), {
+    folderPath: null,
+  });
+  assert.deepEqual(
+    libraryFolderRemovalRequestedSchema.parse({
+      folderPath: '/workspace/notes',
+      requestId: 'request-1',
+    }),
+    { folderPath: '/workspace/notes', requestId: 'request-1' },
+  );
+  assert.deepEqual(
+    libraryFolderRemovalReadySchema.parse({
+      folderPath: '/workspace/notes',
+      ready: false,
+      requestId: 'request-1',
+    }),
+    { folderPath: '/workspace/notes', ready: false, requestId: 'request-1' },
+  );
+  assert.deepEqual(libraryLifecycleResponseSchema.parse({ ok: true }), { ok: true });
+  assert.deepEqual(libraryPrepareFolderRemovalResponseSchema.parse({ ok: true, ready: true }), {
+    ok: true,
+    ready: true,
+  });
+  assert.equal(
+    libraryFolderRemovalReadySchema.safeParse({
+      folderPath: '/workspace/notes',
+      ready: true,
+      requestId: '',
+    }).success,
+    false,
+  );
 });

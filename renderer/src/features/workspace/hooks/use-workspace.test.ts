@@ -26,7 +26,11 @@ describe('Workspace lifecycle', () => {
       homeDirectory: '/library',
       members: [],
     };
-    const api: LibraryApi = { load: vi.fn(async () => notes), openFolder: vi.fn() };
+    const api: LibraryApi = {
+      load: vi.fn(async () => notes),
+      openFolder: vi.fn(),
+      removeFolder: vi.fn(),
+    };
     queryClient.setQueryData(libraryQueryKey, notes);
     const workspace = renderHook(() => useWorkspace(api), {
       wrapper: queryWrapper(queryClient),

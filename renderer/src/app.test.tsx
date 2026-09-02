@@ -16,6 +16,14 @@ describe('workspace shell', () => {
       api: {
         load: () => new Promise(() => {}),
         openFolder: vi.fn(),
+        removeFolder: vi.fn(),
+      },
+      lifecycle: {
+        notifyFolderRemoved: vi.fn(async () => undefined),
+        onFolderRemoved: vi.fn(() => () => undefined),
+        onPrepareFolderRemoval: vi.fn(() => () => undefined),
+        prepareFolderRemoval: vi.fn(),
+        setActiveFolder: vi.fn(async () => undefined),
       },
     },
     workspace: {

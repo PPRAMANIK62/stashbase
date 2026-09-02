@@ -26,6 +26,12 @@ export const libraryOpenFolderRequestSchema = z
   })
   .strict();
 
+export const libraryRemoveFolderRequestSchema = z
+  .object({
+    path: folderPathSchema,
+  })
+  .strict();
+
 export const libraryFailureSchema = z.object({
   code: z.string().trim().min(1).max(64).optional(),
   error: z.string().trim().min(1).max(500),
@@ -33,4 +39,5 @@ export const libraryFailureSchema = z.object({
 
 export type LibrarySnapshotWire = z.infer<typeof librarySnapshotSchema>;
 export type LibraryOpenFolderRequestWire = z.infer<typeof libraryOpenFolderRequestSchema>;
+export type LibraryRemoveFolderRequestWire = z.infer<typeof libraryRemoveFolderRequestSchema>;
 export type LibraryFailureWire = z.infer<typeof libraryFailureSchema>;

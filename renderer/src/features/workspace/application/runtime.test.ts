@@ -8,13 +8,13 @@ describe('Workspace runtime', () => {
       createWorkspaceRuntime({
         folder: { name: 'Notes', path: '/library/notes' },
         generation: 0,
-        queries: { cancel: vi.fn(async () => undefined) },
+        queries: { cancel: vi.fn(async () => undefined), remove: vi.fn() },
       }),
     ).toThrow('Workspace runtime generation must be a positive safe integer.');
   });
 
   it('owns one folder generation and accepts only its current completions', () => {
-    const queries = { cancel: vi.fn(async () => undefined) };
+    const queries = { cancel: vi.fn(async () => undefined), remove: vi.fn() };
     const runtime = createWorkspaceRuntime({
       folder: { name: 'Notes', path: '/library/notes' },
       generation: 7,
@@ -53,7 +53,7 @@ describe('Workspace runtime', () => {
   });
 
   it('aborts work, retires state, and cancels queries exactly once on disposal', () => {
-    const queries = { cancel: vi.fn(async () => undefined) };
+    const queries = { cancel: vi.fn(async () => undefined), remove: vi.fn() };
     const runtime = createWorkspaceRuntime({
       folder: { name: 'Notes', path: '/library/notes' },
       generation: 1,
@@ -68,7 +68,39 @@ describe('Workspace runtime', () => {
     expect(runtime.signal.aborted).toBe(true);
     expect(runtime.store.getState().lifecycle).toBe('disposed');
     expect(queries.cancel).toHaveBeenCalledOnce();
+    expect(queries.remove).not.toHaveBeenCalled();
     expect(runtime.accept(capturedScope, lateCompletion)).toBe(false);
     expect(lateCompletion).not.toHaveBeenCalled();
+  });
+
+  it('evicts scoped queries when authorization retires the runtime', () => {
+    const queries = { cancel: vi.fn(async () => undefined), remove: vi.fn() };
+    const runtime = createWorkspaceRuntime({
+      folder: { name: 'Notes', path: '/library/notes' },
+      generation: 1,
+      queries,
+    });
+
+    runtime.retire();
+    runtime.dispose();
+
+    expect(queries.cancel).toHaveBeenCalledOnce();
+    expect(queries.remove).toHaveBeenCalledOnce();
+  });
+
+  it('upgrades ordinary disposal to query eviction when authorization is later lost', () => {
+    const queries = { cancel: vi.fn(async () => undefined), remove: vi.fn() };
+    const runtime = createWorkspaceRuntime({
+      folder: { name: 'Notes', path: '/library/notes' },
+      generation: 1,
+      queries,
+    });
+
+    runtime.dispose();
+    runtime.retire();
+    runtime.retire();
+
+    expect(queries.cancel).toHaveBeenCalledOnce();
+    expect(queries.remove).toHaveBeenCalledOnce();
   });
 });

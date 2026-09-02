@@ -1,6 +1,7 @@
 import {
   createFilesApi,
   createLibraryApi,
+  createLibraryLifecycle,
   type FileTreeProps,
   type LibrarySidebarProps,
   type LibraryWelcomeProps,
@@ -22,6 +23,7 @@ export function createDependencies(): AppDependencies {
     library: {
       api: createLibraryApi(http),
       folderPicker: createFolderPicker(bridge.library),
+      lifecycle: createLibraryLifecycle(bridge.library),
     },
     workspace: {
       api: createFilesApi(http),

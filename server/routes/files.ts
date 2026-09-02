@@ -15,7 +15,12 @@ import {
   sanitizeFilename,
 } from '../files.ts';
 import { detectViewerFormat, isNoteName } from '../format.ts';
-import { exactMemberFolderRootAsync, getCurrentFolderLabel, runWithFolderRoot } from '../folder.ts';
+import {
+  exactMemberFolderRootAsync,
+  getCurrentFolder,
+  getCurrentFolderLabel,
+  runWithFolderRoot,
+} from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError, revealInOsFileManager } from '../http.ts';
 import { noteTreeChanged } from '../watcher.ts';
@@ -42,6 +47,25 @@ export async function fileHeadStatusAsync(name: string): Promise<number> {
   return (await pathExistsAsync(name)) ? 204 : 404;
 }
 
+async function sendUnavailableExplicitFolder(
+  res: express.Response,
+  rawFolder: string,
+): Promise<void> {
+  const current = getCurrentFolder();
+  if (
+    current
+    && filesystemPath.isAbsolute(rawFolder)
+    && await filesystemPath.equalAsync(current, rawFolder)
+  ) {
+    res.status(410).json({
+      code: 'FOLDER_UNAVAILABLE',
+      error: 'the active folder is no longer available',
+    });
+    return;
+  }
+  res.status(400).json({ error: 'folder is not a registered library folder' });
+}
+
 /** Run a READ handler against an explicit `?folder=` member folder when the
  *  request carries one; otherwise against the window's own folder. Same
  *  membership rule as the `/api/files?folder=` listing above. */
@@ -57,7 +81,7 @@ async function runWithExplicitReadFolder(
   }
   const member = filesystemPath.isAbsolute(rawFolder) ? await exactMemberFolderRootAsync(rawFolder) : null;
   if (!member) {
-    res.status(400).json({ error: 'folder is not a registered library folder' });
+    await sendUnavailableExplicitFolder(res, rawFolder);
     return;
   }
   await runWithFolderRoot(member, fn).catch((err: unknown) => sendError(res, err));
@@ -94,7 +118,8 @@ export function mount(app: express.Express): void {
           ? await exactMemberFolderRootAsync(rawFolder)
           : null;
         if (!member) {
-          return res.status(400).json({ error: 'folder is not a registered library folder' });
+          await sendUnavailableExplicitFolder(res, rawFolder);
+          return;
         }
         const result = await runWithFolderRoot(member, async () => ({
           folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),

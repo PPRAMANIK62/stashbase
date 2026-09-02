@@ -153,6 +153,7 @@ const bugReportReviewDraftBySender = new Map();
 const windowRegistry = createWindowRegistry({ platform: process.platform });
 const replacementWindowCapabilities = new WeakMap();
 let libraryFolderDialogCapability = null;
+let libraryLifecycleCapability = null;
 let replacementBoundaryInstalled = false;
 
 function installReplacementBoundary() {
@@ -170,7 +171,15 @@ function installReplacementBoundary() {
     'library',
     'dialog.cjs',
   ));
+  const lifecycle = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'library',
+    'lifecycle.cjs',
+  ));
   libraryFolderDialogCapability = boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY;
+  libraryLifecycleCapability = lifecycle.LIBRARY_LIFECYCLE_CAPABILITY;
   boundary.registerDialog({
     BrowserWindow,
     dialog,
@@ -180,6 +189,23 @@ function installReplacementBoundary() {
     hasCapability: (win, capability) => (
       replacementWindowCapabilities.get(win)?.has(capability) === true
     ),
+  });
+  lifecycle.registerLifecycle({
+    BrowserWindow,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
+    liveWindows: () => [...mainWindows].filter((win) => isLiveMainWindow(win)),
+    setActiveFolder: (win, folder) => {
+      const windowId = windowRegistry.idForWindow(win);
+      return windowId ? windowRegistry.setFolder(windowId, folder) : false;
+    },
+    windowsForFolder: (folder) => windowRegistry
+      .windowsByFolder(folder)
+      .filter((win) => isLiveMainWindow(win)),
   });
   replacementBoundaryInstalled = true;
 }
@@ -793,8 +819,11 @@ async function createWindow(initialFolder) {
   const webContentsId = win.webContents.id;
   mainWindows.add(win);
   windowRegistry.add(windowId, win, initialFolder);
-  if (libraryFolderDialogCapability) {
-    replacementWindowCapabilities.set(win, new Set([libraryFolderDialogCapability]));
+  if (libraryFolderDialogCapability && libraryLifecycleCapability) {
+    replacementWindowCapabilities.set(
+      win,
+      new Set([libraryFolderDialogCapability, libraryLifecycleCapability]),
+    );
   }
   lastMainWindow = win;
   win.on('focus', () => {

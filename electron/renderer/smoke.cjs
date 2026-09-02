@@ -66,7 +66,17 @@ app
     const boundary = require(
       path.join(repositoryRoot, 'dist', 'electron', 'library', 'dialog.cjs'),
     );
-    const authorizedWindows = new WeakSet();
+    const lifecycle = require(
+      path.join(repositoryRoot, 'dist', 'electron', 'library', 'lifecycle.cjs'),
+    );
+    const authorizedWindows = new Set();
+    const activeFolders = new WeakMap();
+    const isLiveWindow = (window) =>
+      authorizedWindows.has(window) && !window.isDestroyed();
+    const hasCapability = (window, capability) =>
+      isLiveWindow(window) &&
+      (capability === boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY ||
+        capability === lifecycle.LIBRARY_LIFECYCLE_CAPABILITY);
     boundary.registerDialog({
       BrowserWindow,
       dialog: {
@@ -76,9 +86,24 @@ app
       },
       ipcMain,
       expectedOrigins: new Set([APP_ORIGIN]),
-      isLiveWindow: (window) => authorizedWindows.has(window) && !window.isDestroyed(),
-      hasCapability: (window, capability) =>
-        authorizedWindows.has(window) && capability === boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY,
+      isLiveWindow,
+      hasCapability,
+    });
+    lifecycle.registerLifecycle({
+      BrowserWindow,
+      ipcMain,
+      expectedOrigins: new Set([APP_ORIGIN]),
+      isLiveWindow,
+      hasCapability,
+      liveWindows: () => [...authorizedWindows].filter(isLiveWindow),
+      setActiveFolder: (window, folder) => {
+        activeFolders.set(window, folder);
+        return true;
+      },
+      windowsForFolder: (folder) =>
+        [...authorizedWindows].filter(
+          (window) => isLiveWindow(window) && activeFolders.get(window) === folder,
+        ),
     });
 
     const webPreferences = applicationWindowWebPreferences({
@@ -172,13 +197,21 @@ app
       welcomeTitle: 'StashBase',
       workspaceMarginLeft: '0px',
       url: APP_URL,
-      libraryKeys: ['chooseFolder'],
+      libraryKeys: [
+        'chooseFolder',
+        'notifyFolderRemoved',
+        'onFolderRemoved',
+        'onPrepareFolderRemoval',
+        'prepareFolderRemoval',
+        'setActiveFolder',
+      ],
     });
     assert.deepEqual(receivedLibraryRequest, {
       method: 'POST',
       origin: APP_ORIGIN,
       windowId: 'replacement-smoke-window',
     });
+    assert.equal(activeFolders.get(window), null);
 
     libraryMembers = [
       {
@@ -202,6 +235,7 @@ app
       })()
     `);
     assert.equal(folderCursor, 'pointer');
+    assert.equal(activeFolders.get(window), null);
     console.log('replacement Electron boundary smoke passed');
     clearTimeout(timeout);
     window.destroy();

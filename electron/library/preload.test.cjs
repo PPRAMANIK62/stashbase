@@ -9,12 +9,19 @@ const {
 
 function createIpc(response) {
   const invocations = [];
+  const listeners = new Map();
   return {
     invocations,
+    emit(channel, payload) {
+      listeners.get(channel)?.({}, payload);
+    },
     async invoke(channel, payload) {
       invocations.push([channel, payload]);
       if (response instanceof Error) throw response;
-      return response;
+      return typeof response === 'function' ? response(channel, payload) : response;
+    },
+    on(channel, listener) {
+      listeners.set(channel, listener);
     },
   };
 }
@@ -45,4 +52,39 @@ test('library preload validates requests and main-process responses', async () =
     ok: false,
     failure: { kind: 'unavailable', message: 'The folder picker is unavailable.' },
   });
+});
+
+test('library preload validates lifecycle calls and owns subscription cleanup', async () => {
+  const ipc = createIpc((channel) => (
+    channel === 'library:prepare-folder-removal'
+      ? { ok: true, ready: true }
+      : { ok: true }
+  ));
+  const api = createLibraryPreload(ipc);
+
+  assert.deepEqual(await api.setActiveFolder('/workspace/notes'), { ok: true });
+  assert.deepEqual(await api.prepareFolderRemoval('/workspace/notes'), {
+    ok: true,
+    ready: true,
+  });
+  assert.deepEqual(await api.notifyFolderRemoved('/workspace/notes'), { ok: true });
+
+  const removed = [];
+  const unsubscribeRemoved = api.onFolderRemoved((folder) => removed.push(folder));
+  ipc.emit('library:folder-removed', { folderPath: '/workspace/notes' });
+  ipc.emit('library:folder-removed', { folderPath: 42 });
+  unsubscribeRemoved();
+  ipc.emit('library:folder-removed', { folderPath: '/workspace/writing' });
+  assert.deepEqual(removed, ['/workspace/notes']);
+
+  api.onPrepareFolderRemoval(async (folder) => folder === '/workspace/notes');
+  ipc.emit('library:folder-removal-requested', {
+    folderPath: '/workspace/notes',
+    requestId: 'request-1',
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(ipc.invocations.at(-1), [
+    'library:folder-removal-ready',
+    { folderPath: '/workspace/notes', ready: true, requestId: 'request-1' },
+  ]);
 });

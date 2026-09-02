@@ -26,7 +26,17 @@ export function createWorkspaceQueryScope(
   const queryKey = workspaceQueryKeys.folder(folderPath);
   return {
     cancel: () => queryClient.cancelQueries({ queryKey }),
+    remove: () => queryClient.removeQueries({ queryKey }),
   };
+}
+
+export async function retireWorkspaceQueries(
+  queryClient: QueryClient,
+  folderPath: string,
+): Promise<void> {
+  const queryKey = workspaceQueryKeys.folder(folderPath);
+  await queryClient.cancelQueries({ queryKey });
+  queryClient.removeQueries({ queryKey });
 }
 
 export function filesQuery(api: FilesApi, folderPath: string) {

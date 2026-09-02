@@ -11,7 +11,11 @@ const snapshot = {
 
 describe('open library folder', () => {
   it('returns the authoritative snapshot', async () => {
-    const api = { load: vi.fn(), openFolder: vi.fn(async () => snapshot) };
+    const api = {
+      load: vi.fn(),
+      openFolder: vi.fn(async () => snapshot),
+      removeFolder: vi.fn(),
+    };
 
     await expect(openFolder(api, '/library/notes', new AbortController().signal)).resolves.toEqual({
       status: 'opened',
@@ -25,6 +29,7 @@ describe('open library folder', () => {
       openFolder: vi.fn(async () => {
         throw new LibraryError('unavailable', 'The library is unavailable.');
       }),
+      removeFolder: vi.fn(),
     };
 
     await expect(openFolder(api, '/library/notes', new AbortController().signal)).resolves.toEqual({
@@ -44,6 +49,7 @@ describe('open library folder', () => {
             resolveOpen = resolve;
           }),
       ),
+      removeFolder: vi.fn(),
     };
     const result = openFolder(api, '/library/notes', controller.signal);
 

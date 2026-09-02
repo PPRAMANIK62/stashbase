@@ -61,7 +61,10 @@ function renderTree(api: FilesApi) {
   const runtime = createWorkspaceRuntime({
     folder: { name: 'Research', path: '/library/research' },
     generation: runtimes.length + 1,
-    queries: { cancel: () => queryClient.cancelQueries() },
+    queries: {
+      cancel: () => queryClient.cancelQueries(),
+      remove: () => queryClient.removeQueries(),
+    },
   });
   runtimes.push(runtime);
   return render(

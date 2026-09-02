@@ -3,7 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { LibraryError } from '@/features/workspace/application/ports';
+import { LibraryError, type LibraryApi } from '@/features/workspace/application/ports';
 import type { LibrarySnapshot } from '@/features/workspace/domain/library';
 
 import { LibraryWelcome, type LibraryWelcomeProps } from './welcome';
@@ -14,13 +14,17 @@ const emptyLibrary: LibrarySnapshot = {
   members: [],
 };
 
-function renderWelcome(props: LibraryWelcomeProps) {
+type WelcomeTestProps = Omit<LibraryWelcomeProps, 'api'> & {
+  api: Omit<LibraryApi, 'removeFolder'> & Partial<Pick<LibraryApi, 'removeFolder'>>;
+};
+
+function renderWelcome({ api, ...props }: WelcomeTestProps) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LibraryWelcome {...props} />
+      <LibraryWelcome {...props} api={{ removeFolder: vi.fn(), ...api }} />
     </QueryClientProvider>,
   );
 }

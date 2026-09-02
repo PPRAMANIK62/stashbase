@@ -22,8 +22,11 @@ export interface DialogAuthorization {
   isLiveWindow(window: BrowserWindow): boolean;
 }
 
-export interface DialogDependencies extends DialogAuthorization {
+export interface SenderAuthorization extends DialogAuthorization {
   BrowserWindow: BrowserWindowConstructor;
+}
+
+export interface DialogDependencies extends SenderAuthorization {
   dialog: Pick<Dialog, 'showOpenDialog'>;
   ipcMain: Pick<IpcMain, 'handle'>;
 }
@@ -49,14 +52,15 @@ function frameOrigin(rawUrl: string): string | null {
 
 export function authorizeSender(
   event: IpcMainInvokeEvent,
-  dependencies: DialogDependencies,
+  dependencies: SenderAuthorization,
+  capability = LIBRARY_FOLDER_DIALOG_CAPABILITY,
 ): BrowserWindow | null {
   const senderWindow = dependencies.BrowserWindow.fromWebContents(event.sender);
   if (!senderWindow || !dependencies.isLiveWindow(senderWindow)) return null;
   if (!event.senderFrame || event.senderFrame !== event.sender.mainFrame) return null;
   const origin = frameOrigin(event.senderFrame.url);
   if (!origin || !dependencies.expectedOrigins.has(origin)) return null;
-  if (!dependencies.hasCapability(senderWindow, LIBRARY_FOLDER_DIALOG_CAPABILITY)) return null;
+  if (!dependencies.hasCapability(senderWindow, capability)) return null;
   return senderWindow;
 }
 

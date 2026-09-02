@@ -10,6 +10,7 @@ await build({
   bundle: true,
   entryPoints: {
     'library/dialog': 'electron/library/dialog.ts',
+    'library/lifecycle': 'electron/library/lifecycle.ts',
     'library/preload': 'electron/library/preload.ts',
     'renderer/preload': 'electron/renderer/preload.ts',
     'renderer/runtime': 'electron/renderer/runtime.ts',

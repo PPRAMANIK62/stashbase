@@ -157,6 +157,21 @@ export async function exactMemberFolderRootAsync(abs: string): Promise<string | 
   return null;
 }
 
+/** Return the stored spelling of an exact configured member even when its
+ * source directory is currently missing. Removal uses this durable view so a
+ * moved or deleted folder can still be deliberately forgotten without first
+ * recreating it on disk. */
+export async function exactConfiguredMemberFolderRootAsync(abs: string): Promise<string | null> {
+  const target = filesystemPath.absolute(abs);
+  const configured = (readConfigStrict().recentFolders ?? []).map(currentRecentFolder);
+  for (const member of configured) {
+    if (await storedFolderPathEqualsAsync(member.path, target)) {
+      return filesystemPath.absolute(member.path);
+    }
+  }
+  return null;
+}
+
 /** The member folder (longest-prefix) that contains `abs`, or null when
  *  the path isn't inside any member folder. The longest-prefix rule keeps
  *  nested members (`<root>/foo` and `<root>/foo/bar` both opened) correct. */

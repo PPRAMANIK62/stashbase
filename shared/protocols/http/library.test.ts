@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   libraryFailureSchema,
   libraryOpenFolderRequestSchema,
+  libraryRemoveFolderRequestSchema,
   librarySnapshotSchema,
 } from './library.ts';
 
@@ -56,6 +57,15 @@ test('library request rejects unowned and empty paths', () => {
   assert.equal(libraryOpenFolderRequestSchema.safeParse({ path: '' }).success, false);
   assert.equal(
     libraryOpenFolderRequestSchema.safeParse({ create: true, path: '/home/person/Notes' })
+      .success,
+    false,
+  );
+  assert.deepEqual(libraryRemoveFolderRequestSchema.parse({ path: '/home/person/Notes' }), {
+    path: '/home/person/Notes',
+  });
+  assert.equal(libraryRemoveFolderRequestSchema.safeParse({ path: '' }).success, false);
+  assert.equal(
+    libraryRemoveFolderRequestSchema.safeParse({ path: '/home/person/Notes', force: true })
       .success,
     false,
   );

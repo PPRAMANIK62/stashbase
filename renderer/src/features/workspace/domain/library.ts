@@ -15,7 +15,7 @@ export interface LibrarySnapshot {
   members: LibraryMember[];
 }
 
-export type LibraryFailureKind = 'invalid-response' | 'unauthorized' | 'unavailable';
+export type LibraryFailureKind = 'invalid-response' | 'scope-lost' | 'unauthorized' | 'unavailable';
 
 export function folderName(folderPath: string): string {
   const withoutTrailingSeparators = folderPath.replace(/[\\/]+$/u, '');

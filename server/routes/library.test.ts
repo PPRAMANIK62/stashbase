@@ -153,4 +153,42 @@ test('library routes return authoritative membership and open the selected folde
     name: 'Research',
     path: selectedFolder,
   });
+
+  const removed = await fetch(`${baseUrl}/api/library/folders/remove`, {
+    body: JSON.stringify({ path: selectedFolder }),
+    headers,
+    method: 'POST',
+  });
+  assert.equal(removed.status, 200);
+  assert.deepEqual(await removed.json(), {
+    current: null,
+    homeDir: testHome,
+    recent: [],
+  });
+  assert.equal(fs.statSync(selectedFolder).isDirectory(), true);
+
+  const missingFolder = path.join(testHome, 'Moved away');
+  fs.mkdirSync(missingFolder);
+  const openedMissing = await fetch(`${baseUrl}/api/library/folders/open`, {
+    body: JSON.stringify({ path: missingFolder }),
+    headers,
+    method: 'POST',
+  });
+  assert.equal(openedMissing.status, 200);
+  fs.rmSync(missingFolder, { recursive: true });
+
+  const lost = await fetch(`${baseUrl}/api/library`, { headers });
+  assert.equal(lost.status, 200);
+  assert.deepEqual(await lost.json(), {
+    current: null,
+    homeDir: testHome,
+    recent: [],
+  });
+
+  const forgotMissing = await fetch(`${baseUrl}/api/library/folders/remove`, {
+    body: JSON.stringify({ path: missingFolder }),
+    headers,
+    method: 'POST',
+  });
+  assert.equal(forgotMissing.status, 200);
 });

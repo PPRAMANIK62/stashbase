@@ -18,6 +18,8 @@ import { shapeMap } from '@/lib/shape-context';
 import { useSize } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 
+import { Button } from './button';
+
 // MenuItem is only used inside Dropdown, which opts out of the global pill
 // shape — see dropdown.tsx for the rationale.
 const shape = shapeMap.rounded;
@@ -35,7 +37,7 @@ const shape = shapeMap.rounded;
 
 /** What MenuItem hands to the popup's primitive wrapper. `element` is the
  *  styled row div (visuals + proximity registration, no children); `children`
- *  is the row content (icon, label, check). The dropdown wraps them in its
+ *  is the row content (icon, label, trailing action, check). The dropdown wraps them in its
  *  own Item / RadioItem primitive, so MenuItem itself stays primitive-free. */
 export interface MenuItemRenderOptions {
   /** Radio-style option (boolean `checked` on MenuItem) vs plain action item. */
@@ -76,6 +78,12 @@ export function useDropdownMaybe() {
   return useContext(DropdownContext);
 }
 
+export interface MenuItemTrailingAction {
+  icon: IconComponent;
+  label: string;
+  onSelect(): void;
+}
+
 interface MenuItemProps extends HTMLAttributes<HTMLDivElement> {
   /** Optional leading icon. When omitted, the row renders text-only with no
    *  reserved icon column. */
@@ -91,6 +99,9 @@ interface MenuItemProps extends HTMLAttributes<HTMLDivElement> {
   /** Popup-only (inside DropdownContent): whether activating the item closes
    *  the menu. Ignored in the inline Dropdown panel. @default true */
   closeOnClick?: boolean;
+  /** A compact secondary action at the row's trailing edge. The focused row
+   *  also exposes the action through the Delete key. */
+  trailingAction?: MenuItemTrailingAction;
 }
 
 const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
@@ -103,8 +114,10 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       onSelect,
       disabled,
       closeOnClick,
+      trailingAction,
       className,
       onClick,
+      onKeyDown,
       ...props
     },
     ref,
@@ -125,6 +138,7 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
     const isActive = activeIndex === index;
     const skipAnimation = !hasMounted.current;
     const sizeClasses = useSize();
+    const TrailingActionIcon = trailingAction?.icon;
 
     const mergeRef = (node: HTMLDivElement | null) => {
       (internalRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
@@ -138,6 +152,21 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
           onClick?.(e);
           onSelect?.();
         };
+
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+      onKeyDown?.(event);
+      if (event.defaultPrevented || disabled) return;
+      if (trailingAction && (event.key === 'Delete' || event.key === 'Backspace')) {
+        event.preventDefault();
+        event.stopPropagation();
+        trailingAction.onSelect();
+        return;
+      }
+      if (!renderMenuItem && (event.key === ' ' || event.key === 'Enter')) {
+        event.preventDefault();
+        onSelect?.();
+      }
+    };
 
     const itemClassName = cn(
       // Fixed height (was py-2 around a 19.5px line box ≈ 35.5px) so the
@@ -188,6 +217,23 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
             {label}
           </span>
         </span>
+        {trailingAction && TrailingActionIcon && (
+          <Button
+            aria-label={trailingAction.label}
+            className="-my-1 -mr-1 shrink-0"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              trailingAction.onSelect();
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            size="icon-compact"
+            title={trailingAction.label}
+            variant="ghost"
+          >
+            <TrailingActionIcon aria-hidden="true" />
+          </Button>
+        )}
         <AnimatePresence>
           {checked && (
             <motion.svg
@@ -242,7 +288,9 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
             ref={mergeRef}
             data-proximity-index={index}
             aria-label={label}
+            aria-keyshortcuts={trailingAction ? 'Delete' : undefined}
             onClick={handleActivate}
+            onKeyDown={handleKeyDown}
             className={itemClassName}
             {...props}
           />
@@ -261,14 +309,9 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
         aria-checked={typeof checked === 'boolean' ? checked : undefined}
         aria-disabled={disabled || undefined}
         aria-label={label}
+        aria-keyshortcuts={trailingAction ? 'Delete' : undefined}
         onClick={handleActivate}
-        onKeyDown={(e) => {
-          if (disabled) return;
-          if (e.key === ' ' || e.key === 'Enter') {
-            e.preventDefault();
-            onSelect?.();
-          }
-        }}
+        onKeyDown={handleKeyDown}
         className={itemClassName}
         {...props}
       >

@@ -15,6 +15,7 @@ export type LibraryFolderPickerResult =
 export interface LibraryApi {
   load(signal: AbortSignal): Promise<LibrarySnapshot>;
   openFolder(path: string, signal: AbortSignal): Promise<LibrarySnapshot>;
+  removeFolder(path: string, signal: AbortSignal): Promise<LibrarySnapshot>;
 }
 
 export interface FolderPickerOptions {
@@ -27,6 +28,15 @@ export interface LibraryFolderPicker {
 
 export interface WorkspaceQueryScope {
   cancel(): Promise<void>;
+  remove(): void;
+}
+
+export interface LibraryLifecycle {
+  notifyFolderRemoved(folderPath: string): Promise<void>;
+  onFolderRemoved(handler: (folderPath: string) => void): () => void;
+  onPrepareFolderRemoval(handler: (folderPath: string) => boolean | Promise<boolean>): () => void;
+  prepareFolderRemoval(folderPath: string): Promise<boolean>;
+  setActiveFolder(folderPath: string | null): Promise<void>;
 }
 
 export interface FilesApi {

@@ -30,11 +30,18 @@ function mapListing(listing: WorkspaceFilesWire): WorkspaceListing {
 
 function operationError(response: HttpResponse): FilesError {
   const failure = workspaceFailureSchema.safeParse(response.body);
+  const scopeLost =
+    response.status === 412 ||
+    (response.status === 410 && failure.success && failure.data.code === 'FOLDER_UNAVAILABLE');
   const unauthorized =
     response.status === 401 || response.status === 403 || response.status === 410;
   return new FilesError(
-    unauthorized ? 'unauthorized' : 'unavailable',
-    unauthorized ? 'This window can no longer access that folder.' : 'The files are unavailable.',
+    scopeLost ? 'scope-lost' : unauthorized ? 'unauthorized' : 'unavailable',
+    scopeLost
+      ? 'This folder is no longer available in this window.'
+      : unauthorized
+        ? 'This window can no longer access that folder.'
+        : 'The files are unavailable.',
     failure.success ? { cause: new Error(failure.data.error) } : undefined,
   );
 }

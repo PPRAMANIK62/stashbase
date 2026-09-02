@@ -37,7 +37,7 @@ describe('folder operation generations', () => {
         if (folderPath === '/library/writing') resolveWriting = resolve;
       });
     });
-    const api: LibraryApi = { load: vi.fn(), openFolder };
+    const api: LibraryApi = { load: vi.fn(), openFolder, removeFolder: vi.fn() };
     queryClient.setQueryData(libraryQueryKey, initial);
     const folders = renderHook(() => useFolders(api, { chooseFolder: vi.fn() }), {
       wrapper: queryWrapper(queryClient),

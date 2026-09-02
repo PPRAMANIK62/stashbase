@@ -18,11 +18,12 @@ import {
   clearCurrentFolder,
   currentWindowId,
   ensureFolderHome,
+  exactConfiguredMemberFolderRootAsync,
   getCurrentFolder,
   getCurrentFolderLabel,
   getFolderHome,
   getRecentFolders,
-  exactMemberFolderRootAsync,
+  getRecentFoldersAsync,
   notifyFolderSwitch,
   removeRecentAsync,
   setCurrentFolder,
@@ -41,13 +42,25 @@ import { ensureAgentsFile } from '../agent-rules.ts';
 import { stopAgentRuntimeForFolder } from '../agent-contract.ts';
 import {
   libraryOpenFolderRequestSchema,
+  libraryRemoveFolderRequestSchema,
   librarySnapshotSchema,
 } from '../../shared/protocols/http/library.ts';
 
 const log = logger('routes/folder');
 
-function librarySnapshot() {
-  const current = getCurrentFolder();
+async function librarySnapshot() {
+  let current = getCurrentFolder();
+  if (current) {
+    try {
+      if (!(await fs.promises.stat(current)).isDirectory()) {
+        clearCurrentFolder();
+        current = null;
+      }
+    } catch {
+      clearCurrentFolder();
+      current = null;
+    }
+  }
   return librarySnapshotSchema.parse({
     current: current
       ? {
@@ -56,7 +69,7 @@ function librarySnapshot() {
         }
       : null,
     homeDir: os.homedir(),
-    recent: getRecentFolders(),
+    recent: await getRecentFoldersAsync(),
   });
 }
 
@@ -105,12 +118,41 @@ async function cleanupRemovedLibraryFolder(abs: string): Promise<void> {
   catch (err: unknown) { log.warn(`runtime-state cleanup failed for ${abs}: ${errorMessage(err)}`); }
 }
 
+async function removeLibraryFolder(rawPath: string): Promise<void> {
+  const requested = filesystemPath.absolute(rawPath);
+  const abs = await exactConfiguredMemberFolderRootAsync(requested);
+  if (!abs) {
+    const err = new Error('folder is not in your folders');
+    (err as { code?: string }).code = 'FOLDER_NOT_FOUND';
+    (err as { status?: number }).status = 404;
+    throw err;
+  }
+  const finishRemoval = await beginLibraryFolderRemovalAsync(abs);
+  try {
+    // Built-in Agent sessions are folder-pinned and survive window folder
+    // switches, so removal must also end the sessions BOUND to this folder —
+    // including ones in windows currently showing another folder. Do this
+    // BEFORE releasing window folder contexts so the structured retirement
+    // reason reaches the session first.
+    stopAgentRuntimeForFolder('claude', abs);
+    stopAgentRuntimeForFolder('codex', abs);
+    await clearFolderPathAsync(abs);
+    // Membership is the commit record. Keep it until every cleanup owner has
+    // acknowledged completion; partial cleanup remains recoverable.
+    await cleanupRemovedLibraryFolder(abs);
+    await removeRecentAsync(abs);
+    noteTreeChanged();
+  } finally {
+    finishRemoval();
+  }
+}
+
 export function mount(app: express.Express): void {
-  app.get('/api/library', (_req, res) => {
-    res.json(librarySnapshot());
+  app.get('/api/library', async (_req, res) => {
+    res.json(await librarySnapshot());
   });
 
-  app.post('/api/library/folders/open', (req, res) => {
+  app.post('/api/library/folders/open', async (req, res) => {
     const request = libraryOpenFolderRequestSchema.safeParse(req.body);
     if (!request.success) {
       res.status(400).json({ error: 'path required', code: 'INVALID_FOLDER' });
@@ -124,12 +166,26 @@ export function mount(app: express.Express): void {
       if (changed) {
         res.once('finish', () => notifyFolderSwitch(folderRoot, windowId));
       }
-      res.json(librarySnapshot());
+      res.json(await librarySnapshot());
     } catch (err: unknown) {
       if ((err as { code?: string })?.code === 'WINDOW_CLOSED') {
         res.status(410).json({ error: 'window is closed', code: 'WINDOW_CLOSED' });
         return;
       }
+      sendFolderOperationError(res, err);
+    }
+  });
+
+  app.post('/api/library/folders/remove', async (req, res) => {
+    const request = libraryRemoveFolderRequestSchema.safeParse(req.body);
+    if (!request.success) {
+      res.status(400).json({ error: 'path required', code: 'INVALID_FOLDER' });
+      return;
+    }
+    try {
+      await removeLibraryFolder(request.data.path);
+      res.json(await librarySnapshot());
+    } catch (err: unknown) {
       sendFolderOperationError(res, err);
     }
   });
@@ -238,34 +294,8 @@ export function mount(app: express.Express): void {
     try {
       const raw = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
       if (!raw) return res.status(400).json({ error: 'path required' });
-      const requested = filesystemPath.absolute(raw);
-      const abs = await exactMemberFolderRootAsync(requested);
-      if (!abs) {
-        return res.status(404).json({ error: 'folder is not in your folders' });
-      }
-      const finishRemoval = await beginLibraryFolderRemovalAsync(abs);
-      try {
-        // Built-in Agent sessions are folder-pinned and survive window folder
-        // switches, so removal must also end the sessions BOUND to this folder
-        // — including ones in windows currently showing another folder. Do
-        // this BEFORE releasing window folder contexts: that release invokes
-        // the generic window-close teardown, whose raw socket close would
-        // otherwise erase the structured scope-retirement reason.
-        stopAgentRuntimeForFolder('claude', abs);
-        stopAgentRuntimeForFolder('codex', abs);
-        // Tear down every live window bound to the member after its affected
-        // Agent sessions have received the precise retirement event.
-        await clearFolderPathAsync(abs);
-        // Membership is the commit record. Keep it until every cleanup owner
-        // has acknowledged completion; a failure leaves the member recoverable
-        // and the next reconcile can rebuild any partially-cleared cache.
-        await cleanupRemovedLibraryFolder(abs);
-        await removeRecentAsync(abs);
-        noteTreeChanged();
-        res.json({});
-      } finally {
-        finishRemoval();
-      }
+      await removeLibraryFolder(raw);
+      res.json({});
     } catch (err: unknown) {
       sendFolderOperationError(res, err);
     }

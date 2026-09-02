@@ -150,6 +150,46 @@ Evidence: `renderer/src/features/workspace/domain/tree.test.ts`,
 Preserve save safety and unrelated work while reconciling removal across
 windows, retiring the affected runtime, and evicting its scoped queries.
 
+**Status:** Complete.
+
+Each folder in the active-folder chooser now has a quiet trailing removal icon;
+the row also exposes the action with an accessible name and Delete shortcut.
+The action and confirmation compose the shared MenuItem, Dialog, and Button
+primitives. Confirmation shows the complete home-shortened path, keeps the
+operation locked while it is pending, reports a local retryable failure, and
+states that only Library membership, prepared data, and indexed data are
+removed; the source folder and its files stay on disk. The additive validated
+removal route returns the authoritative post-removal `LibrarySnapshot`, reuses
+the existing folder cleanup transaction, removes membership last, and can
+forget a configured folder after its source has moved or disappeared.
+
+A typed, authorized Electron lifecycle boundary records each window's active
+folder and coordinates a correlated release request across every affected
+window before removal. Missing, failed, stale, or timed-out acknowledgements
+stop the command. The current workspace has no editable document state and
+therefore acknowledges release; Task 32 composes the document save barrier into
+this seam before editable state ships. Successful removal is broadcast only as
+a hint: each renderer refetches authoritative membership before retiring a
+scope, so stale or forged notifications cannot remove unrelated work.
+
+Direct folder loss and the files route's typed unavailable response share the
+same recovery path. Recovery captures the exact runtime and generation, rejects
+stale completions, rebinds a folder that remains authorized, and otherwise
+retires only the lost runtime while cancelling and removing only its query
+prefix. Ordinary folder switching still retains its bounded cache, and
+unrelated folder state remains intact.
+
+Evidence: `renderer/src/features/workspace/application/remove-folder.test.ts`,
+`renderer/src/features/workspace/hooks/use-library-lifecycle.test.ts`,
+`renderer/src/features/workspace/ui/sidebar.test.tsx`,
+`electron/library/lifecycle.test.cjs`, `electron/library/preload.test.cjs`,
+`server/routes/library.test.ts`, and the shared Electron/HTTP protocol tests;
+`pnpm test:renderer`, `pnpm test:electron`, `pnpm test:electron-boundary`,
+`pnpm test:library-files`, `pnpm test:conversion-scheduler`,
+`pnpm test:protocols`, `pnpm typecheck`, `pnpm format:web`, `pnpm lint:web`,
+`pnpm build:web`, and
+`env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`.
+
 ## 28 — Restore approved workspace session state
 
 **Blocked by:** 25.

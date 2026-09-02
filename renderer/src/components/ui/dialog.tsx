@@ -42,6 +42,7 @@ const DialogTrigger = DialogPrimitive.Trigger;
 const DialogClose = DialogPrimitive.Close;
 
 interface DialogContentProps extends HTMLAttributes<HTMLDivElement> {
+  closeDisabled?: boolean;
   size?: 'sm' | 'lg';
   /** Portal target. When set, the overlay and panel render inside this element
    *  (positioned `absolute`) instead of covering the viewport (`fixed`). Pair
@@ -52,7 +53,7 @@ interface DialogContentProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, size = 'sm', container, ...props }, ref) => {
+  ({ className, children, closeDisabled = false, size = 'sm', container, ...props }, ref) => {
     const XIcon = useIcon('x');
     const shape = useShape();
     const substrate = useSurface();
@@ -150,7 +151,12 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                   {children}
                   <DialogPrimitive.Close
                     render={
-                      <Button variant="ghost" size="icon-sm" className="absolute top-3 right-3">
+                      <Button
+                        className="absolute top-3 right-3"
+                        disabled={closeDisabled}
+                        size="icon-sm"
+                        variant="ghost"
+                      >
                         <XIcon />
                         <span className="sr-only">Close</span>
                       </Button>
