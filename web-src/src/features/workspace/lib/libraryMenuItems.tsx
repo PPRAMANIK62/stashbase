@@ -22,8 +22,9 @@ export function libraryMenuItems(opts: {
   attention: (path: string) => boolean;
   isCurrent: (path: string) => boolean;
   onPick: (path: string) => void;
+  onImportGitHub?: () => void;
 }): { pinned: MenuItem[]; list: MenuItem[] } {
-  const add = addFolderMenuItems(opts.actions, opts.bridge);
+  const add = addFolderMenuItems(opts.actions, opts.bridge, { onImportGitHub: opts.onImportGitHub });
   const row = (entry: LibraryListEntry): MenuItem => ({
     label: basename(entry.path),
     icon: <FolderIcon />,

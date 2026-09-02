@@ -28,6 +28,7 @@ import type {
   FilesPayload,
   GenericFilePreview,
   FolderState,
+  GitHubImportResult,
   IndexStatus,
   KeywordSearchResult,
   LibraryKeywordSearchResult,
@@ -77,6 +78,12 @@ export const api = {
   /** Absolute path of the default folder home. New Folder opens the native
    *  picker here, but users can still open any folder on disk. */
   getFolderHome: () => getJson<{ path: string }>('/api/folder-home'),
+  /** Import a public GitHub repository into the StashBase folder home. */
+  importPublicGitHubRepository: (
+    input: { url: string; folderName?: string },
+    opts?: { signal?: AbortSignal },
+  ) =>
+    send<GitHubImportResult>('POST', '/api/github/import', input, { signal: opts?.signal }),
   /** Star / unstar a library folder. Metadata only — never touches the
    *  folder on disk. */
   setFolderFavorite: (path: string, favorite: boolean) =>

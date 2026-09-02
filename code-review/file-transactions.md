@@ -116,6 +116,12 @@ blocked until that decision succeeds, fails, or is cancelled:
 - Merge opens a dirty draft with conflict markers and saves it against the disk
   snapshot through the ordinary versioned path.
 
+### Clean folder entry — no instruction-file writes
+
+Folder entry is navigation-only and performs no unsolicited filesystem
+mutations: opening or re-entering a folder never creates, migrates, or edits
+Agent instruction files in the user's source tree.
+
 ## Mutation Sequence
 
 For rename, move, and delete:
@@ -169,6 +175,7 @@ keep resolving after the identity change.
 
 ## Import Publication
 
+### Clipboard and File Import
 - A clipboard image reaches publication only after the default-off capture
   setting is enabled and the user accepts that specific offer. Dismissal and
   clipboard observation never create a source file.
@@ -183,6 +190,35 @@ keep resolving after the identity change.
   ambiguously owned destination.
 - A successful publication is not rolled back because optional indexing fails.
   Direct-text indexing has its own bounded read budget.
+
+### GitHub Repository Import
+
+- `GitHubImportModule` accepts only the exact public HTTPS GitHub repository URL
+  shape and one portable direct-child name under the fixed folder home. Git runs
+  without a shell, ambient Git configuration, credential helpers, prompts,
+  hooks, submodule recursion, or LFS smudge downloads.
+- The shallow default-branch clone lives under an operation-owned
+  `.import-staging-${uuid}` root. Asynchronous pre-publication inspection rejects
+  root submodule declarations and LFS declarations in any checked-out
+  `.gitattributes` file.
+- The final directory is reserved with exclusive creation before validated
+  staged entries move into it. An existing file, directory, or symlink wins the
+  collision and remains untouched. Failures clean the operation-owned staging
+  root and any final reservation the operation created.
+- Request cancellation and application shutdown abort the Git process tree and
+  await staging cleanup. Raw remote output is used only for bounded error
+  classification and is never returned or logged.
+- Acquisition returns the retained local path only. The renderer then calls the
+  existing active-workspace folder-open action, which remains the sole owner of
+  membership, navigation, and background preparation/indexing. If that later
+  transition fails, the modal reports the retained path and retries opening
+  without cloning again.
+
+**Known gap — atomic directory visibility:** Node exposes no cross-platform
+atomic no-replace rename for directories. The exclusive final reservation
+prevents clobbering concurrent user state, but the reserved directory can be
+briefly visible while its already-validated top-level entries move into place.
+The focused tests prove no-clobber and cleanup, not single-syscall visibility.
 
 ## Folder Removal vs Filesystem Delete
 
@@ -209,7 +245,7 @@ text reads and manifest-known derived-text reads also reject responses above
 | Source Mutation Module | `server/library-file-mutations.ts` |
 | Link Cascade Module | `server/links.ts` (`planRenameLinksAsync`, `applyRenamePlanAsync`, plus sync background/test compatibility entry points) |
 | Library/MCP Adapter | `LibraryOperations` and MCP/HTTP transport adapters |
-| Publication Module | `server/import-publication.ts` |
+| Publication Modules | `server/import-publication.ts` for file imports and `GitHubImportModule` in `server/github-import.ts` for repository acquisition |
 | Lifecycle Adapter | conversion cancellation, cleanup, and reconcile Modules in [Data Lifecycle](data-lifecycle.md) |
 | Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, `library-operations/index.test.ts`, renderer persistence tests, and the J03 conflict Journey |
 
@@ -227,7 +263,9 @@ pnpm test:renderer
 Run `pnpm test:e2e:functional` for user-visible CRUD, failed-save navigation,
 or conflict UX. Cover POSIX, Windows drive/UNC, case-only rename, symlink
 escape, target collision, disconnect/crash recovery, and the
-`V1 → V2 → conflict` sequence at the lowest deterministic layer.
+  `V1 → V2 → conflict` sequence at the lowest deterministic layer. GitHub
+  import behavior and lifecycle run through
+  `server/__tests__/github-import.test.ts` in `pnpm test:library-files`.
 
 Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folder),
 [J03](../design-docs/user-journeys.md#j03-read-and-edit-source-documents),

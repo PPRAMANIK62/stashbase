@@ -100,6 +100,11 @@ semantic readiness.
 - Polling, timers, controllers, and native subscriptions retire when their
   generation or window context ends. Late results cannot repopulate reset
   state.
+- The GitHub import dialog owns acquisition form state while its focused hook
+  owns the request controller. Valid shared URL and folder-name rules gate submission; the
+  existing `actions.openFolder(path)` transition owns successful membership and
+  navigation. A published-path open failure remains in the dialog with a
+  retry-open action that never starts a second clone.
 - The blank-chat lifecycle follows [Agent Panel](agent-panel.md); the workspace
   may reveal or dock it but does not redefine Agent session scope. A pending
   Build Wiki intent is started and pinned by the Agent Panel; window-folder
@@ -110,7 +115,7 @@ semantic readiness.
 
 The initial renderer contains only window chrome and the minimum workspace
 shell. Feature surfaces that open on demand remain dynamic entries. The
-authoritative budget is `437 KiB` of initial static JavaScript, and the current
+authoritative budget is `439 KiB` of initial static JavaScript, and the current
 required dynamic-entry set lives in `scripts/check-renderer-chunks.mjs`.
 Change that list or budget only when the ownership of eager shell behavior
 changes, never to make an accidental dependency pass.
@@ -121,7 +126,7 @@ changes, never to make an accidental dependency pass.
 |---|---|
 | Interface | `ActiveFolderWorkspace` in `web-src/src/store/hooks/useActiveFolderWorkspace.ts` |
 | Primary owners | `web-src/src/store/state/state.ts`, `state/stateReducer.ts` and the `state/workspaceReducer.ts`, `state/chatReducer.ts`, `state/uiShellReducer.ts` sub-reducers it composes, `state/stateHelpers.ts`, `lib/folderScopedReset.ts`, `lib/folderPath.ts`, `lib/folderTransition.ts`, and the internal `hooks/useDocumentActions.ts`, `hooks/useFileActions.ts`, `hooks/useFolderActions.ts`, `hooks/useSearchActions.ts` Modules |
-| Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx` |
+| Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx`, and the lazy `features/workspace/components/ImportGitHubModal.tsx` boundary |
 | Renderer tree model | `web-src/src/features/workspace/lib/fileTreeModel.ts` (nesting, manual-rank ordering, visible rows), `lib/treeKeyboard.ts` (roving-focus rules), `hooks/useTreeRoving.ts` (row registry and per-row binding) |
 | Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `shared/library-files.ts`, `server/routes/files.ts`, the asynchronous request listing in `server/file-listing.ts`, and bounded selection-time inspection in `server/generic-file-preview.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |

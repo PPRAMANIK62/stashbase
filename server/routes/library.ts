@@ -38,6 +38,7 @@ import { noteTreeChanged } from '../watcher.ts';
 import { deleteDerivedForSource, deleteDerivedUnderFolder, type DerivedCleanupStats } from '../derived-store.ts';
 import { deleteFileOrderForRoot } from '../file-order.ts';
 import { stopAgentRuntimeForFolder } from '../agent-contract.ts';
+import { GitHubImportError, importPublicGitHubRepository } from '../github-import.ts';
 
 const log = logger('routes/folder');
 
@@ -160,6 +161,33 @@ export function mount(app: express.Express): void {
     const root = getFolderHome();
     if (!fs.existsSync(root)) ensureFolderHome();
     res.json({ path: getFolderHome() });
+  });
+
+  // Import a public GitHub repository into the StashBase folder home.
+  // Works before any folder is open.
+  app.post('/api/github/import', async (req, res) => {
+    const ac = new AbortController();
+    const abort = () => ac.abort(new Error('GitHub import request closed'));
+    const abortOnPrematureClose = () => { if (!res.writableEnded) abort(); };
+    req.once('aborted', abort);
+    res.once('close', abortOnPrematureClose);
+    try {
+      const result = await importPublicGitHubRepository({
+        url: req.body?.url,
+        folderName: req.body?.folderName,
+        signal: ac.signal,
+      });
+      res.json(result);
+    } catch (err: unknown) {
+      if (ac.signal.aborted || res.destroyed) return;
+      if (err instanceof GitHubImportError) {
+        return res.status(err.status).json({ error: err.message, code: err.code });
+      }
+      sendFolderOperationError(res, err);
+    } finally {
+      req.removeListener('aborted', abort);
+      res.removeListener('close', abortOnPrematureClose);
+    }
   });
 
   // Star / unstar a member folder. Pure library metadata — never touches

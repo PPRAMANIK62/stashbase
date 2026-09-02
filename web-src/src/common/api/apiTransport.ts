@@ -54,8 +54,13 @@ export async function getJson<T>(path: string): Promise<T> {
   return parseJsonOrThrow<T>(r);
 }
 
-export async function send<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
-  const init: RequestInit = { method, headers: requestHeaders() };
+export async function send<T>(
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown,
+  options?: { signal?: AbortSignal },
+): Promise<T> {
+  const init: RequestInit = { method, headers: requestHeaders(), signal: options?.signal };
   if (body !== undefined) {
     init.headers = requestHeaders(JSON_HEADERS);
     init.body = JSON.stringify(body);

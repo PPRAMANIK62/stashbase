@@ -4,6 +4,7 @@ import { electronBridge } from '@/common/lib/electronBridge';
 import { FolderIcon } from '@/common/components/icons';
 import { Menu } from '@/common/components/Menu';
 import { Button } from '@/common/components/ui/button';
+import { ImportGitHubModal } from '@/features/workspace/components/ImportGitHubModal';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { useLibraryMembership } from '@/features/workspace/hooks/useLibraryMembership';
 import { libraryMenuItems } from '@/features/workspace/lib/libraryMenuItems';
@@ -20,6 +21,7 @@ export function ChooseFolderButton() {
   const { actions, dispatch } = useAppActions();
   const bridge = electronBridge();
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const [importGitHubOpen, setImportGitHubOpen] = useState(false);
 
   // Same honesty rule as the switcher: membership can change without
   // this window acting; poll only while the menu is up.
@@ -36,6 +38,10 @@ export function ChooseFolderButton() {
       setAnchor(null);
       void actions.openFolder(path)
         .catch((e) => actions.toast(errorMessage(e), { level: 'error' }));
+    },
+    onImportGitHub: () => {
+      setAnchor(null);
+      setImportGitHubOpen(true);
     },
   });
 
@@ -78,6 +84,9 @@ export function ChooseFolderButton() {
           items={items.list}
           onClose={() => setAnchor(null)}
         />
+      )}
+      {importGitHubOpen && (
+        <ImportGitHubModal onClose={() => setImportGitHubOpen(false)} />
       )}
     </>
   );

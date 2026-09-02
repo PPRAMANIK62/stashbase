@@ -109,9 +109,11 @@ aliases, and Journey E2E owns representative composition.
 
 ## J02: Folder
 
-**Status:** Release-dependent.
+**Status:** Partial and release-dependent.
 
-- **Contract Test:** workspace transitions, library mutation, cleanup, and
+- **Contract Test:** workspace transitions, library mutation, cleanup, GitHub
+  repository import (`server/__tests__/github-import.test.ts`,
+  `web-src/src/features/workspace/__tests__/import-github-modal.test.ts`), and
   window retirement run through `pnpm test:renderer`,
   `pnpm test:library-files`, and `pnpm test:electron`.
 - **Journey E2E:** [library navigation](../e2e/journeys/library-navigation.spec.ts)
@@ -119,8 +121,11 @@ aliases, and Journey E2E owns representative composition.
   entry, switching, and removal without source deletion; navigation also proves
   folder entry creates no `AGENTS.md` or `CLAUDE.md`.
 - **AI Eval:** not required.
-- **Release Check:** real operating-system folder picking and file drop remain
-  release evidence.
+- **Release Check:** real operating-system folder picking, Git cloning of public
+  repositories, and file drop remain release evidence.
+- **Gap:** repository publication reserves the final directory without
+  clobbering concurrent user state, but Node lacks a cross-platform atomic
+  no-replace directory rename; see the File Transactions Known Gap.
 
 ## J03: Documents
 
