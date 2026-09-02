@@ -30,6 +30,8 @@ import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
 import { mountFileOrderRoutes } from './file-order.ts';
 import {
+  documentTextSaveRequestSchema,
+  documentTextSaveResponseSchema,
   documentTextSourceResponseSchema,
   workspaceFilesSchema,
 } from '../../shared/protocols/http/files.ts';
@@ -91,15 +93,69 @@ async function runWithExplicitReadFolder(
 }
 
 async function handleWriteFile(req: express.Request, res: express.Response): Promise<void> {
+  const name = (req.params as any)[0] as string;
   const content = (req.body ?? {}).content;
+  const baseVersion = typeof (req.body ?? {}).baseVersion === 'string'
+    ? (req.body ?? {}).baseVersion
+    : undefined;
+  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+
+  if (rawFolder) {
+    const request = documentTextSaveRequestSchema.safeParse({
+      baseVersion,
+      content,
+      folderPath: rawFolder,
+      path: name,
+    });
+    if (!request.success) {
+      res.status(400).json({ error: 'invalid versioned text save request' });
+      return;
+    }
+    const format = detectFormat(request.data.path);
+    if (format !== 'md' && format !== 'txt') {
+      res.status(415).json({ code: 'UNSUPPORTED_FORMAT', error: 'unsupported editable format' });
+      return;
+    }
+    const current = getCurrentFolder();
+    let matchesActiveFolder = false;
+    if (current && filesystemPath.isAbsolute(request.data.folderPath)) {
+      try {
+        matchesActiveFolder = await filesystemPath.equalAsync(current, request.data.folderPath);
+      } catch {
+        // A missing or malformed expected folder is a lost renderer scope,
+        // never permission to fall through to the window's newer folder.
+      }
+    }
+    if (!matchesActiveFolder || !current) {
+      res.status(409).json({
+        code: 'FOLDER_CHANGED',
+        error: 'the document folder is no longer active in this window',
+      });
+      return;
+    }
+    try {
+      const saved = await runWithFolderRoot(current, () =>
+        saveFileContent(request.data.path, request.data.content, {
+          baseVersion: request.data.baseVersion,
+        }),
+      );
+      res.json(
+        documentTextSaveResponseSchema.parse({
+          ...saved,
+          format,
+          name: request.data.path,
+        }),
+      );
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+    return;
+  }
+
   if (typeof content !== 'string') {
     res.status(400).json({ error: 'content (string) required' });
     return;
   }
-  const name = (req.params as any)[0] as string;
-  const baseVersion = typeof (req.body ?? {}).baseVersion === 'string'
-    ? (req.body ?? {}).baseVersion
-    : undefined;
   try {
     res.json(await saveFileContent(name, content, { baseVersion }));
   } catch (err: unknown) {
@@ -197,8 +253,9 @@ export function mount(app: express.Express): void {
 
   // HEAD and GET accept an optional `?folder=` (validated member folder) so
   // an out-of-folder tab — a search result viewed without switching the
-  // window's folder — can read by explicit folder. Reads only: every write
-  // route below stays bound to the window's own folder.
+  // window's folder — can read by explicit folder. Versioned replacement
+  // writes also carry the expected folder, but must still match the window's
+  // own active folder.
   app.head('/api/files/*', (req, res) => {
     const name = (req.params as any)[0] as string;
     void runWithExplicitReadFolder(req, res, async () => {

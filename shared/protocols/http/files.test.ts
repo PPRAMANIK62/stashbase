@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  documentTextSaveFailureSchema,
+  documentTextSaveRequestSchema,
+  documentTextSaveResponseSchema,
   documentTextSourceFailureSchema,
   documentTextSourceRequestSchema,
   documentTextSourceResponseSchema,
@@ -108,6 +111,57 @@ test('document text source contracts distinguish unsupported encoding from trans
       content: 'missing version',
       format: 'txt',
       name: 'notes.txt',
+    }).success,
+    false,
+  );
+});
+
+test('document text save contracts require identity, expected version, and authoritative result', () => {
+  assert.deepEqual(
+    documentTextSaveRequestSchema.parse({
+      baseVersion: 'sha256:before',
+      content: '# Changed\n',
+      folderPath: '/library/notes',
+      path: 'drafts/plan.md',
+    }),
+    {
+      baseVersion: 'sha256:before',
+      content: '# Changed\n',
+      folderPath: '/library/notes',
+      path: 'drafts/plan.md',
+    },
+  );
+  assert.deepEqual(
+    documentTextSaveResponseSchema.parse({
+      content: '# Changed\r\n',
+      format: 'md',
+      name: 'drafts/plan.md',
+      version: 'sha256:after',
+    }),
+    {
+      content: '# Changed\r\n',
+      format: 'md',
+      name: 'drafts/plan.md',
+      version: 'sha256:after',
+    },
+  );
+  assert.deepEqual(
+    documentTextSaveFailureSchema.parse({
+      code: 'FILE_CHANGED',
+      currentVersion: 'sha256:external',
+      error: 'file changed on disk',
+    }),
+    {
+      code: 'FILE_CHANGED',
+      currentVersion: 'sha256:external',
+      error: 'file changed on disk',
+    },
+  );
+  assert.equal(
+    documentTextSaveRequestSchema.safeParse({
+      content: '# Missing version',
+      folderPath: '/library/notes',
+      path: 'plan.md',
     }).success,
     false,
   );

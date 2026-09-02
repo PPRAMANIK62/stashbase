@@ -92,6 +92,35 @@ export const documentTextSourceFailureSchema = z
   })
   .strict();
 
+export const documentTextSaveRequestSchema = z
+  .object({
+    baseVersion: sourceVersionSchema,
+    content: boundedSourceTextSchema,
+    folderPath: folderPathSchema,
+    path: relativePathSchema,
+  })
+  .strict();
+
+export const documentTextSaveResponseSchema = z
+  .object({
+    content: boundedSourceTextSchema,
+    format: z.enum(['md', 'txt']),
+    indexWarning: z.string().trim().min(1).max(1_000).optional(),
+    name: relativePathSchema,
+    version: sourceVersionSchema,
+  })
+  .strict();
+
+export const documentTextSaveFailureSchema = z
+  .object({
+    code: z.string().trim().min(1).max(64).optional(),
+    currentVersion: sourceVersionSchema.nullable().optional(),
+    error: z.string().trim().min(1).max(500),
+  })
+  .strict();
+
 export type WorkspaceFilesWire = z.infer<typeof workspaceFilesSchema>;
 export type DocumentTextSourceRequestWire = z.infer<typeof documentTextSourceRequestSchema>;
 export type DocumentTextSourceResponseWire = z.infer<typeof documentTextSourceResponseSchema>;
+export type DocumentTextSaveRequestWire = z.infer<typeof documentTextSaveRequestSchema>;
+export type DocumentTextSaveResponseWire = z.infer<typeof documentTextSaveResponseSchema>;
