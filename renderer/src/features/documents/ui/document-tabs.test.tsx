@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -12,7 +12,11 @@ function createRuntime() {
   let next = 0;
   const runtime = createDocumentTabsRuntime({
     createId: () => `tab-${++next}`,
-    createQueries: () => ({ cancel: vi.fn(async () => undefined), remove: vi.fn() }),
+    createQueries: () => ({
+      cancel: vi.fn(async () => undefined),
+      remove: vi.fn(),
+      replaceSource: vi.fn(),
+    }),
     folderPath: '/library/notes',
     generation: 1,
   });
@@ -23,6 +27,7 @@ function createRuntime() {
 
 const sourceApi = {
   load: vi.fn(async () => ({ content: '# Loaded', format: 'md' as const, version: 'v1' })),
+  save: vi.fn(),
 };
 
 function testQueryClient() {
@@ -72,7 +77,9 @@ describe('document tabs', () => {
     const tabList = screen.getByRole('tablist', { name: 'Open documents' });
     expect(tabList.classList.contains('overflow-x-auto')).toBe(true);
     expect(tabList.classList.contains('scrollbar-hide')).toBe(true);
-    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs).toHaveLength(2);
+    expect(tabs.map((tab) => tab.getAttribute('data-proximity-index'))).toEqual(['0', '1']);
     expect(screen.getByRole('tab', { name: 'other.md' }).getAttribute('aria-selected')).toBe(
       'true',
     );
@@ -130,5 +137,51 @@ describe('document tabs', () => {
     const newlyOpened = screen.getByRole('tab', { name: 'newly-opened.md' });
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
     expect(scrollIntoView.mock.instances.at(-1)).toBe(newlyOpened);
+  });
+
+  it('replaces the close glyph with a filled circle until an edit is saved', async () => {
+    const runtime = createRuntime();
+    runtimes.push(runtime);
+    let acceptSave: ((value: { content: string; format: 'md'; version: string }) => void) | null =
+      null;
+    const api = {
+      load: vi.fn(async () => ({ content: '# Loaded', format: 'md' as const, version: 'v1' })),
+      save: vi.fn(
+        () =>
+          new Promise<{ content: string; format: 'md'; version: string }>((resolve) => {
+            acceptSave = resolve;
+          }),
+      ),
+    };
+    render(
+      <QueryClientProvider client={testQueryClient()}>
+        <DocumentTabs runtime={runtime} />
+        <DocumentWorkspace api={api} runtime={runtime} />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'plan.md' }));
+    const editor = await screen.findByLabelText('plan.md source');
+    fireEvent.change(editor, { target: { value: '# Draft' } });
+
+    const dirtyTab = screen.getByRole('tab', { name: 'plan.md, unsaved changes' });
+    expect(dirtyTab.querySelector('[data-unsaved-indicator]')).not.toBeNull();
+    expect(dirtyTab.getAttribute('data-document-dirty')).toBe('true');
+
+    let save: Promise<boolean> | undefined;
+    act(() => {
+      save = runtime.getDocument('tab-1')?.save(api);
+    });
+    expect(dirtyTab.querySelector('[data-unsaved-indicator]')).not.toBeNull();
+
+    await act(async () => {
+      acceptSave?.({ content: '# Draft', format: 'md', version: 'v2' });
+      await save;
+    });
+
+    const savedTab = screen.getByRole('tab', { name: 'plan.md' });
+    expect(savedTab.querySelector('[data-unsaved-indicator]')).toBeNull();
+    expect(savedTab.getAttribute('data-document-dirty')).toBeNull();
+    expect(savedTab.querySelector('[data-tab-trailing]')).not.toBeNull();
   });
 });

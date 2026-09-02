@@ -1,10 +1,14 @@
 import {
+  DocumentSaveError,
   DocumentSourceError,
   type DocumentSourceApi,
 } from '@/features/documents/application/ports';
 import { documentTextFormat } from '@/features/documents/domain/document';
 import type { HttpClient, HttpResponse } from '@/platform/http/client';
 import {
+  documentTextSaveFailureSchema,
+  documentTextSaveRequestSchema,
+  documentTextSaveResponseSchema,
   documentTextSourceFailureSchema,
   documentTextSourceRequestSchema,
   documentTextSourceResponseSchema,
@@ -13,6 +17,41 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 
 function encodePath(entryPath: string): string {
   return entryPath.split('/').map(encodeURIComponent).join('/');
+}
+
+function saveResponseError(response: HttpResponse): DocumentSaveError {
+  const failure = documentTextSaveFailureSchema.safeParse(response.body);
+  const cause = failure.success ? { cause: new Error(failure.data.error) } : undefined;
+  if (response.status === 409 && failure.success && failure.data.code === 'FILE_CHANGED') {
+    return new DocumentSaveError(
+      'conflict',
+      'The file changed on disk. Your unsaved changes are still available.',
+      { ...cause, currentVersion: failure.data.currentVersion },
+    );
+  }
+  if (
+    response.status === 409 ||
+    response.status === 410 ||
+    response.status === 412 ||
+    (failure.success &&
+      (failure.data.code === 'FOLDER_CHANGED' ||
+        failure.data.code === 'FOLDER_UNAVAILABLE' ||
+        failure.data.code === 'NO_FOLDER'))
+  ) {
+    return new DocumentSaveError(
+      'scope-lost',
+      'The document folder is no longer active in this window.',
+      cause,
+    );
+  }
+  if (response.status === 401 || response.status === 403) {
+    return new DocumentSaveError(
+      'unauthorized',
+      'This window can no longer save that document.',
+      cause,
+    );
+  }
+  return new DocumentSaveError('unavailable', 'The document could not be saved.', cause);
 }
 
 function responseError(response: HttpResponse): DocumentSourceError {
@@ -95,6 +134,51 @@ export function createDocumentSourceApi(client: HttpClient): DocumentSourceApi {
         });
       }
       return mapResponse(source, response);
+    },
+    async save(source, input, signal) {
+      const request = documentTextSaveRequestSchema.safeParse({
+        ...input,
+        folderPath: source.folderPath,
+        path: source.path,
+      });
+      if (!request.success || documentTextFormat(source.path) === null) {
+        throw new DocumentSaveError('unavailable', 'The document save request is invalid.');
+      }
+      const query = new URLSearchParams({ folder: request.data.folderPath });
+      let response: HttpResponse;
+      try {
+        response = await client.request({
+          body: { baseVersion: request.data.baseVersion, content: request.data.content },
+          method: 'PUT',
+          path: `/api/files/${encodePath(request.data.path)}?${query}`,
+          signal,
+        });
+      } catch (error) {
+        if (error instanceof DocumentSaveError || signal.aborted) throw error;
+        throw new DocumentSaveError('unavailable', 'The document could not be saved.', {
+          cause: error,
+        });
+      }
+      if (response.status < 200 || response.status >= 300) throw saveResponseError(response);
+      const body = documentTextSaveResponseSchema.safeParse(response.body);
+      const expectedFormat = documentTextFormat(source.path);
+      if (
+        !body.success ||
+        expectedFormat === null ||
+        body.data.name !== source.path ||
+        body.data.format !== expectedFormat
+      ) {
+        throw new DocumentSaveError(
+          'invalid-response',
+          'The document save returned an invalid response.',
+        );
+      }
+      return {
+        content: body.data.content,
+        format: expectedFormat,
+        version: body.data.version,
+        ...(body.data.indexWarning ? { indexWarning: body.data.indexWarning } : {}),
+      };
     },
   };
 }

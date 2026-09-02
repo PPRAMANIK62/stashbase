@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -24,6 +24,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   for (const runtime of runtimes.splice(0)) runtime.dispose();
   if (getAnimationsDescriptor) {
@@ -63,13 +64,14 @@ describe('document text source', () => {
         format: 'md' as const,
         version: 'sha256:abc',
       })),
+      save: vi.fn(),
     };
     renderSource(api);
 
     expect(screen.getByRole('status').textContent).toContain('Loading plan.md');
     const source = await screen.findByLabelText('plan.md source');
 
-    expect(source.textContent).toBe('# Plan\n\n- Keep the source');
+    expect((source as HTMLTextAreaElement).value).toBe('# Plan\n\n- Keep the source');
     expect(screen.queryByRole('heading', { name: 'Plan' })).toBeNull();
     expect(api.load).toHaveBeenCalledWith(
       { folderPath: '/library/notes', path: 'plan.md' },
@@ -80,6 +82,7 @@ describe('document text source', () => {
   it('marks a source from another member folder as read-only', async () => {
     const api = {
       load: vi.fn(async () => ({ content: 'literal text', format: 'txt' as const, version: 'v1' })),
+      save: vi.fn(),
     };
     renderSource(api, { folderPath: '/library/archive', path: 'notes.txt' });
 
@@ -103,6 +106,7 @@ describe('document text source', () => {
           ),
         )
         .mockResolvedValueOnce({ content: 'now utf-8', format: 'txt', version: 'v2' }),
+      save: vi.fn(),
     };
     renderSource(api, { folderPath: '/library/notes', path: 'legacy.txt' });
 
@@ -111,7 +115,9 @@ describe('document text source', () => {
     );
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
 
-    expect((await screen.findByLabelText('legacy.txt source')).textContent).toContain('now utf-8');
+    expect(((await screen.findByLabelText('legacy.txt source')) as HTMLTextAreaElement).value).toBe(
+      'now utf-8',
+    );
     expect(api.load).toHaveBeenCalledTimes(2);
   });
 
@@ -122,12 +128,86 @@ describe('document text source', () => {
       capturedSignal = signal;
       return new Promise(() => {});
     });
-    const api: DocumentSourceApi = { load };
+    const api: DocumentSourceApi = { load, save: vi.fn() };
     const { runtime } = renderSource(api);
     await waitFor(() => expect(capturedSignal).not.toBeNull());
 
     act(() => runtime.close('tab-1'));
 
     await waitFor(() => expect(capturedSignal?.aborted).toBe(true));
+  });
+
+  it('marks edits immediately and autosaves with the accepted version', async () => {
+    const api: DocumentSourceApi = {
+      load: vi.fn<DocumentSourceApi['load']>(async () => ({
+        content: 'before\r\n',
+        format: 'txt',
+        version: 'v1',
+      })),
+      save: vi.fn<DocumentSourceApi['save']>(async () => ({
+        content: 'after\r\n',
+        format: 'txt',
+        version: 'v2',
+      })),
+    };
+    const { runtime } = renderSource(api, {
+      folderPath: '/library/notes',
+      path: 'notes.txt',
+    });
+    const editor = (await screen.findByLabelText('notes.txt source')) as HTMLTextAreaElement;
+    vi.useFakeTimers();
+
+    fireEvent.change(editor, { target: { value: 'after\n' } });
+
+    expect(runtime.getDocument('tab-1')?.store.getState().editor).toMatchObject({
+      dirty: true,
+      savePhase: 'unsaved',
+      value: 'after\n',
+      version: 'v1',
+    });
+    expect(screen.queryByText('Unsaved')).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(499));
+    expect(api.save).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(api.save).toHaveBeenCalledOnce();
+    expect(api.save).toHaveBeenCalledWith(
+      { folderPath: '/library/notes', path: 'notes.txt' },
+      { baseVersion: 'v1', content: 'after\n' },
+      expect.any(AbortSignal),
+    );
+    expect(runtime.getDocument('tab-1')?.store.getState().editor?.savePhase).toBe('saved');
+    expect(screen.queryByText('Saved')).toBeNull();
+    expect((screen.getByLabelText('notes.txt source') as HTMLTextAreaElement).value).toBe(
+      'after\n',
+    );
+  });
+
+  it('keeps failed saves editable and offers retry without another toolbar', async () => {
+    const api: DocumentSourceApi = {
+      load: vi.fn<DocumentSourceApi['load']>(async () => ({
+        content: 'before',
+        format: 'md',
+        version: 'v1',
+      })),
+      save: vi
+        .fn<DocumentSourceApi['save']>()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce({ content: 'draft', format: 'md', version: 'v2' }),
+    };
+    const { runtime } = renderSource(api);
+    const editor = (await screen.findByLabelText('plan.md source')) as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'draft' } });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retry' })).not.toBeNull(), {
+      timeout: 2_000,
+    });
+    expect(editor.value).toBe('draft');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() =>
+      expect(runtime.getDocument('tab-1')?.store.getState().editor?.savePhase).toBe('saved'),
+    );
+    expect(screen.queryByText('Saved')).toBeNull();
+    expect(api.save).toHaveBeenCalledTimes(2);
   });
 });

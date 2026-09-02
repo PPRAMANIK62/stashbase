@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import type { DocumentScope } from '@/features/documents/domain/document';
+import type { DocumentScope, DocumentTextSource } from '@/features/documents/domain/document';
 
 import type { DocumentQueryScope, DocumentSourceApi } from './ports';
 
@@ -25,6 +25,7 @@ export function createDocumentQueryScope(
   return {
     cancel: () => queryClient.cancelQueries({ queryKey }),
     remove: () => queryClient.removeQueries({ queryKey }),
+    replaceSource: (source: DocumentTextSource) => queryClient.setQueryData(queryKey, source),
   };
 }
 

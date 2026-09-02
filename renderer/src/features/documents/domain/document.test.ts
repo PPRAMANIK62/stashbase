@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import {
+  acceptDocumentSave,
+  beginDocumentSave,
+  changeDocumentText,
   createDocumentState,
   documentAccess,
+  documentEditorText,
   documentTextFormat,
   disposeDocumentState,
+  reconcileDocumentSource,
+  rejectDocumentSave,
   sameSource,
   sourceIdentity,
   sourceName,
@@ -29,7 +35,7 @@ describe('document identity', () => {
     };
     const disposed = disposeDocumentState(createDocumentState(scope, 'editable'));
 
-    expect(disposed).toEqual({ access: 'editable', lifecycle: 'disposed', scope });
+    expect(disposed).toEqual({ access: 'editable', editor: null, lifecycle: 'disposed', scope });
     expect(disposeDocumentState(disposed)).toBe(disposed);
   });
 
@@ -48,5 +54,84 @@ describe('document identity', () => {
     expect(
       documentAccess({ folderPath: '/library/archive', path: 'plan.md' }, '/library/notes'),
     ).toBe('read-only');
+  });
+
+  it('normalizes editor line endings while retaining a versioned baseline', () => {
+    const scope = {
+      generation: 1,
+      id: 'tab-1',
+      source: { folderPath: '/library/notes', path: 'notes.txt' },
+    };
+    const loaded = reconcileDocumentSource(createDocumentState(scope, 'editable'), {
+      content: '\uFEFFone\r\ntwo\r\n',
+      format: 'txt',
+      version: 'v1',
+    });
+
+    expect(documentEditorText('one\rtwo\r\n')).toBe('one\ntwo\n');
+    expect(loaded.editor).toMatchObject({
+      baseline: '\uFEFFone\ntwo\n',
+      dirty: false,
+      value: '\uFEFFone\ntwo\n',
+      version: 'v1',
+    });
+  });
+
+  it('makes the live draft dirty synchronously and preserves newer input after save', () => {
+    const scope = {
+      generation: 1,
+      id: 'tab-1',
+      source: { folderPath: '/library/notes', path: 'plan.md' },
+    };
+    let state = reconcileDocumentSource(createDocumentState(scope, 'editable'), {
+      content: 'one\r\n',
+      format: 'md',
+      version: 'v1',
+    });
+    state = changeDocumentText(state, 'first edit\n');
+    const capturedRevision = state.editor?.revision ?? -1;
+    state = beginDocumentSave(state);
+    state = changeDocumentText(state, 'newer edit\n');
+    state = acceptDocumentSave(state, capturedRevision, {
+      content: 'first edit\r\n',
+      format: 'md',
+      version: 'v2',
+    });
+
+    expect(state.editor).toMatchObject({
+      baseline: 'first edit\n',
+      dirty: true,
+      savePhase: 'unsaved',
+      value: 'newer edit\n',
+      version: 'v2',
+    });
+  });
+
+  it('keeps a conflicted draft recoverable', () => {
+    const scope = {
+      generation: 1,
+      id: 'tab-1',
+      source: { folderPath: '/library/notes', path: 'plan.md' },
+    };
+    let state = reconcileDocumentSource(createDocumentState(scope, 'editable'), {
+      content: 'before',
+      format: 'md',
+      version: 'v1',
+    });
+    state = changeDocumentText(state, 'draft');
+    state = rejectDocumentSave(state, {
+      conflictVersion: 'v2',
+      message: 'changed on disk',
+      phase: 'conflict',
+    });
+
+    expect(state.editor).toMatchObject({
+      conflictVersion: 'v2',
+      dirty: true,
+      saveMessage: 'changed on disk',
+      savePhase: 'conflict',
+      value: 'draft',
+      version: 'v1',
+    });
   });
 });

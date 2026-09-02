@@ -1,6 +1,8 @@
 export {
+  DocumentSaveError,
   DocumentSourceError,
   type DocumentQueryScope,
+  type DocumentSaveFailureKind,
   type DocumentSourceApi,
   type DocumentSourceFailureKind,
 } from './application/ports';

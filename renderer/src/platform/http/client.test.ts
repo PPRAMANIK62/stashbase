@@ -36,4 +36,22 @@ describe('HTTP client', () => {
       status: 502,
     });
   });
+
+  it('supports versioned PUT bodies', async () => {
+    const fetchRequest = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ version: 'v2' }), { status: 200 }),
+    );
+    const client = createHttpClient('http://127.0.0.1:8090', fetchRequest);
+
+    await client.request({
+      body: { baseVersion: 'v1', content: 'changed' },
+      method: 'PUT',
+      path: '/api/files/notes.txt?folder=%2Flibrary%2Fnotes',
+    });
+
+    const [, init] = fetchRequest.mock.calls[0];
+    expect(init?.method).toBe('PUT');
+    expect(init?.body).toBe(JSON.stringify({ baseVersion: 'v1', content: 'changed' }));
+  });
 });

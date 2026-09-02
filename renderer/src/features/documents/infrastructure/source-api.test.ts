@@ -91,4 +91,76 @@ describe('document source API', () => {
     });
     expect(client.request).not.toHaveBeenCalled();
   });
+
+  it('saves through the explicit folder and expected source version', async () => {
+    const client: HttpClient = {
+      request: vi.fn(async () => ({
+        body: {
+          content: '# Changed\r\n',
+          format: 'md',
+          name: 'drafts/plan #1.markdown',
+          version: 'sha256:after',
+        },
+        status: 200,
+      })),
+    };
+    const signal = new AbortController().signal;
+    const api = createDocumentSourceApi(client);
+
+    await expect(
+      api.save(
+        { folderPath: '/library/research notes', path: 'drafts/plan #1.markdown' },
+        { baseVersion: 'sha256:before', content: '# Changed\n' },
+        signal,
+      ),
+    ).resolves.toEqual({ content: '# Changed\r\n', format: 'md', version: 'sha256:after' });
+    expect(client.request).toHaveBeenCalledWith({
+      body: { baseVersion: 'sha256:before', content: '# Changed\n' },
+      method: 'PUT',
+      path: '/api/files/drafts/plan%20%231.markdown?folder=%2Flibrary%2Fresearch+notes',
+      signal,
+    });
+  });
+
+  it('classifies a stale save without exposing server detail', async () => {
+    const api = createDocumentSourceApi({
+      request: vi.fn(async () => ({
+        body: {
+          code: 'FILE_CHANGED',
+          currentVersion: 'sha256:external',
+          error: '/private/library/notes/plan.md changed',
+        },
+        status: 409,
+      })),
+    });
+
+    await expect(
+      api.save(
+        { folderPath: '/library/notes', path: 'plan.md' },
+        { baseVersion: 'sha256:before', content: 'draft' },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({
+      currentVersion: 'sha256:external',
+      kind: 'conflict',
+      message: 'The file changed on disk. Your unsaved changes are still available.',
+    });
+  });
+
+  it('rejects a mismatched save response identity', async () => {
+    const api = createDocumentSourceApi({
+      request: vi.fn(async () => ({
+        body: { content: 'saved', format: 'txt', name: 'other.txt', version: 'v2' },
+        status: 200,
+      })),
+    });
+
+    await expect(
+      api.save(
+        { folderPath: '/library/notes', path: 'plan.md' },
+        { baseVersion: 'v1', content: 'saved' },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ kind: 'invalid-response' });
+  });
 });

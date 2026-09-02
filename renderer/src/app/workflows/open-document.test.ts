@@ -16,7 +16,11 @@ function createWorkspace() {
 function createDocuments() {
   return createDocumentTabsRuntime({
     createId: () => 'tab-1',
-    createQueries: () => ({ cancel: vi.fn(async () => undefined), remove: vi.fn() }),
+    createQueries: () => ({
+      cancel: vi.fn(async () => undefined),
+      remove: vi.fn(),
+      replaceSource: vi.fn(),
+    }),
     folderPath: '/library/notes',
     generation: 1,
   });
@@ -54,7 +58,11 @@ describe('open document workflow', () => {
     const workspace = createWorkspace();
     const documents = createDocumentTabsRuntime({
       createId: () => 'tab-1',
-      createQueries: () => ({ cancel: vi.fn(async () => undefined), remove: vi.fn() }),
+      createQueries: () => ({
+        cancel: vi.fn(async () => undefined),
+        remove: vi.fn(),
+        replaceSource: vi.fn(),
+      }),
       folderPath: '/library/notes',
       generation: 2,
     });

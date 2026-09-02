@@ -8,7 +8,7 @@ function idFactory() {
 }
 
 function createQueries() {
-  return { cancel: vi.fn(async () => undefined), remove: vi.fn() };
+  return { cancel: vi.fn(async () => undefined), remove: vi.fn(), replaceSource: vi.fn() };
 }
 
 describe('Document tabs runtime', () => {

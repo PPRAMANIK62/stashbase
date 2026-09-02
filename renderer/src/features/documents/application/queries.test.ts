@@ -24,6 +24,7 @@ describe('document source queries', () => {
   it('loads through the source port with query cancellation', async () => {
     const api = {
       load: vi.fn(async () => ({ content: '# Plan', format: 'md' as const, version: 'v1' })),
+      save: vi.fn(),
     };
     const controller = new AbortController();
     const query = documentSourceQuery(api, scope);
@@ -41,12 +42,16 @@ describe('document source queries', () => {
     const queryClient = new QueryClient();
     const cancel = vi.spyOn(queryClient, 'cancelQueries');
     const remove = vi.spyOn(queryClient, 'removeQueries');
+    const setQueryData = vi.spyOn(queryClient, 'setQueryData');
     const queryScope = createDocumentQueryScope(queryClient, scope);
+    const replacement = { content: 'saved', format: 'md' as const, version: 'v2' };
 
+    queryScope.replaceSource(replacement);
     await queryScope.cancel();
     queryScope.remove();
 
     const queryKey = documentQueryKeys.source(scope);
+    expect(setQueryData).toHaveBeenCalledWith(queryKey, replacement);
     expect(cancel).toHaveBeenCalledWith({ queryKey });
     expect(remove).toHaveBeenCalledWith({ queryKey });
   });

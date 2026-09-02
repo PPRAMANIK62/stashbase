@@ -1,13 +1,22 @@
-import type { DocumentTextSource } from '@/features/documents/domain/document';
+import type {
+  DocumentTextSaveResult,
+  DocumentTextSource,
+} from '@/features/documents/domain/document';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 export interface DocumentSourceApi {
   load(source: SourceReference, signal: AbortSignal): Promise<DocumentTextSource>;
+  save(
+    source: SourceReference,
+    input: { baseVersion: string; content: string },
+    signal: AbortSignal,
+  ): Promise<DocumentTextSaveResult>;
 }
 
 export interface DocumentQueryScope {
   cancel(): Promise<void>;
   remove(): void;
+  replaceSource(source: DocumentTextSource): void;
 }
 
 export type DocumentSourceFailureKind =
@@ -23,6 +32,29 @@ export class DocumentSourceError extends Error {
   constructor(kind: DocumentSourceFailureKind, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'DocumentSourceError';
+    this.kind = kind;
+  }
+}
+
+export type DocumentSaveFailureKind =
+  | 'conflict'
+  | 'invalid-response'
+  | 'scope-lost'
+  | 'unauthorized'
+  | 'unavailable';
+
+export class DocumentSaveError extends Error {
+  readonly currentVersion: string | null;
+  readonly kind: DocumentSaveFailureKind;
+
+  constructor(
+    kind: DocumentSaveFailureKind,
+    message: string,
+    options?: ErrorOptions & { currentVersion?: string | null },
+  ) {
+    super(message, options);
+    this.name = 'DocumentSaveError';
+    this.currentVersion = options?.currentVersion ?? null;
     this.kind = kind;
   }
 }

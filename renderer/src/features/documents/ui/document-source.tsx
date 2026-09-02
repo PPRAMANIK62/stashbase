@@ -1,4 +1,11 @@
-import { FileText, LoaderCircle, LockKeyhole, RefreshCw, TriangleAlert } from 'lucide-react';
+import {
+  AlertCircle,
+  FileText,
+  LoaderCircle,
+  LockKeyhole,
+  RefreshCw,
+  TriangleAlert,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,6 +20,56 @@ import { useDocumentSource } from '@/features/documents/hooks/use-document-sourc
 export interface DocumentSourceProps {
   api: DocumentSourceApi;
   runtime: DocumentRuntime;
+}
+
+function SaveFeedback({
+  editor,
+  retry,
+}: {
+  editor: NonNullable<ReturnType<typeof useDocumentSource>['editor']>;
+  retry: () => void;
+}) {
+  if (
+    editor.savePhase !== 'conflict' &&
+    editor.savePhase !== 'error' &&
+    editor.savePhase !== 'warning'
+  ) {
+    return null;
+  }
+  const failed = editor.savePhase === 'conflict' || editor.savePhase === 'error';
+  const text =
+    editor.savePhase === 'conflict'
+      ? 'Conflict detected'
+      : editor.savePhase === 'error'
+        ? (editor.saveMessage ?? 'Save failed')
+        : (editor.saveMessage ?? 'Saved with a warning');
+
+  return (
+    <div
+      className="absolute right-4 bottom-3 flex max-w-[min(32rem,calc(100%-2rem))] items-center gap-2 rounded-md border border-border bg-surface-2/95 px-2.5 py-1.5 text-caption shadow-sm"
+      data-save-phase={editor.savePhase}
+    >
+      {failed ? (
+        <AlertCircle aria-hidden="true" className="size-3.5 shrink-0 text-destructive" />
+      ) : (
+        <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+      )}
+      <span
+        className={
+          failed ? 'min-w-0 truncate text-destructive' : 'min-w-0 truncate text-muted-foreground'
+        }
+        role={failed ? 'alert' : 'status'}
+        title={text}
+      >
+        {text}
+      </span>
+      {editor.savePhase === 'error' && (
+        <Button onClick={retry} size="sm" variant="tertiary">
+          Retry
+        </Button>
+      )}
+    </div>
+  );
 }
 
 function PendingSource({ name }: { name: string }) {
@@ -60,7 +117,7 @@ function FailedSource({ error, name, retry }: { error: unknown; name: string; re
 
 export function DocumentSource({ api, runtime }: DocumentSourceProps) {
   const name = sourceName(runtime.scope.source);
-  const { access, format, source } = useDocumentSource(runtime, api);
+  const { access, change, editor, format, retrySave, source } = useDocumentSource(runtime, api);
 
   if (format === null) {
     return (
@@ -80,6 +137,8 @@ export function DocumentSource({ api, runtime }: DocumentSourceProps) {
   if (!source.data) {
     return <FailedSource error={source.error} name={name} retry={() => void source.refetch()} />;
   }
+
+  if (access === 'editable' && !editor) return <PendingSource name={name} />;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-document-access={access}>
@@ -102,14 +161,29 @@ export function DocumentSource({ api, runtime }: DocumentSourceProps) {
           </Button>
         </div>
       )}
-      <ScrollArea className="min-h-0 flex-1" orientation="both">
-        <pre
-          aria-label={`${name} source`}
-          className="min-h-full w-max min-w-full p-5 font-mono text-body leading-relaxed whitespace-pre"
-        >
-          {source.data.content}
-        </pre>
-      </ScrollArea>
+      {access === 'editable' && editor ? (
+        <div className="relative min-h-0 flex-1">
+          <textarea
+            aria-label={`${name} source`}
+            className="size-full resize-none border-0 bg-transparent p-5 pb-12 font-mono text-body leading-relaxed whitespace-pre outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+            data-document-dirty={editor.dirty || undefined}
+            onChange={(event) => change(event.currentTarget.value)}
+            spellCheck={false}
+            value={editor.value}
+            wrap="off"
+          />
+          <SaveFeedback editor={editor} retry={() => void retrySave()} />
+        </div>
+      ) : (
+        <ScrollArea className="min-h-0 flex-1" orientation="both">
+          <pre
+            aria-label={`${name} source`}
+            className="min-h-full w-max min-w-full p-5 font-mono text-body leading-relaxed whitespace-pre"
+          >
+            {source.data.content}
+          </pre>
+        </ScrollArea>
+      )}
     </div>
   );
 }
