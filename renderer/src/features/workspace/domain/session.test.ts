@@ -19,14 +19,16 @@ describe('workspace session state', () => {
   it('records only approved serializable folder presentation and tab identities', () => {
     const state = {
       ...createWorkspaceState(scope),
-      activeTabId: 'tab-1',
       expanded: { drafts: true as const },
       selectedPath: 'drafts/plan.md',
-      tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
     };
     const snapshot = recordFolderSession(
       setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/library/notes'),
       state,
+      {
+        activeTabId: 'tab-1',
+        tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
+      },
     );
 
     expect(snapshot).toEqual({
@@ -45,6 +47,21 @@ describe('workspace session state', () => {
     });
     expect(snapshot).not.toHaveProperty('scope');
     expect(snapshot).not.toHaveProperty('lifecycle');
+  });
+
+  it('bounds document identity projections at the Workspace persistence owner', () => {
+    const state = createWorkspaceState(scope);
+    const snapshot = recordFolderSession(createWorkspaceSessionSnapshot(), state, {
+      activeTabId: 'tab-54',
+      tabs: Array.from({ length: 55 }, (_, index) => ({
+        id: `tab-${index}`,
+        path: `${index}.md`,
+      })),
+    });
+
+    expect(snapshot.folders[0]?.tabs).toHaveLength(50);
+    expect(snapshot.folders[0]?.tabs[0]?.path).toBe('5.md');
+    expect(snapshot.folders[0]?.activeTabId).toBe('tab-54');
   });
 
   it('normalizes duplicate identities and invalid active references', () => {

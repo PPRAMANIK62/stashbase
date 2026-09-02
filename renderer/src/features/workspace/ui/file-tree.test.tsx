@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { FilesApi } from '@/features/workspace/application/ports';
@@ -54,7 +55,7 @@ const listing: WorkspaceListing = {
 
 const runtimes: WorkspaceRuntime[] = [];
 
-function renderTree(api: FilesApi) {
+function renderTree(api: FilesApi, onOpenSource?: ComponentProps<typeof FileTree>['onOpenSource']) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -69,7 +70,12 @@ function renderTree(api: FilesApi) {
   runtimes.push(runtime);
   return render(
     <QueryClientProvider client={queryClient}>
-      <FileTree api={api} revealLabel="Show in file manager" runtime={runtime} />
+      <FileTree
+        api={api}
+        onOpenSource={onOpenSource}
+        revealLabel="Show in file manager"
+        runtime={runtime}
+      />
     </QueryClientProvider>,
   );
 }
@@ -159,6 +165,31 @@ describe('file tree', () => {
         name: 'linked-file, restricted, Show in file manager',
       }),
     );
+    expect(api.reveal).toHaveBeenCalledWith('linked-file', expect.any(AbortSignal));
+  });
+
+  it('emits explicit source identity for regular files and keeps restricted files reveal-only', async () => {
+    const api = filesApi();
+    const onOpenSource = vi.fn();
+    renderTree(api, onOpenSource);
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole('treeitem', {
+        name: 'archive.zip, excluded from Search and automatic Chat context',
+      }),
+    );
+    expect(onOpenSource).toHaveBeenCalledWith({
+      folderPath: '/library/research',
+      path: 'archive.zip',
+    });
+
+    await user.click(
+      screen.getByRole('treeitem', {
+        name: 'linked-file, restricted, Show in file manager',
+      }),
+    );
+    expect(onOpenSource).toHaveBeenCalledOnce();
     expect(api.reveal).toHaveBeenCalledWith('linked-file', expect.any(AbortSignal));
   });
 

@@ -45,6 +45,7 @@ import { useTouchPrimary } from '@/hooks/use-touch-primary';
 import { useShape } from '@/lib/shape-context';
 import { spring } from '@/lib/springs';
 import { cn } from '@/lib/utils';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
 const EMPTY_LISTING: WorkspaceListing = { files: [], folderName: '', folders: [] };
 const TREE_PAGE_SIZE = 240;
@@ -66,12 +67,13 @@ const FILE_ICONS: Record<FileFormat, LucideIcon> = {
 
 export interface FileTreeProps {
   api: FilesApi;
+  onOpenSource?: (source: SourceReference) => void;
   onScopeLost?: (scope: WorkspaceScope) => void;
   revealLabel: string;
   runtime: WorkspaceRuntime;
 }
 
-export function FileTree({ api, onScopeLost, revealLabel, runtime }: FileTreeProps) {
+export function FileTree({ api, onOpenSource, onScopeLost, revealLabel, runtime }: FileTreeProps) {
   const files = useFiles(runtime, api);
   const tree = useTree(runtime, files.data ?? EMPTY_LISTING);
   const reveal = useReveal(runtime, api);
@@ -144,6 +146,8 @@ export function FileTree({ api, onScopeLost, revealLabel, runtime }: FileTreePro
       else tree.toggle(row.node.path);
     } else if (fileIsRestricted(row.node)) {
       reveal.reveal(row.node.path);
+    } else {
+      onOpenSource?.({ folderPath: runtime.scope.folder.path, path: row.node.path });
     }
   };
 

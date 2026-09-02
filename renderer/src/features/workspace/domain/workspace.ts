@@ -1,5 +1,5 @@
 import type { ActiveLibraryFolder } from './library';
-import type { FolderSessionState, WorkspaceTabIdentity } from './session';
+import type { FolderSessionState } from './session';
 import type { ExpandedFolders } from './tree';
 
 export interface WorkspaceScope {
@@ -8,12 +8,10 @@ export interface WorkspaceScope {
 }
 
 export interface WorkspaceState {
-  activeTabId: string | null;
   expanded: ExpandedFolders;
   lifecycle: 'active' | 'disposed';
   selectedPath: string | null;
   scope: WorkspaceScope;
-  tabs: WorkspaceTabIdentity[];
 }
 
 export function createWorkspaceState(
@@ -21,12 +19,10 @@ export function createWorkspaceState(
   restored: FolderSessionState | null = null,
 ): WorkspaceState {
   return {
-    activeTabId: restored?.activeTabId ?? null,
     expanded: Object.fromEntries(restored?.expandedPaths.map((path) => [path, true]) ?? []),
     lifecycle: 'active',
     scope,
     selectedPath: restored?.selectedPath ?? null,
-    tabs: restored?.tabs.map((tab) => ({ ...tab })) ?? [],
   };
 }
 

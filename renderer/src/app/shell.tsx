@@ -7,6 +7,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
+import { DocumentTabs, DocumentWorkspace } from '@/features/documents/public';
 import {
   FileTree,
   LibrarySidebar,
@@ -18,7 +19,9 @@ import {
 } from '@/features/workspace/public';
 import { Logo } from '@/shared/brand/logo';
 
+import { useDocumentWorkspace } from './composition/use-document-workspace';
 import type { AppDependencies } from './dependencies';
+import { openDocument } from './workflows/open-document';
 
 import './shell.css';
 
@@ -26,6 +29,12 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
   const session = useWorkspaceSession(dependencies.library.api, dependencies.session);
   const workspace = useWorkspace(dependencies.library.api, session.restoredFolder, session.isReady);
   usePersistWorkspaceSession(session.runtime, workspace);
+  const documents = useDocumentWorkspace(
+    workspace,
+    session.restoredFolder,
+    session.runtime,
+    dependencies.documents.createId,
+  );
   const libraryLifecycle = useLibraryLifecycle(
     dependencies.library.api,
     dependencies.library.lifecycle,
@@ -56,6 +65,9 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
               <FileTree
                 {...dependencies.workspace}
                 key={workspace.scope.generation}
+                onOpenSource={(source) => {
+                  if (documents) openDocument(workspace, documents, source);
+                }}
                 onScopeLost={libraryLifecycle.recoverLostScope}
                 runtime={workspace}
               />
@@ -69,13 +81,28 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
           <div className="workspace-titlebar-controls">
             <SidebarTrigger aria-label="Toggle files sidebar" />
           </div>
-          <div className="min-w-0 flex-1 px-2 text-center">
-            <span className="text-caption font-medium text-muted-foreground">Agent</span>
+          <div className="flex min-w-0 flex-1 px-2">
+            {documents ? (
+              <DocumentTabs
+                className="workspace-titlebar-controls max-w-full"
+                emptyContent={
+                  <span className="flex-1 text-center text-caption font-medium text-muted-foreground">
+                    Agent
+                  </span>
+                }
+                runtime={documents}
+              />
+            ) : (
+              <span className="flex-1 text-center text-caption font-medium text-muted-foreground">
+                Agent
+              </span>
+            )}
           </div>
           <div aria-hidden="true" className="size-9 shrink-0" />
         </header>
 
         <section aria-label="Agent workspace" className="min-h-0 flex-1">
+          {documents && <DocumentWorkspace runtime={documents} />}
           <LibraryWelcome
             {...dependencies.library}
             isRestoringSession={session.isRestoringFolder}

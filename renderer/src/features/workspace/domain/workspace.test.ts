@@ -20,7 +20,7 @@ describe('workspace tree state', () => {
     expect(initial).toMatchObject({ expanded: {}, selectedPath: null });
   });
 
-  it('hydrates only approved tree and tab identities into a fresh runtime scope', () => {
+  it('hydrates only approved tree state into a fresh runtime scope', () => {
     const restored = createWorkspaceState(
       {
         folder: { name: 'Notes', path: '/library/notes' },
@@ -36,7 +36,6 @@ describe('workspace tree state', () => {
     );
 
     expect(restored).toEqual({
-      activeTabId: 'tab-1',
       expanded: { drafts: true },
       lifecycle: 'active',
       scope: {
@@ -44,7 +43,6 @@ describe('workspace tree state', () => {
         generation: 9,
       },
       selectedPath: 'drafts/plan.md',
-      tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
     });
   });
 });

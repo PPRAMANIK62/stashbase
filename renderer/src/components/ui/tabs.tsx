@@ -374,12 +374,29 @@ interface TabItemProps extends ComponentPropsWithoutRef<typeof TabsPrimitive.Tab
   value: string;
   icon?: IconComponent;
   label: string;
+  /** Optional presentational action glyph. Keep the tab as the sole semantic
+   *  control and provide its keyboard equivalent on the tab itself. */
+  trailingIcon?: IconComponent;
+  onTrailingClick?: () => void;
   /** @internal Auto-assigned by TabsList. */
   _index?: number;
 }
 
 const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
-  ({ value, icon: Icon, label, _index = 0, className, onClick, ...props }, ref) => {
+  (
+    {
+      value,
+      icon: Icon,
+      label,
+      trailingIcon: TrailingIcon,
+      onTrailingClick,
+      _index = 0,
+      className,
+      onClick,
+      ...props
+    },
+    ref,
+  ) => {
     const internalRef = useRef<HTMLButtonElement>(null);
     const sizeClasses = useSize();
     const { registerTab, hoveredIndex, selectedValue, setOptimisticIdx } = useTabsList();
@@ -397,6 +414,10 @@ const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
         // Composed (not spread-overridable): a consumer onClick must not
         // replace the optimistic indicator jump.
         onClick={(e) => {
+          if ((e.target as Element).closest('[data-tab-trailing]')) {
+            onTrailingClick?.();
+            return;
+          }
           setOptimisticIdx(_index);
           onClick?.(e);
         }}
@@ -452,6 +473,15 @@ const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
             {label}
           </span>
         </span>
+        {TrailingIcon && (
+          <span
+            aria-hidden="true"
+            className="flex size-4 items-center justify-center text-muted-foreground"
+            data-tab-trailing=""
+          >
+            <TrailingIcon size={12} strokeWidth={isActive ? 2 : 1.5} />
+          </span>
+        )}
       </TabsPrimitive.Tab>
     );
   },

@@ -9,6 +9,7 @@ import {
   setSessionActiveFolder,
   setSessionSidebarOpen,
   setSessionSidebarWidth,
+  type WorkspaceDocumentSession,
   type WorkspaceSessionSnapshot,
 } from '@/features/workspace/domain/session';
 import type { WorkspaceState } from '@/features/workspace/domain/workspace';
@@ -24,7 +25,7 @@ export interface WorkspaceSessionRuntime {
   dispose(): void;
   flush(): Promise<void>;
   reconcileMembership(memberPaths: readonly string[]): void;
-  recordWorkspace(workspace: WorkspaceState): void;
+  recordWorkspace(workspace: WorkspaceState, documents?: WorkspaceDocumentSession): void;
   restore(): Promise<void>;
   setActiveFolder(folderPath: string | null): void;
   setSidebarOpen(open: boolean): void;
@@ -93,9 +94,9 @@ export function createWorkspaceSessionRuntime(
     reconcileMembership(memberPaths) {
       update((snapshot) => reconcileSessionMembership(snapshot, memberPaths));
     },
-    recordWorkspace(workspace) {
+    recordWorkspace(workspace, documents) {
       if (workspace.lifecycle !== 'active') return;
-      update((snapshot) => recordFolderSession(snapshot, workspace));
+      update((snapshot) => recordFolderSession(snapshot, workspace, documents));
     },
     restore() {
       if (restorePromise) return restorePromise;

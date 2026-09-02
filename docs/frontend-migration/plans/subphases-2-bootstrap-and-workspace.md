@@ -226,9 +226,11 @@ the normal validated `LibraryApi`; removal prunes only the lost folder's
 persisted state. A captured membership snapshot prevents a late restore from
 replacing a newer user choice. The welcome remains absent only while that
 decision is unresolved. An approved folder creates a fresh runtime generation
-and hydrates only its serialized tree and tab identities. The Fluid Sidebar
-primitive remains the geometry owner, now reporting controlled open and
-drag-resize changes through its existing provider boundary.
+and hydrates only its serialized tree state. Its serialized tab identities are
+handed to the fresh document runtimes introduced by Task 29 rather than
+becoming live Workspace state. The Fluid Sidebar primitive remains the
+geometry owner, now reporting controlled open and drag-resize changes through
+its existing provider boundary.
 
 Evidence: `renderer/src/features/workspace/domain/session.test.ts`,
 `renderer/src/features/workspace/application/session-runtime.test.ts`,

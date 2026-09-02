@@ -13,6 +13,11 @@ export interface WorkspaceTabIdentity {
   path: string;
 }
 
+export interface WorkspaceDocumentSession {
+  activeTabId: string | null;
+  tabs: WorkspaceTabIdentity[];
+}
+
 export interface FolderSessionState {
   activeTabId: string | null;
   expandedPaths: string[];
@@ -138,19 +143,24 @@ export function reconcileSessionMembership(
 export function recordFolderSession(
   snapshot: WorkspaceSessionSnapshot,
   workspace: WorkspaceState,
+  documents?: WorkspaceDocumentSession,
 ): WorkspaceSessionSnapshot {
   const folderPath = workspace.scope.folder.path;
+  const previous = snapshot.folders.find((candidate) => candidate.folderPath === folderPath);
+  const documentSession = documents ?? previous ?? { activeTabId: null, tabs: [] };
   const folder: FolderSessionState = {
-    activeTabId: null,
+    activeTabId: documentSession.activeTabId,
     expandedPaths: Object.keys(workspace.expanded)
       .filter((path) => workspace.expanded[path] === true)
       .slice(-MAX_SESSION_EXPANDED_PATHS),
     folderPath,
     selectedPath: workspace.selectedPath,
-    tabs: workspace.tabs.slice(-MAX_SESSION_TABS).map((tab) => ({ id: tab.id, path: tab.path })),
+    tabs: documentSession.tabs
+      .slice(-MAX_SESSION_TABS)
+      .map((tab) => ({ id: tab.id, path: tab.path })),
   };
-  folder.activeTabId = folder.tabs.some((tab) => tab.id === workspace.activeTabId)
-    ? workspace.activeTabId
+  folder.activeTabId = folder.tabs.some((tab) => tab.id === documentSession.activeTabId)
+    ? documentSession.activeTabId
     : null;
   const index = snapshot.folders.findIndex((candidate) => candidate.folderPath === folderPath);
   const folders = [...snapshot.folders];

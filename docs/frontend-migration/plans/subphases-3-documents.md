@@ -4,8 +4,22 @@
 
 **Blocked by:** 25.
 
+**Status:** Complete.
+
 Own unique source identity, activation, cancellation, disposal, and stale-open
 rejection in independently scoped document runtimes.
+
+The new `documents` feature owns folder-plus-path source identity, unique tabs,
+fresh restored runtimes, cancellation, disposal, and stale-completion guards.
+App composition connects eligible file-tree activation and Workspace session
+projection; restricted entries remain reveal-only. The Fluid titlebar tab
+surface supports keyboard activation and close while Task 30 retains source
+loading.
+
+Evidence: focused Documents, app-composition, file-tree, session, and shell
+tests; `pnpm test:renderer`, `pnpm test:renderer-architecture`,
+`pnpm typecheck`, `pnpm format:web`, `pnpm lint:web`, `pnpm build:web`, and the
+replacement Electron smoke.
 
 ## 30 — Load Markdown and TXT sources
 

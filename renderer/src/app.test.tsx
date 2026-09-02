@@ -1,3 +1,4 @@
+import { waitFor } from '@testing-library/react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
@@ -11,6 +12,7 @@ describe('workspace shell', () => {
   let root: Root;
   let getAnimationsDescriptor: PropertyDescriptor | undefined;
   const dependencies: AppDependencies = {
+    documents: { createId: vi.fn(() => 'tab-1') },
     library: {
       folderPicker: { chooseFolder: vi.fn() },
       api: {
@@ -161,5 +163,75 @@ describe('workspace shell', () => {
     });
 
     expect(container.querySelector('[data-sidebar="peek"]')).toBeNull();
+  });
+
+  it('opens an eligible file-tree source into the document workspace', async () => {
+    await act(async () => root.unmount());
+    const activeDependencies: AppDependencies = {
+      ...dependencies,
+      documents: { createId: vi.fn(() => 'document-tab') },
+      library: {
+        ...dependencies.library,
+        api: {
+          ...dependencies.library.api,
+          load: vi.fn(async () => ({
+            activeFolder: { name: 'Notes', path: '/library/notes' },
+            homeDirectory: '/home/person',
+            members: [
+              { favorite: false, openedAt: '2026-09-02T00:00:00.000Z', path: '/library/notes' },
+            ],
+          })),
+        },
+      },
+      workspace: {
+        ...dependencies.workspace,
+        api: {
+          ...dependencies.workspace.api,
+          load: vi.fn(async () => ({
+            files: [
+              {
+                availability: 'available' as const,
+                format: 'md' as const,
+                heading: 'Plan',
+                importedAt: '',
+                kind: 'regular' as const,
+                path: 'plan.md',
+                size: 12,
+                snippet: '',
+              },
+            ],
+            folderName: 'Notes',
+            folders: [],
+          })),
+        },
+      },
+    };
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <Providers>
+          <App dependencies={activeDependencies} />
+        </Providers>,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    let source: HTMLButtonElement | null = null;
+    await waitFor(() => {
+      source = container.querySelector<HTMLButtonElement>(
+        '[role="treeitem"][aria-label="plan.md"]',
+      );
+      expect(source).not.toBeNull();
+    });
+    await act(async () => source?.click());
+
+    expect(container.querySelector('[aria-label="Document workspace"]')).not.toBeNull();
+    const tab = container.querySelector('[role="tab"]');
+    expect(tab?.textContent).toContain('plan.md');
+    expect(tab?.closest('header')).not.toBeNull();
+    expect(
+      container.querySelector('[aria-label="Document workspace"] [role="tablist"]'),
+    ).toBeNull();
   });
 });
