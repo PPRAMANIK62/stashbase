@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import type { DocumentSourceApi } from '@/features/documents/application/ports';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 
+import { DocumentOutline } from './document-outline';
 import { DocumentTabs } from './document-tabs';
 import { DocumentWorkspace } from './document-workspace';
 
@@ -75,6 +76,67 @@ afterEach(() => {
 });
 
 describe('document tabs', () => {
+  it('renders and operates the active document outline hierarchy', async () => {
+    const runtime = createRuntime();
+    runtimes.push(runtime);
+    const owner = Symbol('outline-test');
+    const select = vi.fn();
+    const parent = { id: 'plan', level: 1, position: 1, text: 'Plan' };
+    const child = { id: 'details', level: 2, position: 8, text: 'Details' };
+    runtime.navigation.claimOutline('tab-2', owner);
+    runtime.navigation.publishOutline(
+      'tab-2',
+      owner,
+      { activeId: child.id, headings: [parent, child] },
+      select,
+    );
+
+    render(<DocumentOutline runtime={runtime} />);
+
+    const section = screen.getByLabelText('Document outline section');
+    expect(section.dataset.sidebar).toBe('group');
+    expect(section.classList.contains('p-0')).toBe(true);
+    expect(section.classList.contains('border-t')).toBe(false);
+    expect(screen.getByLabelText('other.md outline, 2 headings').className).toContain('h-7');
+    expect(section.querySelector('[data-slot="scroll-area"]')).toBeNull();
+    expect(
+      screen
+        .getByRole('navigation', { name: 'Document outline' })
+        .querySelector('[data-sidebar="menu-sub"]'),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Heading level 2: Details' }).getAttribute('aria-current'),
+    ).toBe('location');
+    expect(screen.getByRole('button', { name: 'Collapse Plan' }).className).toContain('left-1');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Collapse Plan' }));
+    expect(screen.queryByRole('button', { name: 'Heading level 2: Details' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Expand Plan' }));
+    await user.click(screen.getByRole('button', { name: 'Heading level 1: Plan' }));
+
+    expect(select).toHaveBeenCalledWith(parent);
+  });
+
+  it('explains unavailable and empty document outlines', () => {
+    const runtime = createRuntime();
+    runtimes.push(runtime);
+    const { rerender } = render(<DocumentOutline runtime={runtime} />);
+
+    expect(screen.getByLabelText('Document outline section')).not.toBeNull();
+    expect(screen.getByLabelText('other.md outline, unavailable')).not.toBeNull();
+    expect(screen.getByText('No outline available for this document')).not.toBeNull();
+
+    const owner = Symbol('empty-outline-test');
+    runtime.navigation.claimOutline('tab-2', owner);
+    runtime.navigation.publishOutline('tab-2', owner, { activeId: null, headings: [] }, vi.fn());
+    rerender(<DocumentOutline runtime={runtime} />);
+
+    expect(screen.getByLabelText('other.md outline, 0 headings')).not.toBeNull();
+    expect(screen.getByText('No headings in this document')).not.toBeNull();
+    expect(screen.queryByText('No outline available for this document')).toBeNull();
+    expect(screen.queryByText('Outline')).toBeNull();
+  });
+
   it('renders one accessible tab per source and activates through the primitive', async () => {
     const runtime = createRuntime();
     runtimes.push(runtime);

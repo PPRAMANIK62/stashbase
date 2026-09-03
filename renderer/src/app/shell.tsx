@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 
 import {
   Sidebar,
-  SidebarContent,
   SidebarGroup,
   SidebarHeader,
   SidebarInset,
@@ -25,6 +24,8 @@ import {
 } from '@/features/workspace/public';
 import { Logo } from '@/shared/brand/logo';
 
+import { SidebarNavigator } from './composition/sidebar-navigator';
+import { useDocumentCommands } from './composition/use-document-commands';
 import { useDocumentWorkspace } from './composition/use-document-workspace';
 import type { AppDependencies } from './dependencies';
 import { openDocument } from './workflows/open-document';
@@ -42,6 +43,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     dependencies.documents.api,
     dependencies.documents.createId,
   );
+  useDocumentCommands(documents?.navigation ?? null);
   useDocumentSaveBarrier(documents, dependencies.documents.lifecycle);
   const saveDocumentsForFolder = useCallback(
     (folderPath: string) =>
@@ -72,29 +74,29 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
           <Logo aria-hidden="true" className="size-7 shrink-0" />
           <span className="text-title font-semibold tracking-tight">StashBase</span>
         </SidebarHeader>
-        <SidebarContent>
-          <SidebarGroup>
-            <LibrarySidebar
-              {...dependencies.library}
-              beforeFolderChange={() =>
-                workspace
-                  ? saveDocumentsForFolder(workspace.scope.folder.path)
-                  : Promise.resolve(true)
-              }
+        <SidebarGroup className="shrink-0 pb-0">
+          <LibrarySidebar
+            {...dependencies.library}
+            beforeFolderChange={() =>
+              workspace
+                ? saveDocumentsForFolder(workspace.scope.folder.path)
+                : Promise.resolve(true)
+            }
+          />
+        </SidebarGroup>
+        {workspace && (
+          <SidebarNavigator runtime={documents}>
+            <FileTree
+              {...dependencies.workspace}
+              key={workspace.scope.generation}
+              onOpenSource={(source) => {
+                if (documents) void openDocument(workspace, documents, source);
+              }}
+              onScopeLost={libraryLifecycle.recoverLostScope}
+              runtime={workspace}
             />
-            {workspace && (
-              <FileTree
-                {...dependencies.workspace}
-                key={workspace.scope.generation}
-                onOpenSource={(source) => {
-                  if (documents) void openDocument(workspace, documents, source);
-                }}
-                onScopeLost={libraryLifecycle.recoverLostScope}
-                runtime={workspace}
-              />
-            )}
-          </SidebarGroup>
-        </SidebarContent>
+          </SidebarNavigator>
+        )}
       </Sidebar>
 
       <SidebarInset className="min-h-0 overflow-hidden">
@@ -123,7 +125,20 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         </header>
 
         <section aria-label="Agent workspace" className="min-h-0 flex-1">
-          {documents && <DocumentWorkspace api={dependencies.documents.api} runtime={documents} />}
+          {documents && (
+            <DocumentWorkspace
+              api={dependencies.documents.api}
+              onNavigate={(target) => {
+                if (workspace) {
+                  void openDocument(workspace, documents, target.source, {
+                    anchor: target.anchor,
+                  });
+                }
+              }}
+              onOpenExternal={dependencies.documents.openExternal}
+              runtime={documents}
+            />
+          )}
           <LibraryWelcome
             {...dependencies.library}
             isRestoringSession={session.isRestoringFolder}

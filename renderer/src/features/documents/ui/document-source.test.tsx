@@ -39,6 +39,10 @@ afterEach(() => {
 function renderSource(
   api: DocumentSourceApi,
   source = { folderPath: '/library/notes', path: 'plan.md' },
+  options: {
+    onNavigate?: Parameters<typeof DocumentWorkspace>[0]['onNavigate'];
+    onOpenExternal?: Parameters<typeof DocumentWorkspace>[0]['onOpenExternal'];
+  } = {},
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const runtime = createDocumentTabsRuntime({
@@ -55,7 +59,7 @@ function renderSource(
   runtimes.push(runtime);
   render(
     <QueryClientProvider client={queryClient}>
-      <DocumentWorkspace api={api} runtime={runtime} />
+      <DocumentWorkspace api={api} runtime={runtime} {...options} />
     </QueryClientProvider>,
   );
   return { queryClient, runtime };
@@ -72,7 +76,7 @@ describe('document text source', () => {
       overwrite: vi.fn(),
       save: vi.fn(),
     };
-    renderSource(api);
+    const { runtime } = renderSource(api);
 
     expect(screen.getByRole('status').textContent).toContain('Loading plan.md');
     const source = await screen.findByRole(
@@ -88,6 +92,48 @@ describe('document text source', () => {
       { folderPath: '/library/notes', path: 'plan.md' },
       expect.any(AbortSignal),
     );
+    await waitFor(() =>
+      expect(runtime.navigation.store.getState().outline.headings).toEqual([
+        expect.objectContaining({ id: 'plan', level: 1, text: 'Plan' }),
+      ]),
+    );
+  });
+
+  it('routes Markdown Find and links through the active document authority', async () => {
+    const onNavigate = vi.fn();
+    const onOpenExternal = vi.fn(async () => true);
+    const api = {
+      load: vi.fn(async () => ({
+        content:
+          '# Plan\n\nFind this phrase.\n\n[Details](details.md#part)\n\n[Website](https://example.com/docs)',
+        format: 'md' as const,
+        version: 'v1',
+      })),
+      overwrite: vi.fn(),
+      save: vi.fn(),
+    };
+    const { runtime } = renderSource(
+      api,
+      { folderPath: '/library/notes', path: 'guides/plan.md' },
+      { onNavigate, onOpenExternal },
+    );
+    await screen.findByRole('heading', { name: 'Plan' }, { timeout: 5_000 });
+
+    await waitFor(() => expect(runtime.navigation.store.getState().find.available).toBe(true));
+    act(() => expect(runtime.navigation.openFind()).toBe(true));
+    const input = await screen.findByRole('textbox', { name: 'Find in document' });
+    expect(screen.getByRole('group', { name: 'Find matching options' })).not.toBeNull();
+    expect(screen.getByRole('group', { name: 'Find result navigation' })).not.toBeNull();
+    fireEvent.change(input, { target: { value: 'Find this phrase' } });
+    await waitFor(() => expect(runtime.navigation.store.getState().find.total).toBe(1));
+
+    fireEvent.click(screen.getByRole('link', { name: 'Details' }));
+    expect(onNavigate).toHaveBeenCalledWith({
+      anchor: 'part',
+      source: { folderPath: '/library/notes', path: 'guides/details.md' },
+    });
+    fireEvent.click(screen.getByRole('link', { name: 'Website' }));
+    await waitFor(() => expect(onOpenExternal).toHaveBeenCalledWith('https://example.com/docs'));
   });
 
   it('marks a source from another member folder as read-only', async () => {

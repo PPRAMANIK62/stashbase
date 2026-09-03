@@ -6,6 +6,7 @@ export async function openDocument(
   workspace: WorkspaceRuntime,
   documents: DocumentTabsRuntime,
   source: SourceReference,
+  options?: { anchor?: string },
 ): Promise<DocumentRuntime | null> {
   const workspaceScope = workspace.scope;
   const documentScope = documents.scope;
@@ -20,7 +21,7 @@ export async function openDocument(
 
   workspace.accept(workspaceScope, () => {
     documents.accept(documentScope, () => {
-      opening = documents.open(source);
+      opening = documents.open(source, options);
     });
   });
 

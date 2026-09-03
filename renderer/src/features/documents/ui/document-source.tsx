@@ -11,12 +11,14 @@ import { lazy, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
+import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
 import {
   DocumentSourceError,
   type DocumentSourceApi,
 } from '@/features/documents/application/ports';
 import { sourceName } from '@/features/documents/domain/document';
 import { useDocumentSource } from '@/features/documents/hooks/use-document-source';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
 const DocumentConflict = lazy(async () => {
   const module = await import('./document-conflict');
@@ -24,13 +26,16 @@ const DocumentConflict = lazy(async () => {
 });
 
 const MarkdownDocument = lazy(async () => {
-  const module = await import('./markdown-document');
+  const module = await import('./markdown/document');
   return { default: module.MarkdownDocument };
 });
 
 export interface DocumentSourceProps {
   active: boolean;
   api: DocumentSourceApi;
+  navigation: DocumentNavigationRuntime;
+  onNavigate(target: { anchor?: string; source: SourceReference }): void;
+  onOpenExternal(href: string): Promise<boolean>;
   runtime: DocumentRuntime;
 }
 
@@ -127,7 +132,14 @@ function FailedSource({ error, name, retry }: { error: unknown; name: string; re
   );
 }
 
-export function DocumentSource({ active, api, runtime }: DocumentSourceProps) {
+export function DocumentSource({
+  active,
+  api,
+  navigation,
+  onNavigate,
+  onOpenExternal,
+  runtime,
+}: DocumentSourceProps) {
   const name = sourceName(runtime.scope.source);
   const { access, change, editor, format, markdownMode, resolveConflict, retrySave, source } =
     useDocumentSource(runtime, api, active);
@@ -186,13 +198,19 @@ export function DocumentSource({ active, api, runtime }: DocumentSourceProps) {
         <div className="relative min-h-0 flex-1">
           <Suspense fallback={<PendingSource name="Markdown editor" />}>
             <MarkdownDocument
+              active={active}
               canChangeMode={access === 'editable' && editor !== null}
               dirty={editor?.dirty ?? false}
               mode={markdownMode}
               name={name}
               onChange={change}
+              onNavigate={onNavigate}
               onModeChange={(mode) => runtime.setMarkdownMode(mode)}
+              onOpenExternal={onOpenExternal}
+              navigation={navigation}
               readOnly={access === 'read-only' || editor === null || markdownMode === 'reading'}
+              source={runtime.scope.source}
+              tabId={runtime.scope.id}
               value={editor?.value ?? source.data.content}
             />
           </Suspense>

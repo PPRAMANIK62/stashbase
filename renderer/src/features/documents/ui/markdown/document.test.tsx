@@ -1,6 +1,8 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { createDocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
+
 const editorHarness = vi.hoisted(() => ({
   change: null as ((context: unknown, markdown: string, previous: string) => void) | null,
   instances: [] as Array<{
@@ -61,7 +63,7 @@ vi.mock('@milkdown/crepe/builder', () => ({
   },
 }));
 
-import { MarkdownDocument } from './markdown-document';
+import { MarkdownDocument } from './document';
 
 afterEach(() => {
   cleanup();
@@ -70,17 +72,52 @@ afterEach(() => {
 });
 
 describe('Markdown document surface', () => {
-  it('reattaches valid frontmatter when Milkdown serializes a Writer change', async () => {
-    const onChange = vi.fn();
+  it('keeps the document canvas on the raised workspace plane', () => {
+    const navigation = createDocumentNavigationRuntime('tab-1');
     render(
       <MarkdownDocument
+        active
+        canChangeMode
+        dirty={false}
+        mode="reading"
+        name="plan.md"
+        onChange={vi.fn()}
+        onNavigate={vi.fn()}
+        onModeChange={vi.fn()}
+        onOpenExternal={vi.fn(async () => true)}
+        navigation={navigation}
+        readOnly
+        source={{ folderPath: '/library/notes', path: 'plan.md' }}
+        tabId="tab-1"
+        value="# Plan"
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole('document', { name: 'plan.md Markdown content' })
+        .classList.contains('bg-surface-2'),
+    ).toBe(true);
+  });
+
+  it('reattaches valid frontmatter when Milkdown serializes a Writer change', async () => {
+    const onChange = vi.fn();
+    const navigation = createDocumentNavigationRuntime('tab-1');
+    render(
+      <MarkdownDocument
+        active
         canChangeMode
         dirty={false}
         mode="writer"
         name="plan.md"
         onChange={onChange}
+        onNavigate={vi.fn()}
         onModeChange={vi.fn()}
+        onOpenExternal={vi.fn(async () => true)}
+        navigation={navigation}
         readOnly={false}
+        source={{ folderPath: '/library/notes', path: 'plan.md' }}
+        tabId="tab-1"
         value={'---\ntitle: Plan\n---\nbody'}
       />,
     );
@@ -98,15 +135,22 @@ describe('Markdown document surface', () => {
   });
 
   it('changes the retained editor boundary in place and destroys it on unmount', async () => {
+    const navigation = createDocumentNavigationRuntime('tab-1');
     const { rerender, unmount } = render(
       <MarkdownDocument
+        active
         canChangeMode
         dirty={false}
         mode="writer"
         name="plan.md"
         onChange={vi.fn()}
+        onNavigate={vi.fn()}
         onModeChange={vi.fn()}
+        onOpenExternal={vi.fn(async () => true)}
+        navigation={navigation}
         readOnly={false}
+        source={{ folderPath: '/library/notes', path: 'plan.md' }}
+        tabId="tab-1"
         value="body"
       />,
     );
@@ -115,13 +159,19 @@ describe('Markdown document surface', () => {
 
     rerender(
       <MarkdownDocument
+        active
         canChangeMode
         dirty={false}
         mode="reading"
         name="plan.md"
         onChange={vi.fn()}
+        onNavigate={vi.fn()}
         onModeChange={vi.fn()}
+        onOpenExternal={vi.fn(async () => true)}
+        navigation={navigation}
         readOnly
+        source={{ folderPath: '/library/notes', path: 'plan.md' }}
+        tabId="tab-1"
         value="body"
       />,
     );

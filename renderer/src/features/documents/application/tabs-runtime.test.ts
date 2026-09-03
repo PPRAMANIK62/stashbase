@@ -79,6 +79,26 @@ describe('Document tabs runtime', () => {
     expect(createId).toHaveBeenCalledOnce();
   });
 
+  it('carries an anchor through the target tab runtime without duplicating its source', async () => {
+    const runtime = createDocumentTabsRuntime({
+      api: createApi(),
+      createId: idFactory(),
+      createQueries,
+      folderPath: '/library/notes',
+      generation: 1,
+    });
+    const source = { folderPath: '/library/notes', path: 'plan.md' };
+
+    await runtime.open(source, { anchor: 'details' });
+    await runtime.open({ ...source }, { anchor: 'summary' });
+
+    expect(runtime.store.getState().tabs).toHaveLength(1);
+    expect(runtime.navigation.store.getState().pendingAnchor).toEqual({
+      id: 'summary',
+      tabId: 'tab-1',
+    });
+  });
+
   it('cancels only the closed document and rejects its stale work', async () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),

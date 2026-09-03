@@ -20,6 +20,7 @@ describe('workspace shell', () => {
       },
       createId: vi.fn(() => 'tab-1'),
       lifecycle: { onPrepareContextRelease: vi.fn(() => () => undefined) },
+      openExternal: vi.fn(async () => true),
     },
     library: {
       folderPicker: { chooseFolder: vi.fn() },
@@ -100,8 +101,10 @@ describe('workspace shell', () => {
 
     expect(container.querySelectorAll('[data-slot="sidebar"]')).toHaveLength(1);
     expect(sidebar?.getAttribute('data-variant')).toBe('inset');
+    expect(sidebar?.className).toContain('bg-surface-1');
     expect(workspace?.classList.contains('!m-2')).toBe(false);
     expect(workspace?.className).toContain('peer-data-[variant=inset]:peer-data-[side=left]:ml-0');
+    expect(workspace?.className).toContain('peer-data-[variant=inset]:bg-surface-2');
     expect(sidebar?.textContent).toContain('StashBase');
     expect(sidebar?.querySelector('[data-sidebar="header"]')?.classList.contains('border-b')).toBe(
       false,
@@ -185,6 +188,7 @@ describe('workspace shell', () => {
         },
         createId: vi.fn(() => 'document-tab'),
         lifecycle: dependencies.documents.lifecycle,
+        openExternal: dependencies.documents.openExternal,
       },
       library: {
         ...dependencies.library,
@@ -243,7 +247,7 @@ describe('workspace shell', () => {
     await act(async () => source?.click());
 
     expect(container.querySelector('[aria-label="Document workspace"]')).not.toBeNull();
-    const tab = container.querySelector('[role="tab"]');
+    const tab = container.querySelector('[role="tab"][aria-label="plan.md"]');
     expect(tab?.textContent).toContain('plan.md');
     expect(tab?.closest('header')).not.toBeNull();
     expect(
@@ -257,5 +261,37 @@ describe('workspace shell', () => {
       },
       { timeout: 5_000 },
     );
+    await waitFor(() => {
+      const outline = container.querySelector('[aria-label="Document outline section"]');
+      expect(outline?.closest('[data-sidebar="content"]')).not.toBeNull();
+      expect(outline?.closest('[data-sidebar="footer"]')).toBeNull();
+    });
+
+    const navigator = container.querySelector('[role="tablist"][aria-label="Sidebar navigator"]');
+    expect(navigator).not.toBeNull();
+    expect(navigator?.parentElement?.classList.contains('justify-center')).toBe(true);
+    const filesTab = navigator?.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-label="Files"]',
+    );
+    const outlineTab = navigator?.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-label="Document outline"]',
+    );
+    expect(filesTab?.textContent).toBe('');
+    expect(outlineTab?.textContent).toBe('');
+    expect(filesTab?.getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => outlineTab?.click());
+
+    expect(outlineTab?.getAttribute('aria-selected')).toBe('true');
+    expect(
+      document
+        .getElementById(filesTab?.getAttribute('aria-controls') ?? '')
+        ?.hasAttribute('hidden'),
+    ).toBe(true);
+    expect(
+      document
+        .getElementById(outlineTab?.getAttribute('aria-controls') ?? '')
+        ?.hasAttribute('hidden'),
+    ).toBe(false);
   });
 });

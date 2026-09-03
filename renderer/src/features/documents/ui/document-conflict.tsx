@@ -83,7 +83,7 @@ export function DocumentConflict({ editor, name, resolve }: DocumentConflictProp
           <caption className="sr-only">
             Newer disk version and unsaved editor version compared line by line
           </caption>
-          <thead className="sticky top-0 z-10 bg-surface-1 text-left font-sans text-muted-foreground">
+          <thead className="sticky top-0 z-10 bg-surface-2 text-left font-sans text-muted-foreground">
             <tr className="border-b border-border">
               <th className="w-10 px-2 py-2 text-right font-normal" scope="col">
                 <span className="sr-only">Disk line</span>

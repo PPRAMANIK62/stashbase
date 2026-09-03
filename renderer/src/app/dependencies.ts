@@ -14,6 +14,7 @@ import {
   type LibraryWelcomeProps,
 } from '@/features/workspace/public';
 import { readBridge } from '@/platform/electron/bridge';
+import { createExternalNavigation } from '@/platform/electron/external-navigation';
 import { fileManagerLabel } from '@/platform/electron/file-manager';
 import { createFolderPicker } from '@/platform/electron/folder-picker';
 import { createHttpClient } from '@/platform/http/client';
@@ -23,6 +24,7 @@ export interface AppDependencies {
     api: DocumentSourceApi;
     createId: () => string;
     lifecycle: DocumentWindowLifecycle;
+    openExternal(href: string): Promise<boolean>;
   };
   library: LibrarySidebarProps & LibraryWelcomeProps;
   session: ReturnType<typeof createWorkspaceSessionPersistence>;
@@ -32,11 +34,13 @@ export interface AppDependencies {
 export function createDependencies(): AppDependencies {
   const bridge = readBridge();
   const http = createHttpClient(bridge.runtime.serverOrigin);
+  const externalNavigation = createExternalNavigation(bridge.externalNavigation);
   return {
     documents: {
       api: createDocumentSourceApi(http),
       createId: () => globalThis.crypto.randomUUID(),
       lifecycle: createDocumentWindowLifecycle(bridge.windowLifecycle),
+      openExternal: externalNavigation.open,
     },
     library: {
       api: createLibraryApi(http),
