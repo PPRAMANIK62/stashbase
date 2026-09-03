@@ -172,6 +172,8 @@
   --text-3xl--line-height: 1.15;
   --text-4xl: var(--text-4xl);
   --text-4xl--line-height: 1.1;
+  --text-5xl: var(--text-5xl);
+  --text-5xl--line-height: 1.05;
   /* Motion bridge — `duration-*` and `ease-*` utilities resolve to the
    * role tokens in globals.css. `ease-out`/`ease-in-out` deliberately
    * OVERRIDE Tailwind's built-ins: the stock curves are too weak to read

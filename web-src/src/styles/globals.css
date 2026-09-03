@@ -391,6 +391,9 @@
       --text-2xl: calc(20px * var(--ui-scale));
       --text-3xl: calc(24px * var(--ui-scale));
       --text-4xl: calc(30px * var(--ui-scale));
+      /* The site-styled page headline (the Templates gallery) — the
+       * marketing site's display step folded into the chrome ramp. */
+      --text-5xl: calc(40px * var(--ui-scale));
       /* Body default = the primary chrome body size (13 = text-base), so
        * unstyled text lands on the same size the type-scale roles call
        * "body" instead of a phantom 14 that almost nothing else uses.

@@ -93,8 +93,10 @@ this file records the mechanics a change must respect.
    `--scrim` is, which is why it spells its own rgb instead of reaching for
    `--shadow-color` — that one flips with the theme and the stage never
    does. All three live in the base `:root` only.
-   The chrome type scale lives here too — `--text-2xs` … `--text-4xl`,
-   10/11/12/13/14/16/20/24/30px, every step multiplied by `--ui-scale`.
+   The chrome type scale lives here too — `--text-2xs` … `--text-5xl`,
+   10/11/12/13/14/16/20/24/30/40px, every step multiplied by `--ui-scale`.
+   The final display step is reserved for the site-styled Templates page
+   headline; ordinary workbench hierarchy remains on the earlier steps.
    It sits in globals' plain `:root` rather than in the `@theme inline`
    block that spends it, and that placement is load-bearing: `inline`
    means Tailwind pastes a step's value into the utilities it generates
@@ -117,7 +119,7 @@ this file records the mechanics a change must respect.
    for exactly that reason). Hand-written CSS spends the ramp as plain
    px, which the spacing guard below checks.
 2. **Tailwind theme mapping** (`web-src/src/styles.css` `@theme inline`) —
-   exposes those roles as utilities. Chrome type scale `text-2xs..4xl`
+   exposes those roles as utilities. Chrome type scale `text-2xs..5xl`
    (forwarding the globals steps above), corner scale
    `rounded-xs/sm/md/lg/xl` forwarding the globals roles
    `--radius-xs/-control/-ui/-container` = 4/6/10/16px, assigned by role

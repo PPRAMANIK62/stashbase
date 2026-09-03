@@ -31,21 +31,18 @@ import './templates.css';
 
 const SECTIONS: {
   category: TemplateCategory;
-  label: string;
   title: string;
   detail: string;
 }[] = [
   {
     category: 'start',
-    label: 'From zero to one',
     title: 'Start a project.',
-    detail: 'Seed a brand-new folder with the pages that keep the work on track.',
+    detail: 'Give a brand-new folder its first pages.',
   },
   {
     category: 'organize',
-    label: 'From the Sources here',
     title: 'Organize this folder into a wiki.',
-    detail: 'Distill the Sources already in this folder into browsable, source-linked pages.',
+    detail: 'Turn the files already here into wiki pages that link back to them.',
   },
 ];
 
@@ -68,28 +65,22 @@ export default function TemplatesView() {
     actions.activateChatTab(agent);
   }
 
-  let cardNumber = 0;
-
   return (
     <div className="scrollbar-quiet min-h-0 flex-1 overflow-auto">
       {/* The site's page column (--max), responding to its own width via
         * the container queries in templates.css. */}
       <div className="templates-page mx-auto w-measure-xl px-6 py-10">
-        {/* The mono kicker — the site's technical-print accent in its one
-          * sanctioned habitat: a small, static, non-interactive label. */}
-        <p className="m-0 font-mono text-2xs tracking-[0.12em] text-placeholder uppercase">
-          Templates
-        </p>
-        {/* Site type voice: large, weight 400, tight — the site sets its
-          * headings light and lets size carry the rank. */}
-        {/* Benefit-led, in the site's voice: sentence case, weight 400, a
-          * period — not a marketing title case. */}
-        <h1 className="mt-2 mb-1 text-4xl font-normal tracking-tight text-foreground">
+        {/* No page-level kicker and no section eyebrows: the tab and the
+          * sidebar row already say "Templates", and the headings carry the
+          * structure — the mono-print accent lives on the cards instead.
+          * Benefit-led headline at the site's display step: sentence case,
+          * weight 400, a period. */}
+        <h1 className="m-0 text-5xl font-normal tracking-tight text-foreground">
           Start faster with a template.
         </h1>
-        <p className="m-0 text-base text-muted-foreground">
+        <p className="m-0 mt-2 text-base text-muted-foreground">
           {folderOpen
-            ? 'Each template places one editable request in Chat — nothing hidden rides along.'
+            ? 'Every template drops one editable request into Chat.'
             : 'Open a folder first — templates build its wiki in place.'}
         </p>
 
@@ -101,14 +92,10 @@ export default function TemplatesView() {
                 /* The site's hatched divider between printed sections. */
                 <div aria-hidden className="templates-separator mt-10" />
               )}
-              {/* The site's step-label: mono uppercase between two short
-                * hairline dashes. */}
-              <div className="mt-10 flex items-center gap-2.5 font-mono text-2xs tracking-[0.12em] text-muted-foreground uppercase">
-                <span aria-hidden className="h-px w-4 bg-stroke-strong" />
-                {section.label}
-                <span aria-hidden className="h-px w-4 bg-stroke-strong" />
-              </div>
-              <h2 className="mt-3 mb-1 text-xl font-normal tracking-tight text-foreground">
+              {/* The site's type ladder is deliberately steep — headings
+                * clearly outrank body text (48/24/16 on the site maps to
+                * 40/30/20 on the chrome ramp here). */}
+              <h2 className="mt-10 mb-1 text-4xl font-normal tracking-tight text-foreground">
                 {section.title}
               </h2>
               <p className="m-0 text-sm text-muted-foreground">{section.detail}</p>
@@ -117,8 +104,6 @@ export default function TemplatesView() {
                 * border colour through — dividers, not per-card boxes. */}
               <ul className="templates-frame templates-grid mt-5 grid list-none gap-px bg-border p-0">
                 {items.map((template) => {
-                  cardNumber += 1;
-                  const number = String(cardNumber).padStart(2, '0');
                   return (
                     <li key={template.id} className="flex min-w-0">
                       {/* Raw button, same reasoning as the setup cards for
@@ -138,30 +123,22 @@ export default function TemplatesView() {
                           folderOpen ? 'cursor-pointer hover:bg-muted' : 'cursor-default',
                         )}
                       >
-                        <span className="flex w-full items-start justify-between gap-3">
-                          {/* The site's resource-index: an ink tile with a
-                            * mono number — the gallery's one strong mark. */}
-                          <span className="grid size-9 flex-none place-items-center bg-foreground font-mono text-2xs tracking-[0.08em] text-background">
-                            {number}
-                          </span>
-                          <span className="flex items-center gap-1.5 font-mono text-2xs tracking-[0.12em] text-placeholder uppercase">
-                            <span aria-hidden className="size-2 flex-none rounded-full border border-stroke-strong" />
-                            Preview
-                          </span>
-                        </span>
-                        {/* Placeholder art on the site's dotted ground —
-                          * a generic wireframe mini-card stands in until
-                          * each template gets its real print-style
-                          * illustration (see template-visual in
-                          * templates.css). */}
-                        <span aria-hidden className="template-visual mt-5 grid h-32 w-full flex-none place-items-center border border-border">
+                        {/* No index tile: the site numbers STEPS, which
+                          * have an order — templates do not, so a count
+                          * implied a ranking. The illustration is the
+                          * card's anchor. Placeholder art on the site's
+                          * dotted ground — a generic wireframe mini-card
+                          * stands in until each template gets its real
+                          * print-style illustration (see template-visual
+                          * in templates.css). */}
+                        <span aria-hidden className="template-visual grid h-32 w-full flex-none place-items-center border border-border">
                           <span className="block w-24 border border-border bg-card p-2">
                             <span className="block h-1 w-full bg-border" />
                             <span className="mt-1.5 block h-1 w-2/3 bg-border" />
                             <span className="mt-1.5 block h-1 w-full bg-border" />
                           </span>
                         </span>
-                        <span className="mt-5 block text-lg font-normal tracking-tight text-foreground">
+                        <span className="mt-5 block text-2xl font-normal tracking-tight text-foreground">
                           {template.name}
                         </span>
                         <span className="mt-2 block flex-1 text-sm leading-relaxed text-muted-foreground">

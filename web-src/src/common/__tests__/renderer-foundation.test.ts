@@ -87,8 +87,8 @@ test('chrome type scale and radius scale are the only visual values', () => {
   // now lives in globals.css's plain `:root` and styles.css forwards it,
   // so BOTH halves are asserted: the numbers, and the bridge that carries
   // them into Tailwind's namespace. Losing either one silently returns the
-  // renderer to two copies of nine numbers.
-  for (const step of ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl']) {
+  // renderer to two copies of ten numbers.
+  for (const step of ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl']) {
     assert.match(globalTokens, new RegExp(`--text-${step}: calc\\([0-9]+px \\* var\\(--ui-scale\\)\\);`),
       `globals.css is missing the --text-${step} step`);
     assert.match(styles, new RegExp(`--text-${step}: var\\(--text-${step}\\);`),
@@ -551,7 +551,7 @@ test('spacing in colocated CSS stays on the derived ramp', () => {
 });
 
 test('font size in colocated CSS comes off the type scale, never a literal', () => {
-  // The scale is nine roles, and until this landed every `.css` file
+  // The scale is ten roles, and until this landed every `.css` file
   // reached them by re-typing `calc(12px * var(--ui-scale))` — the
   // definition of `--text-sm`, spelled out, once per rule. That is not a
   // shortcut around the scale, it IS the scale copied by hand, which is
@@ -567,7 +567,7 @@ test('font size in colocated CSS comes off the type scale, never a literal', () 
   const ROLE_FOR_PX: Record<string, string> = {
     '10': '--text-2xs', '11': '--text-xs', '12': '--text-sm', '13': '--text-base',
     '14': '--text-lg', '16': '--text-xl', '20': '--text-2xl', '24': '--text-3xl',
-    '30': '--text-4xl',
+    '30': '--text-4xl', '40': '--text-5xl',
   };
   const problems: string[] = [];
   for (const file of walkFiles('web-src/src', '.css')) {
@@ -584,7 +584,7 @@ test('font size in colocated CSS comes off the type scale, never a literal', () 
       problems.push(
         `${file} sets ${property} from the literal ${literal[0]} — ${role
           ? `that step is \`var(${role})\``
-          : `and it is not even a step on the scale (10/11/12/13/14/16/20/24/30)`}. globals.css owns the ramp; nothing else restates it.`,
+          : `and it is not even a step on the scale (10/11/12/13/14/16/20/24/30/40)`}. globals.css owns the ramp; nothing else restates it.`,
       );
     }
   }
