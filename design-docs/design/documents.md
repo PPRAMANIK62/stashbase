@@ -93,6 +93,11 @@ the active Workbench, including generic regular files; they do not make a
 preview-only format content-editable or widen Agent access. Restricted
 filesystem entries are reveal-only. Generic bytes are never decoded lossily.
 
+`read_file` returns the whole readable text by default and, on request, one
+declared line window of it, so a long source can be consumed a piece at a time
+instead of spending an Agent's entire context in one call. A window is opt-in
+and never silently substituted for a whole read.
+
 ## Experience Contract
 
 - A visible source file is always the identity for tabs, links, search results,
@@ -114,6 +119,9 @@ filesystem entries are reveal-only. Generic bytes are never decoded lossily.
   lossy replacement-character decode.
 - A structured JSON view is a controller over source text, never a second
   document model or persistence path.
+- A partial read announces itself, reports the source's full length, and offers
+  the offset that continues it. It never carries a version token, so a window
+  cannot be mistaken for the whole file by a later version-checked write.
 - Rendering untrusted document content never grants application privileges or
   loads arbitrary remote resources.
 - Product copy, Agent tool descriptions, and tests qualify format access by

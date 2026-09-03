@@ -29,6 +29,33 @@ export interface LibraryFileRead {
   sourceFormat?: string;
   readPath?: string;
   derived?: boolean;
+  /** Present only when `content` is a line window rather than the whole file. */
+  partial?: true;
+  totalLines?: number;
+  /** Offset to pass back for the next window; absent once the window ends the file. */
+  nextOffset?: number;
+}
+
+/** A 1-based line window over an already-read file. */
+export interface LibraryFileLineRange {
+  offset?: number;
+  limit?: number;
+}
+
+/** Parse one optional public read-window bound. HTTP query parameters arrive
+ * as strings while MCP arguments arrive as numbers; both transports must
+ * reject malformed supplied values instead of silently widening to a whole
+ * file read. */
+export function parseLibraryFileLineBound(raw: unknown, name: 'offset' | 'limit'): number | undefined {
+  if (raw === undefined) return undefined;
+  if ((typeof raw !== 'string' && typeof raw !== 'number') || (typeof raw === 'string' && !raw.trim())) {
+    throw routeError(`${name} must be a positive integer`, 400);
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw routeError(`${name} must be a positive integer`, 400);
+  }
+  return value;
 }
 
 export function isAgentReadableDerivedTextReady(
@@ -118,7 +145,51 @@ export async function agentContextFile(rawPath: unknown): Promise<AgentContextFi
   });
 }
 
-export async function readLibraryFile(rawPath: unknown): Promise<LibraryFileRead> {
+export async function readLibraryFile(
+  rawPath: unknown,
+  range?: LibraryFileLineRange,
+): Promise<LibraryFileRead> {
+  return applyLineRange(await readWholeLibraryFile(rawPath), range);
+}
+
+/** Narrow an already-read file to a 1-based line window. Reading stays whole-file
+ * and bounded by MAX_TEXT_READ_BYTES; this only bounds what the caller receives.
+ * Because the slice happens after that bounded read, a source above the ceiling
+ * stays unreadable in every window. Serving those would mean streaming the window
+ * off disk, which costs TXT its whole-file UTF-8 validation. */
+export function applyLineRange(
+  read: LibraryFileRead,
+  range?: LibraryFileLineRange,
+): LibraryFileRead {
+  if (range == null) return read;
+  const offset = Math.max(1, Math.trunc(range?.offset ?? 1));
+  const limit = range?.limit == null ? null : Math.max(0, Math.trunc(range.limit));
+
+  const lines = read.content.split('\n');
+  const endsWithNewline = lines.length > 1 && lines[lines.length - 1] === '';
+  if (endsWithNewline) lines.pop();
+  const totalLines = lines.length;
+
+  const start = Math.min(offset - 1, totalLines);
+  const end = limit == null ? totalLines : Math.min(start + limit, totalLines);
+  const window = lines.slice(start, end);
+  const content = window.length === 0
+    ? ''
+    : window.join('\n') + (end < totalLines || endsWithNewline ? '\n' : '');
+
+  // A window must never be mistaken for the whole file: without the version
+  // token it cannot be laundered into an optimistic full-file overwrite.
+  const { version: _version, ...rest } = read;
+  return {
+    ...rest,
+    content,
+    partial: true,
+    totalLines,
+    ...(end < totalLines ? { nextOffset: end + 1 } : {}),
+  };
+}
+
+async function readWholeLibraryFile(rawPath: unknown): Promise<LibraryFileRead> {
   const derived = await normalizeDerivedReadPath(rawPath);
   if (derived) return derived;
   const target = await normalizeLibraryFilePath(rawPath);

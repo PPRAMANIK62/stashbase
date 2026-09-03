@@ -17,6 +17,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { LibraryOperations } from '../server/library-operations/index.ts';
+import { parseLibraryFileLineBound } from '../server/library-file-reader.ts';
 import { createHttpLibraryOperations } from './library-operations-http.ts';
 import {
   parseSearchMode,
@@ -128,7 +129,12 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
     }
 
     if (req.params.name === 'read_file') {
-      const result = await operations.read(filePathArg(args));
+      const offset = parseLibraryFileLineBound(args.offset, 'offset');
+      const limit = parseLibraryFileLineBound(args.limit, 'limit');
+      const result = await operations.read(
+        filePathArg(args),
+        offset == null && limit == null ? undefined : { offset, limit },
+      );
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
@@ -253,12 +259,18 @@ const BUILTIN_TOOLS = [
         'PDFs, DOCX, and media return current prepared text. Images are visible in ' +
         '`list_directory` and searchable through OCR evidence, but are not returned as bytes. ' +
         'Generic Workbench-only files are not listed or readable through MCP. ' +
-        'One response is limited to 8 MiB; split oversized text before reading it through this tool.',
+        'Use `offset` and `limit` to read a long file one window at a time instead of ' +
+        'spending your context on the whole file. A windowed response sets `partial: true`, ' +
+        'reports `totalLines`, and returns `nextOffset` until the window reaches the end. ' +
+        'It also omits `version`, so read the whole file before any `baseVersion` write. ' +
+        'A source above the 8 MiB read ceiling is not served by this tool in any window.',
       inputSchema: {
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Absolute file path under one of your folders.' },
           file_path: { type: 'string', description: 'Alias for path; accepted for Claude Read-style calls.' },
+          offset: { type: 'integer', minimum: 1, description: 'Optional 1-based line to start at. Defaults to the first line.' },
+          limit: { type: 'integer', minimum: 1, description: 'Optional maximum number of lines to return. Defaults to the rest of the file.' },
         },
       },
     },

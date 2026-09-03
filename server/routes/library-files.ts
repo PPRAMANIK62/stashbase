@@ -12,7 +12,7 @@ import { sendError } from '../http.ts';
 import {
   requireLibraryStatusFolder,
 } from '../library-file-access.ts';
-import { agentContextFile } from '../library-file-reader.ts';
+import { agentContextFile, parseLibraryFileLineBound } from '../library-file-reader.ts';
 import { currentWindowId } from '../folder.ts';
 import { AGENT_SESSION_ID_HEADER } from '../agent-session-registry.ts';
 import { createLibraryOperations, type LibraryOperations } from '../library-operations/index.ts';
@@ -205,7 +205,12 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
 
   app.get('/api/library/file', async (req, res) => {
     try {
-      res.json(await operations.read(req.query.path));
+      const offset = parseLibraryFileLineBound(req.query.offset, 'offset');
+      const limit = parseLibraryFileLineBound(req.query.limit, 'limit');
+      res.json(await operations.read(
+        req.query.path,
+        offset == null && limit == null ? undefined : { offset, limit },
+      ));
     } catch (err: unknown) {
       sendError(res, err);
     }
