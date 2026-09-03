@@ -12,6 +12,7 @@ import {
   forwardRef,
   type ReactNode,
   type HTMLAttributes,
+  type ButtonHTMLAttributes,
 } from 'react';
 
 import { useProximityHover } from '@/hooks/use-proximity-hover';
@@ -279,7 +280,7 @@ const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
 
 TabsSubtle.displayName = 'TabsSubtle';
 
-interface TabsSubtleItemProps extends HTMLAttributes<HTMLButtonElement> {
+interface TabsSubtleItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: IconComponent;
   label: string;
   index: number;
