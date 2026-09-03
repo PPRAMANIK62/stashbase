@@ -23,7 +23,13 @@ const DocumentConflict = lazy(async () => {
   return { default: module.DocumentConflict };
 });
 
+const MarkdownDocument = lazy(async () => {
+  const module = await import('./markdown-document');
+  return { default: module.MarkdownDocument };
+});
+
 export interface DocumentSourceProps {
+  active: boolean;
   api: DocumentSourceApi;
   runtime: DocumentRuntime;
 }
@@ -121,12 +127,10 @@ function FailedSource({ error, name, retry }: { error: unknown; name: string; re
   );
 }
 
-export function DocumentSource({ api, runtime }: DocumentSourceProps) {
+export function DocumentSource({ active, api, runtime }: DocumentSourceProps) {
   const name = sourceName(runtime.scope.source);
-  const { access, change, editor, format, resolveConflict, retrySave, source } = useDocumentSource(
-    runtime,
-    api,
-  );
+  const { access, change, editor, format, markdownMode, resolveConflict, retrySave, source } =
+    useDocumentSource(runtime, api, active);
 
   if (format === null) {
     return (
@@ -178,7 +182,25 @@ export function DocumentSource({ api, runtime }: DocumentSourceProps) {
           </Button>
         </div>
       )}
-      {access === 'editable' && editor ? (
+      {format === 'md' ? (
+        <div className="relative min-h-0 flex-1">
+          <Suspense fallback={<PendingSource name="Markdown editor" />}>
+            <MarkdownDocument
+              canChangeMode={access === 'editable' && editor !== null}
+              dirty={editor?.dirty ?? false}
+              mode={markdownMode}
+              name={name}
+              onChange={change}
+              onModeChange={(mode) => runtime.setMarkdownMode(mode)}
+              readOnly={access === 'read-only' || editor === null || markdownMode === 'reading'}
+              value={editor?.value ?? source.data.content}
+            />
+          </Suspense>
+          {access === 'editable' && editor && (
+            <SaveFeedback editor={editor} retry={() => void retrySave()} />
+          )}
+        </div>
+      ) : access === 'editable' && editor ? (
         <div className="relative min-h-0 flex-1">
           <textarea
             aria-label={`${name} source`}

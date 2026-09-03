@@ -12,6 +12,7 @@ import {
   enterDocumentConflict,
   reconcileDocumentSource,
   sameSource,
+  setDocumentMarkdownMode,
   sourceIdentity,
   sourceName,
 } from './document';
@@ -35,7 +36,13 @@ describe('document identity', () => {
     };
     const disposed = disposeDocumentState(createDocumentState(scope, 'editable'));
 
-    expect(disposed).toEqual({ access: 'editable', editor: null, lifecycle: 'disposed', scope });
+    expect(disposed).toEqual({
+      access: 'editable',
+      editor: null,
+      lifecycle: 'disposed',
+      markdownMode: 'writer',
+      scope,
+    });
     expect(disposeDocumentState(disposed)).toBe(disposed);
   });
 
@@ -54,6 +61,23 @@ describe('document identity', () => {
     expect(
       documentAccess({ folderPath: '/library/archive', path: 'plan.md' }, '/library/notes'),
     ).toBe('read-only');
+  });
+
+  it('keeps Markdown mode with the document and refuses writer mode for read-only sources', () => {
+    const scope = {
+      generation: 1,
+      id: 'tab-1',
+      source: { folderPath: '/library/notes', path: 'plan.md' },
+    };
+    const editable = createDocumentState(scope, 'editable');
+    const reading = setDocumentMarkdownMode(editable, 'reading');
+
+    expect(editable.markdownMode).toBe('writer');
+    expect(reading.markdownMode).toBe('reading');
+    expect(setDocumentMarkdownMode(reading, 'writer').markdownMode).toBe('writer');
+    expect(
+      setDocumentMarkdownMode(createDocumentState(scope, 'read-only'), 'writer').markdownMode,
+    ).toBe('reading');
   });
 
   it('normalizes editor line endings while retaining a versioned baseline', () => {

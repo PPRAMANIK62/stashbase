@@ -62,7 +62,7 @@ function renderSource(
 }
 
 describe('document text source', () => {
-  it('loads and presents versioned Markdown as source text', async () => {
+  it('loads versioned Markdown into the Milkdown document surface', async () => {
     const api = {
       load: vi.fn(async () => ({
         content: '# Plan\n\n- Keep the source',
@@ -75,10 +75,15 @@ describe('document text source', () => {
     renderSource(api);
 
     expect(screen.getByRole('status').textContent).toContain('Loading plan.md');
-    const source = await screen.findByLabelText('plan.md source');
+    const source = await screen.findByRole(
+      'document',
+      { name: 'plan.md Markdown content' },
+      { timeout: 5_000 },
+    );
 
-    expect((source as HTMLTextAreaElement).value).toBe('# Plan\n\n- Keep the source');
-    expect(screen.queryByRole('heading', { name: 'Plan' })).toBeNull();
+    expect(await screen.findByRole('heading', { name: 'Plan' }, { timeout: 5_000 })).not.toBeNull();
+    expect(source.querySelector('[contenteditable="true"]')).not.toBeNull();
+    expect(screen.queryByLabelText('plan.md source')).toBeNull();
     expect(api.load).toHaveBeenCalledWith(
       { folderPath: '/library/notes', path: 'plan.md' },
       expect.any(AbortSignal),
@@ -197,17 +202,17 @@ describe('document text source', () => {
     const api: DocumentSourceApi = {
       load: vi.fn<DocumentSourceApi['load']>(async () => ({
         content: 'before',
-        format: 'md',
+        format: 'txt',
         version: 'v1',
       })),
       overwrite: vi.fn(),
       save: vi
         .fn<DocumentSourceApi['save']>()
         .mockRejectedValueOnce(new Error('offline'))
-        .mockResolvedValueOnce({ content: 'draft', format: 'md', version: 'v2' }),
+        .mockResolvedValueOnce({ content: 'draft', format: 'txt', version: 'v2' }),
     };
-    const { runtime } = renderSource(api);
-    const editor = (await screen.findByLabelText('plan.md source')) as HTMLTextAreaElement;
+    const { runtime } = renderSource(api, { folderPath: '/library/notes', path: 'plan.txt' });
+    const editor = (await screen.findByLabelText('plan.txt source')) as HTMLTextAreaElement;
     fireEvent.change(editor, { target: { value: 'draft' } });
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Retry' })).not.toBeNull(), {
@@ -227,25 +232,25 @@ describe('document text source', () => {
     const api: DocumentSourceApi = {
       load: vi
         .fn<DocumentSourceApi['load']>()
-        .mockResolvedValueOnce({ content: 'shared\nbefore', format: 'md', version: 'v1' })
-        .mockResolvedValueOnce({ content: 'shared\ndisk change', format: 'md', version: 'v2' }),
+        .mockResolvedValueOnce({ content: 'shared\nbefore', format: 'txt', version: 'v1' })
+        .mockResolvedValueOnce({ content: 'shared\ndisk change', format: 'txt', version: 'v2' }),
       overwrite: vi.fn(),
       save: vi
         .fn<DocumentSourceApi['save']>()
         .mockRejectedValueOnce(
           new DocumentSaveError('conflict', 'changed', { currentVersion: 'v2' }),
         )
-        .mockResolvedValue({ content: 'merged', format: 'md', version: 'v3' }),
+        .mockResolvedValue({ content: 'merged', format: 'txt', version: 'v3' }),
     };
-    const { runtime } = renderSource(api);
-    const editor = (await screen.findByLabelText('plan.md source')) as HTMLTextAreaElement;
+    const { runtime } = renderSource(api, { folderPath: '/library/notes', path: 'plan.txt' });
+    const editor = (await screen.findByLabelText('plan.txt source')) as HTMLTextAreaElement;
     fireEvent.change(editor, { target: { value: 'shared\neditor change' } });
 
     await act(async () => {
       await runtime.getDocument('tab-1')?.save(api);
     });
 
-    expect(await screen.findByRole('heading', { name: 'plan.md changed on disk' })).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: 'plan.txt changed on disk' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Merge' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Overwrite' })).not.toBeNull();
@@ -253,7 +258,7 @@ describe('document text source', () => {
     expect(screen.getByText('editor change')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
-    const merged = (await screen.findByLabelText('plan.md source')) as HTMLTextAreaElement;
+    const merged = (await screen.findByLabelText('plan.txt source')) as HTMLTextAreaElement;
     expect(merged.value).toContain('<<<<<<< Editor Version\neditor change');
     expect(merged.value).toContain('=======\ndisk change\n>>>>>>> Disk Version');
     expect(runtime.getDocument('tab-1')?.store.getState().editor).toMatchObject({

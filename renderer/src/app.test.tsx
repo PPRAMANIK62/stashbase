@@ -249,10 +249,13 @@ describe('workspace shell', () => {
     expect(
       container.querySelector('[aria-label="Document workspace"] [role="tablist"]'),
     ).toBeNull();
-    await waitFor(() => {
-      expect(container.querySelector('[aria-label="plan.md source"]')?.textContent).toContain(
-        '# Plan',
-      );
-    });
+    await waitFor(
+      () => {
+        expect(
+          container.querySelector('[aria-label="plan.md Markdown content"] h1')?.textContent,
+        ).toContain('Plan');
+      },
+      { timeout: 5_000 },
+    );
   });
 });

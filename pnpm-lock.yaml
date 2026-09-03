@@ -230,9 +230,18 @@ importers:
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.6.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@codemirror/language-data':
+        specifier: ^6.5.2
+        version: 6.5.2
       '@fontsource-variable/inter':
         specifier: 5.3.0
         version: 5.3.0
+      '@milkdown/crepe':
+        specifier: ^7.21.3
+        version: 7.21.3(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.1)(typescript@5.9.3)
+      '@milkdown/kit':
+        specifier: ^7.21.3
+        version: 7.21.3(@codemirror/language@6.12.4)(@codemirror/state@6.6.0)(@codemirror/view@6.42.1)(typescript@5.9.3)
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.2.6)
@@ -260,6 +269,9 @@ importers:
       tailwind-merge:
         specifier: 3.6.0
         version: 3.6.0
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
       zustand:
         specifier: 5.0.15
         version: 5.0.15(@types/react@19.2.14)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))

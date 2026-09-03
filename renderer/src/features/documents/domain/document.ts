@@ -10,10 +10,13 @@ export interface DocumentState {
   access: DocumentAccess;
   editor: DocumentEditorState | null;
   lifecycle: 'active' | 'disposed';
+  markdownMode: MarkdownViewMode;
   scope: DocumentScope;
 }
 
 export type DocumentAccess = 'editable' | 'read-only';
+
+export type MarkdownViewMode = 'reading' | 'writer';
 
 export type DocumentTextFormat = 'md' | 'txt';
 
@@ -85,7 +88,27 @@ export function documentEditorText(source: string): string {
 }
 
 export function createDocumentState(scope: DocumentScope, access: DocumentAccess): DocumentState {
-  return { access, editor: null, lifecycle: 'active', scope };
+  return {
+    access,
+    editor: null,
+    lifecycle: 'active',
+    markdownMode: access === 'editable' ? 'writer' : 'reading',
+    scope,
+  };
+}
+
+export function setDocumentMarkdownMode(
+  state: DocumentState,
+  mode: MarkdownViewMode,
+): DocumentState {
+  if (
+    state.lifecycle === 'disposed' ||
+    state.markdownMode === mode ||
+    (mode === 'writer' && state.access !== 'editable')
+  ) {
+    return state;
+  }
+  return { ...state, markdownMode: mode };
 }
 
 export function reconcileDocumentSource(

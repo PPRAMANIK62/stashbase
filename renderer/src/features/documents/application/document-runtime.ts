@@ -18,10 +18,12 @@ import {
   reloadDocumentConflict,
   rejectDocumentSave,
   sameSource,
+  setDocumentMarkdownMode,
   type DocumentConflictResolution,
   type DocumentScope,
   type DocumentState,
   type DocumentTextSource,
+  type MarkdownViewMode,
 } from '@/features/documents/domain/document';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
@@ -37,6 +39,7 @@ export interface DocumentRuntime {
   reconcile(source: DocumentTextSource): void;
   resolveConflict(api: DocumentSourceApi, resolution: DocumentConflictResolution): Promise<boolean>;
   save(api: DocumentSourceApi): Promise<boolean>;
+  setMarkdownMode(mode: MarkdownViewMode): void;
 }
 
 export interface DocumentRuntimeOptions {
@@ -231,5 +234,9 @@ export function createDocumentRuntime({
       }
     },
     save,
+    setMarkdownMode(mode) {
+      if (disposed) return;
+      store.setState((state) => setDocumentMarkdownMode(state, mode));
+    },
   };
 }
