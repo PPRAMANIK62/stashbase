@@ -21,17 +21,17 @@ other journeys own the capabilities and recovery paths they compose.
 ### Outcome
 
 A first-time user understands StashBase's local-file model, authorizes useful
-context, makes an informed optional Similarity Search choice, and reaches a concrete first
-result without completing unnecessary setup. On the next launch, completed
-choices and authorized content remain recognizable without replaying
-onboarding.
+context, makes an informed optional choice about search by meaning, and
+reaches a concrete first result without completing unnecessary setup. On the
+next launch, completed choices and authorized content remain recognizable
+without replaying onboarding.
 
 ### Entry State
 
 StashBase starts in a first-use window. The default folder home may be pristine,
 may already contain user content, or the user may want to add an existing
-folder. No account, Similarity Search configuration, active folder, or Agent
-runtime is assumed.
+folder. No account, configuration for search by meaning, active folder, or
+Agent runtime is assumed.
 
 ### Primary Flow
 
@@ -46,11 +46,12 @@ runtime is assumed.
 3. **Enter the workspace.** Select a library folder and begin browsing before
    preparation or indexing completes. A fresh window does not silently choose
    a folder on the user's behalf.
-4. **Choose optional Similarity Search.** The first activated folder offers
-   hosted or bring-your-own-key setup. Configure it or choose **Not now**
-   without losing local functionality or the ability to build Wiki Pages. Either choice is
-   remembered across folders and relaunches; Similarity Search, the persistent
-   setup action, and Settings remain manual routes back.
+4. **Choose whether to set up search by meaning.** The first activated folder
+   offers hosted or bring-your-own-key setup. Configure it or choose **Not
+   now** without losing local functionality or the ability to build Wiki
+   Pages. Either choice is remembered across folders and relaunches; the
+   **By meaning** search mode, the persistent setup action, and Settings
+   remain manual routes back.
 5. **Reach first value.** Open a real source and complete at least one useful
    action: inspect the document, retrieve source evidence, or explicitly set up
    a scoped Agent Chat. The next useful action stays visible without requiring
@@ -65,33 +66,34 @@ runtime is assumed.
 
 ### Required Observable Results
 
-- Before granting access or configuring Similarity Search, the user can
+- Before granting access or setting up search by meaning, the user can
   distinguish Sources, StashBase-derived data, and optional hosted processing
   well enough to make the next decision deliberately.
 - The shortest path to first value is authorizing or selecting useful content,
   not creating an account, installing an Agent, or waiting for all background
   work.
-- Local browsing, editing, preview, and Exact Search do not depend on online
-  authentication, Similarity Search readiness, transcription, or an Agent runtime.
+- Local browsing, editing, preview, and keyword search do not depend on
+  online authentication, readiness for search by meaning, transcription, or
+  an Agent runtime.
 - The seeded Start Here content appears only for a pristine default folder
   home, gives people a concise Welcome, makes detailed grounded product context
   available to Agents, remains an ordinary user-owned folder, is not
   overwritten by app updates, and is never recreated after deletion.
 - A fresh window does not silently select another folder, send a prompt,
-  install an Agent runtime, or open Similarity Search setup. The first folder activation may
-  open the one-time setup invitation, but no later folder or relaunch repeats
-  it after the user completes or declines it.
-- A deliberate Similarity Search skip remains reversible through the
+  install an Agent runtime, or open setup for search by meaning. The first
+  folder activation may open the one-time setup invitation, but no later
+  folder or relaunch repeats it after the user completes or declines it.
+- Deliberately skipping search by meaning remains reversible through the
   persistent action and does not prevent pending Wiki Pages from being built.
 - Reaching first value leaves a clear route into Search, scoped Chat, or the
   J10 durable core loop without forcing one universal workflow.
 - Returning users recognize their library and completed durable setup without
   replaying first-use explanation or losing access when an optional online
   capability is unavailable.
-- When a user chooses Google sign-in for hosted Similarity Search, the sidebar,
-  account menu, and Settings consistently identify the connected person by optional
-  provider profile data plus the full email, without making profile loading a
-  prerequisite for local or hosted work.
+- When a user chooses Google sign-in for hosted search by meaning, the
+  sidebar, account menu, and Settings consistently identify the connected
+  person by optional provider profile data plus the full email, without
+  making profile loading a prerequisite for local or hosted work.
 
 ### Degradation and Recovery
 
@@ -252,7 +254,8 @@ new knowledge and has opted into clipboard-image offers in Settings.
   derived state and never appears as a second workspace file.
 - Completion means format-specific output is both complete and fresh for the
   current source bytes.
-- Preparation readiness and Similarity Search readiness remain distinguishable.
+- Preparation readiness and readiness for search by meaning remain
+  distinguishable.
 - Generated text, checkpoints, and indexes never become workspace files.
 
 ### Degradation and Recovery
@@ -278,12 +281,13 @@ the visible source that supports it.
 The library contains direct-text readable or currently prepared sources as
 classified by the
 [Documents format capability matrix](design/documents.md#format-capability-matrix).
-Similarity Search may be ready, partially ready, not set up, or unavailable.
+Searching by meaning may be ready, partially ready, not set up, or
+unavailable.
 
 ### Primary Flow
 
 1. Enter one query in library search.
-2. Use Exact Search without additional setup, or use Similarity Search with an
+2. Use keyword search without additional setup, or search by meaning with an
    explicitly selected hosted or bring-your-own-key provider.
 3. Optionally narrow the query to one member folder.
 4. Review ranked evidence and readiness guidance.
@@ -297,7 +301,7 @@ Similarity Search may be ready, partially ready, not set up, or unavailable.
   source format; it never treats previewability alone as searchable text.
 - Missing results are distinguishable from preparation, indexing, provider, or
   quota state.
-- Exact Search remains usable when semantic work cannot continue.
+- Keyword search remains usable when semantic work cannot continue.
 - Representative meaning-based queries retrieve relevant source evidence even
   when the query and source use different wording.
 
@@ -322,15 +326,15 @@ installation, context, tools, and permissions.
 
 ### Entry State
 
-The workspace has a reusable blank Chat. **Built-in** is selected by default
+The workspace has a reusable blank Chat. **Wiki Agent** is selected by default
 and may need account sign-in; a bring-your-own runtime may be ready, missing,
 disconnected, or recoverable.
 
 ### Primary Flow
 
-1. Use New Chat with Built-in, or choose another Agent, and select the
+1. Use New Chat with Wiki Agent, or choose another Agent, and select the
    Library or folder scope.
-2. For Built-in, sign in to the StashBase account when needed; no Agent
+2. For Wiki Agent, sign in to the StashBase account when needed; no Agent
    install, model API key, or separate recharge is required within the fixed
    seven-day included allowance.
 3. When a bring-your-own runtime is missing, explicitly choose **Install and
@@ -340,7 +344,7 @@ disconnected, or recoverable.
 5. Optionally customize **Agent Instructions** for the Chat's working folder.
    The readable default already applies; StashBase stores a
    customization without writing to the source folder.
-6. Optionally turn **Similarity Search** Off to constrain Agent retrieval to
+6. Optionally turn **Search by meaning** Off to constrain Agent retrieval to
    text matching, or leave it On to add meaning-based retrieval.
 7. Inspect streaming output, tool activity, permissions, runtime-supported
    attachments, failures, and file artifacts.
@@ -351,12 +355,12 @@ disconnected, or recoverable.
 
 - Opening the app, a folder, a tab, or history is never runtime-installation
   consent.
-- Built-in uses only its included pinned runtime and account allowance;
+- Wiki Agent uses only its included pinned runtime and account allowance;
   its account token is absent from the renderer and OpenCode state.
-- Signing in for Built-in establishes account identity without silently
-  activating hosted Similarity Search; that source remains an explicit setup or
-  Settings choice.
-- Built-in does not offer transient attachments until its isolated
+- Signing in for Wiki Agent establishes account identity without silently
+  activating hosted search by meaning; that source remains an explicit setup
+  or Settings choice.
+- Wiki Agent does not offer transient attachments until its isolated
   runtime can read their bytes through an authorized scope. Bring-your-own
   runtimes retain attachment support.
 - Settings reports the current seven-day window as a remaining percentage and
@@ -390,12 +394,13 @@ disconnected, or recoverable.
   turn failure.
 - Tool and source use remain inspectable without turning generated artifacts
   or transcripts into hidden product state.
-- Similarity Search affects only the live Chat's retrieval strategy. Off keeps
-  `search_library` available across the authorized scope using direct and
-  current prepared text, while On may additionally use meaning-based evidence. Neither state
-  controls background indexing or exposes derived paths.
+- The **Search by meaning** control affects only the live Chat's retrieval
+  strategy. Off keeps `search_library` available across the authorized scope
+  using direct and current prepared text, while On may additionally use
+  meaning-based evidence. Neither state controls background indexing or
+  exposes derived paths.
 - A source is presented as Agent-readable only when the selected Agent surface
-  can consume that format's source or current prepared representation. Built-in
+  can consume that format's source or current prepared representation. Wiki Agent
   attachment behavior must not be implied for an external MCP client.
 
 ### Degradation and Recovery
@@ -460,7 +465,7 @@ See [J07 evidence](../code-review/journey-coverage.md#j07-converge).
 ### Outcome
 
 An MCP-capable client uses the same authorized library operations and visible
-source identity as the built-in Agent.
+source identity as Wiki Agent.
 
 ### Entry State
 
@@ -477,7 +482,7 @@ MCP-capable client to configure.
 
 ### Required Observable Results
 
-- Built-in and external Agents use the same operation and source-identity
+- Wiki Agent and external Agents use the same operation and source-identity
   rules.
 - `read_file`, `write_file`, and `edit_file` advertise and enforce the format
   capabilities in the
@@ -507,8 +512,8 @@ shared, and remains the only party who submits it.
 
 ### Entry State
 
-The user deliberately opens Report Bug from the sidebar or native Help menu.
-The main workspace renderer may be healthy or impaired.
+The user deliberately opens Report a bug from Settings → General or the
+native Help menu. The main workspace renderer may be healthy or impaired.
 
 ### Primary Flow
 
@@ -556,8 +561,7 @@ Agent.
 ### Primary Flow
 
 1. Add or select the folder without migrating its contents.
-2. Inspect a Source and retrieve relevant evidence through Exact Search or
-   Similarity Search.
+2. Inspect a Source and retrieve relevant evidence by keyword or by meaning.
 3. Start an explicitly scoped Agent task that uses the same source identity and
    authorized context.
 4. Inspect the Agent's evidence, tool activity, and proposed file changes.
@@ -658,7 +662,7 @@ originating window cannot enter a successfully rebound project, the Chat keeps
 the new scope visible and reports a retryable open failure rather than
 reverting to an ambiguous Library presentation.
 
-Known Gap: a Built-in chat updates its live scope and keeps using the
+Known Gap: a Wiki Agent chat updates its live scope and keeps using the
 attributed MCP connection, but OpenCode does not yet migrate the same native
 session record and cwd to the project. Its restored history remains under
 Library and native folder commands require a new folder-scoped chat.
@@ -676,26 +680,29 @@ durable continuation described by J10.
 
 An existing local folder gains visible, source-linked Wiki Pages that make its
 Sources easier for people and Agents to navigate without replacing or
-reorganizing them. Similarity Search may independently make the same Sources
-and Wiki Pages retrievable by meaning.
+reorganizing them. Setting up search by meaning may independently make the
+same Sources and Wiki Pages retrievable even when the wording differs.
 
 ### Entry State
 
 The user has opened a Library folder and is in a blank folder-scoped Chat. The
 folder may contain no Wiki Pages, or it may already have pages under `wiki/`.
-Similarity Search setup may have been completed or declined independently;
-selected Agent readiness may be absent.
+Setup for search by meaning may have been completed or declined
+independently; selected Agent readiness may be absent.
 
 ### Primary Flow
 
-1. See **Build Wiki** as the fixed first action directly below the empty
-   Chat composer; no secondary prompt carousel competes with it.
-2. Choose Build Wiki. The tab pins to that folder and retains one pending
-   intent while any selected-Agent setup completes. Similarity Search setup
-   neither opens nor blocks this action.
+1. Open **Templates** from its sidebar row under New Chat. The singleton
+   gallery tab groups curated wiki presets by intent, and each card shows the
+   one visible request it places in Chat.
+2. Choose **Knowledge Base**, the classic Build Wiki preset in the organize
+   section. A blank Chat opens (or is reused), pins to that folder, and retains
+   one pending intent while any selected-Agent setup completes. Once ready,
+   the request appears as an editable draft for the user to review and send.
+   Setup for search by meaning neither opens nor blocks this action.
 3. If the selected Agent still needs installation or sign-in, complete that
-   stage. The original Build Wiki intent resumes once, in the original
-   tab and folder; the user may cancel while waiting.
+   stage. The original draft appears once, in the original tab and folder;
+   the user may cancel while waiting (the progress line below the composer).
 4. The Agent inspects the folder and creates or improves `wiki/index.md`,
    adding focused pages under `wiki/` only when a single map would be
    unwieldy. Wiki Pages use relative links to visible Sources.
@@ -709,24 +716,24 @@ selected Agent readiness may be absent.
 - The default write scope is only `wiki/`, with `wiki/index.md` as its entry.
   The Agent does not modify anything outside that directory. A physical
   reorganization is a separate proposal requiring explicit approval.
-- Building Wiki Pages and activating Similarity Search can succeed
-  independently. Skipping or failing Similarity Search does not discard the
+- Building Wiki Pages and activating search by meaning can succeed
+  independently. Skipping or failing that activation does not discard the
   Build Wiki intent.
 - A pending intent is renderer-local, folder-pinned, cancellable, and sent at
   most once after runtime readiness. It is not restored after an app
   restart and cannot follow an unrelated window-folder switch.
-- Wiki Page Markdown is ordinary visible content and re-enters browsing, Exact
-  Search, semantic indexing, and future Agent work. Machine-derived text, chunks, and
-  vectors remain invisible AppData.
+- Wiki Page Markdown is ordinary visible content and re-enters browsing,
+  keyword search, semantic indexing, and future Agent work. Machine-derived
+  text, chunks, and vectors remain invisible AppData.
 - The first release does not claim persistent built, ready, or stale Wiki
   state, does not change the button to Update Wiki Pages, and does not schedule
   background Wiki Page rewriting.
 
 ### Degradation and Recovery
 
-Similarity Search setup state does not affect building Wiki Pages. The waiting capsule
-retains a clear cancel path during selected-Agent setup. Agent setup failure
-keeps the pending capability visible beside its
+Setup state for search by meaning does not affect building Wiki Pages. The
+waiting capsule retains a clear cancel path during selected-Agent setup.
+Agent setup failure keeps the pending capability visible beside its
 stage-specific recovery. Folder removal cancels the pending intent rather than
 silently widening it to Library. A partial Agent write remains an ordinary,
 inspectable file transaction and never authorizes source reorganization.
@@ -734,5 +741,5 @@ inspectable file transaction and never authorizes source reorganization.
 ### Evidence
 
 See [J12 evidence](../code-review/journey-coverage.md#j12-build-wiki-pages). This
-journey composes J02 folder scope, J05 Similarity Search activation, J06 Agent lifecycle,
-and J07 ordinary file writeback.
+journey composes J02 folder scope, J05 activation of search by meaning, J06
+Agent lifecycle, and J07 ordinary file writeback.

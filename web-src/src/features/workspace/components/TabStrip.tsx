@@ -181,7 +181,9 @@ export function TabStrip() {
           // Tab label = the file's basename, extension included (`note.md`,
           // not `note`) — the suffix keeps `.md` vs `.html` vs `.pdf` tabs
           // unambiguous at a glance.
-          const label = t.file ? basename(t.file.name) : 'Untitled';
+          const label = t.file
+            ? basename(t.file.name)
+            : t.kind === 'templates' ? 'Templates' : 'Untitled';
           const isDragging = dragId === t.id;
           const dropEdge = dropTarget?.id === t.id ? dropTarget.edge : null;
           return (

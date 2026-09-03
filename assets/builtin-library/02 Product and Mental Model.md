@@ -19,8 +19,8 @@ proprietary workspace or a new file model.
 
 ```text
 Sources ────────────────→ Document Workbench
-   ├→ Build Wiki → Wiki Pages ───────────────────┐
-   └→ Prepare → Exact / Similarity Search ───────┴→ Agents
+   ├→ Build Wiki → Wiki Pages ──────────────────────────┐
+   └→ Prepare → Search (by keyword / by meaning) ───────┴→ Agents
 ```
 
 ## Who It Is For
@@ -44,8 +44,8 @@ Typical uses include:
 
 The Wiki brings together **Sources**, visible source-linked **Wiki Pages**,
 Search, and Agent work. Wiki Pages begin at `wiki/index.md`, with optional
-focused pages beside it. Similarity Search adds meaning-based retrieval without
-becoming a second knowledge store.
+focused pages beside it. Setting up search by meaning adds meaning-based
+retrieval without creating a second knowledge store.
 
 ### Document Workbench
 
@@ -55,14 +55,14 @@ format-specific viewers keep source work in the same workspace as Chat.
 
 ### Local RAG Layer
 
-Preparation turns hard-to-read formats into current derived text. Exact Search
-finds matching words without additional setup. Similarity Search finds related
-meaning even when the wording differs. Search evidence always resolves back to
-the visible Source.
+Preparation turns hard-to-read formats into current derived text. Keyword
+search finds matching words without additional setup. Searching by meaning
+finds related material even when the wording differs. Search evidence always
+resolves back to the visible Source.
 
 "Local" describes ownership of source files, derived state, and index
-lifecycle. A configured hosted Similarity Search may process extracted text outside the
-computer; that choice must remain explicit.
+lifecycle. A configured hosted provider for search by meaning may process
+extracted text outside the computer; that choice must remain explicit.
 
 ### Agent Panel
 
@@ -105,15 +105,15 @@ visible workspace and never become replacement source files.
 ### Preparation
 
 Preparation is the format-specific work that makes PDF, DOCX, images, audio,
-and video useful as search or Agent context. It is separate from Similarity Search
-readiness. A file may be previewable before its derived text is ready.
+and video useful as search or Agent context. It is separate from readiness for
+search by meaning. A file may be previewable before its derived text is ready.
 
-### Similarity Search
+### Search by meaning
 
-Similarity Search is optional meaning-based retrieval across Sources and Wiki
-Pages. It can use hosted StashBase capacity after sign-in or a user-provided
-OpenAI/OpenRouter key. Exact Search and ordinary local file work do not require
-it.
+Searching by meaning is optional retrieval that finds related material across
+Sources and Wiki Pages even when the wording differs. It can use hosted
+StashBase capacity after sign-in or a user-provided OpenAI/OpenRouter key.
+Keyword search and ordinary local file work do not require it.
 
 ### Wiki Pages
 
@@ -137,17 +137,17 @@ project state.
 |---|---|---|
 | Local folders and source files | User | They remain ordinary files and the source of truth. |
 | Prepared text, previews, indexes, and status | StashBase | Rebuildable application-owned state outside the workspace. |
-| StashBase account session and Similarity Search credentials | StashBase Settings | Used only for the selected provider. |
-| Claude Code or Codex credentials and history | The selected Agent runtime | Separate from StashBase sign-in and Similarity Search configuration. |
+| StashBase account session and credentials for search by meaning | StashBase Settings | Used only for the selected provider. |
+| Claude Code or Codex credentials and history | The selected Agent runtime | Separate from StashBase sign-in and the setup for search by meaning. |
 | Wiki Pages and other Agent-created source files | User after an explicit write | Visible ordinary files that re-enter browsing, search, and future Agent work. |
 
-Local browsing, preview, editing, Preparation, and Exact Search do not require
-a cloud account. When hosted Similarity Search is selected, extracted text may
-be sent to that provider for indexing and retrieval. When an Agent is used, the
-context it reads is handled according to that Agent provider's account and
-data terms.
+Local browsing, preview, editing, Preparation, and keyword search do not
+require a cloud account. When you choose hosted search by meaning, extracted
+text may be sent to that provider for indexing and retrieval. When an Agent is
+used, the context it reads is handled according to that Agent provider's
+account and data terms.
 
-StashBase MCP tools remain bounded to Library folders. Built-in coding Agents
+StashBase MCP tools remain bounded to Library folders. Agent Panel coding Agents
 can also propose commands, network access, deletion, or broader filesystem
 access through their own runtime; those remain explicit permission decisions
 rather than hidden expansion of the Library boundary.

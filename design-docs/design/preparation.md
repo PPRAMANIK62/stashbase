@@ -59,7 +59,8 @@ artifacts.
 - A derived result is current only when its format-specific completion and
   source-freshness contract succeeds. File existence or an in-memory status is
   not completion truth.
-- Conversion completion and Similarity Search readiness remain separate states.
+- Conversion completion and readiness for search by meaning remain separate
+  states.
 - Explicit cancellation remains stopped until the user retries. Transient
   interruption is rediscoverable.
 - Optional native tools and state stores degrade to actionable status rather

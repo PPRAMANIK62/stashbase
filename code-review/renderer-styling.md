@@ -10,7 +10,7 @@ this file records the mechanics a change must respect.
    blocks) — the only place literal colors, radii, motion values, and
    stacking values are defined, once per theme. `data-theme` on `<html>`
    switches themes; 'system'/absent follows the OS preference. This file
-   also carries the universal reset (box-sizing, squircle corners,
+   also carries the universal reset (box-sizing, continuous corners,
    focus-visible, the reduced-motion policy) — the pieces every surface
    depends on, not any one feature's.
 
@@ -18,7 +18,12 @@ this file records the mechanics a change must respect.
    app had already proved it could not hold the line without one:
 
    - **Corners** — `--radius-xs/-control/-ui/-container` = 4/6/10/16,
-     assigned by role (see "Assigning a corner").
+     assigned by role (see "Assigning a corner"), plus `--radius-hero` =
+     28: a single named exception owned by the composer card, nothing
+     else may take it. Every radius is drawn as a continuous corner —
+     a universal `corner-shape: superellipse(1.3)` (the `squircle`
+     keyword pinches from the container step up), with `.rounded-full`
+     opting capsules and circles back to `round`.
    - **Motion** — `--motion-instant/-fast/-standard/-slow` = 100/120/180/240ms
      and three curves: `--motion-ease-out` for anything entering or exiting,
      `--motion-ease-in-out` for something moving or morphing on screen, and
@@ -119,7 +124,8 @@ this file records the mechanics a change must respect.
    rather than size — each step is a `var()` and never a literal, so every
    colocated exemption file (below) reaches the same roles; `rounded-lg`,
    `rounded-xl` and `rounded-2xl` all collapse onto `-container` on purpose,
-   so a component reaching for any of the three lands on the one box corner —
+   so a component reaching for any of the three lands on the one box corner
+   (`rounded-hero` forwards the composer-only `--radius-hero` exception) —
    `shadow-low`/`shadow-elevation`,
    `duration-fast`/`duration-standard` (via the `--transition-duration-*`
    namespace — the bare `--duration-*` namespace generates nothing),
@@ -430,11 +436,11 @@ this file records the mechanics a change must respect.
    palette as a className (the lightbox's white-on-dark stage controls) and
    still gets the press, the ring, and the transition from the recipe.
 
-   The Similarity Search setup cards (`EmbeddingAuthChoice`) are the second standing
-   exemption, and the reason is worth stating because the surface looks
-   like two things it is not. They are not a radio group: each card fires
-   on click, there is no pending selection and no submit, and the screen is
-   built specifically so nothing reads as already chosen. They are also not
+   The setup cards for search by meaning (`EmbeddingAuthChoice`) are the
+   second standing exemption, and the reason is worth stating because the
+   surface looks like two things it is not. They are not a radio group: each
+   card fires on click, there is no pending selection and no submit, and the
+   screen is built specifically so nothing reads as already chosen. They are also not
    `Button`s: that primitive is a centred, single-line, `-ui`-cornered ITEM,
    while these are two-line, left-aligned `-container`-cornered BOXES whose
    disabled state deliberately keeps full opacity. Adopting it would mean
@@ -626,14 +632,18 @@ Corners have two independent halves, and a change that moves one without
 the other flattens the shape language:
 
 - **How much** a corner turns — the role scale above.
-- **How** it turns — `corner-shape: squircle`, applied app-wide from a
-  universal selector in globals.css (the property does not inherit, so it
-  cannot live on `:root`). Chromium 139+ implements it; the renderer is on
-  142 via Electron 39, and non-supporting engines drop the declaration and
-  fall back to circular corners, so it needs no guard.
+- **How** it turns — `corner-shape: superellipse(1.3)`, applied app-wide
+  from a universal selector in globals.css (the property does not inherit,
+  so it cannot live on `:root`). Not the `squircle` keyword: superellipse(2)
+  hugs its corner so tightly that from the container step up a box reads
+  boxier and smaller than its stated radius — 1.3 keeps the transition
+  continuous while the corner keeps its full sweep. Chromium 139+
+  implements the property; the renderer is on 142 via Electron 39, and
+  non-supporting engines drop the declaration and fall back to circular
+  corners, so it needs no guard.
 
 Capsules and circles opt back out with `corner-shape: round` — at a radius
-of 50% or more a squircle is a bulged superellipse, not the capsule the
+of 50% or more a superellipse is a bulged oval, not the capsule the
 affordance is drawing. The opt-out list (`.rounded-full`, the transcript
 progress capsule) lives beside the universal rule; extend it there rather
 than locally.
@@ -655,19 +665,19 @@ it":
   terminal action). Every short box was quietly spending the one shape the
   language had set aside. At 16 it keeps its corner and stays a box, so the
   capsule means something again wherever it does appear.
-  **Build Wiki** is one such terminal capability action: its `rounded-full`
-  capsule marks the fixed folder activation path, directly below the empty
-  composer, rather than styling an ordinary button as a pill. The capsule is
-  all it adds — it is otherwise the default solid-accent `Button`, the same
-  primary the zero-folder sidebar and the empty main pane put under their own
-  invitations, because a hero's one action should not be a second dialect of
-  primary. A tinted outline is not that dialect: a pale fill under a pale
-  stroke under pale text is three washes of one hue, and it reads as a status
-  badge rather than as the thing to press. The cancellable waiting state
-  retains the capsule's identity, and its progress arc sits on the caption
-  below rather than inside the fill the accent arc would vanish against.
+  The composer's **send/stop disc** is the standing terminal-action example:
+  a true circle (`rounded-full`) that reads as a button rather than a
+  smaller copy of the composer around it. Every ordinary CTA — a runtime
+  gate card's Open account settings, for one — stays on the button family's
+  `-ui` corner;
+  a hero's one action should not be a second dialect of primary, and a
+  tinted outline is not that dialect either: a pale fill under a pale
+  stroke under pale text is three washes of one hue, and it reads as a
+  status badge rather than as the thing to press.
 - **An item inside a box** — takes a hover or selected background: `-ui`.
-  Tree rows, menu items, mention rows, buttons, the segmented control.
+  Tree rows, menu items, mention rows, buttons, the segmented control, and
+  both tab strips' tabs (top corners only — a tab opens into the surface
+  below it).
   Buttons are the trap here: at `-container` a 32px button becomes a
   capsule, so `ui/button.tsx` must never reach for `rounded-lg` or wider
   (the foundation test asserts this).
@@ -766,10 +776,11 @@ that carried no accessible name at all and gained one.
   Text emphasised mid-sentence stays a `<span>`, a card's numeric read-out
   stays a value, and a title that sits inside a `<button>` or a `role="menu"`
   popup stays what it is — neither element may contain a heading, so the
-  scope menu's title is named through `aria-labelledby` and the Similarity Search
-  setup cards keep theirs as card text. The sidebar's Document Outline strip
-  is the opposite case: it always WAS a disclosure heading, so the heading
-  element now wraps its toggle, carrying the level and none of the look.
+  scope menu's title is named through `aria-labelledby` and the setup cards
+  for search by meaning keep theirs as card text. The sidebar's Document
+  Outline strip is the opposite case: it always WAS a disclosure heading, so
+  the heading element now wraps its toggle, carrying the level and none of
+  the look.
 - **A repeated row is a list item.** Runtimes, transcription models,
   transcript segments, and outline entries are `<ul>`/`<li>`, so they announce
   a count and item boundaries instead of one undifferentiated run of text.
@@ -849,9 +860,9 @@ that carried no accessible name at all and gained one.
 - **State that is conveyed visually is conveyed programmatically.** The
   download bar reports a number through `Progress`, rather than being a
   coloured rectangle only sighted users can read. The two hosted-allowance
-  bars — Settings → Similarity Search and the sidebar account menu — were the same
-  shape of silence (a nested `div` with an inline `width`, no role and no
-  value) sitting beside the finished primitive, and now run on it too. A
+  bars — Settings → Search by Meaning and the sidebar account menu — were the
+  same shape of silence (a nested `div` with an inline `width`, no role and
+  no value) sitting beside the finished primitive, and now run on it too. A
   bar that needs the full width of its container overrides the track's
   inline step rather than growing a second recipe.
 
@@ -925,6 +936,11 @@ there is no stroke width to keep consistent and no `fill-current` trick for a
 solid state — a filled variant is a different asset (`StarIcon` /
 `StarFilledIcon`). Size comes from the parent's CSS in every case.
 
+Product brand marks keep their own native geometry. Normalize surplus source
+whitespace in their SVG viewBoxes so marks sharing one CSS slot retain
+comparable painted footprints; do not compensate with an off-ramp size at one
+caller.
+
 Adding icons is not free: the budget below has little headroom, and each
 Phosphor path is bulkier than the hand-drawn strokes it replaced. Prefer
 reusing an existing export over adding a near-duplicate.
@@ -975,7 +991,7 @@ reads as a decision.
 ## Enforcement
 
 `web-src/src/common/__tests__/renderer-foundation.test.ts` locks the mapping, the
-type and corner scales, and the squircle rule; bans `text-[calc(` and
+type and corner scales, and the corner-shape rule; bans `text-[calc(` and
 `bg-[var(--hover)]` in components; and scans every colocated CSS file
 under `web-src/src` (a directory walk, not a hardcoded file list, so it
 survives a file moving to a new feature folder) for a literal
@@ -1084,12 +1100,13 @@ because the layer is only worth its cost while both halves are true.
   exemption covers the elements it was reasoned about, so an exempt file
   cannot grow a second unreasoned control, an entry whose call site has
   since been converted fails as stale, and an entry with no argument
-  written out fails on its own length. The eleven entries are the
-  ErrorBoundary pair plus its lazy-boundary sibling, the three palette
-  query fields, the two tree-row inline editors, the composer's hidden
-  file picker, the two Similarity Search setup cards, the transcription radios, the
-  two outline row controls, and the sidebar section-header toggle — every
-  one of them reasoned above and repeated inline where it lives.
+  written out fails on its own length. The thirteen entries are the
+  ErrorBoundary trio, the four palette query fields, the two tree-row
+  inline editors, the composer's hidden file picker, the two setup cards
+  for search by meaning, the Templates gallery's whole-card buttons, the
+  transcription radios, the two outline row controls, and the sidebar
+  section-header toggle — every one of them reasoned above and repeated
+  inline where it lives.
 - *`cn()` is the only way class names are composed* — no `className={…}`
   under `web-src/src` may concatenate with `+` or interpolate a template
   literal, unless the whole expression is itself a `cn(...)` call. It reads
@@ -1167,7 +1184,7 @@ cross-feature, not because migrating them was skipped:
   variants. Cross-feature because it expresses how the workspace tab strip
   and the agent panel's chat-tab-row relate to one top-level layout.
 - **Universal reset** (`styles/globals.css`, imported centrally from
-  `styles.css`): box-sizing, squircle corners, focus-visible, and the
+  `styles.css`): box-sizing, continuous corners, focus-visible, and the
   reduced-motion policy block — every surface depends on these, not any one
   feature.
 - **Tab strip** (`features/workspace/workspace.css`):
@@ -1284,8 +1301,12 @@ deletes its CSS import in the same change.
   `Field` rather than a bare `aria-label`.
 - Works in light, dark, and system themes (tokens flip — verify no raw
   `dark:` media assumptions) and at all `--ui-scale` steps.
-- Focus ring visible and non-layout-shifting; reduced-motion policy holds
-  (no transform/layout animation under it).
+- Focus ring visible and non-layout-shifting on pressable controls. Text
+  fields (`Input`, `Textarea`, the palette query fields, the composer)
+  deliberately paint NO focus ring — the caret and the echo of typing are
+  the focus affordance; the aria-invalid ring is validation state and
+  stays. Reduced-motion policy holds (no transform/layout animation under
+  it).
 - Deleting a component deletes its styles; anything left behind in
   styles/*.css needs an exemption category above, or it is a defect.
 

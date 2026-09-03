@@ -37,7 +37,10 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
   and code blocks to the active light/dark roles. Crepe uses its outline token
   for contextual-toolbar and slash-menu glyphs, so those controls need explicit
   inactive, hover, and active colors rather than inheriting the subtle border
-  role.
+  role. A code block's current-line paint is scoped to its focused editor:
+  every unfocused CodeMirror keeps a cursor parked on line 1, so an
+  unconditional paint bars the first line of every block in a document at
+  rest.
 - The Agent-message Markdown renderer remains separate from document Markdown.
 
 ## Integration invariants

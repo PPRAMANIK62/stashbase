@@ -19,7 +19,7 @@ runtime. Manual checks remain available when automatic checks are disabled.
 Models, derived data, caches, the pinned OpenCode state, and legacy managed
 Agent runtimes live under AppData and are not app-config fields. Claude Code
 and Codex configuration files are rewritten only by Agent readiness
-(`ensureAgentMcp`). Built-in receives an in-memory OpenCode config and
+(`ensureAgentMcp`). Wiki Agent receives an in-memory OpenCode config and
 per-session MCP environment instead of a durable client config. StashBase never
 writes any other client's configuration — the MCP Settings page is a read-only
 access surface external clients copy from.
@@ -48,22 +48,23 @@ access surface external clients copy from.
   variables may isolate automated tests or select runtime plumbing, but are
   never the product credential source of truth.
 - Launch into a bare Library only resolves authorization state. The first
-  active folder opens the one-time Similarity Search setup invitation when
-  authorization is absent. Completing it or choosing **Not now** records a durable renderer
-  preference across folders and relaunches; Similarity Search, the persistent
-  Files-panel **Set up** action, and Settings remain explicit reopen routes.
-  Build Wiki has no setup request or correlated result and remains
-  independent from embedding authorization.
+  active folder opens the one-time setup invitation for search by meaning
+  when authorization is absent. Completing it or choosing **Not now** records
+  a durable renderer preference across folders and relaunches; the
+  **By meaning** search mode, the persistent Files-panel **Set up** action,
+  and Settings remain explicit reopen routes. Build Wiki has no setup request or
+  correlated result and remains independent from embedding authorization.
 - Every OAuth flow records its initiating purpose. Account-menu and Agent
-  sign-in establish identity only; only the explicit hosted Similarity Search
-  choice may activate `stashbase-account`, reset the indexer, or begin backfill.
+  sign-in establish identity only; only the explicit choice of hosted search
+  by meaning may activate `stashbase-account`, reset the indexer, or begin
+  backfill.
 - BYOK credentials, the refreshable Supabase account session, and the active
   embedding source persist independently. Switching between account and BYOK
   retains the inactive credential and never silently falls back after a
   provider failure. The retired local source is a one-way, pre-daemon startup
   migration: select a valid account session first, otherwise a stored BYOK
-  credential, otherwise clear the explicit source so Similarity Search is not set up.
-  New local selections are rejected.
+  credential, otherwise clear the explicit source so searching by meaning is
+  not set up. New local selections are rejected.
 - Account access and refresh tokens are Node-only configuration. They never
   cross renderer HTTP responses or the Node/Python boundary; Python receives a
   random per-process loopback bearer credential instead.
@@ -127,7 +128,7 @@ access surface external clients copy from.
   appearance updates the renderer, capture updates the Electron clipboard
   monitor, update checks refresh the Electron update scheduler, embedding affects semantic readiness, transcription affects
   preparation, and MCP HTTP settings affect the listener. Ordinary browsing
-  and Exact Search remain available on failure.
+  and keyword search remain available on failure.
 
 ## Implementation Map
 
@@ -142,7 +143,7 @@ access surface external clients copy from.
 | Appearance Adapter | `web-src/src/features/settings/lib/appearance.ts`, applied to a window by `hooks/useAppliedAppearance.ts` |
 | Capture runtime Adapter | `web-src/src/app/hooks/useClipboardImageOffer.ts`, `electron/preload.cjs`, and the clipboard boundary in `electron/main.cjs` |
 | Update runtime Adapter | `electron/update-manager.cjs`, `electron/main.cjs`, `electron/preload.cjs`, `web-src/src/common/hooks/useDesktopUpdate.ts`, and `web-src/src/common/components/DesktopUpdateBanner.tsx` — the hook and banner sit in `common/` because Settings and the sidebar account row both render update state, and a feature may not import a sibling |
-| Open-request Interfaces | `web-src/src/common/lib/settingsTrigger.ts` (Settings), `web-src/src/common/lib/embeddingSetupTrigger.ts` (manual Similarity Search setup), `web-src/src/common/lib/embeddingAuth.ts` (authorization and durable one-time-onboarding preference) — shared so no surface reaches into the Settings feature to ask it to open |
+| Open-request Interfaces | `web-src/src/common/lib/settingsTrigger.ts` (Settings), `web-src/src/common/lib/embeddingSetupTrigger.ts` (manual setup for search by meaning), `web-src/src/common/lib/embeddingAuth.ts` (authorization and durable one-time-onboarding preference) — shared so no surface reaches into the Settings feature to ask it to open |
 | Focused evidence | `server/app-config.test.ts`, `server/agent-instructions.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/hosted-agent-broker.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, renderer account/appearance/embedding tests, `web-src/src/common/__tests__/desktop-update-hook.test.ts`, `web-src/src/features/settings/__tests__/appearance.test.ts`, `web-src/src/common/__tests__/embedding-auth.test.ts`, `e2e/smoke/settings.spec.ts`, J04 in `e2e/journeys/preparation-capture.spec.ts`, and J06 in `e2e/journeys/agent-panel.spec.ts` |
 
 ## Validation
@@ -170,6 +171,7 @@ Related journeys: [J01](../design-docs/user-journeys.md#j01-complete-onboarding-
 plus [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
 for the owned default project location and
 [J12](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder)
-for first-folder Similarity Search activation and independent Wiki Page builds.
+for first-folder activation of search by meaning and independent Wiki Page
+builds.
 Related contracts: [MCP Access](mcp-access.md), [Agent Runtime](agent-runtime.md),
 and [Data Lifecycle](data-lifecycle.md).

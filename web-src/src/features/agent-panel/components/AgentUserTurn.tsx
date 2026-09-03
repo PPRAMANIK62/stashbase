@@ -126,14 +126,13 @@ function InlineUserMessageEditor({
   }, []);
   return (
     <div className="agent-turn-edit flex flex-col gap-3.5">
-      {/* `.agent-turn-edit textarea` (agent-panel.css) still owns the
+      {/* `.agent-turn-edit textarea` (agent-panel.css) owns the
         * composer-idiom look — no border, no background, inherited type,
-        * and the auto-grow bounds. It cannot clear the primitive's focus
-        * halo, which is a box-shadow, so `ring-0` does that here: a text
-        * field always matches :focus-visible, and the bubble turning into
-        * an edit card IS the focus affordance. */}
+        * and the auto-grow bounds. The primitive paints no focus ring of
+        * its own (text fields never do), and the bubble turning into an
+        * edit card IS the focus affordance. */}
       <Textarea
-        className="p-0 focus-visible:ring-0"
+        className="p-0"
         aria-label="Edit message"
         ref={textareaRef}
         value={text}

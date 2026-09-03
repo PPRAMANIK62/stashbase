@@ -37,7 +37,7 @@ function protocolRecords(logFile: string): ProtocolRecord[] {
     .map((line) => JSON.parse(line) as ProtocolRecord);
 }
 
-test('J06 lists bring-your-own Agents before the zero-install Built-in Agent', async ({}, testInfo) => {
+test('J06 lists bring-your-own Agents before the zero-install Wiki Agent', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   let app: LaunchedApp | undefined;
   try {
@@ -52,8 +52,24 @@ test('J06 lists bring-your-own Agents before the zero-install Built-in Agent', a
     await expect(agents).toHaveCount(3);
     await expect(agents.nth(0)).toHaveText('Codex');
     await expect(agents.nth(1)).toHaveText('Claude Code');
-    await expect(agents.nth(2)).toContainText('Built-in');
+    await expect(agents.nth(2)).toContainText('Wiki Agent');
     await expect(agents.nth(2)).toContainText('Sign in for free credits');
+    const iconFootprints = await agents.evaluateAll((rows) => rows.map((row) => {
+      const icon = row.querySelector('svg');
+      if (!(icon instanceof SVGGraphicsElement)) throw new Error('Agent row is missing its SVG icon');
+      const painted = icon.getBBox();
+      const viewport = icon.viewBox.baseVal;
+      return {
+        width: painted.width / viewport.width,
+        height: painted.height / viewport.height,
+      };
+    }));
+    const [codexIcon, claudeIcon, wikiAgentIcon] = iconFootprints;
+    // Every row owns the same 16px SVG slot, but a brand mark can still look
+    // smaller when its viewBox carries more internal whitespace. Keep Wiki
+    // Agent's painted footprint within one optical step of both peers.
+    expect(wikiAgentIcon.width).toBeGreaterThanOrEqual(Math.min(codexIcon.width, claudeIcon.width) * 0.85);
+    expect(wikiAgentIcon.height).toBeGreaterThanOrEqual(Math.min(codexIcon.height, claudeIcon.height) * 0.85);
     app.errors.assertNone();
   } finally {
     await app?.close();
@@ -61,7 +77,7 @@ test('J06 lists bring-your-own Agents before the zero-install Built-in Agent', a
   }
 });
 
-test('J06 keeps Similarity Search in session scope and Agent Instructions in the panel toolbar', async ({}, testInfo) => {
+test('J06 keeps the Search by meaning toggle in session scope and Agent Instructions in the panel toolbar', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
   const protocolLog = path.join(fixture.artifacts, 'fake-codex-instructions.jsonl');
   fixture.env.STASHBASE_CODEX_BIN = FAKE_CODEX;
@@ -76,7 +92,7 @@ test('J06 keeps Similarity Search in session scope and Agent Instructions in the
         model: 'fixture-model', account: { signedIn: false, active: false },
       }) });
     });
-    // Install the deterministic Similarity Search response before folder activation so
+    // Install the deterministic embedder response before folder activation so
     // the Chat starts with the retrieval policy genuinely available.
     await app.page.reload();
     await app.page.waitForFunction(() => document.body.dataset.bootSettled === '1');
@@ -109,7 +125,7 @@ test('J06 keeps Similarity Search in session scope and Agent Instructions in the
     expect(fs.existsSync(path.join(fixture.workspaces.projectA, 'CLAUDE.md'))).toBe(false);
 
     await scope.click();
-    let similarity = app.page.getByRole('menuitemcheckbox', { name: 'Similarity Search' });
+    let similarity = app.page.getByRole('menuitemcheckbox', { name: 'Search by meaning' });
     await expect(similarity).toHaveAttribute('aria-checked', 'true');
     await similarity.click();
     await expect(similarity).toHaveAttribute('aria-checked', 'false');
@@ -128,7 +144,7 @@ test('J06 keeps Similarity Search in session scope and Agent Instructions in the
     await expect(app.page.getByText('Set for this conversation', { exact: true })).toBeVisible();
     const scopeRows = app.page.getByRole('menuitemradio');
     await expect(scopeRows.first()).toBeDisabled();
-    similarity = app.page.getByRole('menuitemcheckbox', { name: 'Similarity Search' });
+    similarity = app.page.getByRole('menuitemcheckbox', { name: 'Search by meaning' });
     await expect(similarity).toBeEnabled();
     await expect(similarity).toHaveAttribute('aria-checked', 'false');
     await expect(app.page.getByRole('menuitem', { name: 'Agent Instructions' })).toHaveCount(0);

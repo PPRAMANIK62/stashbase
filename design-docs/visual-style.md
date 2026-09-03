@@ -27,12 +27,15 @@ StashBase has three stable visual voices:
 - **Color:** cyan is the working accent; amber is a scarce brand counterpoint.
   Selection surfaces stay neutral, and status colors communicate state rather
   than decoration.
-- **Typography:** two voices. The system UI sans (SF Pro on macOS, with
-  explicit CJK fallbacks — PingFang SC first) carries chrome and long-form
-  reading alike; bundled Geist Mono carries paths, code, and structured
-  data on every platform. Reading surfaces are distinguished by size,
-  spacing, and measure, not by a typeface change. Documents may carry
-  their own typography (a styled HTML file keeps its fonts).
+- **Typography:** three voices, split by what the surface is for. The
+  system UI sans (SF Pro on macOS, with explicit CJK fallbacks — PingFang
+  SC first) carries chrome — dense lists, tabs, menus are what system
+  faces are optically tuned for, and it is what the reference class does.
+  Bundled Geist (the marketing site's face, latin subset with the same
+  CJK fallbacks) carries reading surfaces: the Markdown view, the editor,
+  and chat replies. Bundled Geist Mono carries paths, code, and
+  structured data on every platform. Documents may carry their own
+  typography (a styled HTML file keeps its fonts).
 - **Icons:** one coherent Phosphor family for product controls, with separate
   marks only for brands that have no equivalent icon.
 
@@ -41,8 +44,10 @@ type is carried primarily by shape and label rather than a rainbow of colors.
 
 ## Surfaces and Hierarchy
 
-- Sunken chrome, base content, and raised transient surfaces form the depth
-  model. Separation comes from subtle strokes and surface shifts.
+- Light mode is deliberately FLAT: sidebar, document, and chat share one
+  near-white paper (the marketing site's ground), and pane separation is
+  carried by hairline strokes alone. Dark mode keeps the sunken / base /
+  raised depth model, where surface shifts do the separating.
 - Documents read as the primary content surface. Chat uses a consistent
   workbench canvas whether expanded or docked; layout changes do not recolor
   its identity.

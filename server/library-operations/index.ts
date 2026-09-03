@@ -54,8 +54,8 @@ export interface LibraryOperations {
     folder?: string;
     pathPrefix?: string;
     types?: readonly SearchTypeCategory[];
-    /** Requested retrieval mode. An attributed panel session with Similarity
-     * Search off resolves every request to lexical retrieval. */
+    /** Requested retrieval mode. An attributed panel session with search by
+     * meaning off resolves every request to lexical retrieval. */
     mode?: RetrievalMode;
     caseStrict?: boolean;
     wholeWord?: boolean;
@@ -169,13 +169,13 @@ export function createLibraryOperations(
       if (result.availability.state === 'unavailable') {
         if (result.availability.reason === 'hosted-quota-exhausted') {
           throw routeError(
-            'Your hosted Similarity Search allowance is exhausted. Exact Search is still available.',
+            'Your hosted allowance for search by meaning is used up. Keyword search is still available.',
             402,
             'HOSTED_QUOTA_EXHAUSTED',
           );
         }
         throw routeError(
-          "Similarity Search isn't set up. Open StashBase Settings to set it up.",
+          'To search by meaning, set it up in StashBase Settings.',
           412,
           'EMBEDDER_KEY_REQUIRED',
         );

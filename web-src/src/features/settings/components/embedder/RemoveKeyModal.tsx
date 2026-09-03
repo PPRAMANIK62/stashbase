@@ -31,7 +31,7 @@ export function RemoveKeyModal({
   return (
     <ModalShell
       title="Remove API key?"
-      description="Similarity Search stops until you select another provider or add a key back. Existing search data is kept — nothing is deleted."
+      description="Searching by meaning stops until you select another provider or add a key back. Existing search data is kept — nothing is deleted."
       onCancel={busy ? () => { /* wait for removal */ } : onCancel}
     >
       {error && (

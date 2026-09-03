@@ -224,7 +224,7 @@ test('valid DOCX renders its document and legacy derived notes never surface as 
 
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     const search = app.page.getByRole('dialog', { name: 'Search library' });
-    await search.getByRole('button', { name: 'Exact', exact: true }).click();
+    await search.getByRole('button', { name: 'By keyword', exact: true }).click();
     await search.getByRole('combobox').fill('Hidden derived regression phrase');
     await expect(search.getByText(LEGACY_DERIVED_NOTE, { exact: false })).toHaveCount(0);
     expectOnlyKnownViewerFailures(app, [

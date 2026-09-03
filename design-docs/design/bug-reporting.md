@@ -13,14 +13,14 @@ handoff destinations. It does not own general diagnostics, telemetry, crash
 reporting, GitHub authentication, or automatic issue submission.
 
 Bug-report drafts and prepared temporary artifacts are application state, not
-workspace files. They never join the library, search, preparation, or Similarity Search.
+workspace files. They never join the library, search, preparation, or
+indexing for search by meaning.
 
 ## Current Experience
 
-- Reporting normally starts from the sidebar **Report Bug** action or native
-  **Help → Report a Bug…**. When an available update temporarily replaces the
-  sidebar's secondary utilities, the native entry remains available; it also
-  remains usable when the main workspace renderer is unhealthy.
+- Reporting normally starts from **Settings → General → Report a bug** or
+  native **Help → Report a Bug…**. The native entry remains usable when the
+  main workspace renderer is unhealthy.
 - StashBase opens a dedicated local review window. It collects the selected
   StashBase window, a fixed environment summary, and a bounded sanitized log
   tail on a best-effort basis; one unavailable artifact does not discard the

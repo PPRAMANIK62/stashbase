@@ -1,5 +1,5 @@
 /**
- * Owns the Similarity Search setup dialog. Mounted once at the app root, always —
+ * Owns the setup dialog for search by meaning. Mounted once at the app root, always —
  * not only when a folder is open — so it can resolve the app-wide
  * `embedderHasKey` fact even in a bare window, which is what lets the standing
  * Files-panel callout (and its "Set up" action) work before any folder opens.

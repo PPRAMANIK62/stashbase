@@ -123,8 +123,10 @@
   min-width: 60px;
   border: 1px solid transparent;
   border-bottom: none;
-  border-top-left-radius: var(--radius-control);
-  border-top-right-radius: var(--radius-control);
+  /* `-ui`, the item-inside-a-box role: a tab is a hover/selected item in
+   * the strip, same as a tree row or menu item — not a sub-24px control. */
+  border-top-left-radius: var(--radius-ui);
+  border-top-right-radius: var(--radius-ui);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -278,9 +280,9 @@
 
 /* Match the sidebar's drag handle above: a 6px hit area whose only
  * visible cue is a crisp line drawn by `::after` — not a fat colored
- * band. The strip is painted CANVAS so it reads as part of the chat
- * panel; left transparent it exposed a 6px slice of the white body
- * between the sunken tab strip and the canvas panel. */
+ * band. The strip paints CANVAS — every pane shares that surface now,
+ * so it blends into the document side of the divider line; left
+ * transparent it would expose the app grid's ground instead. */
 .chat-splitter {
   grid-column: 3;
   grid-row: 1;
@@ -290,15 +292,21 @@
 }
 /* This line is the panel's only left divider: a 1px `--border` seam at
  * rest (the panel itself has no border-left), brightening to a 2px accent
- * on hover/active. Pinned to the strip's LEFT edge — the true main|chat
- * boundary now that the strip belongs to the panel side — so there's
- * a single line, not a splitter line + a separate panel border. */
+ * on hover/active. 1px matches every other resting border — the app
+ * borders are unified on the site's outer-frame weight. Pinned to the
+ * strip's RIGHT edge, where the chat column actually starts: every pane
+ * shares one surface colour now, so whatever sits left of this line
+ * reads as the document side and the chat sheet begins AT the line.
+ * Drawn at the left edge, the 6px strip joined the chat sheet and
+ * pushed its centered content (the composer) 3px off the optical
+ * centre. One line either way — never a splitter line + a separate
+ * panel border. */
 .chat-splitter::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
+  right: 0;
   width: 1px;
   background: var(--border);
   transition: background var(--motion-fast) var(--motion-ease-hover), width var(--motion-fast) var(--motion-ease-hover);

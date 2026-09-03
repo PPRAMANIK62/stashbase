@@ -54,7 +54,7 @@ test('Settings and quick-access overlays preserve light and dark composition', a
   }
 });
 
-test('cross-folder exact search keeps grouped result identity visible', async ({}, testInfo) => {
+test('cross-folder keyword search keeps grouped result identity visible', async ({}, testInfo) => {
   const visual = await launchVisualApp('two-folders', testInfo);
   seedJourneyWorkspaces(visual.fixture);
   try {
@@ -66,7 +66,7 @@ test('cross-folder exact search keeps grouped result identity visible', async ({
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+F' : 'Control+Shift+F');
     const search = page.getByRole('dialog', { name: 'Search library' });
     await expect(search).toBeVisible();
-    await search.getByRole('button', { name: 'Exact', exact: true }).click();
+    await search.getByRole('button', { name: 'By keyword', exact: true }).click();
     await search.getByRole('combobox').fill(EXACT_SEARCH_PHRASE);
     await expect(search.getByText('project-alpha', { exact: true })).toBeVisible();
     await expect(search.getByText('project-beta', { exact: true })).toBeVisible();

@@ -7,38 +7,33 @@
 
 /* Tree rows. Indent is set inline per node depth.
  * Folder rows toggle expand/collapse; file rows open the file.
- * Hover/selected fills run FULL-BLEED, edge to edge: the -6px inline
- * margins cancel the scroll containers' px-1.5 rail (Sidebar.tsx /
- * DocumentOutline.tsx keep that rail for their other children), and the
- * rail comes back as the transparent left border — 6px rail + the
- * original 2px metric spacer = 8px — so every consumer's inline indent
- * math lands exactly where it did. A bar that touches both edges has no
- * corners to round, so the radius is 0. Selection stays a tinted fill:
- * no accent edge bar, no focus-outlined box. */
+ * Hover/selected fills are an INSET PILL, not a full-bleed band: rows
+ * stay inside the scroll containers' px-1.5 rail (Sidebar.tsx /
+ * DocumentOutline.tsx), so the fill floats with a 6px gutter each side
+ * and takes the item-in-a-box corner (`--radius-ui`) — the
+ * Notion/Craft selection idiom. The transparent left border drops to
+ * the original 2px metric spacer (6px rail + 2px = 8px, same baseline
+ * as the old full-bleed geometry), so every consumer's inline indent
+ * math lands exactly where it did. Selection stays a tinted fill: no
+ * accent edge bar, no focus-outlined box. */
 .tree-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  min-height: 28px;
-  /* 3, off the ramp on purpose, and pinned in
-   * `CSS_OFF_RAMP_EXEMPTIONS`. This is not an amount of air: it is the
-   * largest padding that leaves `min-height` the thing DECLARING the
-   * row height. The line box is 20.15px here and 21.7px at Large, so
-   * 3+20.15+3 and 3+21.7+3 both stay under 28 and every row is exactly
-   * 28px tall.
-   *
-   * The ramp's 4 makes the content box 28.15px, which beats the
-   * min-height — so rows go fractional and each one's top carries the
-   * accumulated remainder. That is not only a blurry pill: the file
-   * tree's drop target splits at the row's midpoint, and a midpoint
-   * that is no longer on a whole pixel resolves a drop AT the middle to
-   * the wrong side. `real pointer drag reorders root files` is the
-   * regression test. */
-  margin-inline: -6px;
-  padding: 3px 14px 3px 0;
+  /* 23px row — VS Code Explorer's 22 loosened by exactly 1px, per the
+   * design reference: 13px type in a 22-23px row is most of the
+   * "professional tool" density read; 24+ drifts toward a generic
+   * SaaS sidebar. Off the ramp on purpose and pinned in
+   * `CSS_OFF_RAMP_EXEMPTIONS`. No vertical padding: flex centers the
+   * line box (20.15px at the default interface size), and at larger
+   * sizes the row grows past 23 instead of clipping. Rows stay
+   * whole-pixel tall, which the file tree's drag drop-midpoint needs —
+   * `real pointer drag reorders root files` is the regression test. */
+  min-height: 23px;
+  padding: 0 8px 0 0;
   cursor: pointer;
-  border-left: 8px solid transparent;
-  border-radius: 0;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-ui);
   font-size: var(--text-base);
   color: var(--fg);
   min-width: 0;
@@ -57,6 +52,24 @@
 .tree-row.folder.active-folder {
   background: var(--active);
   font-weight: 500;
+}
+
+/* The document outline is a POSITION indicator, not a picker, and it
+ * speaks a tier quieter than the file tree: resting headings take the
+ * muted ink — a second column of full-ink rows read as a second file
+ * list — and only the current heading pays full ink back, so position
+ * is carried by contrast as well as weight. */
+#document-outline .tree-row {
+  color: var(--muted);
+}
+
+/* The current heading keeps the `.active` weight bump but paints NO
+ * fill — a standing pill in the outline read as a second selection
+ * competing with the file tree's. Hover keeps its tint: rows are still
+ * clickable and the transient cue does not read as state. */
+#document-outline .tree-row.active {
+  background: transparent;
+  color: var(--fg);
 }
 
 /* Drop indicators for drag-to-reorder. Inset shadow draws a 2px
@@ -129,9 +142,11 @@
 
 /* Flex-center the glyph so it sits on the row's vertical midline.
  * Without this the span is inline and the SVG rides the text
- * baseline (looks high). The SLOT stays 16px (the sidebar's gutter
- * and indent grid); the glyph inside runs the app-wide 14px icon
- * size, centred. */
+ * baseline (looks high). Slot AND glyph are 16px here — the tree is
+ * the one chrome surface whose marks run at full slot size (the
+ * VS Code Explorer reference: 16px icon, 4px gap, 13px label); at the
+ * chrome-wide 14px the marks read a tier quieter than the density
+ * around them. */
 .tree-row .icon {
   display: inline-flex;
   align-items: center;
@@ -141,8 +156,8 @@
   flex-shrink: 0;
 }
 .tree-row .icon svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   color: var(--muted);
 }
@@ -194,14 +209,15 @@
 /* Same recipe as the inline rename fields (RenameInput.tsx,
  * SessionHistoryMenu.tsx): control-tier radius (it is a bordered input
  * FIELD sitting in a row slot — the full-bleed row fill around it stays
- * square, the field keeps its own small corners), base surface, accent
- * border as the focus affordance. */
+ * square, the field keeps its own small corners), base surface, neutral
+ * border — an edit box is delimited, not "selected"; the caret is the
+ * focus affordance, same as every text field. */
 .tree-create-input {
   flex: 1;
   min-width: 0;
   margin: 0;
   padding: 2px 6px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--bg);
   color: var(--fg);

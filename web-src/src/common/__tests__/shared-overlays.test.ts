@@ -441,7 +441,7 @@ test('a locked scope stays inspectable while its independent retrieval switch st
         checked: true,
         closeOnClick: false,
         onCheckedChange: (checked: boolean) => { nextChecked = checked; },
-      }, 'Similarity Search'),
+      }, 'Search by meaning'),
       onSetScope: () => assert.fail('a locked scope must not change'),
     }));
 

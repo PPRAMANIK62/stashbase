@@ -70,7 +70,7 @@ function TreeNodes({ nodes, depth, parent }: { nodes: TreeNode[]; depth: number;
             path={n.path}
             meta={n.meta}
             depth={depth}
-            paddingLeft={depth * 14 + 26}
+            paddingLeft={depth * 8 + 26}
             parent={parent}
             siblings={siblings}
             posInSet={index + 1}
@@ -170,7 +170,7 @@ function FolderRow({
         // ARIA needs the ownership spelled out — see `treeGroupId`.
         aria-owns={isRestricted ? undefined : treeGroupId(node.path)}
         tabIndex={row.tabIndex}
-        style={{ paddingLeft: depth * 14 + 26 }}
+        style={{ paddingLeft: depth * 8 + 26 }}
         data-path={node.path}
         draggable={!isRestricted && !renaming}
         {...(isRestricted ? {} : dragProps)}
@@ -494,7 +494,9 @@ function agentRulesIcon(fileBasename: string) {
   // LOGO, not a state or a category, and CLAUDE.md appears at most once per
   // folder, so it stays inside the one-small-moment colour budget rather
   // than becoming a hue-per-row.
-  // AGENTS.md stays muted — its bot represents a vendor-neutral contract.
+  // AGENTS.md stays muted — the robot marks a vendor-neutral AGENT
+  // contract (the agent itself, not the orders: the Instructions scroll
+  // belongs to the panel-toolbar control, deliberately a different mark).
   if (normalized === 'claude.md') return <ClaudeIcon />;
   if (normalized === 'agents.md') return <BotIcon className="agent-rules-icon" />;
   return null;

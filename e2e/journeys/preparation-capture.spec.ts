@@ -122,7 +122,7 @@ test('J04 accepts an opted-in screenshot as a visible source and retrieves its p
 
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     const search = app.page.getByRole('dialog', { name: 'Search library' });
-    await search.getByRole('button', { name: 'Exact', exact: true }).click();
+    await search.getByRole('button', { name: 'By keyword', exact: true }).click();
     await search.getByRole('combobox').fill(OCR_PHRASE);
     await expect(search.getByRole('option', { name: new RegExp(sourceName!) })).toBeVisible();
     await search.getByRole('option', { name: new RegExp(sourceName!) }).click();

@@ -104,7 +104,7 @@ export async function buildIndexStatus(folderRoot: string): Promise<IndexStatus>
     semanticAvailable,
     ...(!semanticAvailable ? {
       semanticDisabledReason: unavailableReason === 'hosted-quota-exhausted'
-        ? 'Hosted allowance exhausted; Exact Search remains available'
+        ? 'Hosted allowance used up; keyword search still works'
         : 'Embedding source required',
     } : {}),
     pending,

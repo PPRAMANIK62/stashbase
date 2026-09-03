@@ -17,7 +17,12 @@ export function folderSwitcherTrigger(page: Page): Locator {
 }
 
 function switcherMenu(page: Page): Locator {
-  return page.getByRole('menu');
+  // Folder-header menus remain mounted briefly while their close animation
+  // finishes. Identify the titlebar switcher by its unique folder-picker
+  // command instead of assuming it is the only menu in the document.
+  return page.getByRole('menu').filter({
+    has: page.getByRole('menuitem', { name: /^Open Folder…/ }),
+  });
 }
 
 export async function openFolderSwitcher(page: Page): Promise<void> {
@@ -134,7 +139,7 @@ export function saveStatus(page: Page): Locator {
 export async function dismissEmbeddingKeyPrompt(
   page: Page,
 ): Promise<void> {
-  // The first active folder offers Similarity Search setup once. Most journeys are about a
+  // The first active folder offers setup for search by meaning once. Most journeys are about a
   // different capability, so this compatibility helper deliberately takes
   // the durable Not now path before they continue. Query the same localhost
   // state the gate is resolving before deciding whether to wait: checking
@@ -143,7 +148,7 @@ export async function dismissEmbeddingKeyPrompt(
   const shouldOffer = await page.evaluate(async () => {
     if (window.localStorage.getItem('stashbase.ai-setup-seen') === '1') return false;
     const response = await fetch('/api/embedder');
-    if (!response.ok) throw new Error(`Could not resolve Similarity Search setup state: ${response.status}`);
+    if (!response.ok) throw new Error(`Could not resolve the setup state for search by meaning: ${response.status}`);
     const embedder = await response.json() as { authorized?: unknown };
     return embedder.authorized !== true;
   });

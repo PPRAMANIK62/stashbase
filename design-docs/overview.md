@@ -11,10 +11,11 @@ The Wiki brings together the user's original Sources, visible source-linked
 Wiki Pages, Search, and Agent work. It turns ordinary folders into reusable
 knowledge without replacing the files themselves. StashBase keeps Sources in
 local files, prepares the formats that need help, and exposes authorized
-context through MCP. Local browsing, editing, preview, and Exact Search do not
-require a cloud account. When a user explicitly configures hosted Similarity
-Search, extracted text may be sent to that provider for indexing or retrieval.
-The included Built-in Agent runs locally and sends only prompts and necessary
+context through MCP. Local browsing, editing, preview, and keyword search do
+not require a cloud account. When a user explicitly sets up hosted search by
+meaning, extracted text may be sent to that provider for indexing or
+retrieval.
+The included Wiki Agent runs locally and sends only prompts and necessary
 model context through its hosted model gateway. In both cases the Sources
 remain locally owned.
 
@@ -42,12 +43,14 @@ re-explaining it.
 
 ## Product Shape
 
-- A VS Code-like **Document Workbench** for browsing, reading, editing, and
+* A VS Code-like **Document Workbench** for browsing, reading, editing, and
   navigating ordinary local files.
-- A Codex-like **Agent Panel** whose Chat leads before a document is opened and
-  docks beside active source work, with the zero-install Built-in Agent while
+
+* A Codex-like **Agent Panel** whose Chat leads before a document is opened and
+  docks beside active source work, with the zero-install Wiki Agent while
   preserving bring-your-own-agent workflows.
-- A **Wiki** that brings together Sources, visible source-linked Wiki Pages,
+
+* A **Wiki** that brings together Sources, visible source-linked Wiki Pages,
   and a local RAG layer that prepares difficult formats and retrieves
   source-grounded evidence for built-in and external Agents.
 

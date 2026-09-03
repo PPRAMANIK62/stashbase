@@ -15,6 +15,10 @@ export type MentionComposerHandle = {
   insertMention: (path: string, query: Exclude<MentionQuery, null>) => void;
   insertSkill: (label: string, query: Exclude<MentionQuery, null>) => void;
   clearQuery: (query: Exclude<MentionQuery, null>) => void;
+  /** Append plain text as an editable draft (a Template's staged prompt),
+   *  separated from any existing draft by a newline, caret at the end.
+   *  Reports whether it landed — the editor may not be mounted yet. */
+  insertText: (text: string) => boolean;
   submit: () => void;
 };
 
@@ -253,6 +257,18 @@ export function MentionComposer({
       if (!view) return;
       view.dispatch({ changes: { from: query.from - 1, to: view.state.selection.main.head }, selection: { anchor: query.from - 1 } });
       view.focus();
+    },
+    insertText: (text) => {
+      const view = viewRef.current;
+      if (!view) return false;
+      const end = view.state.doc.length;
+      const insert = end > 0 ? `\n${text}` : text;
+      view.dispatch({
+        changes: { from: end, insert },
+        selection: { anchor: end + insert.length },
+      });
+      view.focus();
+      return true;
     },
     submit,
   }));

@@ -350,7 +350,14 @@ test('real pointer drag reorders root files and moves a nested file to the targe
 
     const second = fileTreeRow(app.page, 'Second Note.md');
     const welcome = fileTreeRow(app.page, 'Welcome.md');
-    await second.dragTo(welcome);
+    // Drop explicitly in the target row's LOWER half ("lands after"). The
+    // default centre drop sat exactly on the 50% seam and only resolved
+    // below through pixel rounding — an even row height rounded down to
+    // 0.5, an odd one to just under it, flipping the drop to "above".
+    const welcomeBox = (await welcome.boundingBox())!;
+    await second.dragTo(welcome, {
+      targetPosition: { x: Math.round(welcomeBox.width / 2), y: Math.round(welcomeBox.height * 0.75) },
+    });
     await expect.poll(async () => {
       const paths = await app!.page.getByRole('treeitem').evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.path));
       return paths.indexOf('Second Note.md') > paths.indexOf('Welcome.md');

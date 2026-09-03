@@ -88,9 +88,15 @@ const manifestPath = path.join(outputRoot, '.vite', 'manifest.json');
  * `ManagedImportGitHubModal` is a required dynamic entry, while the pinned action
  * in `addFolderMenuItems` and the boundary on the switcher / bare-window
  * Choose Folder button are eager chrome.
+ * 439 → 443 for the Templates entry points: the gallery view is a
+ * dynamic entry below, but its sidebar row (+ squares-four glyph), the
+ * tab-kind routing in MainPane/TabStrip/reducer, the lazy boundary, and
+ * the template trigger latch are eager chrome — plus the AGENTS.md
+ * robot returning alongside the Instructions scroll instead of
+ * replacing it.
  * Raise it only for shell UI that must load with the window — anything a
  * user can open on demand belongs in a dynamic entry above. */
-const initialJsBudgetBytes = 439 * 1024;
+const initialJsBudgetBytes = 443 * 1024;
 const expectedEntries = [
   'src/features/agent-panel/components/ChatPane.tsx',
   'src/features/agent-panel/components/AgentMathMarkdown.tsx',
@@ -107,6 +113,8 @@ const expectedEntries = [
   'src/features/documents/components/ManagedLinkFilePicker.tsx',
   'src/features/workspace/components/ManagedMoveFilePicker.tsx',
   'src/features/workspace/components/ManagedImportGitHubModal.tsx',
+  'src/features/templates/TemplatesView.tsx',
+  'src/features/workspace/components/FolderHeaderMenu.tsx',
   'src/app/components/ContextMenu.tsx',
   'src/common/components/DocumentOutline.tsx',
   'src/common/components/SemanticIndexingNotice.tsx',

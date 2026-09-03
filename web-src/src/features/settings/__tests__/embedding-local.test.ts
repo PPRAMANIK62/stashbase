@@ -9,7 +9,7 @@ import { OPEN_EMBEDDING_SETUP_EVENT } from '@/common/lib/embeddingSetupTrigger';
 import { setSimilaritySearchSetupSeen } from '@/common/lib/embeddingAuth';
 import { OverlayStackProvider } from '@/common/components/OverlayStack';
 
-test('Similarity Search setup offers only hosted account and BYOK sources', async () => {
+test('setup for search by meaning offers only hosted account and BYOK sources', async () => {
   await withDom(async (dom) => {
     let signIns = 0;
     let keySelections = 0;
@@ -34,7 +34,7 @@ test('Similarity Search setup offers only hosted account and BYOK sources', asyn
   });
 });
 
-test('Similarity Search setup keeps the deliberate exit beside the two source choices', async () => {
+test('setup for search by meaning keeps the deliberate exit beside the two source choices', async () => {
   await withDom(async (dom) => {
     let skips = 0;
     await dom.render(h(EmbeddingAuthChoice, {
@@ -51,7 +51,7 @@ test('Similarity Search setup keeps the deliberate exit beside the two source ch
   });
 });
 
-test('Similarity Search setup opens for the first active folder, remembers Not now, and remains manually reachable', async () => {
+test('setup for search by meaning opens for the first active folder, remembers Not now, and remains manually reachable', async () => {
   const realFetch = globalThis.fetch;
   setSimilaritySearchSetupSeen(false);
   globalThis.fetch = (async () => new Response(JSON.stringify({
@@ -75,8 +75,8 @@ test('Similarity Search setup opens for the first active folder, remembers Not n
       });
       await dom.flush();
       await dom.flush();
-      assert.equal(dom.byRole('dialog').length, 1, 'the first active folder offers Similarity Search setup');
-      assert.match(document.body.textContent ?? '', /Set up Similarity Search/);
+      assert.equal(dom.byRole('dialog').length, 1, 'the first active folder offers setup for search by meaning');
+      assert.match(document.body.textContent ?? '', /Set up search by meaning/);
       const notNow = dom.queryAll('button').find((button) => button.textContent?.trim() === 'Not now');
       assert.ok(notNow);
       await dom.fire(notNow, new MouseEvent('click', { bubbles: true }));

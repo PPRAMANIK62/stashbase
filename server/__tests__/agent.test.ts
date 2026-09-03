@@ -41,7 +41,7 @@ test('Claude sends a structured scope-retirement exit before closing', () => {
   assert.equal(ws.readyState, 3);
 });
 
-test('Claude applies Similarity Search as live session policy', () => {
+test('Claude applies the search-by-meaning policy live', () => {
   const ws = new FakeAgentWebSocket();
   const session = new AgentSession(ws as unknown as WebSocket, 'similarity-policy-window');
 

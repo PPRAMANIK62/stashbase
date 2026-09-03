@@ -170,6 +170,12 @@ export interface TabConflict {
  *  required cost more to learn than it saved. */
 export interface Tab {
   id: string;
+  /** Special standing page rendered in the main pane instead of a file.
+   *  `templates` is the Wiki Templates gallery — a singleton tab
+   *  (`TEMPLATES_OPEN` focuses the existing one). A kind tab keeps
+   *  `file: null` but is NOT a blank tab: sidebar opens must never fill
+   *  it in place (see `openFile`'s guard). */
+  kind?: 'templates';
   file: OpenFile | null;
   editMode: boolean;
   /** True only after the user changes the live editor buffer. */
@@ -315,8 +321,8 @@ export interface WorkspaceSlice {
    *  the sidebar's right edge; clamped to [SIDEBAR_MIN_WIDTH, MAX]. */
   sidebarWidth: number;
 
-  /** User-visible paths whose Similarity Search content is still being
-   *  embedded/indexed. Keyword search ignores this state and can search
+  /** User-visible paths whose content is still being embedded/indexed for
+   *  search by meaning. Keyword search ignores this state and can search
    *  converted/source text without embeddings. */
   pendingSemanticNames: NameSet;
   semanticIndexing: NonNullable<IndexStatus['semanticIndexing']> | null;
@@ -518,6 +524,7 @@ export type Action =
   /** Push an empty tab and activate it (Obsidian-style `+`). The next
    *  single-click in the sidebar lands here. */
   | { type: 'NEW_TAB' }
+  | { type: 'TEMPLATES_OPEN' }
   | { type: 'CLOSE_TAB'; id: string }
   | { type: 'ACTIVATE_TAB'; id: string }
   /** Close every open tab — used on folder switch / "go home". */

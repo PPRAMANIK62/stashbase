@@ -96,6 +96,17 @@ function AppBody() {
   useEffect(() => {
     document.title = state.folder ? `${state.folder} — StashBase` : 'StashBase';
   }, [state.folder]);
+  /* A bare window boots with the Templates gallery open: the main pane
+   * leads with what the product does (cards disabled until a folder
+   * opens) while the sidebar carries the folder actions. Once, at boot,
+   * and only when nothing else claims the pane — closing the tab later
+   * must stick, and a folder window keeps its restored tabs. */
+  const templatesAutoOpened = useRef(false);
+  useEffect(() => {
+    if (!state.booted || templatesAutoOpened.current) return;
+    templatesAutoOpened.current = true;
+    if (!state.folderPath && state.tabs.length === 0) dispatch({ type: 'TEMPLATES_OPEN' });
+  }, [state.booted, state.folderPath, state.tabs.length, dispatch]);
   useEffect(() => {
     // createWindow registers its requested folder immediately so a second
     // "Open in New Window" click can focus the still-loading window. Preserve

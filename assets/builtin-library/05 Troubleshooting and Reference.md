@@ -10,19 +10,21 @@ Check each stage separately:
 1. **Library membership:** Is the expected folder still in the Library?
 2. **Scope:** Is Search covering the whole Library or narrowed to the correct
    folder?
-3. **Mode:** Use Exact for known wording; use Similarity for related meaning.
+3. **Mode:** Use **By keyword** for known wording; use **By meaning** for
+   related meaning.
 4. **Retrieval capability:** Does the format provide direct text, or does it
    need current prepared text?
 5. **Preparation:** Is extraction, OCR, or transcription still running,
    blocked, failed, stale, or cancelled?
-6. **Similarity Search:** Is a provider configured, and is the expected content
-   ready?
+6. **Search by meaning:** Is a provider configured, and is the expected
+   content ready?
 7. **Hosted availability:** Is the provider available, and does the hosted
    allowance remain?
 
-Switching to Exact Search is the normal fallback when Similarity Search cannot continue.
-A true empty result, incomplete Preparation, incomplete indexing, wrong scope,
-provider failure, and exhausted allowance are different conditions.
+Switching to keyword search is the normal fallback when searching by meaning
+cannot continue. A true empty result, incomplete Preparation, incomplete
+indexing, wrong scope, provider failure, and exhausted allowance are different
+conditions.
 
 ## A File Opens but Is Not Searchable Yet
 
@@ -41,24 +43,25 @@ For audio or video, download a local model under **Settings → Transcription**.
 If optional native support is missing, StashBase should explain the blocked or
 retryable stage without blocking the rest of the folder.
 
-## Similarity Search Is Unavailable or Paused
+## Searching by Meaning Is Unavailable or Paused
 
-- Confirm the selected provider under **Settings → Similarity Search**.
+- Confirm the selected provider under **Settings → Search by Meaning**.
 - Hosted access requires a StashBase sign-in; bring-your-own access requires an
   OpenAI or OpenRouter key stored in Settings.
-- Hosted indexing and Similarity Search queries share the displayed allowance.
-- Known stale semantic evidence is hidden rather than presented as current.
+- Hosted indexing and meaning-based queries share the displayed allowance.
+- Known stale evidence is hidden rather than presented as current.
 - Pending work can resume after allowance refresh or after selecting an
   available bring-your-own source.
 
-Exact Search and ordinary local file work remain available throughout.
+Keyword search and ordinary local file work remain available throughout.
 
 ## Build Wiki Is Waiting
 
-Build Wiki may wait for the selected Agent runtime or its account.
-Similarity Search setup is independent and never blocks this action. Complete the visible Agent setup
-action; the pending action stays pinned to its original folder and sends once
-when the Agent is ready. Use **Cancel** below the capsule to discard it.
+Build Wiki may wait for the selected Agent runtime or its account. Setup for
+search by meaning is independent and never blocks this action. Complete the
+visible Agent setup action; the pending action stays pinned to its original
+folder and sends once when the Agent is ready. Use **Cancel** below the
+capsule to discard it.
 
 Build Wiki modifies only `wiki/`; it does not move, rename, delete, or
 broadly rewrite Sources. If
@@ -66,7 +69,7 @@ an Agent proposes physical reorganization, review and approve that as a
 separate action. If a partial `wiki/index.md` was written before failure, treat
 it as an ordinary visible file: inspect it, then retry or edit it directly.
 
-## Built-In Chat Does Not Start
+## Agent Panel Chat Does Not Start
 
 Treat these stages separately:
 
@@ -81,8 +84,8 @@ Treat these stages separately:
 - **Turn failed:** use the in-conversation recovery card. The transcript and
   session remain available.
 
-StashBase sign-in and Similarity Search configuration do not sign in Claude Code or
-Codex.
+StashBase sign-in and the setup for search by meaning do not sign in Claude
+Code or Codex.
 
 ## A Chat Seems to Be Using the Wrong Folder
 
@@ -101,7 +104,7 @@ Previewability does not imply Agent readability or content editing. Consult
 
 - external MCP reads current prepared text for PDF, DOCX, audio, and video;
 - external MCP does not receive image bytes through `read_file`;
-- a built-in Agent may consume an explicitly supplied image;
+- an Agent Panel runtime may consume an explicitly supplied image;
 - preview-only binary formats reject content writes;
 - generic Workbench files do not appear in Agent/MCP directory, read, or
   mutation tools;
@@ -118,8 +121,8 @@ readable by every Agent client.
 - Restart clients that read MCP configuration only at startup.
 - Confirm the expected folder is a current Library member.
 - Confirm requested paths remain inside that member.
-- For meaning-based retrieval, confirm Similarity Search separately; Exact
-  Search remains the fallback.
+- To search by meaning, confirm its setup separately; keyword search remains
+  the fallback.
 
 Advanced configuration, URL access, Docker boundaries, CORS, and credential
 rotation are documented at

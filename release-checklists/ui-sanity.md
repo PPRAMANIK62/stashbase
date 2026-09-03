@@ -78,10 +78,10 @@ reason when a platform cannot exercise it.
   interaction when available, completion, and a clean close. Never use a real
   user workspace or capture credentials in evidence.
 - [ ] **J05 / J07 / J10** — In a disposable project with one non-sensitive source and
-  one Markdown Canvas, confirm Similarity Search returns the source, ask the real
-  Agent to use that evidence and write an accepted result into the Canvas,
+  one Markdown Canvas, confirm searching by meaning returns the source, ask the
+  real Agent to use that evidence and write an accepted result into the Canvas,
   approve the write, review and edit the file, then close and reopen it. Confirm
-  Exact Search can find the new durable content. This is a packaged integration
+  keyword search can find the new durable content. This is a packaged integration
   check, not the semantic-quality threshold owned by the J05 Eval.
 - [ ] **J11** — From a Library-scoped Chat, explicitly ask the real Agent to create a
   disposable project. Decline the first `create_project` approval and confirm no

@@ -173,8 +173,8 @@ export function useFileActions(
     // same product-level explanation.
     const isPdf = /\.pdf$/i.test(name);
     const prompt = isPdf
-      ? `Delete ${name}? This also removes the derived markdown + image bundle and its Similarity Search data.`
-      : `Delete ${name}? This also removes its Similarity Search data.`;
+      ? `Delete ${name}? This also removes the derived markdown + image bundle and its search data.`
+      : `Delete ${name}? This also removes its search data.`;
     if (!(await askConfirm(prompt))) return;
     if (stateRef.current.workspace.folderPath !== targetFolderPath) return;
     const activeFile = getActiveTab(stateRef.current.workspace)?.file;
@@ -322,7 +322,7 @@ export function useFileActions(
       if (j.indexWarning) {
         toast('Renamed. ' + j.indexWarning, { level: 'warning' });
       } else if (j.indexDeferred) {
-        toast('Renamed. Updating the file for Similarity Search in the background.', { level: 'info' });
+        toast('Renamed. Updating the file for search by meaning in the background.', { level: 'info' });
       }
     } catch (e: unknown) {
       if (stateRef.current.workspace.folderPath !== targetFolderPath) return;
@@ -413,7 +413,7 @@ export function useFileActions(
       if (j.indexWarning) {
         toast('Moved. ' + j.indexWarning, { level: 'warning' });
       } else if (j.indexDeferred) {
-        toast('Moved. Updating the file for Similarity Search in the background.', { level: 'info' });
+        toast('Moved. Updating the file for search by meaning in the background.', { level: 'info' });
       }
       return true;
     } catch (e: unknown) {

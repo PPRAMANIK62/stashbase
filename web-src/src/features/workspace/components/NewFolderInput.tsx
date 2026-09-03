@@ -30,7 +30,7 @@ export function NewFolderInput({ parentPath, depth }: { parentPath: string; dept
   return (
     <div
       className="tree-row folder new-folder-row"
-      style={{ paddingLeft: depth * 14 + 26 }}
+      style={{ paddingLeft: depth * 8 + 26 }}
     >
       <span className="chev new-folder-spacer" aria-hidden="true" />
       {/* Deliberately NOT the `Input` primitive. `Input` is the app's

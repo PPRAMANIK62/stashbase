@@ -54,6 +54,10 @@ import type { Attachment, Block, RetiredAgentScope, ServerEvent } from '@/featur
 interface PendingBuildWikiPages {
   scope: Extract<LibraryScope, { kind: 'folder' }>;
   previousPickedScope: LibraryScope | undefined;
+  /** The visible preset request this staged draft will place in the
+   *  composer — a Wiki Template's prompt, or the classic Build Wiki line
+   *  by default. The user sends it; nothing goes to the wire from here. */
+  prompt: string;
 }
 
 /** The whole "talk to the runtime" concern for one AgentView tab: WebSocket
@@ -176,8 +180,10 @@ export function useAgentSession({
   // runtime reconnect, but never app restart, and pins the folder scope until
   // it sends or the user cancels. Semantic indexing has an independent lifecycle.
   const [pendingBuildWikiPages, setPendingBuildWikiPages, pendingBuildWikiPagesRef] = useStateWithRef<PendingBuildWikiPages | null>(null);
-  // null follows product availability: configured Similarity Search starts
-  // on; an explicitly disabled chat stays off even if credentials later change.
+  // A placed-but-unacknowledged Template draft on its way to the composer.
+  const [composerSeed, setComposerSeed] = useState<string | null>(null);
+  // null follows product availability: search by meaning starts on once
+  // configured; an explicitly disabled chat stays off even if credentials later change.
   // The effective policy is always false while no embedding source exists,
   // but text retrieval (including prepared documents) remains available.
   const [similaritySearchPreference, setSimilaritySearchPreference] = useState<boolean | null>(null);
@@ -214,7 +220,7 @@ export function useAgentSession({
     if (enabled && workspace.embedderHasKey !== true) openEmbeddingSetup();
   }
 
-  // Completing or removing Similarity Search setup changes the effective policy without a
+  // Completing or removing setup for search by meaning changes the effective policy without a
   // new Chat connection. Re-apply it live; the ready handler below covers
   // initial connection ordering.
   useEffect(() => {
@@ -269,14 +275,18 @@ export function useAgentSession({
     sessionFolder,
   });
 
-  function maybeSendPendingBuildWikiPages() {
+  /** A staged Template prompt is PLACED in the composer, never sent: the
+   * user reviews, edits, and sends it themselves. Placement waits only for
+   * the session to be ready on the pinned scope — a draft is safe to hold
+   * during an active turn, so no turn gate. */
+  function maybePlacePendingBuildWikiPages() {
     const pending = pendingBuildWikiPagesRef.current;
-    if (!pending || !readyRef.current || turnActiveRef.current) return;
+    if (!pending || !readyRef.current) return;
     if (!libraryScopesEqual(controls.connectedScopeRef.current, pending.scope)) return;
-    // Clear before the send so a repeated ready event cannot duplicate the
-    // product-owned turn.
+    // Clear before the hand-off so a repeated ready event cannot place the
+    // prompt twice.
     setPendingBuildWikiPages(null);
-    promptQueue.sendPreset(BUILD_WIKI_PAGES_PROMPT);
+    setComposerSeed(pending.prompt);
   }
 
   /* Agent Instructions edited for some scope. The resolved text is injected
@@ -316,18 +326,21 @@ export function useAgentSession({
     [agentInstructionsSavedRef],
   );
 
-  /** Pin this blank chat to its folder and arm one Build Wiki turn. */
-  function requestBuildWikiPages(): boolean {
+  /** Pin this blank chat to its folder and stage one preset wiki prompt
+   *  for the composer — the classic Build Wiki request by default, or a
+   *  Wiki Template's visible prompt. */
+  function requestBuildWikiPages(prompt: string = BUILD_WIKI_PAGES_PROMPT): boolean {
     const scope = controls.sessionScope;
     if (scope.kind !== 'folder' || pendingBuildWikiPagesRef.current) return false;
     setPendingBuildWikiPages({
       scope,
       previousPickedScope: controls.pickedScopeRef.current,
+      prompt,
     });
     // Even when this is the window-default folder, retain an explicit pick so
     // Agent setup or a window-folder switch cannot redirect the intent.
     controls.setPickedScope(scope);
-    maybeSendPendingBuildWikiPages();
+    maybePlacePendingBuildWikiPages();
     return true;
   }
 
@@ -710,7 +723,7 @@ export function useAgentSession({
     if (action === 'open-agent-settings') {
       // Account/allowance recovery completes outside this view. Keep the
       // failed prompt armed so the runtime's account-change reconnect can
-      // retry it exactly once when Built-in becomes ready again.
+      // retry it exactly once when Wiki Agent becomes ready again.
       if (retry) pendingRetryRef.current = retry;
       openSettings('agents');
       return;
@@ -769,7 +782,7 @@ export function useAgentSession({
         sendSimilaritySearchPolicy();
         setPhase('live');
         runtimeCatalog.refreshRuntimes();
-        // Starting a built-in agent can create root-level instruction files
+        // Starting an Agent Panel runtime can create root-level instruction files
         // (`AGENTS.md`, and for Claude the `CLAUDE.md` bridge). Refresh the
         // tree immediately instead of waiting for the next index-status poll;
         // a cross-folder session refreshes its own folder's listing too.
@@ -795,7 +808,7 @@ export function useAgentSession({
           pendingRetryRef.current = null;
           if (retry) promptQueue.resendFailedPrompt(retry);
         }
-        maybeSendPendingBuildWikiPages();
+        maybePlacePendingBuildWikiPages();
         maybeApplyAgentInstructions();
         break;
       case 'session-id':
@@ -911,7 +924,7 @@ export function useAgentSession({
           (message) => setBlocks((bs) => [...bs, { kind: 'error', id: nextBlockId(), text: message }]),
           promptQueue.runNextQueuedPrompt,
         );
-        maybeSendPendingBuildWikiPages();
+        maybePlacePendingBuildWikiPages();
         maybeApplyAgentInstructions();
         break;
       }
@@ -1057,6 +1070,8 @@ export function useAgentSession({
       pending: pendingBuildWikiPages !== null,
       requestBuildWikiPages,
       cancelBuildWikiPages,
+      composerSeed,
+      consumeComposerSeed: () => setComposerSeed(null),
     },
     similaritySearch: {
       enabled: similaritySearchEnabled,

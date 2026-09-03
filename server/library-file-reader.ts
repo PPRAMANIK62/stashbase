@@ -92,7 +92,7 @@ export async function agentContextFile(rawPath: unknown): Promise<AgentContextFi
       };
     }
 
-    // Derived text lives in per-machine app data, so the built-in agent gets
+    // Derived text lives in per-machine app data, so the Agent Panel runtime gets
     // an absolute read path while the visible source remains the identity.
     const derivedAbs = sourceFormat === 'docx'
       ? derivedHtmlPathForDocx(target.abs)

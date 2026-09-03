@@ -92,7 +92,7 @@ test('Windows extractor build wires PyInstaller hide-console without switching o
   assert.doesNotMatch(source, /'--(?:no)?console'/);
 });
 
-test('packaged Similarity Search daemon includes the local ONNX embedding runtime', () => {
+test('the packaged daemon for search by meaning includes the local ONNX embedding runtime', () => {
   const requirements = fs.readFileSync(path.join(root, 'python', 'requirements.txt'), 'utf8');
   const build = fs.readFileSync(path.join(root, 'scripts', 'build-python-sidecar.mjs'), 'utf8');
   const daemonExcludes = build.match(/const daemonExcludedModules = \[([\s\S]*?)\n\];/)?.[1] ?? '';

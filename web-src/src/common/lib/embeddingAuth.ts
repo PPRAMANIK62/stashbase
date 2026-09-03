@@ -1,5 +1,5 @@
 /**
- * Whether Similarity Search is authorized, whether the one-time setup invitation has
+ * Whether searching by meaning is authorized, whether the one-time setup invitation has
  * already been handled, and the one place that decides both.
  *
  * A signed-in account allowance and a provider API key are equal activation
@@ -16,7 +16,7 @@ export function isEmbeddingAuthorized(state: EmbedderState | null | undefined): 
 
 /** The first-folder setup is a one-time invitation, not a per-folder nag.
  * Completing or declining it records a durable renderer preference; the
- * standing Files-panel action and Settings remain available if Similarity Search isn't set up. */
+ * standing Files-panel action and Settings remain available while searching by meaning isn't set up. */
 // Keep the legacy storage key so existing dismissals survive the terminology
 // migration; the identifier names the current product concept.
 const SIMILARITY_SEARCH_SETUP_SEEN_KEY = 'stashbase.ai-setup-seen';
@@ -55,6 +55,6 @@ export function setSimilaritySearchSetupSeen(
     else storage?.removeItem(SIMILARITY_SEARCH_SETUP_SEEN_KEY);
   } catch {
     // Hardened WebViews may reject localStorage. The setup can reappear on a
-    // later launch, but browsing and Exact Search still remain available.
+    // later launch, but browsing and keyword search still remain available.
   }
 }

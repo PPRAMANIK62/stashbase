@@ -1,3 +1,14 @@
+    /* Geist (latin subset, 28KB variable) is bundled (SIL OFL, see
+     * assets/fonts/geist/) so the READING voice (--font-reading) matches
+     * the marketing site everywhere; CJK text falls through to the
+     * platform stack behind it, which is why the subset is enough. */
+    @font-face {
+      font-family: 'Geist';
+      src: url('../assets/fonts/geist/Geist-Variable-latin.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
     /* Geist Mono is bundled (SIL OFL, see assets/fonts/geist-mono/) so the
      * code voice renders identically on every platform; the ui-monospace
      * chain in --font-mono stays behind it as fallback. */
@@ -20,28 +31,29 @@
       color-scheme: light;
       /* Semantic tokens are the only cross-surface theme API. Component
        * styles consume these roles instead of assuming a light literal. */
-      --surface-base: #ffffff;
+      /* LIGHT is deliberately FLAT: base, sunken and canvas all sit on
+       * one near-white (#fcfcfc) so the sidebar, document and chat
+       * panes read as a single sheet — the hairline borders alone carry
+       * the pane boundaries. Raised stays a step above (pure white) so
+       * cards and popovers still float. The dark blocks keep distinct
+       * sunken/canvas deltas; depth carries the separation there. */
+      --surface-base: #fcfcfc;
       --surface-raised: #ffffff;
-      /* Sunken must be a PERCEPTIBLE step below base in both themes —
-       * the sidebar/rail/tab-strip vs content separation is carried by
-       * this delta, not by the hairline alone. Calibrated live: ~8 RGB
-       * points off white is invisible, ~13 reads heavy; this sits at
-       * ~10 with a cool (blue-leaning) cast so it stays airy. */
-      --surface-sunken: #f3f5f7;
-      /* Chat workbench canvas — its own role between paper (base) and
-       * chrome (sunken): a cool, blue-leaning near-white. Distinct from
-       * BOTH neighbours so sidebar↔chat and chat↔document each read as
-       * a surface change (calibrated live with the gray-calibrator jig). */
-      --surface-canvas: #f9fbfd;
-      /* Hover is a light cool neutral one step past sunken (rows hover
-       * on sunken panels too); selected is one step stronger in the
-       * same neutral ramp with only a whisper of cool cast — cyan
-       * washes at row width read loud, so the accent is reserved for
-       * focus rings, progress, and small interactive emphasis, never
-       * selection surfaces. */
-      --surface-hover: #eaedf0;
-      --surface-selected: #e0e5e9;
-      --text-primary: #202427;
+      --surface-sunken: #fcfcfc;
+      --surface-canvas: #fcfcfc;
+      /* Hover and selected are PURE-NEUTRAL steps off the paper — the
+       * light palette follows the marketing site's print look (ink on
+       * #fcfcfc, no cool cast; stashbase-web home-page.css is the
+       * reference). Cyan washes at row width read loud, so the accent
+       * is reserved for focus rings, progress, and small interactive
+       * emphasis, never selection surfaces. */
+      --surface-hover: #f4f4f4;
+      /* Selected shares the hover fill by DESIGN, not by accident: every
+       * darker step (#e8e8e8, #ececec, #efefef) read as a patch on the
+       * paper. Selection is carried by the inset pill shape and the
+       * weight bump alone; the fill only says "this row is warm". */
+      --surface-selected: var(--surface-hover);
+      --text-primary: #191919;
       /* Long-form reading text, as distinct from a chrome label. The
        * content/chrome split already exists for size, measure and
        * leading (`--reading-font-size`, `.agent-prose`); this is the same
@@ -50,22 +62,26 @@
        * does not bloom, so a paragraph and a button label can share one
        * value. The dark blocks are where it earns its keep. */
       --text-reading: var(--text-primary);
-      --text-secondary: #68737a;
+      --text-secondary: #636363;
       /* Placeholder text — its own role, deliberately lighter than
        * secondary. A placeholder is a hint about what to type, not content:
        * at the secondary weight an empty field reads as a filled one, which
        * is the exact confusion it exists to avoid. Sits between secondary
        * text and the strong stroke, so it stays legible while clearly
        * ranking below every real string on screen. */
-      --text-placeholder: #8b969d;
+      --text-placeholder: #999999;
       --text-on-accent: #ffffff;
-      --stroke-subtle: #d9e0e3;
-      --stroke-strong: #aeb9bf;
+      /* ONE border everywhere: the marketing site's outer frame — 1px of
+       * its faint gray — is the reference for every resting border and
+       * pane divider. Strong is the hover/emphasis step only, borrowed
+       * from the site's control stroke. */
+      --stroke-subtle: #efefef;
+      --stroke-strong: #cccccc;
       --focus-ring: #0891b2;
       /* Raw RGB of --focus-ring, for the ring's alpha (see the
        * :focus-visible rule). */
       --focus-ring-rgb: 8, 145, 178;
-      --shadow-color: 25, 34, 39;
+      --shadow-color: 0, 0, 0;
       /* Corner scale, split by ROLE rather than by size. The earlier ramp
        * graded boxes by how big they were — a code block rounder than a
        * card, a card rounder than a popover — and the result read as
@@ -75,7 +91,7 @@
        * So there is exactly one corner for every BOX, no matter its size,
        * and smaller corners only for things that are not boxes: items that
        * live inside a box, and runs of text inside a line. Half of the
-       * "continuous corner" read comes from the squircle rule further
+       * "continuous corner" read comes from the corner-shape rule further
        * down, not the radii — change one without the other and the shape
        * goes flat. */
       --radius-xs: 4px;      /* inline runs: code spans, mentions, marks */
@@ -91,6 +107,11 @@
        * short box keeps its corner and stays a box, so the capsule shape
        * means something again wherever it does appear. */
       --radius-container: 16px;
+      /* The hero corner — the composer only. One deliberate step past the
+       * container corner so the surface the eye rests on reads as the
+       * plump anchor of the pane, not another panel. A single named
+       * exception to "one corner per box", not a size grade. */
+      --radius-hero: 28px;
       --density-gap: 4px;
       --density-control: 28px;
       --shadow-elevation: 0 8px 24px rgba(var(--shadow-color), 0.14);
@@ -103,8 +124,8 @@
        * scale, because it does a different job: it lifts a photograph off
        * the dark room rather than a panel off the app. Theme-static for the
        * same reason --scrim is, which is why it spells its own rgb instead
-       * of reaching for --shadow-color (that one flips 25,34,39 → 0,0,0
-       * with the theme, and the stage never flips). Base :root only;
+       * of reaching for --shadow-color (a theme-owned token whose alpha
+       * recipes vary per theme; the stage never varies). Base :root only;
        * neither dark block redefines it. */
       --shadow-stage: 0 16px 60px rgba(0, 0, 0, 0.35);
       /* Topmost-veil dim, two strengths: --veil behind modal dialogs,
@@ -246,6 +267,10 @@
       --measure-sm: min(440px, 100%);  /* a notice card */
       --measure-md: min(640px, 100%);  /* the agent transcript and its composer */
       --measure-lg: min(760px, 100%);  /* a media stage */
+      /* The marketing site's page column (home-page.css --max). Only the
+       * site-styled Templates gallery takes it — reading surfaces stay on
+       * the steps above. */
+      --measure-xl: min(1224px, 100%);
 
       /* Where floating pane chrome starts. The main pane hangs three
        * absolutely-positioned things off its top edge — the Markdown edit
@@ -382,7 +407,16 @@
        * CJK fallbacks explicitly per platform so Chinese always lands on a
        * quality sans (PingFang/Hiragino/YaHei/Noto), never a serif or an
        * unhinted default. */
+      /* Chrome speaks the SYSTEM UI face (SF Pro on macOS): dense chrome
+       * — the tree, tabs, menus — is what system faces are optically
+       * tuned for, and it is what the whole reference class does
+       * (VS Code's workbench, Notion, Craft, Finder). */
       --font-sans: -apple-system, system-ui, "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif;
+      /* Reading surfaces speak Geist — the marketing site's voice kept
+       * where the user actually READS (Markdown view, editor, chat
+       * replies). The latin-only subset falls through to the same
+       * CJK-aware stack for mixed-script text. */
+      --font-reading: "Geist", -apple-system, system-ui, "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif;
       --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -523,22 +557,34 @@
     }
 
     /* Continuous corners app-wide. The radii above set how MUCH a corner
-     * turns; `corner-shape: squircle` sets how it turns — a superellipse
-     * instead of a circular arc, which is the difference between "rounded
-     * rectangle" and the Apple-style corner. Chromium 139+ ships it (the
-     * renderer is on 142 via Electron 39); anywhere else the declaration
-     * is dropped and plain circular corners remain as the fallback.
+     * turns; `corner-shape` sets how it turns — a superellipse instead of
+     * a circular arc, which is the difference between "rounded rectangle"
+     * and the Apple-style corner. Chromium 139+ ships it (the renderer is
+     * on 142 via Electron 39); anywhere else the declaration is dropped
+     * and plain circular corners remain as the fallback.
+     *
+     * superellipse(1.3), not the `squircle` keyword (superellipse(2)).
+     * The squircle curve hugs its corner: at the small radii of the ramp
+     * that read as subtle continuity, but from the container step up it
+     * inverts — a 16px squircle turns so late it reads boxier and
+     * SMALLER than a 16px arc, and menus, dialogs, and the composer all
+     * came out pinched next to their stated radius. 1.3 sits between arc
+     * and squircle: still curvature-continuous into the straight edge,
+     * but the corner keeps the full soft sweep its radius promises, at
+     * every step of the ramp with one declaration. At control radii the
+     * two exponents are within a pixel of each other, so nothing small
+     * changed voice when this moved off `squircle`.
      *
      * `corner-shape` does not inherit, so this has to be a universal
      * selector rather than a rule on :root. */
     *,
     *::before,
     *::after {
-      corner-shape: squircle;
+      corner-shape: superellipse(1.3);
     }
 
     /* Capsules and circles opt back out: at a 50%-or-larger radius a
-     * squircle is a fat superellipse, not the true capsule these
+     * superellipse is a bulged oval, not the true capsule these
      * affordances are drawing (the transcript's jump-to-latest pill,
      * status dots, the progress track, the lightbox toolbar). Everything
      * that needs the opt-out reaches it through `.rounded-full`, so this
@@ -581,8 +627,16 @@
      * opaque line set 2px off the control reads as a heavy detached box
      * on 28px icon chrome, which is where focus most often lands:
      * closing an overlay with Esc restores focus to its trigger, and
-     * that keyboard modality correctly re-shows the ring. */
-    :where(button, input, select, textarea, [tabindex]):focus-visible {
+     * that keyboard modality correctly re-shows the ring.
+     *
+     * Text fields (input, textarea) are deliberately NOT in the list:
+     * the caret and the echo of typing are a text field's focus
+     * affordance (the composer set the idiom; the palette fields and the
+     * session-history rename each used to carry their own suppression
+     * rule against exactly this outline). A halo that lit up on every
+     * click into every field was the loudest recurring accent in the
+     * app for its most routine act. */
+    :where(button, select, [tabindex]):focus-visible {
       outline: 2px solid rgba(var(--focus-ring-rgb), 0.55);
       outline-offset: 1px;
     }
@@ -594,35 +648,6 @@
      * that do take keyboard focus use tabindex="0" and keep the ring. */
     [tabindex="-1"]:focus-visible {
       outline: none;
-    }
-
-    /* Palette query inputs (Quick Open / library search / the link-file
-     * and move-file pickers): the modal panel is the focus affordance, and
-     * its overflow-hidden corners clip the ring to a stray thick bar under
-     * the input — suppress the ring here. All four palette veils are listed;
-     * each picker renders the same seam into the same overflow-hidden panel,
-     * so leaving one out only made the defect harder to find. (This rule
-     * is unlayered on purpose: the Tailwind `outline-0` utility loses to the
-     * unlayered ring rule above, so an unlayered override is required.) */
-    .quick-open-veil input:focus-visible,
-    .library-search-veil input:focus-visible,
-    .link-file-picker-veil input:focus-visible,
-    .move-file-picker-veil input:focus-visible {
-      outline: none;
-    }
-
-    /* Session-history fields — the search box and the inline row rename —
-     * are the same palette pattern: the popover panel is the focus
-     * affordance, so neither should wear a loud cyan halo the moment it is
-     * auto-focused. Unlike the veils above, both are the `Input` primitive,
-     * so suppress ALL three of its focus cues: the global outline, the
-     * focus-visible border-ring, and the ring-3 glow (a box-shadow that
-     * `outline: none` alone can't clear). Unlayered, so it beats the
-     * primitive's Tailwind utilities. */
-    .session-history-popover input:focus-visible {
-      outline: none;
-      border-color: var(--border);
-      box-shadow: none;
     }
 
     /* One treatment for panel-chrome scrollers (sidebar tree/Library,

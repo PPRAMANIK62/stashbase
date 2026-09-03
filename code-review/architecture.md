@@ -12,7 +12,7 @@ Electron renderer windows
         ▼
 Node application server
   ├─ local file operations and preparation orchestration
-  ├─ built-in Agent bridge
+  ├─ Agent Panel bridge
   ├─ MCP transports and library operations
   └─ Supabase session and loopback embedding broker
         │

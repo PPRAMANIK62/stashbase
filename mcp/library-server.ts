@@ -278,7 +278,7 @@ const BUILTIN_TOOLS = [
       name: 'write_file',
       description:
         'Create or overwrite a Markdown, HTML, JSON, or UTF-8 plain-text file. Creates parent folders as ' +
-        'needed, writes atomically, and updates Similarity Search data when a provider is configured.',
+        'needed, writes atomically, and updates data for search by meaning when a provider is configured.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -311,7 +311,7 @@ const BUILTIN_TOOLS = [
       description:
         'Rename or move a file within the same folder. Keeps note attachment bundles together, ' +
         'regenerates PDF/image searchable text when needed, optionally cascades Markdown/HTML links, ' +
-        'and updates Similarity Search data when possible.',
+        'and updates data for search by meaning when possible.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -326,7 +326,7 @@ const BUILTIN_TOOLS = [
       name: 'delete_file',
       description:
         'Delete a visible file by absolute path. Also removes note bundles or ' +
-        'PDF/image derived artifacts owned by that file, and cleans Similarity Search data asynchronously.',
+        'PDF/image derived artifacts owned by that file, and cleans up data for search by meaning asynchronously.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -339,11 +339,11 @@ const BUILTIN_TOOLS = [
       name: 'search_library',
       description:
         'Search opened local folders, including current prepared text for PDFs, DOCX, images, and media. ' +
-        'Two modes: `semantic` (default) is hybrid ' +
-        '(vector + full-text) meaning-based search and needs Similarity Search; `keyword` is ' +
+        'Two modes: `semantic` (default) searches by meaning — hybrid ' +
+        '(vector + full-text) retrieval that needs an embedding provider set up in StashBase; `keyword` is ' +
         'exact literal search (ripgrep) for identifiers, error codes, config keys, or quoted ' +
-        'phrases that Similarity Search may blur, and it works before Similarity Search is set up. ' +
-        'In a StashBase panel chat, turning Similarity Search off resolves this tool to ' +
+        'phrases that meaning-based matching may blur, and it works without any setup. ' +
+        'In a StashBase panel chat, turning search by meaning off resolves this tool to ' +
         'keyword mode even when the `semantic` mode was requested; the response `mode` is the strategy actually used. ' +
         'Searches the **whole library** by default — every member folder from ' +
         '`library_info` — and scopes to one folder when `folder` is its absolute root (e.g. ' +
@@ -355,13 +355,13 @@ const BUILTIN_TOOLS = [
       inputSchema: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Natural-language query for Similarity Search (`semantic` mode) or literal text for Exact Search (`keyword` mode).' },
+          query: { type: 'string', description: 'Natural-language query for `semantic` mode (search by meaning) or literal text for `keyword` mode.' },
           mode: {
             type: 'string',
             enum: [...SEARCH_MODES],
             description:
-              'Search mode. "semantic" (default) is meaning-based and needs Similarity Search. ' +
-              '"keyword" is exact literal matching over source and prepared text and works before Similarity Search setup.',
+              'Search mode. "semantic" (default) searches by meaning and needs an embedding provider set up in StashBase. ' +
+              '"keyword" is exact literal matching over source and prepared text and works without setup.',
           },
           folder: {
             type: 'string',
@@ -436,7 +436,7 @@ const BUILTIN_TOOLS = [
     {
       name: 'reindex',
       description:
-        'Reconcile Similarity Search data with the files currently on disk, then report ' +
+        'Reconcile search data with the files currently on disk, then report ' +
         'index health. StashBase file tools update the index themselves when possible; ' +
         'call this after bulk external changes or when a file tool returns an index warning. ' +
         'You do NOT need to ' +

@@ -219,7 +219,7 @@ test('Codex changes the model for the next turn without replacing its thread', a
   session.dispose();
 });
 
-test('Codex applies the panel Similarity Search policy live', () => {
+test('Codex applies the panel search-by-meaning policy live', () => {
   const ws = new FakeWebSocket();
   const session = new CodexSession(ws as unknown as WebSocket, 'similarity-policy-window');
 

@@ -13,12 +13,12 @@ On a brand-new empty default folder home, StashBase creates the ordinary
 `👋 Start Here` folder and adds it to the Library without opening it. If that
 home already contains user folders, onboarding does not seed or modify it.
 
-Similarity Search is recommended for meaning-based retrieval but remains
-optional. The empty Library stays quiet; the first folder you activate offers
-hosted sign-in or an OpenAI/OpenRouter key. **Not now** keeps browsing,
-preview, editing, Preparation, Exact Search, and Build Wiki available,
-and is remembered across folders and relaunches. The Files-panel **Set up**
-action, Similarity Search mode, and Settings remain available later.
+Setting up search by meaning is recommended but remains optional. The empty
+Library stays quiet; the first folder you activate offers hosted sign-in or an
+OpenAI/OpenRouter key. **Not now** keeps browsing, preview, editing,
+Preparation, keyword search, and Build Wiki available, and is remembered
+across folders and relaunches. The Files-panel **Set up** action, the
+**By meaning** search mode, and Settings remain available later.
 
 ## Fastest Local-Only First Result
 
@@ -27,12 +27,12 @@ action, Similarity Search mode, and Settings remain available later.
    local folder whose contents you know.
 3. Open a source file. Folder entry prioritizes navigation; background
    Preparation and indexing do not have to finish first.
-4. Open Search, choose **Exact**, and search for a word or phrase known to be in
-   the source. In Start Here, try `source of truth`.
+4. Open Search, choose **By keyword**, and search for a word or phrase known to
+   be in the source. In Start Here, try `source of truth`.
 5. Open a result and confirm that it returns to the visible source file.
 
-That is a complete useful session. It requires no StashBase account, Similarity Search,
-transcription model, or Agent runtime.
+That is a complete useful session. It requires no StashBase account, no setup
+for search by meaning, no transcription model, and no Agent runtime.
 
 ## Build Wiki from Sources
 
@@ -43,8 +43,8 @@ focused pages under `wiki/` only when one map would become unwieldy.
 
 Build Wiki preserves the existing layout and modifies only `wiki/`. It
 does not move, rename, delete, or broadly rewrite Sources; a physical
-reorganization must be proposed and approved separately. Similarity Search
-setup does not appear or block this action. If selected-Agent setup is needed,
+reorganization must be proposed and approved separately. Setup for search by
+meaning does not appear or block this action. If selected-Agent setup is needed,
 the original action stays pinned to the same folder and resumes once the Agent
 is ready.
 
@@ -56,8 +56,8 @@ authorized context even before one folder becomes the current workspace.
 Try:
 
 - `How do I use StashBase?`
-- `What can I do without Similarity Search?`
-- `Explain the difference between Preparation and Similarity Search.`
+- `What can I do without search by meaning?`
+- `Explain the difference between Preparation and search by meaning.`
 - `Which file formats can an external MCP Agent actually read or edit?`
 - `How is StashBase different from NotebookLM or Obsidian?`
 
@@ -75,38 +75,39 @@ If the selected Claude Code or Codex runtime is missing, StashBase waits for
 **Install and continue**. Opening the app, a folder, or Chat history is not
 installation consent. Provider authentication is separate: for example,
 Codex may offer **Sign in with ChatGPT** through the same discovered runtime.
-Neither Agent login is a StashBase account or a Similarity Search credential.
+Neither Agent login is a StashBase account or a credential for search by
+meaning.
 
 Opening a document docks the same conversation beside it. Closing the last
 document expands an open Chat again. The session, draft, transcript, and scope
 remain the same presentation state.
 
-## Add Similarity Search When Meaning Matters
+## Add Search by Meaning When Meaning Matters
 
-Exact Search is best when the wording is known. Similarity Search is useful when
-the same idea may be expressed with different words or buried among many
+Keyword search is best when the wording is known. Searching by meaning helps
+when the same idea may be expressed with different words or buried among many
 documents.
 
-1. Choose Similarity Search, the Files-panel **Set up** action, or open **Settings
-   → Similarity Search**.
+1. Choose **By meaning** in Search, use the Files-panel **Set up** action, or
+   open **Settings → Search by Meaning**.
 2. Sign in to StashBase for the current hosted allowance, or configure an
    OpenAI/OpenRouter key.
 3. Confirm which source is selected and understand its data-handling terms.
 4. Let background indexing make relevant files ready.
-5. In Search, choose **Similarity** and try a concept query that does not copy the
-   source wording.
+5. In Search, choose **By meaning** and try a concept query that does not copy
+   the source wording.
 
-Hosted indexing and Similarity Search queries share the allowance shown in the account
-menu. If hosted capacity or the provider is unavailable, Exact Search and all
-ordinary local-file workflows remain available.
+Hosted indexing and meaning-based queries share the allowance shown in the
+account menu. If hosted capacity or the provider is unavailable, keyword search
+and all ordinary local-file workflows remain available.
 
 ## Turn Sources and Chat into Durable Work
 
 The repeatable StashBase workflow is:
 
 1. Add or select an ordinary project folder.
-2. Inspect a Source and retrieve relevant evidence with Exact Search or
-   Similarity Search.
+2. Inspect a Source and retrieve relevant evidence with keyword search or
+   search by meaning.
 3. Start an Agent task with an explicit Library or folder scope.
 4. Inspect the Agent's evidence, tool activity, permissions, and proposed file
    changes.
@@ -148,7 +149,7 @@ does not copy the transcript into project files automatically.
 
 ## Connect an External Agent Later
 
-Built-in Claude Code and Codex setup is automatic after deliberate Agent
+Agent Panel setup for Claude Code and Codex is automatic after deliberate Agent
 activation. For another MCP-compatible client, open **Settings → MCP** and copy
 the standard configuration or connection details.
 

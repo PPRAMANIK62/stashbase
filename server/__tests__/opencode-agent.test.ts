@@ -23,7 +23,7 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
-test('OpenCode applies Similarity Search before native client readiness', () => {
+test('OpenCode applies the search-by-meaning policy before native client readiness', () => {
   const ws = new FakeWebSocket();
   const runtime: OpenCodeSessionRuntime = {
     client: async () => new Promise<never>(() => {}),

@@ -7,9 +7,9 @@ import type { MenuItem } from '@/common/components/Menu';
 import type { LibraryListEntry } from '@/features/workspace/lib/libraryListPlan';
 
 /**
- * The library menu's one content home, shared by its two triggers: the
- * titlebar folder switcher and the sidebar's no-folder Choose Folder
- * invitation. Add-folder flows ride `pinned` so they stay put while a
+ * The library menu's one content home, shared by the titlebar folder switcher
+ * and the active-folder header's Change Folder submenu. Add-folder flows ride
+ * `pinned` so they stay put while a
  * long membership scrolls; the membership itself lists favorites first.
  * Row selection semantics (what "current" means, how a pick opens) stay
  * with the caller — the two triggers differ exactly there.
@@ -29,7 +29,10 @@ export function libraryMenuItems(opts: {
     label: basename(entry.path),
     icon: <FolderIcon />,
     detail: shortenFolderPath(entry.path, opts.homeDir),
-    checked: opts.isCurrent(entry.path),
+    /* `current`, not `checked`: the picker marks where you are with the
+     * accent DOT in the label's dot slot — a trailing check beside an
+     * attention dot read as two competing marks. */
+    current: opts.isCurrent(entry.path),
     attention: opts.attention(entry.path),
     onSelect: () => opts.onPick(entry.path),
   });

@@ -1,7 +1,7 @@
 /**
  * `create_project` — host-side project creation for Agent callers.
  *
- * During a library-scoped chat the built-in agent can call the
+ * During a library-scoped chat an attributed Agent Panel session can call the
  * `create_project` MCP tool to get a fresh working context. This module owns
  * the semantics: validate the name, create the directory (under the default
  * folder home unless an explicit valid location is given), register it into

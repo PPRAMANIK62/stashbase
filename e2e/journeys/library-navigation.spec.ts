@@ -110,9 +110,9 @@ test('persistent document tabs and Quick Open remain keyboard-operable and resto
 });
 
 // Intent: J01/J12 — a bare Library stays interruption-free, while the first
-// active folder offers the one app-wide Similarity Search setup choice. Not now is durable;
+// active folder offers the one app-wide setup choice for search by meaning. Not now is durable;
 // the Files-panel action keeps setup manually reachable.
-test('Similarity Search setup is offered on the first active folder and Not now suppresses later automatic prompts', async ({}, testInfo) => {
+test('setup for search by meaning is offered on the first active folder and Not now suppresses later automatic prompts', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   let app: LaunchedApp | undefined;
   try {
@@ -120,7 +120,7 @@ test('Similarity Search setup is offered on the first active folder and Not now 
     const skip = app.page.getByRole('button', { name: 'Not now', exact: true });
 
     await expect(skip).toBeHidden();
-    await expect(app.page.getByText("Similarity Search isn't set up", { exact: true })).toBeVisible();
+    await expect(app.page.getByText("Searching by meaning isn't set up", { exact: true })).toBeVisible();
 
     await openLibraryFolder(app.page, 'project-alpha');
     await expect(app.page).toHaveTitle('project-alpha — StashBase');
@@ -131,7 +131,7 @@ test('Similarity Search setup is offered on the first active folder and Not now 
     // A folder switch remains quiet after that explicit local-only choice.
     await openLibraryFolder(app.page, 'project-beta');
     await expect(skip).toBeHidden();
-    await expect(app.page.getByText("Similarity Search isn't set up", { exact: true })).toBeVisible();
+    await expect(app.page.getByText("Searching by meaning isn't set up", { exact: true })).toBeVisible();
 
     await app.page.getByRole('button', { name: 'Set up', exact: true }).click();
     await expect(skip).toBeVisible();

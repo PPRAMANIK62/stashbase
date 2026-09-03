@@ -183,7 +183,7 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
     }
   });
 
-  // Resolve the best file path to hand to a built-in agent for a visible
+  // Resolve the best file path to hand to an Agent Panel runtime for a visible
   // source file. PDF/DOCX use app-data extracted text for reading. HTML/images
   // keep the original source as the read path; their extracted text layers
   // are indexing inputs, not source replacements.

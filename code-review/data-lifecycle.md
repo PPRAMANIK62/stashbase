@@ -38,12 +38,12 @@
 - Conversion completion is independent of semantic indexing. Current prepared
   text can serve exact retrieval while semantic indexing is disabled, pending,
   paused, or failed.
-- A Chat's Similarity Search switch is consumption policy only. Off routes its
-  attributed retrieval through direct and current prepared text without
+- A Chat's **Search by meaning** switch is consumption policy only. Off routes
+  its attributed retrieval through direct and current prepared text without
   pausing Preparation, reconcile, or semantic indexing.
 - **wiki/** pages are ordinary visible Markdown, not AppData-derived state.
   Agent write reconciliation admits them through the same exact/semantic paths
-  as other Markdown. Similarity Search activation/backfill and Build Wiki
+  as other Markdown. Activation/backfill for search by meaning and Build Wiki
   may complete independently.
 
 ## Scheduler and Cancellation
@@ -111,7 +111,7 @@ cannot clear the current readiness latch or reject current operations.
 
 Large semantic workloads use the same authoritative content-hash diff. Known
 stale rows become unavailable before a durable awaiting/paused decision is
-published. A pause never delays browsing, preparation, editing, or exact
+published. A pause never delays browsing, preparation, editing, or keyword
 search; only explicit Start clears it.
 
 ## Freshness and Visibility
@@ -256,6 +256,6 @@ core loop and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
 for registration and initial sync of an Agent-created member, and
 [J12](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder)
-for Wiki Page admission and independent Similarity Search activation.
+for Wiki Page admission and independent activation of search by meaning.
 Related contracts: [File Transactions](file-transactions.md),
 [MCP Access](mcp-access.md), and [Release Pipeline](release-pipeline.md).

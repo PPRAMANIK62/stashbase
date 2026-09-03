@@ -79,7 +79,7 @@ export function DocumentOutline({
          * "Heading level N" label stays too: level is the document's
          * heading number, depth is the outline's nesting, and they differ
          * when a document skips levels. */
-        return <li key={heading.id} aria-level={depth + 1} className={cn('tree-row', activeId === heading.id && 'active', isCollapsed && 'collapsed')} style={{ paddingLeft: Math.min(depth, 4) * 14 + 10 } as React.CSSProperties}>
+        return <li key={heading.id} aria-level={depth + 1} className={cn('tree-row', activeId === heading.id && 'active', isCollapsed && 'collapsed')} style={{ paddingLeft: Math.min(depth, 4) * 8 + 10 } as React.CSSProperties}>
           {hasChildren ? <button type="button" className="chev cursor-pointer border-0 bg-transparent p-0" aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${label}`} aria-expanded={!isCollapsed} onClick={() => setCollapsed((previous) => {
             const next = new Set(previous);
             if (isCollapsed) next.delete(heading.id);

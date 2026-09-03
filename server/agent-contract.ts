@@ -1,5 +1,5 @@
 /**
- * Compatibility-first contract for the built-in Agent panel.
+ * Compatibility-first contract for the Agent Panel.
  *
  * Runtime-specific bridges register a small adapter here.  The renderer and
  * route layer speak only in terms of this contract, while Claude's SDK and

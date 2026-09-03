@@ -53,10 +53,16 @@ export type {
  * thing no variant expresses: a circle that tints ACCENT on hover rather
  * than muted. Circular, not squircular: a true circle is the one shape
  * that reads as a button rather than as a smaller copy of the composer
- * around it. `rounded-full` also opts out of the app-wide squircle (see
- * globals.css), which is what keeps it a circle instead of a bulged
- * superellipse. Stop holds its red under the pointer — the ghost variant's
- * muted hover would read as the button going inert mid-turn.
+ * around it. `rounded-full` also opts out of the app-wide continuous
+ * corner (see globals.css), which is what keeps it a circle instead of a
+ * bulged superellipse. BOTH states wear the accent: this is the composer's one
+ * key action, and send→stop must read as the same button changing verbs,
+ * not two buttons trading places. (Not red for stop: the danger palette
+ * is budgeted for destructive actions, and stopping a turn is routine —
+ * a red disc made every streaming turn wear a warning light.) Hover dims
+ * the fill — never grays it — so mid-turn it cannot read as going inert.
+ * The stop glyph takes size-3.5, under the primitive's size-4 default:
+ * the fill-weight square at 16px filled the disc edge to edge.
  */
 function SendButton({ turnActive, disabled, onStop, onSend }: {
   turnActive: boolean;
@@ -69,11 +75,11 @@ function SendButton({ turnActive, disabled, onStop, onSend }: {
       <Button
         variant="ghost"
         size="icon-sm"
-        className="rounded-full border-destructive bg-destructive text-primary-foreground hover:bg-destructive hover:text-primary-foreground"
+        className="rounded-full bg-accent text-primary-foreground hover:bg-accent/85 hover:text-primary-foreground"
         aria-label="Stop agent"
         onClick={onStop}
       >
-        <StopIcon />
+        <StopIcon className="size-3.5" />
       </Button>
     );
   }
@@ -81,7 +87,7 @@ function SendButton({ turnActive, disabled, onStop, onSend }: {
     <Button
       variant="ghost"
       size="icon-sm"
-      className="rounded-full border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:opacity-40"
+      className="rounded-full bg-accent text-primary-foreground enabled:hover:bg-accent/85 enabled:hover:text-primary-foreground disabled:opacity-40"
       aria-label="Send message"
       disabled={disabled}
       onClick={onSend}
@@ -124,7 +130,7 @@ export interface ComposerAttachments {
 export function AgentComposer({
   phase, disabled, turnActive, active, agentShortName, hero,
   mode, effort, model, scope, similaritySearch, mentions, skills, attachments,
-  closedPlaceholder, onDraftChange, onFocusChange, onSend, onStop,
+  closedPlaceholder, seedText, onSeedConsumed, onDraftChange, onFocusChange, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
   disabled: boolean;
@@ -147,6 +153,12 @@ export function AgentComposer({
   mentions: ComposerMentionSources;
   skills: ComposerSkillSource;
   attachments: ComposerAttachments;
+  /** One-shot text the session asks the composer to hold — a Template's
+   * staged prompt placed as an editable draft, never auto-sent. Consumed
+   * (and acknowledged) the moment it lands, so a later remount cannot
+   * place it twice. */
+  seedText?: string | null;
+  onSeedConsumed?: () => void;
   /** Reports whether the composer holds unsent draft text, so the tab
    * model can freeze a drafted tab's scope and exclude it from blank-tab
    * reuse. */
@@ -168,6 +180,19 @@ export function AgentComposer({
   });
 
   useEffect(() => { if (active) composerRef.current?.focus(); }, [active]);
+
+  /* A staged Template prompt lands as an editable draft the moment it is
+   * offered (including on mount, when the session armed it while a
+   * runtime gate stood where this composer now is). Acknowledged only
+   * once it actually LANDS — the editor mounts in a child effect, so it
+   * exists by the time this runs, but a not-yet-mounted view must leave
+   * the seed armed rather than swallow it. */
+  useEffect(() => {
+    if (seedText == null) return;
+    if (composerRef.current?.insertText(seedText)) onSeedConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the ack
+    // callback's identity must not re-run a consumed seed.
+  }, [seedText]);
 
   function cycleMode() {
     mode.onSet(nextPermMode(mode.value));
@@ -210,7 +235,7 @@ export function AgentComposer({
     // composer share the `-md` measure — which the old chat-primary hook
     // (a 944px wrapper around a 920px card) had drifted away from.
     <div
-      className="relative mx-auto w-measure-md p-2"
+      className="relative mx-auto w-measure-md px-4 py-2"
       data-draft-empty={text.trim() ? 'false' : 'true'}
     >
       <MentionSuggestions state={suggestions} skills={skills} />
@@ -222,15 +247,18 @@ export function AgentComposer({
         // The hero corner — one step past every overlay in the app. The
         // composer is the surface the eye rests on, and the extra radius
         // is what makes it read as the anchor rather than another panel.
-        'flex flex-col gap-1.5 rounded-2xl border border-border bg-background px-2 pt-2 pb-1.5',
+        // pb matches px so the send disc sits equidistant from the right
+        // and bottom edges — at the hero radius the corner sweep makes any
+        // inset mismatch read as the button drifting off-center.
+        'flex flex-col gap-1.5 rounded-hero border border-border bg-background px-3 pt-2 pb-3',
         // Hero (empty-state) presentation: the composer is the visual
         // anchor of an otherwise bare pane, so it earns a taller resting
         // input and the one sanctioned non-overlay shadow. Docked mode
         // stays flat and compact beside a document.
-        // 56px ≈ two and a half lines: a shade taller than the docked
-        // composer's two, which is all the extra presence the empty
-        // pane's anchor needs. Four lines read as a form to fill in.
-        hero && 'shadow-raised [--composer-min-h:56px]',
+        // 72px ≈ three lines: the plump-anchor presence the empty pane
+        // asks for (paired with the hero corner). More reads as a form
+        // to fill in.
+        hero && 'shadow-raised [--composer-min-h:72px]',
       )}>
         {(attachments.items.length > 0 || attachments.uploading) && (
           <div className="flex flex-wrap items-center gap-1">

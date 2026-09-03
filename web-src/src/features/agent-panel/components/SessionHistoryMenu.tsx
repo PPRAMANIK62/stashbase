@@ -138,13 +138,12 @@ export function SessionHistoryMenu({
                   >
                     {editingKey === key ? (
                       // Same `Input` primitive as the search field above, sized
-                      // down to sit inside a row. The popover's unlayered
-                      // `input:focus-visible` rule in globals.css keeps suppressing
-                      // all three focus cues here too — the panel is the focus
-                      // affordance, and this field is autofocused the moment it
+                      // down to sit inside a row, keeping the primitive's own
+                      // neutral stroke — an edit box is delimited, not
+                      // "selected". This field is autofocused the moment it
                       // appears.
                       <Input
-                        className="mx-1.5 my-1 h-auto w-auto flex-1 rounded-md border-accent px-2 py-1"
+                        className="mx-1.5 my-1 h-auto w-auto flex-1 rounded-md px-2 py-1"
                         autoFocus
                         aria-label={`Rename ${row.title}`}
                         value={editText}

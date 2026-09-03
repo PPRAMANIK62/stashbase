@@ -4,61 +4,75 @@ import { FolderIcon, GithubLogoIcon, NewFolderIcon } from '@/common/components/i
 import type { useAppActions } from '@/store/contexts/AppContext';
 import type { MenuItem } from '@/common/components/Menu';
 
-/** The add-folder flows shared by the switcher (and the zero-folder
- *  hero button, which keeps its own copy of the first). "Open Folder…"
- *  picks any folder on disk and opens it in place (nothing is copied; it
- *  is indexed where it lives). "New Folder…" opens the same native picker
- *  at the default StashBase home so the OS panel's New Folder button
- *  lands in the expected place. "Import from GitHub…" opens the in-app
- *  repository import modal to clone into folder home. */
+/** The two native-picker flows behind "Open Folder…" and "New Folder…",
+ *  shared by the switcher menu and the main pane's welcome landing — ONE
+ *  implementation so the two surfaces cannot drift. Null when the host
+ *  has no folder dialog (the browser dev shell). "Open Folder…" picks any
+ *  folder on disk and opens it in place (nothing is copied; it is indexed
+ *  where it lives). "New Folder…" opens the same native picker at the
+ *  default StashBase home so the OS panel's New Folder button lands in
+ *  the expected place. */
+export function folderPickerFlows(
+  actions: ReturnType<typeof useAppActions>['actions'],
+  bridge: ReturnType<typeof electronBridge>,
+): { openExistingFolder: () => Promise<void>; newFolderFromHome: () => Promise<void> } | null {
+  if (typeof bridge?.openFolderDialog !== 'function') return null;
+
+  async function openExistingFolder() {
+    try {
+      const picked = await bridge!.openFolderDialog!({
+        title: 'Select folder',
+        buttonLabel: 'Select folder',
+        allowCreateDirectory: true,
+      });
+      if (picked) await actions.openFolder(picked);
+    } catch (err) {
+      actions.toast('Could not open the folder: ' + errorMessage(err), { level: 'error' });
+    }
+  }
+
+  async function newFolderFromHome() {
+    try {
+      const { path } = await api.getFolderHome();
+      const picked = await bridge!.openFolderDialog!({
+        title: 'Create or select folder',
+        buttonLabel: 'Select folder',
+        defaultPath: path,
+        allowCreateDirectory: true,
+      });
+      if (picked) await actions.openFolder(picked);
+    } catch (err) {
+      actions.toast('New folder failed: ' + errorMessage(err), { level: 'error' });
+    }
+  }
+
+  return { openExistingFolder, newFolderFromHome };
+}
+
+/** The add-folder flows as menu rows, for the switcher. "Import from
+ *  GitHub…" opens the in-app repository import modal to clone into
+ *  folder home. */
 export function addFolderMenuItems(
   actions: ReturnType<typeof useAppActions>['actions'],
   bridge: ReturnType<typeof electronBridge>,
   opts?: { onImportGitHub?: () => void },
 ): MenuItem[] {
   const items: MenuItem[] = [];
+  const flows = folderPickerFlows(actions, bridge);
 
-  if (typeof bridge?.openFolderDialog === 'function') {
-    async function openExistingFolder() {
-      try {
-        const picked = await bridge!.openFolderDialog!({
-          title: 'Select folder',
-          buttonLabel: 'Select folder',
-          allowCreateDirectory: true,
-        });
-        if (picked) await actions.openFolder(picked);
-      } catch (err) {
-        actions.toast('Could not open the folder: ' + errorMessage(err), { level: 'error' });
-      }
-    }
-
-    async function newFolderFromHome() {
-      try {
-        const { path } = await api.getFolderHome();
-        const picked = await bridge!.openFolderDialog!({
-          title: 'Create or select folder',
-          buttonLabel: 'Select folder',
-          defaultPath: path,
-          allowCreateDirectory: true,
-        });
-        if (picked) await actions.openFolder(picked);
-      } catch (err) {
-        actions.toast('New folder failed: ' + errorMessage(err), { level: 'error' });
-      }
-    }
-
+  if (flows) {
     items.push(
       {
         label: 'Open Folder…',
         icon: <FolderIcon />,
         detail: 'Any folder on your disk, indexed in place',
-        onSelect: () => { void openExistingFolder(); },
+        onSelect: () => { void flows.openExistingFolder(); },
       },
       {
         label: 'New Folder…',
         icon: <NewFolderIcon />,
         detail: 'Created under the StashBase folder home',
-        onSelect: () => { void newFolderFromHome(); },
+        onSelect: () => { void flows.newFolderFromHome(); },
       },
     );
   }
@@ -83,6 +97,6 @@ export function addFolderMenuItems(
  * the identity survives a sidebar collapse; the menu lists the
  * add-folder actions on top and the whole membership below (favorites
  * first, current checked, needs-attention members carrying the quiet
- * warning dot). The menu's content is built once in `libraryMenuItems`;
- * the sidebar's no-folder Choose Folder invitation opens the same menu.
+ * warning dot). The menu's content is built once in `libraryMenuItems` and is
+ * shared with the active-folder header's Change Folder submenu.
  */

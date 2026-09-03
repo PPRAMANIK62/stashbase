@@ -225,7 +225,7 @@ export function mount(app: express.Express): void {
       }
       const finishRemoval = await beginLibraryFolderRemovalAsync(abs);
       try {
-        // Built-in Agent sessions are folder-pinned and survive window folder
+        // Wiki Agent sessions are folder-pinned and survive window folder
         // switches, so removal must also end the sessions BOUND to this folder
         // — including ones in windows currently showing another folder. Do
         // this BEFORE releasing window folder contexts: that release invokes

@@ -100,7 +100,7 @@ export function useLibrarySearchController({ prefill, onClose }: {
     const folderScope = opts.scope.kind === 'folder' ? { folder: opts.scope.path } : {};
     try {
       if (opts.mode === 'keyword') {
-        // Exact search is plain, case-insensitive substring matching:
+        // Keyword search is plain, case-insensitive substring matching:
         // the popup offers no case/whole-word latches, so it must never
         // send options the user cannot see or unset.
         const result = await api.libraryKeywordSearch(q, folderScope);
@@ -119,7 +119,7 @@ export function useLibrarySearchController({ prefill, onClose }: {
           return;
         }
         if (embedder.source === 'stashbase-account' && embedder.account.quota?.remainingTokens === 0) {
-          setError('Your hosted Similarity Search allowance is exhausted. Exact Search is still available.');
+          setError('Your hosted allowance for search by meaning is used up. Keyword search is still available.');
           setSemanticHits(null);
           setSearching(false);
           return;

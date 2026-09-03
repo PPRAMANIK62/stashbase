@@ -902,7 +902,7 @@ async function createWindow(initialFolder) {
     // There is no in-window titlebar strip — document.title is the only
     // place the folder identity is spelled out.
     title: 'StashBase',
-    backgroundColor: '#fafafa',
+    backgroundColor: '#fcfcfc',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 12 },
     webPreferences: {

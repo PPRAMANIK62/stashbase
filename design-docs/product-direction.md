@@ -7,9 +7,9 @@ three connected capabilities:
 > RAG layer for document retrieval.
 
 Sources and visible Wiki Pages are complementary parts of the Wiki. Wiki Pages
-help people and Agents navigate durable knowledge; Similarity Search retrieves
-relevant material when wording and file layout are insufficient. None of these
-capabilities replaces the local files as source of truth.
+help people and Agents navigate durable knowledge; searching by meaning
+retrieves relevant material when wording and file layout are insufficient.
+None of these capabilities replaces the local files as source of truth.
 
 ## AI-native Product Scope
 
@@ -38,20 +38,21 @@ or proprietary storage model.
 
 ## Agent Panel
 
-The built-in Agent Panel works against an explicit library or folder scope.
+The Agent Panel works against an explicit library or folder scope.
 Before a document is opened, Chat is the primary working surface; once a
 document appears, the same Chat adapts into a side panel alongside the source.
 It is a convenient client of StashBase context, not a separate AI workspace
 and not a replacement for external Agent clients.
 
-For a blank folder-scoped Chat, **Build Wiki** is the fixed first action.
+For a folder, the **Templates** gallery is the fixed way into building a
+wiki, and its **Knowledge Base** preset is the classic Build Wiki action.
 It asks the selected Agent to create or improve source-linked `wiki/index.md` and,
 only when needed, focused pages beside it. The first release does not infer a
 persistent built/stale state or schedule refreshes. It preserves source files:
 moving, renaming, deletion, and broad source rewrites require a separate
 explicit user decision.
 
-Built-in is the included path: a pinned local OpenCode runtime uses the
+Wiki Agent is the included path: a pinned local OpenCode runtime uses the
 signed-in account's included model allowance without asking the user to install
 an Agent or configure a model key. It remains the initial selection while the
 picker lists Codex and Claude Code before it as first-class bring-your-own
@@ -79,17 +80,18 @@ evidence may span long-form files, OCR, or transcripts. StashBase therefore
 treats preparation, a persistent meaning-based index, and source-grounded
 retrieval as one first-class RAG layer instead of relying on exact terms alone.
 
-### Similarity Search activation
+### Activating search by meaning
 
-StashBase should strongly recommend Similarity Search because document
-libraries often need meaning-based retrieval, while keeping Exact Search as a
-supported local state.
+StashBase should strongly recommend setting up search by meaning because
+document libraries often need meaning-based retrieval, while keeping keyword
+search as a supported local state.
 Launch into an empty Library remains quiet. The first activated folder offers
 setup once; completing it or choosing **Not now** prevents automatic replays
-across folders and relaunches. Similarity Search, its persistent setup action,
-and Settings remain deliberate routes back. Activating Similarity Search
-automatically prepares Library folders and keeps eligible files synchronized;
-Build Wiki remains an independent visible-file action.
+across folders and relaunches. The **By meaning** search mode, the persistent
+setup action, and Settings remain deliberate routes back.
+Activating search by meaning automatically prepares Library folders and keeps
+eligible files synchronized; Build Wiki remains an independent visible-file
+action.
 Hosted service and bring-your-own-key sources are choices, not gates to local
 files. Browsing, editing, preview, exact retrieval, and an existing local index
 must remain usable through authentication, provider, network, or quota failure.

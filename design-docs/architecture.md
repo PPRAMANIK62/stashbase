@@ -9,7 +9,7 @@ source of truth for file, module, route, and function-level detail.
 ```text
 Sources ────────────────→ Document Workbench
    ├→ Build Wiki → Wiki Pages ───────────────────┐
-   └→ Prepare → Exact / Similarity Search → MCP ─┴→ Agents
+   └→ Prepare → Search by keyword/meaning → MCP ─┴→ Agents
 ```
 
 The Document Workbench is the user-facing surface over local files. Sources,
@@ -42,13 +42,13 @@ operate as one local library per installation.
 Credentials and optional hosted-account sessions are owned by the local Node
 service. Provider and account tokens do not cross into renderer responses,
 OpenCode configuration/history, or the indexing daemon. When the user selects
-hosted Similarity Search, Node may send extracted text through the hosted
+hosted search by meaning, Node may send extracted text through the hosted
 Adapter. When
-the user runs Built-in, the Node broker sends prompts and necessary model
+the user runs Wiki Agent, the Node broker sends prompts and necessary model
 context through the hosted model Adapter; sessions, tool execution, permissions,
 Diffs, and files remain local. The hosted service owns model routing and usage
 accounting, not Agent execution or session storage. Agent accounting is a
-separate cost ledger from hosted Similarity Search: the service atomically
+separate cost ledger from hosted search by meaning: the service atomically
 reserves and settles
 each model request against its prompt turn, fixed seven-day account window,
 short-term limits, and UTC-day provider budget. Model and policy versions are
@@ -80,8 +80,8 @@ visible, user-owned content and follows ordinary file transactions.
   show different folders at the same time; those are independent UI scopes,
   not separate libraries or indexing runtimes.
 - Search and Agent retrieval stay within authorized library membership and
-  return visible Source identity. Exact Search works before Similarity Search
-  setup.
+  return visible Source identity. Keyword search works before any setup for
+  search by meaning.
   Mode-specific scope rules live in [Search and Retrieval](design/search.md)
   and [MCP Access](../code-review/mcp-access.md).
 - Agent Instructions resolve from one packaged plain-language default plus an
@@ -97,12 +97,12 @@ visible, user-owned content and follows ordinary file transactions.
 - One local runtime owns indexing state. Other processes communicate through
   its supported boundary rather than maintaining competing copies of the index.
 - The included Agent runtime is already packaged and starts only for an active
-  Built-in session. Bring-your-own readiness is demand-driven: opening
+  Wiki Agent session. Bring-your-own readiness is demand-driven: opening
   the app or a folder does not install an Agent runtime; explicit Chat actions
   own preparation and recovery.
 - Build Wiki pins one blank Chat to its folder while selected-Agent setup
   or reconnect completes. The pending intent is renderer-local, independent
-  from Similarity Search setup, and sends at most once; it is not durable
+  of setup for search by meaning, and sends at most once; it is not durable
   application state and cannot widen to Library implicitly.
 - Closing a window releases only its UI and folder context. Shared application
   resources remain alive until the application session quits, and a window is
@@ -115,7 +115,7 @@ visible, user-owned content and follows ordinary file transactions.
   remains the visible source. The product-facing classifications live in the
   [Documents format matrix](design/documents.md#format-capability-matrix).
 - Preparation and semantic indexing are separate stages. Current prepared text
-  may support Exact Search before Similarity Search is ready.
+  may support keyword search before the semantic index is ready.
 - Incomplete, stale, or partial derived output is never current truth.
 - Reconcile brings external changes back into derived state and the index
   without blocking folder navigation or ordinary local work.
@@ -151,7 +151,7 @@ Format completion, scheduler, freshness, quota, and cleanup rules live in
 - External URLs and local-file navigation follow explicit, validated paths.
 - Network, commands, deletion, rename, and broader filesystem access remain
   explicit approval decisions in the Agent Panel.
-- Every Built-in panel session receives a private OpenCode server
+- Every Wiki Agent panel session receives a private OpenCode server
   credential and MCP attribution identity. A Library-wide session disables
   native cwd file/command tools and uses the membership-checked MCP layer;
   folder sessions deny paths outside their working folder. The private process

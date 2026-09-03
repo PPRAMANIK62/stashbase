@@ -125,15 +125,6 @@ export function useAgentPromptQueue({
     void sendPromptNow({ text, attachments: atts, titleHint, skill, appendBlock: true, clearAttachments: true });
   }
 
-  /** Send a product action while idle without borrowing composer attachments.
-   * Its visible transcript text and wire text are deliberately identical. */
-  function sendPreset(text: string) {
-    if (turnActiveRef.current) return false;
-    const titleHint = capabilitiesRef.current?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
-    void sendPromptNow({ text, attachments: [], titleHint, appendBlock: true });
-    return true;
-  }
-
   function resend(text: string) {
     if (!turnActiveRef.current) {
       send(text);
@@ -288,7 +279,6 @@ export function useAgentPromptQueue({
     runNextQueuedPrompt,
     steerQueuedPrompt,
     send,
-    sendPreset,
     resend,
     resendFailedPrompt,
   };

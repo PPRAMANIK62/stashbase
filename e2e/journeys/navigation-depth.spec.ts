@@ -161,7 +161,7 @@ test('Favorites pin above recents and removing the active folder returns to Home
     // Selecting a member in the open menu switches this window in place.
     await switcherFolderItem(app.page, 'project-alpha').click();
     await expect(app.page).toHaveTitle('project-alpha — StashBase');
-    // Folder switching remains uninterrupted when Similarity Search is off.
+    // Folder switching remains uninterrupted when search by meaning is off.
     await dismissEmbeddingKeyPrompt(app.page);
 
     await openFolderMenu(app, 'project-alpha');
@@ -169,12 +169,12 @@ test('Favorites pin above recents and removing the active folder returns to Home
     await app.page.getByRole('dialog', { name: 'Remove from Library?' }).getByRole('button', { name: 'Remove' }).click();
     await expect(app.page).toHaveTitle('StashBase');
     await expect(app.page.getByRole('button', { name: 'Select project-alpha folder root' })).toHaveCount(0);
-    await expect(app.page.getByText('Chat and search cover your whole library')).toBeVisible();
     // Returning to the bare window stays uninterrupted too.
     await dismissEmbeddingKeyPrompt(app.page);
-    // Members remain but none is open, so the sidebar carries the Choose
-    // Folder invitation below New Chat.
-    await expect(app.page.getByRole('button', { name: 'Choose Folder' })).toBeVisible();
+    // The launcher column offers the add-folder flows; membership
+    // browsing (and reopening project-beta) belongs to the switcher menu,
+    // asserted below.
+    await expect(app.page.getByRole('button', { name: 'Open Folder…', exact: true })).toBeVisible();
     // The removed folder is gone from the switcher menu; the remaining
     // member is still offered.
     await openFolderSwitcher(app.page);

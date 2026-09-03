@@ -1,5 +1,5 @@
 /**
- * The Similarity Search setup choice: how to power indexing.
+ * The setup choice for search by meaning: how to power indexing.
  *
  * This is a two-option question, so it reads as two objects, not a form. Each
  * option is ONE card with its explanation stacked inside it (title over a
@@ -9,7 +9,7 @@
  *
  * Wording keeps the first-run choice at the product level; "embeddings"
  * appears only in the bottom disclosure line (and the key form), while the
- * technical Similarity Search name remains in Settings.
+ * feature name — search by meaning — remains in Settings.
  *   • Sign in to StashBase — hosted, free monthly indexing; the low-friction
  *     default. The recommended card carries a soft brand TINT and the same
  *     neutral border as its sibling: tint plus a brand-toned border read as
@@ -158,7 +158,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
         'm-0 border-t border-border pt-2 text-2xs leading-relaxed text-muted-foreground',
         onSkip ? 'mt-7' : 'mt-3',
       )}>
-        Hosted and API-key modes send text to the selected service for Similarity Search embeddings.
+        Hosted and API-key modes send text to the selected service to compute embeddings for search by meaning.
       </p>
     </div>
   );

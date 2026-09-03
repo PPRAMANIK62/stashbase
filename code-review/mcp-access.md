@@ -5,7 +5,7 @@
 
 ## One Library, One Operation Layer
 
-The built-in Agent panel and external clients call the same library operations.
+The Agent Panel and external clients call the same library operations.
 Stdio, Streamable HTTP, and app HTTP routes are adapters over that operation
 layer; none may implement a broader filesystem path or a different source
 identity rule.
@@ -30,9 +30,9 @@ clients and are not a general host-filesystem API.
   the operation boundary rather than exposing that folder-rooted mechanism to
   callers.
 - An attributable panel session may resolve any `search_library` request to
-  keyword mode while its Similarity Search control is Off. This policy comes
-  from trusted transport attribution, never model-controlled tool arguments;
-  ambiguous or external callers retain their requested strategy.
+  keyword mode while its **Search by meaning** control is Off. This policy
+  comes from trusted transport attribution, never model-controlled tool
+  arguments; ambiguous or external callers retain their requested strategy.
 - Results retain absolute visible-source identity for Agent tools. Converted
   evidence never exposes an AppData path.
 - `library_info` returns folder identity and provider state, not a second
@@ -98,7 +98,7 @@ clients and are not a general host-filesystem API.
 StashBase writes durable MCP client configuration only for the bring-your-own
 Chat agents: Agent readiness calls `ensureAgentMcp` (Claude Code, Codex), which
 regenerates the platform MCP launcher and idempotently rewrites that agent's own
-config. Built-in injects the same launcher into each private OpenCode
+config. Wiki Agent injects the same launcher into each private OpenCode
 server with the owning window and live-session attribution; it does not write a
 user config file.
 StashBase config does not mirror client config. Every external client —
@@ -106,7 +106,7 @@ including Claude Desktop — is configured by the user from the read-only
 Settings → MCP page (standard stdio config, URL access, token, Docker
 opt-in); manual and URL setup are documented in
 [docs/mcp-configuration.md](../docs/mcp-configuration.md). No route connects
-or disconnects a third-party client. A built-in Agent's MCP failure may link to
+or disconnects a third-party client. An Agent Panel runtime's MCP failure may link to
 this page as a manual recovery reference, but retry remains owned by Agent
 readiness.
 
@@ -117,13 +117,13 @@ approval path. Ordinary `write_file` and `edit_file` may be accepted only by
 the built-in panel's explicit Edit policy. Move, delete, commands, network,
 sandbox changes, and broader access remain explicit approval decisions.
 
-Built-in Library chats disable native cwd file and command tools because
+Wiki Agent Library chats disable native cwd file and command tools because
 the Library is a non-contiguous membership set; every file operation therefore
 crosses this MCP authorization boundary. A folder chat may use native local
 tools only inside its selected member cwd, with external directories denied.
 
 `create_project` creates a new source folder and changes Library membership.
-A built-in Agent call must follow an explicit user request or a visible
+An Agent Panel runtime call must follow an explicit user request or a visible
 approval that names the action and target; exploratory conversation alone is
 not consent. The operation returns the resolved project path. Only an
 attributable live Library Chat may rebind to it; folder-bound, stale,
@@ -139,7 +139,7 @@ unattributed, and external callers never redirect a built-in session.
 | HTTP client Adapter | `mcp/library-operations-http.ts` |
 | HTTP server Adapter | `server/routes/mcp-http.ts` and `server/mcp-http-service.ts` |
 | Settings Interface | `server/mcp-http-settings.ts` and the narrow read/HTTP routes in `server/routes/mcp.ts` |
-| Launcher and built-in agent wiring | `ensureAgentMcp` and `ensureMcpLauncher` in `server/agent-mcp.ts`, with per-session OpenCode injection in `server/opencode-runtime.ts` |
+| Launcher and Agent Panel runtime wiring | `ensureAgentMcp` and `ensureMcpLauncher` in `server/agent-mcp.ts`, with per-session OpenCode injection in `server/opencode-runtime.ts` |
 | Focused evidence | `server/library-operations/index.test.ts`, `server/routes/library-files.test.ts`, and `server/__tests__/mcp-http-*.test.ts` |
 
 ## Validation

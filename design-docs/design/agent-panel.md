@@ -15,7 +15,7 @@ Runtime installation, native process ownership, MCP access, and indexing have
 separate engineering contracts.
 
 The panel is not a remote Agent host, a separate AI workspace, or a
-transcript-centered file manager. **Built-in**, the included Agent, runs locally
+transcript-centered file manager. **Wiki Agent**, the included Agent, runs locally
 and uses a hosted service only as its metered model provider.
 
 ## Current Experience
@@ -23,20 +23,25 @@ and uses a hosted service only as its metered model provider.
 - Chat begins expanded. With no document it is the primary work surface;
   opening a source docks the same mounted session beside it, and closing the
   last source expands an open Chat again.
-- A blank Chat keeps the durable greeting **Your Wiki is here**. In folder
-  scope, one fixed **Build Wiki** capsule sits directly below the composer
-  and sends a complete product-owned preset immediately. The greeting,
-  composer, and capsule remain one vertically centered action group. A
+- A blank Chat keeps the durable greeting **Your Wiki is here**. Starting a
+  wiki lives in the **Templates** gallery — a singleton main-pane tab opened
+  from its sidebar row under New Chat — where each card places one complete
+  product-owned preset as an editable draft (the Knowledge Base card in the
+  organize section is the classic Build Wiki request). Nothing stands below
+  the composer at rest; while a used Template waits on Agent setup, its
+  progress line (with cancel) sits there.
+  The greeting and composer remain one vertically centered action group. A
   Library-scoped blank Chat stays focused on the greeting and composer without
   a bottom suggestion carousel.
-- **Similarity Search** is a single switch inside the Chat's session scope
-  picker, below the folder list and outside the Agent's Mode and model
-  settings. It sits with scope because scope decides what a lookup may reach
-  and this decides how it matches. On adds meaning-based retrieval on top of
-  text matching; turning it Off never stops search. It is On when Similarity
-  Search is available and can be turned Off per Chat to keep `search_library`
-  text-only. Both states retain direct and prepared document retrieval; asking
-  to turn it On before Similarity Search setup opens the explicit setup path.
+- The Chat's **Search by meaning** control is a single switch inside the
+  session scope picker, below the folder list and outside the Agent's Mode
+  and model settings. It sits with scope because scope decides what a lookup
+  may reach and this decides how it matches. On adds meaning-based retrieval
+  on top of text matching; turning it Off never stops search. It is On when
+  searching by meaning is available and can be turned Off per Chat to keep
+  `search_library` text-only. Both states retain direct and prepared document
+  retrieval; asking to turn it On while searching by meaning isn't set up
+  opens the explicit setup path.
 - For a Chat with a concrete working folder, **Agent Instructions** is a glyph
   action at the right of the Chat tab strip, separate from conversation controls
   and sharing a centre line with the chat-panel toggle beside it. It edits that
@@ -55,8 +60,9 @@ and uses a hosted service only as its metered model provider.
   Clearing and saving restores that default. Existing `AGENTS.md` and
   `CLAUDE.md` files remain separate user-owned runtime inputs and are never
   changed.
-- New users start with **Built-in** selected. The New Chat picker lists Codex,
-  Claude Code, then Built-in. Its second line says **Sign in for free credits**
+- New users start with **Wiki Agent** selected. The New Chat picker lists Codex,
+  Claude Code, then Wiki Agent, with comparable visual weight across their
+  leading marks. Its second line says **Sign in for free credits**
   while signed out and **Free credits included** after sign-in, keeping the
   zero-setup choice available without
   placing it ahead of explicit bring-your-own runtimes. Its pinned OpenCode runtime is included
@@ -88,8 +94,8 @@ and uses a hosted service only as its metered model provider.
   An idle Codex conversation can change the model used by its next turn without
   replacing its native thread; the picker pauses while a turn is active. Claude
   keeps its selected model fixed after the conversation has content.
-  Build Wiki sends immediately because it is a complete capability action
-  rather than an editable template.
+  A Template places a complete capability request in the composer rather than
+  sending it automatically; the user may edit it before sending.
 - Streaming, tool activity, permissions, runtime-supported attachments, skills, recovery, and
   file artifacts remain inspectable. Collapsed tool summaries omit exact
   counts while using grammatical singular or plural category labels. Editing
@@ -99,7 +105,7 @@ and uses a hosted service only as its metered model provider.
   delete one waiting follow-up before it is sent without interrupting the
   active turn or removing its queued siblings; runtimes that support steering
   also offer **Steer** for that waiting item.
-- Built-in normalizes OpenCode streaming, tools, permission requests,
+- Wiki Agent normalizes OpenCode streaming, tools, permission requests,
   native session history, and file Diffs into the same panel contract. Each
   live panel session has an independently attributed local runtime and MCP
   connection. Each user-submitted prompt also establishes one turn identity;
@@ -112,11 +118,11 @@ and uses a hosted service only as its metered model provider.
   recovery-requiring errors.
 - Bring-your-own Agents preserve user-visible Unicode attachment filenames
   from selection or drop through the sent transcript and restored history.
-  Built-in does not advertise transient attachments until its isolated
+  Wiki Agent does not advertise transient attachments until its isolated
   OpenCode runtime has a scoped byte-reading path; Library mentions and MCP
   context remain available.
 - Source and attachment access follows the
-  [Documents format matrix](documents.md#format-capability-matrix). Built-in
+  [Documents format matrix](documents.md#format-capability-matrix). Wiki Agent
   image attachment behavior does not imply that every external MCP client can
   read image bytes, and previewability does not imply content-write access.
 - Document context is explicit. Agent-created files refresh the workspace but
@@ -140,16 +146,18 @@ and uses a hosted service only as its metered model provider.
 - Opening, switching, or resuming an Agent tab is not installation consent.
   The included runtime needs no install action; each missing bring-your-own
   runtime waits for its own explicit setup action.
-- Build Wiki pins its blank tab to the shown folder and retains one
-  cancellable, renderer-local pending intent across selected-Agent setup or
-  reconnect. Once the runtime is ready, the preset sends exactly once in that
-  tab. Similarity Search setup is independent and never blocks this intent.
-  Folder removal cancels it; app restart never restores it.
-- Similarity Search is live session policy, not Agent permission mode. The
-  renderer sends the effective value before any ready-transition prompt and
-  reapplies it when Similarity Search availability changes. Turning it Off leaves
-  prepared PDF and document text searchable and does not alter background
-  indexing.
+- A used Template (the classic Build Wiki preset included) pins its blank
+  tab to the shown folder and retains one cancellable, renderer-local
+  pending intent across selected-Agent setup or reconnect. Once the runtime
+  is ready, the preset is placed as an editable draft exactly once in that tab;
+  the user remains the party who sends it. Setup for search by meaning is
+  independent and never blocks this intent. Folder removal cancels it; app
+  restart never restores it.
+- The **Search by meaning** switch is live session policy, not Agent
+  permission mode. The renderer sends the effective value before any
+  ready-transition prompt and reapplies it when searching by meaning becomes
+  available or unavailable. Turning it Off leaves prepared PDF and document
+  text searchable and does not alter background indexing.
 - Agent Instructions are durable working-folder metadata, not a live turn
   control or a security boundary. Save failures remain visible, the folder
   requires live library membership, and changes reach matching open folder
@@ -157,9 +165,9 @@ and uses a hosted service only as its metered model provider.
   default. The resolved text is the only StashBase-owned Agent prompt; Runtime
   Adapters inject it verbatim without another product preamble or hidden MCP
   instruction.
-- The Build Wiki preset sends only its visible concise request. Wiki Page
-  placement and maintenance behavior live in Agent Instructions rather than a
-  second hidden wire prompt.
+- Every Template preset (Build Wiki included) places only its visible concise
+  request in the composer. Wiki Page placement and maintenance behavior live
+  in Agent Instructions rather than a second hidden wire prompt.
 - A runtime, transport, or turn failure leaves one persistent explanation and
   a truthful, stage-specific recovery path. Retrying preparation resumes from
   the first incomplete stage. After an installation failure, **Check again**
@@ -170,7 +178,7 @@ and uses a hosted service only as its metered model provider.
   from an abandoned generation cannot enter a newer turn.
 - A failed turn explains itself in the conversation and never blocks the
   panel: transient rate or network failures offer an in-place Try again. An
-  exhausted Built-in allowance opens Agent Settings to review usage or
+  exhausted Wiki Agent allowance opens Agent Settings to review usage or
   switch runtimes; an expired sign-in offers Codex's in-app sign-in or, for
   Claude, terminal sign-in steps with an in-place Reconnect. Either
   way the same conversation continues without restarting StashBase: acting
@@ -185,7 +193,7 @@ and uses a hosted service only as its metered model provider.
   automatic approval is routine activity rather than a notice; other notices
   use a polite warning presentation and stay visible when no final answer
   follows. Only failures enter startup, turn, or session recovery.
-- Built-in uses a service-owned model profile. The first release hides
+- Wiki Agent uses a service-owned model profile. The first release hides
   model selection, while the stable profile alias keeps later model choice and
   provider changes compatible with existing desktop builds.
 - Folder-scope retirement never offers Retry or reconnects user work into a
@@ -196,7 +204,7 @@ and uses a hosted service only as its metered model provider.
   its own. Every approval it surfaces — permission, deletion, command, network,
   or broader filesystem — is an explicit user decision; the panel never answers
   one itself. Tool payloads render in a human-readable form.
-- Library-wide Built-in sessions reach files only through the authorized
+- Library-wide Wiki Agent sessions reach files only through the authorized
   StashBase MCP operation layer. Folder-scoped sessions may use OpenCode's
   native local tools inside that folder; commands, edits, network, and any
   broader access retain their configured approval or denial.
@@ -223,9 +231,9 @@ and uses a hosted service only as its metered model provider.
 - [Agent Runtime](../../code-review/agent-runtime.md) owns native lifecycle.
 - [MCP Access](../../code-review/mcp-access.md) owns Agent file boundaries.
 
-## Known Gap — Built-in Project Rebind
+## Known Gap — Wiki Agent Project Rebind
 
-An attributed Built-in Library chat can create a project and move its
+An attributed Wiki Agent Library chat can create a project and move its
 live panel scope to that folder. OpenCode cannot yet move the same native
 session record to a different directory project, so the restored history row
 remains under Library and that continued chat stays on MCP-only file access.

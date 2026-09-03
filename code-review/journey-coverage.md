@@ -70,10 +70,11 @@ aliases, and Journey E2E owns representative composition.
 - **Contract Test:** renderer initialization, Settings state, workspace
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
   `pnpm test:config`, `pnpm test:updates`, and `pnpm test:electron:smoke`.
-  The Settings and config suites cover hosted and BYOK Similarity Search choices,
-  rejection of new local selection, deterministic retirement of persisted
-  local selection before daemon startup, and transactional source activation
-  that keeps the prior source selected when runtime reset or binding fails.
+  The Settings and config suites cover hosted and BYOK choices for search by
+  meaning, rejection of new local selection, deterministic retirement of
+  persisted local selection before daemon startup, and transactional source
+  activation that keeps the prior source selected when runtime reset or
+  binding fails.
   Account identity fixtures cover profile normalization, migration, privacy,
   and UI fallbacks.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
@@ -86,8 +87,9 @@ aliases, and Journey E2E owns representative composition.
   utilities.
 - **Journey E2E:** [launch smoke](../e2e/smoke/launch.spec.ts) and
   [library navigation](../e2e/journeys/library-navigation.spec.ts) exercise
-  blank-workspace entry, quiet Similarity Search state, explicit setup/skip behavior,
-  folder selection, and local availability. [Navigation layout](../e2e/journeys/navigation-layout.spec.ts)
+  blank-workspace entry, the quiet state of search by meaning, explicit
+  setup/skip behavior, folder selection, and local availability.
+  [Navigation layout](../e2e/journeys/navigation-layout.spec.ts)
   verifies that Appearance Settings remains usable with the operating system's
   reduced-motion preference while transform movement is removed and quiet
   state feedback remains, and that a folder name too long for a narrowed
@@ -171,7 +173,7 @@ aliases, and Journey E2E owns representative composition.
 - **Journey E2E:** [preparation capture](../e2e/journeys/preparation-capture.spec.ts)
   proves default-off opt-in, explicit screenshot acceptance, opt-out stopping
   later offers, visible source publication, deterministic OCR through the real
-  preparation path, Exact Search, and navigation back to the image source.
+  preparation path, keyword search, and navigation back to the image source.
   Viewer journeys separately cover source continuity and failure identity.
 - **AI Eval:** extraction correctness is format-specific deterministic or
   dataset evidence; no shared product-level quality Eval is currently claimed.
@@ -189,14 +191,14 @@ aliases, and Journey E2E owns representative composition.
   remapping, access boundaries, account identity, and failure presentation.
   Python daemon tests additionally lock the fixed ONNX model identity,
   provider/dimension collection separation, and cross-collection cleanup for
-  renamed or deleted sources; Exact Search remains provider-independent.
+  renamed or deleted sources; keyword search remains provider-independent.
 - **Journey E2E:** [semantic search UI](../e2e/journeys/semantic-search-ui.spec.ts)
   covers mode, scope, readiness, result presentation, and source navigation.
 - **AI Eval:** `pnpm eval:semantic-retrieval` runs the versioned, synthetic
   [semantic retrieval dataset](../evals/semantic-retrieval/README.md) through
   the production index and Retrieval interfaces. It reports provider, model,
   dataset version, Recall@3, MRR, missed evidence, unexpected top results, and
-  selected Exact Search comparisons against predeclared thresholds. It remains
+  selected keyword-search comparisons against predeclared thresholds. It remains
   calibration evidence until three retained runs exist for both supported BYOK
   providers; the runner makes that gate state explicit. Ranking is scored over
   distinct sources, not chunks, and the corpus includes multi-chunk sources so
@@ -225,7 +227,7 @@ aliases, and Journey E2E owns representative composition.
   for blank, draft-only, queued, and active-tool Chats. Workspace reset tests
   pin Chat preservation through both direct folder loss and 412 recovery.
   Library-operation, route, keyword-search, and renderer composition tests pin
-  the per-session Similarity Search policy, library-wide text fallback, and
+  the per-session policy for search by meaning, library-wide text fallback, and
   prepared-PDF source remapping while the switch is Off. Agent Instructions
   config tests pin bounded folder isolation, strict persistence, and membership
   cleanup plus default restoration; Adapter tests pin verbatim runtime
@@ -240,17 +242,17 @@ aliases, and Journey E2E owns representative composition.
   classification. Config tests also prove that ambient credentials and process
   injection flags do not enter the bundled runtime.
 - **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
-  the Built-in Agent account gate and bring-your-own choices, then
+  the Wiki Agent account gate and bring-your-own choices, then
   exercises the built-in panel against the deterministic fake Codex runtime,
-  including the session-scope Similarity Search switch before and after scope
-  binding plus folder-scoped Agent Instructions persistence, no source-file
-  creation, and exact native developer-instructions injection, and
+  including the session-scope **Search by meaning** switch before and after
+  scope binding plus folder-scoped Agent Instructions persistence, no
+  source-file creation, and exact native developer-instructions injection, and
   retaining a started cross-folder Chat through Library removal and opening a
   fresh explicitly Library-scoped Chat.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
 - **Release Check:** packaged OpenCode version/executability plus a fake-gateway
-  model turn that proves the signed runtime stays alive, a real hosted Built-in
+  model turn that proves the signed runtime stays alive, a real hosted Wiki Agent
   turn and allowance response, bring-your-own CLI/account setup,
   and bring-your-own clipboard image behavior remain release evidence.
 
@@ -313,7 +315,7 @@ aliases, and Journey E2E owns representative composition.
 - **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
   proves one Golden Path from a visible image through deterministic OCR,
   derived-text UI retrieval, scoped Agent retrieval, approved real MCP
-  writeback, user review/save, Chat close, and later Exact Search. Native
+  writeback, user review/save, Chat close, and later keyword search. Native
   extractor packaging and hosted providers remain release or focused evidence.
 - **AI Eval:** Gap. No first-class representative dataset currently measures
   whether an Agent receives the relevant project evidence and produces a
@@ -352,7 +354,7 @@ aliases, and Journey E2E owns representative composition.
 - **Gap:** real-Agent intent/tool choice still needs an Eval. Codex
   configuration leaves `create_project` on the default prompt path, but no
   focused test locks that tool allowlist; Claude requires equivalent focused
-  or release evidence. Built-in can rebind the live panel and attributed
+  or release evidence. Wiki Agent can rebind the live panel and attributed
   MCP path, but OpenCode cannot yet migrate its native history/cwd; its restored
   row remains under Library and this path needs separate evidence after that
   native limitation is resolved.
@@ -361,28 +363,28 @@ aliases, and Journey E2E owns representative composition.
 
 **Status:** Partial and release-dependent.
 
-- **Contract Test:** renderer tests cover the fixed folder CTA, concise visible
-  turn versus safe wire preset, the one-time first-folder setup offer and
-  durable **Not now**, manual setup reopening, and the Build Wiki
-  action's independence from embedding authorization. Agent, file-transaction, and data-lifecycle
-  suites cover approval, source confinement, write reconciliation, and index
-  admission.
+- **Contract Test:** renderer tests cover the Templates handoff, the concise
+  editable draft with no automatic wire send, the one-time first-folder setup
+  offer and durable **Not now**, manual setup reopening, and the preset's
+  independence from embedding authorization. Agent, file-transaction, and
+  data-lifecycle suites cover approval, source confinement, write
+  reconciliation, and index admission.
 - **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
-  handles the first-folder Similarity Search offer, invokes Build Wiki
-  independently through the deterministic fake Codex runtime, approves a real MCP
-  **wiki/index.md** write, observes the directory in the tree, and proves an
-  original source stayed
-  byte-identical. [Library navigation](../e2e/journeys/library-navigation.spec.ts)
+  handles the first-folder setup offer for search by meaning, uses the
+  Knowledge Base Template independently through the deterministic fake Codex runtime,
+  reviews and sends its draft, approves a real MCP **wiki/index.md** write,
+  observes the directory in the tree, and
+  proves an original source stayed byte-identical. [Library navigation](../e2e/journeys/library-navigation.spec.ts)
   separately proves the bare Library remains quiet, the first active folder
   offers setup, later folder switches stay quiet after **Not now**, and the
   persistent **Set up** route can reopen setup.
 - **AI Eval:** Gap. The deterministic Agent proves orchestration and safety,
   not whether a real model produces useful, complete, well-linked Wiki Pages
   over representative mixed-format folders.
-- **Release Check:** one packaged Built-in flow should cover independent
-  account-required Agent setup, hosted Similarity Search activation/backfill,
-  and review of real generated Wiki Pages. Bring-your-own-key plus a real
-  external Agent is representative secondary evidence.
+- **Release Check:** one packaged Wiki Agent flow should cover independent
+  account-required Agent setup, hosted activation/backfill for search by
+  meaning, and review of real generated Wiki Pages. Bring-your-own-key plus a
+  real external Agent is representative secondary evidence.
 - **Gap:** no real-Agent quality Eval yet covers folder-map completeness,
   source-link correctness, or preservation under ambiguous existing Wiki
   content. The first release intentionally claims no persistent ready/stale

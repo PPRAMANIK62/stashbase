@@ -35,7 +35,7 @@ test('Find transfers its query and active-folder scope to exact all-files search
       await expect(search).toBeVisible();
       await expect(search.getByRole('combobox')).toHaveValue('Alpha smoke fixture');
       await expect(search.getByRole('combobox')).toHaveAttribute('placeholder', 'Search in project-alpha');
-      await expect(search.getByRole('button', { name: 'Exact' })).toHaveAttribute('data-pressed');
+      await expect(search.getByRole('button', { name: 'By keyword' })).toHaveAttribute('data-pressed');
       await expect(search.getByRole('button', { name: 'Search scope' })).toContainText('project-alpha');
     });
     app.errors.assertNone();

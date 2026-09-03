@@ -27,7 +27,7 @@ test('exact library search keeps cross-folder results in their owning identity',
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     const dialog = app.page.getByRole('dialog', { name: 'Search library' });
     await expect(dialog).toBeVisible();
-    await dialog.getByRole('button', { name: 'Exact', exact: true }).click();
+    await dialog.getByRole('button', { name: 'By keyword', exact: true }).click();
     await dialog.getByRole('combobox').fill(EXACT_SEARCH_PHRASE);
 
     const crossFolder = dialog.locator(`[role="option"][title=${JSON.stringify(`${fixture.workspaces.projectB}/${CROSS_FOLDER_NOTE}`)}]`);
@@ -56,7 +56,7 @@ test('native folder dialog success, cancellation, and failure preserve their bou
     await stubOpenFolderDialog(app.electron, { kind: 'cancel' });
     await openFolderPickerMenu(app.page);
     await expect(app.page).toHaveTitle('StashBase');
-    await expect(app.page.getByText('Add a folder to your Wiki.')).toBeVisible();
+    await expect(app.page.getByRole('heading', { name: 'Start faster with a template.' })).toBeVisible();
 
     await stubOpenFolderDialog(app.electron, { kind: 'error', message: 'fixture picker failed' });
     await openFolderPickerMenu(app.page);
@@ -77,7 +77,7 @@ test('native folder dialog success, cancellation, and failure preserve their bou
   }
 });
 
-test('exact search remembers state, distinguishes duplicate paths, and resolves cross-folder content', async ({}, testInfo) => {
+test('keyword search remembers state, distinguishes duplicate paths, and resolves cross-folder content', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'two-folders' });
   seedJourneyWorkspaces(fixture);
   let app: LaunchedApp | undefined;
@@ -87,7 +87,7 @@ test('exact search remembers state, distinguishes duplicate paths, and resolves 
     await dismissEmbeddingKeyPrompt(app.page);
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     let dialog = app.page.getByRole('dialog', { name: 'Search library' });
-    await dialog.getByRole('button', { name: 'Exact', exact: true }).click();
+    await dialog.getByRole('button', { name: 'By keyword', exact: true }).click();
     await dialog.getByRole('combobox').fill(EXACT_SEARCH_PHRASE);
     await expect(dialog.getByText('project-alpha', { exact: true })).toBeVisible();
     await expect(dialog.getByText('project-beta', { exact: true })).toBeVisible();
@@ -98,7 +98,7 @@ test('exact search remembers state, distinguishes duplicate paths, and resolves 
     await app.page.keyboard.press(`${primaryKey}+Shift+F`);
     dialog = app.page.getByRole('dialog', { name: 'Search library' });
     await expect(dialog.getByRole('combobox')).toHaveValue(EXACT_SEARCH_PHRASE);
-    await expect(dialog.getByRole('button', { name: 'Exact', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.getByRole('button', { name: 'By keyword', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(dialog.getByRole('option')).not.toHaveCount(0);
 
     await dialog.getByRole('combobox').fill('Welcome to Project');

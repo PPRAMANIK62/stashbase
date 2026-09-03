@@ -1,6 +1,6 @@
 /**
  * Structured chat view for an agent tab — the VSCode-extension-style
- * panel. Built-in (OpenCode), Claude (Agent SDK), and Codex
+ * panel. Wiki Agent (OpenCode), Claude (Agent SDK), and Codex
  * (app-server) connect through the Shared Agent Contract at `/ws/agent`;
  * their adapters live in server.
  * All adapters render the event stream as ordered blocks:
@@ -16,9 +16,10 @@
  *
  * See design-docs/architecture.md §8 for the shared library path.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AgentKind } from '@/common/lib/agentCatalog';
 import { FILE_MIME } from '@/common/lib/dragMime';
+import { consumePendingTemplate, onTemplateRequested } from '@/common/lib/templateTrigger';
 import { acceptsAgentContextDrop, dragPayloadKinds } from '@/common/lib/dragRouting';
 import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
 import { Button } from '@/common/components/ui/button';
@@ -122,27 +123,41 @@ export function AgentView({
   // `key` so the same mounted instance moves between the two layouts.
   const emptyChat = transcript.blocks.length === 0 && queue.queuedTurns.length === 0 && transcript.phase !== 'closed' && !transcript.fatal;
   const folderScoped = controls.sessionScope.kind === 'folder';
-  const canOfferBuildWikiPages = folderScoped
-    && transcript.blocks.length === 0
-    && queue.queuedTurns.length === 0
-    && !transcript.fatal
-    && (!controls.hasDraftText && attach.attachments.length === 0 || wiki.pending);
 
-  function requestBuildWikiPages() {
-    if (!wiki.requestBuildWikiPages()) return;
+  function requestBuildWikiPages(prompt?: string) {
+    if (!wiki.requestBuildWikiPages(prompt)) return;
     // Building the Wiki is independent of semantic indexing, but the
-    // Built-in Agent still needs its own model source before it can write.
+    // Wiki Agent still needs its own model source before it can write.
     if (agent === 'stashbase' && runtime.runtime?.bootstrap?.failure?.code === 'account-required') {
       openSettings('agents');
     }
   }
 
-  const buildWikiPagesAction = canOfferBuildWikiPages ? (
-    <BuildWikiPagesAction
-      pending={wiki.pending}
-      onBuild={requestBuildWikiPages}
-      onCancel={wiki.cancelBuildWikiPages}
-    />
+  /* A Template card was used. Only the ACTIVE session OF THE LATCH'S
+   * AGENT takes the preset — every mounted AgentView subscribes, and
+   * consuming clears the latch, so exactly one arms it (see
+   * templateTrigger for the reused-blank-tab race the agent gate closes).
+   * Runs both on becoming active (the tab activateChatTab just created,
+   * reused, or re-agented) and on the broadcast (this tab already
+   * active). */
+  useEffect(() => {
+    if (!active) return undefined;
+    const tryConsume = () => {
+      const prompt = consumePendingTemplate(agent);
+      if (prompt) requestBuildWikiPages(prompt);
+    };
+    tryConsume();
+    return onTemplateRequested(tryConsume);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- consume is
+    // event-driven; re-subscribing on every render identity would churn.
+  }, [active, agent]);
+
+  /* Nothing stands below the hero composer any more — the Templates
+   * gallery (sidebar row) is the sole way into starting a wiki. Only an
+   * ARMED turn surfaces here: its progress + cancel must live where the
+   * send will land. */
+  const buildWikiPagesAction = wiki.pending ? (
+    <BuildWikiPagesAction onCancel={wiki.cancelBuildWikiPages} />
   ) : null;
 
   return (
@@ -282,6 +297,8 @@ export function AgentView({
           onPasteImages: attach.pasteImages,
           onRemove: attach.removeAttachment,
         }}
+        seedText={wiki.composerSeed}
+        onSeedConsumed={wiki.consumeComposerSeed}
         onDraftChange={controls.handleDraftChange}
         onFocusChange={transcript.setAgentComposerFocused}
         onSend={queue.send}

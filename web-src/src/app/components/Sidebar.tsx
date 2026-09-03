@@ -1,10 +1,10 @@
 import '@/common/styles/tree.css';
 import {
   ChevronDownIcon,
-  FolderIcon,
   MoreHorizontalIcon,
   NewFileIcon,
   OutlineIcon,
+  SquaresFourIcon,
   StarIcon,
 } from '@/common/components/icons';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
@@ -16,15 +16,14 @@ import { SidebarAccountRow } from '@/features/account';
 import { NewChatButton, ScopeHistoryButton } from '@/features/agent-panel';
 import { EmbeddingSetupCallout } from '@/features/preparation';
 import {
-  ChooseFolderButton,
   FileTree,
-  FolderMenu,
+  FolderHeaderMenu,
   RemoveFolderModal,
+  SidebarFolderActions,
   useFolderFavorite,
   useFolderRemoval,
   useLibraryReconcile,
   useOpenFolderWindow,
-  ZeroFolderState,
 } from '@/features/workspace';
 import { useOutlineDefaultExpansion } from '@/app/hooks/useOutlineDefaultExpansion';
 import { useDocumentOutline } from '@/common/components/DocumentOutlineContext';
@@ -91,11 +90,10 @@ const sideActionsClass =
  *
  * A sanctioned exemption from the `Button` primitive: this control is the
  * full width of its own tinted strip, and the strip is what says "header".
- * The `ghost` recipe paints `aria-expanded:bg-muted`, which every expanded
- * section here would wear permanently as a second background on top of the
- * strip it already sits on — so adopting the primitive starts by cancelling
- * the one variant rule that reacts to this button's own state, and goes on
- * to cancel its height, padding, weight, justification and hover fill. The
+ * (The ghost recipe's expanded tint is aria-haspopup-gated now, so it no
+ * longer bites a steady-state disclosure like this one; the exemption
+ * stands on geometry alone.) Adopting the primitive would still mean
+ * cancelling its height, padding, weight, justification and hover fill. The
  * header answers the pointer by changing its ink and swapping its glyph for
  * a fold chevron; it is a disclosure heading, not a control chip. */
 const sectionToggleClass =
@@ -109,6 +107,7 @@ const sectionToggleClass =
 function FilesPanel() {
   const state = useWorkspace();
   const { activeTab } = state;
+  const { dispatch } = useAppActions();
   const { outline } = useDocumentOutline();
 
   const hasMarkdownDocument = activeTab?.file?.format === 'md';
@@ -131,6 +130,25 @@ function FilesPanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files">
       <NewChatButton />
+      {/* Templates — a PLACE (a singleton main-pane tab), so it lives
+        * as a quiet standing row under New Chat, mirroring that row's
+        * geometry: same min-h-7 ghost row, same 16px leading slot around a
+        * 14px glyph, so both labels land on the shared gutter line. The
+        * negative top margin closes New Chat's own bottom padding down to
+        * the 4px sibling gap. */}
+      <div className="-mt-2 flex-none px-1.5 pb-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-auto min-h-7 w-full min-w-0 justify-start gap-2 px-2 text-left text-base font-normal text-foreground"
+          onClick={() => dispatch({ type: 'TEMPLATES_OPEN' })}
+        >
+          <span className="inline-flex size-4 flex-none items-center justify-center">
+            <SquaresFourIcon className="size-3.5 text-muted-foreground" />
+          </span>
+          <span className="min-w-0 truncate">Templates</span>
+        </Button>
+      </div>
       {/* Explorer sections mirror VS Code's compact disclosure rows. The
         * folder zones and the active document's outline intentionally share
         * one navigation surface; neither becomes a floating editor
@@ -202,7 +220,7 @@ function FilesPanel() {
         </section>
         )}
       </ActiveFolderSection>
-      {/* Similarity Search authorization is APP-WIDE, not a property of the
+      {/* Authorization for search by meaning is APP-WIDE, not a property of the
         * open folder, so it sits in the bottom chrome above the account
         * row rather than inside the file tree. Wedged between a folder header
         * and its own files it read as a fact about those files, and it
@@ -222,35 +240,6 @@ function FilesPanel() {
   );
 }
 
-/** The active-folder header's ⋯ trigger (favorite / sync / new window /
- *  remove live in its FolderMenu). */
-function RootMenuButton({
-  name,
-  menuOpen,
-  onMenu,
-}: {
-  name: string;
-  menuOpen: boolean;
-  onMenu: (rect: DOMRect) => void;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      className="shrink-0 text-muted-foreground aria-expanded:bg-active aria-expanded:text-foreground"
-      aria-label={`More actions for ${name}`}
-      aria-haspopup="menu"
-      aria-expanded={menuOpen}
-      onClick={(e) => {
-        e.stopPropagation();
-        onMenu(e.currentTarget.getBoundingClientRect());
-      }}
-    >
-      <MoreHorizontalIcon className="size-3.5" />
-    </Button>
-  );
-}
-
 /** The sidebar's folder zone — exactly one of two states, plus the folder
  *  menu and removal dialog they share.
  *
@@ -259,10 +248,9 @@ function RootMenuButton({
  *  beneath. It shares the sidebar's one pane surface — the inset pill rows,
  *  not a surface split, carry the hierarchy.
  *
- *  NO-FOLDER ZONE — otherwise: the zero-folder brand moment, or one quiet
- *  line pointing at the titlebar's "Library ⌄" switcher. Membership lives
- *  in that switcher, so the sidebar renders NO list of other member
- *  folders; it keeps a single anchor rather than a competing list.
+ *  NO-FOLDER ZONE — otherwise: the quiet Open Folder… and New Folder…
+ *  launcher rows. Membership lives in the titlebar switcher, so the sidebar
+ *  renders NO list of other member folders.
  *
  *  `children` (the Document Outline section) renders after the zone, which
  *  is what puts it below the working context and above the bottom-most
@@ -275,8 +263,6 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
     useFolderRemoval(dispatch, actions.toast);
   const toggleFavorite = useFolderFavorite(dispatch, actions.toast);
   const { canOpenInNewWindow, openInNewWindow } = useOpenFolderWindow(actions.toast);
-  const [folderMenu, setFolderMenu] = useState<{ path: string; name: string; rect: DOMRect } | null>(null);
-
   const isCurrent = useCallback(
     (path: string) => !!state.folderPath && folderRefsEqual(state.folderPath, path),
     [state.folderPath],
@@ -298,7 +284,6 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
     ? removalDialogTarget(pendingRemoval, state.homeDir ?? '')
     : null;
 
-  const menuEntry = folderMenu ? state.recent.find((r) => r.path === folderMenu.path) : null;
   const activeName = activePath ? basename(activePath) : '';
   const activeFavorite = !!activePath
     && !!state.recent.find((r) => folderRefsEqual(r.path, activePath))?.favorite;
@@ -317,8 +302,10 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
             name={activeName}
             path={activePath}
             favorite={activeFavorite}
-            menuOpen={folderMenu?.path === activePath}
-            onMenu={(rect) => setFolderMenu({ path: activePath, name: activeName, rect })}
+            canOpenInNewWindow={canOpenInNewWindow}
+            onToggleFavorite={() => toggleFavorite(activePath)}
+            onOpenInNewWindow={() => openInNewWindow(activePath)}
+            onRemove={() => requestRemoval(activePath)}
           />
           {/* Collapsing hides the list but leaves the `expanded` set in
             * state untouched, so re-expanding restores every inner
@@ -335,46 +322,17 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
           )}
         </section>
       ) : (
-        /* NO-FOLDER ZONE — one invitation either way (visual-style: empty
-         * states name one deliberate anchor): an empty library gets the
-         * zero-folder brand moment, a populated one gets the scope line
-         * plus Choose Folder right below New Chat, where a chat-first
-         * user is already looking. Full membership stays in the titlebar
-         * switcher; neither state renders a competing list. */
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* Nothing before membership succeeds: `recent` starts [] while the
-            * real list is still in flight, and rendering ZeroFolderState on
-            * that unknown flashed the accent Add Folder invitation at every
-            * launch on machines whose library is NOT empty. Bootstrap failure
-            * may settle the rest of the shell, but the membership poll keeps
-            * retrying until this branch can make an authoritative claim. */}
-          {!state.membershipLoaded ? null : state.recent.length === 0 ? <ZeroFolderState /> : (
-            /* The action rides directly under New Chat as a sibling row
-             * on the same px-1.5 rail; the scope line hangs from the
-             * shared 38px label gutter below it, so nothing separates
-             * the two actions a bare window offers. */
-            <div className="flex flex-col gap-2 px-1.5 pb-4">
-              <ChooseFolderButton />
-              <p className="m-0 pr-2 pl-8 text-sm leading-snug text-muted-foreground">
-                No folder is open — Chat and search cover your whole library.
-              </p>
-            </div>
-          )}
+        /* NO-FOLDER ZONE — the launcher column: just the two add-folder
+         * command rows (SidebarFolderActions), set off from the chat
+         * group above by whitespace alone (the doc-tool grouping idiom —
+         * no explainer paragraph, no hairline). Membership browsing and
+         * the GitHub import stay in the titlebar Library switcher; the
+         * main pane meanwhile leads with the Templates gallery. */
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4">
+          <SidebarFolderActions />
         </section>
       )}
       {children}
-      {folderMenu && (
-        <FolderMenu
-          rect={folderMenu.rect}
-          isCurrent={isCurrent(folderMenu.path)}
-          favorite={!!menuEntry?.favorite}
-          canOpenInNewWindow={canOpenInNewWindow}
-          onToggleFavorite={() => { setFolderMenu(null); toggleFavorite(folderMenu.path); }}
-          onOpenInNewWindow={() => { setFolderMenu(null); openInNewWindow(folderMenu.path); }}
-          onRemove={() => requestRemoval(folderMenu.path)}
-          onClose={() => setFolderMenu(null)}
-        />
-      )}
       {removeTarget && (
         <RemoveFolderModal
           name={removeTarget.name}
@@ -410,21 +368,27 @@ function ActiveFolderHeader({
   name,
   path,
   favorite,
-  menuOpen,
-  onMenu,
+  canOpenInNewWindow,
+  onToggleFavorite,
+  onOpenInNewWindow,
+  onRemove,
 }: {
   name: string;
   path: string;
   favorite: boolean;
-  menuOpen: boolean;
-  onMenu: (rect: DOMRect) => void;
+  canOpenInNewWindow: boolean;
+  onToggleFavorite: () => void;
+  onOpenInNewWindow: () => void;
+  onRemove: () => void;
 }) {
   const state = useWorkspace();
   const { actions, dispatch } = useAppActions();
   const [sideHeadDrop, setSideHeadDrop] = useState(false);
-  // Chat-history menu open: hold the hover-revealed action cluster
-  // visible while its popover (portalled outside the sidebar) is up.
+  // Either popup open (chat history, the ⋯ menu): hold the
+  // hover-revealed action cluster visible while a portalled popover is
+  // up.
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   function onSideHeadDragOver(e: DragEvent<HTMLDivElement>) {
     if (!e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes(FILE_MIME)) return;
@@ -461,8 +425,10 @@ function ActiveFolderHeader({
       onDrop={onSideHeadDrop}
     >
       <span className="flex min-w-0 flex-1 items-center gap-2 text-foreground">
-        {/* Folder glyph at rest; the pointer swaps in the fold chevron so
-          * the collapse affordance appears only when it's actionable. */}
+        {/* Chevron at rest, rotating with the fold state — the SAME
+          * disclosure mark every folder row below wears, so the header is
+          * not the odd one out. Folder identity is carried by the name
+          * (and the titlebar switcher), not by a glyph. */}
         <Button
           type="button"
           variant="ghost"
@@ -472,8 +438,7 @@ function ActiveFolderHeader({
           aria-expanded={!state.folderCollapsed}
           onClick={(e) => { e.stopPropagation(); dispatch({ type: 'FOLDER_FOLD_TOGGLE' }); }}
         >
-          <FolderIcon className="size-3.5 group-hover/head:hidden" />
-          <span className={cn('hidden items-center justify-center transition-transform duration-fast group-hover/head:inline-flex [&_svg]:size-3.5', state.folderCollapsed && '-rotate-90')}><ChevronDownIcon /></span>
+          <span className={cn('inline-flex items-center justify-center transition-transform duration-fast [&_svg]:size-3.5', state.folderCollapsed && '-rotate-90')}><ChevronDownIcon /></span>
         </Button>
         <Button
           type="button"
@@ -507,7 +472,24 @@ function ActiveFolderHeader({
           label={'Chat history in ' + name}
           onOpenChange={setHistoryOpen}
         />
-        <RootMenuButton name={name} menuOpen={menuOpen} onMenu={onMenu} />
+        {/* Static ⋯ placeholder while the lazy menu chunk loads — same
+          * footprint, so the hover-revealed cluster never shifts. */}
+        <Suspense fallback={
+          <span className="inline-grid size-6 flex-none place-items-center text-muted-foreground" aria-hidden="true">
+            <MoreHorizontalIcon className="size-3.5" />
+          </span>
+        }>
+          <FolderHeaderMenu
+            name={name}
+            path={path}
+            favorite={favorite}
+            canOpenInNewWindow={canOpenInNewWindow}
+            onOpenChange={setMenuOpen}
+            onToggleFavorite={onToggleFavorite}
+            onOpenInNewWindow={onOpenInNewWindow}
+            onRemove={onRemove}
+          />
+        </Suspense>
       </div>
     </div>
   );

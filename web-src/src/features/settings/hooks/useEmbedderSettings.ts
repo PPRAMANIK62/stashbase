@@ -33,7 +33,7 @@ export interface EmbedderSettingsController {
 }
 
 /**
- * The Similarity Search panel's embedder state and every command that changes which
+ * The Search by Meaning panel's embedder state and every command that changes which
  * source is authorized: a bring-your-own key, the signed-in StashBase
  * allowance or neither.
  *

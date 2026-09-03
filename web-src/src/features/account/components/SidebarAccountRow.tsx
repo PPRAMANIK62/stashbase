@@ -1,8 +1,7 @@
-import { electronBridge } from '@/common/lib/electronBridge';
-import { BugIcon, DiscordIcon, ExternalLinkIcon, SettingsIcon, UserIcon } from '@/common/components/icons';
+import { ExternalLinkIcon, SettingsIcon, UserIcon } from '@/common/components/icons';
 import { AccountAvatar, accountDisplayLabel } from '@/common/components/AccountIdentity';
 import { useHostedAccount } from '@/features/account/hooks/useHostedAccount';
-import { DISCORD_INVITE_URL, openExternalUrl } from '@/common/lib/externalLink';
+import { openExternalUrl } from '@/common/lib/externalLink';
 import { openSettings } from '@/common/lib/settingsTrigger';
 import { hostedQuotaRemainingPercent, hostedQuotaResetLabel } from '@/common/lib/hostedQuota';
 import { DesktopUpdateBanner } from '@/common/components/DesktopUpdateBanner';
@@ -20,9 +19,9 @@ import {
 import { cn } from '@/common/lib/utils';
 
 /**
- * Bottom sidebar chrome: identity on the left and persistent utilities on the
+ * Bottom sidebar chrome: identity on the left and the Settings entry on the
  * right. Signed out is a complete local-workspace state; the account menu adds
- * sign-in and hosted-usage details without gating files or Exact search.
+ * sign-in and hosted-usage details without gating files or keyword search.
  */
 export function SidebarAccountRow() {
   const { account, signingIn, signInError, refresh, signIn, signOut } = useHostedAccount();
@@ -123,7 +122,7 @@ export function SidebarAccountRow() {
                   <div role="presentation" className="p-1">
                     <MenuItem
                       className="items-start py-2"
-                      label="Sign in to StashBase — Built-in Agent and optional hosted Similarity Search"
+                      label="Sign in to StashBase — Wiki Agent and optional hosted search by meaning"
                       disabled={signingIn}
                       onClick={signIn}
                     >
@@ -131,7 +130,7 @@ export function SidebarAccountRow() {
                         <ExternalLinkIcon className="mt-0.5 size-4 flex-none" />
                         <span className="grid min-w-0 gap-0.5">
                           <span>{signingIn ? 'Waiting for browser…' : 'Sign in to StashBase'}</span>
-                          <span className="text-xs leading-snug text-muted-foreground">Built-in Agent and optional hosted Similarity Search</span>
+                          <span className="text-xs leading-snug text-muted-foreground">Wiki Agent and optional hosted search by meaning</span>
                         </span>
                       </span>
                     </MenuItem>
@@ -146,31 +145,9 @@ export function SidebarAccountRow() {
           </MenuPortal>
         </AccountMenu>
 
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Join the StashBase Discord"
-          title="Join the StashBase Discord"
-          className="flex-none text-muted-foreground"
-          onClick={() => { openExternalUrl(DISCORD_INVITE_URL); }}
-        >
-          <DiscordIcon className="size-4" />
-        </Button>
-        {/* Report Bug — opens the desktop app's local review window, the same
-          * deliberate entry as Help → Report a Bug…. The flow lives in the
-          * Electron main process, so the browser dev shell keeps the dimmed
-          * placeholder. */}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={!electronBridge()?.reportBug}
-          aria-label={electronBridge()?.reportBug ? 'Report a bug' : 'Report a bug (desktop app only)'}
-          title={electronBridge()?.reportBug ? 'Report a bug' : 'Report a bug (desktop app only)'}
-          className="flex-none text-muted-foreground"
-          onClick={() => { void electronBridge()?.reportBug?.(); }}
-        >
-          <BugIcon className="size-4" />
-        </Button>
+        {/* Settings is the row's one utility: Discord and Report-a-bug
+          * live in Settings → General (Community and support), so the
+          * footer stays identity + the single door to everything else. */}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -179,7 +156,10 @@ export function SidebarAccountRow() {
           className="flex-none text-muted-foreground"
           onClick={() => { openSettings(); }}
         >
-          <SettingsIcon className="size-4" />
+          {/* size-3.5: the app-wide 14px chrome glyph
+            * (TitlebarControls.tsx) — the bottom row sat at 16px and read
+            * as a louder tier than the strips above it. */}
+          <SettingsIcon className="size-3.5" />
         </Button>
       </div>
     </>

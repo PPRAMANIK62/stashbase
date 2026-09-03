@@ -1,4 +1,4 @@
-import { BotIcon } from '@/common/components/icons';
+import { InstructionsIcon } from '@/common/components/icons';
 import { Button } from '@/common/components/ui/button';
 
 /**
@@ -11,10 +11,10 @@ import { Button } from '@/common/components/ui/button';
  * strips is a glyph with a tooltip (the sidebar's bottom row, the titlebar),
  * so a text button here was also the odd one out.
  *
- * `BotIcon` is the same mark the tree gives `AGENTS.md`, which is the point:
- * both are durable guidance an Agent reads before it starts. Where each one
- * LIVES is the distinction, and the editor says so — it is not a difference
- * a second glyph could carry.
+ * `InstructionsIcon` is a scroll with text lines — the standing orders an
+ * agent reads, i.e. the system prompt. Deliberately NOT the tree's
+ * `AGENTS.md` robot: the file marks the agent contract (the agent itself),
+ * this control edits the orders — two concepts, two marks.
  *
  * The customized dot stays a dot. With the label gone it is the only thing
  * saying this working folder overrides the product default, and it has to do that
@@ -58,7 +58,7 @@ export function AgentInstructionsControl({
       data-customized={customized == null ? 'unknown' : String(customized)}
       onClick={onOpen}
     >
-      <BotIcon className="size-3.5" />
+      <InstructionsIcon className="size-3.5" />
       {customized && (
         /* Clear of the glyph, but tucked inside the corner radius: at the
          * button's very edge the dot crossed the curve and read as

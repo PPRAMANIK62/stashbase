@@ -14,10 +14,10 @@ Avoid: `global store`, `app state` when this narrower meaning is intended.
 
 ## Agent Panel
 
-The built-in Agent capability for working against an explicit library or
+The Agent capability for working against an explicit library or
 folder scope. **Chat** is the Agent Panel's visible conversation surface: it
 leads before a document is opened and docks beside the Document Workbench when
-a source is active. The Agent Panel may run Built-in, Claude Code, or
+a source is active. The Agent Panel may run Wiki Agent, Claude Code, or
 Codex; it is not itself synonymous with any runtime.
 
 ## Agent Instructions
@@ -34,25 +34,35 @@ boundary.
 ordinary user-owned runtime inputs. StashBase neither creates nor rewrites
 them, and does not call those files Agent Instructions in product UI.
 
-## Built-in
+## Wiki Agent
 
-The included zero-install Agent shown as **Built-in** in Agent pickers and Chat
+The included zero-install Agent shown as **Wiki Agent** in Agent pickers and Chat
 chrome, with **Sign in for free credits** under its picker label while signed
 out and **Free credits included** after sign-in. It uses
 StashBase's pinned local OpenCode runtime and the signed-in account allowance.
 `stashbase` remains its implementation identifier.
 
-## Similarity Search
+## Search by meaning
 
 The user-facing name for optional meaning-based retrieval across the Wiki.
 When an embedding source is configured, it combines vector similarity with
-text matching and always returns evidence through a visible Source. Exact
-Search remains available without it.
+text matching and always returns evidence through a visible Source. Keyword
+search — always-available exact text matching — works without it; the search
+popup's mode toggle pairs **By meaning** with **By keyword**.
 
-A Chat's **Similarity Search** control decides whether that Chat uses the
+Write the name as a plain phrase: lowercase in running copy ("set up search
+by meaning", "preparation for search by meaning"), and title-cased **Search
+by Meaning** only where the surrounding chrome title-cases sibling labels
+(such as the Settings tab). Keep the phrase after a verb or preposition.
+Never make it the subject of a finite verb — sentence-initial "Search by
+meaning isn't…" reads as an imperative. Recast such sentences as an action
+("Set up search by meaning") or use the gerund ("Searching by meaning stops
+until a key is added").
+
+A Chat's **Search by meaning** control decides whether that Chat uses the
 capability. Turning it off keeps retrieval text-only; it does not pause or
 delete background search data. Describe background work as preparing or
-updating files for Similarity Search. Use `semantic indexing`, `semantic
+updating files for search by meaning. Use `semantic indexing`, `semantic
 retrieval`, `vector`, and `embedding` only in engineering contracts or a
 disclosure that needs the technical mechanism.
 
@@ -60,8 +70,8 @@ disclosure that needs the technical mechanism.
 
 The product-level knowledge space StashBase presents over the Library. A Wiki
 brings together user-owned **Sources**, visible source-linked **Wiki Pages**,
-Exact Search, Similarity Search, and Agent work without replacing the folders
-as source of truth. It is not a separate hosted knowledge store.
+keyword search, search by meaning, and Agent work without replacing the
+folders as source of truth. It is not a separate hosted knowledge store.
 
 ## Wiki Pages
 
@@ -74,6 +84,11 @@ future Agent work.
 Use **Build Wiki** for the explicit folder-scoped action that asks an
 Agent to create or improve these pages from Sources. The action never grants
 permission to move, rename, delete, or broadly rewrite Sources.
+
+Use **Templates** for the curated gallery of such folder-scoped preset
+actions (a singleton main-pane tab entered from the sidebar). Every Template
+places one visible, editable request in Chat; **Knowledge Base** is the classic
+Build Wiki preset in the organize section.
 
 ## Canvas
 
@@ -148,14 +163,15 @@ source-grounded Agent context. It combines Preparation with exact and
 meaning-based retrieval. **Local** describes ownership of sources, derived
 state, and index lifecycle; configured embedding capacity may be hosted.
 
-Similarity Search is the optional meaning-based retrieval capability inside
-this layer, not a synonym for the whole layer.
+Searching by meaning is the optional retrieval capability inside this layer,
+not a synonym for the whole layer.
 
 ## Preparation
 
 Format-specific work that makes a source usable for search or Agent reading,
 such as PDF extraction, image OCR, DOCX text derivation, or media
-transcription. Preparation and Similarity Search readiness are separate states.
+transcription. Preparation and readiness for search by meaning are separate
+states.
 
 ## Product scenario
 

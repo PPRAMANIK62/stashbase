@@ -1,8 +1,8 @@
 import { MenuCheckboxItem } from '@/common/components/ui/menu-radio';
 
 /**
- * The Chat's Similarity Search policy — one checkable row pinned under the
- * session scope popup's folder list.
+ * The Chat's policy for search by meaning — one checkable row pinned under
+ * the session scope popup's folder list.
  *
  * It lives THERE because scope and retrieval are one question in two
  * halves: scope is what a lookup may reach, this is how it matches. The
@@ -53,7 +53,7 @@ export function SimilaritySearchControl({
     >
       {/* No selected-row background: the switch carries the state, and the
         * tinted row above it means "this is the scope you picked". */}
-      <span className="min-w-0 flex-1 truncate text-sm">Similarity Search</span>
+      <span className="min-w-0 flex-1 truncate text-sm">Search by meaning</span>
     </MenuCheckboxItem>
   );
 }

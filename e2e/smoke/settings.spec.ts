@@ -23,12 +23,17 @@ test('J01: user can navigate Settings and persist appearance across relaunch', a
     await expect(settingsDialog(app.page)).toBeVisible();
     await expect(settingsTab(app.page, 'Appearance')).toHaveAttribute('aria-selected', 'true');
 
-    for (const section of ['General', 'Similarity Search', 'Transcription', 'MCP', 'Appearance']) {
+    for (const section of ['General', 'Search by Meaning', 'Transcription', 'MCP', 'Appearance']) {
       await settingsTab(app.page, section).click();
       await expect(settingsTab(app.page, section)).toHaveAttribute('aria-selected', 'true');
     }
 
     await settingsTab(app.page, 'General').click();
+    // Community and support lives here, not in the sidebar footer: the
+    // Discord link is always actionable and the bug-report entry is live
+    // in a real desktop launch.
+    await expect(settingsDialog(app.page).getByRole('button', { name: 'Join the StashBase Discord' })).toBeVisible();
+    await expect(settingsDialog(app.page).getByRole('button', { name: 'Report a bug' })).toBeEnabled();
     const automaticUpdates = settingsDialog(app.page).getByRole('checkbox', {
       name: 'Automatically check for updates',
     });
@@ -71,7 +76,7 @@ test('J01: user can navigate Settings and persist appearance across relaunch', a
   }
 });
 
-test('signed-in Google identity is consistent in the sidebar, account menu, and Similarity Search Settings', async ({}, testInfo) => {
+test('signed-in Google identity is consistent in the sidebar, account menu, and Search by Meaning Settings', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'empty' });
   let app: LaunchedApp | undefined;
   const account = {
@@ -110,8 +115,8 @@ test('signed-in Google identity is consistent in the sidebar, account menu, and 
     await expect(accountButton).toContainText('Ada Lovelace');
 
     await app.page.getByRole('button', { name: 'Choose agent for new chat' }).click();
-    const builtInAgent = app.page.getByRole('menuitem').filter({ hasText: 'Built-in' });
-    await expect(builtInAgent).toContainText('Free credits included');
+    const wikiAgent = app.page.getByRole('menuitem').filter({ hasText: 'Wiki Agent' });
+    await expect(wikiAgent).toContainText('Free credits included');
     await app.page.keyboard.press('Escape');
     await expect(accountButton.locator('img[src="/api/account/avatar"]')).toBeVisible();
     await accountButton.click();
@@ -121,7 +126,7 @@ test('signed-in Google identity is consistent in the sidebar, account menu, and 
     await app.page.keyboard.press('Escape');
 
     await settingsButton(app.page).click();
-    await settingsTab(app.page, 'Similarity Search').click();
+    await settingsTab(app.page, 'Search by Meaning').click();
     await expect(settingsDialog(app.page)).toContainText('Ada Lovelace');
     await expect(settingsDialog(app.page)).toContainText('ada@example.com');
     await expect(settingsDialog(app.page).locator('img[src="/api/account/avatar"]')).toBeVisible();
@@ -207,25 +212,24 @@ test('J01: an available update floats a dismissible banner above the account row
 
     await sendUpdateState('available', true);
 
-    // The banner floats above the account row; no utility yields its place.
+    // The banner floats above the account row; the footer's Settings entry
+    // keeps its place beneath it.
     const updateButton = app.page.getByRole('button', { name: 'Update to StashBase 9.9.9' });
     await expect(updateButton).toBeVisible();
-    await expect(app.page.getByRole('button', { name: 'Join the StashBase Discord' })).toBeVisible();
-    await expect(app.page.getByRole('button', { name: 'Report a bug' })).toBeVisible();
     await expect(settingsButton(app.page)).toBeVisible();
 
     // Dismissal hides only the current announcement; the phase advancing to
     // ready is a new announcement and brings the banner back.
     await app.page.getByRole('button', { name: 'Dismiss update notice' }).click();
     await expect(updateButton).toHaveCount(0);
-    await expect(app.page.getByRole('button', { name: 'Join the StashBase Discord' })).toBeVisible();
+    await expect(settingsButton(app.page)).toBeVisible();
     await sendUpdateState('ready', true);
     await expect(app.page.getByRole('button', { name: 'Install update to StashBase 9.9.9' })).toBeVisible();
 
     // Disabling the automatic-check preference gates the banner entirely.
     await sendUpdateState('available', false);
     await expect(app.page.getByRole('button', { name: 'Update to StashBase 9.9.9' })).toHaveCount(0);
-    await expect(app.page.getByRole('button', { name: 'Join the StashBase Discord' })).toBeVisible();
+    await expect(settingsButton(app.page)).toBeVisible();
     app.errors.assertNone();
   } finally {
     await app?.close();

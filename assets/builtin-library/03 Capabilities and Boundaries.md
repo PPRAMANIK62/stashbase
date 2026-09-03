@@ -14,7 +14,7 @@ interchangeable.
 | JSON (`.json`) | Source-preserving Tree and Source views | Existing JSON is content-editable; New Note creates Markdown | Direct raw source text | `read_file`, `write_file`, and `edit_file` use source text |
 | HTML (`.html`, `.htm`) | Compatibility preview | Preview-only in the Workbench | Clean text derived in memory from the source | MCP file helpers use raw HTML source text |
 | PDF (`.pdf`) | Source PDF preview | Preview-only | Prepared Markdown | `read_file` returns current prepared Markdown; content writes are rejected |
-| Image (`.png`, `.jpg`, `.jpeg`, `.webp`) | Source image preview and lightbox | Preview-only; imports create visible image sources | Prepared OCR evidence | External MCP `read_file` does not return image bytes; a built-in Agent may consume an explicitly supplied source image |
+| Image (`.png`, `.jpg`, `.jpeg`, `.webp`) | Source image preview and lightbox | Preview-only; imports create visible image sources | Prepared OCR evidence | External MCP `read_file` does not return image bytes; an Agent Panel runtime may consume an explicitly supplied source image |
 | DOCX (`.docx`) | Sanitized source-based preview with prepared fallback | Preview-only | Prepared HTML | `read_file` returns current prepared HTML; content writes are rejected |
 | Audio (`.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.opus`, `.aac`, `.aiff`, `.aif`) | Source playback or compatible local audio preview | Preview-only | Prepared timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
 | Video (`.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv`, `.avi`) | Media playback when compatible, otherwise a local audio preview | Preview-only | Audio track prepared as timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
@@ -30,7 +30,7 @@ are reveal-only, and generic bytes are never decoded lossily.
 - The tree shows ordinary files instead of filtering unknown formats. Generic
   rows are muted because Search and automatic Chat context exclude them.
 - Dependency and generated-output directories are visible as non-expandable
-  excluded rows; StashBase does not traverse their contents. Exact derived
+  excluded rows; StashBase does not traverse their contents. Derived
   artifacts and dot-directories remain hidden infrastructure.
 - Files open in persistent tabs with format-appropriate surfaces.
 - Markdown Writer Mode and Reading View use the same underlying source.
@@ -72,40 +72,41 @@ downloads a speech model under **Settings → Transcription**.
 
 ## Search
 
-### Exact Search
+### Keyword Search
 
-Exact Search is the UI name for word-based or keyword retrieval. It requires no
-Similarity Search setup. It searches direct Source text and any current
-prepared text that is ready.
+Keyword search is exact literal text matching — the search popup's
+**By keyword** mode. It never needs setup. It searches direct Source text and
+any current prepared text that is ready.
 
-### Similarity Search
+### Search by Meaning
 
-Similarity Search is meaning-based retrieval. It
-can find related material even when the query and Source use different wording.
+Searching by meaning — the search popup's **By meaning** mode — finds related
+material even when the query and Source use different wording.
 
-Similarity Search can use:
+It can use:
 
 - hosted capacity after explicit StashBase sign-in; or
 - a user-provided OpenAI or OpenRouter key configured in Settings.
 
-Hosted indexing and Similarity Search queries share the allowance displayed in the
-account menu. If it is exhausted or unavailable, hosted Similarity Search pauses;
-Exact Search and all local-file workflows continue.
+Hosted indexing and meaning-based queries share the allowance displayed in the
+account menu. If it is exhausted or unavailable, hosted searching by meaning
+pauses; keyword search and all local-file workflows continue.
 
 The search popup uses Library scope by default and can narrow to one folder.
 Results always identify visible source files, even when their evidence came
 from PDF extraction, DOCX conversion, OCR, or a transcript. A missing result
 may mean wrong scope, wrong mode, incomplete Preparation, files still being
-prepared for Similarity Search, provider failure, or quota state; those are not
+prepared for search by meaning, provider failure, or quota state; those are not
 equivalent conditions.
 
-## Built-In Agent Chat
+## Agent Panel Chat
 
 - The built-in panel runs supported Claude Code or Codex runtimes.
 - A new app window starts with one reusable blank Chat.
 - A missing runtime waits for explicit **Install and continue**.
 - Agent authentication belongs to the selected runtime and provider. It is
-  separate from StashBase account sign-in and Similarity Search credentials.
+  separate from StashBase account sign-in and the credentials for search by
+  meaning.
 - Every conversation has visible Library or folder scope. A started draft,
   turn, attachment set, or restored conversation keeps that scope when the
   window switches folders.
@@ -128,8 +129,9 @@ Library through MCP.
 
 Common operations include:
 
-- `library_info` for Library folders and Similarity Search status;
-- `search_library` for Exact Search or Similarity Search with explicit narrowing;
+- `library_info` for Library folders and the status of search by meaning;
+- `search_library` for keyword search or search by meaning with explicit
+  narrowing;
 - `reindex` for external disk changes;
 - `create_project` for a new ordinary folder under an authorized location;
 - bounded `list_directory`, `read_file`, `write_file`, `edit_file`,
@@ -149,11 +151,11 @@ Keep these separate when explaining setup or recovery:
 
 | Capability | Credential owner |
 |---|---|
-| Hosted Similarity Search | StashBase account session |
-| Bring-your-own Similarity Search provider | OpenAI or OpenRouter key stored through StashBase Settings |
-| Build Wiki | The selected Built-in, Claude Code, or Codex Agent; no separate credential |
-| Built-in Claude Code | Claude runtime/provider authentication |
-| Built-in Codex | Codex runtime/provider authentication, including the runtime's ChatGPT sign-in flow |
+| Hosted search by meaning | StashBase account session |
+| Bring-your-own provider for search by meaning | OpenAI or OpenRouter key stored through StashBase Settings |
+| Build Wiki | The selected Wiki Agent, Claude Code, or Codex Agent; no separate credential |
+| Agent Panel Claude Code | Claude runtime/provider authentication |
+| Agent Panel Codex | Codex runtime/provider authentication, including the runtime's ChatGPT sign-in flow |
 | External MCP client | That client's account plus the StashBase MCP connection configuration |
 
 No credential should be requested through an environment variable as the

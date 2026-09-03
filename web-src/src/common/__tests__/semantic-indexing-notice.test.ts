@@ -29,7 +29,7 @@ test('awaiting notice renders live guidance and dispatches both decisions withou
   assert.equal(section.props['aria-live'], undefined);
   const heading = renderer!.root.findByType('h2');
   assert.equal(section.props['aria-labelledby'], heading.props.id);
-  assert.equal(heading.children.join(''), 'Many files need Similarity Search preparation');
+  assert.equal(heading.children.join(''), 'Many files need preparation for search by meaning');
   const status = renderer!.root.findByProps({ role: 'status' });
   assert.equal(status.props['aria-live'], 'polite');
   assert.match(status.children.join(''), /stale row/);

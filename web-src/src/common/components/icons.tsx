@@ -261,11 +261,11 @@ export function BugIcon({ className }: IconProps) {
   );
 }
 
-/** Community Discord, beside Report a bug. Phosphor carries the brand mark itself, so it stays on-set instead of being a lone hand-traced logo. (phosphor `discord-logo`, regular) */
+/** Community Discord, beside Report a bug. Phosphor carries the brand mark itself, so it stays on-set instead of being a lone hand-traced logo. FILL weight: the regular outline’s thin face features smear into a robot at 16px; the solid mark stays legible. (phosphor `discord-logo`, fill) */
 export function DiscordIcon({ className }: IconProps) {
   return (
     <Icon className={className}>
-      <path d="M104,140a12,12,0,1,1-12-12A12,12,0,0,1,104,140Zm60-12a12,12,0,1,0,12,12A12,12,0,0,0,164,128Zm74.45,64.9-67,29.71a16.17,16.17,0,0,1-21.71-9.1l-8.11-22q-6.72.45-13.63.46t-13.63-.46l-8.11,22a16.18,16.18,0,0,1-21.71,9.1l-67-29.71a15.93,15.93,0,0,1-9.06-18.51L38,58A16.07,16.07,0,0,1,51,46.14l36.06-5.93a16.22,16.22,0,0,1,18.26,11.88l3.26,12.84Q118.11,64,128,64t19.4.93l3.26-12.84a16.21,16.21,0,0,1,18.26-11.88L205,46.14A16.07,16.07,0,0,1,218,58l29.53,116.38A15.93,15.93,0,0,1,238.45,192.9ZM232,178.28,202.47,62s0,0-.08,0L166.33,56a.17.17,0,0,0-.17,0l-2.83,11.14c5,.94,10,2.06,14.83,3.42A8,8,0,0,1,176,86.31a8.09,8.09,0,0,1-2.16-.3A172.25,172.25,0,0,0,128,80a172.25,172.25,0,0,0-45.84,6,8,8,0,1,1-4.32-15.4c4.82-1.36,9.78-2.48,14.82-3.42L89.83,56s0,0-.12,0h0L53.61,61.93a.17.17,0,0,0-.09,0L24,178.33,91,208a.23.23,0,0,0,.22,0L98,189.72a173.2,173.2,0,0,1-20.14-4.32A8,8,0,0,1,82.16,170,171.85,171.85,0,0,0,128,176a171.85,171.85,0,0,0,45.84-6,8,8,0,0,1,4.32,15.41A173.2,173.2,0,0,1,158,189.72L164.75,208a.22.22,0,0,0,.21,0Z"/>
+      <path d="M247.51,174.39,218,58a16.08,16.08,0,0,0-13-11.88l-36.06-5.92a16.22,16.22,0,0,0-18.26,11.88l-.21.85a4,4,0,0,0,3.27,4.93,155.62,155.62,0,0,1,24.41,5.62,8.2,8.2,0,0,1,5.62,9.7,8,8,0,0,1-10.19,5.64,155.4,155.4,0,0,0-90.8-.1,8.22,8.22,0,0,1-10.28-4.81,8,8,0,0,1,5.08-10.33,156.85,156.85,0,0,1,24.72-5.72,4,4,0,0,0,3.27-4.93l-.21-.85A16.21,16.21,0,0,0,87.08,40.21L51,46.13A16.08,16.08,0,0,0,38,58L8.49,174.39a15.94,15.94,0,0,0,9.06,18.51l67,29.71a16.17,16.17,0,0,0,21.71-9.1l3.49-9.45a4,4,0,0,0-3.27-5.35,158.13,158.13,0,0,1-28.63-6.2,8.2,8.2,0,0,1-5.61-9.67,8,8,0,0,1,10.2-5.66,155.59,155.59,0,0,0,91.12,0,8,8,0,0,1,10.19,5.65,8.19,8.19,0,0,1-5.61,9.68,157.84,157.84,0,0,1-28.62,6.2,4,4,0,0,0-3.27,5.35l3.49,9.45a16.18,16.18,0,0,0,21.71,9.1l67-29.71A15.94,15.94,0,0,0,247.51,174.39ZM92,152a12,12,0,1,1,12-12A12,12,0,0,1,92,152Zm72,0a12,12,0,1,1,12-12A12,12,0,0,1,164,152Z"/>
     </Icon>
   );
 }
@@ -351,11 +351,38 @@ export function StarFilledIcon({ className }: IconProps) {
   );
 }
 
-/** A generic agent, where no specific runtime is named. (phosphor `robot`, regular) */
+/** Agent Instructions / system prompt — the panel-toolbar control. A scroll with text lines (the lucide scroll-text shape, on-set in Phosphor): the concept is the standing orders an agent reads. Deliberately NOT shared with the AGENTS.md tree glyph, which stays the robot — the file marks the agent contract, the control edits the orders. (phosphor `scroll`, regular) */
+export function InstructionsIcon({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <path d="M96,104a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H104A8,8,0,0,1,96,104Zm8,40h64a8,8,0,0,0,0-16H104a8,8,0,0,0,0,16Zm128,48a32,32,0,0,1-32,32H88a32,32,0,0,1-32-32V64a16,16,0,0,0-32,0c0,5.74,4.83,9.62,4.88,9.66h0A8,8,0,0,1,24,88a7.89,7.89,0,0,1-4.79-1.61h0C18.05,85.54,8,77.61,8,64A32,32,0,0,1,40,32H176a32,32,0,0,1,32,32V168h8a8,8,0,0,1,4.8,1.6C222,170.46,232,178.39,232,192ZM96.26,173.48A8.07,8.07,0,0,1,104,168h88V64a16,16,0,0,0-16-16H67.69A31.71,31.71,0,0,1,72,64V192a16,16,0,0,0,32,0c0-5.74-4.83-9.62-4.88-9.66A7.82,7.82,0,0,1,96.26,173.48ZM216,192a12.58,12.58,0,0,0-3.23-8h-94a26.92,26.92,0,0,1,1.21,8,31.82,31.82,0,0,1-4.29,16H200A16,16,0,0,0,216,192Z"/>
+    </Icon>
+  );
+}
+
+/** The AGENTS.md tree glyph — a vendor-neutral agent contract file; the robot marks the agent itself, distinct from the Instructions scroll. (phosphor `robot`, regular) */
 export function BotIcon({ className }: IconProps) {
   return (
     <Icon className={className}>
       <path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A32,32,0,0,0,24,80V192a32,32,0,0,0,32,32H200a32,32,0,0,0,32-32V80A32,32,0,0,0,200,48Zm16,144a16,16,0,0,1-16,16H56a16,16,0,0,1-16-16V80A16,16,0,0,1,56,64H200a16,16,0,0,1,16,16Zm-52-56H92a28,28,0,0,0,0,56h72a28,28,0,0,0,0-56Zm-24,16v24H116V152ZM80,164a12,12,0,0,1,12-12h8v24H92A12,12,0,0,1,80,164Zm84,12h-8V152h8a12,12,0,0,1,0,24ZM72,108a12,12,0,1,1,12,12A12,12,0,0,1,72,108Zm88,0a12,12,0,1,1,12,12A12,12,0,0,1,160,108Z"/>
+    </Icon>
+  );
+}
+
+/** Templates — the sidebar entry and its gallery tab (the marketplace-gallery glyph). (phosphor `squares-four`, regular) */
+export function SquaresFourIcon({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <path d="M104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48Z"/>
+    </Icon>
+  );
+}
+
+/** The switcher mark (macOS/VS Code select idiom) — the sidebar folder header’s Change-folder trigger; distinct on purpose from the single fold chevron beside it. (phosphor `caret-up-down`, regular) */
+export function CaretUpDownIcon({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <path d="M181.66,170.34a8,8,0,0,1,0,11.32l-48,48a8,8,0,0,1-11.32,0l-48-48a8,8,0,0,1,11.32-11.32L128,212.69l42.34-42.35A8,8,0,0,1,181.66,170.34Zm-96-84.68L128,43.31l42.34,42.35a8,8,0,0,0,11.32-11.32l-48-48a8,8,0,0,0-11.32,0l-48,48A8,8,0,0,0,85.66,85.66Z"/>
     </Icon>
   );
 }
@@ -438,9 +465,11 @@ export function CodexIcon({ className }: IconProps) {
 
 export function CubeLogoIcon({ className }: IconProps) {
   // Token-driven so the mark keeps its weight and hue in both themes;
-  // hidden back edges stay a step lighter than the lit front edges.
+  // hidden back edges stay a step lighter than the lit front edges. The
+  // cropped viewBox removes the source mark's surplus whitespace so its
+  // optical footprint matches the other brand marks in the same CSS slot.
   return (
-    <svg className={className} viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <svg className={className} viewBox="44 44 424 424" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <g stroke="var(--stroke-strong)" strokeWidth={18} strokeLinecap="round" strokeLinejoin="round">
         <path d="M92 158 L92 342" />
         <path d="M92 342 L256 436" />

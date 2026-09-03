@@ -72,6 +72,33 @@ function MenuItem({ className, ...props }: MenuPrimitive.Item.Props) {
   )
 }
 
+function MenuSubmenuRoot({ ...props }: MenuPrimitive.SubmenuRoot.Props) {
+  return <MenuPrimitive.SubmenuRoot data-slot="menu-submenu-root" {...props} />
+}
+
+/* A submenu trigger IS an item (same row anatomy and highlight); Base UI
+ * adds the hover/arrow-key open behavior and keeps the PARENT menu on
+ * screen while the child is up — the whole point of a cascade.
+ *
+ * ATTACHED ROOTS ONLY: Base UI's detached-trigger support is
+ * top-level-only, so a SubmenuRoot under ManagedMenu's virtual-anchor
+ * root registers with a null floating-tree parent and the parent closes
+ * itself with reason `sibling-open` the moment the child opens. Menus
+ * that need a cascade must be composed with a real `MenuTrigger` (the
+ * folder header's ⋯ menu is the standing example). */
+function MenuSubmenuTrigger({ className, ...props }: MenuPrimitive.SubmenuTrigger.Props) {
+  return (
+    <MenuPrimitive.SubmenuTrigger
+      data-slot="menu-submenu-trigger"
+      className={cn(
+        "flex w-full cursor-pointer items-center justify-between gap-4 rounded-md border-0 bg-transparent px-2 py-1.5 text-left text-inherit outline-none data-disabled:cursor-default data-disabled:opacity-45 data-highlighted:bg-muted data-[popup-open]:bg-muted",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
 function MenuSeparator({ className, ...props }: MenuPrimitive.Separator.Props) {
   return (
     <MenuPrimitive.Separator
@@ -89,5 +116,7 @@ export {
   MenuPortal,
   MenuPositioner,
   MenuSeparator,
+  MenuSubmenuRoot,
+  MenuSubmenuTrigger,
   MenuTrigger,
 }

@@ -26,7 +26,7 @@ test('every built-in runtime declares the fundamental Shared Agent Contract beha
   assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => [adapter.id, adapter.label]), [
     ['codex', 'Codex'],
     ['claude', 'Claude Code'],
-    ['stashbase', 'Built-in'],
+    ['stashbase', 'Wiki Agent'],
   ]);
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
     for (const capability of REQUIRED_SHARED_CAPABILITIES) {

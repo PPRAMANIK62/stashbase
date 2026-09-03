@@ -462,7 +462,7 @@ export async function fetchHostedAgentAllowance(
   if (response.status === 401 && !options.forceRefreshToken) {
     return fetchHostedAgentAllowance({ forceRefreshToken: true });
   }
-  if (!response.ok) throw new Error(messageOf(payload, `Built-in Agent usage service failed (HTTP ${response.status}).`));
+  if (!response.ok) throw new Error(messageOf(payload, `Wiki Agent usage service failed (HTTP ${response.status}).`));
   return payload as HostedAgentAllowance;
 }
 

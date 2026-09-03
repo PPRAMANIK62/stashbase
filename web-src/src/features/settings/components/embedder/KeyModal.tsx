@@ -54,7 +54,7 @@ export function KeyModal({
       title={mode === 'change' ? 'Change API key' : `${providerLabel(provider)} API key`}
       description={mode === 'change'
         ? `Replaces your ${providerLabel(provider)} key for ${model}.`
-        : `Used only for Similarity Search with ${model} — never for Chat or completions.`}
+        : `Used only for search by meaning with ${model} — never for Chat or completions.`}
       initialFocus={inputRef}
       onCancel={onCancel}
     >

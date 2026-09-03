@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { LibraryOperationError, createLibraryOperations } from './index.ts';
 
-test('Library Operations rejects Similarity Search retrieval without embedding configuration', async () => {
+test('Library Operations rejects semantic retrieval without embedding configuration', async () => {
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
     retrieval: { search: async () => ({
@@ -99,7 +99,7 @@ test('Library Operations fans whole-library keyword search across member folders
   ]);
 });
 
-test('Library Operations resolves an attributed Similarity Search Off request to lexical retrieval', async () => {
+test('Library Operations resolves an attributed request with search by meaning off to lexical retrieval', async () => {
   const modes: string[] = [];
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),

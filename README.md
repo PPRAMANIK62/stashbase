@@ -14,7 +14,7 @@ StashBase and work with that material in place:
 
 - 📂 **Work in place:** browse, read, and edit supported files without moving them into a proprietary workspace.
 - 🗺️ **Build Wiki:** organize Sources into linked Markdown pages while keeping the original files and layout in place.
-- 🔎 **Prepare and search:** extract difficult formats, use Exact Search immediately, and add Similarity Search when meaning matters.
+- 🔎 **Prepare and search:** extract difficult formats, use keyword search immediately, and add search by meaning when meaning matters.
 - 🤖 **Use with Agents:** run Claude Code or Codex in the built-in Chat, or share the same authorized library with other MCP clients.
 
 Your folders remain the source of truth. StashBase brings Sources, Wiki Pages,
@@ -30,9 +30,9 @@ Sources -> Wiki Pages + Search -> Agents
 
 ## 🚀 Demo
 
-Open a local folder in StashBase and ask the built-in Agent: **How do I use StashBase?**
+Open a local folder in StashBase and ask Wiki Agent: **How do I use StashBase?**
 
-![StashBase demo: browsing local guides and asking the built-in Agent how to use StashBase](assets/readme/demo.gif)
+![StashBase demo: browsing local guides and asking Wiki Agent how to use StashBase](assets/readme/demo.gif)
 
 ---
 
@@ -77,18 +77,21 @@ For a portable build, download `StashBase-*-linux-*.AppImage`, make it executabl
 
 ### First Launch
 
-The first window opens with no folder selected and one reusable blank Chat.
+The first window opens with no folder selected, the Templates gallery, and one
+reusable blank Chat.
 
-1. **Open a folder and choose whether to set up Similarity Search**: The first
+1. **Open a folder and choose whether to set up search by meaning**: The first
    folder you activate offers StashBase sign-in or your own OpenAI/OpenRouter
-   key. Choose **Not now** to continue with Exact Search and local file work.
+   key. Choose **Not now** to continue with keyword search and local file work.
    StashBase remembers the choice; the Files-panel **Set up** action and
    Settings remain available later.
-2. **Build Wiki**: In an empty folder-scoped Chat, choose **Build Wiki**.
-   StashBase asks the Agent to create or improve `wiki/index.md` and,
+2. **Build Wiki**: Open **Templates** from the sidebar and choose a preset such
+   as **Knowledge Base**. StashBase opens or reuses a folder-scoped Chat and
+   places the card's visible request as an editable draft. Review and send it
+   to create or improve `wiki/index.md` and,
    when useful, focused pages under `wiki/`, without changing Sources outside
-   that directory. This action is independent from Similarity Search setup and
-   preparation.
+   that directory. This action is independent from setup and preparation for
+   search by meaning.
 3. **Ask how StashBase works**: In the Chat that is already open, ask **“How do
    I use StashBase?”** It starts against the whole Library, including Start
    Here's detailed Agent-readable product, workflow, capability, comparison,
@@ -96,10 +99,10 @@ The first window opens with no folder selected and one reusable blank Chat.
    direct Agent file access, NotebookLM, or Obsidian. StashBase uses a supported
    system Claude Code or Codex runtime when available; if it is missing,
    installation waits for **Install and continue**. Agent provider login is
-   separate from StashBase sign-in and Similarity Search configuration.
+   separate from StashBase sign-in and the setup for search by meaning.
 4. **Open source files when you need them**: On a brand-new empty default
    folder home, StashBase adds **👋 Start Here** to the Library without opening
-   it automatically. Open it from the titlebar's **Library** menu, or use **Add
+   it automatically. Open it from the titlebar's **Library** menu, or use **Open
    Folder…** to work with one of your own local folders. Start Here's short
    Welcome is the human entry; its other ordinary Markdown files are detailed
    context for Chat and remain readable when needed. Selecting a source brings
@@ -198,17 +201,17 @@ Audio and video transcription is optional. Download a local speech model from
 Tiny (74 MiB) and Base (141 MiB) are lighter choices. Transcription runs on
 your machine with no transcription API cost.
 
-### Similarity Search
+### Search by meaning
 
 The first folder you activate offers StashBase sign-in with an included monthly
 allowance or your own OpenAI/OpenRouter key. After setup, StashBase prepares
-the Library and keeps Similarity Search data synchronized. Choose **Not now**
-to defer; the Files-panel **Set up** action, the Similarity Search mode, and
-**Settings → Similarity Search** remain available. An OpenAI restricted key
-needs access only to embeddings with `text-embedding-3-small`; model-list
-access is not required. Exact Search needs neither option.
+the Library and keeps the data for search by meaning synchronized. Choose
+**Not now** to defer; the Files-panel **Set up** action, the **By meaning**
+search mode, and **Settings → Search by Meaning** remain available. An OpenAI
+restricted key needs access only to embeddings with `text-embedding-3-small`;
+model-list access is not required. Keyword search needs neither option.
 
-Similarity Search and Exact Search cover:
+Both search modes cover:
 
 - Markdown, valid UTF-8 plain text, HTML, and raw JSON text
 - PDF-derived Markdown
@@ -220,7 +223,7 @@ Search results point back to the user-visible source file, not hidden app data.
 
 Hosted indexing and meaning-based queries share one monthly token allowance.
 The avatar menu shows the remaining percentage and reset date. If the hosted
-allowance runs out, Exact Search and all local file workflows keep working.
+allowance runs out, keyword search and all local file workflows keep working.
 
 Background preparation is intentionally quiet. Browsing a folder should feel like browsing files, not watching an indexing job. If preparation fails, StashBase shows a lightweight failure marker and lets you retry. Readiness matters most when you search, so that is where StashBase shows how much of your content is ready.
 
@@ -230,12 +233,12 @@ Background preparation is intentionally quiet. Browsing a folder should feel lik
 
 MCP is the main interface between StashBase and Agents.
 
-While the StashBase app is running, a local MCP server makes the same library available to external clients and the built-in Agent panel.
+While the StashBase app is running, a local MCP server makes the same library available to external clients and the Agent Panel.
 
 Common tools:
 
 - `library_info` - return the default folder home, opened folder paths and names, and embedder status. StashBase Chat Agent Instructions are scoped application metadata rather than part of this MCP response; user-owned portable rules may still live in visible files such as `AGENTS.md`.
-- `search_library` - search the whole library in semantic (default) or keyword mode, optionally narrowed by folder, path prefix, or source type. Keyword mode searches direct and prepared text before Similarity Search is set up. In a StashBase Chat, turning Similarity Search off keeps this tool available and resolves it to keyword mode.
+- `search_library` - search the whole library in semantic (default) or keyword mode, optionally narrowed by folder, path prefix, or source type. Semantic mode searches by meaning; keyword mode searches direct and prepared text even before you set up search by meaning. In a StashBase Chat, turning search by meaning off keeps this tool available and resolves it to keyword mode.
 - `reindex` - reconcile disk changes and make updated files searchable.
 - `create_project` - create and register a new project folder beneath an authorized location.
 
@@ -252,19 +255,19 @@ These helpers exist for Agent clients that run in a sandbox and cannot directly 
 
 ### Connect a Client
 
-Built-in receives the MCP connection automatically; StashBase also configures the selected Codex or Claude Code runtime during readiness. For any external MCP-compatible client, copy the standard configuration or the server connection details from **Settings → MCP** and register them in that client.
+Wiki Agent receives the MCP connection automatically; StashBase also configures the selected Codex or Claude Code runtime during readiness. For any external MCP-compatible client, copy the standard configuration or the server connection details from **Settings → MCP** and register them in that client.
 
 For setup examples, URL-based clients, Docker access, ports, CORS boundaries, and token rotation, see [MCP configuration](docs/mcp-configuration.md).
 
 ---
 
-## Built-In Agent Chat
+## Wiki Agent Chat
 
-StashBase includes a built-in chat whose **Built-in** choice runs a pinned
+StashBase includes a built-in chat whose **Wiki Agent** choice runs a pinned
 local OpenCode runtime against the whole library or one selected folder. It
 uses the signed-in account's fixed seven-day model allowance without a separate Agent
 install or model API key. Codex and Claude Code remain available as
-bring-your-own runtimes and appear before Built-in in the picker. Its second
+bring-your-own runtimes and appear before Wiki Agent in the picker. Its second
 line says **Sign in for free credits** while signed out and **Free credits
 included** after sign-in. Chat fills the workspace until you open a document,
 then adapts into a side panel so the conversation and source stay visible
@@ -280,11 +283,13 @@ separate knowledge base. It adds:
   Library-wide Chats use the default without inventing a Library-wide setting.
   Changes apply from the next message. StashBase never creates or changes
   `AGENTS.md` or `CLAUDE.md` in your folders.
-- New Chat reuses a completely blank conversation when possible; Built-in is
+- New Chat reuses a completely blank conversation when possible; Wiki Agent is
   selected initially and later chats use the Agent you last selected.
-- A blank folder Chat offers **Build Wiki**, which creates or improves
-  linked Markdown pages only under `wiki/` while preserving all Sources and
-  their layout.
+- **Templates** opens a gallery of preset Wiki activations. Choosing a card
+  opens or reuses a blank folder Chat and places its visible request as an
+  editable draft; after you send it, the Knowledge Base preset in the organize
+  section creates or improves linked Markdown pages only under `wiki/` while
+  preserving all Sources and their layout.
 - Tool calls and file edits can be reviewed in the app.
 - Session history stays in the selected runtime's native local storage.
 - Agent replies render GFM and offline LaTeX math without changing the copied
@@ -292,11 +297,11 @@ separate knowledge base. It adds:
 - `@` mentions find files and folders with forgiving workspace-path search;
   selecting one inserts only its workspace-relative path.
 
-Built-in keeps sessions, file and command execution, permissions, and
+Wiki Agent keeps sessions, file and command execution, permissions, and
 Diffs local; only prompts and necessary model context pass through the metered
 StashBase gateway. Claude Code and Codex keep their normal provider login and
 native history. Those provider credentials are independent from StashBase
-account sign-in and the embedding source selected for Similarity Search.
+account sign-in and the embedding source selected for search by meaning.
 
 ---
 
@@ -419,10 +424,10 @@ Reasonably stable:
 - Local folder library model
 - Markdown, literal plain text, HTML, JSON, PDF, and image preview
 - PDF extraction, image OCR, and local audio and video transcription, with persisted failures and retry
-- Similarity Search and Exact Search
+- Keyword search and search by meaning
 - MCP access for built-in and externally configured clients
 - Bounded file helpers for sandboxed Agents
-- Built-in, Claude Code, and Codex panel
+- Wiki Agent, Claude Code, and Codex panel
 
 ### Where We Need Help
 

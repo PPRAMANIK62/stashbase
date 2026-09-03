@@ -20,7 +20,8 @@ manager, or a primary graph-navigation tool.
 
 - A new window opens directly into the workspace with no folder selected and
   one expanded, reusable blank library Chat. It never silently restores a
-  folder, installs an Agent runtime, or opens account/Similarity Search setup.
+  folder, installs an Agent runtime, or opens account sign-in or setup for
+  search by meaning.
 - On first launch with a brand-new empty default folder home, StashBase seeds
   the ordinary local **👋 Start Here** folder and adds it to the library
   without automatically opening it. Its `00 Welcome.html` is the human entry;
@@ -31,18 +32,21 @@ manager, or a primary graph-navigation tool.
   deleting the seeded folder does not recreate it, and application updates
   never overwrite the user's copy.
 - Files exposes Chat, the active folder tree, and account utilities without
-  making sign-in a condition of local work. With no active folder, the
-  workspace distinguishes an empty library from an existing library awaiting
-  selection, and claims neither while membership is still loading: the
-  empty-library invitation appears only once the library is confirmed empty,
-  never as a launch flash on a populated library. A populated library awaiting
-  selection states that Chat and search cover the whole library and offers one
-  Choose Folder invitation beneath New Chat, opening the same membership menu
-  the titlebar switcher serves.
+  making sign-in a condition of local work. A bare window boots with the
+  Templates gallery open in the main pane — the product leads with what it
+  does, cards disabled until a folder opens — while the SIDEBAR's launcher
+  column owns getting one open with the fewest rows that can: Open Folder…
+  and New Folder… as quiet command rows (the same flows the titlebar
+  switcher menu serves). The launcher deliberately lists no membership, no
+  scope explainer, and no GitHub import row — browsing members and the
+  import flow belong to the titlebar Library switcher. Closing the
+  boot-opened gallery tab sticks; boot never reopens it over restored tabs
+  or an open folder.
 - Packaged builds check the official stable release channel when the default-on
   preference permits it. An available update floats a dismissible announcement
-  above the account row with one explicit Update action; the Discord,
-  bug-report, and Settings utilities keep their places beneath it. Dismissing
+  above the account row with one explicit Update action; the Settings utility
+  keeps its place beneath it (Discord and bug reporting live inside Settings →
+  General, under Community and support). Dismissing
   hides that announcement only — a newer release, or a download becoming ready
   to install, announces again, and Settings remains the standing update and
   preference surface.
@@ -50,7 +54,7 @@ manager, or a primary graph-navigation tool.
   Files, with the full email retained in the account menu. Missing or failed
   profile display data falls back without changing account controls; **Sign
   in** names the complete signed-out local-workspace state and its optional
-  route to Built-in and Similarity Search.
+  route to Wiki Agent and search by meaning.
 - Users can open or create a local folder, import a public GitHub repository
   directly into the default folder home, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
@@ -58,10 +62,18 @@ manager, or a primary graph-navigation tool.
   membership clears only StashBase-owned state.
 - The titlebar folder switcher keeps the window's current folder identity
   visible and offers the full library membership alongside pinned "New Folder…",
-  "Import from GitHub…", and "Open Folder…" actions. A name wider than the
+  "Import from GitHub…", and "Open Folder…" actions. The sidebar's active
+  folder header offers **Change Folder…** at the top of its ⋯ menu, opening
+  that same membership menu — with a folder open, the sidebar is where
+  people look for "switch", and the titlebar trigger alone proved
+  undiscoverable; a standing icon beside the name crowded it. A name wider than the
   sidebar column truncates within that column instead of crossing onto the
   document tab strip. Folder-level actions remain attributable to the active
   folder.
+- The document tab strip can also hold the singleton **Templates** tab — the
+  gallery of preset wiki activations, opened from its sidebar row under New
+  Chat. It closes like any tab; reopening focuses the existing one, and
+  opening a file while it is active lands in a fresh tab, never inside it.
 - Multiple windows share one library and runtime services while retaining
   independent active folders, tabs, search presentation, and Chat tabs.
 - Folder switches reset folder-scoped documents but preserve library search

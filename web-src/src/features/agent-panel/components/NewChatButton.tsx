@@ -5,7 +5,7 @@ import { Button } from '@/common/components/ui/button';
 import {
   AGENT_META,
   AGENTS,
-  builtInLauncherDetail,
+  wikiAgentLauncherDetail,
   type AgentKind,
 } from '@/common/lib/agentCatalog';
 import {
@@ -60,7 +60,7 @@ export function NewChatButton() {
    * the same thing. */
   const agentItems: MenuItem[] = AGENTS.map((agent) => ({
     label: agent.launcherLabel,
-    detail: agent.id === 'stashbase' ? builtInLauncherDetail(accountSignedIn) : undefined,
+    detail: agent.id === 'stashbase' ? wikiAgentLauncherDetail(accountSignedIn) : undefined,
     icon: <agent.Icon />,
     onSelect: () => pickAgent(agent.id),
   }));
@@ -161,8 +161,19 @@ export function NewChatButton() {
           * unrelated control inside a bonded pair, and no hover treatment
           * reads correctly while the layout says the picker belongs to the
           * clock. The rule divides at the real boundary, so the grouping
-          * is legible at rest instead of only under the pointer. */}
-        <span aria-hidden className="mx-1 h-3.5 w-px flex-none bg-border" />
+          * is legible at rest instead of only under the pointer.
+          *
+          * Present in the BARE window too: this row is the one entry to
+          * every session, the bare Library can hold Library-scoped chats
+          * of its own, and a folder-scoped row resumed from here reopens
+          * its folder — history is exactly how "which folder was that
+          * chat in?" gets answered. Hiding the clock until a folder opens
+          * makes those sessions unreachable from the state where the user
+          * is most likely to be looking for them. */}
+        {/* h-4 matches the titlebar's search|folder hairline
+          * (TitlebarControls.tsx) — the two sit stacked at the sidebar's
+          * top, so unequal heights read as a mistake. */}
+        <span aria-hidden className="mx-1 h-4 w-px flex-none bg-border" />
         <ScopeHistoryButton
           scope={ALL_HISTORY_SCOPE}
           label="Chat history"

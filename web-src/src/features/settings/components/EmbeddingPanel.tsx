@@ -1,8 +1,8 @@
 /**
- * Settings → Similarity Search panel. The user can choose the signed-in StashBase
+ * Settings → Search by Meaning panel. The user can choose the signed-in StashBase
  * allowance, direct OpenAI, or OpenRouter's OpenAI-compatible endpoint. With
- * no active source, Similarity Search is unavailable (files still save,
- * preview, and use Exact Search); the setup modal on folder load lives in
+ * no active source, searching by meaning is unavailable (files still save,
+ * preview, and keyword search keeps working); the setup modal on folder load lives in
  * `EmbedderRequireKeyGate` so it fires whether or not Settings is open.
  */
 import { useState } from 'react';
@@ -105,7 +105,7 @@ export function EmbeddingPanel() {
         {/* role="alert": the failure replaces the panel after an async
           * load, so it must announce itself — nothing else changes on
           * screen for a listener to notice. */}
-        <div role="alert" className="text-sm text-destructive">Couldn’t load Similarity Search settings: {loadError}</div>
+        <div role="alert" className="text-sm text-destructive">Couldn’t load settings for search by meaning: {loadError}</div>
         <div className="mt-2.5 flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={retryLoad}>Retry</Button>
         </div>
@@ -128,7 +128,7 @@ export function EmbeddingPanel() {
     <>
       <div>
         <div>
-          <SectionHeading level={3} className="mb-1">Similarity Search</SectionHeading>
+          <SectionHeading level={3} className="mb-1">Search by Meaning</SectionHeading>
           <SectionDescription className="mb-2.5">
             Find related Sources and Wiki Pages even when the wording differs. The model stays fixed so local search data remains compatible.
           </SectionDescription>
@@ -159,7 +159,7 @@ export function EmbeddingPanel() {
                     * width instead of the primitive's inline step. */}
                   <Progress
                     className="block"
-                    aria-label="Remaining Similarity Search allowance"
+                    aria-label="Remaining allowance for search by meaning"
                     value={hostedQuotaRemainingPercent(state.account.quota)}
                   >
                     <ProgressTrack className="w-full">
@@ -214,7 +214,7 @@ export function EmbeddingPanel() {
               * aria-label on the control. The legend is hidden because the
               * panel heading above already carries the visible name for
               * this block; the fieldset still announces the grouping. */}
-            <FieldLegend className="sr-only">Similarity Search provider</FieldLegend>
+            <FieldLegend className="sr-only">Provider for search by meaning</FieldLegend>
             <SegmentedControl
               disabled={addBusy}
               value={[selectedProvider]}
@@ -316,7 +316,7 @@ export function EmbeddingPanel() {
           ))}
           {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (
             <SectionDescription className="mt-3.5 [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
-              Stored locally in <code>~/.stashbase/config.json</code>. Used only for Similarity Search, never Chat.
+              Stored locally in <code>~/.stashbase/config.json</code>. Used only for search by meaning, never Chat.
             </SectionDescription>
           )}
         </div>

@@ -11,8 +11,8 @@ Read the narrowest relevant guide:
 - `01 Getting Started and Workflows.md` for first launch and end-to-end tasks.
 - `02 Product and Mental Model.md` for product identity, ownership, scope, privacy,
   durable work, and non-goals.
-- `03 Capabilities and Boundaries.md` for formats, search, Preparation, Similarity Search,
-  built-in Chat, and external MCP.
+- `03 Capabilities and Boundaries.md` for formats, keyword search, search by
+  meaning, Preparation, built-in Chat, and external MCP.
 - `04 FAQ and Comparisons.md` for objections, alternatives, and dated product
   comparisons.
 - `05 Troubleshooting and Reference.md` for recovery, support, and links to current
@@ -66,19 +66,21 @@ instructions with an invitation to ask a real question about that folder.
 - Lead with the direct answer, then explain the smallest useful next action.
 - Describe Shipping behavior, not imagined future capability.
 - Use the product terms **Wiki**, **Library**, **Source**, **Wiki Pages**,
-  **Build Wiki**, **Exact Search**, **Similarity Search**,
-  **Preparation**, and **derived data**. When the user says keyword or semantic
-  search, connect those common terms to the UI labels.
+  **Build Wiki**, **Preparation**, and **derived data**, together with the
+  plain phrases keyword search and search by meaning. When the user says
+  semantic or similarity search, treat it as search by meaning; when they say
+  exact search, treat it as keyword search. The search popup labels the modes
+  **By meaning** and **By keyword**.
 - Never use `supported`, `readable`, or `writable` without qualifying the
-  surface. Preview, Workbench content editing, retrieval text, built-in Agent
+  surface. Preview, Workbench content editing, retrieval text, Agent Panel
   input, external MCP reads, and file mutation are different capabilities.
 - Do not make optional online capabilities sound required. Local browsing,
-  preview, editing, and Exact Search work without a StashBase account,
-  Similarity Search, transcription, or an Agent runtime.
+  preview, editing, and keyword search work without a StashBase account, setup
+  for search by meaning, transcription, or an Agent runtime.
 - Explain hosted processing before recommending it. Source files remain local,
-  but extracted text may be sent to the selected Similarity Search or Agent
-  provider when the user chooses those capabilities.
-- Keep StashBase sign-in, the selected Similarity Search provider, and
+  but extracted text may be sent to the provider selected for search by
+  meaning, or to the Agent provider, when the user chooses those capabilities.
+- Keep StashBase sign-in, the provider selected for search by meaning, and
   Claude/Codex provider authentication distinct.
 - Treat Library or folder scope as an authorization boundary. StashBase MCP
   file tools are not a general host-filesystem interface. A built-in coding

@@ -27,7 +27,7 @@ function state(patch: Partial<EmbedderState>): EmbedderState {
   };
 }
 
-test('handling the first-folder Similarity Search setup persists globally', () => {
+test('handling the first-folder setup for search by meaning persists globally', () => {
   const storage = new MemoryStorage();
   assert.equal(hasSeenSimilaritySearchSetup(storage), false);
   setSimilaritySearchSetupSeen(true, storage);
@@ -40,7 +40,7 @@ test('handling the first-folder Similarity Search setup persists globally', () =
   assert.equal(hasSeenSimilaritySearchSetup(storage), false);
 });
 
-test('Similarity Search authorization accepts hosted or BYOK sources', () => {
+test('authorization for search by meaning accepts hosted or BYOK sources', () => {
   assert.equal(isEmbeddingAuthorized(null), false);
   assert.equal(isEmbeddingAuthorized(state({ authorized: true, source: 'stashbase-account' })), true);
   assert.equal(isEmbeddingAuthorized(state({ authorized: true, source: 'openrouter', hasKey: true })), true);

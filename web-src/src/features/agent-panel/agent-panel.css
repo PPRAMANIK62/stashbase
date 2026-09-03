@@ -137,9 +137,10 @@
  * one-line confirmations and tool output included — when only a fraction
  * of them are prose anyone settles in to read.
  *
- * So the panel speaks in the interface's own voice. Two voices, not
- * three: the system UI sans for chrome and content alike, bundled Geist
- * Mono where the content is literally code.
+ * So the panel's replies speak the READING voice — Geist, the site's
+ * face (`--font-reading`), shared with the Markdown view. Chrome stays
+ * the system UI sans; bundled Geist Mono where the content is literally
+ * code.
  *
  * Line-height comes back a step from the serif's 1.65 — the UI sans needs
  * less air to stay readable at this measure, and the old value left the
@@ -149,7 +150,7 @@
  * but one definition, and it keeps following the interface-size
  * preference without this file having to remember to say so. */
 .agent-prose {
-  font-family: var(--font-sans);
+  font-family: var(--font-reading);
   font-size: var(--text-lg);
   line-height: 1.6;
   /* The reading role, not the chrome's `--fg`. In dark mode that is a

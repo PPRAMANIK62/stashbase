@@ -1,5 +1,5 @@
 /**
- * Attribution registry for live built-in Agent panel sessions.
+ * Attribution registry for live Agent Panel sessions.
  *
  * Each panel session gets a private per-session attribution id at spawn.
  * The id travels through the session's process environment

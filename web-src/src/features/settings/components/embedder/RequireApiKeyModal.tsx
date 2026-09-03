@@ -1,5 +1,5 @@
 /**
- * The first-folder Similarity Search setup dialog (see `EmbedderRequireKeyGate`).
+ * The first-folder setup dialog for search by meaning (see `EmbedderRequireKeyGate`).
  *
  * Setting up an indexing source is strongly recommended, not forced: an
  * unindexed library still browses, edits, previews, and keyword-searches —
@@ -56,7 +56,7 @@ const PROVIDER_ORDER: EmbedderProvider[] = ['openai', 'openrouter'];
 type View = 'choice' | 'signin' | 'key';
 
 const TITLES: Record<View, string> = {
-  choice: 'Set up Similarity Search',
+  choice: 'Set up search by meaning',
   signin: 'Sign in to StashBase',
   key: 'Add your API key',
 };
@@ -83,11 +83,11 @@ const DESCRIPTIONS: Record<View, ReactNode> = {
     <>
       Use your{' '}
       <mark className="rounded-xs bg-accent/8 box-decoration-clone px-px text-inherit">
-        included monthly Similarity Search allowance
+        included monthly allowance for search by meaning
       </mark>.
     </>
   ),
-  key: 'Paste an OpenAI or OpenRouter API key for Similarity Search.',
+  key: 'Paste an OpenAI or OpenRouter API key for search by meaning.',
 };
 
 export function RequireApiKeyModal({
@@ -172,7 +172,7 @@ export function RequireApiKeyModal({
         * reads as "these two words are different sizes", and it stretched
         * to the dialog width so the two providers got unequal shares. */}
       <FieldSet className="mb-2 w-fit">
-      <FieldLegend className="sr-only">Similarity Search provider</FieldLegend>
+      <FieldLegend className="sr-only">Provider for search by meaning</FieldLegend>
       <SegmentedControl
         disabled={busy}
         value={[provider]}

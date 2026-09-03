@@ -141,12 +141,12 @@ export default function ChatPane() {
                   }
                 }}
                 className={cn(
-                  // text-sm (12px) + py-1.5 (6px) + rounded-t-sm (the 6px
-                  // control-role top corners) = the document tab's exact
+                  // text-sm (12px) + py-1.5 (6px) + rounded-t-md (the 10px
+                  // item-role top corners) = the document tab's exact
                   // type size, vertical padding, and radius (`.tab` in
                   // workspace.css), so both strips' tabs stand the same
                   // height in the same voice.
-                  'group/tab inline-flex max-w-45 min-w-0 items-center gap-1.5 rounded-none rounded-t-sm border border-transparent border-b-0 py-1.5 pr-1.5 pl-2.5 text-sm select-none',
+                  'group/tab inline-flex max-w-45 min-w-0 items-center gap-1.5 rounded-none rounded-t-md border border-transparent border-b-0 py-1.5 pr-1.5 pl-2.5 text-sm select-none',
                   // bg-canvas, not bg-background: an active tab takes the
                   // colour of the surface it fronts, and this one fronts
                   // the chat canvas — `bg-background` is the document

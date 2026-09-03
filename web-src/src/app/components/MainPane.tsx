@@ -1,4 +1,6 @@
+import { Suspense, useEffect, useState } from 'react';
 import { EditIcon, PreviewIcon } from '@/common/components/icons';
+import { LazyLoadBoundary } from '@/common/components/ErrorBoundary';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { DocumentViewer } from '@/features/documents';
 import { EmptyTabLanding, TabStrip } from '@/features/workspace';
@@ -8,6 +10,7 @@ import { electronBridge } from '@/common/lib/electronBridge';
 import { basename } from '@/common/lib/paths';
 import { Button } from '@/common/components/ui/button';
 import { StatusMessage } from '@/common/components/ui/status';
+import { TemplatesView } from '@/features/templates';
 import { cn } from '@/common/lib/utils';
 
 /**
@@ -29,8 +32,22 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   const cur = activeTab?.file ?? null;
   const editMode = activeTab?.editMode ?? false;
   const saveStatus = activeTab?.saveStatus ?? { text: '', cls: '' };
+  // "Saved" is a tick, not a standing state: fade it out shortly after it
+  // lands (the store keeps the status for tab dots and tests; this is
+  // presentation only). Everything else — Saving…, Unsaved, errors —
+  // stays visible for as long as the store says so.
+  const [saveTickVisible, setSaveTickVisible] = useState(true);
+  useEffect(() => {
+    setSaveTickVisible(true);
+    if (saveStatus.cls !== 'saved') return;
+    const timer = setTimeout(() => setSaveTickVisible(false), 2000);
+    return () => clearTimeout(timer);
+  }, [saveStatus.cls, saveStatus.text, state.activeTabId]);
   const hasTabs = state.tabs.length > 0;
-  const emptyTab = !!activeTab && !cur;
+  // A kind tab (the Templates gallery) holds no file but is not the
+  // blank "Untitled" landing — it renders its own pane.
+  const templatesTab = activeTab?.kind === 'templates';
+  const emptyTab = !!activeTab && !cur && !templatesTab;
   // Out-of-folder tab (a library search hit viewed without switching the
   // window's folder): a quiet identity banner with the one escape hatch —
   // open that folder in its own window.
@@ -108,11 +125,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         aria-labelledby={activeTab ? `document-tab-${activeTab.id}` : undefined}
       >
         {!hasTabs && !state.folderPath && (
-          /* No folder open at all (empty library, or an open failure).
-           * The sidebar's zero-folder block owns the add-folder action;
-           * this pane stays a quiet pointer toward it. */
+          /* Bare window with every tab closed (boot opens the Templates
+           * gallery here; this is the state after the user closes it).
+           * The sidebar's folder zone owns the actions — this stays a
+           * quiet pointer. */
           <div className="grid h-full place-items-center p-10 text-center text-base text-muted-foreground">
-            <p className="m-0 leading-loose">Add a folder from the sidebar to get started.</p>
+            <p className="m-0 leading-loose">Open a folder from the sidebar to get started.</p>
           </div>
         )}
         {!hasTabs && !!state.folderPath && (
@@ -157,6 +175,16 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
           </div>
         )}
         {emptyTab && <EmptyTabLanding />}
+        {templatesTab && (
+          <LazyLoadBoundary
+            className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
+            label="templates"
+          >
+            <Suspense fallback={null}>
+              <TemplatesView />
+            </Suspense>
+          </LazyLoadBoundary>
+        )}
         {/* One Documents surface, whatever the open file is. Which viewer
           * a format gets, and which of them load lazily, is the Documents
           * feature's business — this pane only supplies the tab state and
@@ -190,7 +218,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
             /* `role="status"` (an implicit polite live region): the save
              * tick — and more importantly a save ERROR — is otherwise
              * invisible to a screen reader mid-edit. Styling unchanged. */
-            <span role="status" className={cn('text-sm transition-opacity duration-standard', saveStatus.cls === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
+            <span role="status" className={cn('text-sm transition-opacity duration-standard', saveStatus.cls === 'error' ? 'text-destructive' : 'text-muted-foreground', saveStatus.cls === 'saved' && !saveTickVisible && 'opacity-0')}>
               {saveStatus.text}
             </span>
           )}

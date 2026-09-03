@@ -38,8 +38,10 @@ test('empty library keeps the redesigned zero-state composition', async ({}, tes
     await setVisualViewport(page, 1280, 820);
 
     await expect(page.getByRole('complementary', { name: 'Agent chat' }).getByRole('tab', { selected: true })).toBeInViewport();
-    await expect(page.getByText('Add a folder to your Wiki.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add Folder…' })).toBeVisible();
+    // Empty library: boot opens the Templates gallery in the main pane
+    // while the sidebar's launcher column carries the add-folder flows.
+    await expect(page.getByRole('heading', { name: 'Start faster with a template.' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open Folder…', exact: true })).toBeVisible();
     // With no folder open the switcher trigger reads "Library".
     await expect(folderSwitcherTrigger(page)).toContainText('Library');
     await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
@@ -67,8 +69,6 @@ test('available update floats above persistent account utilities', async ({}, te
     });
 
     await expect(page.getByRole('button', { name: 'Update to StashBase 9.9.9' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Join the StashBase Discord' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Report a bug' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
 
     await expectLinuxScreenshot(page, 'workspace-update-banner.png');

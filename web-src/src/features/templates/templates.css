@@ -1,0 +1,100 @@
+/* The Templates gallery's two site idioms — this surface is deliberately
+ * drawn in the marketing site's print language (stashbase-web
+ * home-page.css is the reference) because the same gallery will be
+ * published there. Both rules are geometry no utility spells: layered
+ * corner-tick gradients on pseudo-elements, and a repeating hatch
+ * gradient. Colours name globals roles, so both hold in dark. */
+
+/* The site's `.framed` registration marks: 10×2px ink ticks in each
+ * corner, drawn over the hairline frame (inside the border box, so no
+ * negative offsets are needed). */
+.templates-frame {
+  position: relative;
+  border: 1px solid var(--stroke-subtle);
+}
+.templates-frame::before,
+.templates-frame::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  height: 10px;
+  pointer-events: none;
+}
+.templates-frame::before {
+  top: 0;
+  background:
+    linear-gradient(var(--text-primary), var(--text-primary)) left top / 10px 2px no-repeat,
+    linear-gradient(var(--text-primary), var(--text-primary)) left top / 2px 10px no-repeat,
+    linear-gradient(var(--text-primary), var(--text-primary)) right top / 10px 2px no-repeat,
+    linear-gradient(var(--text-primary), var(--text-primary)) right top / 2px 10px no-repeat;
+}
+.templates-frame::after {
+  bottom: 0;
+  background:
+    linear-gradient(var(--text-primary), var(--text-primary)) left bottom / 10px 2px no-repeat,
+    linear-gradient(var(--text-primary), var(--text-primary)) left bottom / 2px 10px no-repeat,
+    linear-gradient(var(--text-primary), var(--text-primary)) right bottom / 10px 2px no-repeat,
+    linear-gradient(var(--text-primary), var(--text-primary)) right bottom / 2px 10px no-repeat;
+}
+
+/* Placeholder illustration ground — the site's dotted print ground
+ * (`.step-visual` / `.dotgrid` in home-page.css) with small crop marks,
+ * one ⌐ top-left and one ⌟ bottom-right, the way the site's maps mark
+ * their frames. Each template's real wireframe art will sit on this
+ * same ground; the generic mini-card inside is a stand-in. */
+.template-visual {
+  position: relative;
+  background: radial-gradient(var(--stroke-strong) 1px, transparent 1px);
+  background-size: 12px 12px;
+  background-position: 6px 6px;
+}
+.template-visual::before,
+.template-visual::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}
+.template-visual::before {
+  top: 4px;
+  left: 4px;
+  border-top: 1.5px solid var(--text-primary);
+  border-left: 1.5px solid var(--text-primary);
+}
+.template-visual::after {
+  right: 4px;
+  bottom: 4px;
+  border-right: 1.5px solid var(--text-primary);
+  border-bottom: 1.5px solid var(--text-primary);
+}
+
+/* The gallery answers ITS OWN column's width, not the window's — docking
+ * the chat narrows the main pane without any viewport change, which is
+ * exactly the case a media query cannot see. Two columns in a docked
+ * pane; the site's three once the gallery has room for site-sized cards.
+ * The blank cells completing each hairline row are column-count-specific,
+ * so each set renders only in its own layout. */
+.templates-page { container-type: inline-size; }
+.templates-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.templates-filler-three { display: none; }
+@container (min-width: 880px) {
+  .templates-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .templates-filler-two { display: none; }
+  .templates-filler-three { display: block; }
+}
+
+/* The site's hatched separator between the two sections. Soft-edged
+ * stops (0.5px ramps around the 1px stripe) so the diagonals anti-alias
+ * instead of shimmering on 1x screens. */
+.templates-separator {
+  height: 28px;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 3.5px,
+    var(--stroke-strong) 4px 5px,
+    transparent 6px
+  );
+}

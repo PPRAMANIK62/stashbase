@@ -121,8 +121,8 @@ export function SearchStatusBanner({ semanticMode, onNavigateAway }: {
     return (
       <SearchBanner
         tone="info"
-        title="Similarity Search setup required"
-        detail="Set up Similarity Search to match by meaning. Exact Search stays available without it."
+        title="Set up search by meaning"
+        detail="Find files even when the wording differs. Keyword search keeps working without it."
         actions={
           <Button
             variant="outline"
@@ -147,7 +147,7 @@ export function SearchStatusBanner({ semanticMode, onNavigateAway }: {
     return (
       <SearchBanner
         tone="info"
-        title={semanticMode ? 'Preparing files for Similarity Search' : 'Preparing text for Exact Search'}
+        title={semanticMode ? 'Preparing files for search by meaning' : 'Preparing text for keyword search'}
         detail={<>{readyLabel} {pendingLabel}</>}
       />
     );
