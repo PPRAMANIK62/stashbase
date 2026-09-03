@@ -24,6 +24,7 @@ describe('document source queries', () => {
   it('loads through the source port with query cancellation', async () => {
     const api = {
       load: vi.fn(async () => ({ content: '# Plan', format: 'md' as const, version: 'v1' })),
+      overwrite: vi.fn(),
       save: vi.fn(),
     };
     const controller = new AbortController();

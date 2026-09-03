@@ -122,6 +122,40 @@ describe('document source API', () => {
     });
   });
 
+  it('overwrites only through the explicit conflict-decision request', async () => {
+    const client: HttpClient = {
+      request: vi.fn(async () => ({
+        body: {
+          content: '# Editor draft\r\n',
+          format: 'md',
+          name: 'plan.md',
+          version: 'sha256:overwritten',
+        },
+        status: 200,
+      })),
+    };
+    const signal = new AbortController().signal;
+    const api = createDocumentSourceApi(client);
+
+    await expect(
+      api.overwrite(
+        { folderPath: '/library/notes', path: 'plan.md' },
+        { content: '# Editor draft\n' },
+        signal,
+      ),
+    ).resolves.toEqual({
+      content: '# Editor draft\r\n',
+      format: 'md',
+      version: 'sha256:overwritten',
+    });
+    expect(client.request).toHaveBeenCalledWith({
+      body: { content: '# Editor draft\n', overwrite: true },
+      method: 'PUT',
+      path: '/api/files/plan.md?folder=%2Flibrary%2Fnotes',
+      signal,
+    });
+  });
+
   it('classifies a stale save without exposing server detail', async () => {
     const api = createDocumentSourceApi({
       request: vi.fn(async () => ({

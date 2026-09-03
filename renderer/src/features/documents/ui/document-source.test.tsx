@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import {
+  DocumentSaveError,
   DocumentSourceError,
   type DocumentSourceApi,
 } from '@/features/documents/application/ports';
@@ -68,6 +69,7 @@ describe('document text source', () => {
         format: 'md' as const,
         version: 'sha256:abc',
       })),
+      overwrite: vi.fn(),
       save: vi.fn(),
     };
     renderSource(api);
@@ -86,6 +88,7 @@ describe('document text source', () => {
   it('marks a source from another member folder as read-only', async () => {
     const api = {
       load: vi.fn(async () => ({ content: 'literal text', format: 'txt' as const, version: 'v1' })),
+      overwrite: vi.fn(),
       save: vi.fn(),
     };
     renderSource(api, { folderPath: '/library/archive', path: 'notes.txt' });
@@ -110,6 +113,7 @@ describe('document text source', () => {
           ),
         )
         .mockResolvedValueOnce({ content: 'now utf-8', format: 'txt', version: 'v2' }),
+      overwrite: vi.fn(),
       save: vi.fn(),
     };
     renderSource(api, { folderPath: '/library/notes', path: 'legacy.txt' });
@@ -132,7 +136,7 @@ describe('document text source', () => {
       capturedSignal = signal;
       return new Promise(() => {});
     });
-    const api: DocumentSourceApi = { load, save: vi.fn() };
+    const api: DocumentSourceApi = { load, overwrite: vi.fn(), save: vi.fn() };
     const { runtime } = renderSource(api);
     await waitFor(() => expect(capturedSignal).not.toBeNull());
 
@@ -150,6 +154,7 @@ describe('document text source', () => {
         format: 'txt',
         version: 'v1',
       })),
+      overwrite: vi.fn(),
       save: vi.fn<DocumentSourceApi['save']>(async () => ({
         content: 'after\r\n',
         format: 'txt',
@@ -195,6 +200,7 @@ describe('document text source', () => {
         format: 'md',
         version: 'v1',
       })),
+      overwrite: vi.fn(),
       save: vi
         .fn<DocumentSourceApi['save']>()
         .mockRejectedValueOnce(new Error('offline'))
@@ -215,5 +221,45 @@ describe('document text source', () => {
     );
     expect(screen.queryByText('Saved')).toBeNull();
     expect(api.save).toHaveBeenCalledTimes(2);
+  });
+
+  it('compares both conflict versions and turns merge into an editable draft', async () => {
+    const api: DocumentSourceApi = {
+      load: vi
+        .fn<DocumentSourceApi['load']>()
+        .mockResolvedValueOnce({ content: 'shared\nbefore', format: 'md', version: 'v1' })
+        .mockResolvedValueOnce({ content: 'shared\ndisk change', format: 'md', version: 'v2' }),
+      overwrite: vi.fn(),
+      save: vi
+        .fn<DocumentSourceApi['save']>()
+        .mockRejectedValueOnce(
+          new DocumentSaveError('conflict', 'changed', { currentVersion: 'v2' }),
+        )
+        .mockResolvedValue({ content: 'merged', format: 'md', version: 'v3' }),
+    };
+    const { runtime } = renderSource(api);
+    const editor = (await screen.findByLabelText('plan.md source')) as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: 'shared\neditor change' } });
+
+    await act(async () => {
+      await runtime.getDocument('tab-1')?.save(api);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'plan.md changed on disk' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Merge' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Overwrite' })).not.toBeNull();
+    expect(screen.getByText('disk change')).not.toBeNull();
+    expect(screen.getByText('editor change')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
+    const merged = (await screen.findByLabelText('plan.md source')) as HTMLTextAreaElement;
+    expect(merged.value).toContain('<<<<<<< Editor Version\neditor change');
+    expect(merged.value).toContain('=======\ndisk change\n>>>>>>> Disk Version');
+    expect(runtime.getDocument('tab-1')?.store.getState().editor).toMatchObject({
+      conflict: null,
+      dirty: true,
+      version: 'v2',
+    });
   });
 });

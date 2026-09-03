@@ -30,6 +30,7 @@ import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
 import { mountFileOrderRoutes } from './file-order.ts';
 import {
+  documentTextOverwriteRequestSchema,
   documentTextSaveRequestSchema,
   documentTextSaveResponseSchema,
   documentTextSourceResponseSchema,
@@ -101,12 +102,20 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
   const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
 
   if (rawFolder) {
-    const request = documentTextSaveRequestSchema.safeParse({
-      baseVersion,
-      content,
-      folderPath: rawFolder,
-      path: name,
-    });
+    const overwrite = (req.body ?? {}).overwrite === true;
+    const request = overwrite
+      ? documentTextOverwriteRequestSchema.safeParse({
+          content,
+          folderPath: rawFolder,
+          overwrite,
+          path: name,
+        })
+      : documentTextSaveRequestSchema.safeParse({
+          baseVersion,
+          content,
+          folderPath: rawFolder,
+          path: name,
+        });
     if (!request.success) {
       res.status(400).json({ error: 'invalid versioned text save request' });
       return;
@@ -136,7 +145,9 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
     try {
       const saved = await runWithFolderRoot(current, () =>
         saveFileContent(request.data.path, request.data.content, {
-          baseVersion: request.data.baseVersion,
+          ...('baseVersion' in request.data
+            ? { baseVersion: request.data.baseVersion }
+            : {}),
         }),
       );
       res.json(

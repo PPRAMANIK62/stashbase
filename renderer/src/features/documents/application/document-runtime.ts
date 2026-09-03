@@ -1,15 +1,24 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
+import { buildConflictMarkerDraft } from '@/features/documents/domain/conflict-diff';
 import {
+  acceptDocumentOverwrite,
   acceptDocumentSave,
+  beginDocumentConflictResolution,
   beginDocumentSave,
   changeDocumentText,
   createDocumentState,
   documentAccess,
+  documentTextFormat,
   disposeDocumentState,
+  enterDocumentConflict,
+  failDocumentConflictResolution,
+  mergeDocumentConflict,
   reconcileDocumentSource,
+  reloadDocumentConflict,
   rejectDocumentSave,
   sameSource,
+  type DocumentConflictResolution,
   type DocumentScope,
   type DocumentState,
   type DocumentTextSource,
@@ -26,6 +35,7 @@ export interface DocumentRuntime {
   change(value: string): void;
   dispose(): void;
   reconcile(source: DocumentTextSource): void;
+  resolveConflict(api: DocumentSourceApi, resolution: DocumentConflictResolution): Promise<boolean>;
   save(api: DocumentSourceApi): Promise<boolean>;
 }
 
@@ -87,14 +97,37 @@ export function createDocumentRuntime({
     } catch (error) {
       if (!isLiveScope(capturedScope)) return false;
       const conflict = error instanceof DocumentSaveError && error.kind === 'conflict';
+      if (conflict) {
+        try {
+          const diskSource = await api.load(capturedScope.source, controller.signal);
+          if (!isLiveScope(capturedScope)) return false;
+          queries.replaceSource(diskSource);
+          store.setState((state) =>
+            enterDocumentConflict(
+              state,
+              diskSource,
+              'The file changed on disk. Choose which version to keep.',
+            ),
+          );
+        } catch {
+          if (!isLiveScope(capturedScope)) return false;
+          store.setState((state) =>
+            rejectDocumentSave(state, {
+              conflictVersion: error.currentVersion,
+              message:
+                'The file changed on disk, but its newer version could not be loaded. Retry to compare both versions.',
+            }),
+          );
+        }
+        return false;
+      }
       store.setState((state) =>
         rejectDocumentSave(state, {
-          conflictVersion: conflict ? error.currentVersion : null,
+          conflictVersion: null,
           message:
             error instanceof DocumentSaveError
               ? error.message
               : 'The document could not be saved. Your changes are still available.',
-          phase: conflict ? 'conflict' : 'error',
         }),
       );
       return false;
@@ -108,7 +141,9 @@ export function createDocumentRuntime({
         if (!(await pendingSave)) return false;
         continue;
       }
-      if (!store.getState().editor?.dirty) return true;
+      const editor = store.getState().editor;
+      if (editor?.conflict) return false;
+      if (!editor?.dirty) return true;
       const run = performSave(api);
       saveInFlight = run;
       let succeeded: boolean;
@@ -145,6 +180,55 @@ export function createDocumentRuntime({
     reconcile(nextSource) {
       if (disposed) return;
       store.setState((state) => reconcileDocumentSource(state, nextSource));
+    },
+    async resolveConflict(api, resolution) {
+      if (disposed) return false;
+      const before = store.getState();
+      const conflict = before.editor?.conflict;
+      if (!conflict || conflict.resolving) return false;
+      const format = documentTextFormat(scope.source.path);
+      if (!format) return false;
+      store.setState((state) => beginDocumentConflictResolution(state, resolution));
+      const diskSource = {
+        content: conflict.diskContent,
+        format,
+        version: conflict.diskVersion,
+      };
+
+      if (resolution === 'reload') {
+        queries.replaceSource(diskSource);
+        store.setState(reloadDocumentConflict);
+        return true;
+      }
+      if (resolution === 'merge') {
+        const merged = buildConflictMarkerDraft(conflict.editorContent, conflict.diskContent);
+        queries.replaceSource(diskSource);
+        store.setState((state) => mergeDocumentConflict(state, merged));
+        return true;
+      }
+
+      try {
+        const saved = await api.overwrite(
+          scope.source,
+          { content: conflict.editorContent },
+          controller.signal,
+        );
+        if (!isLiveScope(scope)) return false;
+        queries.replaceSource(saved);
+        store.setState((state) => acceptDocumentOverwrite(state, saved));
+        return true;
+      } catch (error) {
+        if (!isLiveScope(scope)) return false;
+        store.setState((state) =>
+          failDocumentConflictResolution(
+            state,
+            error instanceof DocumentSaveError
+              ? error.message
+              : 'The document could not be overwritten. Both versions are still available.',
+          ),
+        );
+        return false;
+      }
     },
     save,
   };

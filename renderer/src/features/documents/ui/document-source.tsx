@@ -6,6 +6,7 @@ import {
   RefreshCw,
   TriangleAlert,
 } from 'lucide-react';
+import { lazy, Suspense } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,6 +17,11 @@ import {
 } from '@/features/documents/application/ports';
 import { sourceName } from '@/features/documents/domain/document';
 import { useDocumentSource } from '@/features/documents/hooks/use-document-source';
+
+const DocumentConflict = lazy(async () => {
+  const module = await import('./document-conflict');
+  return { default: module.DocumentConflict };
+});
 
 export interface DocumentSourceProps {
   api: DocumentSourceApi;
@@ -117,7 +123,10 @@ function FailedSource({ error, name, retry }: { error: unknown; name: string; re
 
 export function DocumentSource({ api, runtime }: DocumentSourceProps) {
   const name = sourceName(runtime.scope.source);
-  const { access, change, editor, format, retrySave, source } = useDocumentSource(runtime, api);
+  const { access, change, editor, format, resolveConflict, retrySave, source } = useDocumentSource(
+    runtime,
+    api,
+  );
 
   if (format === null) {
     return (
@@ -139,6 +148,14 @@ export function DocumentSource({ api, runtime }: DocumentSourceProps) {
   }
 
   if (access === 'editable' && !editor) return <PendingSource name={name} />;
+
+  if (access === 'editable' && editor?.conflict) {
+    return (
+      <Suspense fallback={<PendingSource name="conflict comparison" />}>
+        <DocumentConflict editor={editor} name={name} resolve={resolveConflict} />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-document-access={access}>

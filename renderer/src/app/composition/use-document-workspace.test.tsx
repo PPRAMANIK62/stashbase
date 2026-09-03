@@ -32,7 +32,7 @@ describe('document workspace composition', () => {
     });
     let nextId = 0;
     const createId = () => `new-tab-${++nextId}`;
-    const api = { load: vi.fn(), save: vi.fn() };
+    const api = { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() };
 
     const queryClient = new QueryClient();
     const wrapper = ({ children }: PropsWithChildren) =>

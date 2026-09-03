@@ -6,6 +6,11 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 
 export interface DocumentSourceApi {
   load(source: SourceReference, signal: AbortSignal): Promise<DocumentTextSource>;
+  overwrite(
+    source: SourceReference,
+    input: { content: string },
+    signal: AbortSignal,
+  ): Promise<DocumentTextSaveResult>;
   save(
     source: SourceReference,
     input: { baseVersion: string; content: string },

@@ -24,6 +24,7 @@ describe('document native save barrier', () => {
     };
     const api: DocumentSourceApi = {
       load: vi.fn(),
+      overwrite: vi.fn(),
       save: vi.fn(async () => {
         throw new Error('offline');
       }),

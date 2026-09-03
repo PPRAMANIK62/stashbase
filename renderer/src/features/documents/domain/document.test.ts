@@ -9,8 +9,8 @@ import {
   documentEditorText,
   documentTextFormat,
   disposeDocumentState,
+  enterDocumentConflict,
   reconcileDocumentSource,
-  rejectDocumentSave,
   sameSource,
   sourceIdentity,
   sourceName,
@@ -119,14 +119,20 @@ describe('document identity', () => {
       version: 'v1',
     });
     state = changeDocumentText(state, 'draft');
-    state = rejectDocumentSave(state, {
-      conflictVersion: 'v2',
-      message: 'changed on disk',
-      phase: 'conflict',
-    });
+    state = enterDocumentConflict(
+      state,
+      { content: 'newer disk', format: 'md', version: 'v2' },
+      'changed on disk',
+    );
 
     expect(state.editor).toMatchObject({
       conflictVersion: 'v2',
+      conflict: {
+        diskContent: 'newer disk',
+        diskVersion: 'v2',
+        editorContent: 'draft',
+        resolving: null,
+      },
       dirty: true,
       saveMessage: 'changed on disk',
       savePhase: 'conflict',

@@ -1,0 +1,144 @@
+import { AlertTriangle } from 'lucide-react';
+import { useMemo } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { computeConflictDiff } from '@/features/documents/domain/conflict-diff';
+import type {
+  DocumentConflictResolution,
+  DocumentEditorState,
+} from '@/features/documents/domain/document';
+import { cn } from '@/lib/utils';
+
+export interface DocumentConflictProps {
+  editor: DocumentEditorState;
+  name: string;
+  resolve: (resolution: DocumentConflictResolution) => Promise<boolean>;
+}
+
+export function DocumentConflict({ editor, name, resolve }: DocumentConflictProps) {
+  const conflict = editor.conflict;
+  const rows = useMemo(
+    () => (conflict ? computeConflictDiff(conflict.editorContent, conflict.diskContent) : []),
+    [conflict],
+  );
+  if (!conflict) return null;
+  const resolving = conflict.resolving;
+
+  return (
+    <section
+      aria-busy={resolving !== null}
+      aria-labelledby="document-conflict-title"
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <AlertTriangle aria-hidden="true" className="size-4 shrink-0 text-destructive" />
+          <div className="min-w-0">
+            <h2 className="truncate text-body font-medium" id="document-conflict-title">
+              {name} changed on disk
+            </h2>
+            <p className="text-caption text-muted-foreground">
+              Compare the newer file with your unsaved changes.
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            disabled={resolving !== null}
+            loading={resolving === 'reload'}
+            onClick={() => void resolve('reload')}
+            size="compact"
+            variant="secondary"
+          >
+            Reload
+          </Button>
+          <Button
+            disabled={resolving !== null}
+            loading={resolving === 'merge'}
+            onClick={() => void resolve('merge')}
+            size="compact"
+          >
+            Merge
+          </Button>
+          <Button
+            className="text-destructive"
+            disabled={resolving !== null}
+            loading={resolving === 'overwrite'}
+            onClick={() => void resolve('overwrite')}
+            size="compact"
+            variant="tertiary"
+          >
+            Overwrite
+          </Button>
+        </div>
+      </div>
+      {conflict.resolutionMessage && (
+        <p className="border-b border-border px-4 py-2 text-caption text-destructive" role="alert">
+          {conflict.resolutionMessage}
+        </p>
+      )}
+      <ScrollArea className="min-h-0 flex-1" orientation="both">
+        <table className="w-full min-w-[48rem] table-fixed border-collapse font-mono text-caption">
+          <caption className="sr-only">
+            Newer disk version and unsaved editor version compared line by line
+          </caption>
+          <thead className="sticky top-0 z-10 bg-surface-1 text-left font-sans text-muted-foreground">
+            <tr className="border-b border-border">
+              <th className="w-10 px-2 py-2 text-right font-normal" scope="col">
+                <span className="sr-only">Disk line</span>
+              </th>
+              <th className="w-[calc(50%-2.5rem)] px-3 py-2 font-medium" scope="col">
+                On disk
+              </th>
+              <th
+                className="w-10 border-l border-border px-2 py-2 text-right font-normal"
+                scope="col"
+              >
+                <span className="sr-only">Editor line</span>
+              </th>
+              <th className="w-[calc(50%-2.5rem)] px-3 py-2 font-medium" scope="col">
+                Your changes
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const diskChanged = row.type === 'insert' || row.type === 'modify';
+              const editorChanged = row.type === 'delete' || row.type === 'modify';
+              return (
+                <tr
+                  className="border-b border-border/40 align-top"
+                  key={`${row.diskLineNumber ?? 'none'}:${row.editorLineNumber ?? 'none'}:${row.type}`}
+                >
+                  <td className="bg-surface-2/40 px-2 py-0.5 text-right text-muted-foreground select-none">
+                    {row.diskLineNumber ?? ''}
+                  </td>
+                  <td
+                    className={cn(
+                      'px-3 py-0.5 break-all whitespace-pre-wrap',
+                      diskChanged && 'bg-destructive/8',
+                    )}
+                  >
+                    {row.diskText ?? ''}
+                  </td>
+                  <td className="border-l border-border bg-surface-2/40 px-2 py-0.5 text-right text-muted-foreground select-none">
+                    {row.editorLineNumber ?? ''}
+                  </td>
+                  <td
+                    className={cn(
+                      'px-3 py-0.5 break-all whitespace-pre-wrap',
+                      editorChanged && 'bg-accent/40',
+                    )}
+                  >
+                    {row.editorText ?? ''}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </ScrollArea>
+    </section>
+  );
+}

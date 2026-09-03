@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   documentTextSaveFailureSchema,
+  documentTextOverwriteRequestSchema,
   documentTextSaveRequestSchema,
   documentTextSaveResponseSchema,
   documentTextSourceFailureSchema,
@@ -162,6 +163,31 @@ test('document text save contracts require identity, expected version, and autho
       content: '# Missing version',
       folderPath: '/library/notes',
       path: 'plan.md',
+    }).success,
+    false,
+  );
+});
+
+test('document text overwrite requires an explicit conflict decision', () => {
+  assert.deepEqual(
+    documentTextOverwriteRequestSchema.parse({
+      content: '# Editor draft\n',
+      folderPath: '/library/notes',
+      overwrite: true,
+      path: 'drafts/plan.md',
+    }),
+    {
+      content: '# Editor draft\n',
+      folderPath: '/library/notes',
+      overwrite: true,
+      path: 'drafts/plan.md',
+    },
+  );
+  assert.equal(
+    documentTextOverwriteRequestSchema.safeParse({
+      content: '# Editor draft\n',
+      folderPath: '/library/notes',
+      path: 'drafts/plan.md',
     }).success,
     false,
   );

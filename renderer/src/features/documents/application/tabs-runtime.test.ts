@@ -17,6 +17,7 @@ function createQueries() {
 function createApi(): DocumentSourceApi {
   return {
     load: vi.fn(),
+    overwrite: vi.fn(),
     save: vi.fn(async (_source, input) => ({
       content: input.content,
       format: 'md' as const,
@@ -140,6 +141,7 @@ describe('Document tabs runtime', () => {
   it('keeps the current tab mounted when its save barrier fails', async () => {
     const api: DocumentSourceApi = {
       load: vi.fn(),
+      overwrite: vi.fn(),
       save: vi.fn(async () => {
         throw new Error('offline');
       }),
@@ -172,6 +174,7 @@ describe('Document tabs runtime', () => {
     const finishSaves: Array<(value: DocumentTextSaveResult) => void> = [];
     const api: DocumentSourceApi = {
       load: vi.fn(),
+      overwrite: vi.fn(),
       save: vi.fn(
         () =>
           new Promise<DocumentTextSaveResult>((resolve) => {

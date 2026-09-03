@@ -6,6 +6,7 @@ import type { DocumentRuntime } from '@/features/documents/application/document-
 import type { DocumentSourceApi } from '@/features/documents/application/ports';
 import { documentSourceQuery } from '@/features/documents/application/queries';
 import { documentTextFormat } from '@/features/documents/domain/document';
+import type { DocumentConflictResolution } from '@/features/documents/domain/document';
 
 const AUTOSAVE_DELAY_MS = 500;
 
@@ -23,18 +24,20 @@ export function useDocumentSource(runtime: DocumentRuntime, api: DocumentSourceA
   }, [runtime, source.data]);
 
   useEffect(() => {
-    if (!editor?.dirty) return;
+    if (!editor?.dirty || editor.conflict) return;
     const timeout = setTimeout(() => {
       void runtime.save(api);
     }, AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timeout);
-  }, [api, editor?.dirty, editor?.revision, runtime]);
+  }, [api, editor?.conflict, editor?.dirty, editor?.revision, runtime]);
 
   return {
     access,
     change: runtime.change,
     editor,
     format,
+    resolveConflict: (resolution: DocumentConflictResolution) =>
+      runtime.resolveConflict(api, resolution),
     retrySave: () => runtime.save(api),
     source,
   };

@@ -15,7 +15,7 @@ function createWorkspace() {
 
 function createDocuments() {
   return createDocumentTabsRuntime({
-    api: { load: vi.fn(), save: vi.fn() },
+    api: { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() },
     createId: () => 'tab-1',
     createQueries: () => ({
       cancel: vi.fn(async () => undefined),
@@ -58,7 +58,7 @@ describe('open document workflow', () => {
   it('rejects a live document collection belonging to another folder generation', async () => {
     const workspace = createWorkspace();
     const documents = createDocumentTabsRuntime({
-      api: { load: vi.fn(), save: vi.fn() },
+      api: { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() },
       createId: () => 'tab-1',
       createQueries: () => ({
         cancel: vi.fn(async () => undefined),

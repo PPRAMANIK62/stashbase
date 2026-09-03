@@ -36,6 +36,7 @@ function createRuntime(api = sourceApi) {
 
 const sourceApi = {
   load: vi.fn(async () => ({ content: '# Loaded', format: 'md' as const, version: 'v1' })),
+  overwrite: vi.fn(),
   save: vi.fn(),
 };
 
@@ -153,6 +154,7 @@ describe('document tabs', () => {
       null;
     const api = {
       load: vi.fn(async () => ({ content: '# Loaded', format: 'md' as const, version: 'v1' })),
+      overwrite: vi.fn(),
       save: vi.fn(
         () =>
           new Promise<{ content: string; format: 'md'; version: string }>((resolve) => {

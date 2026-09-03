@@ -15,6 +15,7 @@ describe('workspace shell', () => {
     documents: {
       api: {
         load: vi.fn<AppDependencies['documents']['api']['load']>(() => new Promise(() => {})),
+        overwrite: vi.fn(),
         save: vi.fn(),
       },
       createId: vi.fn(() => 'tab-1'),
@@ -179,6 +180,7 @@ describe('workspace shell', () => {
       documents: {
         api: {
           load: vi.fn(async () => ({ content: '# Plan', format: 'md' as const, version: 'v1' })),
+          overwrite: vi.fn(),
           save: vi.fn(),
         },
         createId: vi.fn(() => 'document-tab'),

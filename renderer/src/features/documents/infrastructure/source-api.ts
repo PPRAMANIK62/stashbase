@@ -7,6 +7,7 @@ import { documentTextFormat } from '@/features/documents/domain/document';
 import type { HttpClient, HttpResponse } from '@/platform/http/client';
 import {
   documentTextSaveFailureSchema,
+  documentTextOverwriteRequestSchema,
   documentTextSaveRequestSchema,
   documentTextSaveResponseSchema,
   documentTextSourceFailureSchema,
@@ -107,6 +108,29 @@ function mapResponse(source: SourceReference, response: HttpResponse) {
   };
 }
 
+function mapSaveResponse(source: SourceReference, response: HttpResponse) {
+  if (response.status < 200 || response.status >= 300) throw saveResponseError(response);
+  const body = documentTextSaveResponseSchema.safeParse(response.body);
+  const expectedFormat = documentTextFormat(source.path);
+  if (
+    !body.success ||
+    expectedFormat === null ||
+    body.data.name !== source.path ||
+    body.data.format !== expectedFormat
+  ) {
+    throw new DocumentSaveError(
+      'invalid-response',
+      'The document save returned an invalid response.',
+    );
+  }
+  return {
+    content: body.data.content,
+    format: expectedFormat,
+    version: body.data.version,
+    ...(body.data.indexWarning ? { indexWarning: body.data.indexWarning } : {}),
+  };
+}
+
 export function createDocumentSourceApi(client: HttpClient): DocumentSourceApi {
   return {
     async load(source, signal) {
@@ -135,6 +159,33 @@ export function createDocumentSourceApi(client: HttpClient): DocumentSourceApi {
       }
       return mapResponse(source, response);
     },
+    async overwrite(source, input, signal) {
+      const request = documentTextOverwriteRequestSchema.safeParse({
+        ...input,
+        folderPath: source.folderPath,
+        overwrite: true,
+        path: source.path,
+      });
+      if (!request.success || documentTextFormat(source.path) === null) {
+        throw new DocumentSaveError('unavailable', 'The document overwrite request is invalid.');
+      }
+      const query = new URLSearchParams({ folder: request.data.folderPath });
+      let response: HttpResponse;
+      try {
+        response = await client.request({
+          body: { content: request.data.content, overwrite: true },
+          method: 'PUT',
+          path: `/api/files/${encodePath(request.data.path)}?${query}`,
+          signal,
+        });
+      } catch (error) {
+        if (error instanceof DocumentSaveError || signal.aborted) throw error;
+        throw new DocumentSaveError('unavailable', 'The document could not be overwritten.', {
+          cause: error,
+        });
+      }
+      return mapSaveResponse(source, response);
+    },
     async save(source, input, signal) {
       const request = documentTextSaveRequestSchema.safeParse({
         ...input,
@@ -159,26 +210,7 @@ export function createDocumentSourceApi(client: HttpClient): DocumentSourceApi {
           cause: error,
         });
       }
-      if (response.status < 200 || response.status >= 300) throw saveResponseError(response);
-      const body = documentTextSaveResponseSchema.safeParse(response.body);
-      const expectedFormat = documentTextFormat(source.path);
-      if (
-        !body.success ||
-        expectedFormat === null ||
-        body.data.name !== source.path ||
-        body.data.format !== expectedFormat
-      ) {
-        throw new DocumentSaveError(
-          'invalid-response',
-          'The document save returned an invalid response.',
-        );
-      }
-      return {
-        content: body.data.content,
-        format: expectedFormat,
-        version: body.data.version,
-        ...(body.data.indexWarning ? { indexWarning: body.data.indexWarning } : {}),
-      };
+      return mapSaveResponse(source, response);
     },
   };
 }

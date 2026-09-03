@@ -101,6 +101,15 @@ export const documentTextSaveRequestSchema = z
   })
   .strict();
 
+export const documentTextOverwriteRequestSchema = z
+  .object({
+    content: boundedSourceTextSchema,
+    folderPath: folderPathSchema,
+    overwrite: z.literal(true),
+    path: relativePathSchema,
+  })
+  .strict();
+
 export const documentTextSaveResponseSchema = z
   .object({
     content: boundedSourceTextSchema,
@@ -123,4 +132,5 @@ export type WorkspaceFilesWire = z.infer<typeof workspaceFilesSchema>;
 export type DocumentTextSourceRequestWire = z.infer<typeof documentTextSourceRequestSchema>;
 export type DocumentTextSourceResponseWire = z.infer<typeof documentTextSourceResponseSchema>;
 export type DocumentTextSaveRequestWire = z.infer<typeof documentTextSaveRequestSchema>;
+export type DocumentTextOverwriteRequestWire = z.infer<typeof documentTextOverwriteRequestSchema>;
 export type DocumentTextSaveResponseWire = z.infer<typeof documentTextSaveResponseSchema>;
