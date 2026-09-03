@@ -94,8 +94,14 @@ comparison, and source UI tests; `pnpm test:protocols`, `pnpm test:renderer`,
 
 **Blocked by:** 30, 31.
 
-Provide lazy tokenized Milkdown modes with permitted third-party CSS overrides,
-selection continuity, and bounded editor resources.
+**Status:** Complete.
+
+Markdown now uses one lazy Milkdown surface for Writer and Reading modes.
+Mode changes retain editor state, scoped styles consume app tokens, and only
+the five most-recent Markdown surfaces stay mounted.
+
+Evidence: focused Markdown lifecycle, serialization, mode, retention, and UI
+tests; renderer tests, architecture checks, typecheck, lint, and web build.
 
 ## 35 — Add Find, outline, anchors, and file links
 
