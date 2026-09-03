@@ -28,6 +28,7 @@ interface TabsSubtleContextValue {
   selectedIndex: number;
   idPrefix: string | undefined;
   activeLabel: boolean;
+  iconOnly: boolean;
 }
 
 const TabsSubtleContext = createContext<TabsSubtleContextValue | null>(null);
@@ -45,6 +46,8 @@ interface TabsSubtleProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onSelect
   idPrefix?: string;
   /** When true, only the selected tab shows its text label. Requires icons on tabs. */
   activeLabel?: boolean;
+  /** When true, labels remain available to assistive technology but only icons are visible. */
+  iconOnly?: boolean;
   /** Pins the tabs to one step of the size ladder (default 36px, compact
    *  28px — see /docs/sizes). Omitted, they follow the surrounding
    *  SizeProvider. */
@@ -53,7 +56,17 @@ interface TabsSubtleProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onSelect
 
 const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
   (
-    { children, selectedIndex, onSelect, idPrefix, activeLabel = false, size, className, ...props },
+    {
+      children,
+      selectedIndex,
+      onSelect,
+      idPrefix,
+      activeLabel = false,
+      iconOnly = false,
+      size,
+      className,
+      ...props
+    },
     ref,
   ) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -87,7 +100,7 @@ const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
       measureTabs();
     }, [measureTabs, children]);
 
-    // Observe individual tab buttons for resize (label expand/collapse in activeLabel mode)
+    // Observe individual tab buttons for resize when labels expand or collapse.
     useEffect(() => {
       const elements = tabElementsRef.current;
       if (elements.size === 0) return;
@@ -120,7 +133,7 @@ const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
 
     const root = (
       <TabsSubtleContext.Provider
-        value={{ registerTab, hoveredIndex, selectedIndex, idPrefix, activeLabel }}
+        value={{ registerTab, hoveredIndex, selectedIndex, idPrefix, activeLabel, iconOnly }}
       >
         {/* Root is merged into List via `render` so a single <div> is emitted,
             matching the previous DOM structure. Base UI owns role="tablist",
@@ -294,7 +307,8 @@ const TabsSubtleItem = forwardRef<HTMLButtonElement, TabsSubtleItemProps>(
     }, []);
     const shape = useShape();
     const sizeClasses = useSize();
-    const { registerTab, hoveredIndex, selectedIndex, idPrefix, activeLabel } = useTabsSubtle();
+    const { registerTab, hoveredIndex, selectedIndex, idPrefix, activeLabel, iconOnly } =
+      useTabsSubtle();
 
     useEffect(() => {
       registerTab(index, internalRef.current);
@@ -303,8 +317,8 @@ const TabsSubtleItem = forwardRef<HTMLButtonElement, TabsSubtleItemProps>(
 
     const isSelected = selectedIndex === index;
     const isActive = hoveredIndex === index || isSelected;
-    const collapseLabel = activeLabel && !!Icon;
-    const showLabel = !collapseLabel || isSelected;
+    const collapseLabel = (activeLabel || iconOnly) && !!Icon;
+    const showLabel = !collapseLabel || (!iconOnly && isSelected);
 
     const labelContent = (
       // Both stacked spans carry the text-box trim so the invisible bold
