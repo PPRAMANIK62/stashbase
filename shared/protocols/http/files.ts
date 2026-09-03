@@ -113,7 +113,7 @@ export const documentTextOverwriteRequestSchema = z
 export const documentTextSaveResponseSchema = z
   .object({
     content: boundedSourceTextSchema,
-    format: z.enum(['md', 'txt']),
+    format: z.enum(['json', 'md', 'txt']),
     indexWarning: z.string().trim().min(1).max(1_000).optional(),
     name: relativePathSchema,
     version: sourceVersionSchema,

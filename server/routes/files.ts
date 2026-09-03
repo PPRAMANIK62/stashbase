@@ -121,7 +121,7 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
       return;
     }
     const format = detectFormat(request.data.path);
-    if (format !== 'md' && format !== 'txt') {
+    if (format !== 'json' && format !== 'md' && format !== 'txt') {
       res.status(415).json({ code: 'UNSUPPORTED_FORMAT', error: 'unsupported editable format' });
       return;
     }

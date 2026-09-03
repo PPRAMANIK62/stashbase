@@ -147,6 +147,20 @@ test('document text save contracts require identity, expected version, and autho
     },
   );
   assert.deepEqual(
+    documentTextSaveResponseSchema.parse({
+      content: '{"changed":true}\r\n',
+      format: 'json',
+      name: 'drafts/data.json',
+      version: 'sha256:json-after',
+    }),
+    {
+      content: '{"changed":true}\r\n',
+      format: 'json',
+      name: 'drafts/data.json',
+      version: 'sha256:json-after',
+    },
+  );
+  assert.deepEqual(
     documentTextSaveFailureSchema.parse({
       code: 'FILE_CHANGED',
       currentVersion: 'sha256:external',
