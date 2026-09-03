@@ -8,6 +8,7 @@
     { "name": "workspace", "productArea": "Workspace" }
   ],
   "wireSchemaModules": [
+    "shared/protocols/electron/external-navigation.ts",
     "shared/protocols/electron/library.ts",
     "shared/protocols/electron/runtime.ts",
     "shared/protocols/electron/window-lifecycle.ts",

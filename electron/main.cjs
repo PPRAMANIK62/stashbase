@@ -156,6 +156,7 @@ let libraryFolderDialogCapability = null;
 let libraryLifecycleCapability = null;
 let workspaceSessionCapability = null;
 let windowLifecycleCapability = null;
+let externalNavigationCapability = null;
 let replacementWindowLifecycle = null;
 let workspaceSessionRestoreWindow = null;
 let replacementBoundaryInstalled = false;
@@ -174,6 +175,13 @@ function installReplacementBoundary() {
     'electron',
     'library',
     'dialog.cjs',
+  ));
+  const externalNavigation = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'external-navigation',
+    'handler.cjs',
   ));
   const lifecycle = require(path.join(
     PROJECT_ROOT,
@@ -200,6 +208,17 @@ function installReplacementBoundary() {
   libraryLifecycleCapability = lifecycle.LIBRARY_LIFECYCLE_CAPABILITY;
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
   windowLifecycleCapability = windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY;
+  externalNavigationCapability = externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY;
+  externalNavigation.registerExternalNavigation({
+    BrowserWindow,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
+    openExternal: (url) => shell.openExternal(url),
+  });
   boundary.registerDialog({
     BrowserWindow,
     dialog,
@@ -866,7 +885,8 @@ async function createWindow(initialFolder) {
     libraryFolderDialogCapability &&
     libraryLifecycleCapability &&
     workspaceSessionCapability &&
-    windowLifecycleCapability
+    windowLifecycleCapability &&
+    externalNavigationCapability
   ) {
     replacementWindowCapabilities.set(
       win,
@@ -875,6 +895,7 @@ async function createWindow(initialFolder) {
         libraryLifecycleCapability,
         workspaceSessionCapability,
         windowLifecycleCapability,
+        externalNavigationCapability,
       ]),
     );
   }

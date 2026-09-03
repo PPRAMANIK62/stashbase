@@ -66,6 +66,9 @@ app
     const boundary = require(
       path.join(repositoryRoot, 'dist', 'electron', 'library', 'dialog.cjs'),
     );
+    const externalNavigation = require(
+      path.join(repositoryRoot, 'dist', 'electron', 'external-navigation', 'handler.cjs'),
+    );
     const lifecycle = require(
       path.join(repositoryRoot, 'dist', 'electron', 'library', 'lifecycle.cjs'),
     );
@@ -73,12 +76,14 @@ app
       path.join(repositoryRoot, 'dist', 'electron', 'workspace', 'session.cjs'),
     );
     const authorizedWindows = new Set();
+    const openedExternalUrls = [];
     const activeFolders = new WeakMap();
     const isLiveWindow = (window) =>
       authorizedWindows.has(window) && !window.isDestroyed();
     const hasCapability = (window, capability) =>
       isLiveWindow(window) &&
       (capability === boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY ||
+        capability === externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY ||
         capability === lifecycle.LIBRARY_LIFECYCLE_CAPABILITY ||
         capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY);
     boundary.registerDialog({
@@ -92,6 +97,14 @@ app
       expectedOrigins: new Set([APP_ORIGIN]),
       isLiveWindow,
       hasCapability,
+    });
+    externalNavigation.registerExternalNavigation({
+      BrowserWindow,
+      ipcMain,
+      expectedOrigins: new Set([APP_ORIGIN]),
+      isLiveWindow,
+      hasCapability,
+      openExternal: async (url) => { openedExternalUrls.push(url); },
     });
     lifecycle.registerLifecycle({
       BrowserWindow,
@@ -170,6 +183,8 @@ app
       await new Promise((resolve) => setTimeout(resolve, 25));
       const popup = window.open('https://example.com/');
       return {
+        externalNavigation: await window.stashbase.externalNavigation.open('https://example.com/docs'),
+        externalNavigationFrozen: Object.isFrozen(window.stashbase.externalNavigation),
         folderResult: await window.stashbase.library.chooseFolder(),
         globalKeys: Object.keys(window.stashbase),
         librarySnapshot: await fetch(
@@ -205,8 +220,10 @@ app
   `);
 
     assert.deepEqual(result, {
+      externalNavigation: { ok: true },
+      externalNavigationFrozen: true,
       folderResult: { ok: true, folderPath: null },
-      globalKeys: ['runtime', 'library', 'workspaceSession', 'windowLifecycle'],
+      globalKeys: ['externalNavigation', 'runtime', 'library', 'workspaceSession', 'windowLifecycle'],
       nodeGlobal: 'undefined',
       popupDenied: true,
       preloadFrozen: true,
@@ -231,6 +248,7 @@ app
       windowLifecycleFrozen: true,
       windowLifecycleKeys: ['onPrepareContextRelease', 'reload'],
     });
+    assert.deepEqual(openedExternalUrls, ['https://example.com/docs']);
     assert.deepEqual(receivedLibraryRequest, {
       method: 'POST',
       origin: APP_ORIGIN,

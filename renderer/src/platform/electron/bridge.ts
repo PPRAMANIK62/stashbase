@@ -3,6 +3,7 @@ import {
   rendererRuntimeConfigSchema,
 } from '@/protocols/electron/runtime';
 
+import type { ExternalNavigationBridge } from './external-navigation';
 import type { LibraryBridge } from './folder-picker';
 import type { LibraryLifecycleBridge } from './library-lifecycle';
 import type { WindowLifecycleBridge } from './window-lifecycle';
@@ -15,6 +16,7 @@ interface DesktopWorkspaceSessionBridge {
 interface DesktopLibraryBridge extends LibraryBridge, LibraryLifecycleBridge {}
 
 interface DesktopBridge {
+  externalNavigation: ExternalNavigationBridge;
   library: DesktopLibraryBridge;
   runtime: RendererRuntimeConfig;
   workspaceSession: DesktopWorkspaceSessionBridge;
@@ -24,6 +26,7 @@ interface DesktopBridge {
 declare global {
   interface Window {
     stashbase?: {
+      externalNavigation?: ExternalNavigationBridge;
       library?: DesktopLibraryBridge;
       runtime?: unknown;
       workspaceSession?: DesktopWorkspaceSessionBridge;
@@ -34,9 +37,13 @@ declare global {
 
 export function readBridge(globalWindow: Window = window): DesktopBridge {
   const runtime = rendererRuntimeConfigSchema.parse(globalWindow.stashbase?.runtime);
+  const externalNavigation = globalWindow.stashbase?.externalNavigation;
   const library = globalWindow.stashbase?.library;
   const workspaceSession = globalWindow.stashbase?.workspaceSession;
   const windowLifecycle = globalWindow.stashbase?.windowLifecycle;
+  if (!externalNavigation || typeof externalNavigation.open !== 'function') {
+    throw new Error('External navigation is unavailable.');
+  }
   if (
     !library ||
     typeof library.chooseFolder !== 'function' ||
@@ -62,5 +69,5 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   ) {
     throw new Error('The window lifecycle is unavailable.');
   }
-  return { library, runtime, windowLifecycle, workspaceSession };
+  return { externalNavigation, library, runtime, windowLifecycle, workspaceSession };
 }

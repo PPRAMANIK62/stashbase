@@ -9,6 +9,8 @@ await build({
   absWorkingDir: repositoryRoot,
   bundle: true,
   entryPoints: {
+    'external-navigation/handler': 'electron/external-navigation/handler.ts',
+    'external-navigation/preload': 'electron/external-navigation/preload.ts',
     'library/dialog': 'electron/library/dialog.ts',
     'library/lifecycle': 'electron/library/lifecycle.ts',
     'library/preload': 'electron/library/preload.ts',

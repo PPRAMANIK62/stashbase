@@ -19,11 +19,15 @@ const windowLifecycle = {
   onPrepareContextRelease: () => () => undefined,
   reload: async () => ({ ok: true as const, reloaded: false }),
 };
+const externalNavigation = {
+  open: async () => ({ ok: true as const }),
+};
 
 describe('Electron bridge', () => {
   it('returns only the validated library and runtime capabilities', () => {
     const bridge = readBridge({
       stashbase: {
+        externalNavigation,
         library,
         runtime: { serverOrigin: 'http://127.0.0.1:8090' },
         workspaceSession,
@@ -31,6 +35,7 @@ describe('Electron bridge', () => {
       },
     } as unknown as Window);
     expect(bridge).toEqual({
+      externalNavigation,
       library,
       runtime: { serverOrigin: 'http://127.0.0.1:8090' },
       workspaceSession,
@@ -43,6 +48,7 @@ describe('Electron bridge', () => {
     expect(() =>
       readBridge({
         stashbase: {
+          externalNavigation,
           library: { chooseFolder: async () => ({ ok: true, folderPath: null }) },
           runtime: {
             serverOrigin: 'http://127.0.0.1:8090',
