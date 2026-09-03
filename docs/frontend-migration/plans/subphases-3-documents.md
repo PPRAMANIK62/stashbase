@@ -80,8 +80,15 @@ protocol, preload, Electron coordinator, and replacement bridge tests;
 
 **Blocked by:** 31, 32.
 
-Offer reload, overwrite, and merge with both versions recoverable and competing
-resolution actions excluded until the current decision settles.
+**Status:** Complete.
+
+External-write conflicts retain one disk snapshot beside the latest editor
+draft. Reload, merge, and explicit overwrite share one exclusive decision
+owner; unresolved or failed decisions keep navigation behind the save barrier.
+
+Evidence: focused source protocol/adapter, document domain/runtime, conflict
+comparison, and source UI tests; `pnpm test:protocols`, `pnpm test:renderer`,
+`pnpm typecheck`, `pnpm format:web`, `pnpm lint:web`, and `pnpm build:web`.
 
 ## 34 — Integrate Milkdown Writer and Reading modes
 
