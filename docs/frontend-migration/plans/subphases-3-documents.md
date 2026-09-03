@@ -98,7 +98,10 @@ comparison, and source UI tests; `pnpm test:protocols`, `pnpm test:renderer`,
 
 Markdown now uses one lazy Milkdown surface for Writer and Reading modes.
 Mode changes retain editor state, scoped styles consume app tokens, and only
-the five most-recent Markdown surfaces stay mounted.
+the five most-recent Markdown surfaces stay mounted. The Markdown bridge
+inherits the inset workspace plane instead of repainting the lower sidebar
+surface, while Milkdown anatomy maps its canvas to `surface-2` and reserves
+higher surfaces for floating controls.
 
 Evidence: focused Markdown lifecycle, serialization, mode, retention, and UI
 tests; renderer tests, architecture checks, typecheck, lint, and web build.
@@ -107,8 +110,40 @@ tests; renderer tests, architecture checks, typecheck, lint, and web build.
 
 **Blocked by:** 34.
 
+**Status:** Complete.
+
 Add document navigation and safe link behavior through the same source identity
 and active-tab authority.
+
+The active document now owns one scoped navigation runtime for Find, live
+Markdown outline, and pending anchors. Find supports case and whole-word
+matching plus forward/reverse keyboard traversal; headings retain stable
+duplicate-aware anchors and re-resolve against the live Milkdown document.
+App composition owns the window-level Find commands, while each visible control
+subscribes only to its narrow navigation-state slice. Markdown-specific DOM
+controllers and adapters remain colocated with the lazy Markdown surface. The
+Find toolbar composes the Fluid `InputGroup` and `Button` size ladder; outline
+disclosure, rows, hierarchy, focus, and motion come from the Fluid
+`SidebarGroup` and `SidebarMenu` families. App composition presents Files and
+the active Markdown outline as icon-only modes in one compact Fluid
+`TabsSubtle` control centered below the folder selector; tooltips and accessible
+names keep both modes explicit. Switching replaces the scrollable navigator
+body without remounting the file tree. The outline identifies its active
+document, shows its heading count, and uses submenu rails to express hierarchy;
+the mode switch remains stable for every open document, with distinct messages
+for formats without outline support and Markdown documents without headings.
+Relative file links preserve their owning folder and open through the existing
+tab/save-barrier workflow, while same-document anchors scroll in place and
+credential-free HTTP(S) links use a validated, capability-authorized Electron
+bridge. Unsafe, malformed, root-escaping, and browser-navigation links are
+rejected.
+
+Evidence: focused navigation-domain/runtime, Markdown Find/outline/source,
+tab-workflow, external-navigation protocol/preload/handler, renderer-adapter,
+and bridge tests; `pnpm test:protocols`, `pnpm test:electron-boundary`,
+`pnpm test:renderer`, `pnpm test:renderer-architecture`, `pnpm typecheck`,
+`pnpm format:web`, `pnpm lint:web`, `pnpm build:web`, and the replacement
+Electron smoke.
 
 ## 36 — Add source-preserving JSON editing
 
