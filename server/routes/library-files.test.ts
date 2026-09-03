@@ -121,7 +121,13 @@ test('read windows return only the requested lines and drop the version token', 
   };
 
   assert.deepEqual(applyLineRange(whole, undefined), whole);
-  assert.deepEqual(applyLineRange(whole, { offset: 1 }), whole);
+  assert.deepEqual(applyLineRange(whole, { offset: 1 }), {
+    path: whole.path,
+    format: 'md',
+    content: whole.content,
+    partial: true,
+    totalLines: 4,
+  });
 
   assert.deepEqual(applyLineRange(whole, { offset: 2, limit: 2 }), {
     path: whole.path,
@@ -178,12 +184,17 @@ test('read route forwards a line window and rejects a malformed one', async () =
     readArgs = [];
     const whole = await fetch(`${url}?path=%2Flibrary%2Fnotes%2Flong.md`);
     assert.equal(whole.status, 200);
-    assert.deepEqual(readArgs[1], { offset: undefined, limit: undefined });
+    assert.equal(readArgs[1], undefined);
 
     readArgs = [];
     const bad = await fetch(`${url}?path=%2Flibrary%2Fnotes%2Flong.md&offset=0`);
     assert.equal(bad.status, 400);
     assert.match((await bad.json() as { error: string }).error, /offset must be a positive integer/);
+    assert.deepEqual(readArgs, []);
+
+    const empty = await fetch(`${url}?path=%2Flibrary%2Fnotes%2Flong.md&limit=`);
+    assert.equal(empty.status, 400);
+    assert.match((await empty.json() as { error: string }).error, /limit must be a positive integer/);
     assert.deepEqual(readArgs, []);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));

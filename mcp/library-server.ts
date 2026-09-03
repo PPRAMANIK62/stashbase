@@ -17,6 +17,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { LibraryOperations } from '../server/library-operations/index.ts';
+import { parseLibraryFileLineBound } from '../server/library-file-reader.ts';
 import { createHttpLibraryOperations } from './library-operations-http.ts';
 import {
   parseSearchMode,
@@ -45,12 +46,6 @@ const MAX_TOP_K = 25;
 export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
   const { webBase, windowId, agentSessionId } = opts;
   const operations = withMcpErrors(opts.operations ?? createHttpLibraryOperations(webBase, windowId, agentSessionId));
-
-  function positiveIntArg(raw: unknown): number | undefined {
-    if (raw == null) return undefined;
-    const value = Number(raw);
-    return Number.isInteger(value) && value >= 1 ? value : undefined;
-  }
 
   function filePathArg(args: Record<string, unknown>): unknown {
     return typeof args.path === 'string' && args.path.trim()
@@ -134,10 +129,12 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
     }
 
     if (req.params.name === 'read_file') {
-      const result = await operations.read(filePathArg(args), {
-        offset: positiveIntArg(args.offset),
-        limit: positiveIntArg(args.limit),
-      });
+      const offset = parseLibraryFileLineBound(args.offset, 'offset');
+      const limit = parseLibraryFileLineBound(args.limit, 'limit');
+      const result = await operations.read(
+        filePathArg(args),
+        offset == null && limit == null ? undefined : { offset, limit },
+      );
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };

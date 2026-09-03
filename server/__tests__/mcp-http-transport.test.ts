@@ -6,6 +6,7 @@ import { mount } from '../routes/mcp-http.ts';
 import { createDockerMcpApp, createMcpHttpService } from '../mcp-http-service.ts';
 import type { McpHttpSettingsStore } from '../mcp-http-settings.ts';
 import { createLibraryOperations } from '../library-operations/index.ts';
+import { applyLineRange } from '../library-file-reader.ts';
 
 const initRequest = {
   jsonrpc: '2.0',
@@ -31,6 +32,8 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
   let token = 'a'.repeat(64);
   let searchInput: Record<string, unknown> | undefined;
   let stdioSearchBody: Record<string, unknown> | undefined;
+  let readInput: { path: unknown; range: unknown } | undefined;
+  let stdioReadQuery: Record<string, unknown> | undefined;
   let createProjectInput: Record<string, unknown> | undefined;
   let stdioCreateProjectBody: Record<string, unknown> | undefined;
   let stdioCreateProjectAttribution: string | undefined;
@@ -38,6 +41,18 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
   app.use(express.json());
   app.get('/api/library/info', (_req, res) => {
     res.json({ folder_home: '/tmp', folders: [] });
+  });
+  app.get('/api/library/file', (req, res) => {
+    stdioReadQuery = req.query as Record<string, unknown>;
+    res.json(applyLineRange({
+      path: String(req.query.path),
+      format: 'md',
+      content: 'one\ntwo\nthree\n',
+      version: 'v1',
+    }, {
+      offset: req.query.offset == null ? undefined : Number(req.query.offset),
+      limit: req.query.limit == null ? undefined : Number(req.query.limit),
+    }));
   });
   app.post('/api/library/search', (req, res) => {
     stdioSearchBody = req.body as Record<string, unknown>;
@@ -78,6 +93,15 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
         createProjectInput = input as unknown as Record<string, unknown>;
         return { path: '/tmp/Project', name: 'Project', registered: true, rebound: false, note: 'ok' };
       },
+      read: async (path, range) => {
+        readInput = { path, range };
+        return applyLineRange({
+          path: String(path),
+          format: 'md',
+          content: 'one\ntwo\nthree\n',
+          version: 'v1',
+        }, range);
+      },
     }),
   });
 
@@ -112,9 +136,41 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       listed.body.result.tools.find((tool: any) => tool.name === 'read_file').description,
       /Generic Workbench-only files are not listed or readable through MCP/,
     );
+    const readTool = listed.body.result.tools.find((tool: any) => tool.name === 'read_file');
+    assert.equal(readTool.inputSchema.properties.offset.minimum, 1);
+    assert.equal(readTool.inputSchema.properties.limit.minimum, 1);
 
     const called = await post(base, callRequest, token);
     assert.equal(called.status, 200);
+
+    const read = await post(base, {
+      jsonrpc: '2.0',
+      id: 8,
+      method: 'tools/call',
+      params: {
+        name: 'read_file',
+        arguments: { path: '/tmp/notes.md', offset: 1 },
+      },
+    }, token);
+    assert.equal(read.status, 200);
+    assert.deepEqual(readInput, { path: '/tmp/notes.md', range: { offset: 1, limit: undefined } });
+    const readPayload = JSON.parse(read.body.result.content[0].text);
+    assert.equal(readPayload.partial, true);
+    assert.equal('version' in readPayload, false);
+
+    readInput = undefined;
+    const invalidRead = await post(base, {
+      jsonrpc: '2.0',
+      id: 9,
+      method: 'tools/call',
+      params: {
+        name: 'read_file',
+        arguments: { path: '/tmp/notes.md', limit: 0 },
+      },
+    }, token);
+    assert.equal(invalidRead.status, 200);
+    assert.match(invalidRead.body.error.message, /limit must be a positive integer/);
+    assert.equal(readInput, undefined);
 
     const searched = await post(base, {
       jsonrpc: '2.0',
@@ -209,6 +265,16 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.equal(stdioPayload.mode, 'keyword');
     assert.equal(stdioPayload.top_k, 4);
     assert.deepEqual(stdioPayload.types, ['image']);
+    assert.deepEqual(stdioReadQuery, { path: '/tmp/notes.md', offset: '2', limit: '1' });
+    const stdioReadPayload = JSON.parse(stdio.read.result.content[0].text);
+    assert.deepEqual(stdioReadPayload, {
+      path: '/tmp/notes.md',
+      format: 'md',
+      content: 'two\n',
+      partial: true,
+      totalLines: 3,
+      nextOffset: 3,
+    });
     // The stdio host forwards its spawn-time session identity as the
     // attribution header — this is how a built-in panel session's
     // create_project call finds the live session to rebind.
@@ -298,6 +364,7 @@ async function runStdio(port: number): Promise<{
   listed: any;
   called: any;
   searched: any;
+  read: any;
   createdProject: any;
 }> {
   const { spawn } = await import('node:child_process');
@@ -338,19 +405,30 @@ async function runStdio(port: number): Promise<{
     id: 5,
     method: 'tools/call',
     params: {
+      name: 'read_file',
+      arguments: { path: '/tmp/notes.md', offset: 2, limit: 1 },
+    },
+  })}\n`);
+  child.stdin.write(`${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 6,
+    method: 'tools/call',
+    params: {
       name: 'create_project',
       arguments: { name: 'StdioProject' },
     },
   })}\n`);
 
   try {
-    const lines = await waitForJsonLines(() => stdout, 5);
+    const lines = await waitForJsonLines(() => stdout, 6);
+    const byId = new Map(lines.map((line) => [line.id, line]));
     return {
-      initialized: lines[0],
-      listed: lines[1],
-      called: lines[2],
-      searched: lines[3],
-      createdProject: lines[4],
+      initialized: byId.get(1),
+      listed: byId.get(2),
+      called: byId.get(3),
+      searched: byId.get(4),
+      read: byId.get(5),
+      createdProject: byId.get(6),
     };
   } catch (err) {
     throw new Error(`${err instanceof Error ? err.message : String(err)}\nstderr: ${stderr}`);

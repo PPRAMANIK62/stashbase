@@ -42,6 +42,22 @@ export interface LibraryFileLineRange {
   limit?: number;
 }
 
+/** Parse one optional public read-window bound. HTTP query parameters arrive
+ * as strings while MCP arguments arrive as numbers; both transports must
+ * reject malformed supplied values instead of silently widening to a whole
+ * file read. */
+export function parseLibraryFileLineBound(raw: unknown, name: 'offset' | 'limit'): number | undefined {
+  if (raw === undefined) return undefined;
+  if ((typeof raw !== 'string' && typeof raw !== 'number') || (typeof raw === 'string' && !raw.trim())) {
+    throw routeError(`${name} must be a positive integer`, 400);
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw routeError(`${name} must be a positive integer`, 400);
+  }
+  return value;
+}
+
 export function isAgentReadableDerivedTextReady(
   sourceAbs: string,
   sourceFormat: 'pdf' | 'docx' | 'audio',
@@ -145,9 +161,9 @@ export function applyLineRange(
   read: LibraryFileRead,
   range?: LibraryFileLineRange,
 ): LibraryFileRead {
+  if (range == null) return read;
   const offset = Math.max(1, Math.trunc(range?.offset ?? 1));
   const limit = range?.limit == null ? null : Math.max(0, Math.trunc(range.limit));
-  if (offset === 1 && limit == null) return read;
 
   const lines = read.content.split('\n');
   const endsWithNewline = lines.length > 1 && lines[lines.length - 1] === '';
