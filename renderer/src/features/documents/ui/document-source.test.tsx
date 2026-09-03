@@ -66,6 +66,231 @@ function renderSource(
 }
 
 describe('document text source', () => {
+  it('opens strict JSON as a source-preserving tree and saves a structural edit', async () => {
+    const original = '\uFEFF{\r\n  "title" : "before",\r\n  "items": [1, 2]\r\n}\r\n';
+    const api: DocumentSourceApi = {
+      load: vi.fn(async () => ({ content: original, format: 'json' as const, version: 'v1' })),
+      overwrite: vi.fn(),
+      save: vi.fn(async (_source, input) => ({
+        content: input.content.replace(/\n/gu, '\r\n'),
+        format: 'json' as const,
+        version: 'v2',
+      })),
+    };
+    const { runtime } = renderSource(api, {
+      folderPath: '/library/notes',
+      path: 'data.json',
+    });
+
+    const outlinePane = await screen.findByRole('region', { name: 'JSON outline' });
+    const sourcePane = screen.getByRole('region', { name: 'JSON source' });
+    const structureTable = screen.getByRole('treegrid', { name: 'JSON values' });
+    expect(structureTable.tagName).toBe('TABLE');
+    expect(screen.getByRole('columnheader', { name: 'Key' })).not.toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'Value' })).not.toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'Type' })).not.toBeNull();
+    const previewLabel = screen.getByText('Preview');
+    const sourceLabel = screen.getByText('Source');
+    expect(previewLabel.className).toBe(sourceLabel.className);
+    expect(screen.queryByRole('button', { name: 'Selected value actions' })).toBeNull();
+    expect(sourcePane.querySelector('.cm-editor')).not.toBeNull();
+    expect(screen.queryByPlaceholderText('Search tree')).toBeNull();
+    expect(screen.getByRole('row', { name: /^title/u }).textContent).not.toContain('"before"');
+
+    const initialTreeTabStop = structureTable.querySelector<HTMLElement>('tr[tabindex="0"]');
+    expect(initialTreeTabStop?.textContent).toContain('Root');
+    if (initialTreeTabStop) fireEvent.keyDown(initialTreeTabStop, { key: 'ArrowDown' });
+    expect(screen.getByRole('row', { name: /^title/u }).getAttribute('aria-selected')).toBe('true');
+
+    await waitFor(() => expect(runtime.navigation.store.getState().find.available).toBe(true));
+    act(() => runtime.navigation.setFindQuery('before'));
+    await waitFor(() => expect(runtime.navigation.store.getState().find.total).toBe(1));
+    expect(runtime.getDocument('tab-1')?.store.getState().jsonSession.selectedPath).toBe('$.title');
+
+    const sourceContent = sourcePane.querySelector<HTMLElement>('.cm-content');
+    expect(sourceContent).not.toBeNull();
+    if (sourceContent) fireEvent.focus(sourceContent);
+    await waitFor(() =>
+      expect(runtime.getDocument('tab-1')?.store.getState().jsonSession.viewMode).toBe('source'),
+    );
+    expect(screen.getByRole('region', { name: 'JSON outline' })).toBe(outlinePane);
+    expect(screen.getByRole('region', { name: 'JSON source' })).toBe(sourcePane);
+
+    const titleRow = screen.getByRole('row', { name: /^title/u });
+    const titleValueCell = titleRow.querySelectorAll('td')[1];
+    expect(titleValueCell).toBeDefined();
+    const ownerDocument = titleValueCell?.ownerDocument;
+    expect(ownerDocument).toBeDefined();
+    if (!ownerDocument) throw new Error('The value cell must belong to a document.');
+    const caretDescriptor = Object.getOwnPropertyDescriptor(
+      ownerDocument,
+      'caretPositionFromPoint',
+    );
+    Object.defineProperty(ownerDocument, 'caretPositionFromPoint', {
+      configurable: true,
+      value: () => ({ offset: 2, offsetNode: titleValueCell?.firstChild }),
+    });
+    if (titleValueCell) fireEvent.doubleClick(titleValueCell, { clientX: 24, clientY: 12 });
+    if (caretDescriptor)
+      Object.defineProperty(ownerDocument, 'caretPositionFromPoint', caretDescriptor);
+    else Reflect.deleteProperty(ownerDocument, 'caretPositionFromPoint');
+    await waitFor(() =>
+      expect(runtime.getDocument('tab-1')?.store.getState().jsonSession.viewMode).toBe('tree'),
+    );
+    expect(screen.getByRole('region', { name: 'JSON outline' })).toBe(outlinePane);
+    expect(screen.getByRole('region', { name: 'JSON source' })).toBe(sourcePane);
+    const inlineValue = await screen.findByLabelText('JSON value');
+    expect(inlineValue.closest('[data-json-inline-editor]')).not.toBeNull();
+    expect((inlineValue as HTMLInputElement).value).toBe('before');
+    expect((inlineValue as HTMLInputElement).selectionStart).toBe(2);
+    expect((inlineValue as HTMLInputElement).selectionEnd).toBe(2);
+    expect(inlineValue.classList.contains('rounded-none')).toBe(true);
+    fireEvent.change(inlineValue, { target: { value: 'after' } });
+    vi.useFakeTimers();
+    fireEvent.keyDown(inlineValue, { key: 'Enter' });
+    expect(screen.queryByLabelText('JSON value')).toBeNull();
+
+    expect(runtime.getDocument('tab-1')?.store.getState().editor).toMatchObject({
+      dirty: true,
+      value: '\uFEFF{\n  "title" : "after",\n  "items": [1, 2]\n}\n',
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(500));
+    expect(api.save).toHaveBeenCalledWith(
+      { folderPath: '/library/notes', path: 'data.json' },
+      {
+        baseVersion: 'v1',
+        content: '\uFEFF{\n  "title" : "after",\n  "items": [1, 2]\n}\n',
+      },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('keeps malformed JSON editable in Source mode with an actionable reason', async () => {
+    const api: DocumentSourceApi = {
+      load: vi.fn(async () => ({
+        content: '{"unfinished":',
+        format: 'json' as const,
+        version: 'v1',
+      })),
+      overwrite: vi.fn(),
+      save: vi.fn(),
+    };
+    const { runtime } = renderSource(api, {
+      folderPath: '/library/notes',
+      path: 'unfinished.json',
+    });
+
+    const json = await screen.findByRole('document', { name: 'unfinished.json JSON content' });
+    await waitFor(() => expect(json.getAttribute('data-json-active-pane')).toBe('source'));
+    expect(screen.getByRole('region', { name: 'JSON outline' })).not.toBeNull();
+    expect(screen.getByText('Invalid JSON · line 1, column 15')).not.toBeNull();
+    expect(json.querySelector('.cm-editor')).not.toBeNull();
+    await waitFor(() => expect(runtime.navigation.store.getState().find.available).toBe(true));
+    act(() => runtime.navigation.setFindQuery('unfinished'));
+    await waitFor(() => expect(runtime.navigation.store.getState().find.total).toBe(1));
+  });
+
+  it('adds and renames object properties in place', async () => {
+    const api: DocumentSourceApi = {
+      load: vi.fn(async () => ({
+        content: '{"name":"Ada"}',
+        format: 'json' as const,
+        version: 'v1',
+      })),
+      overwrite: vi.fn(),
+      save: vi.fn(async (_source, input) => ({
+        content: input.content,
+        format: 'json' as const,
+        version: 'v2',
+      })),
+    };
+    const { runtime } = renderSource(api, {
+      folderPath: '/library/notes',
+      path: 'person.json',
+    });
+
+    await screen.findByRole('treegrid', { name: 'JSON values' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add property' }));
+    const key = screen.getByLabelText('New property key');
+    const value = screen.getByLabelText('New JSON value');
+    const addRow = key.closest('[data-json-inline-editor]');
+    expect(addRow).toBe(value.closest('[data-json-inline-editor]'));
+    expect(addRow).toBe(screen.getByRole('treegrid').querySelector('tbody tr:last-child'));
+    expect(key.classList.contains('rounded-none')).toBe(true);
+    expect(value.classList.contains('rounded-none')).toBe(true);
+    fireEvent.change(key, { target: { value: 'count' } });
+    fireEvent.change(value, { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add value' }));
+
+    const countRow = await screen.findByRole('row', { name: /^count/u });
+    expect(runtime.getDocument('tab-1')?.store.getState().editor?.value).toBe(
+      '{"name":"Ada","count":1}',
+    );
+
+    fireEvent.click(countRow);
+    fireEvent.keyDown(countRow, { key: 'F2' });
+    const renamedKey = await screen.findByLabelText('Key');
+    expect(renamedKey.closest('[data-json-inline-editor]')).not.toBeNull();
+    fireEvent.change(renamedKey, { target: { value: 'total' } });
+    fireEvent.keyDown(renamedKey, { key: 'Enter' });
+
+    expect(runtime.getDocument('tab-1')?.store.getState().editor?.value).toBe(
+      '{"name":"Ada","total":1}',
+    );
+
+    const totalRow = screen.getByRole('row', { name: /^total/u });
+    const deleteTotal = screen.getByRole('button', { name: 'Delete total' });
+    expect(totalRow.getAttribute('aria-keyshortcuts')).toBe('Delete');
+    expect(deleteTotal.classList.contains('opacity-0')).toBe(true);
+    expect(deleteTotal.classList.contains('text-destructive')).toBe(true);
+    fireEvent.click(deleteTotal);
+    expect(runtime.getDocument('tab-1')?.store.getState().editor?.value).toBe('{"name":"Ada"}');
+  });
+
+  it('adds plain table text as a JSON string without exposing source-mode errors', async () => {
+    const api: DocumentSourceApi = {
+      load: vi.fn(async () => ({
+        content: '{"name":"Ada"}',
+        format: 'json' as const,
+        version: 'v1',
+      })),
+      overwrite: vi.fn(),
+      save: vi.fn(),
+    };
+    const { runtime } = renderSource(api, {
+      folderPath: '/library/notes',
+      path: 'person.json',
+    });
+
+    await screen.findByRole('treegrid', { name: 'JSON values' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add property' }));
+    fireEvent.change(screen.getByLabelText('New property key'), {
+      target: { value: 'portfolio' },
+    });
+    fireEvent.change(screen.getByLabelText('New JSON value'), {
+      target: { value: 'purbayan.me' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add value' }));
+
+    expect(runtime.getDocument('tab-1')?.store.getState().editor?.value).toBe(
+      '{"name":"Ada","portfolio":"purbayan.me"}',
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add property' }));
+    fireEvent.change(screen.getByLabelText('New property key'), {
+      target: { value: 'details' },
+    });
+    fireEvent.change(screen.getByLabelText('New JSON value'), { target: { value: '{bad' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add value' }));
+
+    expect(screen.getByRole('alert').textContent).toContain('Invalid JSON value:');
+    expect(screen.getByRole('alert').textContent).not.toContain('Source mode');
+    expect(runtime.getDocument('tab-1')?.store.getState().editor?.value).toBe(
+      '{"name":"Ada","portfolio":"purbayan.me"}',
+    );
+  });
+
   it('loads versioned Markdown into the Milkdown document surface', async () => {
     const api = {
       load: vi.fn(async () => ({

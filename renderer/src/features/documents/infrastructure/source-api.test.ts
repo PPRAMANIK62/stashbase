@@ -122,6 +122,47 @@ describe('document source API', () => {
     });
   });
 
+  it('loads and saves JSON through the same versioned text authority', async () => {
+    const client: HttpClient = {
+      request: vi
+        .fn<HttpClient['request']>()
+        .mockResolvedValueOnce({
+          body: {
+            content: '{"value": 1}\r\n',
+            format: 'json',
+            name: 'data.json',
+            version: 'sha256:before',
+          },
+          status: 200,
+        })
+        .mockResolvedValueOnce({
+          body: {
+            content: '{"value": 2}\r\n',
+            format: 'json',
+            name: 'data.json',
+            version: 'sha256:after',
+          },
+          status: 200,
+        }),
+    };
+    const api = createDocumentSourceApi(client);
+    const source = { folderPath: '/library/notes', path: 'data.json' };
+    const signal = new AbortController().signal;
+
+    await expect(api.load(source, signal)).resolves.toEqual({
+      content: '{"value": 1}\r\n',
+      format: 'json',
+      version: 'sha256:before',
+    });
+    await expect(
+      api.save(source, { baseVersion: 'sha256:before', content: '{"value": 2}\n' }, signal),
+    ).resolves.toEqual({
+      content: '{"value": 2}\r\n',
+      format: 'json',
+      version: 'sha256:after',
+    });
+  });
+
   it('overwrites only through the explicit conflict-decision request', async () => {
     const client: HttpClient = {
       request: vi.fn(async () => ({

@@ -12,6 +12,7 @@ import {
   enterDocumentConflict,
   reconcileDocumentSource,
   sameSource,
+  setDocumentJsonSession,
   setDocumentMarkdownMode,
   sourceIdentity,
   sourceName,
@@ -39,6 +40,13 @@ describe('document identity', () => {
     expect(disposed).toEqual({
       access: 'editable',
       editor: null,
+      jsonSession: {
+        expandedPaths: ['$'],
+        search: '',
+        searchOptions: { caseSensitive: false, wholeWord: false },
+        selectedPath: '$',
+        viewMode: null,
+      },
       lifecycle: 'disposed',
       markdownMode: 'writer',
       scope,
@@ -46,11 +54,11 @@ describe('document identity', () => {
     expect(disposeDocumentState(disposed)).toBe(disposed);
   });
 
-  it('classifies only Markdown and TXT source names for direct loading', () => {
+  it('classifies Markdown, JSON, and TXT source names for direct loading', () => {
     expect(documentTextFormat('notes/plan.md')).toBe('md');
     expect(documentTextFormat('notes/plan.MARKDOWN')).toBe('md');
     expect(documentTextFormat('notes/literal.TXT')).toBe('txt');
-    expect(documentTextFormat('notes/data.json')).toBeNull();
+    expect(documentTextFormat('notes/data.json')).toBe('json');
     expect(documentTextFormat('notes/no-extension')).toBeNull();
   });
 
@@ -78,6 +86,28 @@ describe('document identity', () => {
     expect(
       setDocumentMarkdownMode(createDocumentState(scope, 'read-only'), 'writer').markdownMode,
     ).toBe('reading');
+  });
+
+  it('retains JSON presentation state in the document runtime without changing source authority', () => {
+    const scope = {
+      generation: 1,
+      id: 'tab-json',
+      source: { folderPath: '/library/notes', path: 'data.json' },
+    };
+    const state = setDocumentJsonSession(createDocumentState(scope, 'editable'), {
+      expandedPaths: ['$', '$.items'],
+      search: 'needle',
+      selectedPath: '$.items[1]',
+      viewMode: 'source',
+    });
+
+    expect(state.jsonSession).toMatchObject({
+      expandedPaths: ['$', '$.items'],
+      search: 'needle',
+      selectedPath: '$.items[1]',
+      viewMode: 'source',
+    });
+    expect(state.editor).toBeNull();
   });
 
   it('normalizes editor line endings while retaining a versioned baseline', () => {

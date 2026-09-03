@@ -30,6 +30,11 @@ const MarkdownDocument = lazy(async () => {
   return { default: module.MarkdownDocument };
 });
 
+const JsonDocument = lazy(async () => {
+  const module = await import('./json/document');
+  return { default: module.JsonDocument };
+});
+
 export interface DocumentSourceProps {
   active: boolean;
   api: DocumentSourceApi;
@@ -211,6 +216,23 @@ export function DocumentSource({
               readOnly={access === 'read-only' || editor === null || markdownMode === 'reading'}
               source={runtime.scope.source}
               tabId={runtime.scope.id}
+              value={editor?.value ?? source.data.content}
+            />
+          </Suspense>
+          {access === 'editable' && editor && (
+            <SaveFeedback editor={editor} retry={() => void retrySave()} />
+          )}
+        </div>
+      ) : format === 'json' ? (
+        <div className="relative min-h-0 flex-1">
+          <Suspense fallback={<PendingSource name="JSON editor" />}>
+            <JsonDocument
+              active={active}
+              name={name}
+              navigation={navigation}
+              onChange={change}
+              readOnly={access === 'read-only' || editor === null}
+              runtime={runtime}
               value={editor?.value ?? source.data.content}
             />
           </Suspense>

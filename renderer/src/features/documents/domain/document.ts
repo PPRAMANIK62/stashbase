@@ -9,6 +9,7 @@ export interface DocumentScope {
 export interface DocumentState {
   access: DocumentAccess;
   editor: DocumentEditorState | null;
+  jsonSession: JsonDocumentSession;
   lifecycle: 'active' | 'disposed';
   markdownMode: MarkdownViewMode;
   scope: DocumentScope;
@@ -18,7 +19,17 @@ export type DocumentAccess = 'editable' | 'read-only';
 
 export type MarkdownViewMode = 'reading' | 'writer';
 
-export type DocumentTextFormat = 'md' | 'txt';
+export type DocumentTextFormat = 'json' | 'md' | 'txt';
+
+export type JsonViewMode = 'source' | 'tree';
+
+export interface JsonDocumentSession {
+  expandedPaths: string[];
+  search: string;
+  searchOptions: { caseSensitive: boolean; wholeWord: boolean };
+  selectedPath: string | null;
+  viewMode: JsonViewMode | null;
+}
 
 export interface DocumentTextSource {
   content: string;
@@ -76,6 +87,7 @@ export function sourceName(source: SourceReference): string {
 export function documentTextFormat(path: string): DocumentTextFormat | null {
   const extension = path.split('.').at(-1)?.toLowerCase();
   if (extension === 'md' || extension === 'markdown') return 'md';
+  if (extension === 'json') return 'json';
   return extension === 'txt' ? 'txt' : null;
 }
 
@@ -91,10 +103,35 @@ export function createDocumentState(scope: DocumentScope, access: DocumentAccess
   return {
     access,
     editor: null,
+    jsonSession: {
+      expandedPaths: ['$'],
+      search: '',
+      searchOptions: { caseSensitive: false, wholeWord: false },
+      selectedPath: '$',
+      viewMode: null,
+    },
     lifecycle: 'active',
     markdownMode: access === 'editable' ? 'writer' : 'reading',
     scope,
   };
+}
+
+export function setDocumentJsonSession(
+  state: DocumentState,
+  patch: Partial<JsonDocumentSession>,
+): DocumentState {
+  if (state.lifecycle === 'disposed') return state;
+  const jsonSession = { ...state.jsonSession, ...patch };
+  if (
+    jsonSession.viewMode === state.jsonSession.viewMode &&
+    jsonSession.search === state.jsonSession.search &&
+    jsonSession.selectedPath === state.jsonSession.selectedPath &&
+    jsonSession.expandedPaths === state.jsonSession.expandedPaths &&
+    jsonSession.searchOptions === state.jsonSession.searchOptions
+  ) {
+    return state;
+  }
+  return { ...state, jsonSession };
 }
 
 export function setDocumentMarkdownMode(
