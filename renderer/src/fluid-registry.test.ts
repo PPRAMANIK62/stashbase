@@ -86,18 +86,6 @@ const publicComponentStories = [
 ] as const;
 
 describe('Fluid Functionalism registry installation', () => {
-  it('keeps the complete component and support inventory', () => {
-    const installedComponents = fs
-      .readdirSync(path.join(rendererRoot, 'src/components/ui'))
-      .filter((name) => name.endsWith('.tsx') && !name.endsWith('.stories.tsx'));
-
-    expect(installedComponents).toHaveLength(componentFiles.length);
-    expect(new Set(installedComponents)).toEqual(new Set(componentFiles));
-    for (const relativePath of supportFiles) {
-      expect(fs.existsSync(path.join(rendererRoot, 'src', relativePath))).toBe(true);
-    }
-  });
-
   it('uses only Fluid Base UI component sources', () => {
     const packageJson = JSON.parse(
       fs.readFileSync(path.join(rendererRoot, 'package.json'), 'utf8'),

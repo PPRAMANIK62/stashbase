@@ -2,6 +2,7 @@ import { Check, ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { InlineInput } from '@/components/ui/inline-input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Table,
@@ -479,7 +480,7 @@ function JsonInlineEditRow({
             style={{ paddingLeft: `${Math.max(0, node.path.length) * 16}px` }}
           >
             <span aria-hidden="true" className="size-7 shrink-0" />
-            <JsonCellInput
+            <InlineInput
               aria-label="Key"
               onCancel={onCancel}
               onChange={setKey}
@@ -498,7 +499,7 @@ function JsonInlineEditRow({
             {jsonNodeDisplayValue(node)}
           </span>
         ) : (
-          <JsonCellInput
+          <InlineInput
             aria-label="JSON value"
             caretOffset={intent.kind === 'replace' ? intent.caretOffset : undefined}
             onCancel={onCancel}
@@ -515,53 +516,6 @@ function JsonInlineEditRow({
       <TableCell className="font-sans text-caption">{node.type}</TableCell>
       <TableCell aria-hidden="true" className="w-16 px-1 py-0" />
     </TableRow>
-  );
-}
-
-function JsonCellInput({
-  caretOffset,
-  commitOnBlur = true,
-  focusOnMount = true,
-  onCancel,
-  onChange,
-  onCommit,
-  ...props
-}: Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> & {
-  caretOffset?: number;
-  commitOnBlur?: boolean;
-  focusOnMount?: boolean;
-  onCancel(): void;
-  onChange(value: string): void;
-  onCommit(): void;
-}) {
-  const ref = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    const input = ref.current;
-    if (!input || !focusOnMount) return;
-    input.focus();
-    const offset = Math.min(Math.max(caretOffset ?? input.value.length, 0), input.value.length);
-    input.setSelectionRange(offset, offset);
-  }, [caretOffset, focusOnMount]);
-
-  return (
-    <input
-      {...props}
-      className="block w-full rounded-none bg-transparent p-0 font-mono text-foreground outline-none"
-      onBlur={commitOnBlur ? onCommit : undefined}
-      onChange={(event) => onChange(event.target.value)}
-      onKeyDown={(event) => {
-        event.stopPropagation();
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          onCommit();
-        } else if (event.key === 'Escape') {
-          event.preventDefault();
-          onCancel();
-        }
-      }}
-      ref={ref}
-    />
   );
 }
 
@@ -611,7 +565,7 @@ function JsonInlineAddRow({
         >
           <span aria-hidden="true" className="size-7 shrink-0" />
           {objectAdd ? (
-            <JsonCellInput
+            <InlineInput
               aria-label="New property key"
               commitOnBlur={false}
               onCancel={onCancel}
@@ -628,7 +582,7 @@ function JsonInlineAddRow({
         </div>
       </TableCell>
       <TableCell className="relative bg-card focus-within:ring-1 focus-within:ring-border focus-within:ring-inset">
-        <JsonCellInput
+        <InlineInput
           aria-label="New JSON value"
           commitOnBlur={false}
           focusOnMount={!objectAdd}
