@@ -143,8 +143,17 @@ architecture, and web build checks.
 
 **Blocked by:** 29.
 
-Perform bounded strict UTF-8 inspection with syntax-aware reading and truthful
-binary, oversized, unavailable, and restricted states.
+**Status:** Complete.
+
+Generic files now use a separate bounded preview query that cannot save or
+widen retrieval access. TXT and strict UTF-8 generic text share one lazy
+CodeMirror editor; TXT stays literal while generic code loads a filename-matched
+grammar. Refusal states retain source identity, metadata, and folder-scoped
+Reveal recovery, while unavailable inspections can retry in place.
+
+Evidence: focused preview protocol/adapter/domain, shared editor, document UI,
+query lifecycle, workspace Reveal request and cross-folder route, server
+inspection, renderer, architecture, typecheck, lint, and web build checks.
 
 ## 38 — Add PDF and image viewers
 
