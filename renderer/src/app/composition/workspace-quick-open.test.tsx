@@ -1,0 +1,149 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+
+import {
+  createDocumentTabsRuntime,
+  type DocumentSourceApi,
+  type DocumentTabsRuntime,
+} from '@/features/documents/public';
+import {
+  createWorkspaceRuntime,
+  type FilesApi,
+  type WorkspaceRuntime,
+} from '@/features/workspace/public';
+
+import { WorkspaceQuickOpen } from './workspace-quick-open';
+
+let documents: DocumentTabsRuntime;
+let workspace: WorkspaceRuntime;
+let getAnimationsDescriptor: PropertyDescriptor | undefined;
+
+beforeEach(() => {
+  getAnimationsDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
+  Object.defineProperty(Element.prototype, 'getAnimations', {
+    configurable: true,
+    value: vi.fn(() => []),
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  documents?.dispose();
+  workspace?.dispose();
+  if (getAnimationsDescriptor) {
+    Object.defineProperty(Element.prototype, 'getAnimations', getAnimationsDescriptor);
+  } else {
+    Reflect.deleteProperty(Element.prototype, 'getAnimations');
+  }
+});
+
+describe('workspace Quick Open composition', () => {
+  it('maps visible files to typed open and reveal actions resolved by app composition', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const filesApi: FilesApi = {
+      load: vi.fn<FilesApi['load']>(async () => ({
+        files: [
+          {
+            availability: 'available',
+            format: 'generic',
+            heading: '',
+            importedAt: '',
+            kind: 'regular',
+            path: 'archive.bin',
+            size: 4,
+            snippet: '',
+          },
+          {
+            availability: 'available',
+            format: 'generic',
+            heading: '',
+            importedAt: '',
+            kind: 'symlink',
+            path: 'linked.bin',
+            size: 0,
+            snippet: '',
+          },
+        ],
+        folderName: 'Notes',
+        folders: [],
+      })),
+      reveal: vi.fn(async () => undefined),
+    };
+    const sourceApi: DocumentSourceApi = {
+      load: vi.fn(() => new Promise<never>(() => undefined)),
+      overwrite: vi.fn(),
+      save: vi.fn(),
+    };
+    workspace = createWorkspaceRuntime({
+      folder: { name: 'Notes', path: '/library/notes' },
+      generation: 1,
+      queries: {
+        cancel: () => queryClient.cancelQueries(),
+        remove: () => queryClient.removeQueries(),
+      },
+    });
+    documents = createDocumentTabsRuntime({
+      api: sourceApi,
+      createId: () => 'opened-tab',
+      createQueries: () => ({
+        cancel: vi.fn(async () => undefined),
+        remove: vi.fn(),
+        replaceSource: vi.fn(),
+      }),
+      folderPath: '/library/notes',
+      generation: 1,
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WorkspaceQuickOpen
+          documents={documents}
+          filesApi={filesApi}
+          onClose={vi.fn()}
+          open
+          revealLabel="Show in file manager"
+          workspace={workspace}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(filesApi.load).toHaveBeenCalledOnce());
+    await userEvent
+      .setup()
+      .click(
+        await screen.findByRole(
+          'option',
+          { name: 'archive.bin, Notes, excluded from Search and automatic Chat context' },
+          { timeout: 5_000 },
+        ),
+      );
+
+    await waitFor(() =>
+      expect(documents.store.getState().tabs).toEqual([
+        {
+          id: 'opened-tab',
+          source: { folderPath: '/library/notes', path: 'archive.bin' },
+        },
+      ]),
+    );
+
+    await userEvent.setup().click(
+      await screen.findByRole(
+        'option',
+        {
+          name: 'linked.bin, Notes, excluded from Search and automatic Chat context, Show in file manager',
+        },
+        { timeout: 5_000 },
+      ),
+    );
+
+    expect(filesApi.reveal).toHaveBeenCalledWith(
+      '/library/notes',
+      'linked.bin',
+      expect.any(AbortSignal),
+    );
+    expect(documents.store.getState().tabs).toHaveLength(1);
+  });
+});

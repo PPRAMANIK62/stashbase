@@ -30,11 +30,16 @@ export function useReveal(runtime: WorkspaceRuntime, api: FilesApi) {
 
   return {
     error: operation.isError ? 'The item could not be shown.' : null,
-    reveal(path: string) {
+    async reveal(path: string): Promise<boolean> {
       current.current?.abort();
       const controller = new AbortController();
       current.current = controller;
-      operation.mutate({ controller, path });
+      try {
+        await operation.mutateAsync({ controller, path });
+        return true;
+      } catch {
+        return false;
+      }
     },
   };
 }

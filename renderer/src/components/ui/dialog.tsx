@@ -43,6 +43,7 @@ const DialogClose = DialogPrimitive.Close;
 
 interface DialogContentProps extends HTMLAttributes<HTMLDivElement> {
   closeDisabled?: boolean;
+  presentation?: 'dialog' | 'command';
   size?: 'sm' | 'lg';
   /** Portal target. When set, the overlay and panel render inside this element
    *  (positioned `absolute`) instead of covering the viewport (`fixed`). Pair
@@ -53,11 +54,23 @@ interface DialogContentProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, closeDisabled = false, size = 'sm', container, ...props }, ref) => {
+  (
+    {
+      className,
+      children,
+      closeDisabled = false,
+      presentation = 'dialog',
+      size = 'sm',
+      container,
+      ...props
+    },
+    ref,
+  ) => {
     const XIcon = useIcon('x');
     const shape = useShape();
     const substrate = useSurface();
-    const dialogLevel = Math.min(substrate + DIALOG_OFFSET, 8);
+    const command = presentation === 'command';
+    const dialogLevel = Math.min(substrate + (command ? 2 : DIALOG_OFFSET), 8);
     // The size ladder narrows the dialog one notch in compact regions —
     // width only, the padding stays put (see /docs/sizes).
     const compact = useSize().variant === 'compact';
@@ -86,7 +99,8 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                 {...rest}
                 className={cn(
                   container ? 'absolute' : 'fixed',
-                  'inset-0 z-50 bg-black/40 dark:bg-black/80',
+                  'inset-0 z-50',
+                  command ? 'bg-transparent' : 'bg-black/40 dark:bg-black/80',
                 )}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: exiting ? 0 : 1 }}
@@ -126,11 +140,12 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                 >)}
                 className={cn(
                   container ? 'absolute' : 'fixed',
-                  'top-1/2 left-1/2 z-50 w-[calc(100%-2rem)]',
+                  'left-1/2 z-50 w-[calc(100%-2rem)]',
+                  command ? 'top-16 max-w-[680px] overflow-hidden p-0' : 'top-1/2 p-6',
                   surfaceClasses(dialogLevel),
-                  'p-6 focus:outline-none',
-                  size === 'sm' && (compact ? 'max-w-[360px]' : 'max-w-[400px]'),
-                  size === 'lg' && (compact ? 'max-w-[480px]' : 'max-w-[540px]'),
+                  'focus:outline-none',
+                  !command && size === 'sm' && (compact ? 'max-w-[360px]' : 'max-w-[400px]'),
+                  !command && size === 'lg' && (compact ? 'max-w-[480px]' : 'max-w-[540px]'),
                   shape.container,
                   className,
                 )}
@@ -138,30 +153,37 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                   ...(baseStyle as React.CSSProperties | undefined),
                   ...(props.style as React.CSSProperties | undefined),
                 }}
-                initial={{ opacity: 0, scale: 0.97, x: '-50%', y: '-50%' }}
+                initial={{
+                  opacity: 0,
+                  scale: command ? 0.985 : 0.97,
+                  x: '-50%',
+                  y: command ? -4 : '-50%',
+                }}
                 animate={{
                   opacity: exiting ? 0 : 1,
-                  scale: exiting ? 0.97 : 1,
+                  scale: exiting ? (command ? 0.985 : 0.97) : 1,
                   x: '-50%',
-                  y: '-50%',
+                  y: command ? 0 : '-50%',
                 }}
                 transition={exiting ? spring.slow.exit : spring.slow}
               >
                 <SurfaceProvider value={dialogLevel}>
                   {children}
-                  <DialogPrimitive.Close
-                    render={
-                      <Button
-                        className="absolute top-3 right-3"
-                        disabled={closeDisabled}
-                        size="icon-sm"
-                        variant="ghost"
-                      >
-                        <XIcon />
-                        <span className="sr-only">Close</span>
-                      </Button>
-                    }
-                  />
+                  {!command && (
+                    <DialogPrimitive.Close
+                      render={
+                        <Button
+                          className="absolute top-3 right-3"
+                          disabled={closeDisabled}
+                          size="icon-sm"
+                          variant="ghost"
+                        >
+                          <XIcon />
+                          <span className="sr-only">Close</span>
+                        </Button>
+                      }
+                    />
+                  )}
                 </SurfaceProvider>
               </motion.div>
             );

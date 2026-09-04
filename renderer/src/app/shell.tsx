@@ -27,6 +27,8 @@ import { Logo } from '@/shared/brand/logo';
 import { SidebarNavigator } from './composition/sidebar-navigator';
 import { useDocumentCommands } from './composition/use-document-commands';
 import { useDocumentWorkspace } from './composition/use-document-workspace';
+import { useQuickOpenCommand } from './composition/use-quick-open-command';
+import { WorkspaceQuickOpen } from './composition/workspace-quick-open';
 import type { AppDependencies } from './dependencies';
 import { openDocument } from './workflows/open-document';
 
@@ -42,6 +44,11 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     session.runtime,
     dependencies.documents.sourceApi,
     dependencies.documents.createId,
+  );
+  const quickOpen = useQuickOpenCommand(
+    workspace && documents
+      ? `${workspace.scope.folder.path}\u0000${workspace.scope.generation}`
+      : null,
   );
   useDocumentCommands(documents?.navigation ?? null);
   useDocumentSaveBarrier(documents, dependencies.documents.lifecycle);
@@ -69,6 +76,16 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
       open={session.shell.sidebarOpen}
       width={`${session.shell.sidebarWidth}px`}
     >
+      {workspace && documents && (
+        <WorkspaceQuickOpen
+          documents={documents}
+          filesApi={dependencies.workspace.api}
+          onClose={quickOpen.close}
+          open={quickOpen.open}
+          revealLabel={dependencies.workspace.revealLabel}
+          workspace={workspace}
+        />
+      )}
       <Sidebar className="bg-surface-1" variant="inset">
         <SidebarHeader className="workspace-titlebar h-11 flex-row items-center gap-2.5 px-4 py-0">
           <Logo aria-hidden="true" className="size-7 shrink-0" />

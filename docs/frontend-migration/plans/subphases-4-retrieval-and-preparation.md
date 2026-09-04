@@ -4,8 +4,17 @@
 
 **Blocked by:** 26, 29.
 
-Provide keyboard-driven scoped source selection and typed navigation intents
-without making the popup a workspace-state owner.
+**Status:** Complete.
+
+Cmd/Ctrl+P now opens a lazy, titleless active-folder document picker with dense
+file rows, shared proximity selection, complete keyboard navigation, focus
+restoration, and truthful generic/restricted-file treatment. It emits typed
+open or Reveal intents that app composition resolves through existing workspace
+and document authorities; Cmd/Ctrl+O remains unassigned.
+
+Evidence: focused ranking, picker interaction, scope retirement, app
+composition, document-open, Reveal, renderer architecture, typecheck, lint, and
+web build checks.
 
 ## 42 — Implement exact library search
 
