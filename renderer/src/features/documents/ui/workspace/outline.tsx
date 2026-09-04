@@ -126,7 +126,13 @@ export function DocumentOutline({ runtime }: { runtime: DocumentTabsRuntime }) {
   }, [outline.headings]);
 
   const tree = useMemo(() => buildDocumentOutline(outline.headings), [outline.headings]);
-  if (!activeTabId) return null;
+  if (!activeTabId) {
+    return (
+      <SidebarGroup aria-label="Document outline section" className="min-h-0 p-0">
+        <p className="px-4 pt-1 pb-2 text-caption text-muted-foreground">No outline available</p>
+      </SidebarGroup>
+    );
+  }
   const name = activeTab ? sourceName(activeTab.source) : 'Document';
   const outlineSummary = outline.available
     ? `${outline.headings.length} ${outline.headings.length === 1 ? 'heading' : 'headings'}`

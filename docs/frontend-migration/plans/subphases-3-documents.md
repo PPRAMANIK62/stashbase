@@ -114,9 +114,9 @@ tests; renderer tests, architecture checks, typecheck, lint, and web build.
 
 The active document now owns Find, Markdown outline, anchors, and safe link
 navigation. A compact icon switch keeps Files and the format-aware outline in
-one stable sidebar location. Relative links reuse the tab and save-barrier
-workflow, same-document anchors scroll in place, and validated HTTP(S) links
-open through the authorized Electron bridge.
+one stable sidebar location, including when no document is open. Relative links
+reuse the tab and save-barrier workflow, same-document anchors scroll in place,
+and validated HTTP(S) links open through the authorized Electron bridge.
 
 Evidence: focused navigation-domain/runtime, Markdown Find/outline/source,
 tab-workflow, external-navigation boundary, and renderer tests; protocol,
