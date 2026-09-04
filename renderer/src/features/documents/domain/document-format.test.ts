@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import {
+  AUDIO_ONLY_SOURCE_EXTENSIONS,
   DOCX_EXTENSIONS,
   HTML_NOTE_EXTENSIONS,
   IMAGE_SOURCE_EXTENSIONS,
   PDF_EXTENSIONS,
+  VIDEO_SOURCE_EXTENSIONS,
 } from '@/shared/file-formats';
 
 import { documentTextFormat, documentViewerFormat } from './document-format';
@@ -38,6 +40,13 @@ describe('document format', () => {
     for (const extension of DOCX_EXTENSIONS) {
       expect(documentViewerFormat(`documents/report.${extension.toUpperCase()}`)).toBe('docx');
       expect(documentTextFormat(`documents/report.${extension}`)).toBeNull();
+    }
+  });
+
+  it('routes every canonical audio and video extension to media viewing', () => {
+    for (const extension of [...AUDIO_ONLY_SOURCE_EXTENSIONS, ...VIDEO_SOURCE_EXTENSIONS]) {
+      expect(documentViewerFormat(`recordings/source.${extension.toUpperCase()}`)).toBe('media');
+      expect(documentTextFormat(`recordings/source.${extension}`)).toBeNull();
     }
   });
 });

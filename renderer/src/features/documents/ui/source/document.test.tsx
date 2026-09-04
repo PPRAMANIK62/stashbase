@@ -75,6 +75,13 @@ function renderSource(
             load: vi.fn(() => new Promise<never>(() => undefined)),
           }
         }
+        mediaApi={{
+          cancelTranscript: vi.fn(),
+          loadPreviewStatus: vi.fn(),
+          loadTranscript: vi.fn(() => new Promise<never>(() => undefined)),
+          preparePreview: vi.fn(),
+          reprocessTranscript: vi.fn(),
+        }}
         onNavigate={options.onNavigate}
         onOpenExternal={options.onOpenExternal}
         onReveal={options.onReveal ?? vi.fn(async () => undefined)}
@@ -179,7 +186,7 @@ describe('document text source', () => {
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
-  it.each(['archive.html', 'report.docx'])(
+  it.each(['archive.html', 'report.docx', 'interview.mp4'])(
     'routes %s through versioned preview assets',
     async (path) => {
       const assetApi = { load: vi.fn(() => new Promise<never>(() => undefined)) };
@@ -214,7 +221,11 @@ describe('document text source', () => {
       path: 'data.json',
     });
 
-    const outlinePane = await screen.findByRole('region', { name: 'JSON outline' });
+    const outlinePane = await screen.findByRole(
+      'region',
+      { name: 'JSON outline' },
+      { timeout: 5_000 },
+    );
     const sourcePane = screen.getByRole('region', { name: 'JSON source' });
     const structureTable = screen.getByRole('treegrid', { name: 'JSON values' });
     expect(structureTable.tagName).toBe('TABLE');

@@ -5,6 +5,7 @@ import type {
   DocumentSourceApi,
   DocxPreviewApi,
   GenericFilePreviewApi,
+  MediaApi,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { sourceName } from '@/features/documents/domain/document';
@@ -23,6 +24,7 @@ export interface DocumentWorkspaceProps {
   assetApi: DocumentAssetApi;
   docxPreviewApi: DocxPreviewApi;
   genericPreviewApi: GenericFilePreviewApi;
+  mediaApi: MediaApi;
   onNavigate?(target: { anchor?: string; source: SourceReference }): void;
   onOpenExternal?(href: string): Promise<boolean>;
   onReveal(source: SourceReference, signal: AbortSignal): Promise<void>;
@@ -35,6 +37,7 @@ export function DocumentWorkspace({
   assetApi,
   docxPreviewApi,
   genericPreviewApi,
+  mediaApi,
   onNavigate = ignoreNavigation,
   onOpenExternal = rejectExternalNavigation,
   onReveal,
@@ -91,6 +94,7 @@ export function DocumentWorkspace({
           assetApi={assetApi}
           docxPreviewApi={docxPreviewApi}
           genericPreviewApi={genericPreviewApi}
+          mediaApi={mediaApi}
           navigation={runtime.navigation}
           onNavigate={onNavigate}
           onOpenExternal={onOpenExternal}

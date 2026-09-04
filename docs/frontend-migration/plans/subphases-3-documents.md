@@ -192,5 +192,15 @@ typecheck, lint, and web build checks.
 
 **Blocked by:** 16, 29.
 
-Provide lazy playback, compatibility fallback, transcript evidence, and cleanup
-of media handles and background work.
+**Status:** Complete.
+
+Audio and video now use lazy native playback with Strict Mode-safe resource
+ownership and an abortable compatible-audio fallback. The renderer origin
+exposes the source-version header required to open binary assets. A
+source-versioned transcript surface follows preparation state, supports
+timestamp seeking and Find, and releases media and request work with the
+document.
+
+Evidence: focused media protocol, adapter, format, playback, fallback,
+transcript, Find, cleanup, and document UI tests; renderer architecture,
+typecheck, lint, and web build checks.

@@ -23,6 +23,13 @@ describe('workspace shell', () => {
       createId: vi.fn(() => 'tab-1'),
       genericPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
       lifecycle: { onPrepareContextRelease: vi.fn(() => () => undefined) },
+      mediaApi: {
+        cancelTranscript: vi.fn(),
+        loadPreviewStatus: vi.fn(),
+        loadTranscript: vi.fn(() => new Promise<never>(() => undefined)),
+        preparePreview: vi.fn(),
+        reprocessTranscript: vi.fn(),
+      },
       openExternal: vi.fn(async () => true),
     },
     library: {
@@ -194,6 +201,7 @@ describe('workspace shell', () => {
         createId: vi.fn(() => 'document-tab'),
         genericPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
         lifecycle: dependencies.documents.lifecycle,
+        mediaApi: dependencies.documents.mediaApi,
         openExternal: dependencies.documents.openExternal,
       },
       library: {

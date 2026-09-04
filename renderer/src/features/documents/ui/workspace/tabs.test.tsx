@@ -46,6 +46,13 @@ const documentWorkspaceProps = {
   assetApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
   docxPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
   genericPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
+  mediaApi: {
+    cancelTranscript: vi.fn(),
+    loadPreviewStatus: vi.fn(),
+    loadTranscript: vi.fn(() => new Promise<never>(() => undefined)),
+    preparePreview: vi.fn(),
+    reprocessTranscript: vi.fn(),
+  },
   onReveal: vi.fn(async () => undefined),
   revealLabel: 'Show in file manager',
 };

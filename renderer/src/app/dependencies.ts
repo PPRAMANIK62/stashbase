@@ -4,11 +4,13 @@ import {
   createDocumentSourceApi,
   createDocumentWindowLifecycle,
   createGenericFilePreviewApi,
+  createMediaApi,
   type DocumentAssetApi,
   type DocumentSourceApi,
   type DocumentWindowLifecycle,
   type DocxPreviewApi,
   type GenericFilePreviewApi,
+  type MediaApi,
 } from '@/features/documents/public';
 import {
   createFilesApi,
@@ -33,6 +35,7 @@ export interface AppDependencies {
     createId: () => string;
     genericPreviewApi: GenericFilePreviewApi;
     lifecycle: DocumentWindowLifecycle;
+    mediaApi: MediaApi;
     openExternal(href: string): Promise<boolean>;
   };
   library: LibrarySidebarProps & LibraryWelcomeProps;
@@ -52,6 +55,7 @@ export function createDependencies(): AppDependencies {
       createId: () => globalThis.crypto.randomUUID(),
       genericPreviewApi: createGenericFilePreviewApi(http),
       lifecycle: createDocumentWindowLifecycle(bridge.windowLifecycle),
+      mediaApi: createMediaApi(http),
       openExternal: externalNavigation.open,
     },
     library: {

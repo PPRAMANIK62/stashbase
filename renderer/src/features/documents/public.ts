@@ -4,6 +4,7 @@ export {
   DocumentSourceError,
   DocxPreviewError,
   GenericFilePreviewError,
+  MediaError,
   type DocumentAssetApi,
   type DocumentAssetFailureKind,
   type DocumentQueryScope,
@@ -15,6 +16,8 @@ export {
   type DocxPreviewFailureKind,
   type GenericFilePreviewApi,
   type GenericFilePreviewFailureKind,
+  type MediaApi,
+  type MediaFailureKind,
 } from './application/ports';
 export { createDocumentQueryScope } from './application/queries';
 export {
@@ -35,6 +38,7 @@ export { createDocumentSourceApi } from './infrastructure/source-api';
 export { createDocumentAssetApi } from './infrastructure/asset-api';
 export { createDocxPreviewApi } from './infrastructure/docx-preview-api';
 export { createGenericFilePreviewApi } from './infrastructure/generic-preview-api';
+export { createMediaApi } from './infrastructure/media-api';
 export { createDocumentWindowLifecycle } from './infrastructure/window-lifecycle';
 export { useDocumentSaveBarrier } from './hooks/use-document-save-barrier';
 export { DocumentTabs, type DocumentTabsProps } from './ui/workspace/tabs';

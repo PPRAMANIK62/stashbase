@@ -1,4 +1,13 @@
-import { Circle, FileCode2, FileImage, FileText, FileType2, X } from 'lucide-react';
+import {
+  Circle,
+  FileAudio,
+  FileCode2,
+  FileImage,
+  FileText,
+  FileType2,
+  FileVideo,
+  X,
+} from 'lucide-react';
 import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
@@ -7,6 +16,7 @@ import type { DocumentRuntime } from '@/features/documents/application/document-
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { sourceName } from '@/features/documents/domain/document';
 import { documentViewerFormat } from '@/features/documents/domain/document-format';
+import { mediaKind } from '@/features/documents/domain/media';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
 import type { IconComponentProps } from '@/lib/icon-context';
 import { cn } from '@/lib/utils';
@@ -51,13 +61,17 @@ function DocumentTab({
   const name = sourceName(source);
   const format = documentViewerFormat(source.path);
   const icon =
-    format === 'image'
-      ? FileImage
-      : format === 'pdf'
-        ? FileType2
-        : format === 'html'
-          ? FileCode2
-          : FileText;
+    format === 'media'
+      ? mediaKind(source.path) === 'video'
+        ? FileVideo
+        : FileAudio
+      : format === 'image'
+        ? FileImage
+        : format === 'pdf'
+          ? FileType2
+          : format === 'html'
+            ? FileCode2
+            : FileText;
 
   return (
     <TabItem

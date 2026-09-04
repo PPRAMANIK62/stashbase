@@ -2,6 +2,7 @@ import type express from 'express';
 
 const ALLOWED_METHODS = 'DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT';
 const ALLOWED_HEADERS = 'content-type';
+const EXPOSED_HEADERS = 'x-stashbase-file-version';
 
 export function createRendererOriginPolicy(
   allowedOrigins: ReadonlySet<string>,
@@ -17,6 +18,7 @@ export function createRendererOriginPolicy(
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', ALLOWED_METHODS);
     res.setHeader('Access-Control-Allow-Headers', ALLOWED_HEADERS);
+    res.setHeader('Access-Control-Expose-Headers', EXPOSED_HEADERS);
     res.setHeader('Vary', 'Origin');
     if (req.method === 'OPTIONS') {
       res.status(204).end();

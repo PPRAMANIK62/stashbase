@@ -5,7 +5,11 @@ import { lazy, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
-import type { DocumentAssetApi, DocxPreviewApi } from '@/features/documents/application/ports';
+import type {
+  DocumentAssetApi,
+  DocxPreviewApi,
+  MediaApi,
+} from '@/features/documents/application/ports';
 import { documentAssetQuery } from '@/features/documents/application/queries';
 import type { DocumentViewerFormat } from '@/features/documents/domain/document-format';
 import type { SourceReference } from '@/shared/domain/source-reference';
@@ -28,6 +32,11 @@ const ImageDocument = lazy(async () => {
 const PdfDocument = lazy(async () => {
   const module = await import('@/features/documents/ui/pdf/document');
   return { default: module.PdfDocument };
+});
+
+const MediaDocument = lazy(async () => {
+  const module = await import('@/features/documents/ui/media/document');
+  return { default: module.MediaDocument };
 });
 
 function AssetStatus({
@@ -71,6 +80,7 @@ export function AssetDocument({
   api,
   docxPreviewApi,
   format,
+  mediaApi,
   name,
   navigation,
   onNavigate,
@@ -81,6 +91,7 @@ export function AssetDocument({
   api: DocumentAssetApi;
   docxPreviewApi: DocxPreviewApi;
   format: Exclude<DocumentViewerFormat, 'json' | 'md' | 'txt'>;
+  mediaApi: MediaApi;
   name: string;
   navigation: DocumentNavigationRuntime;
   onNavigate(target: { anchor?: string; source: SourceReference }): void;
@@ -97,6 +108,16 @@ export function AssetDocument({
     <Suspense fallback={<AssetStatus name={name} />}>
       {format === 'image' ? (
         <ImageDocument key={asset.data.version} name={name} resource={asset.data} />
+      ) : format === 'media' && asset.data.kind === 'media' ? (
+        <MediaDocument
+          active={active}
+          api={mediaApi}
+          key={asset.data.version}
+          name={name}
+          navigation={navigation}
+          resource={asset.data}
+          runtime={runtime}
+        />
       ) : format === 'pdf' ? (
         <PdfDocument
           key={asset.data.version}

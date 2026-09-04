@@ -1,4 +1,5 @@
 import {
+  AUDIO_SOURCE_EXTENSIONS,
   DOCX_EXTENSIONS,
   HTML_NOTE_EXTENSIONS,
   IMAGE_SOURCE_EXTENSIONS,
@@ -10,7 +11,7 @@ import {
 
 export type DocumentTextFormat = 'json' | 'md' | 'txt';
 
-export type DocumentViewerFormat = DocumentTextFormat | 'docx' | 'html' | 'image' | 'pdf';
+export type DocumentViewerFormat = DocumentTextFormat | 'docx' | 'html' | 'image' | 'media' | 'pdf';
 
 function extensionOf(path: string): string | null {
   return path.split('.').at(-1)?.toLowerCase() ?? null;
@@ -34,5 +35,6 @@ export function documentViewerFormat(path: string): DocumentViewerFormat | null 
   if (includesExtension(HTML_NOTE_EXTENSIONS, extension)) return 'html';
   if (includesExtension(DOCX_EXTENSIONS, extension)) return 'docx';
   if (includesExtension(PDF_EXTENSIONS, extension)) return 'pdf';
+  if (includesExtension(AUDIO_SOURCE_EXTENSIONS, extension)) return 'media';
   return includesExtension(IMAGE_SOURCE_EXTENSIONS, extension) ? 'image' : null;
 }

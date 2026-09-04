@@ -13,7 +13,10 @@ test('renderer origin policy allows the exact app origin and answers preflight',
       new Set(['app://renderer', 'http://127.0.0.1:8090']),
     ),
   );
-  app.get('/api/library', (_req, res) => res.json({ ok: true }));
+  app.get('/api/library', (_req, res) => {
+    res.setHeader('x-stashbase-file-version', 'fixture-version');
+    res.json({ ok: true });
+  });
 
   let server: HttpServer | undefined = app.listen(0, '127.0.0.1');
   t.after(async () => {
@@ -35,6 +38,10 @@ test('renderer origin policy allows the exact app origin and answers preflight',
   });
   assert.equal(allowed.status, 200);
   assert.equal(allowed.headers.get('access-control-allow-origin'), 'app://renderer');
+  assert.match(
+    allowed.headers.get('access-control-expose-headers') ?? '',
+    /x-stashbase-file-version/ui,
+  );
   assert.equal(allowed.headers.get('vary'), 'Origin');
 
   const preflight = await fetch(`${baseUrl}/api/library`, {

@@ -3,6 +3,7 @@ import type {
   DocumentTextSource,
 } from '@/features/documents/domain/document';
 import type { GenericFilePreview } from '@/features/documents/domain/generic-preview';
+import type { MediaPreviewStatus, MediaTranscriptState } from '@/features/documents/domain/media';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 export interface DocumentSourceApi {
@@ -36,7 +37,14 @@ export interface DocxDocumentAsset {
   version: string;
 }
 
-export type DocumentAsset = DocxDocumentAsset | SourceDocumentAsset;
+export interface MediaDocumentAsset {
+  fallbackUrl: string;
+  kind: 'media';
+  url: string;
+  version: string;
+}
+
+export type DocumentAsset = DocxDocumentAsset | MediaDocumentAsset | SourceDocumentAsset;
 
 export interface DocumentAssetApi {
   load(source: SourceReference, signal: AbortSignal): Promise<DocumentAsset>;
@@ -48,6 +56,14 @@ export interface DocxPreview {
 
 export interface DocxPreviewApi {
   load(resource: DocxDocumentAsset, signal: AbortSignal): Promise<DocxPreview>;
+}
+
+export interface MediaApi {
+  cancelTranscript(source: SourceReference, signal: AbortSignal): Promise<boolean>;
+  loadPreviewStatus(source: SourceReference, signal: AbortSignal): Promise<MediaPreviewStatus>;
+  loadTranscript(source: SourceReference, signal: AbortSignal): Promise<MediaTranscriptState>;
+  preparePreview(source: SourceReference, signal: AbortSignal): Promise<void>;
+  reprocessTranscript(source: SourceReference, signal: AbortSignal): Promise<void>;
 }
 
 export interface DocumentQueryScope {
@@ -118,6 +134,18 @@ export class DocxPreviewError extends Error {
   constructor(kind: DocxPreviewFailureKind, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'DocxPreviewError';
+    this.kind = kind;
+  }
+}
+
+export type MediaFailureKind = 'invalid-response' | 'scope-lost' | 'unauthorized' | 'unavailable';
+
+export class MediaError extends Error {
+  readonly kind: MediaFailureKind;
+
+  constructor(kind: MediaFailureKind, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'MediaError';
     this.kind = kind;
   }
 }

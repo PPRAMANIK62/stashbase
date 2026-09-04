@@ -21,7 +21,7 @@ function responseError(response: HttpResponse): DocumentAssetError {
 }
 
 function assetPath(
-  prefix: '/asset' | '/asset-derived',
+  prefix: '/asset' | '/asset-audio-preview' | '/asset-derived',
   folderPath: string,
   entryPath: string,
 ): string {
@@ -61,8 +61,17 @@ export function createDocumentAssetApi(client: HttpClient, serverOrigin: string)
       }
       const url = new URL(assetPath('/asset', request.data.folderPath, request.data.path), origin);
       url.searchParams.set('v', version);
-      if (documentViewerFormat(request.data.path) !== 'docx') {
+      const format = documentViewerFormat(request.data.path);
+      if (format !== 'docx' && format !== 'media') {
         return { kind: 'source', url: url.href, version };
+      }
+      if (format === 'media') {
+        const fallbackUrl = new URL(
+          assetPath('/asset-audio-preview', request.data.folderPath, request.data.path),
+          origin,
+        );
+        fallbackUrl.searchParams.set('v', version);
+        return { fallbackUrl: fallbackUrl.href, kind: 'media', url: url.href, version };
       }
       const fallbackUrl = new URL(
         assetPath('/asset-derived', request.data.folderPath, request.data.path),

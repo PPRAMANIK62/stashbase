@@ -57,6 +57,32 @@ describe('document asset API', () => {
     });
   });
 
+  it('adds a compatible audio fallback for media assets', async () => {
+    const api = createDocumentAssetApi(
+      {
+        request: vi.fn(async () => ({
+          body: null,
+          headers: { 'x-stashbase-file-version': 'v1' },
+          status: 204,
+        })),
+      },
+      'http://127.0.0.1:8090',
+    );
+
+    await expect(
+      api.load(
+        { folderPath: '/library', path: 'recordings/demo.mp4' },
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({
+      fallbackUrl:
+        'http://127.0.0.1:8090/asset-audio-preview/__folder/%252Flibrary/recordings/demo.mp4?v=v1',
+      kind: 'media',
+      url: 'http://127.0.0.1:8090/asset/__folder/%252Flibrary/recordings/demo.mp4?v=v1',
+      version: 'v1',
+    });
+  });
+
   it('rejects missing versions and lost scopes', async () => {
     const invalid = createDocumentAssetApi(
       { request: vi.fn(async () => ({ body: null, status: 204 })) },

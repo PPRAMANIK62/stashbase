@@ -8,6 +8,7 @@ import type {
   DocumentSourceApi,
   DocxPreviewApi,
   GenericFilePreviewApi,
+  MediaApi,
 } from '@/features/documents/application/ports';
 import { sourceName } from '@/features/documents/domain/document';
 import { documentViewerFormat } from '@/features/documents/domain/document-format';
@@ -30,6 +31,7 @@ export interface DocumentSourceProps {
   assetApi: DocumentAssetApi;
   docxPreviewApi: DocxPreviewApi;
   genericPreviewApi: GenericFilePreviewApi;
+  mediaApi: MediaApi;
   navigation: DocumentNavigationRuntime;
   onNavigate(target: { anchor?: string; source: SourceReference }): void;
   onOpenExternal(href: string): Promise<boolean>;
@@ -56,6 +58,7 @@ export function DocumentSource({
   assetApi,
   docxPreviewApi,
   genericPreviewApi,
+  mediaApi,
   navigation,
   onNavigate,
   onOpenExternal,
@@ -67,13 +70,20 @@ export function DocumentSource({
   const name = sourceName(runtime.scope.source);
   const format = documentViewerFormat(runtime.scope.source.path);
 
-  if (format === 'docx' || format === 'html' || format === 'image' || format === 'pdf') {
+  if (
+    format === 'media' ||
+    format === 'docx' ||
+    format === 'html' ||
+    format === 'image' ||
+    format === 'pdf'
+  ) {
     return (
       <AssetDocument
         active={active}
         api={assetApi}
         docxPreviewApi={docxPreviewApi}
         format={format}
+        mediaApi={mediaApi}
         name={name}
         navigation={navigation}
         onNavigate={onNavigate}

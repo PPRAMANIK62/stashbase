@@ -130,6 +130,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
               assetApi={dependencies.documents.assetApi}
               docxPreviewApi={dependencies.documents.docxPreviewApi}
               genericPreviewApi={dependencies.documents.genericPreviewApi}
+              mediaApi={dependencies.documents.mediaApi}
               onNavigate={(target) => {
                 if (workspace) {
                   void openDocument(workspace, documents, target.source, {
