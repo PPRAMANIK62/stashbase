@@ -175,8 +175,18 @@ renderer, architecture, typecheck, lint, and web build checks.
 
 **Blocked by:** 19, 29.
 
-Provide sanitized DOCX preview/fallback and separately sandboxed HTML
-compatibility rendering without widening shell privileges.
+**Status:** Complete.
+
+DOCX now converts source bytes in a bounded Worker, sanitizes the result, and
+falls back to the prepared HTML asset when direct conversion fails. HTML uses
+a separately sandboxed, folder-scoped compatibility frame. An inset preview
+surface and bounded theme messages align its scrollbar with the app; both
+viewers retain Find, navigation, and source identity without widening shell
+access.
+
+Evidence: focused asset, DOCX conversion/sanitization, HTML frame/navigation,
+server bootstrap, CSP, and document UI tests; renderer, architecture,
+typecheck, lint, and web build checks.
 
 ## 40 — Add audio and video viewers
 
