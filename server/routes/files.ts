@@ -35,7 +35,16 @@ import {
   documentTextSaveResponseSchema,
   documentTextSourceResponseSchema,
   workspaceFilesSchema,
+  workspaceRevealRequestSchema,
 } from '../../shared/protocols/http/files.ts';
+
+export interface FileRouteAdapters {
+  revealInFileManager(absolutePath: string): void;
+}
+
+const defaultFileRouteAdapters: FileRouteAdapters = {
+  revealInFileManager: revealInOsFileManager,
+};
 
 export { prepareFileOperation } from '../file-operation-guard.ts';
 export { saveFileContent, validateEditableFileWrite } from '../file-save.ts';
@@ -72,9 +81,9 @@ async function sendUnavailableExplicitFolder(
   res.status(400).json({ error: 'folder is not a registered library folder' });
 }
 
-/** Run a READ handler against an explicit `?folder=` member folder when the
- *  request carries one; otherwise against the window's own folder. Same
- *  membership rule as the `/api/files?folder=` listing above. */
+/** Run a non-mutating handler against an explicit `?folder=` member folder
+ *  when the request carries one; otherwise against the window's own folder.
+ *  Same membership rule as the `/api/files?folder=` listing above. */
 async function runWithExplicitReadFolder(
   req: express.Request,
   res: express.Response,
@@ -174,7 +183,10 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
   }
 }
 
-export function mount(app: express.Express): void {
+export function mount(
+  app: express.Express,
+  adapters: FileRouteAdapters = defaultFileRouteAdapters,
+): void {
   // ----- list -----
   // Optional `?folder=` lists an explicit library-member folder instead of
   // the window's current one. Powers cross-folder chat tabs (`@` mentions and
@@ -372,14 +384,24 @@ export function mount(app: express.Express): void {
   // before launching.
   app.post('/api/reveal/*', async (req, res) => {
     const name = (req.params as any)[0] as string;
-    try {
-      const abs = await resolveExistingAsync(name);
-      if (!abs) return res.status(404).json({ error: 'not found' });
-      revealInOsFileManager(abs);
-      res.json({});
-    } catch (err: unknown) {
-      sendError(res, err);
+    const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+    if (rawFolder) {
+      const request = workspaceRevealRequestSchema.safeParse({ folderPath: rawFolder, path: name });
+      if (!request.success) {
+        res.status(400).json({ error: 'invalid reveal request' });
+        return;
+      }
     }
+    void runWithExplicitReadFolder(req, res, async () => {
+      try {
+        const abs = await resolveExistingAsync(name);
+        if (!abs) return res.status(404).json({ error: 'not found' });
+        adapters.revealInFileManager(abs);
+        res.json({});
+      } catch (err: unknown) {
+        sendError(res, err);
+      }
+    });
   });
 
   mountFileOrderRoutes(app);

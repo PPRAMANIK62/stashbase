@@ -159,13 +159,17 @@ describe('file tree', () => {
     expect(restrictedFolder.title).toBe('Show in file manager');
     await user.click(restrictedFolder);
 
-    expect(api.reveal).toHaveBeenCalledWith('vendor', expect.any(AbortSignal));
+    expect(api.reveal).toHaveBeenCalledWith('/library/research', 'vendor', expect.any(AbortSignal));
     await user.click(
       screen.getByRole('treeitem', {
         name: 'linked-file, restricted, Show in file manager',
       }),
     );
-    expect(api.reveal).toHaveBeenCalledWith('linked-file', expect.any(AbortSignal));
+    expect(api.reveal).toHaveBeenCalledWith(
+      '/library/research',
+      'linked-file',
+      expect.any(AbortSignal),
+    );
   });
 
   it('emits explicit source identity for regular files and keeps restricted files reveal-only', async () => {
@@ -190,7 +194,11 @@ describe('file tree', () => {
       }),
     );
     expect(onOpenSource).toHaveBeenCalledOnce();
-    expect(api.reveal).toHaveBeenCalledWith('linked-file', expect.any(AbortSignal));
+    expect(api.reveal).toHaveBeenCalledWith(
+      '/library/research',
+      'linked-file',
+      expect.any(AbortSignal),
+    );
   });
 
   it('keeps initial rendering bounded and progressively reveals more rows', async () => {

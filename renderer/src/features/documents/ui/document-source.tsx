@@ -1,20 +1,13 @@
-import {
-  AlertCircle,
-  FileText,
-  LoaderCircle,
-  LockKeyhole,
-  RefreshCw,
-  TriangleAlert,
-} from 'lucide-react';
+import { AlertCircle, LoaderCircle, LockKeyhole, RefreshCw, TriangleAlert } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
 import {
   DocumentSourceError,
   type DocumentSourceApi,
+  type GenericFilePreviewApi,
 } from '@/features/documents/application/ports';
 import { sourceName } from '@/features/documents/domain/document';
 import { useDocumentSource } from '@/features/documents/hooks/use-document-source';
@@ -35,13 +28,26 @@ const JsonDocument = lazy(async () => {
   return { default: module.JsonDocument };
 });
 
+const GenericFileDocument = lazy(async () => {
+  const module = await import('./generic/document');
+  return { default: module.GenericFileDocument };
+});
+
+const CodeEditorDocument = lazy(async () => {
+  const module = await import('./code-editor/document');
+  return { default: module.CodeEditorDocument };
+});
+
 export interface DocumentSourceProps {
   active: boolean;
-  api: DocumentSourceApi;
+  genericPreviewApi: GenericFilePreviewApi;
   navigation: DocumentNavigationRuntime;
   onNavigate(target: { anchor?: string; source: SourceReference }): void;
   onOpenExternal(href: string): Promise<boolean>;
+  onReveal(source: SourceReference, signal: AbortSignal): Promise<void>;
+  revealLabel: string;
   runtime: DocumentRuntime;
+  sourceApi: DocumentSourceApi;
 }
 
 function SaveFeedback({
@@ -139,27 +145,31 @@ function FailedSource({ error, name, retry }: { error: unknown; name: string; re
 
 export function DocumentSource({
   active,
-  api,
+  genericPreviewApi,
   navigation,
   onNavigate,
   onOpenExternal,
+  onReveal,
+  revealLabel,
   runtime,
+  sourceApi,
 }: DocumentSourceProps) {
   const name = sourceName(runtime.scope.source);
   const { access, change, editor, format, markdownMode, resolveConflict, retrySave, source } =
-    useDocumentSource(runtime, api, active);
+    useDocumentSource(runtime, sourceApi, active);
 
   if (format === null) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-        <FileText aria-hidden="true" className="size-8 text-muted-foreground" />
-        <div className="max-w-full min-w-0">
-          <p className="truncate text-body font-medium">{name}</p>
-          <p className="mt-1 text-caption text-muted-foreground">
-            This document viewer is not available yet.
-          </p>
-        </div>
-      </div>
+      <Suspense fallback={<PendingSource name={name} />}>
+        <GenericFileDocument
+          active={active}
+          api={genericPreviewApi}
+          navigation={navigation}
+          onReveal={onReveal}
+          revealLabel={revealLabel}
+          runtime={runtime}
+        />
+      </Suspense>
     );
   }
 
@@ -240,28 +250,24 @@ export function DocumentSource({
             <SaveFeedback editor={editor} retry={() => void retrySave()} />
           )}
         </div>
-      ) : access === 'editable' && editor ? (
-        <div className="relative min-h-0 flex-1">
-          <textarea
-            aria-label={`${name} source`}
-            className="size-full resize-none border-0 bg-transparent p-5 pb-12 font-mono text-body leading-relaxed whitespace-pre outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
-            data-document-dirty={editor.dirty || undefined}
-            onChange={(event) => change(event.currentTarget.value)}
-            spellCheck={false}
-            value={editor.value}
-            wrap="off"
-          />
-          <SaveFeedback editor={editor} retry={() => void retrySave()} />
-        </div>
       ) : (
-        <ScrollArea className="min-h-0 flex-1" orientation="both">
-          <pre
-            aria-label={`${name} source`}
-            className="min-h-full w-max min-w-full p-5 font-mono text-body leading-relaxed whitespace-pre"
-          >
-            {source.data.content}
-          </pre>
-        </ScrollArea>
+        <div className="relative min-h-0 flex-1">
+          <Suspense fallback={<PendingSource name="text editor" />}>
+            <CodeEditorDocument
+              active={active}
+              ariaLabel={`${name} source`}
+              content={editor?.value ?? source.data.content}
+              language={{ kind: 'plain' }}
+              navigation={navigation}
+              onChange={change}
+              readOnly={access === 'read-only' || editor === null}
+              runtime={runtime}
+            />
+          </Suspense>
+          {access === 'editable' && editor && (
+            <SaveFeedback editor={editor} retry={() => void retrySave()} />
+          )}
+        </div>
       )}
     </div>
   );

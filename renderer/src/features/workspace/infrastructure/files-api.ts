@@ -4,6 +4,7 @@ import type { HttpClient, HttpResponse } from '@/platform/http/client';
 import {
   workspaceFailureSchema,
   workspaceFilesSchema,
+  workspaceRevealRequestSchema,
   workspaceRevealResponseSchema,
   type WorkspaceFilesWire,
 } from '@/protocols/http/files';
@@ -68,12 +69,17 @@ export function createFilesApi(client: HttpClient): FilesApi {
       }
       return mapListing(listing.data);
     },
-    async reveal(entryPath, signal) {
+    async reveal(folderPath, entryPath, signal) {
+      const request = workspaceRevealRequestSchema.safeParse({ folderPath, path: entryPath });
+      if (!request.success) {
+        throw new FilesError('unavailable', 'The item identity is invalid.');
+      }
+      const query = new URLSearchParams({ folder: request.data.folderPath });
       let response: HttpResponse;
       try {
         response = await client.request({
           method: 'POST',
-          path: `/api/reveal/${encodePath(entryPath)}`,
+          path: `/api/reveal/${encodePath(request.data.path)}?${query}`,
           signal,
         });
       } catch (error) {

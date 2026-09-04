@@ -54,6 +54,13 @@ export const workspaceFailureSchema = z
 
 export const workspaceRevealResponseSchema = z.object({}).strict();
 
+export const workspaceRevealRequestSchema = z
+  .object({
+    folderPath: folderPathSchema,
+    path: relativePathSchema,
+  })
+  .strict();
+
 export const documentTextSourceRequestSchema = z
   .object({
     folderPath: folderPathSchema,
@@ -92,6 +99,37 @@ export const documentTextSourceFailureSchema = z
   })
   .strict();
 
+const genericFilePreviewBaseSchema = {
+  name: relativePathSchema,
+  size: z.number().finite().nonnegative().optional(),
+};
+
+export const genericFilePreviewResponseSchema = z.union([
+  z
+    .object({
+      ...genericFilePreviewBaseSchema,
+      content: boundedSourceTextSchema,
+      kind: z.literal('text'),
+      size: z.number().finite().nonnegative(),
+      version: sourceVersionSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...genericFilePreviewBaseSchema,
+      kind: z.enum([
+        'binary',
+        'too-large',
+        'unreadable',
+        'symlink',
+        'special',
+        'cloud-placeholder',
+      ]),
+      message: z.string().trim().min(1).max(500).optional(),
+    })
+    .strict(),
+]);
+
 export const documentTextSaveRequestSchema = z
   .object({
     baseVersion: sourceVersionSchema,
@@ -129,8 +167,10 @@ export const documentTextSaveFailureSchema = z
   .strict();
 
 export type WorkspaceFilesWire = z.infer<typeof workspaceFilesSchema>;
+export type WorkspaceRevealRequestWire = z.infer<typeof workspaceRevealRequestSchema>;
 export type DocumentTextSourceRequestWire = z.infer<typeof documentTextSourceRequestSchema>;
 export type DocumentTextSourceResponseWire = z.infer<typeof documentTextSourceResponseSchema>;
+export type GenericFilePreviewResponseWire = z.infer<typeof genericFilePreviewResponseSchema>;
 export type DocumentTextSaveRequestWire = z.infer<typeof documentTextSaveRequestSchema>;
 export type DocumentTextOverwriteRequestWire = z.infer<typeof documentTextOverwriteRequestSchema>;
 export type DocumentTextSaveResponseWire = z.infer<typeof documentTextSaveResponseSchema>;

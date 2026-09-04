@@ -40,7 +40,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     workspace,
     session.restoredFolder,
     session.runtime,
-    dependencies.documents.api,
+    dependencies.documents.sourceApi,
     dependencies.documents.createId,
   );
   useDocumentCommands(documents?.navigation ?? null);
@@ -127,7 +127,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         <section aria-label="Agent workspace" className="min-h-0 flex-1">
           {documents && (
             <DocumentWorkspace
-              api={dependencies.documents.api}
+              genericPreviewApi={dependencies.documents.genericPreviewApi}
               onNavigate={(target) => {
                 if (workspace) {
                   void openDocument(workspace, documents, target.source, {
@@ -136,7 +136,12 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
                 }
               }}
               onOpenExternal={dependencies.documents.openExternal}
+              onReveal={(source, signal) =>
+                dependencies.workspace.api.reveal(source.folderPath, source.path, signal)
+              }
+              revealLabel={dependencies.workspace.revealLabel}
               runtime={documents}
+              sourceApi={dependencies.documents.sourceApi}
             />
           )}
           <LibraryWelcome

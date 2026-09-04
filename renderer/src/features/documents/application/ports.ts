@@ -2,6 +2,7 @@ import type {
   DocumentTextSaveResult,
   DocumentTextSource,
 } from '@/features/documents/domain/document';
+import type { GenericFilePreview } from '@/features/documents/domain/generic-preview';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 export interface DocumentSourceApi {
@@ -16,6 +17,10 @@ export interface DocumentSourceApi {
     input: { baseVersion: string; content: string },
     signal: AbortSignal,
   ): Promise<DocumentTextSaveResult>;
+}
+
+export interface GenericFilePreviewApi {
+  load(source: SourceReference, signal: AbortSignal): Promise<GenericFilePreview>;
 }
 
 export interface DocumentQueryScope {
@@ -41,6 +46,23 @@ export class DocumentSourceError extends Error {
   constructor(kind: DocumentSourceFailureKind, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'DocumentSourceError';
+    this.kind = kind;
+  }
+}
+
+export type GenericFilePreviewFailureKind =
+  | 'invalid-response'
+  | 'not-generic'
+  | 'scope-lost'
+  | 'unauthorized'
+  | 'unavailable';
+
+export class GenericFilePreviewError extends Error {
+  readonly kind: GenericFilePreviewFailureKind;
+
+  constructor(kind: GenericFilePreviewFailureKind, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'GenericFilePreviewError';
     this.kind = kind;
   }
 }

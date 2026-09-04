@@ -42,6 +42,12 @@ const sourceApi = {
   save: vi.fn(),
 };
 
+const documentWorkspaceProps = {
+  genericPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
+  onReveal: vi.fn(async () => undefined),
+  revealLabel: 'Show in file manager',
+};
+
 function testQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
@@ -143,7 +149,7 @@ describe('document tabs', () => {
     render(
       <QueryClientProvider client={testQueryClient()}>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace api={sourceApi} runtime={runtime} />
+        <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={sourceApi} />
       </QueryClientProvider>,
     );
 
@@ -176,7 +182,7 @@ describe('document tabs', () => {
     render(
       <QueryClientProvider client={testQueryClient()}>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace api={sourceApi} runtime={runtime} />
+        <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={sourceApi} />
       </QueryClientProvider>,
     );
 
@@ -224,7 +230,7 @@ describe('document tabs', () => {
     render(
       <QueryClientProvider client={testQueryClient()}>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace api={sourceApi} runtime={runtime} />
+        <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={sourceApi} />
       </QueryClientProvider>,
     );
 
@@ -270,7 +276,7 @@ describe('document tabs', () => {
     render(
       <QueryClientProvider client={testQueryClient()}>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace api={api} runtime={runtime} />
+        <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={api} />
       </QueryClientProvider>,
     );
 
@@ -309,7 +315,7 @@ describe('document tabs', () => {
     render(
       <QueryClientProvider client={testQueryClient()}>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace api={api} runtime={runtime} />
+        <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={api} />
       </QueryClientProvider>,
     );
 

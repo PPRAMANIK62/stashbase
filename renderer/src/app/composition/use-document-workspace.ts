@@ -17,7 +17,7 @@ export function useDocumentWorkspace(
   workspace: WorkspaceRuntime | null,
   restored: FolderSessionState | null,
   session: WorkspaceSessionRuntime,
-  api: DocumentSourceApi,
+  sourceApi: DocumentSourceApi,
   createId: () => string,
 ): DocumentTabsRuntime | null {
   const queryClient = useQueryClient();
@@ -36,7 +36,7 @@ export function useDocumentWorkspace(
     const restoredFolder =
       restoredRef.current?.folderPath === folderPath ? restoredRef.current : null;
     const nextRuntime = createDocumentTabsRuntime({
-      api,
+      api: sourceApi,
       createId,
       createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
       folderPath,
@@ -53,7 +53,7 @@ export function useDocumentWorkspace(
     });
     setRuntime(nextRuntime);
     return () => nextRuntime.dispose();
-  }, [api, createId, folderPath, generation, queryClient, workspace]);
+  }, [createId, folderPath, generation, queryClient, sourceApi, workspace]);
 
   const current =
     workspace &&

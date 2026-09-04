@@ -1,7 +1,12 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import { createDocumentQueryScope, documentQueryKeys, documentSourceQuery } from './queries';
+import {
+  createDocumentQueryScope,
+  documentQueryKeys,
+  documentSourceQuery,
+  genericFilePreviewQuery,
+} from './queries';
 
 const scope = {
   generation: 3,
@@ -13,11 +18,37 @@ describe('document source queries', () => {
   it('keys source bytes by their complete disposable document scope', () => {
     expect(documentQueryKeys.source(scope)).toEqual([
       'documents',
-      'source',
       '/library/notes',
       'drafts/plan.md',
       'tab-plan',
       3,
+      'source',
+    ]);
+  });
+
+  it('loads generic inspection through a separate read-only query', async () => {
+    const api = {
+      load: vi.fn(async () => ({
+        content: 'const answer = 42;',
+        kind: 'text' as const,
+        name: 'drafts/plan.md',
+        size: 18,
+      })),
+    };
+    const controller = new AbortController();
+    const query = genericFilePreviewQuery(api, scope);
+
+    await expect(query.queryFn({ signal: controller.signal })).resolves.toMatchObject({
+      kind: 'text',
+    });
+    expect(api.load).toHaveBeenCalledWith(scope.source, controller.signal);
+    expect(query.queryKey).toEqual([
+      'documents',
+      '/library/notes',
+      'drafts/plan.md',
+      'tab-plan',
+      3,
+      'generic-preview',
     ]);
   });
 
@@ -39,7 +70,7 @@ describe('document source queries', () => {
     expect(query.retry).toBe(false);
   });
 
-  it('cancels and removes only one document query', async () => {
+  it('cancels and removes every query owned by one document scope', async () => {
     const queryClient = new QueryClient();
     const cancel = vi.spyOn(queryClient, 'cancelQueries');
     const remove = vi.spyOn(queryClient, 'removeQueries');
@@ -51,9 +82,9 @@ describe('document source queries', () => {
     await queryScope.cancel();
     queryScope.remove();
 
-    const queryKey = documentQueryKeys.source(scope);
-    expect(setQueryData).toHaveBeenCalledWith(queryKey, replacement);
-    expect(cancel).toHaveBeenCalledWith({ queryKey });
-    expect(remove).toHaveBeenCalledWith({ queryKey });
+    expect(setQueryData).toHaveBeenCalledWith(documentQueryKeys.source(scope), replacement);
+    const scopeKey = documentQueryKeys.scope(scope);
+    expect(cancel).toHaveBeenCalledWith({ queryKey: scopeKey });
+    expect(remove).toHaveBeenCalledWith({ queryKey: scopeKey });
   });
 });

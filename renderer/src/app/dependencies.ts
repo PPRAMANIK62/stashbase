@@ -1,8 +1,10 @@
 import {
   createDocumentSourceApi,
   createDocumentWindowLifecycle,
+  createGenericFilePreviewApi,
   type DocumentSourceApi,
   type DocumentWindowLifecycle,
+  type GenericFilePreviewApi,
 } from '@/features/documents/public';
 import {
   createFilesApi,
@@ -21,8 +23,9 @@ import { createHttpClient } from '@/platform/http/client';
 
 export interface AppDependencies {
   documents: {
-    api: DocumentSourceApi;
+    sourceApi: DocumentSourceApi;
     createId: () => string;
+    genericPreviewApi: GenericFilePreviewApi;
     lifecycle: DocumentWindowLifecycle;
     openExternal(href: string): Promise<boolean>;
   };
@@ -37,8 +40,9 @@ export function createDependencies(): AppDependencies {
   const externalNavigation = createExternalNavigation(bridge.externalNavigation);
   return {
     documents: {
-      api: createDocumentSourceApi(http),
+      sourceApi: createDocumentSourceApi(http),
       createId: () => globalThis.crypto.randomUUID(),
+      genericPreviewApi: createGenericFilePreviewApi(http),
       lifecycle: createDocumentWindowLifecycle(bridge.windowLifecycle),
       openExternal: externalNavigation.open,
     },

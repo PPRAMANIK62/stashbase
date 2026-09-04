@@ -13,12 +13,13 @@ describe('workspace shell', () => {
   let getAnimationsDescriptor: PropertyDescriptor | undefined;
   const dependencies: AppDependencies = {
     documents: {
-      api: {
-        load: vi.fn<AppDependencies['documents']['api']['load']>(() => new Promise(() => {})),
+      sourceApi: {
+        load: vi.fn<AppDependencies['documents']['sourceApi']['load']>(() => new Promise(() => {})),
         overwrite: vi.fn(),
         save: vi.fn(),
       },
       createId: vi.fn(() => 'tab-1'),
+      genericPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
       lifecycle: { onPrepareContextRelease: vi.fn(() => () => undefined) },
       openExternal: vi.fn(async () => true),
     },
@@ -181,12 +182,13 @@ describe('workspace shell', () => {
     const activeDependencies: AppDependencies = {
       ...dependencies,
       documents: {
-        api: {
+        sourceApi: {
           load: vi.fn(async () => ({ content: '# Plan', format: 'md' as const, version: 'v1' })),
           overwrite: vi.fn(),
           save: vi.fn(),
         },
         createId: vi.fn(() => 'document-tab'),
+        genericPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
         lifecycle: dependencies.documents.lifecycle,
         openExternal: dependencies.documents.openExternal,
       },

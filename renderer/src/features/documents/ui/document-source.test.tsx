@@ -1,3 +1,5 @@
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -6,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import {
   DocumentSaveError,
   DocumentSourceError,
+  GenericFilePreviewError,
   type DocumentSourceApi,
+  type GenericFilePreviewApi,
 } from '@/features/documents/application/ports';
 import { createDocumentQueryScope } from '@/features/documents/application/queries';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
@@ -40,8 +44,10 @@ function renderSource(
   api: DocumentSourceApi,
   source = { folderPath: '/library/notes', path: 'plan.md' },
   options: {
+    genericPreviewApi?: GenericFilePreviewApi;
     onNavigate?: Parameters<typeof DocumentWorkspace>[0]['onNavigate'];
     onOpenExternal?: Parameters<typeof DocumentWorkspace>[0]['onOpenExternal'];
+    onReveal?: Parameters<typeof DocumentWorkspace>[0]['onReveal'];
   } = {},
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -59,13 +65,118 @@ function renderSource(
   runtimes.push(runtime);
   render(
     <QueryClientProvider client={queryClient}>
-      <DocumentWorkspace api={api} runtime={runtime} {...options} />
+      <DocumentWorkspace
+        genericPreviewApi={
+          options.genericPreviewApi ?? {
+            load: vi.fn(() => new Promise<never>(() => undefined)),
+          }
+        }
+        onNavigate={options.onNavigate}
+        onOpenExternal={options.onOpenExternal}
+        onReveal={options.onReveal ?? vi.fn(async () => undefined)}
+        revealLabel="Show in file manager"
+        runtime={runtime}
+        sourceApi={api}
+      />
     </QueryClientProvider>,
   );
   return { queryClient, runtime };
 }
 
+function codeEditor(label: string): EditorView {
+  const content = screen.getByLabelText(label);
+  const editor = content.closest<HTMLElement>('.cm-editor');
+  const view = editor ? EditorView.findFromDOM(editor) : null;
+  if (!view) throw new Error(`Could not find CodeMirror editor for ${label}.`);
+  return view;
+}
+
 describe('document text source', () => {
+  it('opens generic UTF-8 code in the shared read-only editor with Find', async () => {
+    const api: DocumentSourceApi = {
+      load: vi.fn(),
+      overwrite: vi.fn(),
+      save: vi.fn(),
+    };
+    const genericPreviewApi: GenericFilePreviewApi = {
+      load: vi.fn<GenericFilePreviewApi['load']>(async () => ({
+        content: 'export const answer = 42;\n',
+        kind: 'text',
+        name: 'src/answer.ts',
+        size: 26,
+        version: 'v1',
+      })),
+    };
+    const { runtime } = renderSource(
+      api,
+      { folderPath: '/library/notes', path: 'src/answer.ts' },
+      { genericPreviewApi },
+    );
+
+    await screen.findByLabelText('Read-only answer.ts source');
+    const editor = codeEditor('Read-only answer.ts source');
+    expect(editor.state.facet(EditorState.readOnly)).toBe(true);
+    expect(editor.state.doc.toString()).toBe('export const answer = 42;\n');
+    expect(api.load).not.toHaveBeenCalled();
+    expect(genericPreviewApi.load).toHaveBeenCalledWith(
+      { folderPath: '/library/notes', path: 'src/answer.ts' },
+      expect.any(AbortSignal),
+    );
+
+    await waitFor(() => expect(runtime.navigation.store.getState().find.available).toBe(true));
+    act(() => runtime.navigation.setFindQuery('answer'));
+    await waitFor(() =>
+      expect(runtime.navigation.store.getState().find).toMatchObject({ current: 1, total: 1 }),
+    );
+  });
+
+  it('shows generic refusal metadata and reveals the exact source', async () => {
+    const api: DocumentSourceApi = { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() };
+    const onReveal = vi.fn(async () => undefined);
+    renderSource(
+      api,
+      { folderPath: '/library/archive', path: 'assets/payload.bin' },
+      {
+        genericPreviewApi: {
+          load: vi.fn<GenericFilePreviewApi['load']>(async () => ({
+            kind: 'binary',
+            name: 'assets/payload.bin',
+            size: 1_250,
+          })),
+        },
+        onReveal,
+      },
+    );
+
+    expect(await screen.findByText('Binary file cannot be opened')).not.toBeNull();
+    expect(screen.getByText('assets/payload.bin · 1.3 kB')).not.toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Show in file manager' }));
+    expect(onReveal).toHaveBeenCalledWith(
+      { folderPath: '/library/archive', path: 'assets/payload.bin' },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('keeps pending format-specific viewers distinct from generic failures', async () => {
+    renderSource(
+      { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() },
+      { folderPath: '/library/notes', path: 'report.pdf' },
+      {
+        genericPreviewApi: {
+          load: vi.fn<GenericFilePreviewApi['load']>(async () => {
+            throw new GenericFilePreviewError(
+              'not-generic',
+              'This file belongs to a format-specific viewer.',
+            );
+          }),
+        },
+      },
+    );
+
+    expect(await screen.findByText('This document viewer is not available yet.')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
   it('opens strict JSON as a source-preserving tree and saves a structural edit', async () => {
     const original = '\uFEFF{\r\n  "title" : "before",\r\n  "items": [1, 2]\r\n}\r\n';
     const api: DocumentSourceApi = {
@@ -399,9 +510,8 @@ describe('document text source', () => {
     );
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
 
-    expect(((await screen.findByLabelText('legacy.txt source')) as HTMLTextAreaElement).value).toBe(
-      'now utf-8',
-    );
+    await screen.findByLabelText('legacy.txt source');
+    expect(codeEditor('legacy.txt source').state.doc.toString()).toBe('now utf-8');
     expect(api.load).toHaveBeenCalledTimes(2);
   });
 
@@ -441,10 +551,11 @@ describe('document text source', () => {
       folderPath: '/library/notes',
       path: 'notes.txt',
     });
-    const editor = (await screen.findByLabelText('notes.txt source')) as HTMLTextAreaElement;
+    await screen.findByLabelText('notes.txt source');
+    const editor = codeEditor('notes.txt source');
     vi.useFakeTimers();
 
-    fireEvent.change(editor, { target: { value: 'after\n' } });
+    editor.dispatch({ changes: { from: 0, insert: 'after\n', to: editor.state.doc.length } });
 
     expect(runtime.getDocument('tab-1')?.store.getState().editor).toMatchObject({
       dirty: true,
@@ -464,9 +575,7 @@ describe('document text source', () => {
     );
     expect(runtime.getDocument('tab-1')?.store.getState().editor?.savePhase).toBe('saved');
     expect(screen.queryByText('Saved')).toBeNull();
-    expect((screen.getByLabelText('notes.txt source') as HTMLTextAreaElement).value).toBe(
-      'after\n',
-    );
+    expect(codeEditor('notes.txt source').state.doc.toString()).toBe('after\n');
   });
 
   it('keeps failed saves editable and offers retry without another toolbar', async () => {
@@ -483,13 +592,14 @@ describe('document text source', () => {
         .mockResolvedValueOnce({ content: 'draft', format: 'txt', version: 'v2' }),
     };
     const { runtime } = renderSource(api, { folderPath: '/library/notes', path: 'plan.txt' });
-    const editor = (await screen.findByLabelText('plan.txt source')) as HTMLTextAreaElement;
-    fireEvent.change(editor, { target: { value: 'draft' } });
+    await screen.findByLabelText('plan.txt source');
+    const editor = codeEditor('plan.txt source');
+    editor.dispatch({ changes: { from: 0, insert: 'draft', to: editor.state.doc.length } });
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Retry' })).not.toBeNull(), {
       timeout: 2_000,
     });
-    expect(editor.value).toBe('draft');
+    expect(editor.state.doc.toString()).toBe('draft');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
 
     await waitFor(() =>
@@ -514,8 +624,11 @@ describe('document text source', () => {
         .mockResolvedValue({ content: 'merged', format: 'txt', version: 'v3' }),
     };
     const { runtime } = renderSource(api, { folderPath: '/library/notes', path: 'plan.txt' });
-    const editor = (await screen.findByLabelText('plan.txt source')) as HTMLTextAreaElement;
-    fireEvent.change(editor, { target: { value: 'shared\neditor change' } });
+    await screen.findByLabelText('plan.txt source');
+    const editor = codeEditor('plan.txt source');
+    editor.dispatch({
+      changes: { from: 0, insert: 'shared\neditor change', to: editor.state.doc.length },
+    });
 
     await act(async () => {
       await runtime.getDocument('tab-1')?.save(api);
@@ -529,9 +642,10 @@ describe('document text source', () => {
     expect(screen.getByText('editor change')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
-    const merged = (await screen.findByLabelText('plan.txt source')) as HTMLTextAreaElement;
-    expect(merged.value).toContain('<<<<<<< Editor Version\neditor change');
-    expect(merged.value).toContain('=======\ndisk change\n>>>>>>> Disk Version');
+    await screen.findByLabelText('plan.txt source');
+    const merged = codeEditor('plan.txt source').state.doc.toString();
+    expect(merged).toContain('<<<<<<< Editor Version\neditor change');
+    expect(merged).toContain('=======\ndisk change\n>>>>>>> Disk Version');
     expect(runtime.getDocument('tab-1')?.store.getState().editor).toMatchObject({
       conflict: null,
       dirty: true,

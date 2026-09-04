@@ -65,13 +65,22 @@ describe('files API', () => {
     };
     const signal = new AbortController().signal;
 
-    await createFilesApi(client).reveal('drafts/a #1.md', signal);
+    await createFilesApi(client).reveal('/library/notes', 'drafts/a #1.md', signal);
 
     expect(client.request).toHaveBeenCalledWith({
       method: 'POST',
-      path: '/api/reveal/drafts/a%20%231.md',
+      path: '/api/reveal/drafts/a%20%231.md?folder=%2Flibrary%2Fnotes',
       signal,
     });
+  });
+
+  it('rejects an invalid reveal identity before transport', async () => {
+    const client: HttpClient = { request: vi.fn() };
+
+    await expect(
+      createFilesApi(client).reveal('', 'drafts/plan.md', new AbortController().signal),
+    ).rejects.toMatchObject({ kind: 'unavailable', message: 'The item identity is invalid.' });
+    expect(client.request).not.toHaveBeenCalled();
   });
 
   it('classifies a cleared window context as scope loss', async () => {

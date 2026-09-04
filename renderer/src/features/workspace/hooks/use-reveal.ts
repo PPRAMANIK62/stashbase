@@ -12,7 +12,8 @@ interface RevealOperation {
 export function useReveal(runtime: WorkspaceRuntime, api: FilesApi) {
   const current = useRef<AbortController | null>(null);
   const operation = useMutation({
-    mutationFn: ({ controller, path }: RevealOperation) => api.reveal(path, controller.signal),
+    mutationFn: ({ controller, path }: RevealOperation) =>
+      api.reveal(runtime.scope.folder.path, path, controller.signal),
     onSettled: (_result, _error, variables) => {
       if (current.current === variables.controller) current.current = null;
     },

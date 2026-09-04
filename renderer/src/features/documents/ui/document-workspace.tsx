@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 
-import type { DocumentSourceApi } from '@/features/documents/application/ports';
+import type {
+  DocumentSourceApi,
+  GenericFilePreviewApi,
+} from '@/features/documents/application/ports';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { documentTextFormat, sourceName } from '@/features/documents/domain/document';
 import { retainMarkdownTabIds } from '@/features/documents/domain/markdown';
@@ -14,17 +17,23 @@ const ignoreNavigation = () => undefined;
 const rejectExternalNavigation = async () => false;
 
 export interface DocumentWorkspaceProps {
-  api: DocumentSourceApi;
+  genericPreviewApi: GenericFilePreviewApi;
   onNavigate?(target: { anchor?: string; source: SourceReference }): void;
   onOpenExternal?(href: string): Promise<boolean>;
+  onReveal(source: SourceReference, signal: AbortSignal): Promise<void>;
+  revealLabel: string;
   runtime: DocumentTabsRuntime;
+  sourceApi: DocumentSourceApi;
 }
 
 export function DocumentWorkspace({
-  api,
+  genericPreviewApi,
   onNavigate = ignoreNavigation,
   onOpenExternal = rejectExternalNavigation,
+  onReveal,
+  revealLabel,
   runtime,
+  sourceApi,
 }: DocumentWorkspaceProps) {
   const { activeTab, activeTabId, tabs } = useDocumentTabs(runtime);
   const [retention, setRetention] = useState<{ ids: string[]; runtime: DocumentTabsRuntime }>(
@@ -72,11 +81,14 @@ export function DocumentWorkspace({
       >
         <DocumentSource
           active={!hidden}
-          api={api}
+          genericPreviewApi={genericPreviewApi}
           navigation={runtime.navigation}
           onNavigate={onNavigate}
           onOpenExternal={onOpenExternal}
+          onReveal={onReveal}
+          revealLabel={revealLabel}
           runtime={document}
+          sourceApi={sourceApi}
         />
       </div>
     );

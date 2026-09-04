@@ -47,7 +47,7 @@ export interface LibraryLifecycle {
 
 export interface FilesApi {
   load(folderPath: string, signal: AbortSignal): Promise<WorkspaceListing>;
-  reveal(entryPath: string, signal: AbortSignal): Promise<void>;
+  reveal(folderPath: string, entryPath: string, signal: AbortSignal): Promise<void>;
 }
 
 export class LibraryError extends Error {

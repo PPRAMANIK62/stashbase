@@ -9,8 +9,64 @@ import {
   documentTextSourceFailureSchema,
   documentTextSourceRequestSchema,
   documentTextSourceResponseSchema,
+  genericFilePreviewResponseSchema,
   workspaceFilesSchema,
+  workspaceRevealRequestSchema,
 } from './files.ts';
+
+test('workspace reveal requires an explicit folder and relative entry identity', () => {
+  assert.deepEqual(
+    workspaceRevealRequestSchema.parse({
+      folderPath: '/library/notes',
+      path: 'drafts/plan.md',
+    }),
+    { folderPath: '/library/notes', path: 'drafts/plan.md' },
+  );
+  assert.equal(
+    workspaceRevealRequestSchema.safeParse({ folderPath: '', path: 'drafts/plan.md' }).success,
+    false,
+  );
+  assert.equal(
+    workspaceRevealRequestSchema.safeParse({ folderPath: '/library/notes', path: '' }).success,
+    false,
+  );
+});
+
+test('generic preview contracts distinguish strict text from truthful refusal states', () => {
+  assert.deepEqual(
+    genericFilePreviewResponseSchema.parse({
+      content: 'const answer = 42;\n',
+      kind: 'text',
+      name: 'src/answer.ts',
+      size: 19,
+      version: 'sha256:code',
+    }),
+    {
+      content: 'const answer = 42;\n',
+      kind: 'text',
+      name: 'src/answer.ts',
+      size: 19,
+      version: 'sha256:code',
+    },
+  );
+  assert.deepEqual(
+    genericFilePreviewResponseSchema.parse({
+      kind: 'too-large',
+      name: 'archive.log',
+      size: 9_000_000,
+    }),
+    { kind: 'too-large', name: 'archive.log', size: 9_000_000 },
+  );
+  assert.equal(
+    genericFilePreviewResponseSchema.safeParse({
+      content: 'replacement text',
+      kind: 'binary',
+      name: 'payload.bin',
+      size: 12,
+    }).success,
+    false,
+  );
+});
 
 test('workspace listing accepts visible and restricted filesystem entries', () => {
   const listing = workspaceFilesSchema.parse({
