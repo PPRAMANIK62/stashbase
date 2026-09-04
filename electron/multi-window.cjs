@@ -24,6 +24,17 @@ function windowIdFromArgv(argv) {
   return id ? id.slice(0, 128) : null;
 }
 
+function applicationWindowChromeOptions(platform = process.platform) {
+  return {
+    // Linux otherwise reserves a permanent native menu strip above the
+    // renderer. Keep the application menu installed for accelerators and let
+    // the platform reveal it temporarily with Alt when it is needed.
+    autoHideMenuBar: platform === 'linux',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 12 },
+  };
+}
+
 function createApplicationMenuTemplate({
   platform = process.platform,
   onNewWindow,
@@ -451,6 +462,7 @@ function createRendererFlushReadiness() {
 
 module.exports = {
   WINDOW_ID_ARG_PREFIX,
+  applicationWindowChromeOptions,
   buildElectronSmokeArgs,
   classifyProtocolLaunch,
   createApplicationMenuTemplate,

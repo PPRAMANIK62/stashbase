@@ -79,11 +79,14 @@ regions with explanatory placeholder copy.
 Current implementation: the replacement renderer mounts the Files rail, Agent
 workspace, native drag band, and sidebar controls. The sidebar drag band carries
 the StashBase mark and name without separating itself from the lower substrate
-with a divider. Feature content, conditional document composition, nested
-failure boundaries, and Electron shell evidence remain open.
+with a divider. Linux main windows auto-hide the native application menu while
+retaining temporary Alt access and menu accelerators. Feature content,
+conditional document composition, nested failure boundaries, and broader
+Electron shell evidence remain open.
 
-Evidence: `pnpm test:renderer`, `pnpm typecheck:web`, `pnpm lint:web`,
-`pnpm build:web`, and manual wide/compact renderer checks.
+Evidence: `pnpm test:renderer`, `node --test electron/multi-window.test.cjs`,
+`pnpm typecheck:web`, `pnpm lint:web`, `pnpm build:web`, and manual
+wide/compact renderer checks.
 
 ## 12 — Compose product forms and controls
 

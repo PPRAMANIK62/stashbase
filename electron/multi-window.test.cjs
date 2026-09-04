@@ -14,6 +14,7 @@ const {
 } = require('./main-probe.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
+  applicationWindowChromeOptions,
   buildElectronSmokeArgs,
   classifyProtocolLaunch,
   createApplicationMenuTemplate,
@@ -31,6 +32,12 @@ const {
   windowLifecycleShortcutAction,
   windowIdFromArgv,
 } = require('./multi-window.cjs');
+
+test('Linux main windows auto-hide the native application menu bar', () => {
+  assert.equal(applicationWindowChromeOptions('linux').autoHideMenuBar, true);
+  assert.equal(applicationWindowChromeOptions('win32').autoHideMenuBar, false);
+  assert.equal(applicationWindowChromeOptions('darwin').autoHideMenuBar, false);
+});
 
 test('smoke runner terminates and rejects a hung Electron child', async () => {
   const child = new EventEmitter();

@@ -44,6 +44,7 @@ const {
 } = require('./window-security.cjs');
 const { installRequestAuthorization } = require('./renderer/requests.cjs');
 const {
+  applicationWindowChromeOptions,
   classifyProtocolLaunch,
   createApplicationMenuTemplate,
   createSingleFlight,
@@ -870,8 +871,7 @@ async function createWindow(initialFolder) {
     // place the folder identity is spelled out.
     title: 'StashBase',
     backgroundColor: '#fafafa',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 12 },
+    ...applicationWindowChromeOptions(process.platform),
     webPreferences: applicationWindowWebPreferences({
       preloadPath: path.join(PROJECT_ROOT, 'dist', 'electron', 'renderer', 'preload.cjs'),
       additionalArguments: [`--stashbase-server-origin=${SERVER_URL}`],
