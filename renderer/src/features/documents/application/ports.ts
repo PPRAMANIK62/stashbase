@@ -23,6 +23,15 @@ export interface GenericFilePreviewApi {
   load(source: SourceReference, signal: AbortSignal): Promise<GenericFilePreview>;
 }
 
+export interface DocumentAsset {
+  url: string;
+  version: string;
+}
+
+export interface DocumentAssetApi {
+  load(source: SourceReference, signal: AbortSignal): Promise<DocumentAsset>;
+}
+
 export interface DocumentQueryScope {
   cancel(): Promise<void>;
   remove(): void;
@@ -63,6 +72,22 @@ export class GenericFilePreviewError extends Error {
   constructor(kind: GenericFilePreviewFailureKind, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'GenericFilePreviewError';
+    this.kind = kind;
+  }
+}
+
+export type DocumentAssetFailureKind =
+  | 'invalid-response'
+  | 'scope-lost'
+  | 'unauthorized'
+  | 'unavailable';
+
+export class DocumentAssetError extends Error {
+  readonly kind: DocumentAssetFailureKind;
+
+  constructor(kind: DocumentAssetFailureKind, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'DocumentAssetError';
     this.kind = kind;
   }
 }

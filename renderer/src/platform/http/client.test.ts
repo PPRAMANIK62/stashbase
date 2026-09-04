@@ -54,4 +54,25 @@ describe('HTTP client', () => {
     expect(init?.method).toBe('PUT');
     expect(init?.body).toBe(JSON.stringify({ baseVersion: 'v1', content: 'changed' }));
   });
+
+  it('exposes response headers only for metadata HEAD requests', async () => {
+    const client = createHttpClient(
+      'http://127.0.0.1:8090',
+      vi.fn(
+        async () =>
+          new Response(null, {
+            headers: { 'x-stashbase-file-version': 'v3' },
+            status: 204,
+          }),
+      ),
+    );
+
+    await expect(client.request({ method: 'HEAD', path: '/api/files/paper.pdf' })).resolves.toEqual(
+      {
+        body: null,
+        headers: { 'x-stashbase-file-version': 'v3' },
+        status: 204,
+      },
+    );
+  });
 });

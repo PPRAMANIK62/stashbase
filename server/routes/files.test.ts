@@ -8,6 +8,7 @@ import express from "express";
 
 import { fileVersion } from "../files.ts";
 import { clearCurrentFolder, removeRecent, setCurrentFolder } from "../folder.ts";
+import { requireFolder } from "../http.ts";
 import { mount } from "./files.ts";
 
 test("versioned document route accepts JSON through the shared source authority", async () => {
@@ -99,5 +100,54 @@ test("reveal resolves the requested registered folder and rejects an unregistere
     fs.rmSync(activeRoot, { force: true, recursive: true });
     fs.rmSync(memberRoot, { force: true, recursive: true });
     fs.rmSync(outsiderRoot, { force: true, recursive: true });
+  }
+});
+
+test("folder-scoped browser assets load without a window header", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-folder-asset-"));
+  const content = Buffer.from("%PDF-1.7\nfolder-scoped viewer fixture\n", "utf8");
+  fs.writeFileSync(path.join(root, "viewer.pdf"), content);
+  setCurrentFolder(root);
+  clearCurrentFolder();
+
+  const app = express();
+  app.use("/asset", requireFolder);
+  mount(app);
+  const server = http.createServer(app);
+  server.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve, reject) => {
+    server.once("listening", resolve);
+    server.once("error", reject);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const folderToken = encodeURIComponent(encodeURIComponent(root));
+
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/asset/__folder/${folderToken}/viewer.pdf`,
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), content);
+
+    const outsider = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-folder-asset-outsider-"));
+    try {
+      const outsiderToken = encodeURIComponent(encodeURIComponent(outsider));
+      const rejected = await fetch(
+        `http://127.0.0.1:${address.port}/asset/__folder/${outsiderToken}/viewer.pdf`,
+      );
+      assert.equal(rejected.status, 404);
+    } finally {
+      fs.rmSync(outsider, { force: true, recursive: true });
+    }
+
+    const unscoped = await fetch(`http://127.0.0.1:${address.port}/asset/viewer.pdf`);
+    assert.equal(unscoped.status, 412);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    clearCurrentFolder();
+    removeRecent(root);
+    fs.rmSync(root, { force: true, recursive: true });
   }
 });

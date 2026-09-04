@@ -2,7 +2,12 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import type { DocumentScope, DocumentTextSource } from '@/features/documents/domain/document';
 
-import type { DocumentQueryScope, DocumentSourceApi, GenericFilePreviewApi } from './ports';
+import type {
+  DocumentAssetApi,
+  DocumentQueryScope,
+  DocumentSourceApi,
+  GenericFilePreviewApi,
+} from './ports';
 
 export const documentQueryKeys = {
   all: ['documents'] as const,
@@ -17,6 +22,7 @@ export const documentQueryKeys = {
   source: (scope: DocumentScope) => [...documentQueryKeys.scope(scope), 'source'] as const,
   genericPreview: (scope: DocumentScope) =>
     [...documentQueryKeys.scope(scope), 'generic-preview'] as const,
+  asset: (scope: DocumentScope) => [...documentQueryKeys.scope(scope), 'asset'] as const,
 };
 
 export function createDocumentQueryScope(
@@ -30,6 +36,15 @@ export function createDocumentQueryScope(
     replaceSource: (source: DocumentTextSource) =>
       queryClient.setQueryData(documentQueryKeys.source(scope), source),
   };
+}
+
+export function documentAssetQuery(api: DocumentAssetApi, scope: DocumentScope) {
+  return {
+    queryFn: ({ signal }: { signal: AbortSignal }) => api.load(scope.source, signal),
+    queryKey: documentQueryKeys.asset(scope),
+    retry: false,
+    staleTime: 0,
+  } as const;
 }
 
 export function documentSourceQuery(api: DocumentSourceApi, scope: DocumentScope) {

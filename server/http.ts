@@ -54,11 +54,24 @@ const FOLDER_EXPLICIT_ROUTES = new Set([
   'POST /api/files/cancel-preparation',
 ]);
 
+function hasFolderScopedAssetPath(req: express.Request): boolean {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  const routePath = `${req.baseUrl}${req.path}`;
+  return /^\/asset(?:-audio-preview|-derived)?\/(?:__window\/[^/]+\/)?__folder\/[^/]+\//u.test(
+    routePath,
+  );
+}
+
 export const requireFolder: express.RequestHandler = (req, res, next) => {
   if (!getCurrentFolder()) {
     const route = `${req.method.toUpperCase()} ${req.baseUrl}${req.path}`;
     const explicitFolder = req.body?.folder;
-    if (FOLDER_EXPLICIT_ROUTES.has(route) && typeof explicitFolder === 'string' && explicitFolder.trim()) {
+    if (
+      hasFolderScopedAssetPath(req) ||
+      (FOLDER_EXPLICIT_ROUTES.has(route) &&
+        typeof explicitFolder === 'string' &&
+        explicitFolder.trim())
+    ) {
       return next();
     }
     return res.status(412).json({ error: 'no folder open', code: 'NO_FOLDER' });

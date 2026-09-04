@@ -1,7 +1,10 @@
 export {
+  DocumentAssetError,
   DocumentSaveError,
   DocumentSourceError,
   GenericFilePreviewError,
+  type DocumentAssetApi,
+  type DocumentAssetFailureKind,
   type DocumentQueryScope,
   type DocumentSaveFailureKind,
   type DocumentSourceApi,
@@ -26,6 +29,7 @@ export {
   type FindOptions,
 } from './application/navigation-runtime';
 export { createDocumentSourceApi } from './infrastructure/source-api';
+export { createDocumentAssetApi } from './infrastructure/asset-api';
 export { createGenericFilePreviewApi } from './infrastructure/generic-preview-api';
 export { createDocumentWindowLifecycle } from './infrastructure/window-lifecycle';
 export { useDocumentSaveBarrier } from './hooks/use-document-save-barrier';

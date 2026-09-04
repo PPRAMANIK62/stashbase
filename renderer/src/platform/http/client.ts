@@ -1,12 +1,13 @@
 export interface HttpRequest {
   body?: unknown;
-  method?: 'GET' | 'POST' | 'PUT';
+  method?: 'GET' | 'HEAD' | 'POST' | 'PUT';
   path: string;
   signal?: AbortSignal;
 }
 
 export interface HttpResponse {
   body: unknown;
+  headers?: Readonly<Record<string, string>>;
   status: number;
 }
 
@@ -33,7 +34,13 @@ export function createHttpClient(serverOrigin: string, fetchRequest: Fetch = fet
       } catch {
         // The protocol adapter classifies an absent or malformed JSON body.
       }
-      return { body: responseBody, status: response.status };
+      return method === 'HEAD'
+        ? {
+            body: responseBody,
+            headers: Object.fromEntries(response.headers.entries()),
+            status: response.status,
+          }
+        : { body: responseBody, status: response.status };
     },
   };
 }
