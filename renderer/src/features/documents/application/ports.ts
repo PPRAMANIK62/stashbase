@@ -23,13 +23,31 @@ export interface GenericFilePreviewApi {
   load(source: SourceReference, signal: AbortSignal): Promise<GenericFilePreview>;
 }
 
-export interface DocumentAsset {
+export interface SourceDocumentAsset {
+  kind: 'source';
   url: string;
   version: string;
 }
 
+export interface DocxDocumentAsset {
+  fallbackUrl: string;
+  kind: 'docx';
+  url: string;
+  version: string;
+}
+
+export type DocumentAsset = DocxDocumentAsset | SourceDocumentAsset;
+
 export interface DocumentAssetApi {
   load(source: SourceReference, signal: AbortSignal): Promise<DocumentAsset>;
+}
+
+export interface DocxPreview {
+  html: string;
+}
+
+export interface DocxPreviewApi {
+  load(resource: DocxDocumentAsset, signal: AbortSignal): Promise<DocxPreview>;
 }
 
 export interface DocumentQueryScope {
@@ -88,6 +106,18 @@ export class DocumentAssetError extends Error {
   constructor(kind: DocumentAssetFailureKind, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'DocumentAssetError';
+    this.kind = kind;
+  }
+}
+
+export type DocxPreviewFailureKind = 'invalid-response' | 'timeout' | 'unavailable';
+
+export class DocxPreviewError extends Error {
+  readonly kind: DocxPreviewFailureKind;
+
+  constructor(kind: DocxPreviewFailureKind, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'DocxPreviewError';
     this.kind = kind;
   }
 }

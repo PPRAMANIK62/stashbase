@@ -1,4 +1,6 @@
 import {
+  DOCX_EXTENSIONS,
+  HTML_NOTE_EXTENSIONS,
   IMAGE_SOURCE_EXTENSIONS,
   MARKDOWN_NOTE_EXTENSIONS,
   PDF_EXTENSIONS,
@@ -8,7 +10,7 @@ import {
 
 export type DocumentTextFormat = 'json' | 'md' | 'txt';
 
-export type DocumentViewerFormat = DocumentTextFormat | 'image' | 'pdf';
+export type DocumentViewerFormat = DocumentTextFormat | 'docx' | 'html' | 'image' | 'pdf';
 
 function extensionOf(path: string): string | null {
   return path.split('.').at(-1)?.toLowerCase() ?? null;
@@ -29,6 +31,8 @@ export function documentViewerFormat(path: string): DocumentViewerFormat | null 
   const text = documentTextFormat(path);
   if (text) return text;
   const extension = extensionOf(path);
+  if (includesExtension(HTML_NOTE_EXTENSIONS, extension)) return 'html';
+  if (includesExtension(DOCX_EXTENSIONS, extension)) return 'docx';
   if (includesExtension(PDF_EXTENSIONS, extension)) return 'pdf';
   return includesExtension(IMAGE_SOURCE_EXTENSIONS, extension) ? 'image' : null;
 }

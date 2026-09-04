@@ -6,6 +6,8 @@ import type {
   DocumentAssetApi,
   DocumentQueryScope,
   DocumentSourceApi,
+  DocxDocumentAsset,
+  DocxPreviewApi,
   GenericFilePreviewApi,
 } from './ports';
 
@@ -23,6 +25,8 @@ export const documentQueryKeys = {
   genericPreview: (scope: DocumentScope) =>
     [...documentQueryKeys.scope(scope), 'generic-preview'] as const,
   asset: (scope: DocumentScope) => [...documentQueryKeys.scope(scope), 'asset'] as const,
+  docxPreview: (scope: DocumentScope, version: string) =>
+    [...documentQueryKeys.scope(scope), 'docx-preview', version] as const,
 };
 
 export function createDocumentQueryScope(
@@ -36,6 +40,19 @@ export function createDocumentQueryScope(
     replaceSource: (source: DocumentTextSource) =>
       queryClient.setQueryData(documentQueryKeys.source(scope), source),
   };
+}
+
+export function docxPreviewQuery(
+  api: DocxPreviewApi,
+  scope: DocumentScope,
+  resource: DocxDocumentAsset,
+) {
+  return {
+    queryFn: ({ signal }: { signal: AbortSignal }) => api.load(resource, signal),
+    queryKey: documentQueryKeys.docxPreview(scope, resource.version),
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  } as const;
 }
 
 export function documentAssetQuery(api: DocumentAssetApi, scope: DocumentScope) {

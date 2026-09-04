@@ -5,6 +5,7 @@ import {
   createDocumentQueryScope,
   documentQueryKeys,
   documentSourceQuery,
+  docxPreviewQuery,
   genericFilePreviewQuery,
 } from './queries';
 
@@ -68,6 +69,32 @@ describe('document source queries', () => {
     });
     expect(api.load).toHaveBeenCalledWith(scope.source, controller.signal);
     expect(query.retry).toBe(false);
+  });
+
+  it('keys DOCX conversion by the source version inside its document scope', async () => {
+    const resource = {
+      fallbackUrl: 'http://127.0.0.1/asset-derived/report.docx?v=v2',
+      kind: 'docx' as const,
+      url: 'http://127.0.0.1/asset/report.docx?v=v2',
+      version: 'v2',
+    };
+    const api = { load: vi.fn(async () => ({ html: '<p>Report</p>' })) };
+    const controller = new AbortController();
+    const query = docxPreviewQuery(api, scope, resource);
+
+    await expect(query.queryFn({ signal: controller.signal })).resolves.toEqual({
+      html: '<p>Report</p>',
+    });
+    expect(api.load).toHaveBeenCalledWith(resource, controller.signal);
+    expect(query.queryKey).toEqual([
+      'documents',
+      '/library/notes',
+      'drafts/plan.md',
+      'tab-plan',
+      3,
+      'docx-preview',
+      'v2',
+    ]);
   });
 
   it('cancels and removes every query owned by one document scope', async () => {

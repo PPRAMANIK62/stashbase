@@ -294,6 +294,8 @@ if (!DEV_VITE) {
         req.path.startsWith('/asset/') ||
         req.path === '/asset-audio-preview' ||
         req.path.startsWith('/asset-audio-preview/') ||
+        req.path === '/asset-derived' ||
+        req.path.startsWith('/asset-derived/') ||
         req.path === '/mcp'
       ) {
         return next();
@@ -328,6 +330,7 @@ app.use([
   '/api/reveal',
   '/asset',
   '/asset-audio-preview',
+  '/asset-derived',
   '/api/audio',
 ], requireFolder);
 

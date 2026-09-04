@@ -1,4 +1,5 @@
 import { DocumentAssetError, type DocumentAssetApi } from '@/features/documents/application/ports';
+import { documentViewerFormat } from '@/features/documents/domain/document-format';
 import type { HttpClient, HttpResponse } from '@/platform/http/client';
 import { documentTextSourceRequestSchema } from '@/protocols/http/files';
 
@@ -19,9 +20,13 @@ function responseError(response: HttpResponse): DocumentAssetError {
   return new DocumentAssetError('unavailable', 'The file could not be loaded.');
 }
 
-function assetPath(folderPath: string, entryPath: string): string {
+function assetPath(
+  prefix: '/asset' | '/asset-derived',
+  folderPath: string,
+  entryPath: string,
+): string {
   const folder = encodeURIComponent(encodeURIComponent(folderPath));
-  return `/asset/__folder/${folder}/${encodePath(entryPath)}`;
+  return `${prefix}/__folder/${folder}/${encodePath(entryPath)}`;
 }
 
 export function createDocumentAssetApi(client: HttpClient, serverOrigin: string): DocumentAssetApi {
@@ -54,9 +59,17 @@ export function createDocumentAssetApi(client: HttpClient, serverOrigin: string)
           'The file preview returned an invalid version.',
         );
       }
-      const url = new URL(assetPath(request.data.folderPath, request.data.path), origin);
+      const url = new URL(assetPath('/asset', request.data.folderPath, request.data.path), origin);
       url.searchParams.set('v', version);
-      return { url: url.href, version };
+      if (documentViewerFormat(request.data.path) !== 'docx') {
+        return { kind: 'source', url: url.href, version };
+      }
+      const fallbackUrl = new URL(
+        assetPath('/asset-derived', request.data.folderPath, request.data.path),
+        origin,
+      );
+      fallbackUrl.searchParams.set('v', version);
+      return { fallbackUrl: fallbackUrl.href, kind: 'docx', url: url.href, version };
     },
   };
 }

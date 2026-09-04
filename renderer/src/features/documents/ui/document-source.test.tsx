@@ -13,7 +13,6 @@ import {
 } from '@/features/documents/application/ports';
 import { createDocumentQueryScope } from '@/features/documents/application/queries';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
-
 import { DocumentWorkspace } from './document-workspace';
 
 const runtimes: ReturnType<typeof createDocumentTabsRuntime>[] = [];
@@ -44,6 +43,7 @@ function renderSource(
   source = { folderPath: '/library/notes', path: 'plan.md' },
   options: {
     assetApi?: Parameters<typeof DocumentWorkspace>[0]['assetApi'];
+    docxPreviewApi?: Parameters<typeof DocumentWorkspace>[0]['docxPreviewApi'];
     genericPreviewApi?: GenericFilePreviewApi;
     onNavigate?: Parameters<typeof DocumentWorkspace>[0]['onNavigate'];
     onOpenExternal?: Parameters<typeof DocumentWorkspace>[0]['onOpenExternal'];
@@ -67,6 +67,9 @@ function renderSource(
     <QueryClientProvider client={queryClient}>
       <DocumentWorkspace
         assetApi={options.assetApi ?? { load: vi.fn(() => new Promise<never>(() => undefined)) }}
+        docxPreviewApi={
+          options.docxPreviewApi ?? { load: vi.fn(() => new Promise<never>(() => undefined)) }
+        }
         genericPreviewApi={
           options.genericPreviewApi ?? {
             load: vi.fn(() => new Promise<never>(() => undefined)),
@@ -175,6 +178,25 @@ describe('document text source', () => {
     expect(genericPreviewApi.load).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
+
+  it.each(['archive.html', 'report.docx'])(
+    'routes %s through versioned preview assets',
+    async (path) => {
+      const assetApi = { load: vi.fn(() => new Promise<never>(() => undefined)) };
+      const genericPreviewApi = { load: vi.fn(() => new Promise<never>(() => undefined)) };
+      const sourceApi = { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() };
+      renderSource(
+        sourceApi,
+        { folderPath: '/library/notes', path },
+        { assetApi, genericPreviewApi },
+      );
+
+      expect(await screen.findByText(`Loading ${path}`)).not.toBeNull();
+      await waitFor(() => expect(assetApi.load).toHaveBeenCalled());
+      expect(sourceApi.load).not.toHaveBeenCalled();
+      expect(genericPreviewApi.load).not.toHaveBeenCalled();
+    },
+  );
 
   it('opens strict JSON as a source-preserving tree and saves a structural edit', async () => {
     const original = '\uFEFF{\r\n  "title" : "before",\r\n  "items": [1, 2]\r\n}\r\n';

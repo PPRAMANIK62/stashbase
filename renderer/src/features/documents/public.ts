@@ -2,6 +2,7 @@ export {
   DocumentAssetError,
   DocumentSaveError,
   DocumentSourceError,
+  DocxPreviewError,
   GenericFilePreviewError,
   type DocumentAssetApi,
   type DocumentAssetFailureKind,
@@ -10,6 +11,8 @@ export {
   type DocumentSourceApi,
   type DocumentSourceFailureKind,
   type DocumentWindowLifecycle,
+  type DocxPreviewApi,
+  type DocxPreviewFailureKind,
   type GenericFilePreviewApi,
   type GenericFilePreviewFailureKind,
 } from './application/ports';
@@ -30,6 +33,7 @@ export {
 } from './application/navigation-runtime';
 export { createDocumentSourceApi } from './infrastructure/source-api';
 export { createDocumentAssetApi } from './infrastructure/asset-api';
+export { createDocxPreviewApi } from './infrastructure/docx-preview-api';
 export { createGenericFilePreviewApi } from './infrastructure/generic-preview-api';
 export { createDocumentWindowLifecycle } from './infrastructure/window-lifecycle';
 export { useDocumentSaveBarrier } from './hooks/use-document-save-barrier';

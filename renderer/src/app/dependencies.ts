@@ -1,11 +1,13 @@
 import {
   createDocumentAssetApi,
+  createDocxPreviewApi,
   createDocumentSourceApi,
   createDocumentWindowLifecycle,
   createGenericFilePreviewApi,
   type DocumentAssetApi,
   type DocumentSourceApi,
   type DocumentWindowLifecycle,
+  type DocxPreviewApi,
   type GenericFilePreviewApi,
 } from '@/features/documents/public';
 import {
@@ -26,6 +28,7 @@ import { createHttpClient } from '@/platform/http/client';
 export interface AppDependencies {
   documents: {
     assetApi: DocumentAssetApi;
+    docxPreviewApi: DocxPreviewApi;
     sourceApi: DocumentSourceApi;
     createId: () => string;
     genericPreviewApi: GenericFilePreviewApi;
@@ -44,6 +47,7 @@ export function createDependencies(): AppDependencies {
   return {
     documents: {
       assetApi: createDocumentAssetApi(http, bridge.runtime.serverOrigin),
+      docxPreviewApi: createDocxPreviewApi(),
       sourceApi: createDocumentSourceApi(http),
       createId: () => globalThis.crypto.randomUUID(),
       genericPreviewApi: createGenericFilePreviewApi(http),

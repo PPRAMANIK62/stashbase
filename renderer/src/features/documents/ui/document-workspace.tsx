@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type {
   DocumentAssetApi,
   DocumentSourceApi,
+  DocxPreviewApi,
   GenericFilePreviewApi,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
@@ -20,6 +21,7 @@ const rejectExternalNavigation = async () => false;
 
 export interface DocumentWorkspaceProps {
   assetApi: DocumentAssetApi;
+  docxPreviewApi: DocxPreviewApi;
   genericPreviewApi: GenericFilePreviewApi;
   onNavigate?(target: { anchor?: string; source: SourceReference }): void;
   onOpenExternal?(href: string): Promise<boolean>;
@@ -31,6 +33,7 @@ export interface DocumentWorkspaceProps {
 
 export function DocumentWorkspace({
   assetApi,
+  docxPreviewApi,
   genericPreviewApi,
   onNavigate = ignoreNavigation,
   onOpenExternal = rejectExternalNavigation,
@@ -86,6 +89,7 @@ export function DocumentWorkspace({
         <DocumentSource
           active={!hidden}
           assetApi={assetApi}
+          docxPreviewApi={docxPreviewApi}
           genericPreviewApi={genericPreviewApi}
           navigation={runtime.navigation}
           onNavigate={onNavigate}

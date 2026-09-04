@@ -105,15 +105,11 @@ export function analyzeHtml(html: string): HtmlAnalysis {
  * against the page and against every other scroller in the app, all of
  * which are `thin`.
  *
- * The thumb is a translucent mid-gray over a TRANSPARENT track rather
- * than a themed pair. We cannot read a page's intent — a dark background
- * may be one section's styling, not the document's scheme — and forcing
- * `color-scheme` would change form controls and the default canvas as
- * well, which is far more than a scrollbar's worth of opinion. Gray at
- * 40% carries on light and dark alike, and the transparent track lets the
- * page's own background show through, so the bar adopts whatever the
- * document is already wearing. `.scrollbar-quiet` in globals.css uses the
- * same transparent-track trick for the app's own panes.
+ * The thumb is a translucent app-theme overlay. The track uses the app's
+ * preview-surface color because Chromium reserves its 10px hit area inside
+ * an iframe; a transparent track can expose the iframe's white canvas as a
+ * conspicuous strip even when the document itself is dark. We do not force
+ * `color-scheme`, which would also retheme document controls and defaults.
  *
  * Injected FIRST inside `<head>` and with no `!important`. Both
  * properties inherit, so one rule on the root reaches every nested
@@ -121,7 +117,19 @@ export function analyzeHtml(html: string): HtmlAnalysis {
  * source order — this is a fallback for documents that said nothing, not
  * an override of ones that did. */
 function addViewerScrollbar(html: string): string {
-  const style = '<style>html{scrollbar-width:thin;scrollbar-color:rgba(140,140,140,.4) transparent}</style>';
+  const style = `<style>
+:root{--stashbase-scrollbar-overlay:0 0 0;--stashbase-scrollbar-surface:255 255 255}
+@media(prefers-color-scheme:dark){:root{--stashbase-scrollbar-overlay:255 255 255;--stashbase-scrollbar-surface:37 37 37}}
+@media(pointer:fine){
+*{scrollbar-width:thin;scrollbar-color:rgb(var(--stashbase-scrollbar-overlay)/.08) rgb(var(--stashbase-scrollbar-surface))}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:rgb(var(--stashbase-scrollbar-surface))}
+::-webkit-scrollbar-button{display:none;width:0;height:0}
+::-webkit-scrollbar-thumb{background-color:rgb(var(--stashbase-scrollbar-overlay)/.08);border:3px solid transparent;background-clip:content-box;border-radius:9999px}
+::-webkit-scrollbar-thumb:hover{background-color:rgb(var(--stashbase-scrollbar-overlay)/.12)}
+::-webkit-scrollbar-thumb:active{background-color:rgb(var(--stashbase-scrollbar-overlay)/.16)}
+}
+</style>`;
   const head = /<head[^>]*>/i.exec(html);
   if (head) {
     const at = head.index + head[0].length;
@@ -133,15 +141,11 @@ function addViewerScrollbar(html: string): string {
 }
 
 function addScrollBootstrap(html: string): string {
-  // The iframe viewer uses `sandbox="allow-scripts allow-same-origin"`.
-  // `allow-same-origin` gives the page a real localhost origin so
-  // `URL.createObjectURL` produces `blob:http://localhost/…` (loadable as
-  // `<script src>`), but the parent window cannot reach the iframe DOM
-  // directly. This tiny trusted listener gives in-doc anchor links a safe
-  // scroll target, runs the in-iframe half of the Cmd+F find bar (parent
-  // posts queries, iframe paints highlights via CSS Custom Highlights), and
-  // forwards external link clicks so a YouTube/GitHub/etc link doesn't
-  // navigate the sandboxed iframe to a blank page.
+  // The viewer runs this bootstrap in an opaque-origin `allow-scripts`
+  // sandbox. This tiny listener accepts commands only from its parent, gives
+  // in-document links a safe scroll target, synchronizes app-owned scrollbar
+  // chrome, runs the in-frame half of Find, and forwards links for parent-side
+  // authorization instead of navigating the frame.
   const script = `<script>
 (function() {
   var HL_ALL = 'stash-find';
@@ -386,8 +390,20 @@ function addScrollBootstrap(html: string): string {
   }
 
   window.addEventListener('message', function(e) {
-    if (!e || !e.data) return;
+    if (!e || e.source !== window.parent || !e.data) return;
     var d = e.data;
+    if (d.type === 'stashbase-theme') {
+      if (d.theme !== 'dark' && d.theme !== 'light') return;
+      document.documentElement.style.setProperty(
+        '--stashbase-scrollbar-overlay',
+        d.theme === 'dark' ? '255 255 255' : '0 0 0'
+      );
+      document.documentElement.style.setProperty(
+        '--stashbase-scrollbar-surface',
+        d.theme === 'dark' ? '37 37 37' : '255 255 255'
+      );
+      return;
+    }
     if (d.type === 'stashbase-scroll') {
       var el = document.getElementById(d.id);
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -477,6 +493,7 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         window.parent.postMessage({
           type: 'stashbase-nav',
+          href: raw,
           path: currentDecoded,
           folder: currentFolder,
           anchor: hashOnly
@@ -515,6 +532,7 @@ document.addEventListener('click', function(e) {
         var anchor = url.hash && url.hash.charAt(0) === '#' ? url.hash.slice(1) : '';
         window.parent.postMessage({
           type: 'stashbase-nav',
+          href: raw,
           path: decoded,
           folder: linkFolder,
           anchor: anchor || undefined

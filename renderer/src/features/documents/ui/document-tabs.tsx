@@ -1,4 +1,4 @@
-import { Circle, FileImage, FileText, FileType2, X } from 'lucide-react';
+import { Circle, FileCode2, FileImage, FileText, FileType2, X } from 'lucide-react';
 import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
@@ -50,7 +50,14 @@ function DocumentTab({
   const dirty = useStore(document.store, (state) => state.editor?.dirty ?? false);
   const name = sourceName(source);
   const format = documentViewerFormat(source.path);
-  const icon = format === 'image' ? FileImage : format === 'pdf' ? FileType2 : FileText;
+  const icon =
+    format === 'image'
+      ? FileImage
+      : format === 'pdf'
+        ? FileType2
+        : format === 'html'
+          ? FileCode2
+          : FileText;
 
   return (
     <TabItem

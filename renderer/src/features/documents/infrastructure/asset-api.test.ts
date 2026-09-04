@@ -22,6 +22,7 @@ describe('document asset API', () => {
         new AbortController().signal,
       ),
     ).resolves.toEqual({
+      kind: 'source',
       url: 'http://127.0.0.1:8090/asset/__folder/%252Flibrary%252Farchive/images/cover%20one.png?v=v+2',
       version: 'v 2',
     });
@@ -29,6 +30,30 @@ describe('document asset API', () => {
       method: 'HEAD',
       path: '/api/files/images/cover%20one.png?folder=%2Flibrary%2Farchive',
       signal: expect.any(AbortSignal),
+    });
+  });
+
+  it('adds the prepared fallback only for DOCX assets', async () => {
+    const client: HttpClient = {
+      request: vi.fn(async () => ({
+        body: null,
+        headers: { 'x-stashbase-file-version': 'v1' },
+        status: 204,
+      })),
+    };
+    const api = createDocumentAssetApi(client, 'http://127.0.0.1:8090');
+
+    await expect(
+      api.load(
+        { folderPath: '/library', path: 'reports/summary.docx' },
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({
+      fallbackUrl:
+        'http://127.0.0.1:8090/asset-derived/__folder/%252Flibrary/reports/summary.docx?v=v1',
+      kind: 'docx',
+      url: 'http://127.0.0.1:8090/asset/__folder/%252Flibrary/reports/summary.docx?v=v1',
+      version: 'v1',
     });
   });
 

@@ -6,12 +6,20 @@ import { analyzeHtml } from './html.ts';
 // never reaches it. What the server injects is the only chrome the frame
 // gets, and these are the properties of that injection that matter.
 
-test('previewed HTML carries a neutral scrollbar rule', () => {
+test('previewed HTML carries the app scrollbar anatomy and theme fallback', () => {
   const { preparedHtml } = analyzeHtml('<html><head><title>t</title></head><body><p>x</p></body></html>');
   assert.match(preparedHtml, /scrollbar-width:thin/);
-  // Transparent track, not a themed pair: the page's own background shows
-  // through, so one rule reads on light and dark documents alike.
-  assert.match(preparedHtml, /scrollbar-color:rgba\(140,140,140,\.4\) transparent/);
+  assert.match(
+    preparedHtml,
+    /scrollbar-color:rgb\(var\(--stashbase-scrollbar-overlay\)\/\.08\) rgb\(var\(--stashbase-scrollbar-surface\)\)/,
+  );
+  assert.match(preparedHtml, /::-webkit-scrollbar\{width:10px;height:10px\}/);
+  assert.match(preparedHtml, /::-webkit-scrollbar-button\{display:none;width:0;height:0\}/);
+  assert.match(
+    preparedHtml,
+    /::-webkit-scrollbar-track,::-webkit-scrollbar-corner\{background:rgb\(var\(--stashbase-scrollbar-surface\)\)\}/,
+  );
+  assert.doesNotMatch(preparedHtml, /!important/u);
 });
 
 test('the scrollbar rule precedes the page, so a page that styles its own wins', () => {
@@ -36,4 +44,19 @@ test('injected chrome never reaches the indexed plaintext', () => {
   const { plaintext } = analyzeHtml('<html><head><title>t</title></head><body><h1>Hi</h1><p>x</p></body></html>');
   assert.doesNotMatch(plaintext, /scrollbar/);
   assert.equal(plaintext, 't\n\n# Hi\n\nx');
+});
+
+test('the frame forwards the original link for parent-side scope resolution', () => {
+  const { preparedHtml } = analyzeHtml(
+    '<html><body><a href="next.html#details">Next</a></body></html>',
+  );
+  assert.match(preparedHtml, /type: 'stashbase-nav',[\s\S]*href: raw,/u);
+});
+
+test('the frame accepts a bounded scrollbar theme only from its parent', () => {
+  const { preparedHtml } = analyzeHtml('<p>content</p>');
+  assert.match(preparedHtml, /e\.source !== window\.parent/u);
+  assert.match(preparedHtml, /d\.type === 'stashbase-theme'/u);
+  assert.match(preparedHtml, /d\.theme !== 'dark' && d\.theme !== 'light'/u);
+  assert.match(preparedHtml, /--stashbase-scrollbar-surface/u);
 });

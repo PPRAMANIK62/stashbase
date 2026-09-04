@@ -36,7 +36,11 @@ describe('image document', () => {
     render(
       <ImageDocument
         name="diagram.png"
-        resource={{ url: 'http://127.0.0.1/asset/diagram.png?v=1', version: 'v1' }}
+        resource={{
+          kind: 'source',
+          url: 'http://127.0.0.1/asset/diagram.png?v=1',
+          version: 'v1',
+        }}
       />,
     );
     const image = screen.getByRole('img', { name: 'diagram.png' });

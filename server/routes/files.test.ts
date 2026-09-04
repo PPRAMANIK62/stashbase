@@ -151,3 +151,41 @@ test("folder-scoped browser assets load without a window header", async () => {
     fs.rmSync(root, { force: true, recursive: true });
   }
 });
+
+test("folder-scoped DOCX fallback remains reachable without an active folder", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-folder-docx-fallback-"));
+  fs.writeFileSync(path.join(root, "viewer.docx"), Buffer.from("PK fixture", "utf8"));
+  setCurrentFolder(root);
+  clearCurrentFolder();
+
+  const app = express();
+  app.use("/asset-derived", requireFolder);
+  mount(app);
+  const server = http.createServer(app);
+  server.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve, reject) => {
+    server.once("listening", resolve);
+    server.once("error", reject);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const folderToken = encodeURIComponent(encodeURIComponent(root));
+
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/asset-derived/__folder/${folderToken}/viewer.docx`,
+    );
+    assert.equal(response.status, 409);
+    assert.match(await response.text(), /Preparing document preview/u);
+
+    const unscoped = await fetch(
+      `http://127.0.0.1:${address.port}/asset-derived/viewer.docx`,
+    );
+    assert.equal(unscoped.status, 412);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    clearCurrentFolder();
+    removeRecent(root);
+    fs.rmSync(root, { force: true, recursive: true });
+  }
+});

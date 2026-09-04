@@ -71,6 +71,10 @@ test('app protocol attaches restrictive CSP to packaged asset responses', async 
   assert.match(csp, /script-src 'self'(?:;|$)/u);
   assert.doesNotMatch(csp, /script-src[^;]*unsafe-(?:inline|eval)/u);
   assert.match(csp, /connect-src 'self' http:\/\/127\.0\.0\.1:8090 ws:\/\/127\.0\.0\.1:8090/u);
+  assert.equal(
+    csp.split('; ').find((directive) => directive.startsWith('frame-src ')),
+    'frame-src http://127.0.0.1:8090/asset/ http://127.0.0.1:8090/asset-derived/',
+  );
   assert.equal(result.headers.get('x-content-type-options'), 'nosniff');
 
   const denied = await handler({ method: 'POST', url: 'app://renderer/' });

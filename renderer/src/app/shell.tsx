@@ -128,6 +128,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
           {documents && (
             <DocumentWorkspace
               assetApi={dependencies.documents.assetApi}
+              docxPreviewApi={dependencies.documents.docxPreviewApi}
               genericPreviewApi={dependencies.documents.genericPreviewApi}
               onNavigate={(target) => {
                 if (workspace) {

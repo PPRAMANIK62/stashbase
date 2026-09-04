@@ -5,8 +5,20 @@ import { lazy, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
-import type { DocumentAssetApi } from '@/features/documents/application/ports';
+import type { DocumentAssetApi, DocxPreviewApi } from '@/features/documents/application/ports';
 import { documentAssetQuery } from '@/features/documents/application/queries';
+import type { DocumentViewerFormat } from '@/features/documents/domain/document-format';
+import type { SourceReference } from '@/shared/domain/source-reference';
+
+const DocxDocument = lazy(async () => {
+  const module = await import('./docx/document');
+  return { default: module.DocxDocument };
+});
+
+const HtmlDocument = lazy(async () => {
+  const module = await import('./html/document');
+  return { default: module.HtmlDocument };
+});
 
 const ImageDocument = lazy(async () => {
   const module = await import('./image/document');
@@ -57,16 +69,22 @@ function AssetStatus({
 export function AssetDocument({
   active,
   api,
+  docxPreviewApi,
   format,
   name,
   navigation,
+  onNavigate,
+  onOpenExternal,
   runtime,
 }: {
   active: boolean;
   api: DocumentAssetApi;
-  format: 'image' | 'pdf';
+  docxPreviewApi: DocxPreviewApi;
+  format: Exclude<DocumentViewerFormat, 'json' | 'md' | 'txt'>;
   name: string;
   navigation: DocumentNavigationRuntime;
+  onNavigate(target: { anchor?: string; source: SourceReference }): void;
+  onOpenExternal(href: string): Promise<boolean>;
   runtime: DocumentRuntime;
 }) {
   const asset = useQuery({ ...documentAssetQuery(api, runtime.scope), enabled: active });
@@ -79,7 +97,7 @@ export function AssetDocument({
     <Suspense fallback={<AssetStatus name={name} />}>
       {format === 'image' ? (
         <ImageDocument key={asset.data.version} name={name} resource={asset.data} />
-      ) : (
+      ) : format === 'pdf' ? (
         <PdfDocument
           key={asset.data.version}
           name={name}
@@ -87,6 +105,32 @@ export function AssetDocument({
           resource={asset.data}
           runtime={runtime}
         />
+      ) : format === 'html' ? (
+        <HtmlDocument
+          active={active}
+          key={asset.data.version}
+          name={name}
+          navigation={navigation}
+          onNavigate={onNavigate}
+          onOpenExternal={onOpenExternal}
+          resource={asset.data}
+          source={runtime.scope.source}
+          tabId={runtime.scope.id}
+        />
+      ) : asset.data.kind === 'docx' ? (
+        <DocxDocument
+          active={active}
+          api={docxPreviewApi}
+          key={asset.data.version}
+          name={name}
+          navigation={navigation}
+          onNavigate={onNavigate}
+          onOpenExternal={onOpenExternal}
+          resource={asset.data}
+          runtime={runtime}
+        />
+      ) : (
+        <AssetStatus failed name={name} retry={() => void asset.refetch()} />
       )}
     </Suspense>
   );

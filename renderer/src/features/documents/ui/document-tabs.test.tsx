@@ -44,6 +44,7 @@ const sourceApi = {
 
 const documentWorkspaceProps = {
   assetApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
+  docxPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
   genericPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
   onReveal: vi.fn(async () => undefined),
   revealLabel: 'Show in file manager',

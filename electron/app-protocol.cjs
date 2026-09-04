@@ -25,7 +25,7 @@ function productionContentSecurityPolicy(serverOrigin) {
     "default-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
-    "frame-src 'none'",
+    `frame-src ${serverOrigin}/asset/ ${serverOrigin}/asset-derived/`,
     "object-src 'none'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",

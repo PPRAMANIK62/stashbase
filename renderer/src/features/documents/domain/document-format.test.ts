@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { IMAGE_SOURCE_EXTENSIONS, PDF_EXTENSIONS } from '@/shared/file-formats';
+import {
+  DOCX_EXTENSIONS,
+  HTML_NOTE_EXTENSIONS,
+  IMAGE_SOURCE_EXTENSIONS,
+  PDF_EXTENSIONS,
+} from '@/shared/file-formats';
 
 import { documentTextFormat, documentViewerFormat } from './document-format';
 
@@ -23,5 +28,16 @@ describe('document format', () => {
       expect(documentTextFormat(`images/source.${extension}`)).toBeNull();
     }
     expect(documentViewerFormat('images/animation.gif')).toBeNull();
+  });
+
+  it('routes HTML and DOCX to preview-only viewers', () => {
+    for (const extension of HTML_NOTE_EXTENSIONS) {
+      expect(documentViewerFormat(`pages/archive.${extension.toUpperCase()}`)).toBe('html');
+      expect(documentTextFormat(`pages/archive.${extension}`)).toBeNull();
+    }
+    for (const extension of DOCX_EXTENSIONS) {
+      expect(documentViewerFormat(`documents/report.${extension.toUpperCase()}`)).toBe('docx');
+      expect(documentTextFormat(`documents/report.${extension}`)).toBeNull();
+    }
   });
 });

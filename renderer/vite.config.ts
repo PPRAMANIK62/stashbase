@@ -16,6 +16,10 @@ export default defineConfig({
         find: '@/shared/file-formats',
         replacement: fileURLToPath(new URL('../shared/file-formats.ts', import.meta.url)),
       },
+      {
+        find: '@/shared/html-sanitization',
+        replacement: fileURLToPath(new URL('../shared/html-sanitization.ts', import.meta.url)),
+      },
       { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
     ],
   },

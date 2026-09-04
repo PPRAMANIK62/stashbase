@@ -6,6 +6,7 @@ import type { DocumentNavigationRuntime } from '@/features/documents/application
 import type {
   DocumentAssetApi,
   DocumentSourceApi,
+  DocxPreviewApi,
   GenericFilePreviewApi,
 } from '@/features/documents/application/ports';
 import { sourceName } from '@/features/documents/domain/document';
@@ -27,6 +28,7 @@ const TextDocument = lazy(async () => {
 export interface DocumentSourceProps {
   active: boolean;
   assetApi: DocumentAssetApi;
+  docxPreviewApi: DocxPreviewApi;
   genericPreviewApi: GenericFilePreviewApi;
   navigation: DocumentNavigationRuntime;
   onNavigate(target: { anchor?: string; source: SourceReference }): void;
@@ -52,6 +54,7 @@ function PendingDocument({ name }: { name: string }) {
 export function DocumentSource({
   active,
   assetApi,
+  docxPreviewApi,
   genericPreviewApi,
   navigation,
   onNavigate,
@@ -64,14 +67,17 @@ export function DocumentSource({
   const name = sourceName(runtime.scope.source);
   const format = documentViewerFormat(runtime.scope.source.path);
 
-  if (format === 'image' || format === 'pdf') {
+  if (format === 'docx' || format === 'html' || format === 'image' || format === 'pdf') {
     return (
       <AssetDocument
         active={active}
         api={assetApi}
+        docxPreviewApi={docxPreviewApi}
         format={format}
         name={name}
         navigation={navigation}
+        onNavigate={onNavigate}
+        onOpenExternal={onOpenExternal}
         runtime={runtime}
       />
     );
