@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 
 import type {
+  DocumentAssetApi,
   DocumentSourceApi,
   GenericFilePreviewApi,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
-import { documentTextFormat, sourceName } from '@/features/documents/domain/document';
+import { sourceName } from '@/features/documents/domain/document';
+import { documentTextFormat } from '@/features/documents/domain/document-format';
 import { retainMarkdownTabIds } from '@/features/documents/domain/markdown';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
 import type { SourceReference } from '@/shared/domain/source-reference';
@@ -17,6 +19,7 @@ const ignoreNavigation = () => undefined;
 const rejectExternalNavigation = async () => false;
 
 export interface DocumentWorkspaceProps {
+  assetApi: DocumentAssetApi;
   genericPreviewApi: GenericFilePreviewApi;
   onNavigate?(target: { anchor?: string; source: SourceReference }): void;
   onOpenExternal?(href: string): Promise<boolean>;
@@ -27,6 +30,7 @@ export interface DocumentWorkspaceProps {
 }
 
 export function DocumentWorkspace({
+  assetApi,
   genericPreviewApi,
   onNavigate = ignoreNavigation,
   onOpenExternal = rejectExternalNavigation,
@@ -81,6 +85,7 @@ export function DocumentWorkspace({
       >
         <DocumentSource
           active={!hidden}
+          assetApi={assetApi}
           genericPreviewApi={genericPreviewApi}
           navigation={runtime.navigation}
           onNavigate={onNavigate}

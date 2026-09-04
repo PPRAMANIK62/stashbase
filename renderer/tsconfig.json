@@ -6,6 +6,7 @@
     "baseUrl": ".",
     "paths": {
       "@/protocols/*": ["../shared/protocols/*"],
+      "@/shared/file-formats": ["../shared/file-formats.ts"],
       "@/*": ["./src/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],

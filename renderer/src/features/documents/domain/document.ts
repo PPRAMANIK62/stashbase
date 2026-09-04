@@ -1,5 +1,7 @@
 import type { SourceReference } from '@/shared/domain/source-reference';
 
+import type { DocumentTextFormat } from './document-format';
+
 export interface DocumentScope {
   readonly generation: number;
   readonly id: string;
@@ -12,14 +14,13 @@ export interface DocumentState {
   jsonSession: JsonDocumentSession;
   lifecycle: 'active' | 'disposed';
   markdownMode: MarkdownViewMode;
+  pdfPage: number;
   scope: DocumentScope;
 }
 
 export type DocumentAccess = 'editable' | 'read-only';
 
 export type MarkdownViewMode = 'reading' | 'writer';
-
-export type DocumentTextFormat = 'json' | 'md' | 'txt';
 
 export type JsonViewMode = 'source' | 'tree';
 
@@ -84,13 +85,6 @@ export function sourceName(source: SourceReference): string {
   return source.path.split('/').at(-1) ?? source.path;
 }
 
-export function documentTextFormat(path: string): DocumentTextFormat | null {
-  const extension = path.split('.').at(-1)?.toLowerCase();
-  if (extension === 'md' || extension === 'markdown') return 'md';
-  if (extension === 'json') return 'json';
-  return extension === 'txt' ? 'txt' : null;
-}
-
 export function documentAccess(source: SourceReference, activeFolderPath: string): DocumentAccess {
   return source.folderPath === activeFolderPath ? 'editable' : 'read-only';
 }
@@ -112,8 +106,14 @@ export function createDocumentState(scope: DocumentScope, access: DocumentAccess
     },
     lifecycle: 'active',
     markdownMode: access === 'editable' ? 'writer' : 'reading',
+    pdfPage: 1,
     scope,
   };
+}
+
+export function setDocumentPdfPage(state: DocumentState, page: number): DocumentState {
+  if (state.lifecycle === 'disposed' || !Number.isSafeInteger(page) || page < 1) return state;
+  return state.pdfPage === page ? state : { ...state, pdfPage: page };
 }
 
 export function setDocumentJsonSession(

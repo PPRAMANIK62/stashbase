@@ -9,7 +9,6 @@ import {
   changeDocumentText,
   createDocumentState,
   documentAccess,
-  documentTextFormat,
   disposeDocumentState,
   enterDocumentConflict,
   failDocumentConflictResolution,
@@ -20,6 +19,7 @@ import {
   sameSource,
   setDocumentJsonSession,
   setDocumentMarkdownMode,
+  setDocumentPdfPage,
   type DocumentConflictResolution,
   type DocumentScope,
   type DocumentState,
@@ -27,6 +27,7 @@ import {
   type JsonDocumentSession,
   type MarkdownViewMode,
 } from '@/features/documents/domain/document';
+import { documentTextFormat } from '@/features/documents/domain/document-format';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { DocumentSaveError, type DocumentQueryScope, type DocumentSourceApi } from './ports';
@@ -43,6 +44,7 @@ export interface DocumentRuntime {
   save(api: DocumentSourceApi): Promise<boolean>;
   setJsonSession(patch: Partial<JsonDocumentSession>): void;
   setMarkdownMode(mode: MarkdownViewMode): void;
+  setPdfPage(page: number): void;
 }
 
 export interface DocumentRuntimeOptions {
@@ -244,6 +246,10 @@ export function createDocumentRuntime({
     setMarkdownMode(mode) {
       if (disposed) return;
       store.setState((state) => setDocumentMarkdownMode(state, mode));
+    },
+    setPdfPage(page) {
+      if (disposed) return;
+      store.setState((state) => setDocumentPdfPage(state, page));
     },
   };
 }

@@ -7,13 +7,13 @@ import {
   createDocumentState,
   documentAccess,
   documentEditorText,
-  documentTextFormat,
   disposeDocumentState,
   enterDocumentConflict,
   reconcileDocumentSource,
   sameSource,
   setDocumentJsonSession,
   setDocumentMarkdownMode,
+  setDocumentPdfPage,
   sourceIdentity,
   sourceName,
 } from './document';
@@ -49,17 +49,10 @@ describe('document identity', () => {
       },
       lifecycle: 'disposed',
       markdownMode: 'writer',
+      pdfPage: 1,
       scope,
     });
     expect(disposeDocumentState(disposed)).toBe(disposed);
-  });
-
-  it('classifies Markdown, JSON, and TXT source names for direct loading', () => {
-    expect(documentTextFormat('notes/plan.md')).toBe('md');
-    expect(documentTextFormat('notes/plan.MARKDOWN')).toBe('md');
-    expect(documentTextFormat('notes/literal.TXT')).toBe('txt');
-    expect(documentTextFormat('notes/data.json')).toBe('json');
-    expect(documentTextFormat('notes/no-extension')).toBeNull();
   });
 
   it('grants edit capability only to sources in the active folder scope', () => {
@@ -86,6 +79,20 @@ describe('document identity', () => {
     expect(
       setDocumentMarkdownMode(createDocumentState(scope, 'read-only'), 'writer').markdownMode,
     ).toBe('reading');
+  });
+
+  it('retains a valid PDF page while the document runtime stays alive', () => {
+    const scope = {
+      generation: 1,
+      id: 'tab-pdf',
+      source: { folderPath: '/library/notes', path: 'paper.pdf' },
+    };
+    const initial = createDocumentState(scope, 'read-only');
+    const pageSeven = setDocumentPdfPage(initial, 7);
+
+    expect(pageSeven.pdfPage).toBe(7);
+    expect(setDocumentPdfPage(pageSeven, 0)).toBe(pageSeven);
+    expect(setDocumentPdfPage(pageSeven, 1.5)).toBe(pageSeven);
   });
 
   it('retains JSON presentation state in the document runtime without changing source authority', () => {

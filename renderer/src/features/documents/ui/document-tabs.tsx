@@ -1,4 +1,4 @@
-import { Circle, FileText, X } from 'lucide-react';
+import { Circle, FileImage, FileText, FileType2, X } from 'lucide-react';
 import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
@@ -6,6 +6,7 @@ import { TabItem, Tabs, TabsList } from '@/components/ui/tabs';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { sourceName } from '@/features/documents/domain/document';
+import { documentViewerFormat } from '@/features/documents/domain/document-format';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
 import type { IconComponentProps } from '@/lib/icon-context';
 import { cn } from '@/lib/utils';
@@ -48,13 +49,15 @@ function DocumentTab({
 }) {
   const dirty = useStore(document.store, (state) => state.editor?.dirty ?? false);
   const name = sourceName(source);
+  const format = documentViewerFormat(source.path);
+  const icon = format === 'image' ? FileImage : format === 'pdf' ? FileType2 : FileText;
 
   return (
     <TabItem
       aria-keyshortcuts="Delete"
       aria-label={dirty ? `${name}, unsaved changes` : name}
       data-document-dirty={dirty || undefined}
-      icon={FileText}
+      icon={icon}
       label={name}
       onKeyDown={(event) => closeWithDelete(event, value)}
       onTrailingClick={() => onClose(value)}

@@ -3,7 +3,7 @@ import {
   DocumentSourceError,
   type DocumentSourceApi,
 } from '@/features/documents/application/ports';
-import { documentTextFormat } from '@/features/documents/domain/document';
+import { documentTextFormat } from '@/features/documents/domain/document-format';
 import type { HttpClient, HttpResponse } from '@/platform/http/client';
 import {
   documentTextSaveFailureSchema,

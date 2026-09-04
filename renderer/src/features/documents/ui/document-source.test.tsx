@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import {
   DocumentSaveError,
   DocumentSourceError,
-  GenericFilePreviewError,
   type DocumentSourceApi,
   type GenericFilePreviewApi,
 } from '@/features/documents/application/ports';
@@ -44,6 +43,7 @@ function renderSource(
   api: DocumentSourceApi,
   source = { folderPath: '/library/notes', path: 'plan.md' },
   options: {
+    assetApi?: Parameters<typeof DocumentWorkspace>[0]['assetApi'];
     genericPreviewApi?: GenericFilePreviewApi;
     onNavigate?: Parameters<typeof DocumentWorkspace>[0]['onNavigate'];
     onOpenExternal?: Parameters<typeof DocumentWorkspace>[0]['onOpenExternal'];
@@ -66,6 +66,7 @@ function renderSource(
   render(
     <QueryClientProvider client={queryClient}>
       <DocumentWorkspace
+        assetApi={options.assetApi ?? { load: vi.fn(() => new Promise<never>(() => undefined)) }}
         genericPreviewApi={
           options.genericPreviewApi ?? {
             load: vi.fn(() => new Promise<never>(() => undefined)),
@@ -158,22 +159,20 @@ describe('document text source', () => {
   });
 
   it('keeps pending format-specific viewers distinct from generic failures', async () => {
+    const assetApi = { load: vi.fn(() => new Promise<never>(() => undefined)) };
+    const genericPreviewApi = { load: vi.fn(() => new Promise<never>(() => undefined)) };
     renderSource(
       { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() },
       { folderPath: '/library/notes', path: 'report.pdf' },
       {
-        genericPreviewApi: {
-          load: vi.fn<GenericFilePreviewApi['load']>(async () => {
-            throw new GenericFilePreviewError(
-              'not-generic',
-              'This file belongs to a format-specific viewer.',
-            );
-          }),
-        },
+        assetApi,
+        genericPreviewApi,
       },
     );
 
-    expect(await screen.findByText('This document viewer is not available yet.')).not.toBeNull();
+    expect(await screen.findByText('Loading report.pdf')).not.toBeNull();
+    await waitFor(() => expect(assetApi.load).toHaveBeenCalled());
+    expect(genericPreviewApi.load).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 

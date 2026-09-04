@@ -12,6 +12,10 @@ export default defineConfig({
         find: /^@\/protocols\//u,
         replacement: fileURLToPath(new URL('../shared/protocols/', import.meta.url)),
       },
+      {
+        find: '@/shared/file-formats',
+        replacement: fileURLToPath(new URL('../shared/file-formats.ts', import.meta.url)),
+      },
       { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
     ],
   },

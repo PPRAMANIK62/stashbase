@@ -1,6 +1,6 @@
 import { parseDocument } from 'yaml';
 
-import { documentTextFormat } from './document';
+import { documentTextFormat } from './document-format';
 
 const OPENING_DELIMITER = /^(?:\uFEFF)?---[\t ]*(?:\r\n?|\n)/u;
 const CLOSING_DELIMITER = /^(?:---|\.\.\.)[\t ]*(?:\r\n?|\n|$)/gmu;

@@ -127,6 +127,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         <section aria-label="Agent workspace" className="min-h-0 flex-1">
           {documents && (
             <DocumentWorkspace
+              assetApi={dependencies.documents.assetApi}
               genericPreviewApi={dependencies.documents.genericPreviewApi}
               onNavigate={(target) => {
                 if (workspace) {
