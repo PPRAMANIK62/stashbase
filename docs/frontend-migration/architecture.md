@@ -108,6 +108,10 @@ feature/
 Folders are earned by responsibility. A small feature does not need empty
 layers or pass-through modules.
 
+Within document UI, workspace chrome and source lifecycle form separate
+internal modules. Format-specific viewers stay behind source dispatch rather
+than becoming additional feature interfaces.
+
 The initial feature boundaries are:
 
 | Feature | Capability | Owning product area |

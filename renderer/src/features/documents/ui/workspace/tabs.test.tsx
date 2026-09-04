@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import type { DocumentSourceApi } from '@/features/documents/application/ports';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 
-import { DocumentOutline } from './document-outline';
-import { DocumentTabs } from './document-tabs';
-import { DocumentWorkspace } from './document-workspace';
+import { DocumentOutline } from './outline';
+import { DocumentTabs } from './tabs';
+import { DocumentWorkspace } from './workspace';
 
 function createRuntime(api: DocumentSourceApi = sourceApi) {
   let next = 2;

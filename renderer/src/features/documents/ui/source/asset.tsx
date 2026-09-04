@@ -11,22 +11,22 @@ import type { DocumentViewerFormat } from '@/features/documents/domain/document-
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 const DocxDocument = lazy(async () => {
-  const module = await import('./docx/document');
+  const module = await import('@/features/documents/ui/docx/document');
   return { default: module.DocxDocument };
 });
 
 const HtmlDocument = lazy(async () => {
-  const module = await import('./html/document');
+  const module = await import('@/features/documents/ui/html/document');
   return { default: module.HtmlDocument };
 });
 
 const ImageDocument = lazy(async () => {
-  const module = await import('./image/document');
+  const module = await import('@/features/documents/ui/image/document');
   return { default: module.ImageDocument };
 });
 
 const PdfDocument = lazy(async () => {
-  const module = await import('./pdf/document');
+  const module = await import('@/features/documents/ui/pdf/document');
   return { default: module.PdfDocument };
 });
 

@@ -13,15 +13,15 @@ import { sourceName } from '@/features/documents/domain/document';
 import { documentViewerFormat } from '@/features/documents/domain/document-format';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-import { AssetDocument } from './asset-document';
+import { AssetDocument } from './asset';
 
 const GenericFileDocument = lazy(async () => {
-  const module = await import('./generic/document');
+  const module = await import('@/features/documents/ui/generic/document');
   return { default: module.GenericFileDocument };
 });
 
 const TextDocument = lazy(async () => {
-  const module = await import('./text-document');
+  const module = await import('./text');
   return { default: module.TextDocument };
 });
 

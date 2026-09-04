@@ -11,10 +11,10 @@ import { sourceName } from '@/features/documents/domain/document';
 import { documentTextFormat } from '@/features/documents/domain/document-format';
 import { retainMarkdownTabIds } from '@/features/documents/domain/markdown';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
+import { DocumentSource } from '@/features/documents/ui/source/document';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-import { DocumentFind } from './document-find';
-import { DocumentSource } from './document-source';
+import { DocumentFind } from './find';
 
 const ignoreNavigation = () => undefined;
 const rejectExternalNavigation = async () => false;

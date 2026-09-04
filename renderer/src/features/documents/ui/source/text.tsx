@@ -13,22 +13,22 @@ import { useDocumentSource } from '@/features/documents/hooks/use-document-sourc
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 const DocumentConflict = lazy(async () => {
-  const module = await import('./document-conflict');
+  const module = await import('./conflict');
   return { default: module.DocumentConflict };
 });
 
 const MarkdownDocument = lazy(async () => {
-  const module = await import('./markdown/document');
+  const module = await import('@/features/documents/ui/markdown/document');
   return { default: module.MarkdownDocument };
 });
 
 const JsonDocument = lazy(async () => {
-  const module = await import('./json/document');
+  const module = await import('@/features/documents/ui/json/document');
   return { default: module.JsonDocument };
 });
 
 const CodeEditorDocument = lazy(async () => {
-  const module = await import('./code-editor/document');
+  const module = await import('@/features/documents/ui/code-editor/document');
   return { default: module.CodeEditorDocument };
 });
 

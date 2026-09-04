@@ -13,7 +13,7 @@ import {
 } from '@/features/documents/application/ports';
 import { createDocumentQueryScope } from '@/features/documents/application/queries';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
-import { DocumentWorkspace } from './document-workspace';
+import { DocumentWorkspace } from '@/features/documents/ui/workspace/workspace';
 
 const runtimes: ReturnType<typeof createDocumentTabsRuntime>[] = [];
 let getAnimationsDescriptor: PropertyDescriptor | undefined;
