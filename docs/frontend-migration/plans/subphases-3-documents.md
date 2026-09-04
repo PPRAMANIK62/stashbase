@@ -159,8 +159,17 @@ inspection, renderer, architecture, typecheck, lint, and web build checks.
 
 **Blocked by:** 16, 29.
 
-Provide lazy accessible previews and lightbox behavior with version-keyed,
-bounded resources and explicit cleanup.
+**Status:** Complete.
+
+PDF and supported images now resolve through folder-scoped, versioned asset
+references before their viewer code loads. PDF keeps page and Find state while
+bounding nearby canvas/text-layer work; shared floating controls provide
+in-place page and zoom entry, image fitting, and an accessible lightbox.
+Replaced or closed resources cancel stale work and release viewer-owned handles.
+
+Evidence: focused asset adapter and server-route authorization, viewer dispatch,
+PDF lifecycle, PDF Find, image controls, lightbox, and document runtime tests;
+renderer, architecture, typecheck, lint, and web build checks.
 
 ## 39 — Add DOCX and HTML viewers
 
