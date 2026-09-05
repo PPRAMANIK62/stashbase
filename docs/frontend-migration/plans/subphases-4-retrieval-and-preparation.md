@@ -20,8 +20,16 @@ web build checks.
 
 **Blocked by:** 26, 29.
 
-Provide cancelled and scope-complete queries, evidence snippets, stable result
-identity, and active/out-of-folder source navigation.
+**Status:** Complete.
+
+Cmd/Ctrl+Shift+F always focuses the sidebar Search field. Exact queries default
+to the active folder, can widen to the library, cancel obsolete work, group
+individual occurrences by source, and reveal the selected occurrence after its
+active- or out-of-folder document viewer is ready.
+
+Evidence: focused protocol, adapter, scope, cancellation, keyboard/focus,
+occurrence navigation, app-composition, read-only, architecture, typecheck,
+lint, and web build checks.
 
 ## 43 — Present Preparation status and recovery
 
