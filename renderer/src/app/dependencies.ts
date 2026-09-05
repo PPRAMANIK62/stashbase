@@ -12,6 +12,7 @@ import {
   type GenericFilePreviewApi,
   type MediaApi,
 } from '@/features/documents/public';
+import { createExactSearchApi, type ExactSearchApi } from '@/features/retrieval/public';
 import {
   createFilesApi,
   createLibraryApi,
@@ -39,6 +40,9 @@ export interface AppDependencies {
     openExternal(href: string): Promise<boolean>;
   };
   library: LibrarySidebarProps & LibraryWelcomeProps;
+  retrieval: {
+    exactSearchApi: ExactSearchApi;
+  };
   session: ReturnType<typeof createWorkspaceSessionPersistence>;
   workspace: Omit<FileTreeProps, 'runtime'>;
 }
@@ -62,6 +66,9 @@ export function createDependencies(): AppDependencies {
       api: createLibraryApi(http),
       folderPicker: createFolderPicker(bridge.library),
       lifecycle: createLibraryLifecycle(bridge.library),
+    },
+    retrieval: {
+      exactSearchApi: createExactSearchApi(http),
     },
     session: createWorkspaceSessionPersistence(bridge.workspaceSession),
     workspace: {

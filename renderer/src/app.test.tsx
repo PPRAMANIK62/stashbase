@@ -47,6 +47,9 @@ describe('workspace shell', () => {
         setActiveFolder: vi.fn(async () => undefined),
       },
     },
+    retrieval: {
+      exactSearchApi: { search: vi.fn() },
+    },
     session: {
       load: vi.fn(async () => null),
       save: vi.fn(async () => undefined),
@@ -290,9 +293,50 @@ describe('workspace shell', () => {
     const outlineTab = navigator?.querySelector<HTMLButtonElement>(
       '[role="tab"][aria-label="Document outline"]',
     );
+    const searchTab = navigator?.querySelector<HTMLButtonElement>(
+      '[role="tab"][aria-label="Search"]',
+    );
     expect(filesTab?.textContent).toBe('');
     expect(outlineTab?.textContent).toBe('');
+    expect(searchTab?.textContent).toBe('');
     expect(filesTab?.getAttribute('aria-selected')).toBe('true');
+
+    const generalSearch = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: 'f',
+      shiftKey: true,
+    });
+    await act(async () => {
+      document.dispatchEvent(generalSearch);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    expect(generalSearch.defaultPrevented).toBe(true);
+    expect(searchTab?.getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('[aria-label="Exact library search"]')).not.toBeNull();
+    expect(container.querySelector('input[placeholder="Search library"]')).toBe(
+      document.activeElement,
+    );
+
+    const elsewhere = document.createElement('button');
+    container.append(elsewhere);
+    elsewhere.focus();
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          key: 'f',
+          shiftKey: true,
+        }),
+      );
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    expect(container.querySelector('input[placeholder="Search library"]')).toBe(
+      document.activeElement,
+    );
 
     await act(async () => outlineTab?.click());
 

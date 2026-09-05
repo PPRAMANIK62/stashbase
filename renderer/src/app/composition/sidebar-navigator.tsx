@@ -1,5 +1,5 @@
-import { FolderTree, ListTree } from 'lucide-react';
-import { useId, useState, type ReactNode } from 'react';
+import { FolderTree, ListTree, Search } from 'lucide-react';
+import { useId, type ReactNode } from 'react';
 
 import { SidebarContent, SidebarGroup } from '@/components/ui/sidebar';
 import { TabsSubtle, TabsSubtleItem } from '@/components/ui/tabs-subtle';
@@ -8,11 +8,19 @@ import { DocumentOutline, type DocumentTabsRuntime } from '@/features/documents/
 
 interface SidebarNavigatorProps {
   children: ReactNode;
+  onSelect(index: number): void;
   runtime: DocumentTabsRuntime | null;
+  search: ReactNode;
+  selectedIndex: number;
 }
 
-export function SidebarNavigator({ children, runtime }: SidebarNavigatorProps) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
+export function SidebarNavigator({
+  children,
+  onSelect,
+  runtime,
+  search,
+  selectedIndex,
+}: SidebarNavigatorProps) {
   const navigatorId = useId();
 
   return (
@@ -22,7 +30,7 @@ export function SidebarNavigator({ children, runtime }: SidebarNavigatorProps) {
           aria-label="Sidebar navigator"
           iconOnly
           idPrefix={navigatorId}
-          onSelect={setSelectedIndex}
+          onSelect={onSelect}
           selectedIndex={selectedIndex}
           size="compact"
         >
@@ -32,10 +40,18 @@ export function SidebarNavigator({ children, runtime }: SidebarNavigatorProps) {
           <Tooltip content="Document outline" side="bottom">
             <TabsSubtleItem icon={ListTree} index={1} label="Document outline" />
           </Tooltip>
+          <Tooltip content="Search · Cmd/Ctrl Shift F" side="bottom">
+            <TabsSubtleItem
+              aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
+              icon={Search}
+              index={2}
+              label="Search"
+            />
+          </Tooltip>
         </TabsSubtle>
       </div>
 
-      <SidebarContent>
+      <SidebarContent className={selectedIndex === 2 ? 'hidden' : undefined}>
         <SidebarGroup>
           <div
             aria-labelledby={`${navigatorId}-tab-0`}
@@ -63,6 +79,14 @@ export function SidebarNavigator({ children, runtime }: SidebarNavigatorProps) {
           </div>
         </SidebarGroup>
       </SidebarContent>
+      <div
+        aria-labelledby={`${navigatorId}-tab-2`}
+        className={selectedIndex === 2 ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+        id={`${navigatorId}-panel-2`}
+        role="tabpanel"
+      >
+        {search}
+      </div>
     </>
   );
 }

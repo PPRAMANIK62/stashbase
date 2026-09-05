@@ -1,5 +1,6 @@
 export { useWorkspace } from './hooks/use-workspace';
 export { useFiles } from './hooks/use-files';
+export { useLibrary } from './hooks/use-library';
 export { useLibraryLifecycle } from './hooks/use-library-lifecycle';
 export { usePersistWorkspaceSession, useWorkspaceSession } from './hooks/use-workspace-session';
 export { useReveal } from './hooks/use-reveal';
@@ -11,6 +12,7 @@ export {
 } from './application/session-runtime';
 export type { FolderSessionState, WorkspaceDocumentSession } from './domain/session';
 export type { WorkspaceScope } from './domain/workspace';
+export { displayFolderPath, folderName } from './domain/library';
 export { fileIsRestricted, type WorkspaceFile, type WorkspaceListing } from './domain/tree';
 export { createFilesApi } from './infrastructure/files-api';
 export { createLibraryApi } from './infrastructure/api';

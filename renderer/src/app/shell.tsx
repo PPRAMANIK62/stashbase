@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
   Sidebar,
@@ -17,7 +17,10 @@ import {
   FileTree,
   LibrarySidebar,
   LibraryWelcome,
+  displayFolderPath,
+  folderName,
   useLibraryLifecycle,
+  useLibrary,
   usePersistWorkspaceSession,
   useWorkspace,
   useWorkspaceSession,
@@ -28,6 +31,8 @@ import { SidebarNavigator } from './composition/sidebar-navigator';
 import { useDocumentCommands } from './composition/use-document-commands';
 import { useDocumentWorkspace } from './composition/use-document-workspace';
 import { useQuickOpenCommand } from './composition/use-quick-open-command';
+import { useSidebarSearchCommand } from './composition/use-sidebar-search-command';
+import { WorkspaceExactSearch } from './composition/workspace-exact-search';
 import { WorkspaceQuickOpen } from './composition/workspace-quick-open';
 import type { AppDependencies } from './dependencies';
 import { openDocument } from './workflows/open-document';
@@ -36,6 +41,7 @@ import './shell.css';
 
 export function App({ dependencies }: { dependencies: AppDependencies }) {
   const session = useWorkspaceSession(dependencies.library.api, dependencies.session);
+  const library = useLibrary(dependencies.library.api);
   const workspace = useWorkspace(dependencies.library.api, session.restoredFolder, session.isReady);
   usePersistWorkspaceSession(session.runtime, workspace);
   const documents = useDocumentWorkspace(
@@ -50,6 +56,26 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
       ? `${workspace.scope.folder.path}\u0000${workspace.scope.generation}`
       : null,
   );
+  const [sidebarNavigatorIndex, setSidebarNavigatorIndex] = useState(0);
+  const [searchFocusRevision, setSearchFocusRevision] = useState(0);
+  const openSearch = useCallback(() => {
+    session.runtime.setSidebarOpen(true);
+    setSidebarNavigatorIndex(2);
+    setSearchFocusRevision((revision) => revision + 1);
+  }, [session.runtime]);
+  useSidebarSearchCommand((library.data?.members.length ?? 0) > 0, openSearch);
+  const searchScopes = useMemo(() => {
+    const snapshot = library.data;
+    if (!snapshot) return [];
+    const names = snapshot.members.map((member) => folderName(member.path));
+    return snapshot.members.map((member, index) => ({
+      folderPath: member.path,
+      label:
+        names.indexOf(names[index] ?? '') === names.lastIndexOf(names[index] ?? '')
+          ? (names[index] ?? member.path)
+          : displayFolderPath(member.path, snapshot.homeDirectory),
+    }));
+  }, [library.data]);
   useDocumentCommands(documents?.navigation ?? null);
   useDocumentSaveBarrier(documents, dependencies.documents.lifecycle);
   const saveDocumentsForFolder = useCallback(
@@ -101,17 +127,36 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
             }
           />
         </SidebarGroup>
-        {workspace && (
-          <SidebarNavigator runtime={documents}>
-            <FileTree
-              {...dependencies.workspace}
-              key={workspace.scope.generation}
-              onOpenSource={(source) => {
-                if (documents) void openDocument(workspace, documents, source);
-              }}
-              onScopeLost={libraryLifecycle.recoverLostScope}
-              runtime={workspace}
-            />
+        {library.data?.activeFolder && (
+          <SidebarNavigator
+            onSelect={setSidebarNavigatorIndex}
+            runtime={documents}
+            search={
+              <WorkspaceExactSearch
+                active={sidebarNavigatorIndex === 2}
+                activeFolderPath={library.data.activeFolder.path}
+                api={dependencies.retrieval.exactSearchApi}
+                documents={documents}
+                focusRevision={searchFocusRevision}
+                scopes={searchScopes}
+                workspace={workspace}
+              />
+            }
+            selectedIndex={sidebarNavigatorIndex}
+          >
+            {workspace ? (
+              <FileTree
+                {...dependencies.workspace}
+                key={workspace.scope.generation}
+                onOpenSource={(source) => {
+                  if (documents) void openDocument(workspace, documents, source);
+                }}
+                onScopeLost={libraryLifecycle.recoverLostScope}
+                runtime={workspace}
+              />
+            ) : (
+              <p className="px-4 py-2 text-caption text-muted-foreground">Loading files…</p>
+            )}
           </SidebarNavigator>
         )}
       </Sidebar>

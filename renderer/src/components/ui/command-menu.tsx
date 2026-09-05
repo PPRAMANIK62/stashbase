@@ -69,13 +69,17 @@ CommandInput.displayName = 'CommandInput';
 interface CommandListProps extends HTMLAttributes<HTMLDivElement> {
   activeIndex: number;
   children: ReactNode;
+  itemCount?: number;
   onActiveIndexChange(index: number): void;
 }
 
 const CommandList = forwardRef<HTMLDivElement, CommandListProps>(
-  ({ activeIndex, children, className, onActiveIndexChange, ...props }, ref) => {
+  (
+    { activeIndex, children, className, itemCount: itemCountProp, onActiveIndexChange, ...props },
+    ref,
+  ) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const itemCount = Children.count(children);
+    const itemCount = itemCountProp ?? Children.count(children);
     const shape = useShape();
     const {
       activeIndex: proximityIndex,

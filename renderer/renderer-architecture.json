@@ -15,6 +15,7 @@
     "shared/protocols/electron/workspace-session.ts",
     "shared/protocols/http/files.ts",
     "shared/protocols/http/library.ts",
-    "shared/protocols/http/media.ts"
+    "shared/protocols/http/media.ts",
+    "shared/protocols/http/search.ts"
   ]
 }
