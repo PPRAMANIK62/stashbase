@@ -19,6 +19,7 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 import {
   createDocumentNavigationRuntime,
   type DocumentNavigationRuntime,
+  type DocumentSearchTarget,
 } from './navigation-runtime';
 import type { DocumentQueryScope, DocumentSourceApi } from './ports';
 
@@ -43,7 +44,10 @@ export interface DocumentTabsRuntime {
   dispose(): void;
   flush(): Promise<boolean>;
   getDocument(tabId: string): DocumentRuntime | null;
-  open(source: SourceReference, options?: { anchor?: string }): Promise<DocumentRuntime | null>;
+  open(
+    source: SourceReference,
+    options?: { anchor?: string; search?: DocumentSearchTarget },
+  ): Promise<DocumentRuntime | null>;
   toSession(): DocumentSessionProjection;
 }
 
@@ -111,6 +115,15 @@ export function createDocumentTabsRuntime({
     documents.set(id, runtime);
     sourceIds.set(sourceIdentity(source), id);
     return runtime;
+  };
+
+  const requestDocumentLocation = (
+    document: DocumentRuntime,
+    options: { anchor?: string; search?: DocumentSearchTarget },
+  ) => {
+    if (options.anchor) navigation.requestAnchor(document.scope.id, options.anchor);
+    if (!options.search) return;
+    navigation.requestSearch(document.scope.id, options.search);
   };
 
   for (const tab of initialState.tabs) createChild(tab.id, tab.source);
@@ -185,7 +198,7 @@ export function createDocumentTabsRuntime({
         const existingId = sourceIds.get(sourceIdentity(source));
         if (existingId === state.activeTabId) {
           const existing = documents.get(existingId) ?? null;
-          if (existing && options.anchor) navigation.requestAnchor(existingId, options.anchor);
+          if (existing) requestDocumentLocation(existing, options);
           return existing;
         }
         const active = state.activeTabId ? documents.get(state.activeTabId) : null;
@@ -196,7 +209,7 @@ export function createDocumentTabsRuntime({
           if (existing) {
             store.setState((current) => activateDocumentTab(current, existingId));
             navigation.activate(existingId);
-            if (options.anchor) navigation.requestAnchor(existingId, options.anchor);
+            requestDocumentLocation(existing, options);
           }
           return existing;
         }
@@ -207,7 +220,7 @@ export function createDocumentTabsRuntime({
         const document = createChild(id, source);
         store.setState((current) => openDocumentTab(current, { id, source }));
         navigation.activate(id);
-        if (options.anchor) navigation.requestAnchor(id, options.anchor);
+        requestDocumentLocation(document, options);
         return document;
       });
     },

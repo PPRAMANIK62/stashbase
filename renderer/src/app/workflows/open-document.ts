@@ -1,4 +1,8 @@
-import type { DocumentRuntime, DocumentTabsRuntime } from '@/features/documents/public';
+import type {
+  DocumentRuntime,
+  DocumentSearchTarget,
+  DocumentTabsRuntime,
+} from '@/features/documents/public';
 import type { WorkspaceRuntime } from '@/features/workspace/public';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
@@ -6,7 +10,7 @@ export async function openDocument(
   workspace: WorkspaceRuntime,
   documents: DocumentTabsRuntime,
   source: SourceReference,
-  options?: { anchor?: string },
+  options?: { anchor?: string; search?: DocumentSearchTarget },
 ): Promise<DocumentRuntime | null> {
   const workspaceScope = workspace.scope;
   const documentScope = documents.scope;

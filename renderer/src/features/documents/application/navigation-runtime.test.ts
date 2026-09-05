@@ -51,4 +51,38 @@ describe('document navigation runtime', () => {
     runtime.consumeAnchor('one', 'part');
     expect(runtime.store.getState().pendingAnchor).toBeNull();
   });
+
+  it('delivers a pending search to the active viewer and selects its requested occurrence', async () => {
+    const runtime = createDocumentNavigationRuntime('one');
+    const controller = {
+      close: vi.fn(),
+      next: vi
+        .fn()
+        .mockReturnValueOnce({ current: 2, total: 3 })
+        .mockReturnValueOnce({ current: 3, total: 3 }),
+      previous: vi.fn(() => ({ current: 1, total: 3 })),
+      setQuery: vi.fn(() => ({ current: 1, total: 3 })),
+    };
+
+    runtime.requestSearch('one', {
+      caseSensitive: false,
+      occurrenceIndex: 2,
+      query: 'evidence',
+      wholeWord: false,
+    });
+    runtime.claimFind('one', Symbol('viewer'), controller);
+
+    await vi.waitFor(() => expect(runtime.store.getState().find.current).toBe(3));
+    expect(controller.setQuery).toHaveBeenCalledWith('evidence', {
+      caseSensitive: false,
+      wholeWord: false,
+    });
+    expect(controller.next).toHaveBeenCalledTimes(2);
+    expect(runtime.store.getState().find).toMatchObject({
+      current: 3,
+      open: false,
+      query: 'evidence',
+      total: 3,
+    });
+  });
 });

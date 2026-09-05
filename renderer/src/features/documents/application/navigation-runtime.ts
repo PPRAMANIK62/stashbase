@@ -12,6 +12,14 @@ export interface FindMatchInfo {
   total: number;
 }
 
+export interface DocumentSearchTarget extends FindOptions {
+  audioTimestampMs?: number;
+  line?: number;
+  occurrenceIndex: number;
+  pdfPage?: number;
+  query: string;
+}
+
 export interface DocumentFindController {
   close(): void;
   next(): FindMatchInfo | Promise<FindMatchInfo>;
@@ -62,6 +70,7 @@ export interface DocumentNavigationRuntime {
     select: (heading: DocumentHeading) => void,
   ): void;
   requestAnchor(tabId: string, id: string): void;
+  requestSearch(tabId: string, target: DocumentSearchTarget): void;
   selectHeading(heading: DocumentHeading): void;
   setFindCaseSensitive(value: boolean): void;
   setFindQuery(query: string): void;
@@ -98,6 +107,7 @@ export function createDocumentNavigationRuntime(
   let outlineOwner: symbol | null = null;
   let outlineSelect: ((heading: DocumentHeading) => void) | null = null;
   let requestSequence = 0;
+  let pendingSearch: { tabId: string; target: DocumentSearchTarget } | null = null;
 
   const updateFind = (patch: Partial<DocumentFindState>) => {
     store.setState((state) => ({ ...state, find: { ...state.find, ...patch } }));
@@ -131,6 +141,31 @@ export function createDocumentNavigationRuntime(
     applyMatch(command.call(controller, query, { caseSensitive, wholeWord }));
   };
 
+  const deliverSearch = () => {
+    const pending = pendingSearch;
+    const controller = findController;
+    if (!pending || !controller || pending.tabId !== activeTabId) return;
+    pendingSearch = null;
+    const sequence = ++requestSequence;
+    const { caseSensitive, occurrenceIndex, query, wholeWord } = pending.target;
+    updateFind({ caseSensitive, current: 0, open: false, query, total: 0, wholeWord });
+    void Promise.resolve(controller.setQuery(query, { caseSensitive, wholeWord }))
+      .then(async (initial) => {
+        let match = initial;
+        const steps = Math.min(Math.max(0, occurrenceIndex), Math.max(0, initial.total - 1));
+        for (let index = 0; index < steps; index += 1) {
+          match = await controller.next();
+          if (disposed || sequence !== requestSequence || findController !== controller) return;
+        }
+        if (disposed || sequence !== requestSequence || findController !== controller) return;
+        updateFind(match);
+      })
+      .catch(() => {
+        if (disposed || sequence !== requestSequence || findController !== controller) return;
+        updateFind({ current: 0, total: 0 });
+      });
+  };
+
   const clearFindOwner = () => {
     requestSequence += 1;
     findController?.close();
@@ -152,6 +187,7 @@ export function createDocumentNavigationRuntime(
       activeTabId = tabId;
       clearFindOwner();
       clearOutlineOwner();
+      pendingSearch = null;
       store.setState((state) => ({ ...state, pendingAnchor: null }));
     },
     claimFind(tabId, owner, controller) {
@@ -161,7 +197,8 @@ export function createDocumentNavigationRuntime(
       findController = controller;
       updateFind({ available: true });
       const { open, query } = store.getState().find;
-      if (open && query) runQuery(true);
+      if (pendingSearch?.tabId === tabId) deliverSearch();
+      else if (open && query) runQuery(true);
       return () => {
         if (findOwner !== owner) return;
         clearFindOwner();
@@ -200,6 +237,7 @@ export function createDocumentNavigationRuntime(
       clearFindOwner();
       clearOutlineOwner();
       activeTabId = null;
+      pendingSearch = null;
       store.setState((state) => ({ ...state, pendingAnchor: null }));
     },
     findNext() {
@@ -226,6 +264,19 @@ export function createDocumentNavigationRuntime(
     requestAnchor(tabId, id) {
       if (disposed || tabId !== activeTabId || !id) return;
       store.setState((state) => ({ ...state, pendingAnchor: { id, tabId } }));
+    },
+    requestSearch(tabId, target) {
+      if (
+        disposed ||
+        tabId !== activeTabId ||
+        !target.query ||
+        !Number.isSafeInteger(target.occurrenceIndex) ||
+        target.occurrenceIndex < 0
+      ) {
+        return;
+      }
+      pendingSearch = { tabId, target: { ...target } };
+      deliverSearch();
     },
     selectHeading(heading) {
       if (!disposed) outlineSelect?.(heading);

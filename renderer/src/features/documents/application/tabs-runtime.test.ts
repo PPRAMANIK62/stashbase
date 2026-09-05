@@ -99,6 +99,41 @@ describe('Document tabs runtime', () => {
     });
   });
 
+  it('carries a search occurrence through a newly opened document', async () => {
+    const runtime = createDocumentTabsRuntime({
+      api: createApi(),
+      createId: idFactory(),
+      createQueries,
+      folderPath: '/library/notes',
+      generation: 1,
+    });
+    const controller = {
+      close: vi.fn(),
+      next: vi.fn(() => ({ current: 2, total: 2 })),
+      previous: vi.fn(() => ({ current: 1, total: 2 })),
+      setQuery: vi.fn(() => ({ current: 1, total: 2 })),
+    };
+
+    await runtime.open(
+      { folderPath: '/library/notes', path: 'plan.md' },
+      {
+        search: {
+          caseSensitive: false,
+          occurrenceIndex: 1,
+          query: 'plan',
+          wholeWord: false,
+        },
+      },
+    );
+    runtime.navigation.claimFind('tab-1', Symbol('viewer'), controller);
+
+    await vi.waitFor(() => expect(runtime.navigation.store.getState().find.current).toBe(2));
+    expect(controller.setQuery).toHaveBeenCalledWith('plan', {
+      caseSensitive: false,
+      wholeWord: false,
+    });
+  });
+
   it('cancels only the closed document and rejects its stale work', async () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),

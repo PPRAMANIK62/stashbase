@@ -31,6 +31,7 @@ export {
   createDocumentNavigationRuntime,
   type DocumentFindController,
   type DocumentNavigationRuntime,
+  type DocumentSearchTarget,
   type FindMatchInfo,
   type FindOptions,
 } from './application/navigation-runtime';
