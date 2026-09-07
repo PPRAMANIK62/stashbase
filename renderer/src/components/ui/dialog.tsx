@@ -43,7 +43,7 @@ const DialogClose = DialogPrimitive.Close;
 
 interface DialogContentProps extends HTMLAttributes<HTMLDivElement> {
   closeDisabled?: boolean;
-  presentation?: 'dialog' | 'command';
+  presentation?: 'dialog' | 'command' | 'shell';
   size?: 'sm' | 'lg';
   /** Portal target. When set, the overlay and panel render inside this element
    *  (positioned `absolute`) instead of covering the viewport (`fixed`). Pair
@@ -70,6 +70,7 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
     const shape = useShape();
     const substrate = useSurface();
     const command = presentation === 'command';
+    const shell = presentation === 'shell';
     const dialogLevel = Math.min(substrate + (command ? 2 : DIALOG_OFFSET), 8);
     // The size ladder narrows the dialog one notch in compact regions —
     // width only, the padding stays put (see /docs/sizes).
@@ -141,11 +142,19 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                 className={cn(
                   container ? 'absolute' : 'fixed',
                   'left-1/2 z-50 w-[calc(100%-2rem)]',
-                  command ? 'top-16 max-w-[680px] overflow-hidden p-0' : 'top-1/2 p-6',
+                  command ? 'top-16 max-w-[680px] overflow-hidden p-0' : 'top-1/2',
+                  shell ? 'overflow-hidden p-0' : !command && 'p-6',
                   surfaceClasses(dialogLevel),
                   'focus:outline-none',
-                  !command && size === 'sm' && (compact ? 'max-w-[360px]' : 'max-w-[400px]'),
-                  !command && size === 'lg' && (compact ? 'max-w-[480px]' : 'max-w-[540px]'),
+                  shell && (compact ? 'max-w-[min(94vw,480px)]' : 'max-w-[min(92vw,820px)]'),
+                  !command &&
+                    !shell &&
+                    size === 'sm' &&
+                    (compact ? 'max-w-[360px]' : 'max-w-[400px]'),
+                  !command &&
+                    !shell &&
+                    size === 'lg' &&
+                    (compact ? 'max-w-[480px]' : 'max-w-[540px]'),
                   shape.container,
                   className,
                 )}

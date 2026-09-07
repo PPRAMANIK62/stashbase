@@ -8,6 +8,9 @@
       "@/protocols/*": ["../shared/protocols/*"],
       "@/shared/file-formats": ["../shared/file-formats.ts"],
       "@/shared/html-sanitization": ["../shared/html-sanitization.ts"],
+      "@/shared/agent-runtime": ["../shared/agent-runtime.ts"],
+      "@/shared/agent-protocol": ["../shared/agent-protocol.ts"],
+      "@/shared/account": ["../shared/account.ts"],
       "@/*": ["./src/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],

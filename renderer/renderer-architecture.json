@@ -13,6 +13,7 @@
     "shared/protocols/electron/runtime.ts",
     "shared/protocols/electron/window-lifecycle.ts",
     "shared/protocols/electron/workspace-session.ts",
+    "shared/protocols/http/agent-runtime.ts",
     "shared/protocols/http/files.ts",
     "shared/protocols/http/library.ts",
     "shared/protocols/http/media.ts",

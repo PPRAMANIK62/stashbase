@@ -20,6 +20,18 @@ export default defineConfig({
         find: '@/shared/html-sanitization',
         replacement: fileURLToPath(new URL('../shared/html-sanitization.ts', import.meta.url)),
       },
+      {
+        find: '@/shared/agent-runtime',
+        replacement: fileURLToPath(new URL('../shared/agent-runtime.ts', import.meta.url)),
+      },
+      {
+        find: '@/shared/agent-protocol',
+        replacement: fileURLToPath(new URL('../shared/agent-protocol.ts', import.meta.url)),
+      },
+      {
+        find: '@/shared/account',
+        replacement: fileURLToPath(new URL('../shared/account.ts', import.meta.url)),
+      },
       { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
     ],
   },

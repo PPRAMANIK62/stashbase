@@ -13,6 +13,7 @@ import {
   type MediaApi,
 } from '@/features/documents/public';
 import { createExactSearchApi, type ExactSearchApi } from '@/features/retrieval/public';
+import { createAgentRuntimeApi, type AgentRuntimePort } from '@/features/settings/public';
 import {
   createFilesApi,
   createLibraryApi,
@@ -44,6 +45,9 @@ export interface AppDependencies {
     exactSearchApi: ExactSearchApi;
   };
   session: ReturnType<typeof createWorkspaceSessionPersistence>;
+  settings: {
+    agentRuntimeApi: AgentRuntimePort;
+  };
   workspace: Omit<FileTreeProps, 'runtime'>;
 }
 
@@ -71,6 +75,9 @@ export function createDependencies(): AppDependencies {
       exactSearchApi: createExactSearchApi(http),
     },
     session: createWorkspaceSessionPersistence(bridge.workspaceSession),
+    settings: {
+      agentRuntimeApi: createAgentRuntimeApi(http),
+    },
     workspace: {
       api: createFilesApi(http),
       revealLabel: fileManagerLabel(),

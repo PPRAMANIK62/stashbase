@@ -54,6 +54,15 @@ describe('workspace shell', () => {
       load: vi.fn(async () => null),
       save: vi.fn(async () => undefined),
     },
+    settings: {
+      agentRuntimeApi: {
+        getAllowance: vi.fn(() => new Promise<never>(() => undefined)),
+        listAgents: vi.fn(() => new Promise<never>(() => undefined)),
+        prepareAgent: vi.fn(),
+        resetManagedAgent: vi.fn(),
+        updateDebug: vi.fn(),
+      },
+    },
     workspace: {
       api: { load: vi.fn(), reveal: vi.fn() },
       revealLabel: 'Show in file manager',

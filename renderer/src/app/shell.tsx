@@ -1,18 +1,22 @@
+import { Settings as SettingsIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
 import {
   Sidebar,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
 import {
   DocumentTabs,
   DocumentWorkspace,
   useDocumentSaveBarrier,
 } from '@/features/documents/public';
+import { Settings } from '@/features/settings/public';
 import {
   FileTree,
   LibrarySidebar,
@@ -31,6 +35,7 @@ import { SidebarNavigator } from './composition/sidebar-navigator';
 import { useDocumentCommands } from './composition/use-document-commands';
 import { useDocumentWorkspace } from './composition/use-document-workspace';
 import { useQuickOpenCommand } from './composition/use-quick-open-command';
+import { useSettingsCommand } from './composition/use-settings-command';
 import { useSidebarSearchCommand } from './composition/use-sidebar-search-command';
 import { WorkspaceExactSearch } from './composition/workspace-exact-search';
 import { WorkspaceQuickOpen } from './composition/workspace-quick-open';
@@ -51,6 +56,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     dependencies.documents.sourceApi,
     dependencies.documents.createId,
   );
+  const settings = useSettingsCommand();
   const quickOpen = useQuickOpenCommand(
     workspace && documents
       ? `${workspace.scope.folder.path}\u0000${workspace.scope.generation}`
@@ -112,6 +118,13 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
           workspace={workspace}
         />
       )}
+      <Settings
+        agentRuntimeApi={dependencies.settings.agentRuntimeApi}
+        onClose={settings.close}
+        onSectionChange={settings.onSectionChange}
+        open={settings.open}
+        section={settings.section}
+      />
       <Sidebar className="bg-surface-1" variant="inset">
         <SidebarHeader className="workspace-titlebar h-11 flex-row items-center gap-2.5 px-4 py-0">
           <Logo aria-hidden="true" className="size-7 shrink-0" />
@@ -159,6 +172,15 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
             )}
           </SidebarNavigator>
         )}
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton icon={SettingsIcon} onClick={() => settings.openSettings()}>
+                Settings
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
       </Sidebar>
 
       <SidebarInset className="min-h-0 overflow-hidden">
