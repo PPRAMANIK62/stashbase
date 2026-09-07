@@ -1,0 +1,734 @@
+<title>StashBase Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================================
+   OUTER GALLERY CHROME — the page this mockup lives on. Independent theme
+   system from the simulated StashBase window below (which mirrors the real
+   app's own light-dark() tokens and gets its own Light/Dark toggle).
+============================================================================ */
+:root {
+  --page-bg: #f6f5f3;
+  --page-fg: #1a1a1a;
+  --page-muted: #6b6b6b;
+  --page-border: #e2e0db;
+  --page-card: #ffffff;
+  --page-accent: #6b97ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page-bg: #121212;
+    --page-fg: #f0f0f0;
+    --page-muted: #9a9a9a;
+    --page-border: #2a2a2a;
+    --page-card: #1a1a1a;
+  }
+}
+:root[data-theme="dark"] {
+  --page-bg: #121212;
+  --page-fg: #f0f0f0;
+  --page-muted: #9a9a9a;
+  --page-border: #2a2a2a;
+  --page-card: #1a1a1a;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--page-bg);
+  color: var(--page-fg);
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  padding: 48px 20px 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.intro {
+  max-width: 760px;
+  text-align: center;
+}
+.intro .eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--page-accent);
+  margin-bottom: 10px;
+}
+.intro h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 10px;
+}
+.intro p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--page-muted);
+  margin: 0;
+}
+
+/* Control strip above the mock */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.control-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--page-card);
+  border: 1px solid var(--page-border);
+  border-radius: 999px;
+  padding: 4px;
+}
+.control-group span.gl {
+  padding: 0 8px;
+  color: var(--page-muted);
+  font-weight: 500;
+}
+.control-group button {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--page-muted);
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.control-group button:hover { color: var(--page-fg); }
+.control-group button.active {
+  background: var(--page-fg);
+  color: var(--page-bg);
+}
+.control-group button:focus-visible,
+.mock button:focus-visible,
+.mock [tabindex]:focus-visible {
+  outline: 2px solid var(--page-accent);
+  outline-offset: 2px;
+}
+
+/* Backdrop hinting at the workspace behind the dialog */
+.stage {
+  position: relative;
+  width: min(94vw, 900px);
+  border-radius: 20px;
+  overflow: hidden;
+  background: light-dark(#ececea, #0d0d0d);
+  padding: 40px 20px;
+  display: flex;
+  justify-content: center;
+}
+.workspace-ghost {
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  pointer-events: none;
+}
+.workspace-ghost .ghost-sidebar {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 210px;
+  background: light-dark(#f2f1ee, #161616);
+  border-right: 1px solid light-dark(#e3e1db, #232323);
+}
+.workspace-ghost .ghost-row {
+  height: 9px; margin: 14px 18px; border-radius: 4px;
+  background: light-dark(#00000012, #ffffff12);
+}
+.workspace-ghost .ghost-row.short { width: 60%; }
+.scrim {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.38);
+}
+
+/* ============================================================================
+   THE MOCK — simulated StashBase window. Tokens mirror the real app's
+   globals.css 1:1 (Inter, neutral surface ladder, #6B97FF focus ring,
+   light-dark() resolved per-container color-scheme so the Light/Dark
+   control below behaves exactly like the app's own Appearance setting).
+============================================================================ */
+.mock {
+  position: relative;
+  z-index: 1;
+  width: 820px;
+  max-width: 100%;
+  height: 620px;
+  border-radius: 14px;
+  overflow: hidden;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  transition: width 260ms cubic-bezier(0.23,1,0.32,1);
+
+  --surface-1: light-dark(#fafafa, #171717);
+  --background: var(--surface-1);
+  --foreground: light-dark(#171717, #f5f5f5);
+  --card: light-dark(#ffffff, #252525);
+  --muted: light-dark(#f4f4f5, #1e1e1e);
+  --muted-foreground: light-dark(#737373, #a3a3a3);
+  --accent: light-dark(#e5e5e5, #525252);
+  --border: light-dark(#00000014, #ffffff1f);
+  --hover: light-dark(rgba(0,0,0,0.04), rgba(255,255,255,0.06));
+  --active: light-dark(rgba(0,0,0,0.07), rgba(255,255,255,0.10));
+  --destructive: light-dark(#ef4444, #f87171);
+  --destructive-bg: light-dark(#fef2f2, #2a1414);
+  --warn: light-dark(#b45309, #fbbf24);
+  --warn-bg: light-dark(#fffbeb15, #78350f22);
+  --warn-border: light-dark(#f59e0b3d, #f59e0b3d);
+  --focus: #6b97ff;
+  --shadow: 0 1px 1px -0.5px rgba(0,0,0,0.06), 0 3px 3px -1.5px rgba(0,0,0,0.06),
+            0 6px 6px -3px rgba(0,0,0,0.06), 0 24px 24px -12px rgba(0,0,0,0.10);
+
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: var(--shadow), 0 0 0 1px var(--border);
+}
+.mock.compact { width: 460px; }
+
+.mock-header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.mock-header .title {
+  font-size: 16px;
+  font-weight: 700;
+}
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px;
+  border: none; background: transparent; color: var(--muted-foreground);
+  cursor: pointer; transition: background-color 120ms, color 120ms;
+}
+.icon-btn:hover { background: var(--hover); color: var(--foreground); }
+
+.mock-body {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  height: calc(100% - 56px);
+}
+.mock.compact .mock-body {
+  grid-template-columns: 1fr;
+}
+
+/* ── Nav rail ── */
+.rail {
+  border-right: 1px solid var(--border);
+  background: var(--muted);
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+.mock.compact .rail { display: none; }
+.compact-topbar {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.mock.compact .compact-topbar { display: flex; }
+.compact-topbar .label { font-size: 13px; font-weight: 600; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 8px; border-radius: 8px;
+  font-size: 13px; color: var(--muted-foreground);
+  cursor: default; user-select: none; position: relative;
+  background: transparent; border: none; width: 100%; text-align: left; font-family: inherit;
+}
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; stroke-width: 1.5; }
+.nav-item.active {
+  background: var(--active); color: var(--foreground); font-weight: 600;
+}
+.nav-item.active svg { stroke-width: 2; }
+.nav-item.disabled { cursor: not-allowed; color: var(--muted-foreground); }
+.nav-item .soon {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: light-dark(#a3a3a3, #6e6e6e);
+  flex-shrink: 0;
+}
+.rail-note {
+  margin-top: auto;
+  padding: 10px 8px 2px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+  opacity: 0.85;
+}
+
+/* ── Content pane ── */
+.pane {
+  overflow-y: auto;
+  padding: 20px 24px 28px;
+}
+.pane h2 {
+  font-size: 13px; font-weight: 600; margin: 0 0 4px;
+}
+.pane .lede {
+  font-size: 12.5px; line-height: 1.6; color: var(--muted-foreground); margin: 0 0 14px;
+}
+
+/* allowance card */
+.allowance {
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 14px; background: var(--card);
+}
+.allowance-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.allowance-top .stat-label { font-size: 13px; font-weight: 500; }
+.allowance-top .stat-sub { font-size: 11.5px; color: var(--muted-foreground); margin-top: 1px; }
+.ghost-btn {
+  font-family: inherit; font-size: 12px; font-weight: 500;
+  border: none; background: transparent; color: var(--muted-foreground);
+  padding: 5px 10px; border-radius: 7px; cursor: pointer;
+  transition: background-color 120ms, color 120ms;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.ghost-btn:hover { background: var(--hover); color: var(--foreground); }
+.bar-track { height: 5px; border-radius: 999px; background: var(--muted); margin-top: 9px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 999px; background: var(--foreground); opacity: 0.7; }
+.detail-toggle { font-size: 11px; color: var(--muted-foreground); margin-top: 7px; cursor: pointer; }
+.detail-toggle summary { cursor: pointer; }
+.detail-toggle summary::-webkit-details-marker { display: none; }
+
+/* runtime list */
+.runtime-list {
+  border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--background);
+}
+.runtime-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 13px 14px; border-top: 1px solid var(--border);
+}
+.runtime-row:first-child { border-top: none; }
+.runtime-icon {
+  width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+  border: 1px solid var(--border); background: var(--muted);
+  display: flex; align-items: center; justify-content: center; color: var(--foreground);
+}
+.runtime-icon svg { width: 16px; height: 16px; stroke-width: 1.6; }
+.runtime-main { flex: 1; min-width: 0; }
+.runtime-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.runtime-name { font-size: 13.5px; font-weight: 600; }
+.runtime-desc { font-size: 11.5px; color: var(--muted-foreground); margin-top: 1px; }
+.runtime-desc.err { color: var(--destructive); }
+
+/* staged progress — the signature element */
+.stage-track {
+  display: flex; align-items: center; gap: 3px; margin-top: 8px;
+}
+.stage-seg {
+  height: 4px; flex: 1; border-radius: 999px; background: var(--muted);
+  position: relative; overflow: hidden;
+}
+.stage-seg .fill {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: var(--muted-foreground);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform 420ms cubic-bezier(0.23,1,0.32,1), background-color 200ms;
+}
+.stage-seg.done .fill { transform: scaleX(1); background: var(--foreground); }
+.stage-seg.current .fill { transform: scaleX(1); background: var(--focus); }
+.stage-seg.failed .fill { transform: scaleX(1); background: var(--destructive); }
+@media (prefers-reduced-motion: reduce) {
+  .stage-seg .fill { transition: none; }
+}
+.stage-labels {
+  display: flex; justify-content: space-between; margin-top: 4px;
+}
+.stage-labels span {
+  font-size: 9.5px; color: var(--muted-foreground); letter-spacing: 0.01em;
+}
+.stage-labels span.current { color: var(--focus); font-weight: 600; }
+.stage-labels span.done { color: var(--foreground); }
+.stage-labels span.failed { color: var(--destructive); font-weight: 600; }
+
+.runtime-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-top: 2px; }
+.btn {
+  font-family: inherit; font-size: 12.5px; font-weight: 500;
+  border-radius: 8px; padding: 0 12px; height: 30px;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  transition: background-color 120ms, box-shadow 120ms, color 120ms;
+  white-space: nowrap;
+}
+.btn-outline {
+  background: transparent; color: var(--foreground);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.btn-outline:hover { background: var(--hover); }
+.btn-quiet {
+  background: transparent; color: var(--muted-foreground); border: none; padding: 0 6px;
+}
+.btn-quiet:hover { color: var(--foreground); background: var(--hover); }
+.demo-controls { display: flex; gap: 6px; margin-top: 8px; }
+.demo-controls button {
+  font-family: inherit; font-size: 10.5px; font-weight: 500;
+  border: 1px dashed var(--border); background: transparent; color: var(--muted-foreground);
+  border-radius: 6px; padding: 3px 8px; cursor: pointer;
+}
+.demo-controls button:hover { color: var(--foreground); border-color: var(--muted-foreground); }
+
+/* dev-only disclosure */
+.dev-block {
+  margin-top: 16px; border: 1px solid var(--warn-border); border-radius: 10px;
+  background: var(--warn-bg); overflow: hidden;
+}
+.dev-block summary {
+  list-style: none; cursor: pointer; padding: 10px 14px;
+  display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600;
+}
+.dev-block summary::-webkit-details-marker { display: none; }
+.dev-pill {
+  font-size: 10px; font-weight: 600; color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  padding: 2px 7px; border-radius: 999px;
+}
+.dev-block .dev-body { padding: 0 14px 14px; font-size: 11.5px; color: var(--muted-foreground); line-height: 1.6; }
+.dev-block[open] summary { border-bottom: 1px solid var(--warn-border); }
+
+/* compact drawer overlay (scoped to the mock, not the real viewport) */
+.drawer-scrim {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.35);
+  opacity: 0; pointer-events: none; transition: opacity 200ms ease; z-index: 5;
+}
+.drawer {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 200px;
+  background: var(--muted); border-right: 1px solid var(--border);
+  transform: translateX(-100%); transition: transform 260ms cubic-bezier(0.23,1,0.32,1);
+  z-index: 6; padding: 12px 8px; display: flex; flex-direction: column; gap: 2px;
+}
+.mock.drawer-open .drawer-scrim { opacity: 1; pointer-events: auto; }
+.mock.drawer-open .drawer { transform: translateX(0); }
+
+/* legend */
+.legend {
+  max-width: 820px; width: 100%;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px; margin-top: 6px;
+}
+.legend .card {
+  background: var(--page-card); border: 1px solid var(--page-border);
+  border-radius: 12px; padding: 16px;
+}
+.legend .card h3 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--page-accent); margin: 0 0 8px; font-weight: 700;
+}
+.legend .card p { font-size: 13px; line-height: 1.55; color: var(--page-muted); margin: 0; }
+.legend .card p b { color: var(--page-fg); font-weight: 600; }
+</style>
+
+<div class="intro">
+  <div class="eyebrow">Task 46 · Settings shell + Agent runtimes</div>
+  <h1>Settings modal, Agents section</h1>
+  <p>Live preview built on the shipped Fluid tokens (Inter, the neutral surface ladder, the #6B97FF focus ring) — no new palette, since this has to sit inside the existing product, not introduce a second one.</p>
+</div>
+
+<div class="controls">
+  <div class="control-group">
+    <span class="gl">App theme</span>
+    <button data-theme-btn="light">Light</button>
+    <button data-theme-btn="dark" class="active">Dark</button>
+  </div>
+  <div class="control-group">
+    <span class="gl">Window</span>
+    <button data-width-btn="wide" class="active">Wide</button>
+    <button data-width-btn="compact">Compact</button>
+  </div>
+  <div class="control-group">
+    <span class="gl">Codex row</span>
+    <button id="advance-btn">Advance state ▸</button>
+    <button id="fail-btn">Simulate failure</button>
+    <button id="reset-btn">Reset</button>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="workspace-ghost">
+    <div class="ghost-sidebar">
+      <div class="ghost-row" style="margin-top:20px;width:40%;"></div>
+      <div class="ghost-row"></div>
+      <div class="ghost-row short"></div>
+      <div class="ghost-row"></div>
+    </div>
+  </div>
+  <div class="scrim"></div>
+
+  <div class="mock" id="mock" style="color-scheme: dark;">
+    <div class="mock-header">
+      <span class="title">Settings</span>
+      <button class="icon-btn" aria-label="Close settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="compact-topbar">
+      <button class="icon-btn" id="drawer-open-btn" aria-label="Open sections">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <span class="label">Agents</span>
+    </div>
+
+    <div class="mock-body">
+      <nav class="rail" aria-label="Settings sections">
+        <button class="nav-item disabled" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          General
+          <span class="soon">Soon</span>
+        </button>
+        <button class="nav-item disabled" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          Appearance
+          <span class="soon">Soon</span>
+        </button>
+        <button class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h.01M15 9h.01M9 15c.7.7 1.9 1 3 1s2.3-.3 3-1"/></svg>
+          Agents
+        </button>
+        <button class="nav-item disabled" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.3-4.3"/><circle cx="11" cy="11" r="7"/></svg>
+          AI Index
+          <span class="soon">Soon</span>
+        </button>
+        <button class="nav-item disabled" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4"/></svg>
+          Transcription
+          <span class="soon">Soon</span>
+        </button>
+        <button class="nav-item disabled" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6M15 2v6M6 8h12l-1 5a5 5 0 0 1-10 0L6 8Z"/><path d="M12 17v5"/></svg>
+          MCP
+          <span class="soon">Soon</span>
+        </button>
+        <p class="rail-note">Only <b style="color:inherit">Agents</b> ships in this task — the rest are the same shell, filled in by later tasks (53 for MCP).</p>
+      </nav>
+
+      <div class="drawer-scrim" id="drawer-scrim"></div>
+      <div class="drawer" id="drawer">
+        <button class="nav-item disabled" tabindex="-1">General<span class="soon">Soon</span></button>
+        <button class="nav-item disabled" tabindex="-1">Appearance<span class="soon">Soon</span></button>
+        <button class="nav-item active">Agents</button>
+        <button class="nav-item disabled" tabindex="-1">AI Index<span class="soon">Soon</span></button>
+        <button class="nav-item disabled" tabindex="-1">Transcription<span class="soon">Soon</span></button>
+        <button class="nav-item disabled" tabindex="-1">MCP<span class="soon">Soon</span></button>
+      </div>
+
+      <div class="pane">
+        <h2>Agent runtimes</h2>
+        <p class="lede">Built-in includes free credits through your fixed 7-day account allowance. Codex and Claude Code remain available as bring-your-own runtimes.</p>
+
+        <div class="allowance">
+          <div class="allowance-top">
+            <div>
+              <div class="stat-label">7-day Agent allowance</div>
+              <div class="stat-sub">62% remaining · Resets Sep 12, 4:00 PM</div>
+            </div>
+            <button class="ghost-btn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v5h-5"/></svg>
+              Refresh
+            </button>
+          </div>
+          <div class="bar-track"><div class="bar-fill" style="width:62%"></div></div>
+          <details class="detail-toggle"><summary>Token detail</summary>
+            <div style="margin-top:4px;">128,402 input · 41,208 output · 9,014 cached</div>
+          </details>
+        </div>
+
+        <div class="runtime-list">
+          <!-- Built-in — ready -->
+          <div class="runtime-row">
+            <div class="runtime-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5"/></svg>
+            </div>
+            <div class="runtime-main">
+              <div class="runtime-name-row"><span class="runtime-name">Built-in</span></div>
+              <div class="runtime-desc">Ready for Chat · Included with StashBase</div>
+            </div>
+          </div>
+
+          <!-- Codex — interactive demo row -->
+          <div class="runtime-row" id="codex-row">
+            <div class="runtime-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 10 2 2-2 2M13 14h3"/></svg>
+            </div>
+            <div class="runtime-main">
+              <div class="runtime-name-row"><span class="runtime-name">Codex</span></div>
+              <div class="runtime-desc" id="codex-desc">Not installed</div>
+              <div class="stage-track" id="codex-track">
+                <div class="stage-seg" data-i="0"><div class="fill"></div></div>
+                <div class="stage-seg" data-i="1"><div class="fill"></div></div>
+                <div class="stage-seg" data-i="2"><div class="fill"></div></div>
+                <div class="stage-seg" data-i="3"><div class="fill"></div></div>
+              </div>
+              <div class="stage-labels" id="codex-labels">
+                <span data-i="0">Discover</span>
+                <span data-i="1">Install</span>
+                <span data-i="2">Authenticate</span>
+                <span data-i="3">Configure</span>
+              </div>
+              <div class="demo-controls">
+                <span style="font-size:10px;color:var(--muted-foreground);align-self:center;">Demo:</span>
+              </div>
+            </div>
+            <div class="runtime-actions" id="codex-actions">
+              <button class="btn btn-outline">Install</button>
+            </div>
+          </div>
+
+          <!-- Claude Code — ready -->
+          <div class="runtime-row">
+            <div class="runtime-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v8M8 12h8"/><circle cx="12" cy="12" r="9"/></svg>
+            </div>
+            <div class="runtime-main">
+              <div class="runtime-name-row"><span class="runtime-name">Claude Code</span></div>
+              <div class="runtime-desc">Ready for Chat · System runtime</div>
+            </div>
+            <div class="runtime-actions">
+              <button class="icon-btn" aria-label="More actions for Claude Code">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <details class="dev-block">
+          <summary>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+            Agent bootstrap testing
+            <span class="dev-pill">Development only</span>
+          </summary>
+          <div class="dev-body">
+            These controls change discovery inside StashBase only — they never uninstall a global Agent or clear provider credentials. Hidden entirely from packaged builds.
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="card">
+    <h3>Why staged dots, not a spinner</h3>
+    <p>Preparation is a real staged Interface — <b>discover → install → authenticate → configure</b> — not an indeterminate wait. Making the stages visible is the one place this screen spends its design budget; everything else stays quiet.</p>
+  </div>
+  <div class="card">
+    <h3>One inherited palette</h3>
+    <p>Every color here is the shipped neutral ladder plus the single <b>#6B97FF</b> focus/in-progress accent — no new brand color for a settings surface people already trust.</p>
+  </div>
+  <div class="card">
+    <h3>Compact window</h3>
+    <p>Toggle <b>Window → Compact</b> above: the rail becomes a drawer behind a menu button, matching the app's existing MobileDrawer pattern instead of a bespoke narrow layout.</p>
+  </div>
+  <div class="card">
+    <h3>Honest scope</h3>
+    <p>Five of six rail sections are dimmed and inert — they're the target shape, not a claim that they ship in this task. Only <b>Agents</b> is real here.</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  var mock = document.getElementById('mock');
+
+  document.querySelectorAll('[data-theme-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('[data-theme-btn]').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      mock.style.colorScheme = btn.dataset.themeBtn;
+    });
+  });
+
+  document.querySelectorAll('[data-width-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('[data-width-btn]').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      mock.classList.toggle('compact', btn.dataset.widthBtn === 'compact');
+      mock.classList.remove('drawer-open');
+    });
+  });
+
+  var drawerOpenBtn = document.getElementById('drawer-open-btn');
+  var drawerScrim = document.getElementById('drawer-scrim');
+  drawerOpenBtn.addEventListener('click', function () { mock.classList.add('drawer-open'); });
+  drawerScrim.addEventListener('click', function () { mock.classList.remove('drawer-open'); });
+
+  var STAGES = ['not-installed', 'installing', 'authenticating', 'configuring', 'ready'];
+  var STAGE_DESC = {
+    'not-installed': 'Not installed',
+    'installing': 'Preparing…',
+    'authenticating': 'Preparing…',
+    'configuring': 'Preparing…',
+    'ready': 'Ready for Chat · System runtime'
+  };
+  var idx = 0;
+  var failed = false;
+
+  var track = document.getElementById('codex-track');
+  var labels = document.getElementById('codex-labels');
+  var desc = document.getElementById('codex-desc');
+  var actions = document.getElementById('codex-actions');
+  var segs = track.querySelectorAll('.stage-seg');
+  var labelEls = labels.querySelectorAll('span');
+
+  function render() {
+    var stage = STAGES[idx];
+    desc.textContent = STAGE_DESC[stage];
+    desc.classList.toggle('err', failed);
+    if (failed) desc.textContent = 'Setup failed — connection could not be verified';
+
+    segs.forEach(function (seg, i) {
+      seg.classList.remove('done', 'current', 'failed');
+      if (failed && i === idx - 1) seg.classList.add('failed');
+      else if (i < idx - 1 || (idx === 4)) seg.classList.add('done');
+      else if (i === idx - 1 && !failed) seg.classList.add(idx === 4 ? 'done' : 'current');
+    });
+    labelEls.forEach(function (el, i) {
+      el.classList.remove('done', 'current', 'failed');
+      if (failed && i === idx - 1) el.classList.add('failed');
+      else if (i < idx - 1 || idx === 4) el.classList.add('done');
+      else if (i === idx - 1) el.classList.add('current');
+    });
+
+    if (idx === 0) {
+      actions.innerHTML = '<button class="btn btn-outline" id="codex-act">Install</button>';
+    } else if (idx === 4) {
+      actions.innerHTML = '<button class="icon-btn" aria-label="More actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>';
+    } else if (failed) {
+      actions.innerHTML = '<button class="btn btn-outline" id="codex-act">Retry</button>';
+    } else {
+      actions.innerHTML = '<button class="btn btn-outline" disabled style="opacity:.6;cursor:default;">Preparing…</button>';
+    }
+  }
+
+  document.getElementById('advance-btn').addEventListener('click', function () {
+    failed = false;
+    idx = Math.min(idx + 1, 4);
+    render();
+  });
+  document.getElementById('fail-btn').addEventListener('click', function () {
+    if (idx === 0 || idx === 4) return;
+    failed = true;
+    render();
+  });
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    idx = 0; failed = false; render();
+  });
+
+  render();
+})();
+</script>
