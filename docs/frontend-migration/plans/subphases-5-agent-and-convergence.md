@@ -1,5 +1,14 @@
 # Subphase 5 — Agent and Convergence
 
+## Current execution order
+
+After runtime configuration in Task 46, complete the independently unblocked
+Agent thread through session lifecycle, composer turns, and permissions in
+Tasks 47–49. Then return to Preparation and Retrieval in Tasks 43–45 before
+connecting source context, document writes, and durable conclusions in Tasks
+50–52. Task 50 remains blocked by Task 45; the earlier Agent work must not
+invent source readiness, attachment, or mention behavior ahead of that owner.
+
 ## 46 — Configure Agent runtime and credentials
 
 **Blocked by:** 12.
