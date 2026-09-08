@@ -70,14 +70,16 @@ user-managed results.
 - Semantic runtime refreshes after account, quota, or key changes remain
   background work. Overlapping refresh and folder-removal activity does not
   interrupt local browsing or surface native process errors as user actions.
-- Hosted indexing and meaning-based queries draw from one token allowance.
+- Hosted indexing and meaning-based queries draw from one pool of included
+  monthly credits. User-facing copy calls this quota **credits**; `allowance`
+  names only the Wiki Agent's seven-day quota, so the two never share a word.
   The account menu and the Search by Meaning panel in Settings show the
   provider display name and avatar when available, retain the full email for
   account identification, and share deterministic fallbacks. They also show
-  remaining percentage and reset date. When the allowance is exhausted, hosted
+  remaining percentage and reset date. When the credits are exhausted, hosted
   semantic work stops while keyword search and every local-file workflow
-  remain available. Pending semantic work resumes after the allowance
-  refreshes or an available BYOK source is selected.
+  remain available. Pending semantic work resumes after the credits
+  refresh or an available BYOK source is selected.
 - In-app and MCP retrieval share source identity and access rules. MCP also
   supports validated source-type categories.
 - Representative semantic retrieval quality is measured by a versioned,

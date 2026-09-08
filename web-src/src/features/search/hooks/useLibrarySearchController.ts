@@ -119,7 +119,7 @@ export function useLibrarySearchController({ prefill, onClose }: {
           return;
         }
         if (embedder.source === 'stashbase-account' && embedder.account.quota?.remainingTokens === 0) {
-          setError('Your hosted allowance for search by meaning is used up. Keyword search is still available.');
+          setError('Your hosted credits for search by meaning are used up. Keyword search is still available.');
           setSemanticHits(null);
           setSearching(false);
           return;

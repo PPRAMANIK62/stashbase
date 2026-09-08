@@ -2,7 +2,7 @@
  * Whether searching by meaning is authorized, whether the one-time setup invitation has
  * already been handled, and the one place that decides both.
  *
- * A signed-in account allowance and a provider API key are equal activation
+ * Signed-in account credits and a provider API key are equal activation
  * sources. The server resolves the explicit active source and exposes the
  * resulting `authorized` fact so the dialog, Files-panel line, Settings, and
  * search never disagree.

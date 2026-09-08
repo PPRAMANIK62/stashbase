@@ -1,6 +1,6 @@
 /**
  * Settings → Search by Meaning panel. The user can choose the signed-in StashBase
- * allowance, direct OpenAI, or OpenRouter's OpenAI-compatible endpoint. With
+ * credits, direct OpenAI, or OpenRouter's OpenAI-compatible endpoint. With
  * no active source, searching by meaning is unavailable (files still save,
  * preview, and keyword search keeps working); the setup modal on folder load lives in
  * `EmbedderRequireKeyGate` so it fires whether or not Settings is open.
@@ -140,7 +140,7 @@ export function EmbeddingPanel() {
                   * turn sits under the Settings dialog title's h2. */}
                 <AccountSummary
                   account={state.account}
-                  description="Using the StashBase account allowance"
+                  description="Using the StashBase account credits"
                   heading
                 />
                 {state.account.quota && (
@@ -154,12 +154,12 @@ export function EmbeddingPanel() {
                 <div className="mt-3">
                   {/* The primitive, not an inline-width div: Root carries
                     * role="progressbar" with aria-valuenow/max, so the
-                    * remaining allowance is a number and not only a
+                    * remaining credits are a number and not only a
                     * coloured rectangle. The track takes the card's full
                     * width instead of the primitive's inline step. */}
                   <Progress
                     className="block"
-                    aria-label="Remaining allowance for search by meaning"
+                    aria-label="Remaining credits for search by meaning"
                     value={hostedQuotaRemainingPercent(state.account.quota)}
                   >
                     <ProgressTrack className="w-full">
@@ -205,7 +205,7 @@ export function EmbeddingPanel() {
                   setKeyFormOpen(false);
                   void useAccountAllowance();
                 }}
-              >Use account allowance</Button>
+              >Use account credits</Button>
             </Card>
           )}
           {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (

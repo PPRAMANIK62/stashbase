@@ -868,7 +868,7 @@ that carried no accessible name at all and gained one.
   away with the tab list, since it had been a child of the scroller).
 - **State that is conveyed visually is conveyed programmatically.** The
   download bar reports a number through `Progress`, rather than being a
-  coloured rectangle only sighted users can read. The two hosted-allowance
+  coloured rectangle only sighted users can read. The two hosted-credits
   bars — Settings → Search by Meaning and the sidebar account menu — were the
   same shape of silence (a nested `div` with an inline `width`, no role and
   no value) sitting beside the finished primitive, and now run on it too. A

@@ -67,7 +67,7 @@ const TITLES: Record<View, string> = {
  * of this screen running two lines deep. */
 const DESCRIPTIONS: Record<View, ReactNode> = {
   choice: 'Find related Sources and Wiki Pages even when the wording differs.',
-  /* The free allowance is the one thing this view has to say, so it takes
+  /* The free credits are the one thing this view has to say, so they take
    * the view's single accent moment: the same `accent/8` wash the tinted
    * card that led here wears at rest, laid over the operative phrase.
    *
@@ -83,7 +83,7 @@ const DESCRIPTIONS: Record<View, ReactNode> = {
     <>
       Use your{' '}
       <mark className="rounded-xs bg-accent/8 box-decoration-clone px-px text-inherit">
-        included monthly allowance for search by meaning
+        included monthly credits for search by meaning
       </mark>.
     </>
   ),

@@ -22,7 +22,7 @@ test('setup for search by meaning offers only hosted account and BYOK sources', 
     assert.deepEqual(
       buttons.map((button) => button.textContent?.replace(/\s+/g, ' ').trim()),
       [
-        'Sign in to StashBaseIncluded monthly allowance',
+        'Sign in to StashBaseFree monthly credits',
         'Use your own API keyOpenAI or OpenRouter',
       ],
     );

@@ -35,7 +35,7 @@ export interface EmbedderSettingsController {
 /**
  * The Search by Meaning panel's embedder state and every command that changes which
  * source is authorized: a bring-your-own key, the signed-in StashBase
- * allowance or neither.
+ * credits or neither.
  *
  * Every command that authorizes a source owes the rest of the
  * app the same three things — the shared `embedderHasKey` flag the search

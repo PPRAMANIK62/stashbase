@@ -59,6 +59,11 @@ meaning isn't…" reads as an imperative. Recast such sentences as an action
 ("Set up search by meaning") or use the gerund ("Searching by meaning stops
 until a key is added").
 
+Hosted usage draws on the signed-in account's included monthly **credits**
+("Free monthly credits", "Remaining credits for search by meaning"). Reserve
+**allowance** for the Wiki Agent's seven-day quota; the two quotas never
+share a noun, so neither surface can be mistaken for the other.
+
 A Chat's **Search by meaning** control decides whether that Chat uses the
 capability. Turning it off keeps retrieval text-only; it does not pause or
 delete background search data. Describe background work as preparing or

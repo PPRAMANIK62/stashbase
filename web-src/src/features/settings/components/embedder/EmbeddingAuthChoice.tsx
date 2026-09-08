@@ -10,7 +10,7 @@
  * Wording keeps the first-run choice at the product level; "embeddings"
  * appears only in the bottom disclosure line (and the key form), while the
  * feature name — search by meaning — remains in Settings.
- *   • Sign in to StashBase — hosted, free monthly indexing; the low-friction
+ *   • Sign in to StashBase — hosted, free monthly credits; the low-friction
  *     default. The recommended card carries a soft brand TINT and the same
  *     neutral border as its sibling: tint plus a brand-toned border read as
  *     "already selected" rather than "recommended", which is the one thing
@@ -100,7 +100,7 @@ export function EmbeddingAuthChoice({ onUseOwnKey, onSignIn, signInDisabled = fa
           className="relative grid w-full gap-0.5 rounded-xl border border-border bg-accent/8 px-4 py-1.5 text-left transition-control enabled:cursor-pointer enabled:hover:border-stroke-strong enabled:hover:bg-accent/14 enabled:active:scale-97 disabled:cursor-default"
         >
           <span className="text-base font-semibold leading-snug text-foreground">Sign in to StashBase</span>
-          <span className="text-xs leading-snug text-muted-foreground">Included monthly allowance</span>
+          <span className="text-xs leading-snug text-muted-foreground">Free monthly credits</span>
           {signInDisabled && (
             /* Corner mark, not a chip: a filled badge would compete with
              * the card's own title for the eye that is choosing. Sits on

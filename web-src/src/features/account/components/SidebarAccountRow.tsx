@@ -88,7 +88,7 @@ export function SidebarAccountRow() {
                           {/* The primitive, not an inline-width div: Root
                             * carries role="progressbar" with
                             * aria-valuenow/max, so the menu reports the
-                            * remaining allowance as a number rather than a
+                            * remaining credits as a number rather than a
                             * coloured rectangle only sighted users can
                             * read. The track takes the popup's full width
                             * instead of the primitive's inline step. */}
