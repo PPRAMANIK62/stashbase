@@ -10,6 +10,7 @@ const {
 const {
   createServerArguments,
   createServerChildEnvironment,
+  waitForStableServerProbe,
   serverStartupTimeoutMs,
 } = require('./main-probe.cjs');
 const {
@@ -173,6 +174,69 @@ test('Electron-owned server uses a single process unless Vite explicitly needs w
 test('source server startup covers cold TypeScript loading without weakening packaged failure bounds', () => {
   assert.equal(serverStartupTimeoutMs({ packaged: false }), 30_000);
   assert.equal(serverStartupTimeoutMs({ packaged: true }), 10_000);
+});
+
+test('Electron waits through a temporarily unresponsive server instead of spawning a competitor', async () => {
+  const probes = [
+    { compatible: false, occupied: true, transient: true },
+    { compatible: false, occupied: true, transient: true },
+    { compatible: true, occupied: true, transient: false },
+  ];
+  let now = 0;
+  let waits = 0;
+
+  const result = await waitForStableServerProbe(
+    async () => probes.shift(),
+    {
+      timeoutMs: 1_000,
+      retryMs: 100,
+      now: () => now,
+      sleep: async (ms) => { now += ms; waits += 1; },
+    },
+  );
+
+  assert.equal(result.compatible, true);
+  assert.equal(waits, 2);
+});
+
+test('Electron stops waiting when the transient port holder exits', async () => {
+  const probes = [
+    { compatible: false, occupied: true, transient: true },
+    { compatible: false, occupied: false, transient: false },
+  ];
+  let now = 0;
+
+  const result = await waitForStableServerProbe(
+    async () => probes.shift(),
+    {
+      timeoutMs: 1_000,
+      retryMs: 100,
+      now: () => now,
+      sleep: async (ms) => { now += ms; },
+    },
+  );
+
+  assert.equal(result.occupied, false, 'Electron may now start the one owned server');
+});
+
+test('Electron does not delay a responsive incompatible service', async () => {
+  let probes = 0;
+  let waits = 0;
+  const result = await waitForStableServerProbe(
+    async () => {
+      probes += 1;
+      return { compatible: false, occupied: true, transient: false };
+    },
+    {
+      timeoutMs: 1_000,
+      retryMs: 100,
+      sleep: async () => { waits += 1; },
+    },
+  );
+
+  assert.equal(result.compatible, false);
+  assert.equal(probes, 1);
+  assert.equal(waits, 0);
 });
 
 test('application menu exposes VS Code window commands on Windows and Linux', () => {

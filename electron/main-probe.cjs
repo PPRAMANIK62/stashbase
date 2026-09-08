@@ -52,9 +52,29 @@ function serverStartupTimeoutMs({ packaged }) {
   return packaged ? 10_000 : 30_000;
 }
 
+/** A listener that accepted the TCP connection but did not finish the health
+ * response may be a StashBase server restarting or briefly contended. Do not
+ * race a second server onto its port after one short health timeout. Re-probe
+ * for a bounded interval; responsive incompatible services still fail fast. */
+async function waitForStableServerProbe(probe, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const retryMs = options.retryMs ?? 150;
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const deadline = now() + timeoutMs;
+
+  let result = await probe();
+  while (result?.transient === true && now() < deadline) {
+    await sleep(Math.min(retryMs, deadline - now()));
+    result = await probe();
+  }
+  return result;
+}
+
 module.exports = {
   createServerArguments,
   createServerChildEnvironment,
   isCompatibleServerHealth,
   serverStartupTimeoutMs,
+  waitForStableServerProbe,
 };
