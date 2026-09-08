@@ -223,6 +223,12 @@ fixtures, reports, screenshots, and logs.
 
 ## Focus and Flakes
 
+Clipboard capture journeys start with capture disabled, settle onboarding,
+and clear ambient clipboard data before opting in through Settings. They then
+write their controlled image and exercise the native capture path. Enabling
+capture in startup config lets unrelated host clipboard content open a modal
+over onboarding before the journey reaches its own assertions.
+
 Focused tests and raw `.skip`/`.fixme` calls are rejected. CI forbids focused
 tests, uses one worker, retries once, and fails a test that passes only on
 retry. There is no quarantine mechanism.

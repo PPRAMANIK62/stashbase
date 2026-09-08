@@ -22,14 +22,30 @@ const CLIPBOARD_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABC
 
 test('J04 stops clipboard-image offers after opt-out', async ({}, testInfo) => {
   const fixture = await createAppFixture({ membership: 'one-folder' });
-  const config = JSON.parse(fs.readFileSync(fixture.configFile, 'utf8')) as Record<string, unknown>;
-  config.capture = { clipboardImageImport: true };
-  fs.writeFileSync(fixture.configFile, `${JSON.stringify(config, null, 2)}\n`);
   let app: LaunchedApp | undefined;
   try {
     app = await launchApp(fixture, testInfo);
+    // A pre-existing image must not race onboarding before this test opts in.
+    await app.electron.evaluate(({ clipboard, nativeImage }, pixel) => {
+      clipboard.writeImage(nativeImage.createFromDataURL(pixel));
+    }, CLIPBOARD_PIXEL);
     await openLibraryFolder(app.page, 'project-alpha');
     await dismissEmbeddingKeyPrompt(app.page);
+    await app.electron.evaluate(({ clipboard }) => clipboard.clear());
+    await settingsButton(app.page).click();
+    await settingsTab(app.page, 'General').click();
+    const clipboardCapture = settingsDialog(app.page).getByRole('checkbox', {
+      name: 'Offer to add clipboard screenshots',
+    });
+    await expect(clipboardCapture).not.toBeChecked();
+    await clipboardCapture.check();
+    await expect.poll(() => {
+      const config = JSON.parse(fs.readFileSync(fixture.configFile, 'utf8')) as {
+        capture?: { clipboardImageImport?: boolean };
+      };
+      return config.capture?.clipboardImageImport;
+    }).toBe(true);
+    await settingsDialog(app.page).getByRole('button', { name: 'Close settings' }).click();
     await app.electron.evaluate(({ clipboard, nativeImage }, pixel) => {
       clipboard.writeImage(nativeImage.createFromDataURL(pixel));
     }, CLIPBOARD_PIXEL);
@@ -44,9 +60,6 @@ test('J04 stops clipboard-image offers after opt-out', async ({}, testInfo) => {
 
     await settingsButton(app.page).click();
     await settingsTab(app.page, 'General').click();
-    const clipboardCapture = settingsDialog(app.page).getByRole('checkbox', {
-      name: 'Offer to add clipboard screenshots',
-    });
     await expect(clipboardCapture).toBeChecked();
     await clipboardCapture.uncheck();
     await expect(clipboardCapture).not.toBeChecked();
