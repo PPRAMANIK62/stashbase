@@ -136,6 +136,9 @@ overrides upstream policy with a CSP beginning at `default-src 'none'`,
 self-hosted scripts and styles, narrow asset schemes, and only the exact
 Electron-owned loopback HTTP/WebSocket endpoint for server capabilities.
 
+`pnpm dev` starts Vite, the server, and the required Electron host together;
+direct browser loads show an explicit host error instead of a blank page.
+
 Evidence: `pnpm test:electron-boundary`,
 `env -u ELECTRON_RUN_AS_NODE pnpm test:electron-boundary:smoke`, and
 `pnpm test:package-inputs`.

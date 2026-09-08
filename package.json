@@ -32,10 +32,11 @@
     "node": ">=24.11.0"
   },
   "scripts": {
-    "dev": "concurrently -n web,srv -c cyan,green \"npm:dev:web\" \"npm:dev:server\"",
+    "dev": "concurrently -k -s first -n web,srv,desktop -c cyan,green,magenta \"npm:dev:web\" \"npm:dev:server\" \"npm:dev:desktop\"",
     "dev:web": "vp run @stashbase/renderer#dev",
     "storybook": "pnpm --filter @stashbase/renderer storybook",
     "dev:server": "STASHBASE_DEV_VITE=1 tsx watch server/index.ts",
+    "dev:desktop": "node scripts/electron/dev.mjs",
     "start": "tsx server/index.ts",
     "mcp": "tsx mcp/server.ts",
     "build:web": "pnpm check:renderer-architecture && vp run @stashbase/renderer#build",
