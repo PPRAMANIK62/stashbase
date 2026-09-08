@@ -112,7 +112,11 @@ switch.
 Daemon retirement is single-flight across shutdown, credential/quota reset,
 and recovery callers. A replacement generation waits until the retiring child
 has exited and released the store lock; a late event from an older generation
-cannot clear the current readiness latch or reject current operations.
+cannot clear the current readiness latch or reject current operations. If a
+runtime reset lands after a folder bind but before reconcile upserts, the
+daemon's binding-loss result is a recoverable lifecycle fingerprint: retry the
+authoritative operation once from bind instead of persisting a per-file index
+failure.
 
 Large semantic workloads use the same authoritative content-hash diff. Known
 stale rows become unavailable before a durable awaiting/paused decision is

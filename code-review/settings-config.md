@@ -135,7 +135,10 @@ access surface external clients copy from.
   appearance updates the renderer, capture updates the Electron clipboard
   monitor, update checks refresh the Electron update scheduler, embedding affects semantic readiness, transcription affects
   preparation, and MCP HTTP settings affect the listener. Ordinary browsing
-  and keyword search remain available on failure.
+  and keyword search remain available on failure. Embedding diagnostics
+  distinguish missing authorization, exhausted hosted credits, and a configured
+  runtime that is still recovering; they never tell a signed-in user to select
+  an account or key merely because the broker is temporarily unavailable.
 
 ## Implementation Map
 

@@ -12,6 +12,7 @@ import {
 import {
   cancelFolderSyncsAndWait,
   deleteFolderRuntimeState,
+  embeddingRuntimeUnavailableMessage,
   enqueueFolderSyncOperation,
   runFolderSyncOperation,
   semanticSyncPolicy,
@@ -43,6 +44,25 @@ test('semantic pause is folder-scoped, durable across database reopen, and expli
     else process.env.STASHBASE_LOCAL_DATA_ROOT = previous;
     fs.rmSync(dataRoot, { recursive: true, force: true });
   }
+});
+
+test('embedding runtime warnings distinguish setup, credits, and runtime recovery', () => {
+  const folder = '/library/research';
+  assert.match(embeddingRuntimeUnavailableMessage(
+    folder,
+    { configured: false, available: false, reason: 'embedding-source-required' },
+    'openai',
+  ), /until an account or key is selected/);
+  assert.match(embeddingRuntimeUnavailableMessage(
+    folder,
+    { configured: true, available: false, reason: 'hosted-quota-exhausted' },
+    'stashbase-account',
+  ), /credits exhausted/);
+  assert.match(embeddingRuntimeUnavailableMessage(
+    folder,
+    { configured: true, available: true },
+    'stashbase-account',
+  ), /hosted embedding runtime is not ready/);
 });
 
 test('resume intent is serialized after an older reconcile can publish its decision', async () => {
@@ -120,6 +140,62 @@ test('a live folder reconcile resumes after another folder retires the shared da
   assert.equal(result.cancelled, undefined);
   assert.equal(bindCalls, 2, 'the replacement daemon must receive the folder binding again');
   assert.equal(syncCalls, 2, 'authoritative reconcile is safe to retry from the beginning');
+});
+
+test('a folder reconcile rebinds when a runtime reset drops the root during indexing', async () => {
+  const folder = path.join(os.tmpdir(), 'stashbase-live-sync-through-binding-reset');
+  let bindCalls = 0;
+  let syncCalls = 0;
+  const deps = {
+    indexer: {} as Indexer,
+    bind: async () => { bindCalls += 1; },
+    sync: async () => {
+      syncCalls += 1;
+      if (syncCalls === 1) {
+        return {
+          added: [], modified: [], removed: [], renamed: [],
+          failed: [{
+            name: path.join(folder, 'paper.pdf'),
+            error: `no bound root matches path '${path.join(folder, 'paper.pdf')}'; call bind_root first (or set an embedding API key)`,
+          }],
+        };
+      }
+      return { added: ['paper.pdf'], modified: [], removed: [], renamed: [], failed: [] };
+    },
+    semanticEnabled: true,
+  };
+
+  const result = await runFolderSyncOperation(folder, { reason: 'hosted allowance reset' }, deps);
+
+  assert.deepEqual(result.failed, []);
+  assert.deepEqual(result.added, ['paper.pdf']);
+  assert.equal(bindCalls, 2, 'the replacement daemon must receive the folder binding again');
+  assert.equal(syncCalls, 2, 'the reconcile must retry after the binding-loss fingerprint');
+});
+
+test('a persistent binding loss is returned after one recovery attempt', async () => {
+  const folder = path.join(os.tmpdir(), 'stashbase-persistent-binding-loss');
+  let bindCalls = 0;
+  let syncCalls = 0;
+  const failure = {
+    name: path.join(folder, 'paper.pdf'),
+    error: `no bound root matches path '${path.join(folder, 'paper.pdf')}'; call bind_root first (or set an embedding API key)`,
+  };
+  const deps = {
+    indexer: {} as Indexer,
+    bind: async () => { bindCalls += 1; },
+    sync: async () => {
+      syncCalls += 1;
+      return { added: [], modified: [], removed: [], renamed: [], failed: [failure] };
+    },
+    semanticEnabled: true,
+  };
+
+  const result = await runFolderSyncOperation(folder, { reason: 'hosted allowance reset' }, deps);
+
+  assert.deepEqual(result.failed, [failure]);
+  assert.equal(bindCalls, 2, 'binding recovery is attempted once');
+  assert.equal(syncCalls, 2, 'persistent failures must not loop indefinitely');
 });
 
 test('folder removal interrupts an unresponsive reconcile instead of waiting behind it', async () => {
