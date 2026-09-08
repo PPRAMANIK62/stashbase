@@ -19,6 +19,24 @@ interface InlineInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, '
   onCommit(): void;
 }
 
+export function caretOffsetAtPoint(container: HTMLElement, x: number, y: number): number {
+  const document = container.ownerDocument;
+  const position = document.caretPositionFromPoint?.(x, y);
+  const node = position?.offsetNode;
+  const offset = position?.offset;
+  const fallback = document.caretRangeFromPoint?.(x, y);
+  const targetNode = node ?? fallback?.startContainer;
+  const targetOffset = offset ?? fallback?.startOffset;
+  if (!targetNode || targetOffset === undefined || !container.contains(targetNode)) {
+    return container.textContent?.length ?? 0;
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(container);
+  range.setEnd(targetNode, targetOffset);
+  return range.toString().length;
+}
+
 const InlineInput = forwardRef<HTMLInputElement, InlineInputProps>(
   (
     {
