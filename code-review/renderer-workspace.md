@@ -82,6 +82,10 @@ semantic readiness.
   Overlay dismissal restores focus to the initiating control. Destructive
   library confirmation identifies the complete home-shortened member path,
   not only its parent directory.
+- The document tab list is content-sized and shrinks under overflow. New Tab
+  follows the last tab while space remains and stays outside the scroller.
+  Dropping a tab on the empty remainder of the strip appends it to the end;
+  individual tab targets retain ownership of between-tab drops.
 - Drag-only organization gestures keep keyboard equivalents that route through
   the same action: the file row's Move to… picker
   (`features/workspace/components/MoveFilePicker.tsx`) calls the drop path's

@@ -106,7 +106,13 @@
   overflow-y: visible;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
-  flex: 1 1 auto;
+  /* Content-sized, shrinkable (`0 1 auto`): with room to spare the list
+   * ends at its last tab, so the New-tab control TRAILS the tabs (the
+   * browser/editor convention — pinned at the window's far edge it sat
+   * against the chat-panel toggle, reading as chrome instead of "next
+   * tab goes here"). Under pressure the list shrinks and scrolls, and
+   * the control holds the row's right edge beside it. */
+  flex: 0 1 auto;
   min-width: 0;
 }
 .tab {
@@ -114,11 +120,16 @@
   align-items: center;
   gap: 6px;
   padding: 6px 8px 6px 10px;
-  /* `flex: 1 1 0` makes every tab take an equal share of the
-   * available width up to `max-width`; under pressure they shrink
-   * down to `min-width` (just enough for a couple of chars + the
-   * close button). */
-  flex: 1 1 0;
+  /* A definite 200px width (not a 200px flex BASIS: the content-sized
+   * list above measures its intrinsic width through min/max and a bare
+   * basis loses to the label's content size there) keeps every tab the
+   * width it has always rendered at — the old `flex: 1 1 0` equal
+   * share capped at `max-width: 200px` anyway. No grow, so the list
+   * ends at its last tab; under pressure tabs shrink down to
+   * `min-width` (just enough for a couple of chars + the close
+   * button). */
+  flex: 0 1 auto;
+  width: 200px;
   max-width: 200px;
   min-width: 60px;
   border: 1px solid transparent;
@@ -213,11 +224,12 @@
 .tab-new {
   width: 28px;
   height: 28px;
-  /* Pinned beside the scroller rather than inside it, so it never
-   * scrolls away with the tabs it sits next to. Centred against the
-   * strip row: `flex-end` instead puts it a pixel low, because the
-   * scroller reserves a gutter below the tabs that this control does
-   * not have. electron/tab-strip-layout-smoke.cjs asserts the result. */
+  /* Beside the scroller rather than inside it, so it trails the last
+   * tab while the room lasts and never scrolls away once the list
+   * overflows. Centred against the strip row: `flex-end` instead puts
+   * it a pixel low, because the scroller reserves a gutter below the
+   * tabs that this control does not have.
+   * electron/tab-strip-layout-smoke.cjs asserts the result. */
   flex: 0 0 28px;
   align-self: center;
   border: 0;

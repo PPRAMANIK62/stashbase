@@ -1,4 +1,4 @@
-import { PlusIcon } from '@/common/components/icons';
+import { NewChatIcon } from '@/common/components/icons';
 import { Button } from '@/common/components/ui/button';
 import { readPreferredAgent } from '@/common/lib/agentPreference';
 import { useAppActions } from '@/store/contexts/AppContext';
@@ -11,8 +11,11 @@ export const launcherRowClass =
   'h-auto min-h-7 w-full min-w-0 justify-start gap-2 px-2 text-left text-base font-normal text-muted-foreground';
 
 /** Full-width New Chat entry at the sidebar's top (Cursor's "New
- *  Agent" position) — the app's ONE chat-creation entry point, and a
- *  PURE action: one row, one target. Which agent the chat uses is the
+ *  Agent" position) — the app's ONE STANDING chat-creation entry, and a
+ *  PURE action: one row, one target. (Collapsing the sidebar hides it,
+ *  so the titlebar shows a compose button with the same action for
+ *  exactly that state — see `TitlebarControls`; the two never coexist
+ *  on screen.) Which agent the chat uses is the
  *  blank chat's own business now — the composer carries the agent pill,
  *  where the choice is visible at the point of use — and chat History
  *  lives with the chat pane, so neither crowds this row any more.
@@ -39,7 +42,7 @@ export function NewChatButton() {
         {/* 16px slot around the 14px glyph — every launcher row does
           * this, so the label lands on the shared gutter line. */}
         <span className="inline-flex size-4 flex-none items-center justify-center">
-          <PlusIcon className="size-3.5 text-muted-foreground" />
+          <NewChatIcon className="size-3.5 text-muted-foreground" />
         </span>
         <span className="min-w-0 truncate">New Chat</span>
       </Button>

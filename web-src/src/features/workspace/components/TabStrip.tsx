@@ -165,16 +165,21 @@ export function TabStrip() {
   return (
     /* Layout metrics live in .tab-strip / .tab-strip-inner CSS —
      * electron/tab-strip-layout-smoke.cjs consumes workspace.css raw.
-     * `.tab-strip` IS the strip row: the scrolling tab list and the
-     * New-tab control are its two children, so the control stays put
-     * while the list scrolls under it. */
-    <div className="tab-strip">
+     * `.tab-strip` IS the strip row: the content-sized tab list and the
+     * New-tab control trailing it are its two children, so the control
+     * follows the last tab and stays put once the list overflows and
+     * scrolls under it.
+     *
+     * The append-to-end drop handlers sit on the ROW, not the list: the
+     * list now ends at its last tab, and dragging a tab into the empty
+     * run to the right must keep meaning "move to the end". Drops
+     * between tabs are claimed (and stopped) by each tab's own handler
+     * before they bubble here. */
+    <div className="tab-strip" onDragOver={onStripDragOver} onDrop={onStripDrop}>
       <div
         className="tab-strip-inner"
         role="tablist"
         aria-label="Open documents"
-        onDragOver={onStripDragOver}
-        onDrop={onStripDrop}
       >
         {state.tabs.map((t) => {
           const isActive = t.id === state.activeTabId;

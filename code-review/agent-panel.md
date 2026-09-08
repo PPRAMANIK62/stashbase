@@ -80,11 +80,11 @@
 
 ## Composer and Controls
 
-- The sidebar New Chat split button is the only creation/Agent-selection
-  surface. Its agent picker — the named agent and its chevron form one
-  control — changes preference without creating a chat. The row carries no
-  hover surface of its own: each target in it highlights only its own box,
-  and a rule separates the New Chat/agent pair from chat history.
+- The sidebar New Chat row is the standing creation entry — a pure action
+  whose agent choice lives in the composer's agent pill, not on the row.
+  While the sidebar is collapsed, the titlebar's left cluster carries a
+  compose New Chat button running the same blank-tab rule; it renders only
+  in that state, so exactly one creation entry is visible at a time.
 - The scope picker is available before session binding and remains visible and
   openable after binding, with its scope rows locked in place. Model and effort come from runtime capabilities, and
   Default remains an omitted override. An idle Codex conversation applies a

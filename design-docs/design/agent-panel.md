@@ -81,6 +81,10 @@ and uses a hosted service only as its metered model provider.
   detail available on demand, and keeps Codex and Claude Code as explicit
   alternatives. It never exposes the allowance's dollar value.
 - New Chat is the deliberate creation entry and reuses a completely blank tab.
+  Its standing seat is the sidebar's top row; while the sidebar is collapsed,
+  the titlebar's left cluster shows a compose button carrying the same action
+  beside the sidebar toggle, so starting a chat never requires reopening the
+  sidebar. Exactly one of the two entries is on screen at a time.
   Opening the app, a folder, a tab, or history never grants runtime-installation
   consent; a missing bring-your-own runtime waits for **Install and continue**.
 - An installed but signed-out Codex runtime stops at a dedicated sign-in gate.

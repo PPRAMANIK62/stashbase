@@ -18,6 +18,10 @@ manager, or a primary graph-navigation tool.
 
 ## Current Experience
 
+- The New Tab control follows the last document tab and remains reachable
+  when the tab list overflows. Dropping a tab in the empty space to its right
+  moves that tab to the end.
+
 - A new window opens directly into the workspace with no folder selected and
   one expanded, reusable blank library Chat. It never silently restores a
   folder, installs an Agent runtime, or opens account sign-in or setup for

@@ -64,6 +64,33 @@ test('the shell titlebar is a banner landmark rooted by a visually-hidden h1', a
   });
 });
 
+test('collapsing the sidebar seats a New Chat action in the titlebar band', async () => {
+  // The sidebar's New Chat row disappears with the sidebar, so the shell
+  // lends the action a collapsed-only seat beside the way back in — and
+  // only then: two simultaneous creation entries would be two rules for
+  // one function.
+  await withDom(async (dom) => {
+    let activations = 0;
+    await mountApp(dom, h(TitlebarControls), {
+      state: appState({ workspace: { sidebarCollapsed: true } }),
+      actions: appActions({ activateChatTab: () => { activations += 1; } }),
+    });
+    const [compose] = dom.byLabel('New Chat');
+    assert.ok(compose, 'the collapsed band carries the creation entry');
+    await dom.fire(compose, new MouseEvent('click', { bubbles: true }));
+    assert.equal(activations, 1, 'the button runs the same blank-tab rule as the sidebar row');
+  });
+
+  await withDom(async (dom) => {
+    await mountApp(dom, h(TitlebarControls), { state: appState() });
+    assert.equal(
+      dom.byLabel('New Chat').length,
+      0,
+      'with the sidebar open, its row stays the one visible creation entry',
+    );
+  });
+});
+
 test('the folder header names its root as a real button that selects the folder root', async () => {
   await withDom(async (dom) => {
     let dispatched: unknown = null;

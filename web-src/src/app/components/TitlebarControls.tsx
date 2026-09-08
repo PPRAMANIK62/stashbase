@@ -1,4 +1,4 @@
-import { PanelLeftIcon, PanelRightIcon, SearchIcon } from '@/common/components/icons';
+import { NewChatIcon, PanelLeftIcon, PanelRightIcon, SearchIcon } from '@/common/components/icons';
 import { formatPrimaryShiftShortcut } from '@/common/lib/platformShortcuts';
 import { readPreferredAgent } from '@/common/lib/agentPreference';
 import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
@@ -15,6 +15,7 @@ const controlButtonClass = 'cursor-pointer text-muted-foreground [&_svg]:size-3.
 
 /**
  * Cursor-style window-top controls in the titlebar band: sidebar toggle
+ * (joined by a New Chat compose button while the sidebar is collapsed)
  * + library search + the folder switcher at the window's top-left (right
  * of the macOS traffic lights), and the mirrored chat-panel toggle at
  * the top-right — `.titlebar-controls` / `.titlebar-controls-right` in
@@ -58,6 +59,21 @@ export function TitlebarControls() {
         >
           <PanelLeftIcon />
         </TooltipButton>
+        {/* Collapsing the sidebar takes its New Chat row with it, so the
+          * band lends the action a seat NEXT TO the way back in — the
+          * ChatGPT compose idiom: [toggle][compose]. Collapsed-only:
+          * while the sidebar is open its row is the one standing entry,
+          * and a permanent twin here would be a second rule for the
+          * same function. Same blank-tab action as that row. */}
+        {collapsed && (
+          <TooltipButton
+            className={controlButtonClass}
+            label="New Chat"
+            onClick={() => actions.activateChatTab(readPreferredAgent())}
+          >
+            <NewChatIcon />
+          </TooltipButton>
+        )}
         <TooltipButton
           className={controlButtonClass}
           aria-haspopup="dialog"
