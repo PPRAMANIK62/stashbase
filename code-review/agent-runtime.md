@@ -209,22 +209,27 @@ Missing scope uses the window's current folder or Library when none is active;
 it is not a third scope.
 
 - A library session uses the reserved folder-home cwd and retrieves through
-  library MCP. Its Runtime Adapter injects the Library scope's resolved Agent
-  Instructions verbatim — the saved Library-wide customization, or the
-  packaged Library default.
+  library MCP. Its Runtime Adapter resolves the Library scope's exact
+  user-visible Agent Instructions — the saved Library-wide customization, or
+  the packaged Library default — before composing the internal routing policy.
 - A folder session uses that folder's cwd. Its Runtime Adapter injects that
-  exact member's resolved Agent Instructions verbatim. Runtime startup never creates
-  `AGENTS.md`, `CLAUDE.md`, or another source file; existing runtime-native
-  files remain visible, user-owned inputs under that runtime's native rules.
+  exact member's resolved Agent Instructions plus the internal routing policy.
+  Runtime startup never creates `AGENTS.md`, `CLAUDE.md`, or another source
+  file; existing runtime-native files remain visible, user-owned inputs under
+  that runtime's native rules.
 - `assets/agent-instructions/default.md` (folder Chats) and `library.md`
   (Library-wide Chats) are the two packaged defaults. The Agent Instructions
   Interface resolves the session scope's default or its saved customization;
-  that exact text is the ONLY StashBase-owned Agent prompt. Codex receives it
-  as `developerInstructions`, Claude as the native preset append, and Wiki Agent
-  as its OpenCode Agent prompt. No Adapter wraps it, and MCP advertises tools
-  without a second top-level instruction prompt. No Adapter mutates a started
-  native session's prompt in place or grows a live setter. A saved edit reaches
-  an open Chat because the renderer
+  the editor and HTTP Adapter expose only that exact text. At native session
+  startup, each Runtime Adapter composes it with the product-owned policy from
+  `server/agent-runtime-instructions.ts`. That policy prefers StashBase MCP for
+  library orientation and prepared PDF, DOCX, audio, or video reads, avoiding a
+  redundant parser unless original-source analysis was explicitly requested or
+  prepared text is unavailable. Codex receives the composition as
+  `developerInstructions`, Claude as the native preset append, and Wiki Agent
+  as its OpenCode Agent prompt. MCP advertises tools without a second top-level
+  instruction prompt. No Adapter mutates a started native session's prompt in
+  place or grows a live setter. A saved edit reaches an open Chat because the renderer
   remounts that session (resuming its native session id when it has content),
   so the guidance arrives the one way every adapter already supports. They are
   guidance, not authorization or a security boundary.
@@ -366,7 +371,7 @@ than enabling native commands against the old folder-home cwd.
 | Claude Adapter | `server/agent.ts` and its SDK/native-process helpers |
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
-| Agent Instructions Interface | `assets/agent-instructions/default.md` owns the product default; `server/agent-instructions.ts` resolves it or working-folder persistence; `server/routes/agent-instructions.ts` is the authorized HTTP Adapter; each Runtime Adapter injects the returned `text` verbatim |
+| Agent Instructions Interface | `assets/agent-instructions/default.md` owns the product default; `server/agent-instructions.ts` resolves it or working-folder persistence; `server/routes/agent-instructions.ts` is the authorized HTTP Adapter; `server/agent-runtime-instructions.ts` owns the separate internal routing policy and native-session composition |
 | Renderer Adapter | `web-src/src/common/lib/agentCatalog.ts`, the `activateChatTab` action in `web-src/src/store/contexts/AppContext.tsx`, `runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
 | Focused evidence | `server/agent-instructions.test.ts`, `server/__tests__/agent-contract.test.ts`, `opencode-agent.test.ts`, `hosted-agent-broker.test.ts`, `opencode-native-smoke.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs`; J06 in `e2e/journeys/agent-panel.spec.ts` proves scoped UI persistence and native prompt injection, while J11 in `e2e/journeys/agent-workflows.spec.ts` proves the first post-rebind MCP write |
 

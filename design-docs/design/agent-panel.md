@@ -166,9 +166,11 @@ and uses a hosted service only as its metered model provider.
   control or a security boundary. Save failures remain visible, the folder
   requires live library membership, and changes reach matching open folder
   Chats from their next message. Library-wide Chats resolve the packaged
-  default. The resolved text is the only StashBase-owned Agent prompt; Runtime
-  Adapters inject it verbatim without another product preamble or hidden MCP
-  instruction.
+  default. The editor and its API expose only that user-visible text. Runtime
+  Adapters preserve it exactly while composing a separate, non-user-visible
+  product policy that prefers StashBase MCP for library orientation and
+  prepared document reads. Product routing is never registered as if the user
+  authored it.
 - The user's visible request is exactly what the Agent receives. Wiki Page
   placement and maintenance behavior live in Agent Instructions rather than
   a second hidden wire prompt.

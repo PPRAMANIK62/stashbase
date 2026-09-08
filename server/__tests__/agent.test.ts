@@ -17,7 +17,7 @@ import {
   claudeSkillPrompt,
   selectClaudeModel,
 } from '../agent.ts';
-import { setAgentInstructions } from '../agent-instructions.ts';
+import { resolveAgentInstructions, setAgentInstructions } from '../agent-instructions.ts';
 import { clearAgentRuntimeFailure } from '../agent-contract.ts';
 import { clearCurrentFolder, runWithWindowId, setCurrentFolder } from '../folder.ts';
 import { claudeTranscriptEffort } from '../routes/sessions.ts';
@@ -78,7 +78,7 @@ function fakeClaudeQuery(failureOrMessages?: Error | SDKMessage[], failure?: Err
   } as unknown as Query;
 }
 
-test('Claude appends only the exact scoped Agent Instructions', async (t) => {
+test('Claude keeps Agent Instructions user-visible while appending hidden StashBase routing policy', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-instructions-'));
   const instructions = 'Prefer primary research notes.';
   setAgentInstructions({ kind: 'folder', path: folder }, instructions);
@@ -109,7 +109,13 @@ test('Claude appends only the exact scoped Agent Instructions', async (t) => {
 
   session.begin();
   await settle();
-  assert.equal(appended, instructions);
+  assert.equal(resolveAgentInstructions(folder), instructions);
+  assert.match(appended, /StashBase MCP/i);
+  assert.match(appended, /search_library/);
+  assert.match(appended, /read_file/);
+  assert.match(appended, /do not install or run a separate parser/i);
+  assert.match(appended, /Prefer primary research notes\./);
+  assert.notEqual(appended, instructions);
 });
 
 interface TurnEvent {

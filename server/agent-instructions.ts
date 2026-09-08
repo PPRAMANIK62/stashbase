@@ -29,12 +29,13 @@ const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
     ? path.resolve(process.env.STASHBASE_APP_ROOT)
     : path.resolve(import.meta.dirname, '..');
 
-/** The prompts are product content, not runtime implementation. Keeping each
- * as one packaged Markdown resource lets product changes edit the one thing
- * the user sees while every Adapter consumes the exact same bytes. There are
- * two: `default.md` for folder Chats, `library.md` for Library-wide Chats —
- * a Chat with no working folder is oriented toward finding and starting
- * work, not maintaining one folder's Wiki. */
+/** These user-visible prompts are product content, not runtime routing policy.
+ * Keeping each as one packaged Markdown resource lets product changes edit the
+ * exact bytes shown in the Agent Instructions surface. Runtime Adapters
+ * preserve those bytes when composing their separate internal policy. There
+ * are two: `default.md` for folder Chats, `library.md` for Library-wide Chats —
+ * a Chat with no working folder is oriented toward finding and starting work,
+ * not maintaining one folder's Wiki. */
 export function readDefaultAgentInstructions(
   file = path.join(RESOURCES_ROOT, 'assets', 'agent-instructions', 'default.md'),
 ): string {

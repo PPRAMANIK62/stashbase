@@ -37,9 +37,10 @@ clients and are not a general host-filesystem API.
   evidence never exposes an AppData path.
 - `library_info` returns folder identity and provider state, not a second
   folder-description or Agent Instructions store. StashBase Chat instructions
-  are injected verbatim by the panel Runtime Adapter. The MCP server publishes
-  capability and tool descriptions but no second top-level instruction prompt;
-  user-owned portable rules may remain visible source in `AGENTS.md`.
+  remain distinct from the panel Runtime Adapter's internal library-routing
+  policy. The MCP server publishes capability and tool descriptions but no
+  second top-level instruction prompt; user-owned portable rules may remain
+  visible source in `AGENTS.md`.
 - File mutations use the shared transaction/version boundary and schedule or
   reconcile index maintenance after success.
 - `list_directory` enumerates only the requested directory surface and does

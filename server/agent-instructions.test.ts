@@ -86,6 +86,12 @@ test('a Library Chat resolves the Library scope, and the packaged defaults are t
   assert.notEqual(libraryDefault, folderDefault);
 });
 
+test('user-visible Agent Instructions do not expose internal runtime routing policy', () => {
+  for (const instructions of [readDefaultAgentInstructions(), readDefaultLibraryAgentInstructions()]) {
+    assert.doesNotMatch(instructions, /StashBase MCP|mcp__stashbase__|`search_library`|`read_file`/i);
+  }
+});
+
 test('Agent Instructions reject unbounded input and defensively bound hand-edited config', () => {
   const tooLong = 'x'.repeat(MAX_AGENT_INSTRUCTIONS_LENGTH + 1);
   const scope = { kind: 'folder', path: '/Work/Alpha' } as const;

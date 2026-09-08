@@ -56,7 +56,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { logger, errorMessage } from './log.ts';
 import { getCurrentFolder, getFolderHome, memberRootForAbs, runWithWindowId } from './folder.ts';
-import { resolveAgentInstructions } from './agent-instructions.ts';
+import { resolveAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeFolderTrust } from './agent-rules.ts';
 import { disposeSessionsBoundToFolder, isAgentAccessMode, reportAgentRuntimeFailure, resolveSessionBinding, type AgentAccessMode, type AgentSessionTermination } from './agent-contract.ts';
@@ -454,14 +454,13 @@ export class AgentSession implements AttributedAgentSession {
           // Apply the shared Access choice when the native session starts.
           // Later changes still use the SDK's live setPermissionMode API.
           permissionMode: this.access,
-          // Agent Instructions are the only StashBase-owned prompt. Preserve
-          // Claude Code's native preset and append the resolved working-folder
-          // text (or the packaged default for a Library Chat) without an
-          // Adapter-specific preamble or wrapper.
+          // Preserve Claude Code's native preset, then append the resolved
+          // user-visible Agent Instructions plus StashBase's internal library
+          // routing policy. The policy is never stored in the editable text.
           systemPrompt: {
             type: 'preset',
             preset: 'claude_code',
-            append: resolveAgentInstructions(scope === 'library' ? null : cwd),
+            append: resolveAgentRuntimeInstructions(scope === 'library' ? null : cwd),
           },
           // Resuming a past session loads its conversation history so the
           // user can continue it. The transcript itself is rendered from

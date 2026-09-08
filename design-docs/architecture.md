@@ -30,7 +30,8 @@ operate as one local library per installation.
 |---|---|---|
 | Local files and folders | User | They remain the source of truth. |
 | Wiki Pages under `wiki/` | User | They are ordinary visible files created or edited through an explicit Agent action. `wiki/index.md` is the entry page. |
-| Agent Instructions | StashBase product and settings | One packaged default plus an optional working-folder customization resolves to the only StashBase-owned Agent prompt. Library-wide Chats use the default. It is never a source-folder write. |
+| Agent Instructions | StashBase product and settings | One packaged default plus an optional working-folder customization resolves to the user-visible guidance. Library-wide Chats use the default. It is never a source-folder write. |
+| Agent runtime policy | StashBase Agent Adapters | Non-user-visible product guidance routes library orientation and prepared document reads through StashBase MCP. It is composed only at native session startup and is never exposed as Agent Instructions. |
 | `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never created, migrated, or overwritten by StashBase. |
 | Extracted text, previews, indexes, preparation records | StashBase | They are rebuildable derived state. |
 | Included OpenCode runtime | StashBase | It is pinned, packaged, private application state and never resolved from the user's PATH. |
@@ -87,10 +88,11 @@ visible, user-owned content and follows ordinary file transactions.
 - Agent Instructions resolve from one packaged plain-language default plus an
   optional member-folder customization in application config. Library-wide
   Chats use the packaged default because they have no concrete working folder.
-  Each runtime Adapter injects the resolved text verbatim; no Adapter composes
-  another StashBase prompt. Saving remounts matching folder Chats so the new
-  text applies from their next message. Opening a folder or starting a runtime
-  never writes instruction files into user content.
+  Each runtime Adapter preserves the resolved text while composing the separate
+  internal Agent runtime policy. Saving remounts matching folder Chats so the
+  new composition applies from their next message. The editor and HTTP surface
+  expose only Agent Instructions; opening a folder or starting a runtime never
+  writes either instruction layer into user content.
 - MCP file operations are bounded to authorized library folders and never form
   a general filesystem Interface. Membership-changing operations remain inside
   an app-owned or already authorized root.

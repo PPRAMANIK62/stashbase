@@ -139,7 +139,7 @@ test('J06 keeps the Search by meaning toggle in session scope and Agent Instruct
     await expect(panel.getByText('Streamed formula:', { exact: false })).toBeVisible();
     await expect.poll(() => protocolRecords(protocolLog)
       .find((entry) => entry.event === 'thread-start')?.params?.developerInstructions)
-      .toBe('Prefer the primary sources in this folder.');
+      .toMatch(/^Prefer the primary sources in this folder\.\n\n<stashbase_runtime_policy>/);
 
     await scope.click();
     await expect(app.page.getByText('Set for this conversation', { exact: true })).toBeVisible();

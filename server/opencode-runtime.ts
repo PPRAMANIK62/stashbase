@@ -21,6 +21,7 @@ import {
 import { getHostedAccountSession } from './app-config.ts';
 import { ensureMcpLauncher } from './agent-mcp.ts';
 import { resolveAgentInstructions } from './agent-instructions.ts';
+import { composeAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
 import { appDataRoot } from './local-data.ts';
 import { logger } from './log.ts';
 import {
@@ -131,6 +132,7 @@ export function buildOpenCodeConfig(
   mcpEnvironment: Record<string, string> = {},
   agentInstructions?: string,
 ): Config {
+  const runtimeInstructions = composeAgentRuntimeInstructions(agentInstructions);
   const permission = {
     edit: 'ask',
     bash: 'ask',
@@ -180,12 +182,12 @@ export function buildOpenCodeConfig(
       'stashbase-folder': {
         description: 'StashBase Wiki Agent for one authorized library folder.',
         mode: 'primary',
-        ...(agentInstructions ? { prompt: agentInstructions } : {}),
+        prompt: runtimeInstructions,
       },
       'stashbase-library': {
         description: 'StashBase Wiki Agent for the authorized library.',
         mode: 'primary',
-        ...(agentInstructions ? { prompt: agentInstructions } : {}),
+        prompt: runtimeInstructions,
         // A Library chat spans a non-contiguous set of registered folders.
         // Native cwd tools cannot express that membership boundary, so this
         // mode reaches files only through the scoped StashBase MCP server.

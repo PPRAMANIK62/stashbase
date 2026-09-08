@@ -22,13 +22,13 @@ Codex; it is not itself synonymous with any runtime.
 
 ## Agent Instructions
 
-The one StashBase-owned Agent prompt. A plain-language packaged default applies
-to every Chat. A concrete working folder may customize it in application
-metadata; Library-wide Chats use the packaged default and have no Library-wide
-customization. Runtime Adapters inject the resolved text verbatim and do not
-prepend or append another StashBase prompt. Saving remounts matching folder
-Chats so it applies from their next message. It is guidance, not a security
-boundary.
+The user-visible, editable guidance StashBase stores for Chat. A plain-language
+packaged default applies to every Chat. A concrete working folder may customize
+it in application metadata; Library-wide Chats use the packaged default and
+have no Library-wide customization. Runtime Adapters preserve this text while
+composing a separate internal Agent runtime policy that is not exposed in the
+editor. Saving remounts matching folder Chats so the new composition applies
+from their next message. It is guidance, not a security boundary.
 
 `AGENTS.md`, `CLAUDE.md`, and other runtime-native instruction files remain
 ordinary user-owned runtime inputs. StashBase neither creates nor rewrites

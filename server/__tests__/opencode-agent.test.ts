@@ -105,8 +105,14 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
     enabled: true,
     timeout: 10_000,
   });
-  assert.equal(attributed.agent?.['stashbase-folder']?.prompt, 'Use StashBase tools.');
-  assert.equal(attributed.agent?.['stashbase-library']?.prompt, 'Use StashBase tools.');
+  for (const profile of ['stashbase-folder', 'stashbase-library'] as const) {
+    const prompt = attributed.agent?.[profile]?.prompt ?? '';
+    assert.match(prompt, /StashBase MCP/i);
+    assert.match(prompt, /search_library/);
+    assert.match(prompt, /read_file/);
+    assert.match(prompt, /Use StashBase tools\./);
+    assert.notEqual(prompt, 'Use StashBase tools.');
+  }
 });
 
 test('an unexpected bundled runtime exit terminates the panel instead of leaving a turn working', async () => {

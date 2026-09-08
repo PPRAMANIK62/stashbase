@@ -8,7 +8,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import readline from 'node:readline';
 import type { WebSocket } from 'ws';
-import { resolveAgentInstructions } from './agent-instructions.ts';
+import { resolveAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
 import {
   consumeAgentTurnFailure,
   simulatedTurnFailureScript,
@@ -601,10 +601,10 @@ export class CodexSession implements AttributedAgentSession {
       approvalPolicy: access.approvalPolicy,
       approvalsReviewer: access.approvalsReviewer,
       sandbox: access.sandbox,
-      // Agent Instructions are the only StashBase-owned prompt. The Adapter
-      // selects the concrete working folder, if any, and passes the resolved
-      // text verbatim.
-      developerInstructions: resolveAgentInstructions(
+      // Keep the editable Agent Instructions distinct from StashBase's
+      // internal library-routing policy even though Codex receives their
+      // composition through one native developer-instructions field.
+      developerInstructions: resolveAgentRuntimeInstructions(
         this.rebound || !this.libraryScoped ? cwd : null,
       ),
     };
