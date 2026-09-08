@@ -90,6 +90,54 @@ export function resizeChatByKeyboard(width: number, key: SplitterKey): number {
   );
 }
 
+/** Sidebar Document Outline dock bounds (px). The dock is the outline's
+ *  header strip plus its list; its height is what the drag handle on the
+ *  tree/outline seam sizes. The floor keeps three 23px outline rows under
+ *  the 26px strip. There is no static ceiling: the dock may take every row
+ *  the file tree can spare, and what bounds it is the tree's own floor —
+ *  its 28px header plus four rows while the tree is unfolded, the header
+ *  alone once it is folded. The handle measures that ceiling from live
+ *  geometry; the reducer clamps only the floor. */
+export const OUTLINE_MIN_HEIGHT = 95;
+export const FILE_TREE_MIN_HEIGHT = 120;
+
+/** The outline handle is a horizontal separator, so it answers the
+ *  vertical arrows — `isSplitterKey` stays the guard for the two column
+ *  handles and their horizontal arrows. */
+export type OutlineSplitterKey = 'ArrowUp' | 'ArrowDown' | 'Home' | 'End';
+const OUTLINE_SPLITTER_KEYS: readonly OutlineSplitterKey[] = [
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+];
+
+export function isOutlineSplitterKey(key: string): key is OutlineSplitterKey {
+  return (OUTLINE_SPLITTER_KEYS as readonly string[]).includes(key);
+}
+
+/** `ceiling` is the live bound the tree leaves (see `OUTLINE_MIN_HEIGHT`).
+ *  A ceiling under the floor — a window too short for both floors — yields
+ *  the floor; the dock's flex layout clips from there. */
+export function clampOutlineHeight(height: number, ceiling: number): number {
+  return Math.max(OUTLINE_MIN_HEIGHT, Math.min(height, ceiling));
+}
+
+/** Up grows the outline (the seam moves up), Down shrinks it; Home parks
+ *  it on its floor and End on the ceiling the tree currently leaves. */
+export function resizeOutlineByKeyboard(
+  height: number,
+  ceiling: number,
+  key: OutlineSplitterKey,
+): number {
+  if (key === 'Home') return OUTLINE_MIN_HEIGHT;
+  if (key === 'End') return clampOutlineHeight(ceiling, ceiling);
+  return clampOutlineHeight(
+    height + (key === 'ArrowUp' ? SPLITTER_KEYBOARD_STEP : -SPLITTER_KEYBOARD_STEP),
+    ceiling,
+  );
+}
+
 /** Build a fresh persistent tab. The id is `crypto.randomUUID` because every
  *  browser shipping in 2024+ (and Electron's bundled Chromium) has it;
  *  Node ≥19 also exposes it. */

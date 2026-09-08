@@ -93,8 +93,11 @@ aliases, and Journey E2E owns representative composition.
   [Navigation layout](../e2e/journeys/navigation-layout.spec.ts)
   verifies that Appearance Settings remains usable with the operating system's
   reduced-motion preference while transform movement is removed and quiet
-  state feedback remains, and that a folder name too long for a narrowed
-  sidebar truncates inside the column instead of crossing onto the tab strip.
+  state feedback remains, that a folder name too long for a narrowed
+  sidebar truncates inside the column instead of crossing onto the tab strip,
+  and that the three pane separators (sidebar, Agent chat, and the Document
+  Outline dock) update their ARIA values by keyboard, with the outline
+  growing only into room the file tree can spare above its floor.
   These checks do not yet prove the full orientation,
   first-value, and return sequence as one onboarding outcome.
 - **AI Eval:** onboarding mechanics are deterministic. If first value uses

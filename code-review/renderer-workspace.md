@@ -52,6 +52,16 @@ semantic readiness.
   asynchronous caller's earlier duplicate check is never the uniqueness
   authority. Active-folder relative paths and out-of-folder folder-plus-path
   pairs remain distinct identities.
+- Pane geometry is in-memory renderer state, never a durable preference.
+  Sidebar width and Agent chat width carry static bounds in
+  `state/stateHelpers.ts`; the Document Outline dock's height carries only a
+  static floor. Its ceiling is whatever the file tree can spare above the
+  tree section's own `min-height`, measured from live geometry by the handle
+  and enforced identically by the sidebar's flex layout, so a stored height
+  the window cannot hold shrinks the outline and never the tree below its
+  floor. The three handles are named ARIA separators whose keyboard steps
+  come from the same helpers the reducers clamp with; a handle with its own
+  arithmetic would drift from the store.
 - The search popup sends an explicit Library scope for its unfiltered search;
   its retained selection must not inherit an active Chat's MCP search default.
 - Folder switching resets folder-scoped documents and readiness without
@@ -161,11 +171,11 @@ menu on its loading placeholder forever.
 |---|---|
 | Interface | `ActiveFolderWorkspace` in `web-src/src/store/hooks/useActiveFolderWorkspace.ts` |
 | Primary owners | `web-src/src/store/state/state.ts`, `state/stateReducer.ts` and the `state/workspaceReducer.ts`, `state/chatReducer.ts`, `state/uiShellReducer.ts` sub-reducers it composes, `state/stateHelpers.ts`, `lib/folderScopedReset.ts`, `lib/folderPath.ts`, `lib/folderTransition.ts`, and the internal `hooks/useDocumentActions.ts`, `hooks/useFileActions.ts`, `hooks/useFolderActions.ts`, `hooks/useSearchActions.ts` Modules |
-| Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx`, and lazy `features/workspace/components/ImportGitHubModal.tsx` and `FolderHeaderMenu.tsx` boundaries |
+| Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx`, the pane-geometry handles in `web-src/src/features/workspace/components/WorkspaceSplitters.tsx`, and lazy `features/workspace/components/ImportGitHubModal.tsx` and `FolderHeaderMenu.tsx` boundaries |
 | Renderer tree model | `web-src/src/features/workspace/lib/fileTreeModel.ts` (nesting, manual-rank ordering, visible rows), `lib/treeKeyboard.ts` (roving-focus rules), `hooks/useTreeRoving.ts` (row registry and per-row binding) |
 | Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `shared/library-files.ts`, `server/routes/files.ts`, `server/routes/workspace-preferences.ts`, the asynchronous request listing in `server/file-listing.ts`, and bounded selection-time inspection in `server/generic-file-preview.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
-| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`, `file-listing-generation.test.ts`, `hidden-visibility-actions.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`, `hidden-entries.test.ts`, `hidden-files-menu.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, `server/generic-file-preview.test.ts`, `e2e/journeys/formats-media.spec.ts`, and `scripts/check-renderer-chunks.mjs` |
+| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `splitter-keyboard.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`, `file-listing-generation.test.ts`, `hidden-visibility-actions.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`, `hidden-entries.test.ts`, `hidden-files-menu.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, `server/generic-file-preview.test.ts`, `e2e/journeys/formats-media.spec.ts`, and `scripts/check-renderer-chunks.mjs` |
 
 The four action hooks are private Seams inside the workspace Module. Do not make
 components depend on them directly; that would create a second transition

@@ -53,6 +53,14 @@ manager, or a primary graph-navigation tool.
   their downloads are the Gallery's own contract (see
   [Agent Panel](agent-panel.md) and the engineering contract in
   `code-review/agent-panel.md`).
+- With a document open, a Document Outline dock sits under the file tree.
+  Its top seam is a drag handle and a keyboard-operable separator: the
+  outline grows upward into whatever room the tree can spare, and the tree
+  keeps a floor of its header plus four rows (only the header once the tree
+  is folded). The dock is a sized block, never a growing one: the list
+  inside scrolls, and a window too short for the chosen height shrinks the
+  outline first, never the tree below its floor. Folding the outline leaves
+  its strip alone; the strip's toggle is the way back.
 - Packaged builds check the official stable release channel when the default-on
   preference permits it. An available update floats a dismissible announcement
   above the account row with one explicit Update action; the Settings utility

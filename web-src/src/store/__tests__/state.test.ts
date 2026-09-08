@@ -542,3 +542,15 @@ test('SET_CONFLICT and RESOLVE_CONFLICT_DISCARD reducer actions', () => {
   assert.equal(state.workspace.tabs[0].conflict, null);
   assert.equal(state.workspace.tabs[0].dirty, false);
 });
+
+test('the outline dock height keeps its floor and trusts the handle for the ceiling', () => {
+  // The floor is the store's: no dispatch can make a strip of the dock.
+  const floored = reducer(freshState(), { type: 'OUTLINE_HEIGHT', height: 10 });
+  assert.equal(floored.workspace.outlineHeight, 95);
+  // There is no static ceiling — the tree's spare room is measured live
+  // and the sidebar's flex layout re-clamps a height the window cannot
+  // hold — so a tall value is stored as the user's intent.
+  const tall = reducer(freshState(), { type: 'OUTLINE_HEIGHT', height: 900 });
+  assert.equal(tall.workspace.outlineHeight, 900);
+  assert.equal(freshState().workspace.outlineHeight, 180, 'the default dock is the 26px strip over the 154px Library-cap list');
+});

@@ -27,7 +27,7 @@ export { FolderSwitcher } from '@/features/workspace/components/FolderSwitcher';
 export { MoveFilePicker } from '@/features/workspace/components/MoveFilePicker';
 export { RemoveFolderModal } from '@/features/workspace/components/RemoveFolderModal';
 export { TabStrip } from '@/features/workspace/components/TabStrip';
-export { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
+export { ChatSplitter, OutlineSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
 
 export { useFolderFavorite } from '@/features/workspace/hooks/useFolderFavorite';
 export { useFolderRemoval } from '@/features/workspace/hooks/useFolderRemoval';

@@ -1082,9 +1082,12 @@ strip, the shell band, the transcript.
   except that it pins the VALUES rather than a count: an exempt
   stylesheet cannot grow a second unreasoned literal, a value that moved
   fails as a mismatch, and an entry with no argument written out fails on
-  its own length. Two entries remain. The sidebar splitter's
-  `margin-left: -3px` is `-width/2` — the offset that straddles its 6px grab
-  area evenly across the boundary `left` puts it on, not an amount of air.
+  its own length. Three entries remain. The tree row's `23px` min-height
+  is the VS Code Explorer density loosened by exactly one pixel — a height
+  tuned to an external reference, not air. The two workspace drag handles
+  each carry a `-3px` — the sidebar splitter's `margin-left` and the
+  outline splitter's `top` — which is `-width/2`, the offset that straddles
+  a 6px grab area evenly across the seam it sits on, not an amount of air.
   The Gallery's dot-ground gradient carries a `1.5px`
   coordinate that softens the dot rasterization with a half-pixel
   antialias ramp; it neither positions content nor adds surrounding space.

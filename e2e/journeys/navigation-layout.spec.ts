@@ -66,6 +66,27 @@ test('splitters expose keyboard-updated ARIA values and compact resize preserves
     await chat.press('ArrowLeft');
     await expect(chat).toHaveAttribute('aria-valuenow', String(chatBefore + 16));
 
+    // The Document Outline dock's handle: Up grows the outline by the same
+    // step, End takes every row the file tree can spare, and the tree
+    // keeps its floor — a folder window's tree is never squeezed to a
+    // strip. The ceiling is measured from the live layout, so it is read
+    // back from the handle rather than assumed.
+    const outline = app.page.getByRole('separator', { name: 'Resize Document Outline' });
+    const outlineBefore = Number(await outline.getAttribute('aria-valuenow'));
+    await outline.focus();
+    await outline.press('ArrowUp');
+    await expect(outline).toHaveAttribute('aria-valuenow', String(outlineBefore + 16));
+    const outlineCeiling = Number(await outline.getAttribute('aria-valuemax'));
+    expect(outlineCeiling).toBeGreaterThan(outlineBefore + 16);
+    await outline.press('End');
+    await expect(outline).toHaveAttribute('aria-valuenow', String(outlineCeiling));
+    const treeHeight = await app.page.evaluate(() =>
+      document.getElementById('sideHead')!.parentElement!.getBoundingClientRect().height);
+    expect(treeHeight).toBeGreaterThanOrEqual(120);
+    expect(treeHeight).toBeLessThan(122);
+    await outline.press('ArrowDown');
+    await expect(outline).toHaveAttribute('aria-valuenow', String(outlineCeiling - 16));
+
     await app.page.setViewportSize({ width: 900, height: 700 });
     await expect(activeDocumentTab(app.page)).toHaveAttribute('title', 'Welcome.md');
     await expect(activeDocument(app.page)).toContainText('Alpha smoke fixture content');

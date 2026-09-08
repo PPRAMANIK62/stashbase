@@ -12,6 +12,7 @@ import { electronBridge } from '@/common/lib/electronBridge';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { useSemanticIndexingNotice } from '@/store/hooks/useSemanticIndexingNotice';
 import { folderRefsEqual } from '@/store/lib/folderPath';
+import { FILE_TREE_MIN_HEIGHT, OUTLINE_MIN_HEIGHT } from '@/store/state/state';
 import { basename, shortenFolderPath } from '@/common/lib/paths';
 import { SidebarAccountRow } from '@/features/account';
 import { NewChatButton, launcherRowClass } from '@/features/agent-panel';
@@ -19,6 +20,7 @@ import { EmbeddingSetupCallout } from '@/features/preparation';
 import {
   FileTree,
   FolderHeaderMenu,
+  OutlineSplitter,
   RemoveFolderModal,
   useFolderFavorite,
   useFolderRemoval,
@@ -32,7 +34,7 @@ import { LazyLoadBoundary, lazyWithRetry } from '@/common/components/ErrorBounda
 import { Button } from '@/common/components/ui/button';
 import { SectionHeading } from '@/common/components/ui/section';
 import { FILE_MIME } from '@/common/lib/dragMime';
-import { Suspense, useCallback, useState, type DragEvent } from 'react';
+import { Suspense, useCallback, useRef, useState, type DragEvent, type RefObject } from 'react';
 import { cn } from '@/common/lib/utils';
 
 const DocumentOutline = lazyWithRetry(() =>
@@ -127,6 +129,11 @@ function FilesPanel() {
     : null;
   const hasHeadings = outline.headings.length > 0;
   const [outlineExpanded, setOutlineExpanded] = useOutlineDefaultExpansion(documentKey, hasHeadings);
+  // The two sections the outline handle sizes between: it reads their
+  // live geometry for its ceiling and writes the dock's height while a
+  // drag is in flight (the store catches up on release).
+  const treeSectionRef = useRef<HTMLElement | null>(null);
+  const outlineSectionRef = useRef<HTMLElement | null>(null);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden" id="sidebar-panel-files">
@@ -180,18 +187,30 @@ function FilesPanel() {
         * folder zones and the active document's outline intentionally share
         * one navigation surface; neither becomes a floating editor
         * companion. */}
-      <ActiveFolderSection>
+      <ActiveFolderSection treeSectionRef={treeSectionRef}>
         {/* Shown for as long as SOME document is open (see
           * `showOutline`) — not just Markdown ones — so switching tabs
           * never shifts the sections below under the pointer; a file
-          * that cannot have an outline says so in the empty note. It
-          * carries the dock's mt-auto anchor; the dock reads outline →
-          * Library → account, each a fixed block with a top hairline
-          * (they sit flush, so whitespace cannot separate them here).
-          * The expanded list is the Library treatment — a capped
-          * internal scroller, not a growing section. */}
+          * that cannot have an outline says so in the empty note. The
+          * dock reads outline → Library → account, each a block with a
+          * top hairline (they sit flush, so whitespace cannot separate
+          * them here); the folder zone above grows to pin it to the
+          * bottom. Expanded, the dock is the one USER-SIZED block in the
+          * column: the handle on its top seam drags `outlineHeight`
+          * between the store's floor and whatever the tree can spare
+          * above its own (`FILE_TREE_MIN_HEIGHT`, on the tree section),
+          * and `flex-initial` lets the flex layout shrink it back to that
+          * same bound when the window can no longer hold the stored
+          * height — the tree keeps its rows, the outline gives. The list
+          * inside scrolls; the dock never grows with its content. */}
         {showOutline && (
-        <section className="mt-auto flex flex-none flex-col overflow-hidden border-t border-border">
+        <>
+        {outlineExpanded && <OutlineSplitter treeRef={treeSectionRef} dockRef={outlineSectionRef} />}
+        <section
+          ref={outlineSectionRef}
+          className={cn('flex flex-col overflow-hidden border-t border-border', outlineExpanded ? 'flex-initial' : 'flex-none')}
+          style={outlineExpanded ? { height: state.outlineHeight, minHeight: OUTLINE_MIN_HEIGHT } : undefined}
+        >
           {/* Same narrow tinted strip as the Library header below. */}
           <div className="group/outline flex min-h-[26px] items-center justify-between gap-1.5 bg-muted/45 pr-2 pl-3.5">
             {/* A disclosure HEADING, which is what this strip has always
@@ -219,12 +238,14 @@ function FilesPanel() {
             </button>
             </SectionHeading>
           </div>
-          {/* FIXED height (VS Code's outline view), not a content cap:
-            * an expanded outline is always the same block, so switching
-            * between documents with different heading counts never
-            * moves the Library rows below. Same 154px as the Library
-            * list's cap — the two dock lists read as one rhythm. */}
-          <div id="sidebar-outline-section" className={outlineExpanded ? 'flex h-[154px] min-h-0 flex-col overflow-hidden' : 'hidden'}>
+          {/* The list fills whatever the dock's height leaves under the
+            * strip (VS Code's outline view: a sized block, not a content
+            * cap), so switching between documents with different heading
+            * counts never moves the rows below. The default dock height
+            * lands this list on the same 154px as the Library list's cap
+            * — the two dock lists read as one rhythm until the user sizes
+            * the outline. */}
+          <div id="sidebar-outline-section" className={outlineExpanded ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'hidden'}>
             {hasHeadings ? (
               <LazyLoadBoundary
                 className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground"
@@ -245,6 +266,7 @@ function FilesPanel() {
             )}
           </div>
         </section>
+        </>
         )}
       </ActiveFolderSection>
       {/* Authorization for search by meaning is APP-WIDE, not a property of the
@@ -258,8 +280,9 @@ function FilesPanel() {
           <EmbeddingSetupCallout />
         </Suspense>
       )}
-      {/* No mt-auto here: a dock block above always carries the bottom
-        * anchor, and this row simply sits under it. */}
+      {/* No mt-auto anywhere in the dock: the folder zone above (the
+        * tree, or the bare window's spacer) grows to pin every dock
+        * block to the bottom, and this row simply sits last. */}
       <Suspense fallback={<div className="h-[45px] flex-none border-t border-border" aria-hidden="true" />}>
         <SidebarAccountRow />
       </Suspense>
@@ -283,7 +306,15 @@ function FilesPanel() {
  *  `children` (the Document Outline section) renders after the zone, which
  *  is what puts it below the working context and above the bottom-most
  *  global chrome. */
-function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
+function ActiveFolderSection({
+  children,
+  treeSectionRef,
+}: {
+  children?: React.ReactNode;
+  /** The active zone's section element, for the outline handle's ceiling
+   *  measurement — `children` render after the zone and cannot reach it. */
+  treeSectionRef?: RefObject<HTMLElement | null>;
+}) {
   const state = useWorkspace();
   const { actions, dispatch } = useAppActions();
   const semanticNotice = useSemanticIndexingNotice();
@@ -322,10 +353,21 @@ function ActiveFolderSection({ children }: { children?: React.ReactNode }) {
         /* ACTIVE ZONE — the window's current folder. It takes ALL the
          * room the bottom dock leaves (flex-1) and scrolls the tree
          * internally; a content-height cap would strand blank space
-         * between the tree and the dock. Same quiet pane surface as the
-         * rest of the sidebar — the pill rows carry the hierarchy, so no
-         * hairline or surface split. */
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+         * between the tree and the dock. Its min-height is the floor the
+         * outline dock's drag respects: the header plus four rows while
+         * the tree is unfolded — the tree stays a tree, never a strip —
+         * and only the header (`min-h-7`, its own height) once folded,
+         * when the outline may take the rest. Both are real min-heights
+         * rather than a drag-time number, so the outline handle reads the
+         * bound from computed style and the flex layout holds it with no
+         * handle involved. Same quiet pane surface as the rest of the
+         * sidebar — the pill rows carry the hierarchy, so no hairline or
+         * surface split. */
+        <section
+          ref={treeSectionRef}
+          className={cn('flex flex-1 flex-col overflow-hidden', state.folderCollapsed && 'min-h-7')}
+          style={state.folderCollapsed ? undefined : { minHeight: FILE_TREE_MIN_HEIGHT }}
+        >
           <ActiveFolderHeader
             name={activeName}
             path={activePath}

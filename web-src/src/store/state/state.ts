@@ -45,14 +45,19 @@ import type {
 export {
   CHAT_MAX_WIDTH,
   CHAT_MIN_WIDTH,
+  FILE_TREE_MIN_HEIGHT,
+  OUTLINE_MIN_HEIGHT,
   SPLITTER_KEYBOARD_STEP,
   SIDEBAR_COLLAPSE_AT,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   clampChatWidth,
+  clampOutlineHeight,
   hasName,
+  isOutlineSplitterKey,
   isSplitterKey,
   resizeChatByKeyboard,
+  resizeOutlineByKeyboard,
   resizeSidebarByKeyboard,
   getActiveTab,
   makeChatTab,
@@ -320,6 +325,14 @@ export interface WorkspaceSlice {
   /** Width (px) of the sidebar. User-resizable via the drag handle on
    *  the sidebar's right edge; clamped to [SIDEBAR_MIN_WIDTH, MAX]. */
   sidebarWidth: number;
+  /** Height (px) of the sidebar's Document Outline dock (its header strip
+   *  plus the list). User-resizable via the drag handle on the seam it
+   *  shares with the file tree; the store holds the floor
+   *  (OUTLINE_MIN_HEIGHT) while the ceiling is whatever the tree can
+   *  spare above FILE_TREE_MIN_HEIGHT, measured live and re-applied by
+   *  the dock's flex layout whenever the window can no longer hold the
+   *  stored height. */
+  outlineHeight: number;
 
   /** User-visible paths whose content is still being embedded/indexed for
    *  search by meaning. Keyword search ignores this state and can search
@@ -459,6 +472,9 @@ const initialWorkspace: WorkspaceSlice = {
   folderCollapsed: false,
   sidebarCollapsed: false,
   sidebarWidth: 280,
+  // The 26px strip over a 154px list — the Library list's cap, so the two
+  // dock lists read as one rhythm until the user sizes the outline.
+  outlineHeight: 180,
   pendingSemanticNames: {},
   semanticIndexing: null,
   pendingConversions: [],
@@ -537,6 +553,7 @@ export type Action =
   | { type: 'FOLDER_FOLD_TOGGLE' }
   | { type: 'SIDEBAR_SET_COLLAPSED'; collapsed: boolean }
   | { type: 'SIDEBAR_WIDTH'; width: number }
+  | { type: 'OUTLINE_HEIGHT'; height: number }
   | { type: 'CHAT_TOGGLE' }
   | { type: 'CHAT_WIDTH'; width: number }
   | { type: 'AGENTS_LOADED'; agents: ChatSlice['agents'] }

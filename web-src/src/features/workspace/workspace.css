@@ -290,6 +290,47 @@
   background: var(--accent);
 }
 
+/* Drag handle on the seam between the file tree and the Document
+ * Outline dock. The seat is a zero-height item in the sidebar column's
+ * flow, so the strip it positions can straddle the seam evenly: both
+ * sections clip their own overflow, and a strip inside either would lose
+ * the half on the far side. Same 6px hit area and `::after` line as the
+ * sidebar handle above, turned on its side. */
+.outline-splitter-seat {
+  position: relative;
+  flex: none;
+  height: 0;
+  z-index: var(--layer-chrome);
+}
+.outline-splitter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 6px;
+  /* -height/2: the same centring the sidebar handle's `margin-left`
+   * does, straddling the seam the seat sits on. Recorded in
+   * CSS_OFF_RAMP_EXEMPTIONS. */
+  top: -3px;
+  cursor: row-resize;
+  background: transparent;
+}
+.outline-splitter::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  background: transparent;
+  transition: background var(--motion-fast) var(--motion-ease-hover);
+}
+.outline-splitter:hover::after,
+.outline-splitter:active::after,
+.outline-splitter:focus-visible::after {
+  background: var(--accent);
+}
+
 /* Match the sidebar's drag handle above: a 6px hit area whose only
  * visible cue is a crisp line drawn by `::after` — not a fat colored
  * band. The strip paints CANVAS — every pane shares that surface now,

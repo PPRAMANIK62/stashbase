@@ -488,8 +488,8 @@ const CSS_OFF_RAMP_EXEMPTIONS: Record<string, { values: string[]; why: string }>
     why: 'The tree row’s min-height is the VS Code Explorer reference density (22px) deliberately loosened by exactly 1px — 13px type at 22-23px rows is what makes a file tree read as a professional tool, while the ramp’s neighbours miss the mark in both directions: 24 drifts toward a generic SaaS sidebar and 20 clips the Large-interface line box. Not an amount of air: a row height tuned to an external reference, with flex centring absorbing the remainder.',
   },
   'features/workspace/workspace.css': {
-    values: ['-3px'],
-    why: 'The sidebar splitter’s `margin-left` is -width/2, the offset that straddles its 6px grab area evenly across the sidebar/main boundary that `left` puts it on. Not an amount of air: any other value hands more of the grab zone to one pane than the other.',
+    values: ['-3px', '-3px'],
+    why: 'The two workspace drag handles centre their 6px grab area on the seam they sit on: the sidebar splitter’s `margin-left` and the outline splitter’s `top` are both -width/2 (-height/2), the offset that straddles the boundary evenly. Not an amount of air: any other value hands more of the grab zone to one pane than the other.',
   },
   'features/templates/templates.css': {
     values: ['1.5px'],
