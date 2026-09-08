@@ -1,7 +1,7 @@
 'use client';
 
 import { Collapsible } from '@base-ui/react/collapsible';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   useState,
   useEffect,
@@ -53,6 +53,7 @@ const TriggerRow = forwardRef<HTMLButtonElement, TriggerRowProps>(
     const sizeClasses = useSize();
     const [isHovered, setIsHovered] = useState(false);
     const highlighted = open || isHovered;
+    const reduceMotion = useReducedMotion() ?? false;
 
     return (
       <div
@@ -66,8 +67,8 @@ const TriggerRow = forwardRef<HTMLButtonElement, TriggerRowProps>(
               className={`absolute inset-0 ${shape.bg} pointer-events-none bg-hover`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: spring.fast.exit }}
-              transition={{ duration: 0.08 }}
+              exit={{ opacity: 0, transition: reduceMotion ? { duration: 0 } : spring.fast.exit }}
+              transition={{ duration: reduceMotion ? 0 : 0.08 }}
             />
           )}
         </AnimatePresence>
@@ -108,7 +109,7 @@ const TriggerRow = forwardRef<HTMLButtonElement, TriggerRowProps>(
           <motion.span
             className="inline-flex shrink-0 items-center justify-center"
             animate={{ rotate: open ? 90 : 0 }}
-            transition={spring.fast}
+            transition={reduceMotion ? { duration: 0 } : spring.fast}
           >
             <ChevronRight
               size={sizeClasses.icon}
@@ -144,6 +145,7 @@ interface CollapsePanelProps {
  */
 function CollapsePanel({ open, children }: CollapsePanelProps) {
   const compactStep = useSize().variant === 'compact';
+  const reduceMotion = useReducedMotion() ?? false;
   // The open height is animated to a self-measured LAYOUT pixel value, not
   // `height: "auto"`: framer resolves an "auto" target by measuring the
   // element's *visual* (transformed) size, so under a scaled ancestor
@@ -213,7 +215,11 @@ function CollapsePanel({ open, children }: CollapsePanelProps) {
               initial={{ height: open ? 'auto' : 0 }}
               animate={{ height: open ? (contentHeight ?? 0) : 0 }}
               // bounce: 0 — pure height looks better without overshoot.
-              transition={needsSnap.current ? { duration: 0 } : { ...spring.moderate, bounce: 0 }}
+              transition={
+                needsSnap.current || reduceMotion
+                  ? { duration: 0 }
+                  : { ...spring.moderate, bounce: 0 }
+              }
               onAnimationComplete={() => {
                 if (!open) setExitComplete(true);
               }}

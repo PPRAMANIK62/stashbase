@@ -349,6 +349,8 @@ interface DropdownContentProps {
   /** Index of the checked item. Drives the animated selected background and
    *  the radio-group value announced to assistive tech. */
   checkedIndex?: number;
+  /** Keeps radio semantics while allowing a consumer-specific selection cue. */
+  selectionAppearance?: 'fill' | 'none';
   side?: MenuPositionerProps['side'];
   align?: MenuPositionerProps['align'];
   sideOffset?: number;
@@ -356,7 +358,15 @@ interface DropdownContentProps {
 
 const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
   (
-    { className, children, checkedIndex, side = 'bottom', align = 'start', sideOffset = 6 },
+    {
+      className,
+      children,
+      checkedIndex,
+      selectionAppearance = 'fill',
+      side = 'bottom',
+      align = 'start',
+      sideOffset = 6,
+    },
     ref,
   ) => {
     const { open, actionsRef } = useDropdownMenuContext();
@@ -523,7 +533,7 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
               >
                 {/* Selected background */}
                 <AnimatePresence>
-                  {checkedRect && (
+                  {checkedRect && selectionAppearance === 'fill' && (
                     <motion.div
                       className={`absolute ${shape.bg} pointer-events-none bg-active`}
                       initial={false}

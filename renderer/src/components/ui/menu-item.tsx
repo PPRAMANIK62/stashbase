@@ -89,6 +89,15 @@ interface MenuItemProps extends HTMLAttributes<HTMLDivElement> {
    *  reserved icon column. */
   icon?: IconComponent;
   label: string;
+  /** Optional explanatory copy for choices whose consequence cannot be
+   *  understood from the short label alone. */
+  description?: string;
+  /** Places short explanatory copy beside the label in compact choice menus. */
+  descriptionLayout?: 'stacked' | 'inline';
+  /** Controls how a label behaves when it is wider than the menu row. */
+  labelLayout?: 'truncate' | 'wrap';
+  /** Optional optical adjustment for the label-and-description group. */
+  contentClassName?: string;
   index: number;
   /** When a boolean, the item is a radio-style option (role="menuitemradio"
    *  with aria-checked). When undefined, it is a plain action item
@@ -109,6 +118,10 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
     {
       icon: Icon,
       label,
+      description,
+      descriptionLayout = 'stacked',
+      labelLayout = 'truncate',
+      contentClassName,
       index,
       checked,
       onSelect,
@@ -136,6 +149,9 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
     }, []);
 
     const isActive = activeIndex === index;
+    const inlineDescription = Boolean(description && descriptionLayout === 'inline');
+    const wrapsLabel = labelLayout === 'wrap';
+    const stackedDescription = Boolean(description && !inlineDescription);
     const skipAnimation = !hasMounted.current;
     const sizeClasses = useSize();
     const TrailingActionIcon = trailingAction?.icon;
@@ -168,12 +184,15 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       }
     };
 
+    const accessibleLabel = description ? `${label}. ${description}` : label;
     const itemClassName = cn(
       // Fixed height (was py-2 around a 19.5px line box ≈ 35.5px) so the
       // text-box trim on the label doesn't shrink the row. shrink-0 because
       // menu popups are max-height flex columns — without it a long list
       // compresses rows to fit instead of scrolling.
       `relative z-10 flex ${sizeClasses.control} shrink-0 items-center ${sizeClasses.gap} ${shape.item} ${sizeClasses.itemPx} cursor-pointer outline-none`,
+      (wrapsLabel || stackedDescription) && 'h-auto min-h-9 py-2',
+      stackedDescription && 'min-h-14',
       disabled && 'pointer-events-none opacity-50',
       className,
     );
@@ -196,26 +215,56 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
           </span>
         )}
         {/* Both stacked spans carry the text-box trim so the invisible bold
-            sizer and the visible label keep identical boxes. */}
-        <span className={cn('inline-grid flex-1', sizeClasses.text)}>
-          <span
-            className="invisible col-start-1 row-start-1 [text-box:trim-both_cap_alphabetic]"
-            style={{ fontVariationSettings: fontWeights.semibold }}
-            aria-hidden="true"
-          >
-            {label}
+            sizer and the visible label keep identical boxes. The trimmed box
+            ends at the cap line and the baseline, so a truncating label pads
+            its clip box back out to cover ascenders and descenders and pulls
+            the layout box in again with a matching negative margin. */}
+        <span
+          className={cn(
+            'flex min-w-0 flex-1',
+            sizeClasses.text,
+            inlineDescription ? 'items-center gap-2' : 'flex-col items-stretch',
+            contentClassName,
+          )}
+          data-menu-item-content
+        >
+          <span className="grid min-w-0 flex-1">
+            <span
+              className={cn(
+                'invisible col-start-1 row-start-1 [text-box:trim-both_cap_alphabetic]',
+                wrapsLabel && 'break-words whitespace-normal',
+              )}
+              style={{ fontVariationSettings: fontWeights.semibold }}
+              aria-hidden="true"
+            >
+              {label}
+            </span>
+            <span
+              data-menu-item-label
+              className={cn(
+                'col-start-1 row-start-1 transition-[color,font-variation-settings] duration-80 [text-box:trim-both_cap_alphabetic]',
+                wrapsLabel ? 'break-words whitespace-normal' : 'truncate py-[0.3em] -my-[0.3em]',
+                isActive || checked ? 'text-foreground' : 'text-muted-foreground',
+              )}
+              style={{
+                fontVariationSettings: checked ? fontWeights.semibold : fontWeights.normal,
+              }}
+            >
+              {label}
+            </span>
           </span>
-          <span
-            className={cn(
-              'col-start-1 row-start-1 transition-[color,font-variation-settings] duration-80 [text-box:trim-both_cap_alphabetic]',
-              isActive || checked ? 'text-foreground' : 'text-muted-foreground',
-            )}
-            style={{
-              fontVariationSettings: checked ? fontWeights.semibold : fontWeights.normal,
-            }}
-          >
-            {label}
-          </span>
+          {description && (
+            <span
+              className={cn(
+                'text-[12px] font-normal text-muted-foreground',
+                inlineDescription
+                  ? 'min-w-0 truncate'
+                  : 'mt-1 block leading-[17px] whitespace-normal',
+              )}
+            >
+              {description}
+            </span>
+          )}
         </span>
         {trailingAction && TrailingActionIcon && (
           <Button
@@ -281,13 +330,13 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
         radio: typeof checked === 'boolean',
         value: index,
         disabled,
-        label,
+        label: accessibleLabel,
         closeOnClick: closeOnClick ?? true,
         element: (
           <div
             ref={mergeRef}
             data-proximity-index={index}
-            aria-label={label}
+            aria-label={accessibleLabel}
             aria-keyshortcuts={trailingAction ? 'Delete' : undefined}
             onClick={handleActivate}
             onKeyDown={handleKeyDown}

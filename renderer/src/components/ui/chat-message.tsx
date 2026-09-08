@@ -59,7 +59,8 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
         transition={spring.moderate}
         style={{ transformOrigin: isUser ? 'bottom right' : 'bottom left' }}
         className={cn(
-          'group flex max-w-[80%] flex-col gap-1.5',
+          'group flex flex-col gap-1.5',
+          isUser ? 'max-w-[72%]' : 'w-full max-w-full',
           isUser ? 'items-end self-end' : 'items-start self-start',
           className,
         )}
@@ -80,7 +81,10 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
           <div
             className={cn(
               'break-words whitespace-pre-wrap',
-              compact ? 'py-1.5 text-[13px]' : 'py-2 text-[14px]',
+              compact ? 'text-[13px]' : 'text-[14px]',
+              // Only the bubble carries vertical padding; the flush assistant
+              // reply lets the transcript gap set its rhythm.
+              isUser && (compact ? 'py-1.5' : 'py-2'),
               // User keeps the bubble chrome (rounded fill + horizontal padding);
               // the assistant reply is flush-left plain text with no background.
               isUser
@@ -111,11 +115,12 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
             className={cn(
               'flex items-center gap-2 px-1 leading-none text-muted-foreground select-none',
               compact ? 'text-[11px]' : 'text-[12px]',
-              !isTouch && [
-                'pointer-events-none opacity-0 transition-opacity duration-150',
-                'group-hover:pointer-events-auto group-hover:opacity-100',
-                'group-focus-within:pointer-events-auto group-focus-within:opacity-100',
-              ],
+              !isTouch &&
+                isUser && [
+                  'pointer-events-none opacity-0 transition-opacity duration-150',
+                  'group-hover:pointer-events-auto group-hover:opacity-100',
+                  'group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+                ],
             )}
           >
             {showTime && <span className="tabular-nums">{time}</span>}

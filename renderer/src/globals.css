@@ -76,6 +76,13 @@
   --destructive: light-dark(#ef4444, #f87171);
   --destructive-light: light-dark(#fef2f2, #450a0a);
 
+  /* Agent work provenance and decisions. These implement the cyan/amber
+     visual voices already defined by the product style contract. */
+  --working: light-dark(#0e7490, #67e8f9);
+  --working-soft: light-dark(#ecfeff, #083344);
+  --decision: light-dark(#b45309, #fbbf24);
+  --decision-soft: light-dark(#fffbeb, #451a03);
+
   /* ── Focus indicator ──
      Every component focus ring reads var(--focus-ring, #6B97FF), so this is
      the single theming point. The literal fallback keeps registry components
@@ -266,6 +273,10 @@
   --color-input: var(--input);
   --color-destructive: var(--destructive);
   --color-destructive-light: var(--destructive-light);
+  --color-working: var(--working);
+  --color-working-soft: var(--working-soft);
+  --color-decision: var(--decision);
+  --color-decision-soft: var(--decision-soft);
   --color-hover: var(--hover);
   --color-active: var(--active);
 
