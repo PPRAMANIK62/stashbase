@@ -1,18 +1,34 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, StrictMode, type PropsWithChildren } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { AgentSessionPort } from '@/features/agent/application/ports';
+import type { AgentConnectionListener, AgentSessionPort } from '@/features/agent/application/ports';
 import {
   createAgentWorkspaceRuntime,
   type AgentWorkspaceRuntime,
 } from '@/features/agent/application/workspace-runtime';
 import type { Agent } from '@/shared/agent-runtime';
 
-import AgentChats from './chats';
+import AgentChats from './chats/chats';
 import ManagedAgentWorkspace from './workspace';
+
+const nativeCapabilities = {
+  approvals: true,
+  attachments: true,
+  connection: true,
+  effort: true,
+  history: true,
+  interrupt: true,
+  models: true,
+  modes: true,
+  prompts: true,
+  skills: true,
+  steering: true,
+  titleHint: true,
+  transcript: true,
+} as const;
 
 const builtIn: Agent = {
   bootstrap: { phase: 'ready' },
@@ -28,6 +44,7 @@ const builtIn: Agent = {
 
 const codex: Agent = {
   bootstrap: { phase: 'ready' },
+  capabilities: nativeCapabilities,
   id: 'codex',
   installHint: '',
   installed: true,
@@ -40,6 +57,7 @@ const codex: Agent = {
 
 const claude: Agent = {
   bootstrap: { phase: 'ready' },
+  capabilities: { ...nativeCapabilities, steering: false, titleHint: false },
   id: 'claude',
   installHint: '',
   installed: true,
@@ -105,9 +123,10 @@ function renderWorkspace(session: AgentSessionPort, agents: Agent[] = [builtIn, 
           }),
           createElement(ManagedAgentWorkspace, {
             catalog,
+            onOpenExternal: vi.fn(),
             onOpenAgentSettings: vi.fn(),
             runtime,
-            withDocuments: false,
+            scopeOutline: { files: ['MISSION.md', 'notes.md'], folders: ['lessons'] },
           }),
         ),
       ),
@@ -133,7 +152,7 @@ describe('Agent workspace', () => {
     expect(setup.parentElement?.parentElement?.className).toContain('w-full');
   });
 
-  it('keeps New chat quiet and moves Agent choice into the headerless blank canvas', async () => {
+  it('keeps the empty canvas quiet and puts provider choice in the composer', async () => {
     const connect = vi.fn<AgentSessionPort['connect']>(() => ({ close: vi.fn() }));
     const { runtime } = renderWorkspace({
       connect,
@@ -144,11 +163,18 @@ describe('Agent workspace', () => {
     });
 
     expect(connect).not.toHaveBeenCalled();
-    expect(await screen.findByText('Start a conversation')).not.toBeNull();
-    expect(screen.getByText('Working in Research')).not.toBeNull();
+    expect(await screen.findByText('What should we work on?')).not.toBeNull();
+    expect(screen.queryByText('Research workspace')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Summarize lessons/' }));
+    expect(runtime.activeSession().store.getState().draft).toBe(
+      "Summarize what's in lessons/ and what each file covers.",
+    );
+    const composer = screen.getByPlaceholderText('Ask about Research…');
+    expect(composer.ownerDocument.activeElement).toBe(composer);
+    expect(connect).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Chat scope: Research')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Close conversation' })).toBeNull();
-    expect(screen.queryByLabelText(/Choose Agent for new chat/u)).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Provider: Built-in' })).toHaveLength(1);
 
     const newChat = screen.getByRole('button', { name: 'Start new chat' });
     expect(newChat.className).toContain('text-muted-foreground');
@@ -157,21 +183,153 @@ describe('Agent workspace', () => {
     expect(connect).not.toHaveBeenCalled();
     expect(runtime.activeSession().store.getState().agent).toBe('stashbase');
 
-    await userEvent.click(screen.getByRole('button', { name: /Choose Agent\. Current Agent/u }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Built-in' }));
     const codexOption = await screen.findByRole('menuitemradio', { name: 'Codex' });
     const claudeOption = screen.getByRole('menuitemradio', { name: 'Claude Code' });
-    const codexMark = codexOption.querySelector('svg title');
-    const claudeMark = claudeOption.querySelector('svg title');
-    expect(codexMark?.textContent).toBe('Codex');
-    expect(claudeMark?.textContent).toBe('Claude Code');
-    expect(codexMark?.parentElement?.parentElement?.className).toContain('translate-y-px');
-    expect(claudeMark?.parentElement?.parentElement?.className).toContain('translate-y-px');
+    const codexMark = codexOption.querySelector('svg[viewBox="-2 -2 28 28"]');
+    const claudeMark = claudeOption.querySelector('svg[viewBox="-2 -2 28 28"]');
+    expect(codexMark?.querySelector('linearGradient')).not.toBeNull();
+    expect(claudeMark?.querySelector('path[fill="#D97757"]')).not.toBeNull();
+    expect(codexOption.querySelector('svg title')).toBeNull();
+    expect(claudeOption.querySelector('svg title')).toBeNull();
     await userEvent.click(codexOption);
-    expect(
-      screen.getByRole('button', { name: 'Choose Agent. Current Agent: Codex' }),
-    ).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Provider: Codex' })).not.toBeNull();
     expect(runtime.activeSession().store.getState().agent).toBe('codex');
     expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('uses runtime-native model and thinking choices from the composer', async () => {
+    const listeners: AgentConnectionListener[] = [];
+    const requests: Parameters<AgentSessionPort['connect']>[0][] = [];
+    const sent: unknown[] = [];
+    renderWorkspace({
+      connect: vi.fn((request, listener) => {
+        requests.push(request);
+        listeners.push(listener);
+        return {
+          close: vi.fn(),
+          send: vi.fn((event) => {
+            sent.push(event);
+            return true;
+          }),
+        };
+      }),
+      list: vi.fn(async () => []),
+      remove: vi.fn(async () => undefined),
+      rename: vi.fn(),
+      replay: vi.fn(async () => ({ effort: null, transcript: [] })),
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Provider: Built-in' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Model: Default' }));
+    expect(requests).toHaveLength(1);
+
+    act(() => {
+      listeners[0]?.onEvent({
+        activeModel: null,
+        fallback: null,
+        kind: 'models',
+        models: [
+          {
+            id: 'gpt-codex',
+            label: 'Opus (1M context) with extended reasoning',
+            supportedEfforts: ['low', 'high'],
+          },
+        ],
+      });
+      listeners[0]?.onEvent({ kind: 'ready' });
+    });
+    const longModelOption = await screen.findByRole('menuitemradio', {
+      name: 'Opus (1M context) with extended reasoning',
+    });
+    expect(longModelOption.querySelector('[data-menu-item-label]')?.className).toContain(
+      'whitespace-normal',
+    );
+    expect(longModelOption.className).toContain('items-center');
+    expect(longModelOption.className).not.toContain('items-start');
+    expect(longModelOption.querySelector('[data-menu-item-content]')?.className).toContain(
+      'translate-y-px',
+    );
+    await userEvent.click(longModelOption);
+    expect(sent).toContainEqual({ model: 'gpt-codex', t: 'set-model' });
+    expect(
+      screen.getByRole('button', {
+        name: 'Model: Opus (1M context) with extended reasoning',
+      }),
+    ).not.toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Thinking: Default' }));
+    const highEffortOption = await screen.findByRole('menuitemradio', {
+      name: 'High. Deeper reasoning',
+    });
+    expect(highEffortOption.firstElementChild?.className).toContain('items-center');
+    expect(highEffortOption.firstElementChild?.className).not.toContain('items-baseline');
+    expect(highEffortOption.firstElementChild?.className).toContain('translate-y-px');
+    await userEvent.click(highEffortOption);
+    expect(requests.at(-1)).toMatchObject({ effort: 'high', model: 'gpt-codex' });
+    expect(screen.getByRole('button', { name: 'Thinking: High' })).not.toBeNull();
+  });
+
+  it('starts the first composer turn and presents an explicit permission decision', async () => {
+    let listener: AgentConnectionListener | undefined;
+    const sent: unknown[] = [];
+    renderWorkspace({
+      connect: vi.fn((_request, nextListener) => {
+        listener = nextListener;
+        return {
+          close: vi.fn(),
+          send: vi.fn((event) => {
+            sent.push(event);
+            return true;
+          }),
+        };
+      }),
+      list: vi.fn(async () => []),
+      remove: vi.fn(async () => undefined),
+      rename: vi.fn(),
+      replay: vi.fn(async () => ({ effort: null, transcript: [] })),
+    });
+    await screen.findByText('What should we work on?');
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Built-in' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
+
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+    await userEvent.type(composer, 'Inspect the workspace');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect((composer as HTMLTextAreaElement).value).toBe('Inspect the workspace');
+
+    act(() => listener?.onEvent({ kind: 'ready' }));
+    expect(await screen.findByText('Inspect the workspace')).not.toBeNull();
+    expect(sent).toEqual([{ t: 'prompt', text: 'Inspect the workspace' }]);
+
+    act(() => {
+      listener?.onEvent({ kind: 'turn-started' });
+      listener?.onEvent({
+        id: 'permission-1',
+        input: { command: 'pnpm test:agent' },
+        kind: 'permission-requested',
+        name: 'Bash',
+        title: null,
+        toolUseId: 'tool-1',
+      });
+    });
+    expect(screen.getByRole('heading', { name: 'Run this command?' })).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    expect(sent.at(-1)).toEqual({
+      allow: true,
+      always: undefined,
+      id: 'permission-1',
+      t: 'permission-reply',
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /Permission mode: Auto/u }));
+    await userEvent.click(
+      await screen.findByRole('menuitemradio', {
+        name: 'Ask. Ask before actions',
+      }),
+    );
+    expect(sent.at(-1)).toEqual({ mode: 'default', t: 'set-mode' });
   });
 
   it('restores a scoped transcript before resuming its native session', async () => {
@@ -201,7 +359,7 @@ describe('Agent workspace', () => {
       rename: vi.fn(),
       replay,
     });
-    await screen.findByText('Start a conversation');
+    await screen.findByText('What should we work on?');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Planning notes' }));
 

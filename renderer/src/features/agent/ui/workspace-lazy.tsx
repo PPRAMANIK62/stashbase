@@ -3,14 +3,18 @@ import { lazy, Suspense, useState } from 'react';
 import type { AgentCatalogPort } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
+import type { AgentScopeOutline } from '@/features/agent/domain/starters';
 
-import { AgentSurfaceBoundary } from './agent-surface-boundary';
+import { AgentSurfaceBoundary } from './surface-boundary';
 
 export interface AgentWorkspaceProps {
   catalog: AgentCatalogPort;
+  onOpenExternal(href: string): void;
   onOpenAgentSettings(): void;
   runtime: AgentWorkspaceRuntime;
-  withDocuments: boolean;
+  /** Top-level entries of the scoped folder, or null while unknown. Seeds the
+   *  empty chat's starter prompts. */
+  scopeOutline: AgentScopeOutline | null;
 }
 
 export interface AgentChatsProps {
@@ -22,7 +26,7 @@ export interface AgentChatsProps {
 }
 
 const loadWorkspace = () => import('./workspace');
-const loadChats = () => import('./chats');
+const loadChats = () => import('./chats/chats');
 
 export function AgentWorkspace(props: AgentWorkspaceProps) {
   const [Workspace, setWorkspace] = useState(() => lazy(loadWorkspace));

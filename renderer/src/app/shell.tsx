@@ -20,7 +20,9 @@ import {
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
 import {
   AgentChats,
+  AgentTitlebar,
   AgentWorkspace,
+  type AgentScopeOutline,
   type AgentWorkspaceProps,
   useAgentWorkspaceRuntime,
 } from '@/features/agent/public';
@@ -29,11 +31,16 @@ import {
   DocumentWorkspace,
   useDocumentSaveBarrier,
 } from '@/features/documents/public';
+import { SplitHandle } from '@/components/ui/split-handle';
 import { Settings } from '@/features/settings/public';
 import {
+  DEFAULT_AGENT_PANE_WIDTH,
   FileTree,
   LibrarySidebar,
   LibraryWelcome,
+  MAX_AGENT_PANE_WIDTH,
+  MIN_AGENT_PANE_WIDTH,
+  useFiles,
   useLibraryLifecycle,
   useLibrary,
   usePersistWorkspaceSession,
@@ -58,10 +65,14 @@ import './shell.css';
 function AgentDocumentWorkspace({
   agent,
   document,
+  onPaneWidthChange,
+  paneWidth,
   runtime,
 }: {
   agent: AgentWorkspaceProps;
   document: ReactNode;
+  onPaneWidthChange(width: number): void;
+  paneWidth: number;
   runtime: ReturnType<typeof useDocumentWorkspace>;
 }) {
   const subscribe = useCallback(
@@ -70,10 +81,26 @@ function AgentDocumentWorkspace({
   );
   const snapshot = useCallback(() => (runtime?.store.getState().tabs.length ?? 0) > 0, [runtime]);
   const hasDocuments = useSyncExternalStore(subscribe, snapshot, snapshot);
+  if (!hasDocuments) return <AgentWorkspace {...agent} />;
   return (
     <div className="flex h-full min-h-0">
-      {hasDocuments && <div className="min-w-0 flex-1">{document}</div>}
-      <AgentWorkspace {...agent} withDocuments={hasDocuments} />
+      <div className="min-w-0 flex-1">{document}</div>
+      <div
+        className="relative h-full max-w-[calc(100%-20rem)] shrink-0 border-l border-border"
+        style={{ width: paneWidth }}
+      >
+        <SplitHandle
+          className="left-0 -translate-x-1/2"
+          defaultWidth={DEFAULT_AGENT_PANE_WIDTH}
+          label="Resize Agent pane"
+          max={MAX_AGENT_PANE_WIDTH}
+          min={MIN_AGENT_PANE_WIDTH}
+          onWidthChange={onPaneWidthChange}
+          pane="right"
+          width={paneWidth}
+        />
+        <AgentWorkspace {...agent} />
+      </div>
     </div>
   );
 }
@@ -139,11 +166,21 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         : ({ kind: 'library' } as const),
     [selectedFolderPath],
   );
+  const listing = useFiles(workspace, dependencies.workspace.api).data;
+  const agentScopeOutline = useMemo<AgentScopeOutline | null>(() => {
+    if (!listing) return null;
+    const topLevel = (path: string) => !path.includes('/');
+    return {
+      files: listing.files.map((file) => file.path).filter(topLevel),
+      folders: listing.folders.map((folder) => folder.path).filter(topLevel),
+    };
+  }, [listing]);
   const agentProps: AgentWorkspaceProps = {
     catalog: dependencies.settings.agentRuntimeApi,
+    onOpenExternal: (href) => void dependencies.documents.openExternal(href),
     onOpenAgentSettings: () => settings.openSettings('agents'),
     runtime: agentRuntime,
-    withDocuments: false,
+    scopeOutline: agentScopeOutline,
   };
 
   return (
@@ -252,17 +289,11 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
             {documents ? (
               <DocumentTabs
                 className="workspace-titlebar-controls max-w-full"
-                emptyContent={
-                  <span className="flex-1 text-center text-caption font-medium text-muted-foreground">
-                    Agent
-                  </span>
-                }
+                emptyContent={<AgentTitlebar runtime={agentRuntime} />}
                 runtime={documents}
               />
             ) : (
-              <span className="flex-1 text-center text-caption font-medium text-muted-foreground">
-                Agent
-              </span>
+              <AgentTitlebar runtime={agentRuntime} />
             )}
           </div>
           <div aria-hidden="true" className="size-9 shrink-0" />
@@ -274,6 +305,8 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
               <div className={library.data.activeFolder ? 'h-full min-h-0' : 'hidden'}>
                 <AgentDocumentWorkspace
                   agent={agentProps}
+                  onPaneWidthChange={session.runtime.setAgentPaneWidth}
+                  paneWidth={session.shell.agentPaneWidth}
                   runtime={documents}
                   document={
                     documents ? (

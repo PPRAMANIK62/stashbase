@@ -10,10 +10,10 @@ import {
 } from '@/features/agent/domain/conversation-history';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
 import { useConversationHistory } from '@/features/agent/hooks/use-conversation-history';
+import type { AgentChatsProps } from '@/features/agent/ui/workspace-lazy';
 
 import { ConversationTree } from './conversation-tree';
 import { DeleteConversationDialog } from './delete-conversation-dialog';
-import type { AgentChatsProps } from './workspace-lazy';
 
 export default function AgentChats({
   catalog: catalogPort,

@@ -1,4 +1,5 @@
 import { agentScopesEqual, type AgentId, type AgentScope } from './session';
+import { dayLabel, startOfLocalDay } from './time';
 import type { AgentTabState } from './workspace';
 
 export interface AgentHistoryEntry {
@@ -24,25 +25,6 @@ export interface AgentConversationGroup {
   id: string;
   items: AgentConversationItem[];
   label: string;
-}
-
-function startOfLocalDay(value: number): Date {
-  const day = new Date(value);
-  day.setHours(0, 0, 0, 0);
-  return day;
-}
-
-function dateGroupLabel(day: Date, today: Date): string {
-  if (day.getTime() === today.getTime()) return 'Today';
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (day.getTime() === yesterday.getTime()) return 'Yesterday';
-  return day.toLocaleDateString(
-    [],
-    day.getFullYear() === today.getFullYear()
-      ? { day: 'numeric', month: 'long' }
-      : { day: 'numeric', month: 'long', year: 'numeric' },
-  );
 }
 
 export function buildConversationGroups(options: {
@@ -102,7 +84,7 @@ export function buildConversationGroups(options: {
       groups.set(key, {
         id: String(key),
         items: [conversation],
-        label: dateGroupLabel(day, today),
+        label: dayLabel(day, today),
       });
     }
   }

@@ -14,6 +14,7 @@ import {
   type AgentScope,
   type AgentSessionState,
 } from '@/features/agent/domain/session';
+import type { AgentAccessMode } from '@/protocols/websocket/agent-session';
 
 const RECONNECT_DELAYS_MS = [250, 1_000, 3_000] as const;
 
@@ -22,8 +23,22 @@ export interface AgentSessionRuntime {
   readonly signal: AbortSignal;
   readonly store: StoreApi<AgentSessionState>;
   isBlank(): boolean;
+  interrupt(): boolean;
+  replyPermission(
+    toolUseId: string,
+    permissionId: string,
+    allow: boolean,
+    always?: boolean,
+  ): boolean;
   rename(title: string): void;
   reconnect(): void;
+  retry(errorBlockId: string): boolean;
+  sendPrompt(text?: string): boolean;
+  setAccessMode(mode: AgentAccessMode): void;
+  setEffort(effort: string | null): void;
+  setModel(model: string | null): void;
+  setDraft(draft: string): void;
+  setQueue(queue: Array<{ id: string; text: string }>): void;
   restore(entry: AgentHistoryEntry, connectWhenReady?: boolean): Promise<boolean>;
   retire(folderPath: string): void;
   start(): void;
@@ -65,6 +80,14 @@ function defaultScheduler(): AgentReconnectScheduler {
   };
 }
 
+function latestUserPrompt(state: AgentSessionState): string | undefined {
+  for (let index = state.transcript.length - 1; index >= 0; index -= 1) {
+    const block = state.transcript[index];
+    if (block?.kind === 'user') return block.text;
+  }
+  return undefined;
+}
+
 export function createAgentSessionRuntime({
   agent,
   autostart = true,
@@ -85,6 +108,11 @@ export function createAgentSessionRuntime({
   let closeExpected = false;
   let exitReceived = false;
   let started = false;
+  let blockSequence = 0;
+  let pendingPrompt: string | null = null;
+  let appliedAccessMode: AgentAccessMode | null = null;
+
+  const nextBlockId = (kind: string) => `${id}-${kind}-${++blockSequence}`;
 
   const transition = (action: Parameters<typeof transitionAgentSession>[1]) => {
     store.setState((state) => transitionAgentSession(state, action), true);
@@ -127,12 +155,16 @@ export function createAgentSessionRuntime({
     closeExpected = false;
     exitReceived = false;
     const state = store.getState();
+    const connectedAccessMode = state.accessMode;
+    appliedAccessMode = connectedAccessMode;
     transition({ type: 'connect' });
     try {
       connection = port.connect(
         {
+          access: connectedAccessMode,
           agent: state.agent,
           effort: state.effort ?? undefined,
+          model: state.model ?? undefined,
           resume,
           scope: state.scope,
         },
@@ -159,6 +191,26 @@ export function createAgentSessionRuntime({
             switch (event.kind) {
               case 'ready':
                 transition({ type: 'ready' });
+                if (store.getState().accessMode !== appliedAccessMode) {
+                  const nextMode = store.getState().accessMode;
+                  if (connection?.send?.({ mode: nextMode, t: 'set-mode' })) {
+                    appliedAccessMode = nextMode;
+                  }
+                }
+                if (pendingPrompt) {
+                  const prompt = pendingPrompt;
+                  pendingPrompt = null;
+                  if (connection?.send?.({ t: 'prompt', text: prompt })) {
+                    transition({
+                      at: Date.now(),
+                      id: nextBlockId('user'),
+                      text: prompt,
+                      type: 'submit-prompt',
+                    });
+                  } else {
+                    transition({ draft: prompt, type: 'set-draft' });
+                  }
+                }
                 break;
               case 'identified':
                 transition({ id: event.id, type: 'identify' });
@@ -169,8 +221,84 @@ export function createAgentSessionRuntime({
               case 'scope-changed':
                 transition({ scope: event.scope, type: 'change-scope' });
                 break;
+              case 'models':
+                transition({
+                  activeModel: event.activeModel,
+                  fallback: event.fallback,
+                  models: event.models,
+                  type: 'set-model-catalog',
+                });
+                if (event.fallback) {
+                  transition({
+                    id: nextBlockId('notice'),
+                    message: event.fallback,
+                    type: 'append-notice',
+                  });
+                }
+                break;
+              case 'turn-started':
+                transition({ type: 'turn-start' });
+                break;
+              case 'text':
+                transition({ delta: event.delta, id: nextBlockId('reply'), type: 'append-text' });
+                break;
+              case 'thinking':
+                transition({
+                  delta: event.delta,
+                  id: nextBlockId('thinking'),
+                  type: 'append-thinking',
+                });
+                break;
+              case 'tool-started':
+                transition({
+                  id: event.id,
+                  input: event.input,
+                  name: event.name,
+                  type: 'start-tool',
+                });
+                break;
+              case 'tool-output':
+                transition({ delta: event.delta, id: event.id, type: 'append-tool-output' });
+                break;
+              case 'tool-finished':
+                transition({
+                  content: event.content,
+                  id: event.id,
+                  isError: event.isError,
+                  type: 'finish-tool',
+                });
+                break;
+              case 'permission-requested':
+                transition({
+                  id: event.id,
+                  input: event.input,
+                  name: event.name,
+                  title: event.title,
+                  toolUseId: event.toolUseId,
+                  type: 'request-permission',
+                });
+                break;
+              case 'turn-ended':
+                transition({ isError: event.isError, type: 'turn-end' });
+                break;
+              case 'notice':
+                transition({
+                  id: nextBlockId('notice'),
+                  message: event.message,
+                  type: 'append-notice',
+                });
+                break;
               case 'failed':
-                if (store.getState().phase !== 'live') {
+                if (store.getState().phase === 'live') {
+                  const prompt = latestUserPrompt(store.getState());
+                  transition({
+                    failure: event.failure,
+                    id: nextBlockId('error'),
+                    message: event.message,
+                    retryablePrompt: prompt,
+                    type: 'turn-fail',
+                  });
+                } else {
                   transition({ message: event.message, type: 'fail' });
                 }
                 break;
@@ -206,6 +334,27 @@ export function createAgentSessionRuntime({
     isBlank() {
       return agentSessionIsBlank(store.getState());
     },
+    interrupt() {
+      if (disposed || !store.getState().activeTurn) return false;
+      return connection?.send?.({ t: 'interrupt' }) ?? false;
+    },
+    replyPermission(toolUseId, permissionId, allow, always) {
+      if (disposed) return false;
+      const tool = store
+        .getState()
+        .transcript.find((block) => block.kind === 'tool' && block.id === toolUseId);
+      if (
+        tool?.kind !== 'tool' ||
+        tool.permissionId !== permissionId ||
+        tool.status !== 'awaiting'
+      ) {
+        return false;
+      }
+      const sent =
+        connection?.send?.({ allow, always, id: permissionId, t: 'permission-reply' }) ?? false;
+      if (sent) transition({ allow, toolUseId, type: 'reply-permission' });
+      return sent;
+    },
     rename(nextTitle) {
       if (!disposed) transition({ title: nextTitle, type: 'title' });
     },
@@ -213,6 +362,80 @@ export function createAgentSessionRuntime({
       if (disposed || store.getState().phase === 'retired') return;
       transition({ type: 'reset-reconnect' });
       startConnection(store.getState().nativeSessionId ?? undefined);
+    },
+    retry(errorBlockId) {
+      if (disposed || store.getState().activeTurn) return false;
+      const failure = store
+        .getState()
+        .transcript.find((block) => block.kind === 'error' && block.id === errorBlockId);
+      if (failure?.kind !== 'error' || !failure.retryablePrompt) return false;
+      if (store.getState().phase !== 'live') return false;
+      const sent = connection?.send?.({ t: 'prompt', text: failure.retryablePrompt }) ?? false;
+      if (sent) {
+        transition({ id: errorBlockId, type: 'settle-error' });
+        transition({ type: 'turn-start' });
+      }
+      return sent;
+    },
+    sendPrompt(text = store.getState().draft) {
+      if (disposed || store.getState().activeTurn) return false;
+      const prompt = text.trim();
+      if (!prompt) return false;
+      if (store.getState().phase === 'draft') {
+        pendingPrompt = prompt;
+        transition({ draft: prompt, type: 'set-draft' });
+        runtime.start();
+        return true;
+      }
+      if (store.getState().phase !== 'live') return false;
+      const sent = connection?.send?.({ t: 'prompt', text: prompt }) ?? false;
+      if (sent) {
+        transition({
+          at: Date.now(),
+          id: nextBlockId('user'),
+          text: prompt,
+          type: 'submit-prompt',
+        });
+      }
+      return sent;
+    },
+    setAccessMode(mode) {
+      if (disposed || store.getState().accessMode === mode) return;
+      transition({ mode, type: 'set-access-mode' });
+      if (connection?.send?.({ mode, t: 'set-mode' })) appliedAccessMode = mode;
+    },
+    setEffort(effort) {
+      const state = store.getState();
+      if (disposed || state.activeTurn || state.effort === effort) return;
+      const selectedModel = state.models.find(
+        (model) => model.id === (state.model ?? state.activeModel),
+      );
+      if (effort && !selectedModel?.supportedEfforts?.includes(effort)) return;
+      transition({ effort, type: 'set-effort' });
+      if (started) startConnection(state.nativeSessionId ?? undefined);
+    },
+    setModel(model) {
+      const state = store.getState();
+      if (
+        disposed ||
+        state.activeTurn ||
+        state.model === model ||
+        (model !== null && !state.models.some((entry) => entry.id === model))
+      ) {
+        return;
+      }
+      const nextModel = state.models.find((entry) => entry.id === model);
+      const nextEffort =
+        state.effort && !nextModel?.supportedEfforts?.includes(state.effort) ? null : state.effort;
+      transition({ model, type: 'set-model' });
+      if (nextEffort !== state.effort) transition({ effort: nextEffort, type: 'set-effort' });
+      connection?.send?.({ ...(model ? { model } : {}), t: 'set-model' });
+    },
+    setDraft(draft) {
+      if (!disposed) transition({ draft, type: 'set-draft' });
+    },
+    setQueue(queue) {
+      if (!disposed) transition({ queue, type: 'set-queue' });
     },
     async restore(entry, connectWhenReady = true) {
       if (disposed) return false;

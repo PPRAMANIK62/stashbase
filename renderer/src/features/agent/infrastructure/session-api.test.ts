@@ -24,7 +24,12 @@ describe('Agent session API', () => {
     });
 
     api.connect(
-      { agent: 'codex', effort: 'high', scope: { kind: 'folder', path: '/Notes & Plans' } },
+      {
+        agent: 'codex',
+        effort: 'high',
+        model: 'gpt-codex',
+        scope: { kind: 'folder', path: '/Notes & Plans' },
+      },
       { onClose: vi.fn(), onEvent: vi.fn(), onInvalidResponse: vi.fn() },
     );
 
@@ -36,6 +41,7 @@ describe('Agent session API', () => {
       agent: 'codex',
       effort: 'high',
       folder: '/Notes & Plans',
+      model: 'gpt-codex',
     });
     expect(url.searchParams.has('windowId')).toBe(false);
   });
@@ -116,8 +122,23 @@ describe('Agent session API', () => {
     );
     messageListeners[0]?.({ data: JSON.stringify({ t: 'unknown' }) });
     messageListeners[0]?.({ data: JSON.stringify({ t: 'session-id', id: 'native-1' }) });
+    messageListeners[0]?.({
+      data: JSON.stringify({
+        t: 'models',
+        models: [{ id: 'native-model', label: 'Native model', supportedEfforts: ['high'] }],
+        activeModel: 'native-model',
+      }),
+    });
     expect(invalid).toHaveBeenCalledOnce();
-    expect(events).toEqual([{ id: 'native-1', kind: 'identified' }]);
+    expect(events).toEqual([
+      { id: 'native-1', kind: 'identified' },
+      {
+        activeModel: 'native-model',
+        fallback: null,
+        kind: 'models',
+        models: [{ id: 'native-model', label: 'Native model', supportedEfforts: ['high'] }],
+      },
+    ]);
   });
 
   it('attributes folder-scoped history rows to the requested folder', async () => {
@@ -140,6 +161,67 @@ describe('Agent session API', () => {
         scope: { kind: 'folder', path: '/Library/Research' },
         title: 'Research',
       },
+    ]);
+  });
+
+  it('normalizes tool and permission events and validates permission replies', () => {
+    const events: unknown[] = [];
+    const sent: string[] = [];
+    let onMessage: ((event: { data: unknown }) => void) | undefined;
+    const socket: {
+      readyState: number;
+      addEventListener(type: 'close', listener: () => void): void;
+      addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
+      removeEventListener(type: 'close', listener: () => void): void;
+      removeEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
+      close(): void;
+      send(data: string): void;
+    } = {
+      readyState: 1,
+      addEventListener(type, listener) {
+        if (type === 'message') onMessage = listener;
+      },
+      removeEventListener: vi.fn(),
+      close: vi.fn(),
+      send: (data: string) => {
+        sent.push(data);
+      },
+    };
+    const connection = createAgentSessionApi(client(), 'http://127.0.0.1:1', () => socket).connect(
+      { access: 'default', agent: 'codex', scope: { kind: 'library' } },
+      { onClose: vi.fn(), onEvent: (event) => events.push(event), onInvalidResponse: vi.fn() },
+    );
+
+    onMessage?.({
+      data: JSON.stringify({ t: 'tool', id: 'tool-1', name: 'Bash', input: { command: 'pwd' } }),
+    });
+    onMessage?.({
+      data: JSON.stringify({
+        t: 'permission',
+        id: 'permission-1',
+        toolUseId: 'tool-1',
+        name: 'Bash',
+        title: null,
+        input: { command: 'pwd' },
+      }),
+    });
+    expect(connection.send?.({ t: 'permission-reply', id: 'permission-1', allow: true })).toBe(
+      true,
+    );
+
+    expect(events).toEqual([
+      { id: 'tool-1', input: { command: 'pwd' }, kind: 'tool-started', name: 'Bash' },
+      {
+        id: 'permission-1',
+        input: { command: 'pwd' },
+        kind: 'permission-requested',
+        name: 'Bash',
+        title: null,
+        toolUseId: 'tool-1',
+      },
+    ]);
+    expect(sent).toEqual([
+      JSON.stringify({ t: 'permission-reply', id: 'permission-1', allow: true }),
     ]);
   });
 });

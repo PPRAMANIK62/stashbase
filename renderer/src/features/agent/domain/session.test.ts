@@ -68,4 +68,95 @@ describe('Agent session domain', () => {
       ),
     ).toBe(true);
   });
+
+  it('keeps permission races explicit and freezes denied tool output', () => {
+    const initial = createAgentSessionState({
+      agent: 'codex',
+      id: 'chat-1',
+      scope: { kind: 'library' },
+    });
+    const awaiting = transitionAgentSession(initial, {
+      id: 'permission-1',
+      input: { command: 'rm draft.md' },
+      name: 'Bash',
+      title: 'Delete draft.md?',
+      toolUseId: 'tool-1',
+      type: 'request-permission',
+    });
+    const startedLate = transitionAgentSession(awaiting, {
+      id: 'tool-1',
+      input: { command: 'rm draft.md' },
+      name: 'Bash',
+      type: 'start-tool',
+    });
+    const denied = transitionAgentSession(startedLate, {
+      allow: false,
+      toolUseId: 'tool-1',
+      type: 'reply-permission',
+    });
+    const reopenedLate = transitionAgentSession(denied, {
+      id: 'tool-1',
+      input: { command: 'rm draft.md' },
+      name: 'Bash',
+      type: 'start-tool',
+    });
+    const lateResult = transitionAgentSession(reopenedLate, {
+      content: 'deleted',
+      id: 'tool-1',
+      isError: false,
+      type: 'finish-tool',
+    });
+
+    expect(startedLate.transcript[0]).toMatchObject({
+      permissionId: 'permission-1',
+      status: 'awaiting',
+    });
+    expect(reopenedLate.transcript[0]).toMatchObject({ status: 'denied' });
+    expect(lateResult.transcript[0]).toMatchObject({ status: 'denied' });
+    expect('result' in lateResult.transcript[0]!).toBe(false);
+  });
+
+  it('cancels pending tools and queued messages when their folder retires', () => {
+    const initial = createAgentSessionState({
+      agent: 'claude',
+      id: 'chat-1',
+      scope: { kind: 'folder', path: '/Library/Research' },
+    });
+    const running = transitionAgentSession(initial, {
+      id: 'tool-1',
+      input: {},
+      name: 'Search',
+      type: 'start-tool',
+    });
+    const queued = transitionAgentSession(running, {
+      queue: [{ id: 'queued-1', text: 'Follow up' }],
+      type: 'set-queue',
+    });
+    const retired = transitionAgentSession(queued, { type: 'retire' });
+
+    expect(retired.phase).toBe('retired');
+    expect(retired.queuedPrompts).toEqual([]);
+    expect(retired.transcript).toEqual([
+      expect.objectContaining({ id: 'tool-1', status: 'cancelled' }),
+      expect.objectContaining({
+        kind: 'notice',
+        text: '1 queued message was cancelled when this folder was removed.',
+      }),
+    ]);
+  });
+
+  it('bounds queued follow-ups inside the session owner', () => {
+    const initial = createAgentSessionState({
+      agent: 'stashbase',
+      id: 'chat-1',
+      scope: { kind: 'library' },
+    });
+    const queued = transitionAgentSession(initial, {
+      queue: Array.from({ length: 25 }, (_, index) => ({ id: `queued-${index}`, text: 'Next' })),
+      type: 'set-queue',
+    });
+
+    expect(queued.queuedPrompts).toHaveLength(20);
+    expect(queued.queuedPrompts.at(-1)?.id).toBe('queued-19');
+  });
 });

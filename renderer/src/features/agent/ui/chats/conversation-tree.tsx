@@ -17,9 +17,8 @@ import type {
   AgentHistoryEntry,
   AgentConversationItem,
 } from '@/features/agent/domain/conversation-history';
+import { AGENT_ICONS } from '@/features/agent/ui/identity/agent-icons';
 import { fontWeights } from '@/lib/font-weight';
-
-import { AGENT_ICONS } from './agent-presentation';
 
 const CONVERSATION_PAGE_SIZE = 100;
 const SINGLE_CLICK_DELAY_MS = 180;

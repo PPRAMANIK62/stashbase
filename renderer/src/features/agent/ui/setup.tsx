@@ -12,7 +12,6 @@ export function AgentSetup({
   onOpenSettings,
   onPrepare,
   preparingAgentId,
-  withDocuments,
 }: {
   agents: Agent[];
   error: boolean;
@@ -20,13 +19,12 @@ export function AgentSetup({
   onOpenSettings(): void;
   onPrepare(id: AgentId, action: 'bootstrap' | 'login'): void;
   preparingAgentId?: AgentId;
-  withDocuments: boolean;
 }) {
   return (
     <div
       className={cn(
         'flex h-full min-h-0 items-center justify-center bg-surface-2 p-8',
-        withDocuments ? 'w-[min(36rem,42vw)] shrink-0 border-l border-border' : 'w-full',
+        'w-full',
       )}
     >
       <div className="max-w-md text-center">

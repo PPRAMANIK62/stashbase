@@ -20,6 +20,7 @@ import {
   agentServerEventSchema,
   agentSessionConnectSchema,
   type AgentServerEvent,
+  type AgentAccessMode,
 } from '@/protocols/websocket/agent-session';
 
 interface SocketLike {
@@ -72,25 +73,52 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
       return { kind: 'titled', title: event.title };
     case 'scope-changed':
       return { kind: 'scope-changed', scope: event.scope };
+    case 'turn-start':
+      return { kind: 'turn-started' };
+    case 'text':
+      return { delta: event.delta, kind: 'text' };
+    case 'thinking':
+      return { delta: event.delta, kind: 'thinking' };
+    case 'models':
+      return {
+        activeModel: event.activeModel ?? null,
+        fallback: event.fallback ?? null,
+        kind: 'models',
+        models: event.models,
+      };
+    case 'tool':
+      return { id: event.id, input: event.input, kind: 'tool-started', name: event.name };
+    case 'tool-delta':
+      return { delta: event.delta, id: event.id, kind: 'tool-output' };
+    case 'tool-result':
+      return {
+        content: event.content,
+        id: event.id,
+        isError: event.isError,
+        kind: 'tool-finished',
+      };
+    case 'permission':
+      return {
+        id: event.id,
+        input: event.input,
+        kind: 'permission-requested',
+        name: event.name,
+        title: event.title,
+        toolUseId: event.toolUseId,
+      };
+    case 'turn-end':
+      return { isError: event.isError, kind: 'turn-ended' };
+    case 'notice':
+      return { kind: 'notice', message: event.message };
     case 'error':
-      return { kind: 'failed', message: event.message };
+      return { failure: event.failure, kind: 'failed', message: event.message };
     case 'exit':
       return 'reason' in event
         ? { folderPath: event.folder, kind: 'scope-retired' }
         : { kind: 'exited', message: event.message ?? null };
-    case 'models':
     case 'skills':
-    case 'turn-start':
-    case 'text':
-    case 'thinking':
-    case 'tool':
-    case 'tool-delta':
-    case 'tool-result':
     case 'file-diff':
-    case 'permission':
     case 'steer-result':
-    case 'turn-end':
-    case 'notice':
       return null;
   }
 }
@@ -120,14 +148,17 @@ function socketUrl(
     scope: AgentScope;
     resume?: string;
     effort?: string;
+    model?: string;
+    access?: AgentAccessMode;
   },
 ): string {
   const url = new URL('/ws/agent', serverOrigin);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   const wire = agentSessionConnectSchema.parse({
     agent: request.agent,
-    access: 'auto',
+    access: request.access ?? 'auto',
     effort: request.effort,
+    model: request.model,
     resume: request.resume,
     ...(request.scope.kind === 'folder'
       ? { folder: request.scope.path }
@@ -163,6 +194,15 @@ export function createAgentSessionApi(
       socket.addEventListener('message', onMessage);
       socket.addEventListener('close', onClose);
       return {
+        send(event) {
+          if (socket.readyState !== SOCKET_OPEN) return false;
+          try {
+            socket.send(JSON.stringify(agentClientEventSchema.parse(event)));
+            return true;
+          } catch {
+            return false;
+          }
+        },
         close() {
           socket.removeEventListener('message', onMessage);
           socket.removeEventListener('close', onClose);

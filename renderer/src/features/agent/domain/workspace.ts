@@ -22,10 +22,18 @@ export function createAgentWorkspaceState(activeId: string): AgentWorkspaceState
   return { activeId, disposed: false, tabs: [] };
 }
 
+function tabsEqual(left: AgentTabState, right: AgentTabState): boolean {
+  return (Object.keys(right) as Array<keyof AgentTabState>).every((key) =>
+    Object.is(left[key], right[key]),
+  );
+}
+
 export function upsertAgentTab(
   state: AgentWorkspaceState,
   tab: AgentTabState,
 ): AgentWorkspaceState {
+  const current = state.tabs.find((candidate) => candidate.id === tab.id);
+  if (current && tabsEqual(current, tab)) return state;
   return {
     ...state,
     tabs: state.tabs.some((candidate) => candidate.id === tab.id)

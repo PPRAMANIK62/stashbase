@@ -5,6 +5,7 @@ import type {
   AgentSessionEvent,
   AgentTranscriptBlock,
 } from '@/features/agent/domain/session';
+import type { AgentAccessMode, AgentClientEvent } from '@/protocols/websocket/agent-session';
 import type { AgentsResponse } from '@/shared/agent-runtime';
 
 export type { AgentHistoryEntry };
@@ -25,6 +26,7 @@ export interface AgentReplay {
 
 export interface AgentConnection {
   close(): void;
+  send?(event: AgentClientEvent): boolean;
 }
 
 export interface AgentConnectionListener {
@@ -40,6 +42,8 @@ export interface AgentSessionPort {
       scope: AgentScope;
       resume?: string;
       effort?: string;
+      model?: string;
+      access?: AgentAccessMode;
     },
     listener: AgentConnectionListener,
   ): AgentConnection;

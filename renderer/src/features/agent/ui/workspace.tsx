@@ -1,31 +1,32 @@
-import { ChevronDown, RefreshCw } from 'lucide-react';
-import { useEffect } from 'react';
+import { RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
-import { DropdownContent, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
-import { MenuItem } from '@/components/ui/menu-item';
+import { InputMessage, type QueuedMessage } from '@/components/ui/input-message';
+import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import { scopeLabel, type AgentSessionPhase } from '@/features/agent/domain/session';
+import { suggestStarters } from '@/features/agent/domain/starters';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
+import { useStickToBottom } from '@/hooks/use-stick-to-bottom';
 import { cn } from '@/lib/utils';
 import type { Agent } from '@/shared/agent-runtime';
 
-import { AGENT_ICONS } from './agent-presentation';
-import { AgentSetup } from './agent-setup';
-import { AgentTranscript } from './transcript';
+import { AgentPermissionMode } from './composer/permission-mode';
+import { AgentComposerSettings } from './composer/settings';
+import { AgentSetup } from './setup';
+import { AgentTranscript } from './transcript/transcript';
 import type { AgentWorkspaceProps } from './workspace-lazy';
 
 function phaseLabel(phase: AgentSessionPhase, error: string | null): string {
   switch (phase) {
     case 'draft':
-      return 'Ready for Chat';
+      return '';
     case 'restoring':
-      return 'Restoring conversation…';
     case 'connecting':
-      return 'Connecting…';
     case 'live':
-      return 'Ready for Chat';
+      return '';
     case 'closed':
       return error ?? 'Disconnected';
     case 'retired':
@@ -35,10 +36,24 @@ function phaseLabel(phase: AgentSessionPhase, error: string | null): string {
   }
 }
 
+/** Subscribes to the draft alone, so a keystroke re-renders the composer and
+ *  nothing above it. */
+function AgentComposer({
+  session,
+  ...props
+}: { session: AgentSessionRuntime } & Omit<
+  ComponentProps<typeof InputMessage>,
+  'onValueChange' | 'value'
+>) {
+  const draft = useStore(session.store, (state) => state.draft);
+  return <InputMessage {...props} onValueChange={session.setDraft} value={draft} />;
+}
+
 function ReadyWorkspace({
   agents,
+  onOpenExternal,
   runtime,
-  withDocuments,
+  scopeOutline,
 }: Omit<AgentWorkspaceProps, 'catalog' | 'onOpenAgentSettings'> & { agents: Agent[] }) {
   const activeId = useStore(runtime.store, (state) => state.activeId);
   const active = runtime.session(activeId) ?? runtime.activeSession();
@@ -46,80 +61,77 @@ function ReadyWorkspace({
     active.store,
     useShallow((session) => ({
       agent: session.agent,
+      accessMode: session.accessMode,
+      activeTurn: session.activeTurn,
+      activeModel: session.activeModel,
       error: session.error,
+      effort: session.effort,
+      model: session.model,
+      models: session.models,
+      nativeSessionId: session.nativeSessionId,
       phase: session.phase,
+      queuedPrompts: session.queuedPrompts,
       scope: session.scope,
       transcript: session.transcript,
     })),
   );
-  const ActiveIcon = AGENT_ICONS[state.agent];
-  const activeAgent = agents.find((agent) => agent.id === state.agent);
-  const activeAgentIndex = agents.findIndex((agent) => agent.id === state.agent);
+  const activeAgent = agents.find((agent) => agent.id === state.agent)!;
+  const empty = state.transcript.length === 0;
+  const scopeName = scopeLabel(state.scope);
+  const starters = useMemo(
+    () => (scopeOutline ? suggestStarters(scopeName, scopeOutline) : []),
+    [scopeName, scopeOutline],
+  );
+  const composerRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
+  useStickToBottom(logRef, activeId);
+  const prefill = (prompt: string) => {
+    active.setDraft(prompt);
+    composerRef.current?.querySelector('textarea')?.focus();
+  };
 
   return (
     <div
-      className={cn(
-        'flex min-h-0 flex-col bg-surface-2',
-        withDocuments ? 'w-[min(36rem,42vw)] shrink-0 border-l border-border' : 'h-full w-full',
-      )}
+      className="flex h-full w-full min-h-0 flex-col bg-surface-2"
     >
+      {empty && <div aria-hidden className="min-h-0 basis-0 grow" />}
       <div
+        aria-busy={state.activeTurn}
         aria-live="polite"
         aria-label="Conversation transcript"
-        className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-6"
+        className={cn('min-h-0 overflow-y-auto', empty ? 'flex-initial' : 'flex-1')}
+        ref={logRef}
         role="log"
       >
-        {state.transcript.length === 0 ? (
-          <div className="m-auto max-w-sm text-center">
-            <h2 className="text-title font-semibold text-foreground">Start a conversation</h2>
-            <p className="mt-1 text-caption text-muted-foreground">
-              Working in {scopeLabel(state.scope)}
-            </p>
-            <div className="mt-4 flex justify-center">
-              <DropdownMenu>
-                <DropdownTrigger
-                  render={
-                    <Button
-                      aria-label={`Choose Agent. Current Agent: ${activeAgent?.label ?? 'Agent'}`}
-                      leadingIcon={ActiveIcon}
-                      size="compact"
-                      trailingIcon={ChevronDown}
-                      variant="tertiary"
-                    >
-                      {activeAgent?.label ?? 'Choose Agent'}
-                    </Button>
-                  }
-                />
-                <DropdownContent
-                  align="center"
-                  checkedIndex={activeAgentIndex < 0 ? undefined : activeAgentIndex}
-                  className="w-52"
-                >
-                  {agents.map((agent, index) => (
-                    <MenuItem
-                      checked={agent.id === state.agent}
-                      icon={AGENT_ICONS[agent.id]}
-                      index={index}
-                      key={agent.id}
-                      label={agent.label}
-                      onSelect={() => runtime.newChat(agent.id, state.scope)}
-                    />
-                  ))}
-                </DropdownContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        ) : (
-          <AgentTranscript blocks={state.transcript} key={activeId} />
-        )}
+        <div
+          className={cn(
+            'mx-auto flex min-h-full w-full max-w-[46rem] flex-col gap-3',
+            empty ? 'px-4 pt-8 pb-7 max-sm:px-3' : 'px-5 pt-8 pb-6 max-sm:px-4',
+          )}
+        >
+          {empty ? (
+            <h2 className="text-[28px] leading-none font-semibold tracking-[-0.03em] text-foreground max-sm:text-[24px]">
+              What should we work on?
+            </h2>
+          ) : (
+            <AgentTranscript
+              activeTurn={state.activeTurn}
+              blocks={state.transcript}
+              key={activeId}
+              onOpenExternal={onOpenExternal}
+              onPermission={active.replyPermission}
+              onRetry={active.retry}
+            />
+          )}
+        </div>
       </div>
 
-      {state.phase !== 'draft' && (
-        <footer className="flex h-11 shrink-0 items-center gap-2 border-t border-border px-3 text-caption text-muted-foreground">
+      {phaseLabel(state.phase, state.error) !== '' && (
+        <div className="mx-auto flex w-full max-w-[46rem] shrink-0 items-center gap-2 px-5 pb-2 text-caption text-muted-foreground max-sm:px-4">
           <span
             className={cn(
-              'size-1.5 rounded-full',
-              state.phase === 'live' ? 'bg-foreground/70' : 'bg-muted-foreground',
+              'size-1.5 shrink-0 rounded-full',
+              state.phase === 'closed' || state.phase === 'retired' ? 'bg-decision' : 'bg-working',
             )}
           />
           <span>{phaseLabel(state.phase, state.error)}</span>
@@ -134,8 +146,63 @@ function ReadyWorkspace({
               Reconnect
             </Button>
           )}
-        </footer>
+        </div>
       )}
+
+      {state.phase !== 'retired' && state.phase !== 'disposed' && (
+        <div className="relative shrink-0 px-4 pb-3 max-sm:px-3">
+          <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-surface-2 to-transparent" />
+          <div className="relative mx-auto w-full max-w-[46rem] @container" ref={composerRef}>
+            <AgentComposer
+              className="rounded-2xl bg-surface-3 shadow-surface-3"
+              maxRows={6}
+              minRows={3}
+              onQueueChange={(queue: QueuedMessage[]) =>
+                active.setQueue(queue.map(({ id, text }) => ({ id, text })))
+              }
+              onSend={(text) => active.sendPrompt(text)}
+              onStop={active.interrupt}
+              placeholder={`Ask about ${scopeName}…`}
+              queue={state.queuedPrompts.map(({ id, text }) => ({ files: [], id, text }))}
+              leftSlot={
+                <AgentComposerSettings
+                  activeAgent={activeAgent}
+                  agents={agents}
+                  onAgentChange={(agent) => {
+                    if (agent !== state.agent) runtime.newChat(agent, state.scope);
+                  }}
+                  onEffortChange={active.setEffort}
+                  onModelChange={active.setModel}
+                  onRequestCatalog={active.start}
+                  state={state}
+                />
+              }
+              rightSlot={
+                activeAgent.capabilities?.modes !== false ? (
+                  <AgentPermissionMode mode={state.accessMode} onChange={active.setAccessMode} />
+                ) : null
+              }
+              session={active}
+              status={state.activeTurn ? 'streaming' : 'idle'}
+            />
+          </div>
+        </div>
+      )}
+      {empty && starters.length > 0 && (
+        <div className="mx-auto flex w-full max-w-[46rem] shrink-0 flex-wrap gap-2 px-4 pb-3 max-sm:px-3">
+          {starters.map((starter) => (
+            <button
+              className="h-7 cursor-pointer rounded-full border border-border px-3 text-[13px] text-muted-foreground transition-colors duration-80 outline-none hover:bg-surface-3 hover:text-foreground focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]"
+              key={starter.id}
+              onClick={() => prefill(starter.prompt)}
+              type="button"
+            >
+              {starter.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {empty && <div aria-hidden className="min-h-0 basis-0 grow-[1.3]" />}
     </div>
   );
 }
@@ -164,7 +231,6 @@ export default function ManagedAgentWorkspace(props: AgentWorkspaceProps) {
       onOpenSettings={props.onOpenAgentSettings}
       onPrepare={(id, action) => catalog.prepare({ action, id })}
       preparingAgentId={catalog.preparingAgentId}
-      withDocuments={props.withDocuments}
     />
   );
 }

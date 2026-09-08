@@ -15,13 +15,11 @@ invent source readiness, attachment, or mention behavior ahead of that owner.
 
 **Status:** Complete.
 
-Settings now opens as a lazy responsive shell dialog with a section rail that
-becomes a mobile drawer. Agents is the only live section; the remaining
-sections truthfully show “Soon.”
-
-A pure runtime description drives staged setup, allowance, managed uninstall,
-and debug-gated bootstrap testing. Validated React Query boundaries poll only
-while preparing and keep mutation failures visible at their owning control.
+Settings opens as a lazy responsive dialog whose section rail becomes a mobile
+drawer. Agents is the only live section; the rest show “Soon.” A pure runtime
+description drives staged setup, allowance, managed uninstall, and debug-gated
+bootstrap testing. React Query boundaries poll only while preparing and keep
+mutation failures at their owning control.
 
 Evidence: focused domain, adapter, hook, component, protocol, architecture,
 typecheck, lint, and renderer test checks.
@@ -33,32 +31,67 @@ typecheck, lint, and renderer test checks.
 **Status:** Complete.
 
 Window-scoped runtimes own blank reuse, scoped history, bounded reconnect,
-folder retirement, and disposal. Readiness gates transport and started work
-never rebinds; pure transitions and one mounted-session record own lifecycle.
+folder retirement, and disposal. Readiness gates transport; started work never
+rebinds. Electron authorizes the socket and supplies window identity.
 
-Chats shows selected-folder, newest-first date groups, merges mounted/native
-sessions, hides empty allocations, and retains unavailable-Agent history. It
-supports in-place rename, confirmed deletion, bounded rendering, and
-transport-free drafts. Protocols normalize events and scope; Electron
-authorizes the socket and supplies window identity.
+Chats lists the selected folder newest-first by day, merges mounted and native
+sessions, hides empty allocations, and supports rename and confirmed deletion.
+Recency is the later of the native record and the last submitted prompt, so
+opening a chat never promotes it. A chat opens at its latest message and
+follows new content only while the reader is at the end. Beside an open
+document the Agent pane is resizable from its seam by drag, arrow keys, or a
+double-click reset, and the width persists in the workspace session.
 
 Evidence: focused domain, runtime, component, adapter, protocol, Electron,
-server, architecture, typecheck, lint, and web build checks. Task 48 owns turns;
-permanent J06 evidence remains deferred.
+server, architecture, typecheck, lint, and web build checks. J06 evidence is
+deferred.
 
 ## 48 — Run composer turns
 
 **Blocked by:** 47.
 
-Support draft, send, streaming, cancel, retry, and retained-input behavior while
-keeping unrelated Workbench interaction responsive.
+**Status:** Complete.
+
+The session runtime owns transport-free drafts, first-use connect and send,
+bounded queued follow-ups, streaming text and thinking, idempotent
+interruption, structured failure, and in-place retry. Input stays editable
+while the Agent works. Only the composer subscribes to the draft, and
+transcript blocks are memoized, so keystrokes never touch the transcript.
+
+An empty chat centers a greeting, a three-row composer, and up to three
+starter chips drawn from the folder's top-level entries; chips prefill and
+never send. The shell maps the listing to `AgentScopeOutline` so the features
+stay decoupled. The first message docks the composer without resizing it.
+Connecting and restoring are silent; only disconnect, folder removal, or a
+closed chat shows a status row.
+
+Evidence: focused domain, runtime, WebSocket adapter, composer, component,
+architecture, typecheck, lint, and web build checks.
 
 ## 49 — Present permissions and tool calls
 
 **Blocked by:** 13, 48.
 
-Present authorization, pending work, safe arguments/results, and recovery with
-complete keyboard and screen-reader operation.
+**Status:** Complete.
+
+Validated tool and permission events enter pure session transitions. Ordinary
+work folds into a collapsed disclosure; approval asks stay inline and settle
+only the matching request. Arguments and results render as bounded inert text.
+Denied and cancelled tools ignore late output; disconnect or retirement settles
+pending work.
+
+Transcript: no provenance rail, muted thinking, amber only for permission asks,
+one Copy after the final reply of a settled turn, a hover time per prompt, and
+a day divider where a prompt opens a new day. A permission decision returns
+focus to its heading.
+
+Provider, model, and thinking controls live in the composer, hide when
+unsupported, and lock during turns. Model changes use the native next-turn
+command; thinking changes reconnect because Claude fixes effort at connection.
+
+Evidence: focused domain, runtime, protocol, component, architecture,
+typecheck, lint, and web build checks. J06, visual, and screen-reader evidence
+is deferred.
 
 ## 50 — Attach source context and mentions
 

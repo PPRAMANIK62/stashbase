@@ -6,12 +6,19 @@ import { createAgentSessionRuntime } from './session-runtime';
 function harness() {
   const listeners: AgentConnectionListener[] = [];
   const requests: Array<{ resume?: string }> = [];
+  const sent: unknown[] = [];
   const waits: Array<() => void> = [];
   const port: AgentSessionPort = {
     connect(request, listener) {
       requests.push(request);
       listeners.push(listener);
-      return { close: vi.fn() };
+      return {
+        close: vi.fn(),
+        send: vi.fn((event) => {
+          sent.push(event);
+          return true;
+        }),
+      };
     },
     list: vi.fn(async () => []),
     remove: vi.fn(async () => undefined),
@@ -33,7 +40,7 @@ function harness() {
         }),
     ),
   };
-  return { listeners, port, requests, scheduler, waits };
+  return { listeners, port, requests, scheduler, sent, waits };
 }
 
 describe('AgentSessionRuntime', () => {
@@ -68,8 +75,10 @@ describe('AgentSessionRuntime', () => {
     });
 
     expect(test.requests[0]).toEqual({
+      access: 'auto',
       agent: 'codex',
       effort: undefined,
+      model: undefined,
       resume: undefined,
       scope: { kind: 'folder', path: '/library/Research' },
     });
@@ -84,6 +93,138 @@ describe('AgentSessionRuntime', () => {
     test.listeners[0]?.onEvent({ kind: 'titled', title: 'Too late' });
     expect(runtime.store.getState().title).toBe('New chat');
     expect(runtime.store.getState().phase).toBe('disposed');
+  });
+
+  it('retains runtime model catalogs and reconnects idle thinking changes', () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'library' },
+    });
+    test.listeners[0]?.onEvent({
+      activeModel: null,
+      fallback: null,
+      kind: 'models',
+      models: [{ id: 'gpt-codex', label: 'GPT Codex', supportedEfforts: ['low', 'high'] }],
+    });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+
+    runtime.setModel('gpt-codex');
+    expect(test.sent.at(-1)).toEqual({ model: 'gpt-codex', t: 'set-model' });
+    expect(runtime.store.getState().model).toBe('gpt-codex');
+
+    runtime.setEffort('high');
+    expect(test.requests).toHaveLength(2);
+    expect(test.requests.at(-1)).toMatchObject({ effort: 'high', model: 'gpt-codex' });
+    expect(runtime.store.getState().effort).toBe('high');
+  });
+
+  it('sends the retained first-use draft once readiness arrives and streams tool work', () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      autostart: false,
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'library' },
+    });
+
+    runtime.setDraft('  Inspect the project  ');
+    expect(runtime.sendPrompt()).toBe(true);
+    expect(runtime.store.getState()).toMatchObject({
+      draft: 'Inspect the project',
+      phase: 'connecting',
+    });
+    expect(test.sent).toEqual([]);
+
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    test.listeners[0]?.onEvent({ kind: 'turn-started' });
+    test.listeners[0]?.onEvent({
+      id: 'tool-1',
+      input: { command: 'pwd' },
+      kind: 'tool-started',
+      name: 'Bash',
+    });
+    test.listeners[0]?.onEvent({ delta: '/project', id: 'tool-1', kind: 'tool-output' });
+
+    expect(test.sent).toEqual([{ t: 'prompt', text: 'Inspect the project' }]);
+    expect(runtime.store.getState()).toMatchObject({ activeTurn: true, draft: '' });
+    expect(runtime.store.getState().transcript).toEqual([
+      expect.objectContaining({ kind: 'user', text: 'Inspect the project' }),
+      {
+        id: 'tool-1',
+        input: { command: 'pwd' },
+        kind: 'tool',
+        name: 'Bash',
+        result: '/project',
+        status: 'running',
+      },
+    ]);
+  });
+
+  it('answers only the current permission request and keeps the decision inspectable', () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'library' },
+    });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    test.listeners[0]?.onEvent({
+      id: 'permission-1',
+      input: { command: 'pnpm test' },
+      kind: 'permission-requested',
+      name: 'Bash',
+      title: null,
+      toolUseId: 'tool-1',
+    });
+
+    expect(runtime.replyPermission('tool-1', 'stale', true)).toBe(false);
+    expect(runtime.replyPermission('tool-1', 'permission-1', false)).toBe(true);
+    expect(runtime.replyPermission('tool-1', 'permission-1', true)).toBe(false);
+    expect(test.sent).toEqual([
+      { allow: false, always: undefined, id: 'permission-1', t: 'permission-reply' },
+    ]);
+    expect(runtime.store.getState().transcript).toEqual([
+      expect.objectContaining({
+        id: 'tool-1',
+        permissionRequested: true,
+        status: 'denied',
+      }),
+    ]);
+  });
+
+  it('replays a mode changed during connection and retries without duplicating the prompt', () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'library' },
+    });
+    runtime.setAccessMode('default');
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    expect(test.sent).toEqual([{ mode: 'default', t: 'set-mode' }]);
+
+    runtime.setDraft('Keep one prompt');
+    expect(runtime.sendPrompt()).toBe(true);
+    test.listeners[0]?.onEvent({ kind: 'failed', message: 'Network unavailable.' });
+    const failure = runtime.store.getState().transcript.find((block) => block.kind === 'error');
+    expect(failure?.kind).toBe('error');
+    expect(runtime.retry(failure!.id)).toBe(true);
+
+    expect(
+      runtime.store.getState().transcript.filter((block) => block.kind === 'user'),
+    ).toHaveLength(1);
+    expect(runtime.store.getState()).toMatchObject({ activeTurn: true });
+    expect(test.sent.at(-1)).toEqual({ t: 'prompt', text: 'Keep one prompt' });
   });
 
   it('loads replay before reconnecting exactly that native session', async () => {

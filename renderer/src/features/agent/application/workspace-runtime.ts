@@ -11,7 +11,6 @@ import {
   scopeForWindowFolder,
   type AgentId,
   type AgentScope,
-  type AgentSessionState,
 } from '@/features/agent/domain/session';
 import {
   activateAgentTab,
@@ -53,12 +52,10 @@ export interface AgentWorkspaceRuntimeOptions {
   initialAgent?: AgentId;
   port: AgentSessionPort;
   scheduler?: AgentReconnectScheduler;
-  now?: () => number;
 }
 
 interface MountedAgentSession {
   followsWindow: boolean;
-  projectedTranscript: AgentSessionState['transcript'];
   runtime: AgentSessionRuntime;
   unsubscribe(): void;
 }
@@ -70,7 +67,6 @@ export function createAgentWorkspaceRuntime({
   initialAgent = 'stashbase',
   port,
   scheduler,
-  now = Date.now,
 }: AgentWorkspaceRuntimeOptions): AgentWorkspaceRuntime {
   const sessions = new Map<string, MountedAgentSession>();
   const controller = new AbortController();
@@ -98,13 +94,13 @@ export function createAgentWorkspaceRuntime({
       ),
     );
     const hasContent = state.transcript.length > 0;
-    const contentChanged = hasContent && mounted.projectedTranscript !== state.transcript;
+    // Recency follows the user's own prompts and the native record. Opening
+    // or replaying a chat must not promote it in the history list.
     const lastModified = Math.max(
       state.lastModified,
       transcriptModified,
-      contentChanged ? now() : (previous?.lastModified ?? 0),
+      previous?.lastModified ?? 0,
     );
-    mounted.projectedTranscript = state.transcript;
     store.setState(
       upsertAgentTab(workspace, {
         agent: state.agent,
@@ -155,7 +151,6 @@ export function createAgentWorkspaceRuntime({
     const followsWindow = previous?.followsWindow ?? false;
     sessions.set(id, {
       followsWindow,
-      projectedTranscript: sessionState.transcript,
       runtime: session,
       unsubscribe: session.store.subscribe(() => syncTab(id)),
     });

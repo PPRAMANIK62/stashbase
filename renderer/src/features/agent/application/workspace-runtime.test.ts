@@ -90,31 +90,53 @@ describe('AgentWorkspaceRuntime', () => {
     );
   });
 
-  it('advances local recency when transcript content changes', () => {
-    let currentTime = 40;
+  it('advances local recency only when the user submits a prompt', () => {
     const runtime = createAgentWorkspaceRuntime({
       createId: () => 'chat-1',
       folderPath: '/library/Research',
-      now: () => currentTime,
       port: port(),
     });
     const session = runtime.activeSession();
 
-    session.store.setState({ transcript: [{ id: 'one', kind: 'user', text: 'First' }] });
+    session.store.setState({ transcript: [{ at: 40, id: 'one', kind: 'user', text: 'First' }] });
     expect(runtime.store.getState().tabs[0]?.lastModified).toBe(40);
 
-    currentTime = 50;
     session.store.setState({
       transcript: [
-        { id: 'one', kind: 'user', text: 'First' },
+        { at: 40, id: 'one', kind: 'user', text: 'First' },
         { id: 'two', kind: 'assistant', text: 'Second' },
       ],
     });
-    expect(runtime.store.getState().tabs[0]?.lastModified).toBe(50);
+    expect(runtime.store.getState().tabs[0]?.lastModified).toBe(40);
 
-    currentTime = 60;
     session.store.setState({ phase: 'live' });
-    expect(runtime.store.getState().tabs[0]?.lastModified).toBe(50);
+    expect(runtime.store.getState().tabs[0]?.lastModified).toBe(40);
+  });
+
+  it('keeps a restored chat at its recorded recency until a new prompt is sent', async () => {
+    const sessionPort = port();
+    vi.mocked(sessionPort.replay).mockResolvedValue({
+      effort: null,
+      transcript: [
+        { at: 30, id: 'one', kind: 'user', text: 'Yesterday' },
+        { id: 'two', kind: 'assistant', text: 'Reply' },
+      ],
+    });
+    const runtime = createAgentWorkspaceRuntime({
+      createId: () => 'chat-1',
+      folderPath: '/library/Research',
+      port: sessionPort,
+    });
+
+    await runtime.restore({
+      agent: 'stashbase',
+      hasContent: true,
+      id: 'native-1',
+      lastModified: 41,
+      scope: { kind: 'folder', path: '/library/Research' },
+      title: 'Yesterday',
+    });
+    expect(runtime.store.getState().tabs[0]?.lastModified).toBe(41);
   });
 
   it('moves only blank removed-folder chats to Library and retires retained work', () => {
