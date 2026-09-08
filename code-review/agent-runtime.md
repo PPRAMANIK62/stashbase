@@ -336,11 +336,12 @@ assumed CLI versions.
   session's native process, because credentials are read at process start
   and an external login is invisible to the running process until it is
   replaced; never require an app restart for this. Acting on any recovery
-  settles its card to a plain message — a stale button must not outlive the
-  state it described — and auto-resends the failed prompt (immediately for
-  Try again, on session readiness for sign-in and Reconnect), so the
-  outcome is visible without retyping: an answer when the recovery worked, a
-  fresh card when it did not. Included-Agent account/allowance recovery arms
+  removes its stale failure card — neither its button nor its red provider
+  error may outlive the state they described — and auto-resends the failed
+  prompt (immediately for Try again, on session readiness for sign-in and
+  Reconnect), so the stale provider error does not remain presented as a
+  current failure: the user sees an answer when recovery worked or a fresh
+  card when it did not. Included-Agent account/allowance recovery arms
   the same one-shot retry while Agent Settings is open. The armed retry is
   cleared by
   every other session reset. A turn failure never gates the panel and never

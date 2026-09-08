@@ -396,12 +396,13 @@ test('a classified turn failure explains its recovery and offers Codex sign-in i
   await act(async () => { signIn.props.onClick(); });
   assert.equal(logins, 1);
 
-  // Acting on the card settles it: the button and guidance title are gone,
-  // while the provider message stays as a plain record of the failed turn.
+  // Acting on the card removes the stale failure presentation while the
+  // provider-owned sign-in flow takes over. A failed recovery will produce
+  // a fresh card from the retried turn instead.
   output = renderedText(renderer);
   assert.doesNotMatch(output, /Sign in with ChatGPT/);
   assert.doesNotMatch(output, /Signed out of Codex/);
-  assert.match(output, /the session token has expired/);
+  assert.doesNotMatch(output, /the session token has expired/);
 
   // Plan exhaustion explains the provider-side reset and offers Try again,
   // which resends the failed prompt on the live session — no reconnect.
@@ -429,9 +430,27 @@ test('a classified turn failure explains its recovery and offers Codex sign-in i
   await act(async () => { tryAgain.props.onClick(); });
   output = renderedText(renderer);
   assert.doesNotMatch(output, /Usage limit reached/);
+  assert.doesNotMatch(output, /this plan usage window is exhausted/);
+  assert.equal((output.match(/Ping/g) ?? []).length, 1, 'retry reuses the latest visible user turn');
   const prompts = first.sent.map((entry) => JSON.parse(entry) as { t: string; text?: string }).filter((m) => m.t === 'prompt');
   assert.equal(prompts.length, promptsBefore + 1);
   assert.equal(prompts.at(-1)?.text, 'Ping');
+
+  // If recovery did not work, the retried turn supplies a fresh actionable
+  // card rather than reviving the stale provider message.
+  await act(async () => {
+    first.event({ t: 'turn-start' });
+    first.event({
+      t: 'error',
+      message: 'Simulated failure: usage limit is still active.',
+      failure: { kind: 'quota' },
+    });
+    first.event({ t: 'turn-end', isError: true });
+  });
+  output = renderedText(renderer);
+  assert.match(output, /Usage limit reached/);
+  assert.match(output, /usage limit is still active/);
+  assert.doesNotMatch(output, /this plan usage window is exhausted/);
 
   // An unclassified error stays a plain message with no invented recovery.
   await act(async () => {
@@ -493,7 +512,11 @@ test('Claude reconnect resumes the session and auto-retries the failed prompt', 
   });
   await act(async () => {
     first.event({ t: 'turn-start' });
-    first.event({ t: 'error', message: 'Not logged in · Please run /login', failure: { kind: 'auth-expired' } });
+    first.event({
+      t: 'error',
+      message: 'Failed to authenticate: OAuth session expired and could not be refreshed',
+      failure: { kind: 'auth-expired' },
+    });
     first.event({ t: 'turn-end', isError: true });
   });
 
@@ -505,11 +528,11 @@ test('Claude reconnect resumes the session and auto-retries the failed prompt', 
   assert.ok(reconnect);
   await act(async () => { reconnect.props.onClick(); });
 
-  // The card settled (message kept, action gone) and a replacement
-  // connection resumed the same native session.
+  // The stale failure is gone while a replacement connection resumes the
+  // same native session. A real replacement failure will add a fresh card.
   output = renderedText(renderer);
   assert.doesNotMatch(output, /Signed out of Claude Code/);
-  assert.match(output, /Not logged in/);
+  assert.doesNotMatch(output, /Failed to authenticate/);
   assert.equal(LifecycleWebSocket.instances.length, 2);
   const second = LifecycleWebSocket.instances[1]!;
   assert.match(second.url, /[?&]resume=sess-1(?:&|$)/);
@@ -520,7 +543,11 @@ test('Claude reconnect resumes the session and auto-retries the failed prompt', 
   const prompts = second.sent.map((entry) => JSON.parse(entry) as { t: string; text?: string })
     .filter((message) => message.t === 'prompt');
   assert.deepEqual(prompts, [{ t: 'prompt', text: 'Hello Claude' }]);
-  assert.ok((renderedText(renderer).match(/Hello Claude/g) ?? []).length >= 2);
+  assert.equal(
+    (renderedText(renderer).match(/Hello Claude/g) ?? []).length,
+    1,
+    'recovery retries the latest visible turn without duplicating its user message',
+  );
 
   // A later settled turn must not replay it again.
   await act(async () => { second.event({ t: 'turn-start' }); second.event({ t: 'turn-end', isError: false }); });

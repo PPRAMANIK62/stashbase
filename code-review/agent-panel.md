@@ -202,7 +202,8 @@
 - Streaming follows the bottom only while the user remains there. Otherwise a
   jump-to-latest control appears.
 - A terminal failure creates at most one persistent turn explanation, preferring
-  the runtime's specific message. Record it before advancing queued follow-ups.
+  the runtime's specific message. Record it before advancing queued follow-ups
+  and keep it until the user acts on its recovery.
 - Active-turn follow-ups live in the renderer queue until the terminal handoff.
   A waiting item may be deleted by id without interrupting the current turn or
   changing its siblings; once steering has begun, a stale delete cannot discard
@@ -214,10 +215,16 @@
 - A classified turn failure renders as a recovery card whose action follows the
   adapter-assigned kind only (see the turn-failure contract in
   [Agent Runtime](agent-runtime.md#protocol-boundary)); guidance copy and the
-  settle-then-auto-retry behavior live in
+  dismiss-then-auto-retry behavior live in
   `web-src/src/features/agent-panel/lib/turnFailure.ts` and
   `hooks/useAgentSession.ts`. The retry belongs to the card's own turn — the
-  nearest user prompt above the card, never the transcript's newest.
+  nearest user prompt above the card, never the transcript's newest. The latest
+  failed turn reuses its existing user block so recovery does not duplicate the
+  prompt; a card acted on after later turns appends its prompt at the tail so
+  the new answer remains correctly attributed. Removing the acted-on card
+  prevents its provider error from remaining a red alert while recovery is
+  already connecting or retrying; a failed retry produces a fresh actionable
+  card.
 - Completed thinking, interim narration, and tool activity fold under one
   working-trace header while the final answer remains visible. Interrupted work
   stays expanded. Resumed history has no invented duration or timestamp:

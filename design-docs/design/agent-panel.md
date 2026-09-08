@@ -188,10 +188,10 @@ and uses a hosted service only as its metered model provider.
   switch runtimes; an expired sign-in offers Codex's in-app sign-in or, for
   Claude, terminal sign-in steps with an in-place Reconnect. Either
   way the same conversation continues without restarting StashBase: acting
-  on a recovery settles its card — the message remains, the stale action
-  does not — and automatically retries the failed message, answering when
-  the recovery worked and showing a fresh card when it did not. Recovery
-  follows the failure's classified kind, never message prose.
+  on a recovery removes the stale failure card and automatically retries the
+  failed message, answering when the recovery worked and showing a fresh card
+  when it did not. Recovery follows the failure's classified kind, never
+  message prose.
 - Stop is idempotent at the user boundary. If the native runtime has already
   finished the selected turn when it receives the interrupt request, Chat
   settles the stale working state without adding a failure card.

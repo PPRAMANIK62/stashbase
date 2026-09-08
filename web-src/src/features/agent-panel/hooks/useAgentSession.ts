@@ -161,11 +161,17 @@ export function useAgentSession({
   // the same place as `resumeIdRef`, so it cannot leak into later retries.
   const nextConnectionScopeRef = useRef<LibraryScope | null>(initialScope ?? null);
   // The failed prompt to auto-resend once the replacement session is ready,
-  // armed only by an acted-on failure card (sign-in / reconnect). Firing it
-  // makes the recovery's outcome visible immediately: an answer when the
-  // recovery stuck, a fresh failure card when it did not. Any other session
-  // reset clears it so a stale retry can never land in a different session.
-  const pendingRetryRef = useRef<{ text: string; attachments: Attachment[] } | null>(null);
+  // armed only by an acted-on failure card (sign-in / reconnect). It also
+  // records whether the visible user block can be reused without attaching
+  // the retried answer to a later turn. Firing it makes the recovery's outcome
+  // visible immediately: an answer when the recovery stuck, a fresh failure
+  // card when it did not. Any other session reset clears it so a stale retry
+  // can never land in a different session.
+  const pendingRetryRef = useRef<{
+    text: string;
+    attachments: Attachment[];
+    appendBlock: boolean;
+  } | null>(null);
   // null follows product availability: search by meaning starts on once
   // configured; an explicitly disabled chat stays off even if credentials later change.
   // The effective policy is always false while no embedding source exists,
@@ -638,31 +644,38 @@ export function useAgentSession({
     void runtimeCatalog.loginToCodex();
   }
 
-  /** An acted-on failure card first settles to a plain message — its button
-   * and guidance describe a state the action is about to change, and a stale
-   * "Sign in"/"Reconnect"/"Try again" must not outlive it. The failed prompt
-   * is then auto-resent — immediately for `resend` (quota, rate, network
-   * clear on the provider side), or once the replacement session is ready
-   * for the sign-in/reconnect recoveries — so the outcome is visible without
-   * retyping: an answer when the recovery stuck, a fresh card when not. */
+  /** An acted-on failure card is removed before recovery begins: its red
+   * provider error describes the failed attempt, not the recovery now in
+   * progress. The failed prompt is then auto-resent — immediately for
+   * `resend` (quota, rate, network clear on the provider side), or once the
+   * replacement session is ready for sign-in/reconnect — so the outcome is
+   * current: an answer when recovery worked, a fresh card when it did not. */
   function handleTurnFailureAction(blockId: string, action: TurnFailureActionId) {
-    setBlocks((bs) => bs.map((b) => (
-      b.kind === 'error' && b.id === blockId ? { kind: 'error', id: b.id, text: b.text } : b
-    )));
-    // The retry is the prompt of the turn THIS card settled — the nearest
+    // Resolve the retry before removing the card. `useStateWithRef` updates
+    // blocksRef synchronously, so filtering first would lose the card index
+    // and could make an old card resend the transcript's newest prompt.
+    const bs = blocksRef.current;
+    const cardIndex = bs.findIndex((b) => b.id === blockId);
+    // The retry is the prompt of the turn THIS card belongs to — the nearest
     // user block above the card, not the transcript's newest. A failure
     // never ends the session, so the user may have kept chatting before
     // acting on an older card.
-    const bs = blocksRef.current;
-    const cardIndex = bs.findIndex((b) => b.id === blockId);
     let cardUser: Extract<Block, { kind: 'user' }> | null = null;
     for (let i = (cardIndex >= 0 ? cardIndex : bs.length) - 1; i >= 0; i--) {
       const candidate = bs[i];
       if (candidate.kind === 'user') { cardUser = candidate; break; }
     }
-    const retry = cardUser ? { text: cardUser.text, attachments: cardUser.attachments ?? [] } : null;
+    // The newest failed turn already has its visible user block; reusing that
+    // turn avoids painting the same prompt twice. An older card must append
+    // its retry at the transcript tail so the new answer cannot attach to a
+    // later user turn.
+    const appendBlock = cardIndex < 0 || bs.slice(cardIndex + 1).some((block) => block.kind === 'user');
+    const retry = cardUser
+      ? { text: cardUser.text, attachments: cardUser.attachments ?? [], appendBlock }
+      : null;
+    setBlocks((current) => current.filter((block) => !(block.kind === 'error' && block.id === blockId)));
     if (action === 'resend') {
-      if (retry) promptQueue.resendFailedPrompt(retry);
+      if (retry) promptQueue.resendFailedPrompt(retry, retry.appendBlock);
       return;
     }
     if (action === 'open-agent-settings') {
@@ -751,7 +764,7 @@ export function useAgentSession({
         {
           const retry = pendingRetryRef.current;
           pendingRetryRef.current = null;
-          if (retry) promptQueue.resendFailedPrompt(retry);
+          if (retry) promptQueue.resendFailedPrompt(retry, retry.appendBlock);
         }
         maybeApplyAgentInstructions();
         break;

@@ -14,8 +14,8 @@ export interface TurnFailureGuidance {
    * the already-running process until it is replaced. `resend` retries the
    * failed prompt on the live session — quota, rate, and network failures
    * clear on the provider side, so no process replacement is needed.
-   * Acting on any of them settles the card to a plain message — a stale
-   * button must not outlive the state it described. */
+   * Acting on any of them removes the stale failure card. The retry's current
+   * outcome supplies either the answer or a fresh actionable error. */
   action: { id: TurnFailureActionId; label: string };
 }
 
