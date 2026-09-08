@@ -24,7 +24,7 @@
     "milvus",
     "embeddings",
     "rag",
-    "similarity-search"
+    "semantic-search"
   ],
   "type": "module",
   "main": "electron/main.cjs",
