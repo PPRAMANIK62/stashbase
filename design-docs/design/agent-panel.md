@@ -161,6 +161,10 @@ and uses a hosted service only as its metered model provider.
   **Copy prompt** on an entry's detail page, and nothing the Gallery does
   places or sends composer text. Setup for search by meaning is independent
   of building a wiki and never blocks a sent request.
+- Agent searches default to the current Chat scope. Searching the whole
+  Library from a folder Chat is explicit; empty results do not broaden the
+  search automatically. Search scope mechanics live in
+  [MCP Access](../../code-review/mcp-access.md).
 - The **Search by meaning** switch is live session policy, not Agent
   permission mode. The renderer sends the effective value before any
   ready-transition prompt and reapplies it when searching by meaning becomes

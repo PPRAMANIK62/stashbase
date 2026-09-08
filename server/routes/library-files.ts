@@ -43,7 +43,7 @@ const log = logger('routes/library-files');
 
 
 export function mount(app: express.Express, operations: LibraryOperations = createLibraryOperations()): void {
-  // Unified source search over the whole library (optional `folder`,
+  // Unified source search using the attributed chat scope (optional `folder`,
   // `path_prefix`, and source `types` filters). Powers MCP's
   // `search_library`; an attributed panel-session policy may resolve the
   // request to lexical retrieval. Hidden derived text is searched but always
@@ -69,6 +69,7 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
       res.json(await operations.search({
         query,
         topK,
+        scope: req.body?.scope,
         folder: req.body?.folder,
         pathPrefix: req.body?.path_prefix,
         types,
@@ -79,7 +80,7 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
         // model-controlled tool argument. Older native MCP hosts may retain
         // only the window id; the operation layer owns the safe fallbacks.
         agentSessionId: req.header(AGENT_SESSION_ID_HEADER)?.trim() || undefined,
-        windowId: currentWindowId(),
+        windowId: req.header('x-stashbase-window-id')?.trim() || undefined,
       }));
     } catch (err: unknown) {
       sendError(res, err);

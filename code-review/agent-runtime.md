@@ -223,7 +223,9 @@ it is not a third scope.
   the editor and HTTP Adapter expose only that exact text. At native session
   startup, each Runtime Adapter composes it with the product-owned policy from
   `server/agent-runtime-instructions.ts`. That policy prefers StashBase MCP for
-  library orientation and prepared PDF, DOCX, audio, or video reads, avoiding a
+  library orientation and prepared PDF, DOCX, audio, or video reads. It directs
+  search to use the Chat scope unless the user explicitly requests global
+  search; server-side defaults belong to [MCP Access](mcp-access.md). It avoids a
   redundant parser unless original-source analysis was explicitly requested or
   prepared text is unavailable. Codex receives the composition as
   `developerInstructions`, Claude as the native preset append, and Wiki Agent

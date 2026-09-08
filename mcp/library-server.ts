@@ -101,7 +101,7 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
         1,
         Math.min(MAX_TOP_K, Math.floor(typeof args.top_k === 'number' ? args.top_k : DEFAULT_TOP_K)),
       );
-      const searchResult = await operations.search({ query, topK: k, folder, pathPrefix, types, mode, caseStrict, wholeWord });
+      const searchResult = await operations.search({ query, topK: k, scope: args.scope as 'current' | 'library' | undefined, folder, pathPrefix, types, mode, caseStrict, wholeWord });
       const hits = annotateSearchHitsForMcp(searchResult.hits);
       const effectiveMode = searchResult.mode ?? mode;
       return {
@@ -110,7 +110,7 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
           text: JSON.stringify({
             query,
             mode: effectiveMode,
-            folder: folder ?? null,
+            folder: searchResult.folder ?? folder ?? null,
             path_prefix: pathPrefix ?? null,
             types: types ?? null,
             top_k: k,
@@ -345,8 +345,10 @@ const BUILTIN_TOOLS = [
         'phrases that meaning-based matching may blur, and it works without any setup. ' +
         'In a StashBase panel chat, turning search by meaning off resolves this tool to ' +
         'keyword mode even when the `semantic` mode was requested; the response `mode` is the strategy actually used. ' +
-        'Searches the **whole library** by default — every member folder from ' +
-        '`library_info` — and scopes to one folder when `folder` is its absolute root (e.g. ' +
+        'Defaults to the current chat scope: its folder, or the whole library for a Library chat or external client. ' +
+        'Use `scope: "library"` only when the user requests global search; do not broaden an empty search automatically. ' +
+        'The response `folder` reports the effective root (null for the whole library). ' +
+        'Search another specific folder by passing its absolute root as `folder` (e.g. ' +
         '"/Users/me/notes"). For finer control, `path_prefix` restricts hits to sources ' +
         'starting with that prefix (e.g. "/Users/me/notes/transcripts/"). Each hit returns the absolute file path, ' +
         'the matching content, optional heading and source line range, and (in `semantic` mode) a fused ' +
@@ -363,17 +365,22 @@ const BUILTIN_TOOLS = [
               'Search mode. "semantic" (default) searches by meaning and needs an embedding provider set up in StashBase. ' +
               '"keyword" is exact literal matching over source and prepared text and works without setup.',
           },
+          scope: {
+            type: 'string',
+            enum: ['current', 'library'],
+            description: 'Default current uses the chat scope. Use library for explicit global search; cannot combine with folder or path_prefix.',
+          },
           folder: {
             type: 'string',
             description:
               'Optional absolute folder root from library_info (e.g. "/Users/me/notes"). ' +
-              'Omit to search the whole library.',
+              'Omit to use the current chat scope.',
           },
           path_prefix: {
             type: 'string',
             description:
-              'Optional absolute path prefix (e.g. "/Users/me/notes/transcripts/"). Overrides ' +
-              '`folder` when present — pass either, not both. Matches any chunk whose source ' +
+              'Optional absolute path prefix (e.g. "/Users/me/notes/transcripts/"). Must remain inside ' +
+              'the effective folder scope. Matches any chunk whose source ' +
               'starts with the prefix.',
           },
           types: {

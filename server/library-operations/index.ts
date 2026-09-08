@@ -32,7 +32,7 @@ import {
   type RetrievalMode,
   type SourceEvidence,
 } from '../retrieval/index.ts';
-import { attributedRequestSession } from '../agent-session-registry.ts';
+import { attributedAgentSession, attributedSessionForWindow, attributedRequestSession } from '../agent-session-registry.ts';
 import type { IndexerStatus, SearchHit } from '../indexer.ts';
 import type { KeywordHitFile } from '../search-display.ts';
 import type { SyncResult } from '../sync.ts';
@@ -51,6 +51,8 @@ export interface LibraryOperations {
   search(input: {
     query: string;
     topK?: number;
+    /** Omission uses the attributed chat scope; library explicitly searches globally. */
+    scope?: 'current' | 'library';
     folder?: string;
     pathPrefix?: string;
     types?: readonly SearchTypeCategory[];
@@ -62,7 +64,7 @@ export interface LibraryOperations {
     /** Transport attribution, never model-controlled tool arguments. */
     agentSessionId?: string;
     windowId?: string;
-  }): Promise<{ mode: RetrievalMode; hits: SearchHit[]; truncated?: boolean }>;
+  }): Promise<{ mode: RetrievalMode; folder?: string | null; hits: SearchHit[]; truncated?: boolean }>;
   /** Ripgrep keyword search over every member folder (or one `folder`).
    * File paths come back folder-relative next to their member folder root so
    * a caller can open results across folders without prefix guessing. */
@@ -134,6 +136,7 @@ export function createLibraryOperations(
     async search({
       query,
       topK = 8,
+      scope: requestedScope = 'current',
       folder,
       pathPrefix,
       types,
@@ -145,7 +148,25 @@ export function createLibraryOperations(
     }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
-      const scope = await deps.normalizeSearchScope(folder, pathPrefix);
+      if (requestedScope !== 'current' && requestedScope !== 'library') {
+        throw routeError('scope must be current or library', 400);
+      }
+      if (folder != null && typeof folder !== 'string') throw routeError('folder must be a string', 400);
+      if (pathPrefix != null && typeof pathPrefix !== 'string') throw routeError('path_prefix must be a string', 400);
+      folder = folder?.trim() || undefined;
+      if (requestedScope === 'library' && (folder || pathPrefix)) {
+        throw routeError('library scope cannot be combined with folder or path_prefix', 400);
+      }
+      // Scope must come from caller identity, never the app-wide sole active
+      // turn: an unrelated external MCP client may search concurrently.
+      const session = agentSessionId
+        ? attributedAgentSession(agentSessionId)
+        : attributedSessionForWindow(windowId);
+      if (requestedScope === 'current' && !session && (agentSessionId || (windowId && !folder && !pathPrefix))) {
+        throw routeError('search session is no longer available or is ambiguous', 409);
+      }
+      const defaultFolder = requestedScope === 'current' ? session?.boundFolder() ?? undefined : undefined;
+      const scope = await deps.normalizeSearchScope(folder || defaultFolder, pathPrefix);
       const similarityEnabled = deps.similaritySearchEnabled(agentSessionId, windowId);
       const effectiveMode: RetrievalMode = similarityEnabled === false ? 'keyword' : mode;
       const result = effectiveMode === 'keyword' && !scope.folderRoot
@@ -182,6 +203,7 @@ export function createLibraryOperations(
       }
       return {
         mode: effectiveMode,
+        folder: scope.folderRoot ?? null,
         hits: searchHitsFromEvidence(result.evidence),
         ...(result.truncated ? { truncated: true } : {}),
       };

@@ -44,7 +44,10 @@ user-managed results.
   member folder. It remembers query, mode, options, scope, and results across
   close, reopen, and folder switches, then refreshes against current content.
 - MCP retrieval uses one `search_library` operation across the whole library
-  by default. Meaning-based and text-only strategies share the same visible
+  for Library Chats and external clients. In an attributed folder Chat it
+  defaults to that Chat's folder; global search requires an explicit request
+  (`scope: "library"`). Empty results do not automatically broaden scope.
+  Meaning-based and text-only strategies share the same visible
   source-hit shape and may both narrow by folder root, path prefix, and source
   file-type categories. An attributed panel Chat's **Search by meaning**
   choice resolves the operation's strategy without asking the Agent to select

@@ -229,6 +229,8 @@ export const api = {
   // to one member folder (`path_prefix` is that folder's absolute subpath).
   librarySearch: (query: string, top_k = 8, opts?: { folder?: string; pathPrefix?: string }) =>
     send<{ hits: SearchHit[] }>('POST', '/api/library/search', {
+      // The popup owns its scope independently of any active Chat.
+      ...(!opts?.folder && !opts?.pathPrefix ? { scope: 'library' } : {}),
       query,
       top_k,
       ...(opts?.folder ? { folder: opts.folder } : {}),

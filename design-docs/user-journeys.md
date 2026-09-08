@@ -407,6 +407,9 @@ disconnected, or recoverable.
   turn failure.
 - Tool and source use remain inspectable without turning generated artifacts
   or transcripts into hidden product state.
+- Agent search defaults to the live Chat scope; a folder Chat searches across
+  the Library only when explicitly requested. Search results report the
+  effective folder, and invalid scope does not fall back to a broader search.
 - The **Search by meaning** control affects only the live Chat's retrieval
   strategy. Off keeps `search_library` available across the authorized scope
   using direct and current prepared text, while On may additionally use

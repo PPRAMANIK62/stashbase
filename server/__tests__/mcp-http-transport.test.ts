@@ -122,6 +122,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       ['notes', 'data', 'pdf', 'image', 'docx', 'audio'],
     );
     assert.deepEqual(searchTool.inputSchema.properties.mode.enum, ['semantic', 'keyword']);
+    assert.deepEqual(searchTool.inputSchema.properties.scope.enum, ['current', 'library']);
     for (const name of ['read_file', 'write_file', 'edit_file']) {
       const tool = listed.body.result.tools.find((candidate: any) => candidate.name === name);
       assert.match(tool.description, /Markdown.*HTML.*JSON.*(?:plain text|plain-text)/i);
@@ -218,6 +219,12 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.equal(invalidSearch.body.result.isError, true);
     assert.match(invalidSearch.body.result.content[0].text, /unknown search type/i);
 
+    const invalidScope = await post(base, {
+      jsonrpc: '2.0', id: 90, method: 'tools/call',
+      params: { name: 'search_library', arguments: { query: 'answer', scope: 'typo' } },
+    }, token);
+    assert.match(invalidScope.body.error.message, /scope must be/);
+
     const invalidMode = await post(base, {
       jsonrpc: '2.0',
       id: 7,
@@ -255,7 +262,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.deepEqual(stdioSearchBody, {
       query: 'diagram',
       top_k: 4,
-      path_prefix: '/tmp/images',
+      scope: 'library',
       types: ['image'],
       mode: 'keyword',
       case_strict: true,
@@ -392,7 +399,7 @@ async function runStdio(port: number): Promise<{
       arguments: {
         query: 'diagram',
         mode: 'keyword',
-        path_prefix: '/tmp/images',
+        scope: 'library',
         types: ['image'],
         case_strict: true,
         whole_word: true,

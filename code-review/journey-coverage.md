@@ -239,7 +239,8 @@ aliases, and Journey E2E owns representative composition.
   for blank, draft-only, queued, and active-tool Chats. Workspace reset tests
   pin Chat preservation through both direct folder loss and 412 recovery.
   Library-operation, route, keyword-search, and renderer composition tests pin
-  the per-session policy for search by meaning, library-wide text fallback, and
+  the per-session policy for search by meaning, Chat-scoped search defaults,
+  explicit global search, stale-attribution rejection, library-wide text fallback, and
   prepared-PDF source remapping while the switch is Off. Agent Instructions
   config tests pin bounded folder isolation, strict persistence, and membership
   cleanup plus default restoration; Adapter tests pin verbatim runtime

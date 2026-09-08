@@ -142,3 +142,18 @@ test('folder mutation transport aborts a pending response instead of waiting for
     globalThis.fetch = originalFetch;
   }
 });
+
+test('search popup sends an explicit global scope independently of Chat defaults', async (t) => {
+  const { api } = await import('@/common/api/api');
+  const requests: Record<string, unknown>[] = [];
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    requests.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+    return new Response(JSON.stringify({ hits: [] }), { status: 200 });
+  });
+  await api.librarySearch('answer');
+  await api.librarySearch('answer', 8, { folder: '/library/one' });
+  assert.deepEqual(requests, [
+    { query: 'answer', top_k: 8, scope: 'library' },
+    { query: 'answer', top_k: 8, folder: '/library/one' },
+  ]);
+});

@@ -52,6 +52,8 @@ semantic readiness.
   asynchronous caller's earlier duplicate check is never the uniqueness
   authority. Active-folder relative paths and out-of-folder folder-plus-path
   pairs remain distinct identities.
+- The search popup sends an explicit Library scope for its unfiltered search;
+  its retained selection must not inherit an active Chat's MCP search default.
 - Folder switching resets folder-scoped documents and readiness without
   clearing library search or silently rebinding a started or drafted Chat.
 - Folder loss and the 412 recovery ladder also preserve Chat tabs. They clear

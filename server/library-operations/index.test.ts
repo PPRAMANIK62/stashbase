@@ -45,7 +45,7 @@ test('Library Operations keeps search result identity at the visible source path
 
   assert.deepEqual(
     await operations.search({ query: 'paper', topK: 8 }),
-    { mode: 'semantic', hits: [{ fileName: '/library/paper.pdf', chunkIndex: 0, content: 'derived evidence', heading: '', score: 1 }] },
+    { mode: 'semantic', folder: null, hits: [{ fileName: '/library/paper.pdf', chunkIndex: 0, content: 'derived evidence', heading: '', score: 1 }] },
   );
 });
 
@@ -118,7 +118,6 @@ test('Library Operations resolves an attributed request with search by meaning o
   const result = await operations.search({
     query: 'prepared text',
     mode: 'semantic',
-    agentSessionId: 'panel-session',
   });
 
   assert.deepEqual(modes, ['keyword']);
@@ -198,4 +197,83 @@ test('Library Operations validates mutation fields before an adapter can write',
     operations.write({ path: '/library/note.md', content: undefined }),
     (error: unknown) => error instanceof LibraryOperationError && error.status === 400,
   );
+});
+
+for (const mode of ['semantic', 'keyword'] as const) {
+  test(`Library Operations defaults ${mode} search to the attributed chat folder`, async (t) => {
+    const { registerAttributedAgentSession, unregisterAttributedAgentSession } = await import('../agent-session-registry.ts');
+    let bound: string | null = '/library/one';
+    const sessionId = `search-scope-${mode}`;
+    registerAttributedAgentSession(sessionId, {
+      agentId: 'claude', windowId: 'scope-window', boundFolder: () => bound,
+      isLibraryScoped: () => bound == null, turnInFlight: () => true,
+      nativeSessionId: () => null, similaritySearchEnabled: () => true,
+      rebindToFolder: () => false,
+    });
+    t.after(() => unregisterAttributedAgentSession(sessionId));
+    const reached: (string | undefined)[] = [];
+    const operations = createLibraryOperations({
+      normalizeSearchScope: async (folder) => ({ folderRoot: folder as string | undefined }),
+      memberFolderRoots: () => ['/library/one', '/library/two'],
+      retrieval: { search: async (input) => {
+        reached.push(input.folderRoot);
+        return { evidence: [], availability: { state: 'ready' as const }, truncated: false };
+      } },
+    });
+    const result = await operations.search({ query: 'answer', mode, agentSessionId: sessionId });
+    assert.deepEqual(reached.splice(0), ['/library/one']);
+    assert.equal(result.folder, '/library/one');
+    await operations.search({ query: 'answer', mode, windowId: 'scope-window' });
+    assert.deepEqual(reached.splice(0), ['/library/one']);
+    bound = '/library/two';
+    await operations.search({ query: 'answer', mode, agentSessionId: sessionId });
+    assert.deepEqual(reached.splice(0), ['/library/two']);
+    await operations.search({ query: 'answer', mode, agentSessionId: sessionId, scope: 'library' });
+    assert.deepEqual(reached.splice(0), mode === 'keyword' ? ['/library/one', '/library/two'] : [undefined]);
+    await operations.search({ query: 'answer', mode, agentSessionId: sessionId, folder: '/library/one' });
+    assert.deepEqual(reached.splice(0), ['/library/one']);
+    bound = null;
+    await operations.search({ query: 'answer', mode, agentSessionId: sessionId });
+    assert.deepEqual(reached.splice(0), mode === 'keyword' ? ['/library/one', '/library/two'] : [undefined]);
+    bound = '/library/two';
+    // An unrelated external client must not inherit the sole active chat.
+    await operations.search({ query: 'answer', mode });
+    assert.deepEqual(reached.splice(0), mode === 'keyword' ? ['/library/one', '/library/two'] : [undefined]);
+  });
+}
+
+test('Library Operations rejects stale attribution and conflicting or malformed search scope', async () => {
+  const operations = createLibraryOperations({
+    retrieval: { search: async () => { throw new Error('must not retrieve'); } },
+  });
+  await assert.rejects(operations.search({ query: 'answer', agentSessionId: 'retired-session' }), /session is no longer available/);
+  for (const input of [
+    { scope: 'typo' }, { scope: null },
+    { scope: 'library', folder: '/library/one' },
+    { scope: 'library', pathPrefix: '/library/one/notes' },
+  ]) {
+    await assert.rejects(operations.search({ query: 'answer', ...input } as Parameters<typeof operations.search>[0]),
+      (error: unknown) => error instanceof LibraryOperationError && error.status === 400);
+  }
+});
+
+test('Library Operations does not guess a scope between concurrent chats in one window', async (t) => {
+  const { registerAttributedAgentSession, unregisterAttributedAgentSession } = await import('../agent-session-registry.ts');
+  for (const id of ['scope-first', 'scope-second']) {
+    registerAttributedAgentSession(id, {
+      agentId: 'claude', windowId: 'shared-window', boundFolder: () => `/library/${id}`,
+      isLibraryScoped: () => false, turnInFlight: () => true, nativeSessionId: () => null,
+      similaritySearchEnabled: () => true, rebindToFolder: () => false,
+    });
+    t.after(() => unregisterAttributedAgentSession(id));
+  }
+  const operations = createLibraryOperations({
+    normalizeSearchScope: async (folder) => ({ folderRoot: folder as string | undefined }),
+    retrieval: { search: async () => ({ evidence: [], availability: { state: 'ready' as const }, truncated: false }) },
+  });
+  await assert.rejects(operations.search({ query: 'answer', windowId: 'shared-window' }), /ambiguous/);
+  const exact = await operations.search({ query: 'answer', windowId: 'shared-window', agentSessionId: 'scope-second' });
+  assert.equal(exact.folder, '/library/scope-second');
+  const global = await operations.search({ query: 'answer', windowId: 'shared-window', scope: 'library' });
+  assert.equal(global.folder, null);
 });

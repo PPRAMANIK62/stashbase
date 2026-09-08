@@ -37,11 +37,12 @@ export function createHttpLibraryOperations(
   const pathQuery = (path: unknown) => `path=${encodeURIComponent(typeof path === 'string' ? path : '')}`;
   return {
     info: () => json(`${webBase}/api/library/info`, { headers: headers() }),
-    search: ({ query, topK, folder, pathPrefix, types, mode, caseStrict, wholeWord }) => json(`${webBase}/api/library/search`, {
+    search: ({ query, topK, scope, folder, pathPrefix, types, mode, caseStrict, wholeWord }) => json(`${webBase}/api/library/search`, {
       method: 'POST', headers: headers({ 'content-type': 'application/json' }),
       body: JSON.stringify({
         query,
         top_k: topK,
+        ...(scope !== undefined ? { scope } : {}),
         ...(folder ? { folder } : {}),
         ...(pathPrefix ? { path_prefix: pathPrefix } : {}),
         ...(types !== undefined ? { types } : {}),

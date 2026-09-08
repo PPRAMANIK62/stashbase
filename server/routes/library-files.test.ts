@@ -3,16 +3,24 @@ import test from 'node:test';
 import express from 'express';
 import { applyLineRange } from '../library-file-reader.ts';
 import { createLibraryOperations } from '../library-operations/index.ts';
+import { registerAttributedAgentSession, unregisterAttributedAgentSession } from '../agent-session-registry.ts';
 import { mount } from './library-files.ts';
 
-test('library search validates and forwards file-type filters', async () => {
+test('library search validates and forwards file-type filters', async (t) => {
+  registerAttributedAgentSession('panel-session', {
+    agentId: 'claude', windowId: 'route-window', boundFolder: () => '/library',
+    isLibraryScoped: () => false, turnInFlight: () => true, nativeSessionId: () => null,
+    similaritySearchEnabled: () => false, rebindToFolder: () => false,
+  });
+  t.after(() => unregisterAttributedAgentSession('panel-session'));
+  let normalizedFolder: unknown;
   let searchInput: Record<string, unknown> | undefined;
   let attributedSession: string | undefined;
   const operations = createLibraryOperations({
-    normalizeSearchScope: async (_folder, pathPrefix) => ({
-      folderRoot: '/library',
-      pathPrefix: typeof pathPrefix === 'string' ? pathPrefix : undefined,
-    }),
+    normalizeSearchScope: async (folder, pathPrefix) => {
+      normalizedFolder = folder;
+      return { folderRoot: folder as string | undefined ?? '/library', pathPrefix: typeof pathPrefix === 'string' ? pathPrefix : undefined };
+    },
     retrieval: { search: async (input) => {
       searchInput = input as unknown as Record<string, unknown>;
       return {
@@ -80,10 +88,18 @@ test('library search validates and forwards file-type filters', async () => {
         'content-type': 'application/json',
         'x-stashbase-agent-session-id': 'panel-session',
       },
-      body: JSON.stringify({ query: 'prepared evidence', mode: 'semantic', folder: '/library' }),
+      body: JSON.stringify({ query: 'prepared evidence', mode: 'semantic' }),
     });
     assert.equal(policySearch.status, 200);
     assert.equal(attributedSession, 'panel-session');
+    assert.equal(normalizedFolder, '/library');
+    const globalSearch = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-stashbase-agent-session-id': 'panel-session' },
+      body: JSON.stringify({ query: 'answer', scope: 'library' }),
+    });
+    assert.equal(globalSearch.status, 200);
+    assert.equal(normalizedFolder, undefined);
     assert.equal((searchInput as Record<string, unknown> | undefined)?.mode, 'keyword');
     assert.equal((await policySearch.json() as { mode: string }).mode, 'keyword');
 
