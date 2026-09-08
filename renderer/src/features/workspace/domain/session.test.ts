@@ -6,6 +6,7 @@ import {
   reconcileSessionMembership,
   recordFolderSession,
   setSessionActiveFolder,
+  setSessionAgentPaneWidth,
   setSessionSidebarWidth,
 } from './session';
 import { createWorkspaceState } from './workspace';
@@ -42,7 +43,7 @@ describe('workspace session state', () => {
           tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
         },
       ],
-      shell: { sidebarOpen: true, sidebarWidth: 240 },
+      shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 240 },
       version: 1,
     });
     expect(snapshot).not.toHaveProperty('scope');
@@ -79,7 +80,7 @@ describe('workspace session state', () => {
           ],
         },
       ],
-      shell: { sidebarOpen: false, sidebarWidth: 900 },
+      shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 900 },
       version: 1,
     });
 
@@ -90,6 +91,13 @@ describe('workspace session state', () => {
       tabs: [{ id: 'tab-1', path: 'one.md' }],
     });
     expect(normalized.shell.sidebarWidth).toBe(360);
+  });
+
+  it('clamps the Agent pane width and keeps unchanged widths referentially stable', () => {
+    const snapshot = createWorkspaceSessionSnapshot();
+    expect(setSessionAgentPaneWidth(snapshot, 5_000).shell.agentPaneWidth).toBe(960);
+    expect(setSessionAgentPaneWidth(snapshot, 10).shell.agentPaneWidth).toBe(320);
+    expect(setSessionAgentPaneWidth(snapshot, 576)).toBe(snapshot);
   });
 
   it('prunes only sessions whose durable membership disappeared', () => {

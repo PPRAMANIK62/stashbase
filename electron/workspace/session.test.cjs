@@ -21,7 +21,7 @@ const snapshot = {
     selectedPath: null,
     tabs: [],
   }],
-  shell: { sidebarOpen: true, sidebarWidth: 240 },
+  shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 240 },
   version: 1,
 };
 

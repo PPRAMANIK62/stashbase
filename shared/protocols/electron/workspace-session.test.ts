@@ -17,7 +17,7 @@ const current = {
       tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
     },
   ],
-  shell: { sidebarOpen: false, sidebarWidth: 288 },
+  shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 288 },
   version: 1,
 } as const;
 

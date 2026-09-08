@@ -21,6 +21,7 @@ export interface WorkspaceSessionController {
   restoredFolder: ReturnType<typeof restoreFolderSession>;
   runtime: WorkspaceSessionRuntime;
   shell: {
+    agentPaneWidth: number;
     sidebarOpen: boolean;
     sidebarWidth: number;
   };

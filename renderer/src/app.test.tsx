@@ -161,7 +161,7 @@ describe('workspace shell', () => {
     expect(sidebar?.getAttribute('data-state')).toBe('collapsed');
     await act(async () => Promise.resolve());
     expect(dependencies.session.save).toHaveBeenCalledWith(
-      expect.objectContaining({ shell: { sidebarOpen: false, sidebarWidth: 240 } }),
+      expect.objectContaining({ shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 240 } }),
     );
   });
 
@@ -171,7 +171,7 @@ describe('workspace shell', () => {
       load: vi.fn(async () => ({
         activeFolderPath: null,
         folders: [],
-        shell: { sidebarOpen: false, sidebarWidth: 312 },
+        shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 312 },
         version: 1 as const,
       })),
       save: vi.fn(async () => undefined),

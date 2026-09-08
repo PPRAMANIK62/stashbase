@@ -10,7 +10,13 @@ export {
   createWorkspaceSessionRuntime,
   type WorkspaceSessionRuntime,
 } from './application/session-runtime';
-export type { FolderSessionState, WorkspaceDocumentSession } from './domain/session';
+export {
+  DEFAULT_AGENT_PANE_WIDTH,
+  MAX_AGENT_PANE_WIDTH,
+  MIN_AGENT_PANE_WIDTH,
+  type FolderSessionState,
+  type WorkspaceDocumentSession,
+} from './domain/session';
 export type { WorkspaceScope } from './domain/workspace';
 export { displayFolderPath, folderName } from './domain/library';
 export { fileIsRestricted, type WorkspaceFile, type WorkspaceListing } from './domain/tree';

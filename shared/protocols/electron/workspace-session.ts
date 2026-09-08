@@ -39,6 +39,7 @@ export const workspaceSessionSnapshotSchema = z
       .object({
         sidebarOpen: z.boolean(),
         sidebarWidth: z.number().int().min(160).max(360),
+        agentPaneWidth: z.number().int().min(320).max(960).default(576),
       })
       .strict(),
     version: z.literal(1),

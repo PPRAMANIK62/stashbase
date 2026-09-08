@@ -20,7 +20,7 @@ describe('Workspace session runtime', () => {
             tabs: [],
           },
         ],
-        shell: { sidebarOpen: false, sidebarWidth: 288 },
+        shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 288 },
         version: 1,
       }),
       save,
@@ -34,7 +34,7 @@ describe('Workspace session runtime', () => {
       snapshot: {
         activeFolderPath: '/library/notes',
         folders: [{ activeTabId: null, expandedPaths: ['drafts'] }],
-        shell: { sidebarOpen: false, sidebarWidth: 288 },
+        shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 288 },
       },
     });
     expect(save).not.toHaveBeenCalled();
@@ -54,6 +54,7 @@ describe('Workspace session runtime', () => {
     await restoring;
 
     expect(runtime.store.getState().snapshot.shell).toEqual({
+      agentPaneWidth: 576,
       sidebarOpen: false,
       sidebarWidth: 310,
     });

@@ -10,7 +10,7 @@ const {
 const snapshot = {
   activeFolderPath: null,
   folders: [],
-  shell: { sidebarOpen: false, sidebarWidth: 280 },
+  shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 280 },
   version: 1,
 };
 

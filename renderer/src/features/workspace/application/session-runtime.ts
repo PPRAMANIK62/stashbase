@@ -7,6 +7,7 @@ import {
   reconcileSessionMembership,
   recordFolderSession,
   setSessionActiveFolder,
+  setSessionAgentPaneWidth,
   setSessionSidebarOpen,
   setSessionSidebarWidth,
   type WorkspaceDocumentSession,
@@ -28,6 +29,7 @@ export interface WorkspaceSessionRuntime {
   recordWorkspace(workspace: WorkspaceState, documents?: WorkspaceDocumentSession): void;
   restore(): Promise<void>;
   setActiveFolder(folderPath: string | null): void;
+  setAgentPaneWidth(width: number): void;
   setSidebarOpen(open: boolean): void;
   setSidebarWidth(width: number): void;
 }
@@ -122,6 +124,10 @@ export function createWorkspaceSessionRuntime(
     },
     setActiveFolder(folderPath) {
       update((snapshot) => setSessionActiveFolder(snapshot, folderPath));
+    },
+    setAgentPaneWidth(width) {
+      if (store.getState().restoreStatus === 'loading') shellChangedBeforeRestore = true;
+      update((snapshot) => setSessionAgentPaneWidth(snapshot, width));
     },
     setSidebarOpen(open) {
       if (store.getState().restoreStatus === 'loading') shellChangedBeforeRestore = true;

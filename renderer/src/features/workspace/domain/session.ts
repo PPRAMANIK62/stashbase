@@ -4,6 +4,9 @@ export const WORKSPACE_SESSION_VERSION = 1 as const;
 export const DEFAULT_SIDEBAR_WIDTH = 240;
 export const MIN_SIDEBAR_WIDTH = 160;
 export const MAX_SIDEBAR_WIDTH = 360;
+export const DEFAULT_AGENT_PANE_WIDTH = 576;
+export const MIN_AGENT_PANE_WIDTH = 320;
+export const MAX_AGENT_PANE_WIDTH = 960;
 export const MAX_SESSION_FOLDERS = 32;
 export const MAX_SESSION_EXPANDED_PATHS = 2_048;
 export const MAX_SESSION_TABS = 50;
@@ -27,6 +30,7 @@ export interface FolderSessionState {
 }
 
 export interface WorkspaceShellSessionState {
+  agentPaneWidth: number;
   sidebarOpen: boolean;
   sidebarWidth: number;
 }
@@ -42,7 +46,11 @@ export function createWorkspaceSessionSnapshot(): WorkspaceSessionSnapshot {
   return {
     activeFolderPath: null,
     folders: [],
-    shell: { sidebarOpen: true, sidebarWidth: DEFAULT_SIDEBAR_WIDTH },
+    shell: {
+      agentPaneWidth: DEFAULT_AGENT_PANE_WIDTH,
+      sidebarOpen: true,
+      sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+    },
     version: WORKSPACE_SESSION_VERSION,
   };
 }
@@ -83,6 +91,7 @@ export function normalizeWorkspaceSession(
         : null,
     folders,
     shell: {
+      agentPaneWidth: clampAgentPaneWidth(snapshot.shell.agentPaneWidth),
       sidebarOpen: snapshot.shell.sidebarOpen,
       sidebarWidth: Math.max(
         MIN_SIDEBAR_WIDTH,
@@ -178,6 +187,20 @@ export function setSessionSidebarOpen(
   return snapshot.shell.sidebarOpen === sidebarOpen
     ? snapshot
     : { ...snapshot, shell: { ...snapshot.shell, sidebarOpen } };
+}
+
+function clampAgentPaneWidth(width: number): number {
+  return Math.max(MIN_AGENT_PANE_WIDTH, Math.min(MAX_AGENT_PANE_WIDTH, Math.round(width)));
+}
+
+export function setSessionAgentPaneWidth(
+  snapshot: WorkspaceSessionSnapshot,
+  agentPaneWidth: number,
+): WorkspaceSessionSnapshot {
+  const clamped = clampAgentPaneWidth(agentPaneWidth);
+  return snapshot.shell.agentPaneWidth === clamped
+    ? snapshot
+    : { ...snapshot, shell: { ...snapshot.shell, agentPaneWidth: clamped } };
 }
 
 export function setSessionSidebarWidth(
