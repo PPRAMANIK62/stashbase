@@ -15,40 +15,36 @@ invent source readiness, attachment, or mention behavior ahead of that owner.
 
 **Status:** Complete.
 
-Delivered ahead of 43-45 — it is blocked only by 12, not by the Preparation/
-Retrieval sub-thread, and task 53 depends on the shell this task builds.
-Settings is a lazy-loaded `Dialog(presentation="shell")` (a new wide/tall
-dialog presentation) with a `SidebarMenuButton` section rail that collapses
-into a `MobileDrawer` below a compact-window breakpoint. Only the Agents
-section is real; the other five (General, Appearance, AI Index, Transcription,
-MCP — task 53's future home) render as inert rows with a "Soon" tag rather
-than a heavy opacity fade. The Agents section unifies the old app's two
-parallel `runtimeAction`/`runtimeDescription` derivations into one pure
-`describeRuntime` function driving a staged discover/install/authenticate/
-configure progress track per runtime, plus the 7-day allowance card, a
-managed-only Uninstall confirm dialog, and a server-gated (`debug.enabled`)
-development-only bootstrap-testing block. The catalog and allowance are
-`@tanstack/react-query` queries against the existing `/api/terminal/*` and
-`/api/account/agent-usage` server routes (validated at the boundary through a
-new `shared/protocols/http/agent-runtime.ts` zod schema), with the catalog
-polling every 500ms only while a runtime is actively preparing. A failed
-install/login/uninstall/debug mutation stays visible on its row or dialog
-instead of silently clearing the busy state. Allowance token detail uses the
-managed Base UI disclosure and Button treatment rather than browser-native
-`details` chrome. The raised Settings canvas stays at surface 5; its sidebar,
-allowance, runtime group, and development block share the one-step-inset
-surface 4, while runtime icon wells use surface 3.
+Settings now opens as a lazy responsive shell dialog with a section rail that
+becomes a mobile drawer. Agents is the only live section; the remaining
+sections truthfully show “Soon.”
 
-Evidence: focused domain, infrastructure, hook, and component tests; shared
-protocol schema tests; `pnpm typecheck:web`, `pnpm lint:web` (including the
-dependency-cruiser architecture check), and `pnpm test:renderer`.
+A pure runtime description drives staged setup, allowance, managed uninstall,
+and debug-gated bootstrap testing. Validated React Query boundaries poll only
+while preparing and keep mutation failures visible at their owning control.
+
+Evidence: focused domain, adapter, hook, component, protocol, architecture,
+typecheck, lint, and renderer test checks.
 
 ## 47 — Create and restore Agent sessions
 
 **Blocked by:** 25, 46.
 
-Own scoped session identity, transcript loading, history, folder retirement,
-runtime disposal, and bounded reconnect.
+**Status:** Complete.
+
+Window-scoped runtimes own blank reuse, scoped history, bounded reconnect,
+folder retirement, and disposal. Readiness gates transport and started work
+never rebinds; pure transitions and one mounted-session record own lifecycle.
+
+Chats shows selected-folder, newest-first date groups, merges mounted/native
+sessions, hides empty allocations, and retains unavailable-Agent history. It
+supports in-place rename, confirmed deletion, bounded rendering, and
+transport-free drafts. Protocols normalize events and scope; Electron
+authorizes the socket and supplies window identity.
+
+Evidence: focused domain, runtime, component, adapter, protocol, Electron,
+server, architecture, typecheck, lint, and web build checks. Task 48 owns turns;
+permanent J06 evidence remains deferred.
 
 ## 48 — Run composer turns
 

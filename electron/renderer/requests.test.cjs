@@ -48,6 +48,23 @@ test('server request authorization injects main-owned window identity', () => {
       },
     },
   );
+
+  assert.deepEqual(
+    authorizeRequest(
+      {
+        frame: mainFrame,
+        requestHeaders: { 'x-stashbase-window-id': 'renderer-forged-id' },
+        url: 'ws://127.0.0.1:8090/ws/agent?agent=codex',
+        webContents: registeredWebContents,
+        webContentsId: 41,
+      },
+      dependencies,
+    ),
+    {
+      cancel: false,
+      requestHeaders: { 'x-stashbase-window-id': 'registered-window' },
+    },
+  );
 });
 
 test('server request authorization denies other origins, targets, and windows', () => {
@@ -73,6 +90,13 @@ test('server request authorization denies other origins, targets, and windows', 
       frame: mainFrame,
       requestHeaders: {},
       url: 'http://127.0.0.1:8090/index.html',
+      webContents: registeredWebContents,
+      webContentsId: 41,
+    },
+    {
+      frame: mainFrame,
+      requestHeaders: {},
+      url: 'ws://127.0.0.1:8090/ws/codex',
       webContents: registeredWebContents,
       webContentsId: 41,
     },
@@ -108,7 +132,7 @@ test('server request authorization denies other origins, targets, and windows', 
   );
 });
 
-test('server request authorization installs one exact-origin request filter', () => {
+test('server request authorization installs exact HTTP and Agent socket filters', () => {
   let filter;
   let listener;
   installRequestAuthorization({
@@ -122,7 +146,9 @@ test('server request authorization installs one exact-origin request filter', ()
       },
     },
   });
-  assert.deepEqual(filter, { urls: ['http://127.0.0.1:8090/api/*'] });
+  assert.deepEqual(filter, {
+    urls: ['http://127.0.0.1:8090/api/*', 'ws://127.0.0.1:8090/ws/agent*'],
+  });
   let result;
   listener(
     {

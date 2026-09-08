@@ -3,7 +3,11 @@ import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import type { Event } from '@opencode-ai/sdk';
 import type { WebSocket } from 'ws';
-import { OpenCodeEventTranslator, OpenCodePanelSession } from '../opencode-agent.ts';
+import {
+  OpenCodeEventTranslator,
+  OpenCodePanelSession,
+  openCodeSessionHasContent,
+} from '../opencode-agent.ts';
 import { buildOpenCodeConfig, safeOpenCodeInheritedEnvironment, type OpenCodeSessionRuntime } from '../opencode-runtime.ts';
 
 class FakeWebSocket extends EventEmitter {
@@ -22,6 +26,12 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
+
+test('OpenCode history distinguishes allocated blanks from started conversations', () => {
+  assert.equal(openCodeSessionHasContent({ title: 'New Chat' }, 0), false);
+  assert.equal(openCodeSessionHasContent({ title: 'New Chat' }, 2), true);
+  assert.equal(openCodeSessionHasContent({ title: 'Summarize the research folder' }, 0), true);
+});
 
 test('bundled OpenCode inherits launch plumbing but no ambient credentials or injection flags', () => {
   assert.deepEqual(safeOpenCodeInheritedEnvironment({

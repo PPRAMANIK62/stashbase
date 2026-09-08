@@ -1,3 +1,4 @@
+import { createAgentSessionApi, type AgentSessionPort } from '@/features/agent/public';
 import {
   createDocumentAssetApi,
   createDocxPreviewApi,
@@ -30,6 +31,9 @@ import { createFolderPicker } from '@/platform/electron/folder-picker';
 import { createHttpClient } from '@/platform/http/client';
 
 export interface AppDependencies {
+  agent: {
+    session: AgentSessionPort;
+  };
   documents: {
     assetApi: DocumentAssetApi;
     docxPreviewApi: DocxPreviewApi;
@@ -56,6 +60,9 @@ export function createDependencies(): AppDependencies {
   const http = createHttpClient(bridge.runtime.serverOrigin);
   const externalNavigation = createExternalNavigation(bridge.externalNavigation);
   return {
+    agent: {
+      session: createAgentSessionApi(http, bridge.runtime.serverOrigin),
+    },
     documents: {
       assetApi: createDocumentAssetApi(http, bridge.runtime.serverOrigin),
       docxPreviewApi: createDocxPreviewApi(),

@@ -32,12 +32,13 @@ function Navigator({ runtime = null }: { runtime?: ReturnType<typeof createRunti
   const [selectedIndex, setSelectedIndex] = useState(0);
   return (
     <SidebarNavigator
+      chats={<div>Folder chats</div>}
       onSelect={setSelectedIndex}
       runtime={runtime}
       search={
         <label>
           Search panel
-          <input aria-label="Search library" />
+          <input aria-label="Search current workspace" />
         </label>
       }
       selectedIndex={selectedIndex}
@@ -78,7 +79,7 @@ describe('sidebar navigator', () => {
     expect(screen.getByText('No outline available')).not.toBeNull();
   });
 
-  it('keeps Files, Document outline, and Search available without an open document', async () => {
+  it('keeps Files, Document outline, Search, and Chats available without an open document', async () => {
     const runtime = createRuntime();
 
     render(
@@ -91,6 +92,7 @@ describe('sidebar navigator', () => {
     expect(navigator).not.toBeNull();
     expect(screen.getByRole('tab', { name: 'Files' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tab', { name: 'Search' })).not.toBeNull();
+    expect(screen.getByRole('tab', { name: 'Chats' })).not.toBeNull();
 
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Document outline' }));
 
@@ -108,6 +110,19 @@ describe('sidebar navigator', () => {
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Search' }));
 
     expect(screen.getByRole('tab', { name: 'Search' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('textbox', { name: 'Search library' })).not.toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Search current workspace' })).not.toBeNull();
+  });
+
+  it('shows the selected workspace chat navigator', async () => {
+    render(
+      <SidebarProvider>
+        <Navigator />
+      </SidebarProvider>,
+    );
+
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'Chats' }));
+
+    expect(screen.getByRole('tab', { name: 'Chats' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Folder chats')).not.toBeNull();
   });
 });

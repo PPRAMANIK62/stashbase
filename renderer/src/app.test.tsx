@@ -12,6 +12,15 @@ describe('workspace shell', () => {
   let root: Root;
   let getAnimationsDescriptor: PropertyDescriptor | undefined;
   const dependencies: AppDependencies = {
+    agent: {
+      session: {
+        connect: vi.fn(() => ({ close: vi.fn() })),
+        list: vi.fn(async () => []),
+        remove: vi.fn(async () => undefined),
+        rename: vi.fn(),
+        replay: vi.fn(async () => ({ effort: null, transcript: [] })),
+      },
+    },
     documents: {
       assetApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
       docxPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
@@ -70,6 +79,7 @@ describe('workspace shell', () => {
   };
 
   beforeEach(async () => {
+    delete document.body.dataset.bootSettled;
     dependencies.session = {
       load: vi.fn(async () => null),
       save: vi.fn(async () => undefined),
@@ -115,6 +125,7 @@ describe('workspace shell', () => {
       Reflect.deleteProperty(Element.prototype, 'getAnimations');
     }
     vi.unstubAllGlobals();
+    delete document.body.dataset.bootSettled;
   });
 
   it('starts with one folder sidebar and the Agent workspace', () => {
@@ -269,6 +280,7 @@ describe('workspace shell', () => {
         '[role="treeitem"][aria-label="plan.md"]',
       );
       expect(source).not.toBeNull();
+      expect(document.body.dataset.bootSettled).toBe('1');
     });
     await act(async () => source?.click());
 

@@ -537,12 +537,11 @@ function rawScopeOf(req: import('node:http').IncomingMessage): string | undefine
 }
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {
-  try {
-    const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
-    return u.searchParams.get('windowId') || 'default';
-  } catch {
-    return 'default';
-  }
+  const value = req.headers['x-stashbase-window-id'];
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return typeof candidate === 'string' && candidate.trim()
+    ? candidate.trim().slice(0, 128)
+    : 'default';
 }
 
 /** Read the agent session's thinking effort off the WS URL. Effort is

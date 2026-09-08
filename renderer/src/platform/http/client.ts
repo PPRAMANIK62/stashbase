@@ -1,6 +1,6 @@
 export interface HttpRequest {
   body?: unknown;
-  method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   signal?: AbortSignal;
 }

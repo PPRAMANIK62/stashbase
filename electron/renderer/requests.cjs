@@ -4,10 +4,16 @@ const { isAllowedApplicationUrl } = require('../window-security.cjs');
 
 const WINDOW_ID_HEADER = 'x-stashbase-window-id';
 
-function isServerApiUrl(rawUrl, serverOrigin) {
+function isServerCapabilityUrl(rawUrl, serverOrigin) {
   try {
     const url = new URL(rawUrl);
-    return url.origin === serverOrigin && url.pathname.startsWith('/api/');
+    const httpOrigin = new URL(serverOrigin);
+    const socketOrigin = new URL(serverOrigin);
+    socketOrigin.protocol = httpOrigin.protocol === 'https:' ? 'wss:' : 'ws:';
+    return (
+      (url.origin === httpOrigin.origin && url.pathname.startsWith('/api/'))
+      || (url.origin === socketOrigin.origin && url.pathname === '/ws/agent')
+    );
   } catch {
     return false;
   }
@@ -27,7 +33,7 @@ function authorizeRequest(details, {
   serverOrigin,
   windowRegistrationForWebContentsId,
 }) {
-  if (!isServerApiUrl(details.url, serverOrigin)) return { cancel: true };
+  if (!isServerCapabilityUrl(details.url, serverOrigin)) return { cancel: true };
   if (!Number.isSafeInteger(details.webContentsId) || details.webContentsId <= 0) {
     return { cancel: true };
   }
@@ -58,8 +64,9 @@ function installRequestAuthorization({
   session,
   windowRegistrationForWebContentsId,
 }) {
+  const websocketOrigin = serverOrigin.replace(/^http:/u, 'ws:').replace(/^https:/u, 'wss:');
   session.webRequest.onBeforeSendHeaders(
-    { urls: [`${serverOrigin}/api/*`] },
+    { urls: [`${serverOrigin}/api/*`, `${websocketOrigin}/ws/agent*`] },
     (details, callback) => {
       callback(authorizeRequest(details, {
         rendererOrigins,
@@ -73,5 +80,6 @@ function installRequestAuthorization({
 module.exports = {
   WINDOW_ID_HEADER,
   authorizeRequest,
+  isServerCapabilityUrl,
   installRequestAuthorization,
 };

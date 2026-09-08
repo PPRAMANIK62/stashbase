@@ -10,6 +10,13 @@
  * tagged with its member `folder` (absent = library) so the client can
  * label and resume it in its own scope. */
 import express from 'express';
+import {
+  agentSessionEmptyResponseSchema,
+  agentSessionInfoSchema,
+  agentSessionListResponseSchema,
+  agentSessionRenameRequestSchema,
+  agentSessionReplaySchema,
+} from '../../shared/protocols/http/agent-sessions.ts';
 import { agentAdapter, resolveAgentSessionScope } from '../agent-contract.ts';
 import { getCurrentFolder, getFolderHome, memberFolderRoots } from '../folder.ts';
 import { sendError } from '../http.ts';
@@ -71,13 +78,15 @@ export function mount(app: express.Express): void {
         if (req.query.folder) {
           return res.status(400).json({ error: 'scope=all cannot be combined with a folder' });
         }
-        return res.json(await listAllSessions(
+        const rows = await listAllSessions(
           historyFor(req.params.agent),
           getFolderHome(),
           memberFolderRoots(),
-        ));
+        );
+        return res.json(agentSessionListResponseSchema.parse(rows));
       }
-      res.json(await historyFor(req.params.agent).list(historyFolderOf(req)));
+      const rows = await historyFor(req.params.agent).list(historyFolderOf(req));
+      res.json(agentSessionListResponseSchema.parse(rows));
     } catch (err) {
       sendError(res, err);
     }
@@ -93,16 +102,24 @@ export function mount(app: express.Express): void {
     try {
       const history = historyFor(req.params.agent);
       if (!history.replay) return res.status(404).json({ error: 'replay metadata unavailable' });
-      res.json(await history.replay(req.params.id, historyFolderOf(req)));
+      res.json(
+        agentSessionReplaySchema.parse(await history.replay(req.params.id, historyFolderOf(req))),
+      );
     } catch (err) {
       sendError(res, err);
     }
   });
   app.patch('/api/agents/:agent/sessions/:id', async (req, res) => {
-    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
-    if (!title) return res.status(400).json({ error: 'title required' });
+    const request = agentSessionRenameRequestSchema.safeParse(req.body);
+    if (!request.success) return res.status(400).json({ error: 'title required' });
     try {
-      res.json(await historyFor(req.params.agent).rename(req.params.id, title, historyFolderOf(req)));
+      const { title } = request.data;
+      const row = await historyFor(req.params.agent).rename(
+        req.params.id,
+        title,
+        historyFolderOf(req),
+      );
+      res.json(agentSessionInfoSchema.parse(row));
     } catch (err) {
       sendError(res, err);
     }
@@ -110,7 +127,7 @@ export function mount(app: express.Express): void {
   app.delete('/api/agents/:agent/sessions/:id', async (req, res) => {
     try {
       await historyFor(req.params.agent).remove(req.params.id, historyFolderOf(req));
-      res.json({});
+      res.json(agentSessionEmptyResponseSchema.parse({}));
     } catch (err) {
       sendError(res, err);
     }

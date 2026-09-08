@@ -2,8 +2,13 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { codexThreadToBlocks } from './codex-history.ts';
+import { codexThreadHasContent, codexThreadToBlocks } from './codex-history.ts';
 import { nativeTimesByUuid, transcriptToBlocks } from './routes/sessions.ts';
+
+test('Codex history distinguishes allocated blanks from started conversations', () => {
+  assert.equal(codexThreadHasContent({ id: 'blank', preview: '' }), false);
+  assert.equal(codexThreadHasContent({ id: 'started', preview: 'Review the plan' }), true);
+});
 
 test('restores a transient image attachment from the persisted prompt marker', () => {
   const imagePath = path.join(os.tmpdir(), 'stashbase-attachments', 'batch-1', 'image.png');

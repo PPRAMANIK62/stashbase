@@ -1,5 +1,5 @@
 /**
- * Claude session-history routes for the chat panel's History dropdown.
+ * Claude session-history routes for the Chats navigator.
  *
  * These wrap the Agent SDK's on-disk session store (`~/.claude/projects/`,
  * the same transcripts the `claude` CLI writes). They sit OUTSIDE the
@@ -47,6 +47,7 @@ interface SessionRow {
   id: string;
   title: string;
   lastModified: number;
+  hasContent: boolean;
   cwd?: string;
   gitBranch?: string;
 }
@@ -61,6 +62,7 @@ function toRow(s: SDKSessionInfo): SessionRow {
     id: s.sessionId,
     title: s.customTitle || s.summary || s.firstPrompt || s.sessionId,
     lastModified: s.lastModified,
+    hasContent: true,
     ...(s.cwd ? { cwd: s.cwd } : {}),
     ...(s.gitBranch ? { gitBranch: s.gitBranch } : {}),
   };
@@ -69,7 +71,7 @@ function toRow(s: SDKSessionInfo): SessionRow {
 export function mount(app: express.Express): void {
   // Sessions for the CURRENT folder, newest first. The agent always runs
   // with cwd = the open folder dir, and the SDK records `cwd` per session,
-  // so filter on it — the History dropdown then shows only this folder's
+  // so filter on it — the Chats navigator then shows only this folder's
   // conversations (incl. terminal Claude Code runs in the same dir),
   // matching "this panel belongs to this folder". No folder open (rare —
   // the panel needs one) → fall back to listing all so it's never blank.

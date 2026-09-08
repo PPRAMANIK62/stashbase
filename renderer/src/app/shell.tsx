@@ -1,5 +1,12 @@
 import { Settings as SettingsIcon } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 
 import {
   Sidebar,
@@ -11,6 +18,12 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
+import {
+  AgentChats,
+  AgentWorkspace,
+  type AgentWorkspaceProps,
+  useAgentWorkspaceRuntime,
+} from '@/features/agent/public';
 import {
   DocumentTabs,
   DocumentWorkspace,
@@ -42,6 +55,29 @@ import { openDocument } from './workflows/open-document';
 
 import './shell.css';
 
+function AgentDocumentWorkspace({
+  agent,
+  document,
+  runtime,
+}: {
+  agent: AgentWorkspaceProps;
+  document: ReactNode;
+  runtime: ReturnType<typeof useDocumentWorkspace>;
+}) {
+  const subscribe = useCallback(
+    (listener: () => void) => runtime?.store.subscribe(listener) ?? (() => undefined),
+    [runtime],
+  );
+  const snapshot = useCallback(() => (runtime?.store.getState().tabs.length ?? 0) > 0, [runtime]);
+  const hasDocuments = useSyncExternalStore(subscribe, snapshot, snapshot);
+  return (
+    <div className="flex h-full min-h-0">
+      {hasDocuments && <div className="min-w-0 flex-1">{document}</div>}
+      <AgentWorkspace {...agent} withDocuments={hasDocuments} />
+    </div>
+  );
+}
+
 export function App({ dependencies }: { dependencies: AppDependencies }) {
   const session = useWorkspaceSession(dependencies.library.api, dependencies.session);
   const library = useLibrary(dependencies.library.api);
@@ -55,6 +91,14 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     dependencies.documents.createId,
   );
   const settings = useSettingsCommand();
+  useEffect(() => {
+    if (!session.isReady || session.isRestoringFolder || !library.data) return;
+    document.body.dataset.bootSettled = '1';
+  }, [library.data, session.isReady, session.isRestoringFolder]);
+  const [agentStarted, setAgentStarted] = useState(false);
+  useEffect(() => {
+    if ((library.data?.members.length ?? 0) > 0) setAgentStarted(true);
+  }, [library.data?.members.length]);
   const quickOpen = useQuickOpenCommand(
     workspace && documents
       ? `${workspace.scope.folder.path}\u0000${workspace.scope.generation}`
@@ -81,6 +125,26 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     workspace,
     saveDocumentsForFolder,
   );
+  const selectedFolderPath = library.data?.activeFolder?.path ?? null;
+  const agentRuntime = useAgentWorkspaceRuntime({
+    createId: dependencies.documents.createId,
+    folderPath: selectedFolderPath,
+    session: dependencies.agent.session,
+    subscribeFolderRemoved: dependencies.library.lifecycle.onFolderRemoved,
+  });
+  const selectedAgentScope = useMemo(
+    () =>
+      selectedFolderPath
+        ? ({ kind: 'folder', path: selectedFolderPath } as const)
+        : ({ kind: 'library' } as const),
+    [selectedFolderPath],
+  );
+  const agentProps: AgentWorkspaceProps = {
+    catalog: dependencies.settings.agentRuntimeApi,
+    onOpenAgentSettings: () => settings.openSettings('agents'),
+    runtime: agentRuntime,
+    withDocuments: false,
+  };
 
   return (
     <SidebarProvider
@@ -128,6 +192,17 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         </SidebarGroup>
         {library.data?.activeFolder && (
           <SidebarNavigator
+            chats={
+              sidebarNavigatorIndex === 3 ? (
+                <AgentChats
+                  catalog={dependencies.settings.agentRuntimeApi}
+                  onOpenAgentSettings={() => settings.openSettings('agents')}
+                  runtime={agentRuntime}
+                  scope={selectedAgentScope}
+                  workspaceName={library.data.activeFolder.name}
+                />
+              ) : null
+            }
             onSelect={setSidebarNavigatorIndex}
             runtime={documents}
             search={
@@ -194,32 +269,51 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
         </header>
 
         <section aria-label="Agent workspace" className="min-h-0 flex-1">
-          {documents && (
-            <DocumentWorkspace
-              assetApi={dependencies.documents.assetApi}
-              docxPreviewApi={dependencies.documents.docxPreviewApi}
-              genericPreviewApi={dependencies.documents.genericPreviewApi}
-              mediaApi={dependencies.documents.mediaApi}
-              onNavigate={(target) => {
-                if (workspace) {
-                  void openDocument(workspace, documents, target.source, {
-                    anchor: target.anchor,
-                  });
-                }
-              }}
-              onOpenExternal={dependencies.documents.openExternal}
-              onReveal={(source, signal) =>
-                dependencies.workspace.api.reveal(source.folderPath, source.path, signal)
-              }
-              revealLabel={dependencies.workspace.revealLabel}
-              runtime={documents}
-              sourceApi={dependencies.documents.sourceApi}
+          {library.data && agentStarted ? (
+            <div className="h-full min-h-0">
+              <div className={library.data.activeFolder ? 'h-full min-h-0' : 'hidden'}>
+                <AgentDocumentWorkspace
+                  agent={agentProps}
+                  runtime={documents}
+                  document={
+                    documents ? (
+                      <DocumentWorkspace
+                        assetApi={dependencies.documents.assetApi}
+                        docxPreviewApi={dependencies.documents.docxPreviewApi}
+                        genericPreviewApi={dependencies.documents.genericPreviewApi}
+                        mediaApi={dependencies.documents.mediaApi}
+                        onNavigate={(target) => {
+                          if (workspace) {
+                            void openDocument(workspace, documents, target.source, {
+                              anchor: target.anchor,
+                            });
+                          }
+                        }}
+                        onOpenExternal={dependencies.documents.openExternal}
+                        onReveal={(source, signal) =>
+                          dependencies.workspace.api.reveal(source.folderPath, source.path, signal)
+                        }
+                        revealLabel={dependencies.workspace.revealLabel}
+                        runtime={documents}
+                        sourceApi={dependencies.documents.sourceApi}
+                      />
+                    ) : null
+                  }
+                />
+              </div>
+              {!library.data.activeFolder && (
+                <LibraryWelcome
+                  {...dependencies.library}
+                  isRestoringSession={session.isRestoringFolder}
+                />
+              )}
+            </div>
+          ) : (
+            <LibraryWelcome
+              {...dependencies.library}
+              isRestoringSession={session.isRestoringFolder}
             />
           )}
-          <LibraryWelcome
-            {...dependencies.library}
-            isRestoringSession={session.isRestoringFolder}
-          />
         </section>
       </SidebarInset>
     </SidebarProvider>

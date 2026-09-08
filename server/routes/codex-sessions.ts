@@ -1,5 +1,5 @@
 /**
- * Codex thread-history routes for the chat panel's History dropdown.
+ * Codex thread-history routes for the Chats navigator.
  *
  * Backed by Codex app-server's structured thread APIs. Delete maps to the
  * native irreversible thread/delete operation so it has the same meaning as

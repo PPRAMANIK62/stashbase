@@ -1,4 +1,4 @@
-import { FolderTree, ListTree, Search } from 'lucide-react';
+import { Bot, FolderTree, ListTree, Search } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
 
 import { SidebarContent, SidebarGroup } from '@/components/ui/sidebar';
@@ -8,6 +8,7 @@ import { DocumentOutline, type DocumentTabsRuntime } from '@/features/documents/
 
 interface SidebarNavigatorProps {
   children: ReactNode;
+  chats: ReactNode;
   onSelect(index: number): void;
   runtime: DocumentTabsRuntime | null;
   search: ReactNode;
@@ -16,6 +17,7 @@ interface SidebarNavigatorProps {
 
 export function SidebarNavigator({
   children,
+  chats,
   onSelect,
   runtime,
   search,
@@ -48,10 +50,13 @@ export function SidebarNavigator({
               label="Search"
             />
           </Tooltip>
+          <Tooltip content="Chats" side="bottom">
+            <TabsSubtleItem icon={Bot} index={3} label="Chats" />
+          </Tooltip>
         </TabsSubtle>
       </div>
 
-      <SidebarContent className={selectedIndex === 2 ? 'hidden' : undefined}>
+      <SidebarContent className={selectedIndex >= 2 ? 'hidden' : undefined}>
         <SidebarGroup>
           <div
             aria-labelledby={`${navigatorId}-tab-0`}
@@ -86,6 +91,14 @@ export function SidebarNavigator({
         role="tabpanel"
       >
         {search}
+      </div>
+      <div
+        aria-labelledby={`${navigatorId}-tab-3`}
+        className={selectedIndex === 3 ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+        id={`${navigatorId}-panel-3`}
+        role="tabpanel"
+      >
+        {chats}
       </div>
     </>
   );
