@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react';
-import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { lazy, type ComponentType, type ReactNode } from 'react';
+import { loadWithAlternateRetry } from '@/common/components/ErrorBoundary';
 import { LazyManaged } from '@/common/components/LazyManaged';
 import { PopupLoadingStatus } from '@/common/components/ui/status';
 
@@ -74,7 +74,13 @@ export interface MenuProps {
   minWidth?: number;
 }
 
-const ManagedMenu = lazyWithRetry(() => import('@/common/components/ManagedMenu'));
+const ManagedMenu = lazy(() => loadWithAlternateRetry<{ default: ComponentType<MenuProps> }>(
+  () => import('@/common/components/ManagedMenu'),
+  // A distinct URL is intentional: retrying the primary URL would join the
+  // browser's same indefinitely-pending module-map entry after a dev-server
+  // or local app-server restart.
+  () => import('@/common/components/ManagedMenu?menu-retry'),
+));
 
 export function Menu(props: MenuProps) {
   const { anchor } = props;

@@ -120,8 +120,9 @@ export function useActiveFolderWorkspace(
   // renderer ownership of the old sync so its `finally` can't clear a
   // newer folder's spinner.
   const syncGeneration = useRef(0);
-  // Opening folders is multi-step (server bind → files/order load →
-  // landing file). A newer open/home action invalidates older finishers.
+  // Opening commits the server binding and folder identity first. File/order
+  // loading continues in the background, and a newer open/home action
+  // invalidates those older finishers.
   const openGeneration = useRef(0);
   const openingFolderGeneration = useRef<number | null>(null);
   // Last `treeVersion` we saw from `/api/index-status`. Any bump means

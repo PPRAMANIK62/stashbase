@@ -7,6 +7,7 @@ import {
   getWindowId,
   parseJsonOrThrow,
   requestHeaders,
+  sendWithNetworkRetry,
 } from '@/common/api/apiTransport';
 
 test('encodePath preserves separators while encoding individual segments', () => {
@@ -82,4 +83,62 @@ test('JSON transport errors expose only server message, status, and code', async
       return true;
     },
   );
+});
+
+test('folder mutation transport retries an aborted request on a fresh connection', async () => {
+  const originalFetch = globalThis.fetch;
+  let attempts = 0;
+  globalThis.fetch = async () => {
+    attempts += 1;
+    if (attempts === 1) throw new DOMException('request timed out', 'AbortError');
+    return new Response(JSON.stringify({ current: { path: '/library', name: 'library' } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const result = await sendWithNetworkRetry<{ current: { path: string } }>(
+      'POST',
+      '/api/folder',
+      { path: '/library' },
+    );
+    assert.equal(result.current.path, '/library');
+    assert.equal(attempts, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('folder mutation transport aborts a pending response instead of waiting forever', async () => {
+  const originalFetch = globalThis.fetch;
+  let attempts = 0;
+  let aborts = 0;
+  globalThis.fetch = async (_input, init) => {
+    attempts += 1;
+    if (attempts === 1) {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          aborts += 1;
+          reject(new DOMException('request timed out', 'AbortError'));
+        }, { once: true });
+      });
+    }
+    return new Response(JSON.stringify({ current: { path: '/library', name: 'library' } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const result = await sendWithNetworkRetry<{ current: { path: string } }>(
+      'POST',
+      '/api/folder',
+      { path: '/library' },
+      { attemptTimeoutMs: 1, retryDelaysMs: [0] },
+    );
+    assert.equal(result.current.path, '/library');
+    assert.equal(attempts, 2);
+    assert.equal(aborts, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -18,6 +18,12 @@ semantic readiness.
 
 - Every asynchronous folder open, file load, index refresh, and binary stat
   applies only while its captured folder, tab, and generation remain current.
+- A folder-open mutation has a bounded local-transport attempt and retries a
+  timed-out connection. Once the server acknowledges the window-folder
+  binding, the renderer commits navigation and resolves the initiating action;
+  file listing, manual order, and index-status follow-up continue in the
+  background under the same generation guard. None of those follow-ups owns
+  the switcher's **Opening…** state.
 - Active-folder listing performs recursive directory I/O asynchronously and
   yields during large flat-directory classification. It lists generic files
   without reading a preview prefix, represents excluded project directories
@@ -137,6 +143,11 @@ authoritative budget is `444 KiB` of initial static JavaScript, and the current
 required dynamic-entry set lives in `scripts/check-renderer-chunks.mjs`.
 Change that list or budget only when the ownership of eager shell behavior
 changes, never to make an accidental dependency pass.
+
+The shared menu body remains a dynamic entry, but its loader is bounded. If a
+server restart leaves the browser's first module URL permanently pending, the
+loader retries through a distinct bundled URL rather than leaving a navigation
+menu on its loading placeholder forever.
 
 ## Implementation Map
 

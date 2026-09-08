@@ -73,6 +73,10 @@ function isNetworkFetchError(err: unknown): boolean {
   return err instanceof TypeError && /fetch/i.test(err.message);
 }
 
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -81,19 +85,30 @@ export async function sendWithNetworkRetry<T>(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body: unknown,
+  options: { attemptTimeoutMs?: number; retryDelaysMs?: readonly number[] } = {},
 ): Promise<T> {
-  const delays = [250, 750];
+  const attemptTimeoutMs = options.attemptTimeoutMs ?? 2_000;
+  const delays = options.retryDelaysMs ?? [250, 750];
   for (let attempt = 0; ; attempt++) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, attemptTimeoutMs);
     try {
-      return await send<T>(method, path, body);
+      return await send<T>(method, path, body, { signal: controller.signal });
     } catch (err: unknown) {
-      if (!isNetworkFetchError(err) || attempt >= delays.length) {
-        if (isNetworkFetchError(err)) {
+      const retryable = timedOut || isNetworkFetchError(err) || isAbortError(err);
+      if (!retryable || attempt >= delays.length) {
+        if (retryable) {
           throw new ApiError('Could not reach the local StashBase server. Please try again.', 0, 'NETWORK_ERROR');
         }
         throw err;
       }
       await sleep(delays[attempt]);
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }

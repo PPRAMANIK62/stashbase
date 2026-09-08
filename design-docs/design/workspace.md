@@ -144,6 +144,9 @@ manager, or a primary graph-navigation tool.
 - Folder entry is navigation first; listing, preparation, and indexing continue
   in the background. Code-heavy project infrastructure that cannot surface in
   the Workbench does not make those background scans hold navigation closed.
+  The switcher leaves its **Opening…** state when the local server confirms the
+  window-folder binding; a delayed list, ordering read, preparation pass, or
+  semantic reconcile cannot extend that state indefinitely.
 - GitHub import accepts one public repository URL and one portable folder-home
   child name. Import fields remain locked while Git runs; cancellation leaves
   no partial published folder. A completed clone is retained and its local path

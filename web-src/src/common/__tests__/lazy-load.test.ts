@@ -7,7 +7,12 @@
 import assert from 'node:assert/strict';
 import { createElement, Suspense, type ReactElement } from 'react';
 import test from 'node:test';
-import { LazyLoadBoundary, loadWithRetry, reloadForRecovery } from '@/common/components/ErrorBoundary';
+import {
+  LazyLoadBoundary,
+  loadWithAlternateRetry,
+  loadWithRetry,
+  reloadForRecovery,
+} from '@/common/components/ErrorBoundary';
 import { LazyManaged, LazyManagedPicker } from '@/common/components/LazyManaged';
 
 function StubComponent(props: Record<string, unknown>) {
@@ -36,6 +41,18 @@ test('lazy module loading surfaces the final error after its retry budget', asyn
     /chunk failure 2/,
   );
   assert.equal(attempts, 2);
+});
+
+test('a pending module load retries through a distinct alternate loader after a bound', async () => {
+  let alternateLoads = 0;
+  const loaded = await loadWithAlternateRetry(
+    () => new Promise<string>(() => {}),
+    async () => { alternateLoads += 1; return 'loaded from alternate URL'; },
+    0,
+  );
+
+  assert.equal(loaded, 'loaded from alternate URL');
+  assert.equal(alternateLoads, 1);
 });
 
 test('lazy load boundary clears a captured error when its resource identity changes', () => {
