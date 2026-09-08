@@ -21,8 +21,6 @@ import {
   FileTree,
   LibrarySidebar,
   LibraryWelcome,
-  displayFolderPath,
-  folderName,
   useLibraryLifecycle,
   useLibrary,
   usePersistWorkspaceSession,
@@ -70,18 +68,6 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     setSearchFocusRevision((revision) => revision + 1);
   }, [session.runtime]);
   useSidebarSearchCommand((library.data?.members.length ?? 0) > 0, openSearch);
-  const searchScopes = useMemo(() => {
-    const snapshot = library.data;
-    if (!snapshot) return [];
-    const names = snapshot.members.map((member) => folderName(member.path));
-    return snapshot.members.map((member, index) => ({
-      folderPath: member.path,
-      label:
-        names.indexOf(names[index] ?? '') === names.lastIndexOf(names[index] ?? '')
-          ? (names[index] ?? member.path)
-          : displayFolderPath(member.path, snapshot.homeDirectory),
-    }));
-  }, [library.data]);
   useDocumentCommands(documents?.navigation ?? null);
   useDocumentSaveBarrier(documents, dependencies.documents.lifecycle);
   const saveDocumentsForFolder = useCallback(
@@ -151,7 +137,6 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
                 api={dependencies.retrieval.exactSearchApi}
                 documents={documents}
                 focusRevision={searchFocusRevision}
-                scopes={searchScopes}
                 workspace={workspace}
               />
             }

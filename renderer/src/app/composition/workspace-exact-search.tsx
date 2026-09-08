@@ -6,7 +6,6 @@ import {
   ExactSearch,
   type ExactSearchApi,
   type ExactSearchNavigationIntent,
-  type ExactSearchScopeOption,
 } from '@/features/retrieval/public';
 import type { WorkspaceRuntime } from '@/features/workspace/public';
 
@@ -16,7 +15,6 @@ export interface WorkspaceExactSearchProps {
   api: ExactSearchApi;
   documents: DocumentTabsRuntime | null;
   focusRevision: number;
-  scopes: readonly ExactSearchScopeOption[];
   workspace: WorkspaceRuntime | null;
 }
 
@@ -26,7 +24,6 @@ export function WorkspaceExactSearch({
   api,
   documents,
   focusRevision,
-  scopes,
   workspace,
 }: WorkspaceExactSearchProps) {
   const navigate = useCallback(
@@ -47,7 +44,6 @@ export function WorkspaceExactSearch({
       api={api}
       focusRevision={focusRevision}
       onNavigate={navigate}
-      scopes={scopes}
     />
   );
 }

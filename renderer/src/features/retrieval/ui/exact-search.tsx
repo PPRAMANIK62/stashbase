@@ -1,11 +1,10 @@
-import { Folder, Library, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { CommandItem, CommandList } from '@/components/ui/command-menu';
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import { InputField, InputGroup } from '@/components/ui/input-group';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import type { ExactSearchApi } from '@/features/retrieval/application/ports';
 import {
   exactSearchNavigationIntent,
@@ -14,11 +13,9 @@ import {
   type ExactSearchMatch,
   type ExactSearchNavigationIntent,
   type ExactSearchOccurrence,
-  type ExactSearchScopeOption,
 } from '@/features/retrieval/domain/exact-search';
 import { useExactSearch } from '@/features/retrieval/hooks/use-exact-search';
 
-const libraryScope = '__library__';
 const resultPageSize = 6;
 
 export interface ExactSearchProps {
@@ -27,7 +24,6 @@ export interface ExactSearchProps {
   api: ExactSearchApi;
   focusRevision: number;
   onNavigate(intent: ExactSearchNavigationIntent): Promise<boolean>;
-  scopes: readonly ExactSearchScopeOption[];
 }
 
 function basename(path: string): string {
@@ -73,34 +69,27 @@ export function ExactSearch({
   api,
   focusRevision,
   onNavigate,
-  scopes,
 }: ExactSearchProps) {
   const [query, setQuery] = useState('');
-  const [scopeSelection, setScopeSelection] = useState(() => ({
-    followsActiveFolder: true,
-    value: activeFolderPath,
-  }));
   const [activeIndex, setActiveIndex] = useState(0);
   const [navigationFailure, setNavigationFailure] = useState(false);
   const inputGroup = useRef<HTMLDivElement | null>(null);
   const resultsId = useId();
-  const scopeLabels = useMemo(
-    () => new Map(scopes.map((option) => [option.folderPath, option.label])),
-    [scopes],
-  );
-  const scope = scopeSelection.value;
   const request = useMemo(() => {
     const trimmedQuery = query.trim();
     if (!trimmedQuery) return null;
     return {
       caseSensitive: /[A-Z]/u.test(trimmedQuery),
-      ...(scope === libraryScope ? {} : { folderPath: scope }),
+      folderPath: activeFolderPath,
       query: trimmedQuery,
       wholeWord: false,
     };
-  }, [query, scope]);
+  }, [activeFolderPath, query]);
   const search = useExactSearch(api, request);
-  const files = search.data?.files ?? [];
+  const files = useMemo(
+    () => (search.data?.files ?? []).filter((file) => file.source.folderPath === activeFolderPath),
+    [activeFolderPath, search.data?.files],
+  );
   const groups = useMemo(
     () =>
       files
@@ -111,25 +100,7 @@ export function ExactSearch({
   const occurrences = useMemo(() => groups.flatMap((group) => group.occurrences), [groups]);
   const searching = request !== null && (search.isSettling || search.isFetching);
 
-  useEffect(() => {
-    setScopeSelection((current) =>
-      current.followsActiveFolder ? { ...current, value: activeFolderPath } : current,
-    );
-  }, [activeFolderPath]);
-
-  useEffect(() => {
-    setScopeSelection((current) => {
-      if (
-        current.value === libraryScope ||
-        scopes.some((option) => option.folderPath === current.value)
-      ) {
-        return current;
-      }
-      return { followsActiveFolder: true, value: activeFolderPath };
-    });
-  }, [activeFolderPath, scopes]);
-
-  useEffect(() => setActiveIndex(0), [search.data, query, scope]);
+  useEffect(() => setActiveIndex(0), [activeFolderPath, search.data, query]);
 
   useEffect(() => {
     if (!active) return;
@@ -181,8 +152,8 @@ export function ExactSearch({
   };
 
   return (
-    <section aria-label="Exact library search" className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 space-y-1.5 px-2 pb-2">
+    <section aria-label="Exact workspace search" className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 px-2 pb-2">
         <InputGroup className="w-full gap-0" ref={inputGroup} size="compact">
           <InputField
             aria-activedescendant={
@@ -195,43 +166,16 @@ export function ExactSearch({
             autoComplete="off"
             icon={Search}
             index={0}
-            label="Search library"
+            label="Search current workspace"
             labelHidden
             onChange={setQuery}
             onKeyDown={onInputKeyDown}
-            placeholder="Search library"
+            placeholder="Search files"
             role="combobox"
             spellCheck={false}
             value={query}
           />
         </InputGroup>
-        <Select
-          onValueChange={(value) => setScopeSelection({ followsActiveFolder: false, value })}
-          size="compact"
-          value={scope}
-        >
-          <SelectTrigger
-            aria-label="Search scope"
-            className="w-full min-w-0"
-            icon={scope === libraryScope ? Library : Folder}
-            variant="borderless"
-          />
-          <SelectContent>
-            <SelectItem icon={Library} index={0} value={libraryScope}>
-              Entire library
-            </SelectItem>
-            {scopes.map((option, index) => (
-              <SelectItem
-                icon={Folder}
-                index={index + 1}
-                key={option.folderPath}
-                value={option.folderPath}
-              >
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       {!request && (
@@ -274,10 +218,7 @@ export function ExactSearch({
           role="listbox"
         >
           {groups.map(({ file, occurrences: fileOccurrences }, groupIndex) => {
-            const folderLabel =
-              scopeLabels.get(file.source.folderPath) ?? basename(file.source.folderPath);
             const directory = parentPath(file.source.path);
-            const outOfFolder = file.source.folderPath !== activeFolderPath;
             const groupId = `${resultsId}-file-${groupIndex}`;
             return (
               <div aria-labelledby={groupId} key={file.id} role="group">
@@ -297,11 +238,11 @@ export function ExactSearch({
                     {file.totalMatches}
                   </span>
                 </div>
-                <p className="truncate px-9 pb-1 text-[10px] text-muted-foreground">
-                  {folderLabel}
-                  {directory ? ` / ${directory}` : ''}
-                  {outOfFolder ? ' · Read-only' : ''}
-                </p>
+                {directory && (
+                  <p className="truncate px-9 pb-1 text-[10px] text-muted-foreground">
+                    {directory}
+                  </p>
+                )}
                 {fileOccurrences.map((occurrence) => {
                   const index = occurrences.indexOf(occurrence);
                   const selected = index === activeIndex;
@@ -310,7 +251,7 @@ export function ExactSearch({
                   return (
                     <CommandItem
                       active={selected}
-                      aria-label={`${basename(file.source.path)}, ${folderLabel}${directory ? `, ${directory}` : ''}, ${location}, ${accessibleEvidence}${outOfFolder ? ', read-only' : ''}`}
+                      aria-label={`${basename(file.source.path)}${directory ? `, ${directory}` : ''}, ${location}, ${accessibleEvidence}`}
                       className="h-auto min-h-11 items-start py-1.5 pl-9"
                       id={`${resultsId}-${index}`}
                       index={index}

@@ -19,7 +19,7 @@ const result: ExactSearchResult = {
           text: 'The answer is preserved here.',
         },
       ],
-      source: { folderPath: '/library/archive', path: 'notes/answer.md' },
+      source: { folderPath: '/library/research', path: 'notes/answer.md' },
       totalMatches: 2,
     },
   ],
@@ -56,10 +56,6 @@ function renderSearch(api: ExactSearchApi, onNavigate = vi.fn(async () => true))
         api={api}
         focusRevision={0}
         onNavigate={onNavigate}
-        scopes={[
-          { folderPath: '/library/research', label: 'Research' },
-          { folderPath: '/library/archive', label: 'Archive' },
-        ]}
       />
     </QueryClientProvider>,
   );
@@ -67,15 +63,15 @@ function renderSearch(api: ExactSearchApi, onNavigate = vi.fn(async () => true))
 }
 
 describe('Exact Search', () => {
-  it('searches the active folder by default and presents occurrence evidence', async () => {
+  it('searches only the active workspace and presents occurrence evidence', async () => {
     const api: ExactSearchApi = { search: vi.fn(async () => result) };
     const rendered = renderSearch(api);
-    const input = screen.getByRole('combobox', { name: 'Search library' });
+    const input = screen.getByRole('combobox', { name: 'Search current workspace' });
 
     await userEvent.setup().type(input, 'answer');
 
     const option = await screen.findByRole('option', {
-      name: /answer\.md, Archive, notes, Line 7, The answer is preserved here\., read-only/u,
+      name: /answer\.md, notes, Line 7, The answer is preserved here\./u,
     });
     expect(api.search).toHaveBeenCalledWith(
       {
@@ -87,14 +83,14 @@ describe('Exact Search', () => {
       expect.any(AbortSignal),
     );
     expect(option.querySelector('mark')?.textContent).toBe('answer');
-    expect(screen.getByText(/Archive.*Read-only/u)).not.toBeNull();
+    expect(screen.getByText('notes')).not.toBeNull();
     expect(screen.getByText('2')).not.toBeNull();
     expect(screen.getByText(/Showing the first results from 2 matches/u)).not.toBeNull();
 
     await userEvent.setup().keyboard('{Enter}');
     await waitFor(() =>
       expect(rendered.onNavigate).toHaveBeenCalledWith({
-        source: { folderPath: '/library/archive', path: 'notes/answer.md' },
+        source: { folderPath: '/library/research', path: 'notes/answer.md' },
         target: {
           caseSensitive: false,
           line: 7,
@@ -107,26 +103,27 @@ describe('Exact Search', () => {
     );
   });
 
-  it('narrows the request to a selected member folder', async () => {
-    const api: ExactSearchApi = { search: vi.fn(async () => ({ ...result, truncated: false })) };
+  it('does not surface a result returned outside the selected workspace', async () => {
+    const api: ExactSearchApi = {
+      search: vi.fn(async () => ({
+        ...result,
+        files: [
+          {
+            ...result.files[0],
+            id: '/library/archive\u0000notes/answer.md',
+            source: { folderPath: '/library/archive', path: 'notes/answer.md' },
+          },
+        ],
+      })),
+    };
     renderSearch(api);
-    const user = userEvent.setup();
 
-    await user.click(screen.getByRole('combobox', { name: 'Search scope' }));
-    await user.click(await screen.findByRole('option', { name: 'Archive' }));
-    await user.type(screen.getByRole('combobox', { name: 'Search library' }), 'answer');
+    await userEvent
+      .setup()
+      .type(screen.getByRole('combobox', { name: 'Search current workspace' }), 'answer');
 
-    await waitFor(() =>
-      expect(api.search).toHaveBeenCalledWith(
-        {
-          caseSensitive: false,
-          folderPath: '/library/archive',
-          query: 'answer',
-          wholeWord: false,
-        },
-        expect.any(AbortSignal),
-      ),
-    );
+    expect(await screen.findByText('No exact matches.')).not.toBeNull();
+    expect(screen.queryByRole('option', { name: /answer\.md/u })).toBeNull();
   });
 
   it('opens the keyboard-selected occurrence rather than only its file', async () => {
@@ -153,7 +150,7 @@ describe('Exact Search', () => {
     const rendered = renderSearch(api);
     const user = userEvent.setup();
 
-    await user.type(screen.getByRole('combobox', { name: 'Search library' }), 'answer');
+    await user.type(screen.getByRole('combobox', { name: 'Search current workspace' }), 'answer');
     await screen.findAllByRole('option', { name: /answer\.md/u });
     await user.keyboard('{ArrowDown}{Enter}');
 
@@ -169,7 +166,7 @@ describe('Exact Search', () => {
   it('focuses the query again whenever the search command revision changes', async () => {
     const api: ExactSearchApi = { search: vi.fn(async () => result) };
     const rendered = renderSearch(api);
-    const input = screen.getByRole('combobox', { name: 'Search library' });
+    const input = screen.getByRole('combobox', { name: 'Search current workspace' });
     const elsewhere = globalThis.document.createElement('button');
     globalThis.document.body.append(elsewhere);
     elsewhere.focus();
@@ -182,10 +179,6 @@ describe('Exact Search', () => {
           api={api}
           focusRevision={1}
           onNavigate={rendered.onNavigate}
-          scopes={[
-            { folderPath: '/library/research', label: 'Research' },
-            { folderPath: '/library/archive', label: 'Archive' },
-          ]}
         />
       </QueryClientProvider>,
     );
@@ -203,7 +196,7 @@ describe('Exact Search', () => {
     };
     renderSearch(api);
     const user = userEvent.setup();
-    const input = screen.getByRole('combobox', { name: 'Search library' });
+    const input = screen.getByRole('combobox', { name: 'Search current workspace' });
 
     await user.type(input, 'alpha');
     await waitFor(() => expect(api.search).toHaveBeenCalledOnce());

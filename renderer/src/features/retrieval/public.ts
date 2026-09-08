@@ -14,7 +14,6 @@ export {
   type ExactSearchOccurrence,
   type ExactSearchRequest,
   type ExactSearchResult,
-  type ExactSearchScopeOption,
 } from './domain/exact-search';
 export {
   type QuickOpenAction,

@@ -22,14 +22,14 @@ web build checks.
 
 **Status:** Complete.
 
-Cmd/Ctrl+Shift+F always focuses the sidebar Search field. Exact queries default
-to the active folder, can widen to the library, cancel obsolete work, group
-individual occurrences by source, and reveal the selected occurrence after its
-active- or out-of-folder document viewer is ready.
+Cmd/Ctrl+Shift+F always focuses the sidebar Search field. Exact queries are
+bound to the selected Library folder, cancel obsolete work, reject any
+out-of-folder result returned by the boundary, group individual occurrences by
+source, and reveal the selected occurrence after its document viewer is ready.
 
-Evidence: focused protocol, adapter, scope, cancellation, keyboard/focus,
-occurrence navigation, app-composition, read-only, architecture, typecheck,
-lint, and web build checks.
+Evidence: focused protocol, adapter, selected-workspace filtering,
+cancellation, keyboard/focus, occurrence navigation, app-composition,
+architecture, typecheck, lint, and web build checks.
 
 ## 43 — Present Preparation status and recovery
 

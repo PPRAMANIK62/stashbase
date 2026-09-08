@@ -323,8 +323,8 @@ describe('workspace shell', () => {
     });
     expect(generalSearch.defaultPrevented).toBe(true);
     expect(searchTab?.getAttribute('aria-selected')).toBe('true');
-    expect(container.querySelector('[aria-label="Exact library search"]')).not.toBeNull();
-    expect(container.querySelector('input[placeholder="Search library"]')).toBe(
+    expect(container.querySelector('[aria-label="Exact workspace search"]')).not.toBeNull();
+    expect(container.querySelector('input[placeholder="Search files"]')).toBe(
       document.activeElement,
     );
 
@@ -343,7 +343,7 @@ describe('workspace shell', () => {
       );
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
-    expect(container.querySelector('input[placeholder="Search library"]')).toBe(
+    expect(container.querySelector('input[placeholder="Search files"]')).toBe(
       document.activeElement,
     );
 

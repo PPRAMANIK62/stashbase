@@ -33,13 +33,13 @@ afterEach(() => {
 });
 
 describe('workspace Exact Search composition', () => {
-  it('opens an out-of-folder result under its own read-only source identity', async () => {
+  it('opens a selected-workspace result under its editable source identity', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const api: ExactSearchApi = {
       search: vi.fn(async () => ({
         files: [
           {
-            id: '/library/archive\u0000answer.md',
+            id: '/library/research\u0000answer.md',
             matches: [
               {
                 line: 1,
@@ -50,7 +50,7 @@ describe('workspace Exact Search composition', () => {
                 text: 'answer and answer',
               },
             ],
-            source: { folderPath: '/library/archive', path: 'answer.md' },
+            source: { folderPath: '/library/research', path: 'answer.md' },
             totalMatches: 2,
           },
         ],
@@ -86,10 +86,6 @@ describe('workspace Exact Search composition', () => {
           api={api}
           documents={documents}
           focusRevision={0}
-          scopes={[
-            { folderPath: '/library/research', label: 'Research' },
-            { folderPath: '/library/archive', label: 'Archive' },
-          ]}
           workspace={workspace}
         />
       </QueryClientProvider>,
@@ -97,14 +93,14 @@ describe('workspace Exact Search composition', () => {
 
     await userEvent
       .setup()
-      .type(screen.getByRole('combobox', { name: 'Search library' }), 'answer');
+      .type(screen.getByRole('combobox', { name: 'Search current workspace' }), 'answer');
     const occurrences = await screen.findAllByRole('option', { name: /answer\.md/u });
     await userEvent.setup().click(occurrences[1]);
 
     await waitFor(() => {
       const tab = documents.store.getState().tabs[0];
-      expect(tab?.source).toEqual({ folderPath: '/library/archive', path: 'answer.md' });
-      expect(documents.getDocument(tab?.id ?? '')?.store.getState().access).toBe('read-only');
+      expect(tab?.source).toEqual({ folderPath: '/library/research', path: 'answer.md' });
+      expect(documents.getDocument(tab?.id ?? '')?.store.getState().access).toBe('editable');
     });
 
     const controller = {

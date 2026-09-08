@@ -33,11 +33,6 @@ export interface ExactSearchRequest {
   readonly wholeWord: boolean;
 }
 
-export interface ExactSearchScopeOption {
-  readonly folderPath: string;
-  readonly label: string;
-}
-
 export interface ExactSearchNavigationIntent {
   readonly source: SourceReference;
   readonly target: {
