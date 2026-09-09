@@ -22,7 +22,7 @@ import {
   runWithFolderRoot,
 } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
-import { sendError, revealInOsFileManager } from '../http.ts';
+import { guardExplicitFolder, sendError, revealInOsFileManager } from '../http.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { saveFileContent, upsertSavedFile } from '../file-save.ts';
 import { readGenericFilePreview } from '../generic-file-preview.ts';
@@ -134,17 +134,9 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
       res.status(415).json({ code: 'UNSUPPORTED_FORMAT', error: 'unsupported editable format' });
       return;
     }
+    if (!(await guardExplicitFolder(req, res))) return;
     const current = getCurrentFolder();
-    let matchesActiveFolder = false;
-    if (current && filesystemPath.isAbsolute(request.data.folderPath)) {
-      try {
-        matchesActiveFolder = await filesystemPath.equalAsync(current, request.data.folderPath);
-      } catch {
-        // A missing or malformed expected folder is a lost renderer scope,
-        // never permission to fall through to the window's newer folder.
-      }
-    }
-    if (!matchesActiveFolder || !current) {
+    if (!current) {
       res.status(409).json({
         code: 'FOLDER_CHANGED',
         error: 'the document folder is no longer active in this window',
@@ -233,6 +225,7 @@ export function mount(
   // New Note is intentionally Markdown even though existing JSON and TXT
   // sources have their own editing surfaces (HTML remains preview-only here).
   app.post('/api/files', async (req, res) => {
+    if (!(await guardExplicitFolder(req, res))) return;
     const requestedName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     const content = typeof req.body?.content === 'string' ? req.body.content : '';
     const dir = typeof req.body?.dir === 'string' ? req.body.dir.trim() : '';

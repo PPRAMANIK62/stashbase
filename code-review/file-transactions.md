@@ -144,6 +144,13 @@ transport-specific arguments and map results. A delete acknowledgement waits
 for old source and derived index identities; rename/move removes the old
 identity before reporting any optional new-identity indexing lag.
 
+Active-folder create, rename, and delete routes accept an optional explicit
+`?folder=`. When present it must name the window's active folder
+(`guardExplicitFolder` in `server/http.ts`); a mismatch answers
+`409 FOLDER_CHANGED` and mutates nothing, the same rule the versioned text
+save applies. A request without it keeps acting on the window's folder for
+callers that predate explicit scope.
+
 The active-folder Adapter may opt regular generic files into rename/move/delete
 without granting content writes or retrieval. Generic rename/move preserves the
 actual suffix and retires any stale index identity defensively. The shared
@@ -218,7 +225,7 @@ text reads and manifest-known derived-text reads also reject responses above
 | Library/MCP Adapter | `LibraryOperations` and MCP/HTTP transport adapters |
 | Publication Module | `server/import-publication.ts` |
 | Lifecycle Adapter | conversion cancellation, cleanup, and reconcile Modules in [Data Lifecycle](data-lifecycle.md) |
-| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, `library-operations/index.test.ts`, renderer persistence tests, and the J03 conflict Journey |
+| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `routes/file-mutations.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, `library-operations/index.test.ts`, renderer persistence tests, and the J03 conflict Journey |
 
 ## Validation
 

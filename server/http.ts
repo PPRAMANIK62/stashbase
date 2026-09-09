@@ -10,6 +10,7 @@ import express from 'express';
 import childProcess from 'node:child_process';
 import path from 'node:path';
 import { logger, errorMessage, errorCode } from './log.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import { getCurrentFolder, runWithWindowId, WINDOW_ID_HEADER } from './folder.ts';
 
 const log = logger('http');
@@ -42,6 +43,35 @@ export function sendError(res: express.Response, err: unknown): void {
     return;
   }
   res.status(500).json({ error: errorMessage(err) });
+}
+
+/** Mutating active-folder routes accept an optional explicit `?folder=`.
+ *  Present, it must name the window's active folder: a mismatch is a lost
+ *  renderer scope and answers `409 FOLDER_CHANGED`, never permission to act
+ *  on the window's newer folder. Absent, the window's folder applies for
+ *  callers that predate explicit scope. Returns false after responding. */
+export async function guardExplicitFolder(
+  req: express.Request,
+  res: express.Response,
+): Promise<boolean> {
+  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+  if (!rawFolder) return true;
+  const current = getCurrentFolder();
+  let matchesActiveFolder = false;
+  if (current && filesystemPath.isAbsolute(rawFolder)) {
+    try {
+      matchesActiveFolder = await filesystemPath.equalAsync(current, rawFolder);
+    } catch {
+      // A missing or malformed expected folder is a lost renderer scope,
+      // never permission to fall through to the window's newer folder.
+    }
+  }
+  if (matchesActiveFolder) return true;
+  res.status(409).json({
+    code: 'FOLDER_CHANGED',
+    error: 'the requested folder is no longer active in this window',
+  });
+  return false;
 }
 
 /** Express middleware: 412 when no folder is currently open. Mounted on
