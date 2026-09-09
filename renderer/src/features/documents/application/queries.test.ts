@@ -7,6 +7,7 @@ import {
   documentSourceQuery,
   docxPreviewQuery,
   genericFilePreviewQuery,
+  refreshDocumentSources,
 } from './queries';
 
 const scope = {
@@ -113,5 +114,24 @@ describe('document source queries', () => {
     const scopeKey = documentQueryKeys.scope(scope);
     expect(cancel).toHaveBeenCalledWith({ queryKey: scopeKey });
     expect(remove).toHaveBeenCalledWith({ queryKey: scopeKey });
+  });
+
+  it('refetches only the open documents behind externally written sources', () => {
+    const queryClient = new QueryClient();
+    const other = { ...scope, id: 'tab-other', source: { ...scope.source, path: 'other.md' } };
+    queryClient.setQueryData(documentQueryKeys.source(scope), { content: 'a', version: 'v1' });
+    queryClient.setQueryData(documentQueryKeys.source(other), { content: 'b', version: 'v1' });
+    queryClient.setQueryData(['workspace', 'folder', '/library/notes', 'files'], { files: [] });
+
+    refreshDocumentSources(queryClient, [
+      { folderPath: '/library/notes', path: 'drafts/plan.md' },
+      { folderPath: '/library/elsewhere', path: 'other.md' },
+    ]);
+
+    expect(queryClient.getQueryState(documentQueryKeys.source(scope))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(documentQueryKeys.source(other))?.isInvalidated).toBe(false);
+    expect(
+      queryClient.getQueryState(['workspace', 'folder', '/library/notes', 'files'])?.isInvalidated,
+    ).toBe(false);
   });
 });

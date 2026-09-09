@@ -19,7 +19,7 @@ export {
   type MediaApi,
   type MediaFailureKind,
 } from './application/ports';
-export { createDocumentQueryScope } from './application/queries';
+export { createDocumentQueryScope, refreshDocumentSources } from './application/queries';
 export {
   createDocumentTabsRuntime,
   type DocumentSessionProjection,

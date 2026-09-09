@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import type { DocumentScope, DocumentTextSource } from '@/features/documents/domain/document';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
 import type {
   DocumentAssetApi,
@@ -33,6 +34,28 @@ export const documentQueryKeys = {
   mediaPreviewStatus: (scope: DocumentScope, version: string) =>
     [...documentQueryKeys.scope(scope), 'media-preview-status', version] as const,
 };
+
+/** Refetches the open documents behind sources something else wrote to.
+ *  A clean editor takes the newer disk text; a dirty one keeps its draft and
+ *  meets the versioned conflict path on its next save. */
+export function refreshDocumentSources(
+  queryClient: QueryClient,
+  sources: readonly SourceReference[],
+): void {
+  if (sources.length === 0) return;
+  const wanted = new Set(sources.map((source) => `${source.folderPath}\0${source.path}`));
+  void queryClient.invalidateQueries({
+    predicate: (query) => {
+      const [root, folderPath, path] = query.queryKey;
+      return (
+        root === documentQueryKeys.all[0] &&
+        typeof folderPath === 'string' &&
+        typeof path === 'string' &&
+        wanted.has(`${folderPath}\0${path}`)
+      );
+    },
+  });
+}
 
 export function createDocumentQueryScope(
   queryClient: QueryClient,
