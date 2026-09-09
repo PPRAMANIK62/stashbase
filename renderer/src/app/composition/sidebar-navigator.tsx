@@ -56,34 +56,42 @@ export function SidebarNavigator({
         </TabsSubtle>
       </div>
 
-      <SidebarContent className={selectedIndex >= 2 ? 'hidden' : undefined}>
-        <SidebarGroup>
-          <div
-            aria-labelledby={`${navigatorId}-tab-0`}
-            hidden={selectedIndex !== 0}
-            id={`${navigatorId}-panel-0`}
-            role="tabpanel"
-          >
-            {children}
-          </div>
-          <div
-            aria-labelledby={`${navigatorId}-tab-1`}
-            hidden={selectedIndex !== 1}
-            id={`${navigatorId}-panel-1`}
-            role="tabpanel"
-          >
-            {runtime ? (
-              <DocumentOutline runtime={runtime} />
-            ) : (
-              <SidebarGroup aria-label="Document outline section" className="min-h-0 p-0">
-                <p className="px-4 pt-1 pb-2 text-caption text-muted-foreground">
-                  No outline available
-                </p>
-              </SidebarGroup>
-            )}
-          </div>
-        </SidebarGroup>
-      </SidebarContent>
+      {/* The scroll region keeps its own flex frame around the class it is
+          given, so the panel hides through an ancestor: a hidden frame
+          takes no row, and Search or Chats starts right under the tabs. */}
+      <div
+        className={selectedIndex >= 2 ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}
+        hidden={selectedIndex >= 2}
+      >
+        <SidebarContent>
+          <SidebarGroup>
+            <div
+              aria-labelledby={`${navigatorId}-tab-0`}
+              hidden={selectedIndex !== 0}
+              id={`${navigatorId}-panel-0`}
+              role="tabpanel"
+            >
+              {children}
+            </div>
+            <div
+              aria-labelledby={`${navigatorId}-tab-1`}
+              hidden={selectedIndex !== 1}
+              id={`${navigatorId}-panel-1`}
+              role="tabpanel"
+            >
+              {runtime ? (
+                <DocumentOutline runtime={runtime} />
+              ) : (
+                <SidebarGroup aria-label="Document outline section" className="min-h-0 p-0">
+                  <p className="px-4 pt-1 pb-2 text-caption text-muted-foreground">
+                    No outline available
+                  </p>
+                </SidebarGroup>
+              )}
+            </div>
+          </SidebarGroup>
+        </SidebarContent>
+      </div>
       <div
         aria-labelledby={`${navigatorId}-tab-2`}
         className={selectedIndex === 2 ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}

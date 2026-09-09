@@ -111,6 +111,10 @@ describe('sidebar navigator', () => {
 
     expect(screen.getByRole('tab', { name: 'Search' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('textbox', { name: 'Search current workspace' })).not.toBeNull();
+    // The files region leaves the column entirely, so the Search panel is
+    // not pushed halfway down beside an empty flex frame.
+    const filesRegion = document.querySelector('[data-sidebar="content"]');
+    expect(filesRegion?.closest('[hidden]')).not.toBeNull();
   });
 
   it('shows the selected workspace chat navigator', async () => {
