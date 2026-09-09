@@ -5,7 +5,7 @@ import type { AgentRuntimePort } from '@/features/settings/application/ports';
 import { useAgentRuntimes } from '@/features/settings/hooks/use-agent-runtimes';
 import type { Agent, AgentsResponse } from '@/shared/agent-runtime';
 
-import { AgentRuntimesPanel } from './agent-runtimes-panel';
+import { AgentRuntimesPanel } from './agents-panel';
 
 function catalog(clis: Agent[]): AgentsResponse {
   return { clis };

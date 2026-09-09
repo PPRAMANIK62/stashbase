@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { Bot, Settings as SettingsIcon } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { SettingsShell, type SettingsSectionDef } from './settings-shell';
+import { SettingsShell, type SettingsSectionDef } from './shell';
 
 const sections: SettingsSectionDef[] = [
   { available: false, icon: SettingsIcon, id: 'general', label: 'General' },

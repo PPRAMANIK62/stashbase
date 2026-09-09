@@ -2,8 +2,8 @@ import { Bot, Mic, Plug, Search, Settings as SettingsIcon, SunMoon } from 'lucid
 
 import { useAgentRuntimes } from '@/features/settings/hooks/use-agent-runtimes';
 
-import { AgentRuntimesPanel } from './agent-runtimes-panel';
-import { SettingsShell, type SettingsSectionDef } from './settings-shell';
+import { AgentRuntimesPanel } from './agents/agents-panel';
+import { SettingsShell, type SettingsSectionDef } from './shell';
 import type { SettingsProps } from './settings-types';
 
 export default function ManagedSettings({
