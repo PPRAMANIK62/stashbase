@@ -1,3 +1,9 @@
+/** A labelled field: the label, the control, the helper/error line, and the
+ *  border that reacts to focus and validity. `InputGroup` owns the field
+ *  semantics (id wiring, `aria-describedby`, invalid state) and `InputField`
+ *  owns the bordered box, so a consumer can put a native input, a textarea, or
+ *  a custom control inside the same chrome without re-deriving the a11y ids. */
+
 'use client';
 
 import { Field } from '@base-ui/react/field';
@@ -14,17 +20,22 @@ import {
   type InputHTMLAttributes,
 } from 'react';
 
-import { useProximityHover } from '@/hooks/use-proximity-hover';
+import { useProximityRow, type ProximityRowSurface } from '@/components/internal/proximity-row';
+import { FOCUS_RING_TINT } from '@/lib/focus-ring';
 import { fontWeights } from '@/lib/font-weight';
 import type { IconComponent } from '@/lib/icon-context';
+import { mergeRefs } from '@/lib/merge-refs';
 import { useShape } from '@/lib/shape-context';
 import { SizeProvider, useSize, type SizeVariant } from '@/lib/size-context';
+import { useDomOrderRegistry } from '@/lib/use-dom-order-registry';
+import { useProximityHover } from '@/lib/use-proximity-hover';
 import { cn } from '@/lib/utils';
 
-interface InputGroupContextValue {
-  registerItem: (index: number, element: HTMLElement | null) => void;
-  activeIndex: number | null;
-}
+// A field's position is its position in the document, so the group publishes
+// the registry the fields put their own elements into rather than a number
+// each caller has to count out. Inserting a field in the middle of a form
+// renumbers nothing.
+type InputGroupContextValue = ProximityRowSurface;
 
 const InputGroupContext = createContext<InputGroupContextValue | null>(null);
 
@@ -47,24 +58,21 @@ const InputGroup = forwardRef<HTMLDivElement, InputGroupProps>(
     const containerRef = useRef<HTMLDivElement>(null);
 
     const { activeIndex, handlers, registerItem, measureItems } = useProximityHover(containerRef);
+    const registry = useDomOrderRegistry();
 
     useEffect(() => {
       measureItems();
     }, [measureItems, children]);
 
-    const contextValue = useMemo(
-      () => ({ registerItem, activeIndex }),
-      [registerItem, activeIndex],
+    const contextValue = useMemo<InputGroupContextValue>(
+      () => ({ registerItem, activeIndex, registry }),
+      [registerItem, activeIndex, registry],
     );
 
     const group = (
       <InputGroupContext.Provider value={contextValue}>
         <div
-          ref={(node) => {
-            (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-            if (typeof ref === 'function') ref(node);
-            else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
-          }}
+          ref={mergeRefs(containerRef, ref)}
           onMouseEnter={handlers.onMouseEnter}
           onMouseMove={handlers.onMouseMove}
           onMouseLeave={handlers.onMouseLeave}
@@ -87,21 +95,17 @@ const InputGroup = forwardRef<HTMLDivElement, InputGroupProps>(
 
 InputGroup.displayName = 'InputGroup';
 
-interface InputFieldProps extends Omit<
-  InputHTMLAttributes<HTMLInputElement>,
-  'onChange' | 'index'
-> {
+interface InputFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   label: string;
   /** Keep the label for assistive tech but don't render it — for inline
    *  fields (a toolbar search) where the placeholder carries the meaning. */
   labelHidden?: boolean;
   placeholder?: string;
   icon?: IconComponent;
-  index: number;
   value: string;
   onChange: (value: string) => void;
-  error?: string;
-  disabled?: boolean;
+  error?: string | undefined;
+  disabled?: boolean | undefined;
   /** Show the field box at rest as a quiet tint instead of only on hover or
    *  focus — for a field standing alone inside a settings row, where the
    *  proximity reveal reads as plain text. */
@@ -116,7 +120,6 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
       labelHidden,
       placeholder,
       icon: Icon,
-      index,
       value,
       onChange,
       error,
@@ -127,20 +130,16 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
     },
     ref,
   ) => {
-    const internalRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLElement | null>(null);
-    const { registerItem, activeIndex } = useInputGroup();
+    // The row hook registers the field's element, reads its index back out of
+    // the group's registry, and publishes the element for the hover overlay
+    // to measure — the three steps a proximity row cannot skip.
+    const { isActive, ref: rowRef } = useProximityRow<HTMLDivElement>(ref, useInputGroup(), false);
     const [isFocused, setIsFocused] = useState(false);
     const shape = useShape();
     const sizeClasses = useSize();
     const compact = sizeClasses.variant === 'compact';
 
-    useEffect(() => {
-      registerItem(index, internalRef.current);
-      return () => registerItem(index, null);
-    }, [index, registerItem]);
-
-    const isActive = activeIndex === index;
     const labelActive = isActive || isFocused;
 
     const handleFocus = () => {
@@ -160,11 +159,7 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
       ringClass = 'ring-border';
     } else if (filled) {
       bgClass = isActive && !isFocused ? 'bg-active' : 'bg-hover';
-      ringClass = error
-        ? 'ring-destructive/50'
-        : isFocused
-          ? 'ring-[color:var(--focus-ring,#6B97FF)]'
-          : 'ring-transparent';
+      ringClass = error ? 'ring-destructive/50' : isFocused ? FOCUS_RING_TINT : 'ring-transparent';
     } else if (error) {
       bgClass = isFocused ? 'bg-card' : isActive ? 'bg-destructive-light/60' : 'bg-transparent';
       ringClass = isFocused || isActive ? 'ring-destructive/50' : 'ring-transparent';
@@ -184,11 +179,7 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
       // targets the control, Field.Error's generated id lands in the control's
       // aria-describedby, and `invalid` drives aria-invalid / data-invalid.
       <Field.Root
-        ref={(node) => {
-          (internalRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-          if (typeof ref === 'function') ref(node);
-          else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
-        }}
+        ref={rowRef}
         invalid={!!error}
         disabled={disabled}
         className={cn(
@@ -228,8 +219,11 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
           </span>
         </Field.Label>
 
-        {/* Input container */}
+        {/* Input container. Presentational: the <input> inside is the real
+            control, and this box only widens its hit area, so it carries no
+            role or keyboard handling of its own. */}
         <div
+          role="presentation"
           onMouseDown={(e) => {
             // The old wrapper was one big <label>, so a click anywhere (icon,
             // padding) focused the input. Keep that, without disturbing the
@@ -243,7 +237,7 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
             // exactly on the ladder's control height.
             `flex items-center ${sizeClasses.gap} ${shape.input} ${
               compact ? 'px-2' : 'px-2.5'
-            } ${sizeClasses.control} ring-1 transition-all duration-80`,
+            } ${sizeClasses.control} ring-1 transition-all duration-fast`,
             bgClass,
             ringClass,
           )}
@@ -253,7 +247,7 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
               size={sizeClasses.icon}
               strokeWidth={labelActive ? 2 : 1.5}
               className={cn(
-                'shrink-0 transition-[color,stroke-width] duration-80',
+                'shrink-0 transition-[color,stroke-width] duration-fast',
                 labelActive ? 'text-foreground' : 'text-muted-foreground',
               )}
             />
@@ -280,7 +274,7 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
         {error && (
           <Field.Error
             match
-            className={cn('text-destructive', compact ? 'pl-2 text-[11px]' : 'pl-2.5 text-[12px]')}
+            className={cn('text-destructive', sizeClasses.caption, compact ? 'pl-2' : 'pl-2.5')}
             style={{ fontVariationSettings: fontWeights.medium }}
           >
             {error}
@@ -294,4 +288,3 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
 InputField.displayName = 'InputField';
 
 export { InputGroup, InputField };
-export default InputGroup;

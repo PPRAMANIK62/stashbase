@@ -1,3 +1,9 @@
+/** Tooltip: a single `TooltipProvider` owns the shared open/close delays and
+ *  the "skip the delay when one just closed" grouping, and each `Tooltip`
+ *  contributes a trigger plus its popup. The popup is positioned by Base UI
+ *  and animated from the trigger's edge, so a tooltip reads as belonging to
+ *  the control it describes rather than appearing from nowhere. */
+
 'use client';
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
@@ -5,8 +11,11 @@ import { motion, useMotionValue } from 'framer-motion';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { fontWeights } from '@/lib/font-weight';
+import { motionStyle } from '@/lib/motion-style';
 import { useShape } from '@/lib/shape-context';
-import { spring } from '@/lib/springs';
+import { useSize } from '@/lib/size-context';
+import { delayMs, spring } from '@/lib/springs';
+import { useMotionTier } from '@/lib/use-motion-tier';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -15,25 +24,9 @@ import { cn } from '@/lib/utils';
 
 const TooltipPortalContainerContext = createContext<HTMLElement | null>(null);
 
-function TooltipPortalContainer({
-  value,
-  children,
-}: {
-  value: HTMLElement | null;
-  children: ReactNode;
-}) {
-  return (
-    <TooltipPortalContainerContext.Provider value={value}>
-      {children}
-    </TooltipPortalContainerContext.Provider>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
-
-const DEFAULT_DELAY = 200;
 
 // Tracks whether an app-level <TooltipProvider> is above us. Each Tooltip
 // only wraps itself in a local primitive Provider when there isn't one —
@@ -43,10 +36,10 @@ const TooltipGroupContext = createContext(false);
 
 interface TooltipProviderProps {
   children: ReactNode;
-  /** Hover delay before tooltips open, in ms. Defaults to 200. */
+  /** Hover delay before tooltips open, in ms. Defaults to `delayMs.tooltip`. */
   delayDuration?: number;
   /** After a tooltip closes, adjacent tooltips opened within this window
-   *  skip the hover delay, in ms. Defaults to 300. */
+   *  skip the hover delay, in ms. Defaults to `delayMs.tooltipGroup`. */
   skipDelayDuration?: number;
 }
 
@@ -56,8 +49,8 @@ interface TooltipProviderProps {
  *  it via a per-instance fallback. */
 function TooltipProvider({
   children,
-  delayDuration = DEFAULT_DELAY,
-  skipDelayDuration = 300,
+  delayDuration = delayMs.tooltip,
+  skipDelayDuration = delayMs.tooltipGroup,
 }: TooltipProviderProps) {
   return (
     <TooltipGroupContext.Provider value={true}>
@@ -79,12 +72,13 @@ interface TooltipProps {
   children: React.ReactElement;
   side?: TooltipSide;
   sideOffset?: number;
-  /** Hover delay before this tooltip opens, in ms. Defaults to 200, or to the
-   *  ambient TooltipProvider's delayDuration when one is present. */
+  /** Hover delay before this tooltip opens, in ms. Defaults to
+   *  `delayMs.tooltip`, or to the ambient TooltipProvider's delayDuration
+   *  when one is present. */
   delayDuration?: number;
   className?: string;
   /** When true, forces the tooltip open. When false, forces it closed. When undefined, uses default hover/focus behavior. */
-  forceOpen?: boolean;
+  forceOpen?: boolean | undefined;
   /** Follow the cursor along one axis while hovering the trigger — for tall
    *  or wide triggers (the Sidebar rail) where a centered tooltip sits far
    *  from the pointer. The other axis stays anchored by `side`. */
@@ -128,6 +122,9 @@ function Tooltip({
   const [internalOpen, setInternalOpen] = useState(false);
   const open = forceOpen !== undefined ? forceOpen : internalOpen;
   const shape = useShape();
+  const sizeClasses = useSize();
+  const arrive = useMotionTier(spring.fast);
+  const leave = useMotionTier(spring.fast.exit);
   const portalContainer = useContext(TooltipPortalContainerContext);
   const hasAmbientProvider = useContext(TooltipGroupContext);
 
@@ -191,7 +188,7 @@ function Tooltip({
                 <motion.div
                   {...rest}
                   style={{
-                    ...(baseStyle as React.CSSProperties | undefined),
+                    ...motionStyle(baseStyle),
                     ...(followCursor === 'y'
                       ? { y: followOffset }
                       : followCursor === 'x'
@@ -204,7 +201,8 @@ function Tooltip({
                       // Trim recenters the label; the padding bump only applies
                       // where text-box is supported, keeping the same overall
                       // height (~26px) as untrimmed browsers.
-                      'bg-foreground px-2 py-1 text-[12px] text-background',
+                      'bg-foreground px-2 py-1 text-background',
+                      sizeClasses.caption,
                       '[text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both]:py-2',
                       shape.bg,
                       className,
@@ -212,7 +210,7 @@ function Tooltip({
                     style={{ fontVariationSettings: fontWeights.medium }}
                     initial={{ opacity: 0, ...slideOffset }}
                     animate={exiting ? { opacity: 0, ...slideOffset } : { opacity: 1, x: 0, y: 0 }}
-                    transition={exiting ? spring.fast.exit : spring.fast}
+                    transition={exiting ? leave : arrive}
                   >
                     {contentChildren}
                   </motion.div>
@@ -231,11 +229,10 @@ function Tooltip({
   if (hasAmbientProvider) return tooltip;
 
   return (
-    <TooltipPrimitive.Provider delay={delayDuration ?? DEFAULT_DELAY}>
+    <TooltipPrimitive.Provider delay={delayDuration ?? delayMs.tooltip}>
       {tooltip}
     </TooltipPrimitive.Provider>
   );
 }
 
-export { Tooltip, TooltipPortalContainer, TooltipProvider };
-export type { TooltipProps, TooltipProviderProps, TooltipSide };
+export { Tooltip, TooltipProvider };

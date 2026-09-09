@@ -1,46 +1,68 @@
+/** The segmented control: a bordered track with the selected tab drawn as a
+ *  raised pill. It wraps Base UI's Tabs primitive, which owns role/tabindex and
+ *  arrow-key navigation, and adds the Fluid layer — an optimistic pill jump on
+ *  click and the ladder-aligned sizing. The measured indicator layers and the
+ *  tab label live in `components/internal/tabs-strip`, shared with the
+ *  borderless `tabs-subtle` variant.
+ *
+ *  A tab is identified by its `value` and by nothing else. The list used to
+ *  read its children twice over — once to collect their `value` props into an
+ *  order, once to `cloneElement` a private `_index` into each — which meant a
+ *  tab behind a wrapper component had to forward an underscore-prefixed prop
+ *  it never asked for, and a tab that was not a direct child got no index at
+ *  all. Tabs now register their element with the shared DOM-order registry
+ *  (`@/lib/use-dom-order-registry`) and read their own position back. */
+
 'use client';
 
 import { Tabs as TabsPrimitive } from '@base-ui/react/tabs';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
-  useRef,
   useState,
   useCallback,
   useEffect,
-  useLayoutEffect,
+  useMemo,
   createContext,
   useContext,
   forwardRef,
-  Children,
-  cloneElement,
-  isValidElement,
   type ComponentPropsWithoutRef,
 } from 'react';
 
-import { useProximityHover } from '@/hooks/use-proximity-hover';
-import { fontWeights } from '@/lib/font-weight';
+import { useProximityRow } from '@/components/internal/proximity-row';
+import {
+  TabsStripIndicators,
+  TabsStripLabel,
+  useTabsStrip,
+} from '@/components/internal/tabs-strip';
 import type { IconComponent } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
 import { SizeProvider, useSize, type SizeVariant } from '@/lib/size-context';
-import { spring } from '@/lib/springs';
 import { surfaceClasses } from '@/lib/surface-classes';
 import { useSurface } from '@/lib/surface-context';
+import {
+  useDomOrderRegistry,
+  useMarkedIndex,
+  type DomOrderRegistry,
+} from '@/lib/use-dom-order-registry';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────── Contexts ─────────────────────── */
 
-interface TabsValueOrderContextValue {
-  valueOrder: string[];
-  setValueOrder: (order: string[]) => void;
+interface TabsRootContextValue {
   selectedValue: string | undefined;
+  /** The first tab reports its value, which is what an uncontrolled Tabs with
+   *  no `defaultValue` falls back to. Reported rather than counted, so the
+   *  root never inspects its own descendants. */
+  reportFirstValue: (value: string) => void;
 }
 
-const TabsValueOrderContext = createContext<TabsValueOrderContextValue | null>(null);
+const TabsRootContext = createContext<TabsRootContextValue | null>(null);
 
 interface TabsListContextValue {
-  registerTab: (index: number, value: string, el: HTMLElement | null) => void;
+  registry: DomOrderRegistry;
+  registerItem: (index: number, el: HTMLElement | null) => void;
   hoveredIndex: number | null;
   selectedValue: string | undefined;
+  reportFirstValue: (value: string) => void;
   setOptimisticIdx: (index: number) => void;
 }
 
@@ -58,10 +80,10 @@ interface TabsProps extends Omit<
   ComponentPropsWithoutRef<typeof TabsPrimitive.Root>,
   'onValueChange' | 'value' | 'defaultValue' | 'onSelect'
 > {
+  /** The selected tab's value. Pass it with `onValueChange` for a controlled
+   *  compound; leave both off and the tabs manage themselves. */
   value?: string;
   onValueChange?: (value: string) => void;
-  selectedIndex?: number;
-  onSelect?: (index: number) => void;
   defaultValue?: string;
   /** Pins the segmented control to one step of the size ladder (default 36px
    *  outer, compact 28px — see /docs/sizes). Omitted, it follows the
@@ -70,58 +92,37 @@ interface TabsProps extends Omit<
 }
 
 const Tabs = forwardRef<HTMLDivElement, TabsProps>(
-  (
-    { value, onValueChange, selectedIndex, onSelect, defaultValue, size, children, ...props },
-    ref,
-  ) => {
-    const [valueOrder, setValueOrder] = useState<string[]>([]);
+  ({ value, onValueChange, defaultValue, size, children, ...props }, ref) => {
     const [uncontrolledValue, setUncontrolledValue] = useState<string | undefined>(defaultValue);
-    const updateValueOrder = useCallback((order: string[]) => {
-      setValueOrder((current) => {
-        if (current.length === order.length && current.every((v, i) => v === order[i])) {
-          return current;
-        }
-        return order;
-      });
-    }, []);
+    const [firstValue, setFirstValue] = useState<string | undefined>(undefined);
 
-    // Resolve value: explicit value > selectedIndex lookup > uncontrolled state.
-    // Uncontrolled with no defaultValue falls back to the first tab so the
-    // FF layer's selectedValue matches what the primitive shows.
-    const resolvedValue =
-      value ??
-      (selectedIndex != null ? valueOrder[selectedIndex] : (uncontrolledValue ?? valueOrder[0]));
+    // Uncontrolled with no defaultValue falls back to the first tab, so the
+    // Fluid layer's selectedValue matches what the primitive shows.
+    const resolvedValue = value ?? uncontrolledValue ?? firstValue;
 
     // Base UI passes (value, eventDetails); we only need value.
     const handleValueChange = useCallback(
       (newValue: unknown) => {
-        const v = newValue as string;
-        if (value === undefined && selectedIndex == null) {
-          setUncontrolledValue(v);
-        }
-        onValueChange?.(v);
-        if (onSelect) {
-          const idx = valueOrder.indexOf(v);
-          if (idx !== -1) onSelect(idx);
-        }
+        const next = newValue as string;
+        if (value === undefined) setUncontrolledValue(next);
+        onValueChange?.(next);
       },
-      [onValueChange, onSelect, valueOrder, value, selectedIndex],
+      [onValueChange, value],
+    );
+
+    const rootCtx = useMemo(
+      () => ({ selectedValue: resolvedValue, reportFirstValue: setFirstValue }),
+      [resolvedValue],
     );
 
     const root = (
-      <TabsValueOrderContext.Provider
-        value={{
-          valueOrder,
-          setValueOrder: updateValueOrder,
-          selectedValue: resolvedValue,
-        }}
-      >
+      <TabsRootContext.Provider value={rootCtx}>
         {/*
           Always controlled: Base UI's useControlled logs a dev warning when
-          value flips undefined → defined. valueOrder is empty on the first
-          commit, so fall back to an empty-string sentinel — TabsList's
-          layout effect populates valueOrder pre-paint, so the corrected
-          value lands before anything is visible.
+          value flips undefined → defined. No tab has reported in on the first
+          commit, so fall back to an empty-string sentinel — registration runs
+          in a layout effect, so the corrected value lands before anything is
+          visible.
         */}
         <TabsPrimitive.Root
           ref={ref}
@@ -131,7 +132,7 @@ const Tabs = forwardRef<HTMLDivElement, TabsProps>(
         >
           {children}
         </TabsPrimitive.Root>
-      </TabsValueOrderContext.Provider>
+      </TabsRootContext.Provider>
     );
 
     // A size prop pins the whole compound (list + items) to one ladder step.
@@ -147,118 +148,51 @@ type TabsListProps = ComponentPropsWithoutRef<typeof TabsPrimitive.List>;
 
 const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
   ({ children, className, ...props }, ref) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const isMouseInside = useRef(false);
     const shape = useShape();
     const sizeClasses = useSize();
     const substrate = useSurface();
     const indicatorLevel = Math.min(substrate + 3, 8);
-    const valueOrderCtx = useContext(TabsValueOrderContext);
+    const rootCtx = useContext(TabsRootContext);
     const [optimisticIdx, setOptimisticIdx] = useState<number | null>(null);
 
-    const values = Children.toArray(children)
-      .filter(isValidElement)
-      .map((child) => (child.props as { value?: string }).value)
-      .filter((v): v is string => typeof v === 'string');
-    const valueOrderKey = values.join(',');
-    const setValueOrder = valueOrderCtx?.setValueOrder;
+    const registry = useDomOrderRegistry();
+    // The selected tab marks itself, so the pill's resting place comes from
+    // the tabs rather than from the list counting them.
+    const markedIndex = useMarkedIndex(registry);
+    const selectedIdx = markedIndex ?? -1;
 
-    useLayoutEffect(() => {
-      setValueOrder?.(values);
-    }, [setValueOrder, valueOrderKey]);
-
-    const {
-      activeIndex: hoveredIndex,
-      setActiveIndex: setHoveredIndex,
-      itemRects,
-      handlers,
-      registerItem,
-      measureItems,
-    } = useProximityHover(containerRef, { axis: 'x' });
-
-    const registerTab = useCallback(
-      (index: number, _value: string, el: HTMLElement | null) => {
-        registerItem(index, el);
-      },
-      [registerItem],
-    );
+    const strip = useTabsStrip('[role="tab"]', ref);
+    const { hoveredIndex, registerItem, measureItems } = strip;
 
     useEffect(() => {
       measureItems();
     }, [measureItems, children]);
 
-    const handleMouseMove = useCallback(
-      (e: React.MouseEvent) => {
-        isMouseInside.current = true;
-        handlers.onMouseMove(e);
-      },
-      [handlers],
-    );
-
-    const handleMouseLeave = useCallback(() => {
-      isMouseInside.current = false;
-      handlers.onMouseLeave();
-    }, [handlers]);
-
-    const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
-    const selectedValue = valueOrderCtx?.selectedValue;
-    const selectedIdx = selectedValue !== undefined ? values.indexOf(selectedValue) : -1;
-
     useEffect(() => {
       setOptimisticIdx(selectedIdx >= 0 ? selectedIdx : null);
     }, [selectedIdx]);
 
-    const activeSelectedIdx = optimisticIdx;
-    const selectedRect = activeSelectedIdx !== null ? itemRects[activeSelectedIdx] : null;
-    const hoverRect = hoveredIndex !== null ? itemRects[hoveredIndex] : null;
-    const focusRect = focusedIndex !== null ? itemRects[focusedIndex] : null;
-    const isHoveringSelected = hoveredIndex === activeSelectedIdx;
-    const isHovering = hoveredIndex !== null && !isHoveringSelected;
-
-    const indexedChildren = Children.map(children, (child, i) => {
-      // Skip plain DOM elements — injecting _index into e.g. a <div>
-      // triggers React's unknown-prop warning.
-      if (isValidElement(child) && typeof child.type !== 'string') {
-        return cloneElement(child, { _index: i } as Record<string, unknown>);
-      }
-      return child;
-    });
+    const selectedValue = rootCtx?.selectedValue;
+    const reportFirstValue = rootCtx?.reportFirstValue;
+    const listCtx = useMemo(
+      () => ({
+        registry,
+        registerItem,
+        hoveredIndex,
+        selectedValue,
+        reportFirstValue: reportFirstValue ?? (() => undefined),
+        setOptimisticIdx,
+      }),
+      [registry, registerItem, hoveredIndex, selectedValue, reportFirstValue],
+    );
 
     return (
-      <TabsListContext.Provider
-        value={{
-          registerTab,
-          hoveredIndex,
-          selectedValue,
-          setOptimisticIdx,
-        }}
-      >
+      <TabsListContext.Provider value={listCtx}>
         <TabsPrimitive.List
           // Match Radix's `activationMode="automatic"` — arrow keys move + activate.
           activateOnFocus
-          ref={(node) => {
-            (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-            if (typeof ref === 'function') ref(node);
-            else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
-          }}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          onFocus={(e) => {
-            const trigger = (e.target as HTMLElement).closest('[role="tab"]');
-            if (!trigger) return;
-            const indexAttr = trigger.getAttribute('data-proximity-index');
-            if (indexAttr != null) {
-              const idx = Number(indexAttr);
-              setHoveredIndex(idx);
-              setFocusedIndex((e.target as HTMLElement).matches(':focus-visible') ? idx : null);
-            }
-          }}
-          onBlur={(e) => {
-            if (containerRef.current?.contains(e.relatedTarget as Node)) return;
-            setFocusedIndex(null);
-            if (isMouseInside.current) return;
-            setHoveredIndex(null);
-          }}
+          ref={strip.listRef}
+          {...strip.listHandlers}
           className={cn(
             // segmentPad + segmentItem add up to the ladder's control height
             // (36px default, 28px compact) so the segmented control's outer
@@ -270,96 +204,18 @@ const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
           )}
           {...props}
         >
-          {/* Active segment indicator */}
-          {selectedRect && (
-            <motion.div
-              className={cn(
-                'pointer-events-none absolute',
-                surfaceClasses(indicatorLevel),
-                shape.bg,
-              )}
-              initial={false}
-              animate={{
-                left: selectedRect.left,
-                width: selectedRect.width,
-                top: selectedRect.top,
-                height: selectedRect.height,
-                opacity: isHovering ? 0.85 : 1,
-              }}
-              transition={{
-                ...spring.moderate,
-                opacity: { duration: 0.08 },
-              }}
-            />
-          )}
+          {/* The raised pill sits three surface levels above the track it
+              rides in, so the segmented control reads the same on any
+              substrate; hover previews the move at a lower opacity. */}
+          <TabsStripIndicators
+            strip={strip}
+            selectedIndex={optimisticIdx}
+            selectedSurface={surfaceClasses(indicatorLevel)}
+            selectedHoverOpacity={0.85}
+            hoverSurface="bg-hover"
+          />
 
-          {/* Hover indicator */}
-          <AnimatePresence>
-            {hoverRect && !isHoveringSelected && selectedRect && (
-              <motion.div
-                className={cn('pointer-events-none absolute bg-hover', shape.bg)}
-                initial={{
-                  left: selectedRect.left,
-                  width: selectedRect.width,
-                  top: selectedRect.top,
-                  height: selectedRect.height,
-                  opacity: 0,
-                }}
-                animate={{
-                  left: hoverRect.left,
-                  width: hoverRect.width,
-                  top: hoverRect.top,
-                  height: hoverRect.height,
-                  opacity: 0.4,
-                }}
-                exit={
-                  !isMouseInside.current && selectedRect
-                    ? {
-                        left: selectedRect.left,
-                        width: selectedRect.width,
-                        top: selectedRect.top,
-                        height: selectedRect.height,
-                        opacity: 0,
-                        transition: {
-                          ...spring.moderate,
-                          opacity: { duration: 0.06 },
-                        },
-                      }
-                    : { opacity: 0, transition: spring.fast.exit }
-                }
-                transition={{
-                  ...spring.fast,
-                  opacity: { duration: 0.08 },
-                }}
-              />
-            )}
-          </AnimatePresence>
-
-          {/* Focus ring */}
-          <AnimatePresence>
-            {focusRect && (
-              <motion.div
-                className={cn(
-                  'pointer-events-none absolute z-20 border border-[color:var(--focus-ring,#6B97FF)]',
-                  shape.focusRing,
-                )}
-                initial={false}
-                animate={{
-                  left: focusRect.left - 2,
-                  top: focusRect.top - 2,
-                  width: focusRect.width + 4,
-                  height: focusRect.height + 4,
-                }}
-                exit={{ opacity: 0, transition: spring.fast.exit }}
-                transition={{
-                  ...spring.fast,
-                  opacity: { duration: 0.08 },
-                }}
-              />
-            )}
-          </AnimatePresence>
-
-          {indexedChildren}
+          {children}
         </TabsPrimitive.List>
       </TabsListContext.Provider>
     );
@@ -378,8 +234,6 @@ interface TabItemProps extends ComponentPropsWithoutRef<typeof TabsPrimitive.Tab
    *  control and provide its keyboard equivalent on the tab itself. */
   trailingIcon?: IconComponent;
   onTrailingClick?: () => void;
-  /** @internal Auto-assigned by TabsList. */
-  _index?: number;
 }
 
 const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
@@ -390,24 +244,40 @@ const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
       label,
       trailingIcon: TrailingIcon,
       onTrailingClick,
-      _index = 0,
       className,
       onClick,
       ...props
     },
     ref,
   ) => {
-    const internalRef = useRef<HTMLButtonElement>(null);
     const sizeClasses = useSize();
-    const { registerTab, hoveredIndex, selectedValue, setOptimisticIdx } = useTabsList();
-
-    useEffect(() => {
-      registerTab(_index, value, internalRef.current);
-      return () => registerTab(_index, value, null);
-    }, [_index, value, registerTab]);
+    const {
+      registry,
+      registerItem,
+      hoveredIndex,
+      selectedValue,
+      reportFirstValue,
+      setOptimisticIdx,
+    } = useTabsList();
 
     const isSelected = selectedValue === value;
-    const isActive = hoveredIndex === _index || isSelected;
+    // Registering publishes both the tab's position and whether it is the
+    // selected one, which is everything the strip needs from it.
+    const {
+      index,
+      isActive: isHovered,
+      ref: tabRef,
+    } = useProximityRow<HTMLButtonElement>(
+      ref,
+      { activeIndex: hoveredIndex, registerItem, registry },
+      isSelected,
+    );
+
+    useEffect(() => {
+      if (index === 0) reportFirstValue(value);
+    }, [index, reportFirstValue, value]);
+
+    const isActive = isHovered || isSelected;
 
     return (
       <TabsPrimitive.Tab
@@ -418,19 +288,12 @@ const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
             onTrailingClick?.();
             return;
           }
-          setOptimisticIdx(_index);
+          setOptimisticIdx(index);
           onClick?.(e);
         }}
-        ref={(node) => {
-          (internalRef as React.MutableRefObject<HTMLElement | null>).current =
-            node as HTMLButtonElement | null;
-          if (typeof ref === 'function') ref(node as HTMLButtonElement);
-          else if (ref)
-            (ref as React.MutableRefObject<HTMLButtonElement | null>).current =
-              node as HTMLButtonElement | null;
-        }}
+        ref={tabRef}
         value={value}
-        data-proximity-index={_index}
+        data-proximity-index={index}
         className={cn(
           // Fixed height (not py) so the text-box trim below doesn't shrink
           // the tab — browsers without text-box support render identically.
@@ -446,33 +309,12 @@ const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
             size={sizeClasses.icon}
             strokeWidth={isActive ? 2 : 1.5}
             className={cn(
-              'transition-[color,stroke-width] duration-80',
+              'transition-[color,stroke-width] duration-fast',
               isActive ? 'text-foreground' : 'text-muted-foreground',
             )}
           />
         )}
-        {/* Both stacked spans carry the text-box trim so the invisible bold
-            sizer and the visible label keep identical boxes. */}
-        <span className={cn('inline-grid whitespace-nowrap', sizeClasses.text)}>
-          <span
-            className="invisible col-start-1 row-start-1 [text-box:trim-both_cap_alphabetic]"
-            style={{ fontVariationSettings: fontWeights.semibold }}
-            aria-hidden="true"
-          >
-            {label}
-          </span>
-          <span
-            className={cn(
-              'col-start-1 row-start-1 transition-[color,font-variation-settings] duration-80 [text-box:trim-both_cap_alphabetic]',
-              isActive ? 'text-foreground' : 'text-muted-foreground',
-            )}
-            style={{
-              fontVariationSettings: isSelected ? fontWeights.semibold : fontWeights.normal,
-            }}
-          >
-            {label}
-          </span>
-        </span>
+        <TabsStripLabel label={label} isActive={isActive} isSelected={isSelected} />
         {TrailingIcon && (
           <span
             aria-hidden="true"
@@ -502,4 +344,3 @@ const TabPanel = forwardRef<HTMLDivElement, TabPanelProps>(({ className, ...prop
 TabPanel.displayName = 'TabPanel';
 
 export { Tabs, TabsList, TabItem, TabPanel };
-export type { TabsProps, TabsListProps, TabItemProps, TabPanelProps };

@@ -1,57 +1,30 @@
 import type { Decorator, Preview } from '@storybook/react-vite';
-import { MotionConfig } from 'framer-motion';
 
-import { TooltipProvider } from '../src/components/ui/tooltip';
-import { IconProvider } from '../src/lib/icon-context';
-import { ShapeProvider } from '../src/lib/shape-context';
-import { SizeProvider, type SizeVariant } from '../src/lib/size-context';
-import { SurfaceProvider } from '../src/lib/surface-context';
+import { type SizeVariant } from '../src/lib/size-context';
+import {
+  applyStoryTheme,
+  defaultStoryCanvas,
+  StoryFrame,
+  type StoryCanvas,
+  type StoryTheme,
+} from '../src/test/story-canvas';
 
 import '../src/globals.css';
 
-type Theme = 'system' | 'light' | 'dark';
-
-type FluidCanvas = {
-  width: string;
-  minHeight: string;
-};
-
-const defaultCanvas: FluidCanvas = { width: '28rem', minHeight: '9rem' };
-
-function applyTheme(theme: Theme) {
-  document.documentElement.classList.toggle('light', theme === 'light');
-  document.documentElement.classList.toggle('dark', theme === 'dark');
-  document.documentElement.style.colorScheme = theme === 'system' ? 'light dark' : theme;
-}
-
+// The stack itself lives in src/test/story-canvas so the accessibility test can
+// mount the same one; a story scored under a different stack is not the story
+// this canvas shows.
 const withFluidEnvironment: Decorator = (Story, context) => {
-  const theme = context.globals.theme as Theme;
-  const size = context.globals.size as SizeVariant;
-  const canvas = (context.parameters.fluidCanvas as FluidCanvas | undefined) ?? defaultCanvas;
-
-  applyTheme(theme);
+  applyStoryTheme(context.globals.theme as StoryTheme);
 
   return (
-    <MotionConfig reducedMotion="user">
-      <ShapeProvider defaultShape="rounded">
-        <SizeProvider size={size}>
-          <SurfaceProvider value={1}>
-            <IconProvider>
-              <TooltipProvider>
-                <div className="w-full p-6">
-                  <div
-                    className="mx-auto flex max-w-full items-center justify-center overflow-visible rounded-xl border border-border bg-background p-6 text-foreground shadow-sm"
-                    style={{ minHeight: canvas.minHeight, width: canvas.width }}
-                  >
-                    <Story />
-                  </div>
-                </div>
-              </TooltipProvider>
-            </IconProvider>
-          </SurfaceProvider>
-        </SizeProvider>
-      </ShapeProvider>
-    </MotionConfig>
+    <StoryFrame
+      canvas={(context.parameters.fluidCanvas as StoryCanvas | undefined) ?? defaultStoryCanvas}
+      ownsLandmarks={context.parameters.ownsLandmarks === true}
+      size={context.globals.size as SizeVariant}
+    >
+      <Story />
+    </StoryFrame>
   );
 };
 

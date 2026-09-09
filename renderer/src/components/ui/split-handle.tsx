@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 
+import { FOCUS_RING_SEAM } from '@/lib/focus-ring';
 import { cn } from '@/lib/utils';
+import { clamp } from '@/shared/utils/clamp';
 
 const KEY_STEP_PX = 16;
 
@@ -34,7 +36,7 @@ export function SplitHandle({
 }: SplitHandleProps) {
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
   const [dragging, setDragging] = useState(false);
-  const clamp = (value: number) => Math.max(min, Math.min(max, Math.round(value)));
+  const toWidth = (value: number) => clamp(Math.round(value), min, max);
 
   return (
     <button
@@ -47,21 +49,21 @@ export function SplitHandle({
         // touch-none keeps a touch drag from turning into a scroll and
         // cancelling the resize mid-gesture.
         'absolute inset-y-0 z-20 w-2 cursor-col-resize touch-none outline-none',
-        'after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-transparent after:transition-colors after:duration-80',
-        'hover:after:bg-foreground/25 focus-visible:after:bg-[color:var(--focus-ring,#6B97FF)]',
+        'after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-transparent after:transition-colors after:duration-fast',
+        'hover:after:bg-foreground/25',
+        FOCUS_RING_SEAM,
         dragging && 'after:bg-foreground/25',
         className,
       )}
       onDoubleClick={() => {
-        if (defaultWidth !== undefined) onWidthChange(clamp(defaultWidth));
+        if (defaultWidth !== undefined) onWidthChange(toWidth(defaultWidth));
       }}
       onKeyDown={(event) => {
-        const direction =
-          event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
+        const direction = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
         if (direction === 0) return;
         event.preventDefault();
         const grows = pane === 'right' ? -direction : direction;
-        onWidthChange(clamp(width + grows * KEY_STEP_PX));
+        onWidthChange(toWidth(width + grows * KEY_STEP_PX));
       }}
       onPointerCancel={() => {
         drag.current = null;
@@ -75,7 +77,7 @@ export function SplitHandle({
       onPointerMove={(event) => {
         if (!drag.current) return;
         const dx = event.clientX - drag.current.startX;
-        onWidthChange(clamp(drag.current.startWidth + (pane === 'right' ? -dx : dx)));
+        onWidthChange(toWidth(drag.current.startWidth + (pane === 'right' ? -dx : dx)));
       }}
       onPointerUp={(event) => {
         drag.current = null;

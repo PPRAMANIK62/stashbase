@@ -1,14 +1,10 @@
 'use client';
 
-import {
-  forwardRef,
-  useEffect,
-  useRef,
-  type InputHTMLAttributes,
-  type MutableRefObject,
-} from 'react';
+import { forwardRef, useEffect, useRef, type InputHTMLAttributes } from 'react';
 
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
+import { clamp } from '@/shared/utils/clamp';
 
 interface InlineInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   caretOffset?: number;
@@ -65,12 +61,12 @@ const InlineInput = forwardRef<HTMLInputElement, InlineInputProps>(
       const input = ref.current;
       if (!input || !focusOnMount) return;
       input.focus();
-      const clamp = (offset: number) => Math.min(Math.max(offset, 0), input.value.length);
+      const inRange = (offset: number) => clamp(offset, 0, input.value.length);
       if (selectionStart !== undefined && selectionEnd !== undefined) {
-        input.setSelectionRange(clamp(selectionStart), clamp(selectionEnd));
+        input.setSelectionRange(inRange(selectionStart), inRange(selectionEnd));
         return;
       }
-      const offset = clamp(caretOffset ?? input.value.length);
+      const offset = inRange(caretOffset ?? input.value.length);
       input.setSelectionRange(offset, offset);
     }, [caretOffset, focusOnMount, selectionEnd, selectionStart]);
 
@@ -96,13 +92,7 @@ const InlineInput = forwardRef<HTMLInputElement, InlineInputProps>(
             onCancel();
           }
         }}
-        ref={(node) => {
-          ref.current = node;
-          if (typeof forwardedRef === 'function') forwardedRef(node);
-          else if (forwardedRef) {
-            (forwardedRef as MutableRefObject<HTMLInputElement | null>).current = node;
-          }
-        }}
+        ref={mergeRefs(ref, forwardedRef)}
       />
     );
   },
@@ -111,4 +101,3 @@ const InlineInput = forwardRef<HTMLInputElement, InlineInputProps>(
 InlineInput.displayName = 'InlineInput';
 
 export { InlineInput };
-export type { InlineInputProps };

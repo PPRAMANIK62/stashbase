@@ -1,3 +1,9 @@
+/** Modal dialog built on Base UI's dialog: backdrop, focus trap, escape and
+ *  outside-press dismissal, and the enter/exit motion that the portal stays
+ *  mounted for. `Dialog` is the state owner; `DialogContent` is the surface,
+ *  and the header/footer/title/description parts exist so the accessible name
+ *  and description are wired by structure rather than by hand. */
+
 'use client';
 
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
@@ -6,11 +12,13 @@ import { forwardRef, type ReactNode, type HTMLAttributes } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useIcon } from '@/lib/icon-context';
+import { motionStyle } from '@/lib/motion-style';
 import { useShape } from '@/lib/shape-context';
 import { useSize, useSizeVariant } from '@/lib/size-context';
 import { spring } from '@/lib/springs';
 import { surfaceClasses } from '@/lib/surface-classes';
 import { SurfaceProvider, useSurface } from '@/lib/surface-context';
+import { useMotionTier } from '@/lib/use-motion-tier';
 import { cn } from '@/lib/utils';
 
 const DIALOG_OFFSET = 4;
@@ -44,7 +52,8 @@ const DialogClose = DialogPrimitive.Close;
 interface DialogContentProps extends HTMLAttributes<HTMLDivElement> {
   closeDisabled?: boolean;
   presentation?: 'dialog' | 'command' | 'shell';
-  size?: 'sm' | 'lg';
+  /** How much of the viewport the panel claims; density comes from the size ladder. */
+  width?: 'narrow' | 'wide';
   /** Portal target. When set, the overlay and panel render inside this element
    *  (positioned `absolute`) instead of covering the viewport (`fixed`). Pair
    *  with a `position: relative; overflow: hidden` container — and usually
@@ -60,7 +69,7 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
       children,
       closeDisabled = false,
       presentation = 'dialog',
-      size = 'sm',
+      width = 'narrow',
       container,
       ...props
     },
@@ -75,6 +84,10 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
     // The size ladder narrows the dialog one notch in compact regions —
     // width only, the padding stays put (see /docs/sizes).
     const compact = useSize().variant === 'compact';
+    // One resolved pair for both surfaces: the backdrop and the panel are one
+    // arrival, so they honour the reduced-motion preference together.
+    const arrive = useMotionTier(spring.slow);
+    const leave = useMotionTier(spring.slow.exit);
 
     // No `if (!open) return null` here — Base UI's `<DialogPrimitive.Popup>`
     // handles mount/unmount itself, and waits for the framer-motion opacity
@@ -101,11 +114,11 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                 className={cn(
                   container ? 'absolute' : 'fixed',
                   'inset-0 z-50',
-                  command ? 'bg-transparent' : 'bg-black/40 dark:bg-black/80',
+                  command ? 'bg-transparent' : 'bg-scrim',
                 )}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: exiting ? 0 : 1 }}
-                transition={exiting ? spring.slow.exit : spring.slow}
+                transition={exiting ? leave : arrive}
               />
             );
           }}
@@ -149,19 +162,16 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                   shell && (compact ? 'max-w-[min(94vw,480px)]' : 'max-w-[min(92vw,820px)]'),
                   !command &&
                     !shell &&
-                    size === 'sm' &&
+                    width === 'narrow' &&
                     (compact ? 'max-w-[360px]' : 'max-w-[400px]'),
                   !command &&
                     !shell &&
-                    size === 'lg' &&
+                    width === 'wide' &&
                     (compact ? 'max-w-[480px]' : 'max-w-[540px]'),
                   shape.container,
                   className,
                 )}
-                style={{
-                  ...(baseStyle as React.CSSProperties | undefined),
-                  ...(props.style as React.CSSProperties | undefined),
-                }}
+                style={{ ...motionStyle(baseStyle), ...motionStyle(props.style) }}
                 initial={{
                   opacity: 0,
                   scale: command ? 0.985 : 0.97,
@@ -174,7 +184,7 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                   x: '-50%',
                   y: command ? 0 : '-50%',
                 }}
-                transition={exiting ? spring.slow.exit : spring.slow}
+                transition={exiting ? leave : arrive}
               >
                 <SurfaceProvider value={dialogLevel}>
                   {children}
@@ -184,7 +194,7 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                         <Button
                           className="absolute top-3 right-3"
                           disabled={closeDisabled}
-                          size="icon-sm"
+                          size="icon-compact"
                           variant="ghost"
                         >
                           <XIcon />
@@ -234,11 +244,11 @@ DialogTitle.displayName = 'DialogTitle';
 
 const DialogDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLParagraphElement>>(
   ({ className, ...props }, ref) => {
-    const compact = useSizeVariant() === 'compact';
+    const sizeClasses = useSize();
     return (
       <DialogPrimitive.Description
         ref={ref}
-        className={cn(compact ? 'text-[12px]' : 'text-[13px]', 'text-muted-foreground', className)}
+        className={cn(sizeClasses.text, 'text-muted-foreground', className)}
         {...props}
       />
     );

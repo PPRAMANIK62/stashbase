@@ -1,12 +1,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { expectNoA11yViolations } from '@/test/axe';
+
 import { SplitHandle } from './split-handle';
 
 afterEach(cleanup);
 
 function renderHandle(onWidthChange = vi.fn()) {
-  render(
+  const view = render(
     <SplitHandle
       defaultWidth={576}
       label="Resize Agent pane"
@@ -17,12 +19,17 @@ function renderHandle(onWidthChange = vi.fn()) {
       width={500}
     />,
   );
-  return { handle: screen.getByRole('separator', { name: 'Resize Agent pane' }), onWidthChange };
+  return {
+    container: view.container,
+    handle: screen.getByRole('separator', { name: 'Resize Agent pane' }),
+    onWidthChange,
+  };
 }
 
 describe('SplitHandle', () => {
-  it('reports a clamped width while dragging a right-hand pane', () => {
-    const { handle, onWidthChange } = renderHandle();
+  it('reports a clamped width while dragging a right-hand pane', async () => {
+    const { container, handle, onWidthChange } = renderHandle();
+    await expectNoA11yViolations(container);
     fireEvent.pointerDown(handle, { clientX: 700, pointerId: 1 });
     fireEvent.pointerMove(handle, { clientX: 660, pointerId: 1 });
     expect(onWidthChange).toHaveBeenLastCalledWith(540);

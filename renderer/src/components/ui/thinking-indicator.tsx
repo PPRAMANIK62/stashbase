@@ -5,6 +5,7 @@ import { forwardRef, useState, useEffect, type HTMLAttributes } from 'react';
 
 import { fontWeights } from '@/lib/font-weight';
 import { useSize, type SizeVariant } from '@/lib/size-context';
+import { ambient, tween } from '@/lib/springs';
 import { cn } from '@/lib/utils';
 
 const circleA =
@@ -28,7 +29,8 @@ interface ThinkingIndicatorProps extends HTMLAttributes<HTMLDivElement> {
 
 const ThinkingIndicator = forwardRef<HTMLDivElement, ThinkingIndicatorProps>(
   ({ className, showIcon = true, size, ...props }, ref) => {
-    const compactStep = useSize(size).variant === 'compact';
+    const sizeClasses = useSize(size);
+    const compactStep = sizeClasses.variant === 'compact';
     const [index, setIndex] = useState(0);
     // Reduced motion drops the infinite glyph morph and the word cycling — a
     // static glyph and label carry the same meaning without the movement.
@@ -38,7 +40,7 @@ const ThinkingIndicator = forwardRef<HTMLDivElement, ThinkingIndicatorProps>(
       if (reduceMotion) return;
       const interval = setInterval(() => {
         setIndex((i) => (i + 1) % words.length);
-      }, 4000);
+      }, ambient.labelCycleMs);
       return () => clearInterval(interval);
     }, [reduceMotion]);
 
@@ -51,7 +53,7 @@ const ThinkingIndicator = forwardRef<HTMLDivElement, ThinkingIndicatorProps>(
       >
         {/* Static announcement — the cycling word display below is aria-hidden
           so screen readers hear one "Thinking…" instead of a re-announcement
-          every 4 seconds. */}
+          every time the word changes. */}
         <span className="sr-only">Thinking…</span>
         {showIcon && (
           <motion.svg
@@ -77,7 +79,7 @@ const ThinkingIndicator = forwardRef<HTMLDivElement, ThinkingIndicatorProps>(
                 }}
                 transition={{
                   d: {
-                    duration: 6,
+                    duration: ambient.glyphMorphSeconds,
                     ease: 'easeInOut',
                     repeat: Infinity,
                     times: [0, 0.25, 0.5, 0.75, 1.0],
@@ -89,7 +91,7 @@ const ThinkingIndicator = forwardRef<HTMLDivElement, ThinkingIndicatorProps>(
         )}
         <span
           aria-hidden="true"
-          className={cn('inline-grid overflow-hidden', compactStep ? 'text-[12px]' : 'text-[13px]')}
+          className={cn('inline-grid overflow-hidden', sizeClasses.text)}
           style={{ fontVariationSettings: fontWeights.medium }}
         >
           <span className="shimmer-text invisible col-start-1 row-start-1">
@@ -106,12 +108,12 @@ const ThinkingIndicator = forwardRef<HTMLDivElement, ThinkingIndicatorProps>(
                 animate={{
                   y: 0,
                   opacity: 1,
-                  transition: { duration: 0.24, ease: [0.4, 0, 0.2, 1] },
+                  transition: { ...tween.slow, ease: [0.4, 0, 0.2, 1] },
                 }}
                 exit={{
                   y: '-80%',
                   opacity: 0,
-                  transition: { duration: 0.16, ease: [0.4, 0, 0.2, 1] },
+                  transition: { ...tween.base, ease: [0.4, 0, 0.2, 1] },
                 }}
               >
                 {words[index]}
@@ -127,5 +129,3 @@ const ThinkingIndicator = forwardRef<HTMLDivElement, ThinkingIndicatorProps>(
 ThinkingIndicator.displayName = 'ThinkingIndicator';
 
 export { ThinkingIndicator };
-export type { ThinkingIndicatorProps };
-export default ThinkingIndicator;

@@ -1,11 +1,11 @@
-'use client';
+/** Scroll area built on Base UI: a shape-system scrollbar over the content,
+ *  falling back to native overflow on touch-primary devices where the OS
+ *  already draws one. Scrollbar machinery adapted from Lina by SameerJS6
+ *  (https://lina.sameer.sh); built on @base-ui/react/scroll-area, whose
+ *  scrollbars stay mounted while scrollable and expose hover/scroll state as
+ *  data attributes instead of Radix's show/hide presence animation. */
 
-// Scroll area built on Base UI — shape-system scrollbar, native overflow
-// fallback on touch-primary devices. Scrollbar
-// machinery adapted from Lina by SameerJS6 (https://lina.sameer.sh); built on
-// @base-ui/react/scroll-area, whose scrollbars stay mounted while scrollable
-// and expose hover/scroll state as data attributes instead of Radix's
-// show/hide presence animation.
+'use client';
 
 import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import {
@@ -16,8 +16,8 @@ import {
   type ComponentRef,
 } from 'react';
 
-import { useTouchPrimary } from '@/hooks/use-touch-primary';
 import { useShape } from '@/lib/shape-context';
+import { useTouchPrimary } from '@/lib/use-touch-primary';
 import { cn } from '@/lib/utils';
 
 // On touch-primary devices the Base UI machinery is skipped entirely in
@@ -104,19 +104,19 @@ const ScrollBar = forwardRef<
       data-slot="scroll-area-scrollbar"
       // Base UI keeps the scrollbar mounted while scrollable; visibility is
       // a plain opacity transition off its hover/scroll state attributes,
-      // matching the cue fade — 160ms in, 120ms out (exits faster, per the
-      // animation guidelines); spring tokens are framer-motion configs and
-      // don't apply here.
+      // matching the cue fade — the base step in, faster out (exits are
+      // shorter, per the animation guidelines); spring tokens are
+      // framer-motion configs and don't apply here.
       className={cn(
         // The 10px track stays as a comfortable hit target; the thumb inside
         // it rests narrow and low-contrast, then widens + darkens on hover so
         // it gets out of the way until you reach for it.
         'group/scrollbar absolute z-20 flex touch-none select-none',
-        // Show immediately; on hide, wait out the 150ms thumb shrink before
-        // fading so the thumb visibly narrows back first instead of the fade
-        // masking it.
-        'opacity-0 transition-opacity delay-160 duration-120 ease-out',
-        'data-[hovering]:duration-160 data-[scrolling]:duration-160',
+        // Show immediately; on hide, wait out the thumb's shrink (the same
+        // base step) before fading, so the thumb visibly narrows back first
+        // instead of the fade masking it.
+        'opacity-0 transition-opacity delay-base duration-base ease-out',
+        'data-[hovering]:duration-base data-[scrolling]:duration-base',
         'data-[hovering]:opacity-100 data-[scrolling]:opacity-100',
         'data-[hovering]:delay-0 data-[scrolling]:delay-0',
         orientation === 'vertical' && 'top-0 right-0 h-full w-2.5',
@@ -130,7 +130,7 @@ const ScrollBar = forwardRef<
         className={cn(
           // Fixed surface-relative overlay ramp (8 → 12 → 16%) — same tint
           // direction as the menu hover/active tokens, one notch stronger.
-          'relative bg-[rgb(var(--overlay)/0.08)] transition-[background-color,width,height] duration-160 ease-in-out',
+          'relative bg-[rgb(var(--overlay)/0.08)] transition-[background-color,width,height] duration-base ease-in-out',
           'group-hover/scrollbar:bg-[rgb(var(--overlay)/0.12)] active:!bg-[rgb(var(--overlay)/0.16)]',
           shape.bg,
           // -translate nudges the thumb 2px off the container edge; the track
@@ -147,5 +147,4 @@ const ScrollBar = forwardRef<
 
 ScrollBar.displayName = 'ScrollBar';
 
-export { ScrollArea, ScrollBar };
-export type { ScrollAreaProps };
+export { ScrollArea };

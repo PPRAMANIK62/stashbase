@@ -1,3 +1,8 @@
+/** Renders a preview tile for one `File`: an image is drawn directly, a PDF
+ *  has its first page rasterised through pdf.js, and anything else falls back
+ *  to a typed file icon. The pdf.js worker URL is imported so the bundler owns
+ *  it; object URLs created for previews are revoked when the tile unmounts. */
+
 'use client';
 
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -166,5 +171,4 @@ function FileThumbnail({ file, size, className }: FileThumbnailProps) {
   );
 }
 
-export { FileThumbnail, loadPdfjs, renderPdfFirstPage };
-export type { FileThumbnailProps };
+export { FileThumbnail };

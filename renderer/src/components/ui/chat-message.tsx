@@ -4,24 +4,20 @@ import { motion, type HTMLMotionProps } from 'framer-motion';
 import { forwardRef, type ReactNode } from 'react';
 
 import { FileThumbnail } from '@/components/ui/file-thumbnail';
-import { useTouchPrimary } from '@/hooks/use-touch-primary';
+import { keyedByContent } from '@/lib/keyed-by-content';
 import { useShape } from '@/lib/shape-context';
 import { useSize, type SizeVariant } from '@/lib/size-context';
 import { spring } from '@/lib/springs';
+import { useMotionTier } from '@/lib/use-motion-tier';
+import { useTouchPrimary } from '@/lib/use-touch-primary';
 import { cn } from '@/lib/utils';
+import { fileFingerprint } from '@/shared/utils/file-identity';
 
-interface ChatMessageProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
-  /** Who sent the message. Drives alignment and bubble colour:
-   *  `user` → right-aligned accent bubble, `assistant` → left-aligned plain text. */
-  from: 'user' | 'assistant';
+interface ChatMessageBaseProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
   /** Optional attachments rendered as square thumbnails above the bubble. */
   files?: File[];
   /** Side length of each attachment thumbnail in pixels. Defaults to 64. */
   thumbnailSize?: number;
-  /** Timestamp shown in the hover-revealed meta row, before the actions.
-   *  User-message only — ignored on assistant replies. Caller pre-formats it
-   *  (e.g. `"Wednesday 6:08 PM"`). */
-  time?: ReactNode;
   /** Icon-only action buttons shown in the hover-revealed meta row (e.g. copy,
    *  edit, regenerate). Rendered next to the timestamp. */
   actions?: ReactNode;
@@ -32,6 +28,26 @@ interface ChatMessageProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
    *  surrounding SizeProvider. */
   size?: SizeVariant;
 }
+
+/** A timestamp is a user-message affordance. The meta row on an assistant
+ *  reply carries its actions and nothing else — so rather than accepting a
+ *  `time` there and quietly dropping it, the two roles carry different props
+ *  and passing one is a type error. */
+interface UserMessageProps extends ChatMessageBaseProps {
+  /** Right-aligned accent bubble. */
+  from: 'user';
+  /** Timestamp shown in the hover-revealed meta row, before the actions.
+   *  Caller pre-formats it (e.g. `"Wednesday 6:08 PM"`). */
+  time?: ReactNode;
+}
+
+interface AssistantMessageProps extends ChatMessageBaseProps {
+  /** Left-aligned plain text, no bubble. */
+  from: 'assistant';
+  time?: never;
+}
+
+type ChatMessageProps = UserMessageProps | AssistantMessageProps;
 
 // ─── ChatMessage ──────────────────────────────────────────────────────────
 // A single transcript entry with baked-in entrance + layout motion. Pairs with
@@ -47,8 +63,7 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
     const isUser = from === 'user';
     // Hover-reveal is unreachable on touch — keep the meta row visible there.
     const isTouch = useTouchPrimary();
-    // Timestamps are a user-message affordance; assistant replies show actions only.
-    const showTime = isUser && time != null;
+    const showTime = time != null;
 
     return (
       <motion.div
@@ -56,7 +71,7 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
         layout="position"
         initial={{ opacity: 0, y: 8, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={spring.moderate}
+        transition={useMotionTier(spring.moderate)}
         style={{ transformOrigin: isUser ? 'bottom right' : 'bottom left' }}
         className={cn(
           'group flex flex-col gap-1.5',
@@ -68,12 +83,8 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
       >
         {files && files.length > 0 && (
           <div className={cn('flex flex-wrap gap-1.5', isUser ? 'justify-end' : 'justify-start')}>
-            {files.map((file, i) => (
-              <FileThumbnail
-                key={`${file.name}-${file.size}-${file.lastModified}-${i}`}
-                file={file}
-                size={thumbnailSize}
-              />
+            {keyedByContent(files, fileFingerprint).map(({ key, item }) => (
+              <FileThumbnail key={key} file={item} size={thumbnailSize} />
             ))}
           </div>
         )}
@@ -109,15 +120,15 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
           // Meta row: timestamp + icon-only actions. Always rendered (so it
           // reserves its height and the gap between bubbles never shifts) but
           // hidden until the message is hovered or an action is focused.
-          // The timestamp is a user-message affordance only — assistant replies
-          // show their actions alone. User rows read date → icons left-to-right.
+          // Only a user row can carry a timestamp (see the props above), and
+          // it reads date → icons left-to-right.
           <div
             className={cn(
               'flex items-center gap-2 px-1 leading-none text-muted-foreground select-none',
               compact ? 'text-[11px]' : 'text-[12px]',
               !isTouch &&
                 isUser && [
-                  'pointer-events-none opacity-0 transition-opacity duration-150',
+                  'pointer-events-none opacity-0 transition-opacity duration-base',
                   'group-hover:pointer-events-auto group-hover:opacity-100',
                   'group-focus-within:pointer-events-auto group-focus-within:opacity-100',
                 ],
@@ -135,5 +146,3 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
 ChatMessage.displayName = 'ChatMessage';
 
 export { ChatMessage };
-export type { ChatMessageProps };
-export default ChatMessage;

@@ -1,3 +1,14 @@
+/** The button primitive: one `<button>` whose variant, size and shape all come
+ *  from the surrounding token contexts rather than from class names passed in.
+ *  Everything clickable in the renderer that is not a menu row, a tab, or a
+ *  sidebar control routes through here, so the press feedback, the focus ring,
+ *  the icon-only sizing, and the disabled semantics stay in one place.
+ *
+ *  Consumers pick behaviour with `variant` and `size`; they never restyle it
+ *  with `className` beyond layout. There is no `color` prop — the four
+ *  variants below carry every fill this kit draws, and a caller that wanted a
+ *  fifth would be asking for a token, not a prop. */
+
 'use client';
 
 import { Button as ButtonPrimitive } from '@base-ui/react/button';
@@ -11,17 +22,18 @@ import {
   type ReactNode,
 } from 'react';
 
+import { FOCUS_RING } from '@/lib/focus-ring';
 import type { IconComponent } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
-import { useSizeVariant } from '@/lib/size-context';
+import { useSize, useSizeVariant } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
   [
     'group relative isolate inline-flex cursor-pointer items-center justify-center outline-none',
-    'transition-colors duration-80',
+    'transition-colors duration-fast',
     'disabled:pointer-events-none disabled:opacity-50',
-    'focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]',
+    FOCUS_RING,
   ],
   {
     variants: {
@@ -31,51 +43,38 @@ const buttonVariants = cva(
         tertiary: 'text-foreground',
         ghost: 'text-muted-foreground hover:text-foreground',
       },
-      // The two-step size ladder shared by every control — see /docs/sizes.
-      // default = 36px control height, compact = 28px for dense surfaces.
-      size: {
-        default: 'h-9 gap-1.5 px-4 text-[13px]',
-        compact: 'h-7 gap-1 px-3 text-[12px]',
-        icon: 'h-9 w-9 p-0 [&_svg]:h-4 [&_svg]:w-4',
-        'icon-compact': 'h-7 w-7 p-0 [&_svg]:h-3.5 [&_svg]:w-3.5',
+      // Only the icon-only square is a shape decision. Height, type step and
+      // padding all come from the size ladder (see size-context), so this
+      // component holds no copy of it.
+      iconOnly: {
+        true: 'p-0',
+        false: '',
       },
       iconLeft: { true: '' },
       iconRight: { true: '' },
     },
     compoundVariants: [
-      { size: 'compact', iconLeft: true, className: 'pl-[6px]' },
-      { size: 'default', iconLeft: true, className: 'pl-[10px]' },
-      { size: 'compact', iconRight: true, className: 'pr-[6px]' },
-      { size: 'default', iconRight: true, className: 'pr-[10px]' },
+      { iconOnly: false, iconLeft: true, className: 'pl-[10px]' },
+      { iconOnly: false, iconRight: true, className: 'pr-[10px]' },
     ],
     defaultVariants: {
       variant: 'primary',
-      size: 'default',
+      iconOnly: false,
     },
   },
 );
 
-type ButtonSizeCanonical = 'default' | 'compact' | 'icon' | 'icon-compact';
-
-/** Public size values: the canonical two-size scale plus the pre-sizes-system
- *  aliases, kept so existing call sites keep compiling. Aliases resolve onto
- *  the canonical ladder (sm → compact; md/lg → default). */
-type ButtonSize = ButtonSizeCanonical | 'sm' | 'md' | 'lg' | 'icon-sm' | 'icon-lg';
-
-const legacySizeAliases: Partial<Record<ButtonSize, ButtonSizeCanonical>> = {
-  sm: 'compact',
-  md: 'default',
-  lg: 'default',
-  'icon-sm': 'icon-compact',
-  'icon-lg': 'icon',
-};
+/** The button's shape on the ladder. `icon` is the square icon-only button at
+ *  whatever step is in force; `compact` pins a button to the dense step on a
+ *  surface that is otherwise at the default one. */
+type ButtonSize = 'default' | 'compact' | 'icon' | 'icon-compact';
 
 interface ButtonProps
   extends
     ButtonHTMLAttributes<HTMLButtonElement>,
     Omit<VariantProps<typeof buttonVariants>, 'size'> {
   /** Omitted, the button follows the surrounding SizeProvider (default 36px,
-   *  compact 28px). Legacy sm/md/lg values still resolve. */
+   *  compact 28px). */
   size?: ButtonSize;
   /** When true, the given single React-element child becomes the rendered element (slot-style). */
   asChild?: boolean;
@@ -88,13 +87,20 @@ interface ButtonProps
   active?: boolean;
 }
 
+/** The variant names, taken from the one place they are declared. Both maps
+ *  below are keyed by this rather than by `string`: a `Record<string, string>`
+ *  reads back as `string` for any key at all, so a variant added to the cva
+ *  above and forgotten here compiled fine and rendered an unstyled surface at
+ *  runtime. */
+type ButtonVariant = NonNullable<NonNullable<VariantProps<typeof buttonVariants>['variant']>>;
+
 /* Press effect: the surface layer sits 1px inside the button and a
    same-color box-shadow spread fills it back out to the full bounds.
    Pressing collapses the spread, shrinking the surface by exactly 1px per
    side at any width — a scale would warp (2% of a 400px button is 8px
    sideways but under 1px vertically). Fill colors are opaque color-mix()es
    rather than alpha so the fill and its spread ring never seam. */
-const bgVariants: Record<string, string> = {
+const bgVariants: Record<ButtonVariant, string> = {
   primary:
     '[--btn-bg:var(--foreground)] group-hover:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
   secondary:
@@ -113,7 +119,7 @@ const bgVariants: Record<string, string> = {
 
 /* Forced-active (`active` prop): pressed colors at full size; the
    geometric press-collapse still reacts on top. */
-const activeBgVariants: Record<string, string> = {
+const activeBgVariants: Record<ButtonVariant, string> = {
   primary:
     '[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
   secondary:
@@ -157,20 +163,18 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           }>)
         : null;
     const label = asChildElement ? asChildElement.props.children : children;
-    // Resolve the size: explicit prop (legacy aliases mapped onto the
-    // canonical ladder) > surrounding SizeProvider > default.
+    // `icon`/`icon-compact` say "square", `compact` says "dense step"; both
+    // resolve onto the one ladder, which the context owns.
+    const isIconOnly = size === 'icon' || size === 'icon-compact';
     const contextSize = useSizeVariant();
-    const resolvedSize: ButtonSizeCanonical = size
-      ? (legacySizeAliases[size] ?? (size as ButtonSizeCanonical))
-      : contextSize === 'compact'
+    const step =
+      size === 'compact' || size === 'icon-compact'
         ? 'compact'
-        : 'default';
-    const isIconOnly = resolvedSize === 'icon' || resolvedSize === 'icon-compact';
-    const isCompact = resolvedSize === 'compact' || resolvedSize === 'icon-compact';
-    const iconSize = isCompact ? 14 : 16;
-    // Spinner box tracks the button height so the loading glyph stays
-    // proportionate across sizes.
-    const spinnerSizeClass = isCompact ? 'h-7 w-7' : 'h-9 w-9';
+        : size === 'default' || size === 'icon'
+          ? 'default'
+          : contextSize;
+    const sizeClasses = useSize(step);
+    const iconSize = sizeClasses.icon;
     const shape = useShape();
     const bgClass = active
       ? activeBgVariants[variant ?? 'primary']
@@ -181,7 +185,11 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         <span
           aria-hidden
           className={cn(
-            'absolute inset-px rounded-[inherit] transition-[box-shadow,background-color] [transition-duration:180ms,80ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1),ease] group-active:[transition-duration:80ms,80ms]',
+            // The two durations are the motion tokens, not literals: the surface's
+            // shadow settles on the base step and its colour on the fast one, so
+            // a reduced-motion viewer gets both from the same @media block that
+            // zeroes every other transition in the app.
+            'absolute inset-px rounded-[inherit] transition-[box-shadow,background-color] [transition-duration:var(--motion-base),var(--motion-fast)] [transition-timing-function:cubic-bezier(0.23,1,0.32,1),ease] group-active:[transition-duration:var(--motion-fast),var(--motion-fast)]',
             bgClass,
           )}
         />
@@ -194,7 +202,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
                 {TrailingIcon && !isIconOnly && <TrailingIcon size={iconSize} strokeWidth={2} />}
               </span>
               <span className="absolute inset-0 flex items-center justify-center">
-                <svg className={spinnerSizeClass} viewBox="0 0 24 24" fill="none">
+                <svg className={sizeClasses.square} viewBox="0 0 24 24" fill="none">
                   <path
                     d="M 12 12 C 14 8.5 19 8.5 19 12 C 19 15.5 14 15.5 12 12 C 10 8.5 5 8.5 5 12 C 5 15.5 10 15.5 12 12 Z"
                     stroke="currentColor"
@@ -211,7 +219,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
               </span>
             </>
           ) : isIconOnly ? (
-            <span className="[&_svg]:stroke-[1.5] [&_svg]:transition-[stroke-width] [&_svg]:duration-80 group-hover:[&_svg]:stroke-[2]">
+            <span className="[&_svg]:stroke-[1.5] [&_svg]:transition-[stroke-width] [&_svg]:duration-fast group-hover:[&_svg]:stroke-[2]">
               {label}
             </span>
           ) : (
@@ -220,7 +228,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
                 <LeadingIcon
                   size={iconSize}
                   strokeWidth={1.5}
-                  className="transition-[stroke-width] duration-80 group-hover:stroke-[2]"
+                  className="transition-[stroke-width] duration-fast group-hover:stroke-[2]"
                 />
               )}
               {/* text-box only applies to block containers, so the trim lives
@@ -232,7 +240,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
                 <TrailingIcon
                   size={iconSize}
                   strokeWidth={1.5}
-                  className="transition-[stroke-width] duration-80 group-hover:stroke-[2]"
+                  className="transition-[stroke-width] duration-fast group-hover:stroke-[2]"
                 />
               )}
             </>
@@ -244,10 +252,15 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const rootClassName = cn(
       buttonVariants({
         variant,
-        size: resolvedSize,
+        iconOnly: isIconOnly,
         iconLeft: !isIconOnly && !!LeadingIcon,
         iconRight: !isIconOnly && !!TrailingIcon,
       }),
+      sizeClasses.control,
+      sizeClasses.text,
+      isIconOnly
+        ? cn(sizeClasses.square, sizeClasses.squareGlyph)
+        : cn(sizeClasses.buttonPx, sizeClasses.buttonGap),
       shape.button,
       className,
     );
@@ -284,5 +297,5 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
 Button.displayName = 'Button';
 
-export { Button, buttonVariants };
-export type { ButtonProps, ButtonSize };
+export { Button };
+export type { ButtonProps };

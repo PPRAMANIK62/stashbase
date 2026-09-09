@@ -11,7 +11,6 @@ function InputGroupExample({ error = false }: { error?: boolean }) {
     <InputGroup className="w-96 max-w-full">
       <InputField
         icon={Search}
-        index={0}
         label="Search"
         onChange={setSearch}
         placeholder="Search documents"
@@ -20,7 +19,6 @@ function InputGroupExample({ error = false }: { error?: boolean }) {
       <InputField
         error={error ? 'Enter a complete email address.' : undefined}
         icon={Mail}
-        index={1}
         label="Email"
         onChange={setEmail}
         placeholder="you@example.com"

@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vite-plus/test';
 
+import { expectNoA11yViolations } from '@/test/axe';
+
 import { CommandItem, CommandList } from './command-menu';
 
 function CommandListHarness() {
@@ -11,14 +13,9 @@ function CommandListHarness() {
       activeIndex={activeIndex}
       aria-label="Documents"
       onActiveIndexChange={setActiveIndex}
-      role="listbox"
     >
-      <CommandItem active={activeIndex === 0} index={0}>
-        First.md
-      </CommandItem>
-      <CommandItem active={activeIndex === 1} index={1}>
-        Second.md
-      </CommandItem>
+      <CommandItem>First.md</CommandItem>
+      <CommandItem>Second.md</CommandItem>
     </CommandList>
   );
 }
@@ -55,17 +52,19 @@ afterEach(cleanup);
 
 describe('CommandList', () => {
   it('uses pointer proximity to move the active option', async () => {
-    render(<CommandListHarness />);
+    const view = render(<CommandListHarness />);
     const list = screen.getByRole('listbox', { name: 'Documents' });
     const [first, second] = screen.getAllByRole('option');
+    if (!first || !second) throw new Error('The harness renders two options.');
     setBox(list, { height: 72, width: 240 }, null);
-    setBox(first!, { height: 36, top: 0, width: 240 }, list);
-    setBox(second!, { height: 36, top: 36, width: 240 }, list);
+    setBox(first, { height: 36, top: 0, width: 240 }, list);
+    setBox(second, { height: 36, top: 36, width: 240 }, list);
 
     fireEvent.mouseEnter(list);
     fireEvent.mouseMove(list, { clientX: 20, clientY: 54 });
 
-    await waitFor(() => expect(second?.getAttribute('aria-selected')).toBe('true'));
-    expect(first?.getAttribute('aria-selected')).toBe('false');
+    await waitFor(() => expect(second.getAttribute('aria-selected')).toBe('true'));
+    expect(first.getAttribute('aria-selected')).toBe('false');
+    await expectNoA11yViolations(view.container);
   });
 });

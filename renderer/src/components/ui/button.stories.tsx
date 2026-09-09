@@ -53,7 +53,11 @@ export const IconsAndLoading: Story = {
 };
 
 export const Clicked: Story = {
+  // Re-runnable: the handler is a module-level mock shared with every other
+  // story in this file, and the accessibility run replays each play once per
+  // environment. Clearing first keeps "exactly once" a claim about this click.
   play: async ({ canvasElement }) => {
+    onClick.mockClear();
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Save changes' }));
     await expect(onClick).toHaveBeenCalledOnce();
   },

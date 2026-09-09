@@ -1,6 +1,12 @@
+/** Data table primitive: the semantic `<table>` scaffolding, plus the single
+ *  hover block that travels between rows instead of each row painting its own
+ *  (see `proximity-highlight.tsx`). It owns presentation only — sorting,
+ *  selection and paging stay with the caller, which passes already-ordered
+ *  rows. The parts mirror the HTML elements one-for-one so a consumer keeps
+ *  real table semantics. */
+
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   useRef,
   useEffect,
@@ -14,10 +20,11 @@ import {
   type ThHTMLAttributes,
 } from 'react';
 
-import { useProximityHover } from '@/hooks/use-proximity-hover';
+import { ProximityHighlight } from '@/components/internal/proximity-highlight';
 import { fontWeights } from '@/lib/font-weight';
+import { mergeRefs } from '@/lib/merge-refs';
 import { SizeProvider, useSize, type SizeVariant } from '@/lib/size-context';
-import { spring } from '@/lib/springs';
+import { useProximityHover } from '@/lib/use-proximity-hover';
 import { cn } from '@/lib/utils';
 
 // ── Context ──────────────────────────────────────────────
@@ -68,33 +75,7 @@ const Table = forwardRef<HTMLTableElement, TableProps>(
           onMouseLeave={handlers.onMouseLeave}
         >
           {/* Hover background */}
-          <AnimatePresence>
-            {activeRect && (
-              <motion.div
-                key={sessionRef.current}
-                className="pointer-events-none absolute bg-hover"
-                initial={{
-                  opacity: 0,
-                  top: activeRect.top,
-                  left: activeRect.left,
-                  width: activeRect.width,
-                  height: activeRect.height,
-                }}
-                animate={{
-                  opacity: 1,
-                  top: activeRect.top,
-                  left: activeRect.left,
-                  width: activeRect.width,
-                  height: activeRect.height,
-                }}
-                exit={{ opacity: 0, transition: spring.fast.exit }}
-                transition={{
-                  ...spring.fast,
-                  opacity: { duration: 0.08 },
-                }}
-              />
-            )}
-          </AnimatePresence>
+          <ProximityHighlight className="bg-hover" rect={activeRect} session={sessionRef.current} />
 
           <table
             ref={ref}
@@ -156,14 +137,10 @@ const TableRow = forwardRef<HTMLTableRowElement, TableRowProps>(
 
     return (
       <tr
-        ref={(node) => {
-          (internalRef as React.MutableRefObject<HTMLTableRowElement | null>).current = node;
-          if (typeof ref === 'function') ref(node);
-          else if (ref) (ref as React.MutableRefObject<HTMLTableRowElement | null>).current = node;
-        }}
+        ref={mergeRefs(internalRef, ref)}
         data-proximity-index={index}
         className={cn(
-          'group/row relative z-10 border-b transition-[border-color] duration-80',
+          'group/row relative z-10 border-b transition-[border-color] duration-fast',
           hideBorder ? 'border-transparent' : 'border-accent/40',
           isBodyRow && activeIdx === index && 'is-active',
           className,
@@ -211,7 +188,7 @@ const TableCell = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCel
       <td
         ref={ref}
         className={cn(
-          'text-muted-foreground transition-colors duration-80 group-[.is-active]/row:text-foreground',
+          'text-muted-foreground transition-colors duration-fast group-[.is-active]/row:text-foreground',
           sizeClasses.variant === 'compact' ? 'px-2.5 py-[5px]' : 'px-3 py-2',
           className,
         )}

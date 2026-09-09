@@ -1,3 +1,8 @@
+/** Toggle switch: a Base UI switch with a thumb animated by a motion value
+ *  rather than a CSS transition, so a press that lands mid-travel retargets
+ *  the spring instead of restarting it. Track colour, size and shape come from
+ *  the token contexts; the component takes only checked state and a label. */
+
 'use client';
 
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
@@ -12,8 +17,11 @@ import {
   type HTMLAttributes,
 } from 'react';
 
+import { focusRing } from '@/lib/focus-ring';
+import { motionStyle } from '@/lib/motion-style';
 import { useSize, type SizeVariant } from '@/lib/size-context';
 import { spring } from '@/lib/springs';
+import { instant, useMotionTier } from '@/lib/use-motion-tier';
 import { cn } from '@/lib/utils';
 
 interface SwitchProps extends HTMLAttributes<HTMLDivElement> {
@@ -24,49 +32,22 @@ interface SwitchProps extends HTMLAttributes<HTMLDivElement> {
   checked: boolean;
   onToggle: () => void;
   disabled?: boolean;
-  thumbTransition?: Transition;
   /** Pins the switch to one step of the size ladder (see /docs/sizes).
    *  Omitted, it follows the surrounding SizeProvider. */
   size?: SizeVariant;
 }
 
-// Track/thumb geometry per ladder step. The hover pill-extend and press
-// squash scale down with the thumb so the compact switch keeps the same feel.
-const METRICS = {
-  default: {
-    trackWidth: 34,
-    trackHeight: 20,
-    thumbSize: 16,
-    pillExtend: 2,
-    pressExtend: 4,
-    pressShrink: 4,
-  },
-  compact: {
-    trackWidth: 28,
-    trackHeight: 16,
-    thumbSize: 12,
-    pillExtend: 2,
-    pressExtend: 3,
-    pressShrink: 3,
-  },
-} as const;
-
 const THUMB_OFFSET = 2;
 const DRAG_DEAD_ZONE = 2;
 
+/** The two elements Base UI renders for the control proper: the `role="switch"`
+ *  box and the visually-hidden checkbox it mirrors state into. Anything else
+ *  inside the wrapper (the label, the padding) is the widened target. */
+const CONTROL_SELECTOR = '[role="switch"], input[type="checkbox"]';
+
 const Switch = forwardRef<HTMLDivElement, SwitchProps>(
   (
-    {
-      label,
-      labelHidden = false,
-      checked,
-      onToggle,
-      disabled = false,
-      thumbTransition,
-      size,
-      className,
-      ...props
-    },
+    { label, labelHidden = false, checked, onToggle, disabled = false, size, className, ...props },
     ref,
   ) => {
     const labelId = useId();
@@ -74,7 +55,10 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
     const [hovered, setHovered] = useState(false);
     const [pressed, setPressed] = useState(false);
     const sizeClasses = useSize(size);
-    const m = METRICS[sizeClasses.variant];
+    // Track and thumb geometry are ladder steps like the type and the padding
+    // are; the hover pill-extend and press squash scale with the thumb so the
+    // compact switch keeps the same feel.
+    const m = sizeClasses.switchGeometry;
     const thumbTravel = m.trackWidth - m.thumbSize - THUMB_OFFSET * 2;
 
     const dragging = useRef(false);
@@ -85,6 +69,10 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
     } | null>(null);
 
     const motionX = useMotionValue(checked ? THUMB_OFFSET + thumbTravel : THUMB_OFFSET);
+
+    // The thumb's slide, honouring a reduced-motion preference: the switch
+    // still lands in the right place, it just gets there without travelling.
+    const slide: Transition = useMotionTier(spring.moderate);
 
     useEffect(() => {
       hasMounted.current = true;
@@ -105,9 +93,9 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
       if (!hasMounted.current) {
         motionX.set(thumbX);
       } else {
-        animate(motionX, thumbX, thumbTransition ?? spring.moderate);
+        animate(motionX, thumbX, slide);
       }
-    }, [thumbX, motionX, thumbTransition]);
+    }, [thumbX, motionX, slide]);
 
     const handlePointerDown = useCallback(
       (e: React.PointerEvent<HTMLDivElement>) => {
@@ -164,7 +152,7 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
           onToggle();
         } else {
           const snapTarget = checked ? THUMB_OFFSET + thumbTravel : THUMB_OFFSET;
-          animate(motionX, snapTarget, thumbTransition ?? spring.moderate);
+          animate(motionX, snapTarget, slide);
         }
 
         requestAnimationFrame(() => {
@@ -173,7 +161,7 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
       }
 
       pointerStart.current = null;
-    }, [checked, onToggle, motionX, thumbTransition, m, thumbTravel]);
+    }, [checked, onToggle, motionX, slide, m, thumbTravel]);
 
     const handlePointerCancel = useCallback(() => {
       if (!pointerStart.current) return;
@@ -182,14 +170,18 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
       if (dragging.current) {
         dragging.current = false;
         const snapTarget = checked ? THUMB_OFFSET + thumbTravel : THUMB_OFFSET;
-        animate(motionX, snapTarget, thumbTransition ?? spring.moderate);
+        animate(motionX, snapTarget, slide);
       }
 
       pointerStart.current = null;
-    }, [checked, motionX, thumbTransition, thumbTravel]);
+    }, [checked, motionX, slide, thumbTravel]);
 
     return (
+      // Presentational wrapper: the nested SwitchPrimitive.Root is the real
+      // control — it owns the role, focus, and keyboard activation — while
+      // this box only widens the pointer target across the label and gutter.
       <div
+        role="presentation"
         ref={ref}
         className={cn(
           'relative z-10 flex cursor-pointer touch-none items-center select-none',
@@ -208,8 +200,17 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onClick={() => {
+        onClick={(event) => {
           if (disabled || didDrag.current) return;
+          // A press on the control itself — or on the hidden checkbox Base UI
+          // mirrors it into — has already toggled through `onCheckedChange`.
+          // It only reaches this wrapper because it bubbles, and acting on it
+          // again would undo the change the user just made. Keyboard
+          // activation arrives the same way, as a synthesised click. The
+          // wrapper exists only to widen the target across the label and the
+          // gutter, so those are the clicks it answers.
+          const target = event.target;
+          if (target instanceof Element && target.closest(CONTROL_SELECTOR)) return;
           onToggle();
         }}
         {...props}
@@ -227,16 +228,16 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
           tabIndex={0}
           className={cn(
             'relative shrink-0 cursor-pointer rounded-full outline-none',
-            'transition-colors duration-80',
-            'focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)] focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+            'transition-colors duration-fast',
+            focusRing('focus-visible:ring-offset-2 focus-visible:ring-offset-background'),
           )}
           style={{
             width: m.trackWidth,
             height: m.trackHeight,
             backgroundColor: checked
               ? hovered
-                ? '#5C89F2'
-                : '#6B97FF'
+                ? 'var(--control-on-hover)'
+                : 'var(--control-on)'
               : hovered
                 ? 'color-mix(in oklab, var(--accent), rgb(var(--overlay)) 10%)'
                 : 'var(--accent)',
@@ -244,7 +245,7 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
           onClick={(e) => e.stopPropagation()}
         >
           <SwitchPrimitive.Thumb
-            render={(props) => {
+            render={(thumbProps) => {
               const {
                 style: baseStyle,
                 onDrag: _onDrag,
@@ -254,24 +255,19 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
                 onAnimationEnd: _onAnimationEnd,
                 onAnimationIteration: _onAnimationIteration,
                 ...rest
-              } = props as React.HTMLAttributes<HTMLSpanElement>;
+              } = thumbProps as React.HTMLAttributes<HTMLSpanElement>;
               return (
                 <motion.span
                   {...rest}
                   className="absolute top-0 left-0 block rounded-full bg-white shadow-sm"
                   initial={false}
-                  style={{
-                    ...(baseStyle as React.CSSProperties | undefined),
-                    x: motionX,
-                  }}
+                  style={{ ...motionStyle(baseStyle), x: motionX }}
                   animate={{
                     y: thumbY,
                     width: thumbWidth,
                     height: thumbHeight,
                   }}
-                  transition={
-                    hasMounted.current ? (thumbTransition ?? spring.moderate) : { duration: 0 }
-                  }
+                  transition={hasMounted.current ? slide : instant}
                 />
               );
             }}
@@ -284,7 +280,7 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
           className={cn(
             // text-box trim recenters the letterforms against the track; the
             // track is taller than the label, so layout doesn't change.
-            'transition-[color] duration-80 [text-box:trim-both_cap_alphabetic]',
+            'transition-[color] duration-fast [text-box:trim-both_cap_alphabetic]',
             sizeClasses.text,
             checked ? 'text-foreground' : 'text-muted-foreground',
             labelHidden && 'sr-only',
@@ -300,4 +296,3 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
 Switch.displayName = 'Switch';
 
 export { Switch };
-export type { SwitchProps };

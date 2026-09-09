@@ -21,8 +21,8 @@ function SubtleTabsExample({ activeLabel = false }: { activeLabel?: boolean }) {
         onSelect={setSelected}
         selectedIndex={selected}
       >
-        {items.map((item, index) => (
-          <TabsSubtleItem index={index} key={item.label} {...item} />
+        {items.map((item) => (
+          <TabsSubtleItem key={item.label} {...item} />
         ))}
       </TabsSubtle>
       {items.map((item, index) => (

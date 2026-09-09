@@ -4,70 +4,50 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { forwardRef, type HTMLAttributes } from 'react';
 
 import { useShape } from '@/lib/shape-context';
-import { useSizeVariant } from '@/lib/size-context';
+import { useSize, type SizeVariant } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 
+/** One hue per thing a badge is ever saying, and nothing beyond that.
+ *
+ *  This was a seventeen-colour palette — the whole Tailwind wheel, orange
+ *  through rose — of which five were ever asked for. A colour with no caller
+ *  is not a choice a designer gets to make later; it is a token in globals.css
+ *  that nothing reads and a name a reader has to rule out. `gray` is the
+ *  neutral default; the other four are the states the product actually
+ *  reports. */
 const badgeColors = {
-  gray: '#a3a3a3',
-  red: '#ef4444',
-  orange: '#f97316',
-  amber: '#f59e0b',
-  yellow: '#eab308',
-  lime: '#84cc16',
-  green: '#22c55e',
-  emerald: '#10b981',
-  teal: '#14b8a6',
-  cyan: '#06b6d4',
-  blue: '#3b82f6',
-  indigo: '#6366f1',
-  violet: '#8b5cf6',
-  purple: '#a855f7',
-  fuchsia: '#d946ef',
-  pink: '#ec4899',
-  rose: '#f43f5e',
+  gray: 'var(--badge-gray)',
+  /** Failed, blocked, rejected. */
+  red: 'var(--badge-red)',
+  /** Something needs attention but nothing is broken. */
+  amber: 'var(--badge-amber)',
+  /** Informational — a source, a kind, a label that classifies. */
+  blue: 'var(--badge-blue)',
+  /** Ready, complete, healthy. */
+  green: 'var(--badge-green)',
 } as const;
 
 type BadgeColor = keyof typeof badgeColors;
 
+// The box and the dot come from the shared ladder (`badge`, `badgeDot`,
+// `caption` in lib/size-context) rather than a second two-entry map here.
 const badgeVariants = cva('inline-flex items-center font-medium whitespace-nowrap', {
   variants: {
     variant: {
       solid: '',
       dot: 'border border-border text-foreground',
     },
-    // The two-step size ladder shared by every control — see /docs/sizes.
-    size: {
-      default: 'h-6 gap-1.5 px-2.5 text-[12px]',
-      compact: 'h-5 gap-1 px-2 text-[11px]',
-    },
   },
   defaultVariants: {
     variant: 'solid',
-    size: 'default',
   },
 });
 
-type BadgeSizeCanonical = 'default' | 'compact';
-
-/** Public size values: the canonical two-size scale plus the pre-sizes-system
- *  aliases, kept so existing call sites keep compiling. Aliases resolve onto
- *  the canonical ladder (sm → compact; md/lg → default). */
-type BadgeSize = BadgeSizeCanonical | 'sm' | 'md' | 'lg';
-
-const legacySizeAliases: Partial<Record<BadgeSize, BadgeSizeCanonical>> = {
-  sm: 'compact',
-  md: 'default',
-  lg: 'default',
-};
-
 interface BadgeProps
-  extends
-    Omit<HTMLAttributes<HTMLSpanElement>, 'color'>,
-    Omit<VariantProps<typeof badgeVariants>, 'size'> {
+  extends Omit<HTMLAttributes<HTMLSpanElement>, 'color'>, VariantProps<typeof badgeVariants> {
   color?: BadgeColor;
-  /** Omitted, the badge follows the surrounding SizeProvider. Legacy
-   *  sm/md/lg values still resolve. */
-  size?: BadgeSize;
+  /** Omitted, the badge follows the surrounding SizeProvider. */
+  size?: SizeVariant;
 }
 
 const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
@@ -76,17 +56,10 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
     ref,
   ) => {
     const shape = useShape();
-    // Resolve the size: explicit prop (legacy aliases mapped onto the
-    // canonical ladder) > surrounding SizeProvider > default.
-    const contextSize = useSizeVariant();
-    const size: BadgeSizeCanonical = sizeProp
-      ? (legacySizeAliases[sizeProp] ?? (sizeProp as BadgeSizeCanonical))
-      : contextSize === 'compact'
-        ? 'compact'
-        : 'default';
+    // Resolve the size: explicit prop > surrounding SizeProvider > default.
+    const sizeClasses = useSize(sizeProp);
     const colorValue = badgeColors[color];
     const isSolid = variant === 'solid';
-    const dotSize = size === 'compact' ? 6 : 7;
 
     const colorStyle = isSolid
       ? color === 'gray'
@@ -102,7 +75,13 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
     return (
       <span
         ref={ref}
-        className={cn(badgeVariants({ variant, size }), shape.item, className)}
+        className={cn(
+          badgeVariants({ variant }),
+          sizeClasses.badge,
+          sizeClasses.caption,
+          shape.item,
+          className,
+        )}
         style={{ ...colorStyle, ...style }}
         {...props}
       >
@@ -110,8 +89,8 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
           <span
             className="shrink-0 rounded-full"
             style={{
-              width: dotSize,
-              height: dotSize,
+              width: sizeClasses.badgeDot,
+              height: sizeClasses.badgeDot,
               backgroundColor: dotColor,
             }}
           />
@@ -127,5 +106,5 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
 
 Badge.displayName = 'Badge';
 
-export { Badge, badgeVariants, badgeColors };
-export type { BadgeProps, BadgeColor, BadgeSize };
+export { Badge, badgeColors };
+export type { BadgeColor };
