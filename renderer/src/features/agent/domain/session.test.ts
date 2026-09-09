@@ -164,6 +164,39 @@ describe('Agent session domain', () => {
     expect(queued.queuedPrompts.at(-1)?.id).toBe('queued-19');
   });
 
+  it('records a native file diff once as settled work', () => {
+    const live = transitionAgentSession(
+      createAgentSessionState({ agent: 'stashbase', id: 'chat-1', scope: { kind: 'library' } }),
+      { type: 'ready' },
+    );
+    const change = {
+      additions: 1,
+      after: 'one\ntwo\n',
+      before: 'one\n',
+      deletions: 0,
+      id: 'diff:1',
+      path: 'notes.md',
+      type: 'record-file-change' as const,
+    };
+    const recorded = transitionAgentSession(live, change);
+    expect(recorded.transcript).toEqual([
+      {
+        id: 'diff:1',
+        input: {
+          additions: 1,
+          after: 'one\ntwo\n',
+          before: 'one\n',
+          deletions: 0,
+          path: 'notes.md',
+        },
+        kind: 'tool',
+        name: 'FileDiff',
+        status: 'done',
+      },
+    ]);
+    expect(transitionAgentSession(recorded, change)).toBe(recorded);
+  });
+
   it('sends bound context with the prompt and clears it from the draft', () => {
     const initial = createAgentSessionState({
       agent: 'codex',

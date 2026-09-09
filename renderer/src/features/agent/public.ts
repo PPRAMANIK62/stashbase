@@ -4,6 +4,7 @@ export { AgentChats, AgentWorkspace } from './ui/workspace-lazy';
 export { AgentTitlebar } from './ui/titlebar';
 export { useAgentWorkspaceRuntime } from './hooks/use-agent-workspace-runtime';
 export type { AgentCatalogPort, AgentContextPort, AgentSessionPort } from './application/ports';
+export type { AgentFilesChanged } from './application/session-runtime';
 export type {
   AgentContextReadiness,
   AgentScopeEnvironment,

@@ -200,6 +200,74 @@ describe('AgentSessionRuntime', () => {
     ]);
   });
 
+  it('reports files only after a write settles successfully or a native diff arrives', () => {
+    const test = harness();
+    const onFilesChanged = vi.fn();
+    const runtime = createAgentSessionRuntime({
+      agent: 'claude',
+      id: 'chat-1',
+      onFilesChanged,
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'folder', path: '/library/Research' },
+    });
+    const listener = test.listeners[0]!;
+    listener.onEvent({ kind: 'ready' });
+    listener.onEvent({
+      id: 'write-1',
+      input: { content: '# Notes', file_path: '/library/Research/notes.md' },
+      kind: 'tool-started',
+      name: 'Write',
+    });
+    listener.onEvent({
+      id: 'read-1',
+      input: { file_path: '/library/Research/notes.md' },
+      kind: 'tool-started',
+      name: 'Read',
+    });
+    listener.onEvent({ content: '', id: 'read-1', isError: false, kind: 'tool-finished' });
+    listener.onEvent({ content: 'EACCES', id: 'write-1', isError: true, kind: 'tool-finished' });
+    expect(onFilesChanged).not.toHaveBeenCalled();
+
+    listener.onEvent({
+      id: 'edit-1',
+      input: { file_path: 'plan.md', new_string: 'b', old_string: 'a' },
+      kind: 'tool-started',
+      name: 'Edit',
+    });
+    listener.onEvent({ content: 'ok', id: 'edit-1', isError: false, kind: 'tool-finished' });
+    listener.onEvent({
+      additions: 1,
+      after: 'x\n',
+      before: '',
+      deletions: 0,
+      id: 'diff:1',
+      kind: 'file-changed',
+      path: 'new.md',
+    });
+
+    expect(onFilesChanged.mock.calls).toEqual([
+      [
+        {
+          paths: ['plan.md'],
+          scope: { kind: 'folder', path: '/library/Research' },
+          sources: [{ folderPath: '/library/Research', path: 'plan.md' }],
+        },
+      ],
+      [
+        {
+          paths: ['new.md'],
+          scope: { kind: 'folder', path: '/library/Research' },
+          sources: [{ folderPath: '/library/Research', path: 'new.md' }],
+        },
+      ],
+    ]);
+    expect(runtime.store.getState().transcript.at(-1)).toMatchObject({
+      name: 'FileDiff',
+      status: 'done',
+    });
+  });
+
   it('answers only the current permission request and keeps the decision inspectable', () => {
     const test = harness();
     const runtime = createAgentSessionRuntime({

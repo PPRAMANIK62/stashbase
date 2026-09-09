@@ -116,8 +116,17 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
       return 'reason' in event
         ? { folderPath: event.folder, kind: 'scope-retired' }
         : { kind: 'exited', message: event.message ?? null };
-    case 'skills':
     case 'file-diff':
+      return {
+        additions: event.additions,
+        after: event.after,
+        before: event.before,
+        deletions: event.deletions,
+        id: event.id,
+        kind: 'file-changed',
+        path: event.file,
+      };
+    case 'skills':
     case 'steer-result':
       return null;
   }

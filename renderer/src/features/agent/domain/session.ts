@@ -69,6 +69,17 @@ export type AgentSessionEvent =
   | { kind: 'tool-output'; id: string; delta: string }
   | { kind: 'tool-finished'; id: string; content: string; isError: boolean }
   | {
+      /** A whole-file change the runtime reports on its own, beside any
+       *  tool call: the Built-in agent's native diffs. */
+      kind: 'file-changed';
+      id: string;
+      path: string;
+      before: string;
+      after: string;
+      additions: number;
+      deletions: number;
+    }
+  | {
       kind: 'permission-requested';
       id: string;
       toolUseId: string;
@@ -184,6 +195,15 @@ export type AgentSessionAction =
   | { type: 'start-tool'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'append-tool-output'; id: string; delta: string }
   | { type: 'finish-tool'; id: string; content: string; isError: boolean }
+  | {
+      type: 'record-file-change';
+      id: string;
+      path: string;
+      before: string;
+      after: string;
+      additions: number;
+      deletions: number;
+    }
   | {
       type: 'request-permission';
       id: string;
@@ -324,6 +344,30 @@ export function transitionAgentSession(
             : block,
         ),
       };
+    case 'record-file-change':
+      // A native diff is settled work the moment it arrives; it renders as
+      // the same `FileDiff` tool block that replayed history carries.
+      return state.transcript.some((block) => block.kind === 'tool' && block.id === action.id)
+        ? state
+        : {
+            ...state,
+            transcript: [
+              ...state.transcript,
+              {
+                id: action.id,
+                input: {
+                  additions: action.additions,
+                  after: action.after,
+                  before: action.before,
+                  deletions: action.deletions,
+                  path: action.path,
+                },
+                kind: 'tool',
+                name: 'FileDiff',
+                status: 'done',
+              },
+            ],
+          };
     case 'request-permission':
       return {
         ...state,

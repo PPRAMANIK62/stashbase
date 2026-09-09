@@ -208,6 +208,17 @@ describe('Agent session API', () => {
     expect(connection.send?.({ t: 'permission-reply', id: 'permission-1', allow: true })).toBe(
       true,
     );
+    onMessage?.({
+      data: JSON.stringify({
+        t: 'file-diff',
+        id: 'diff:1',
+        file: 'notes.md',
+        before: 'one\n',
+        after: 'one\ntwo\n',
+        additions: 1,
+        deletions: 0,
+      }),
+    });
 
     expect(events).toEqual([
       { id: 'tool-1', input: { command: 'pwd' }, kind: 'tool-started', name: 'Bash' },
@@ -218,6 +229,15 @@ describe('Agent session API', () => {
         name: 'Bash',
         title: null,
         toolUseId: 'tool-1',
+      },
+      {
+        additions: 1,
+        after: 'one\ntwo\n',
+        before: 'one\n',
+        deletions: 0,
+        id: 'diff:1',
+        kind: 'file-changed',
+        path: 'notes.md',
       },
     ]);
     expect(sent).toEqual([

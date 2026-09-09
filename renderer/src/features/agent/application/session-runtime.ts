@@ -19,6 +19,7 @@ import {
   type ResolvedContextLine,
 } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
+import { changedSource, fileChangesForTool } from '@/features/agent/domain/file-change';
 import {
   agentSessionIsBlank,
   createAgentSessionState,
@@ -29,6 +30,7 @@ import {
   type AgentSessionState,
 } from '@/features/agent/domain/session';
 import type { AgentAccessMode } from '@/protocols/websocket/agent-session';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
 const RECONNECT_DELAYS_MS = [250, 1_000, 3_000] as const;
 const MAX_DEQUEUED = 20;
@@ -42,6 +44,15 @@ export type AgentSendResult =
 export interface AgentSessionEnvironment {
   listing: AgentScopeListing | null;
   readiness: Readonly<Record<string, AgentContextReadiness>>;
+}
+
+/** Files a settled tool or native diff left changed under one scope. */
+export interface AgentFilesChanged {
+  scope: AgentScope;
+  /** Every path as the runtime named it. */
+  paths: string[];
+  /** The ones that resolve to a source inside the scoped folder. */
+  sources: SourceReference[];
 }
 
 interface PendingPrompt {
@@ -96,6 +107,9 @@ export interface AgentSessionRuntimeOptions {
   context?: AgentContextPort;
   environment?: () => AgentSessionEnvironment | null;
   id: string;
+  /** Called after a write tool settles successfully or a native diff
+   *  arrives, so the shell can refresh what the change touched. */
+  onFilesChanged?: (change: AgentFilesChanged) => void;
   port: AgentSessionPort;
   scheduler?: AgentReconnectScheduler;
   scope: AgentScope;
@@ -154,6 +168,7 @@ export function createAgentSessionRuntime({
   context: contextPort = unavailableContextPort(),
   environment = () => null,
   id,
+  onFilesChanged,
   port,
   scheduler = defaultScheduler(),
   scope,
@@ -186,6 +201,17 @@ export function createAgentSessionRuntime({
 
   const transition = (action: Parameters<typeof transitionAgentSession>[1]) => {
     store.setState((state) => transitionAgentSession(state, action), true);
+  };
+
+  const notifyFilesChanged = (changed: string[]) => {
+    if (changed.length === 0 || !onFilesChanged) return;
+    const scope = store.getState().scope;
+    const paths = [...new Set(changed)];
+    onFilesChanged({
+      paths,
+      scope,
+      sources: paths.flatMap((path) => changedSource(scope, path) ?? []),
+    });
   };
 
   const stashDequeued = (promptId: string, prompt: DequeuedPrompt) => {
@@ -373,13 +399,36 @@ export function createAgentSessionRuntime({
               case 'tool-output':
                 transition({ delta: event.delta, id: event.id, type: 'append-tool-output' });
                 break;
-              case 'tool-finished':
+              case 'tool-finished': {
+                const tool = store
+                  .getState()
+                  .transcript.find((block) => block.kind === 'tool' && block.id === event.id);
+                const settles =
+                  tool?.kind === 'tool' && tool.status !== 'denied' && tool.status !== 'cancelled';
                 transition({
                   content: event.content,
                   id: event.id,
                   isError: event.isError,
                   type: 'finish-tool',
                 });
+                if (settles && !event.isError) {
+                  notifyFilesChanged(
+                    fileChangesForTool(tool.name, tool.input).map((change) => change.path),
+                  );
+                }
+                break;
+              }
+              case 'file-changed':
+                transition({
+                  additions: event.additions,
+                  after: event.after,
+                  before: event.before,
+                  deletions: event.deletions,
+                  id: event.id,
+                  path: event.path,
+                  type: 'record-file-change',
+                });
+                notifyFilesChanged([event.path]);
                 break;
               case 'permission-requested':
                 transition({

@@ -7,6 +7,7 @@ import type {
 } from '@/features/agent/application/ports';
 import {
   createAgentSessionRuntime,
+  type AgentFilesChanged,
   type AgentSessionRuntime,
 } from '@/features/agent/application/session-runtime';
 import type { AgentScopeEnvironment } from '@/features/agent/domain/context';
@@ -59,6 +60,8 @@ export interface AgentWorkspaceRuntimeOptions {
   createId(): string;
   folderPath: string | null;
   initialAgent?: AgentId;
+  /** Files any session's settled write left changed. */
+  onFilesChanged?: (change: AgentFilesChanged) => void;
   port: AgentSessionPort;
   scheduler?: AgentReconnectScheduler;
 }
@@ -75,6 +78,7 @@ export function createAgentWorkspaceRuntime({
   createId,
   folderPath: initialFolderPath,
   initialAgent = 'stashbase',
+  onFilesChanged,
   port,
   scheduler,
 }: AgentWorkspaceRuntimeOptions): AgentWorkspaceRuntime {
@@ -150,6 +154,7 @@ export function createAgentWorkspaceRuntime({
           : null;
       },
       id,
+      onFilesChanged,
       port,
       scheduler,
       scope,

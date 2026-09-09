@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type { AgentContextPort, AgentSessionPort } from '@/features/agent/application/ports';
+import type { AgentFilesChanged } from '@/features/agent/application/session-runtime';
 import {
   createAgentWorkspaceRuntime,
   type AgentWorkspaceRuntime,
@@ -10,6 +11,8 @@ export interface AgentWorkspaceRuntimeOptions {
   context: AgentContextPort;
   createId(): string;
   folderPath: string | null;
+  /** Files an Agent's settled write changed; the latest handler is called. */
+  onFilesChanged?: (change: AgentFilesChanged) => void;
   session: AgentSessionPort;
   subscribeFolderRemoved(handler: (folderPath: string) => void): () => void;
 }
@@ -20,15 +23,19 @@ export function useAgentWorkspaceRuntime({
   context,
   createId,
   folderPath,
+  onFilesChanged,
   session,
   subscribeFolderRemoved,
 }: AgentWorkspaceRuntimeOptions): AgentWorkspaceRuntime {
+  const filesChangedHandler = useRef(onFilesChanged);
+  filesChangedHandler.current = onFilesChanged;
   const [runtime] = useState(() =>
     createAgentWorkspaceRuntime({
       autostart: false,
       context,
       createId,
       folderPath,
+      onFilesChanged: (change) => filesChangedHandler.current?.(change),
       port: session,
     }),
   );
