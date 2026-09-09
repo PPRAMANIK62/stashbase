@@ -61,7 +61,8 @@ describe('SettingsShell', () => {
     );
 
     expect(await screen.findByText('Agent runtimes content')).not.toBeNull();
-    expect(screen.getByRole('navigation').className).toContain('bg-surface-4');
+    expect(screen.getByRole('navigation').className).not.toContain('bg-surface');
+    expect(screen.getByRole('dialog').className).toContain('bg-surface-2');
     const generalItem = screen.getByRole('button', { name: /General/ });
     expect(generalItem).toHaveProperty('disabled', true);
     expect(screen.getByText('Soon')).not.toBeNull();

@@ -88,7 +88,7 @@ const managedClaude: Agent = {
 };
 
 describe('AgentRuntimesPanel', () => {
-  it('uses the managed disclosure and one-step inset surfaces for runtime details', async () => {
+  it('uses the managed disclosure and hairline lists with no surface fill', async () => {
     const port = fakePort({
       listAgents: vi.fn(async () =>
         catalog([
@@ -112,9 +112,14 @@ describe('AgentRuntimesPanel', () => {
     expect(detail.id).toBe(panelId);
     expect(detail.hidden).toBe(false);
     const runtimeList = screen.getByRole('list');
-    expect(runtimeList.className).toContain('bg-surface-4');
-    const runtimeIcon = screen.getByText('Claude Code').closest('li')?.firstElementChild;
-    expect(runtimeIcon?.className).toContain('bg-surface-3');
+    expect(runtimeList.className).toContain('border-border');
+    expect(runtimeList.className).not.toContain('bg-surface');
+    const runtimeIcon = screen
+      .getByText('Claude Code')
+      .closest('li')
+      ?.querySelector('svg')?.parentElement;
+    expect(runtimeIcon?.className).toContain('border-border');
+    expect(runtimeIcon?.className).not.toContain('bg-surface');
   });
 
   it('installs a not-yet-installed runtime and writes the response into the catalog', async () => {

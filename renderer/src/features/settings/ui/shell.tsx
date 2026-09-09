@@ -100,7 +100,7 @@ export function SettingsShell({
       <Dialog onOpenChange={(next) => !next && onClose()} open={open}>
         <DialogContent
           aria-label="Settings"
-          className="flex h-[min(78vh,640px)] flex-col"
+          className="flex h-[min(78vh,640px)] flex-col bg-surface-2"
           presentation="shell"
         >
           <div className="flex h-14 flex-none items-center gap-2 border-b border-border px-5">
@@ -122,7 +122,7 @@ export function SettingsShell({
             className={cn('grid min-h-0 flex-1', compact ? 'grid-cols-1' : 'grid-cols-[190px_1fr]')}
           >
             {!compact && (
-              <nav className="overflow-y-auto border-r border-border bg-surface-4 p-2">
+              <nav className="overflow-y-auto border-r border-border p-2">
                 <SectionsNav activeId={section} onSelect={selectSection} sections={sections} />
               </nav>
             )}

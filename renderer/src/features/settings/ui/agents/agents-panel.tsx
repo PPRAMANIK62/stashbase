@@ -18,8 +18,15 @@ import {
   type AgentRuntimeAction,
 } from '@/features/settings/domain/agent-runtime-status';
 import type { useAgentRuntimes } from '@/features/settings/hooks/use-agent-runtimes';
+import {
+  Disclosure,
+  ProgressBar,
+  SettingsGroup,
+  SettingsList,
+  SettingsPane,
+  SettingsRow,
+} from '@/features/settings/ui/rows';
 import { useIcon } from '@/lib/icon-context';
-import { cn } from '@/lib/utils';
 import type { HostedAgentAllowance } from '@/shared/account';
 import type { AgentId } from '@/shared/agent-protocol';
 import type { Agent, AgentDiscoveryPolicy } from '@/shared/agent-runtime';
@@ -85,7 +92,7 @@ const TURN_FAILURES = [
   { value: 'crash', label: 'Runtime crash' },
 ] as const;
 
-function AllowanceCard({
+function AllowanceRow({
   allowance,
   onRefresh,
 }: {
@@ -105,21 +112,16 @@ function AllowanceCard({
     : null;
 
   return (
-    <div className="mb-3.5 rounded-lg border border-border bg-surface-4 px-3.5 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-body font-medium text-foreground">7-day Agent allowance</div>
-          <div className="text-caption text-muted-foreground">
-            {percent}% remaining{reset ? ` · Resets ${reset}` : ' · Starts on first use'}
-          </div>
-        </div>
+    <SettingsRow
+      detail={`${percent}% remaining${reset ? ` · Resets ${reset}` : ' · Starts on first use'}`}
+      title="7-day Agent allowance"
+      trail={
         <Button leadingIcon={RefreshCw} onClick={onRefresh} size="compact" variant="ghost">
           Refresh
         </Button>
-      </div>
-      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-foreground/70" style={{ width: `${percent}%` }} />
-      </div>
+      }
+    >
+      <ProgressBar value={percent} />
       <Collapsible.Root className="mt-1" onOpenChange={setDetailOpen} open={detailOpen}>
         <Collapsible.Trigger
           render={
@@ -139,7 +141,7 @@ function AllowanceCard({
           output · {allowance.cacheReadTokens.toLocaleString()} cached
         </Collapsible.Panel>
       </Collapsible.Root>
-    </div>
+    </SettingsRow>
   );
 }
 
@@ -160,59 +162,62 @@ function RuntimeRow({
   const Icon = AGENT_ICONS[agent.id];
   const showTrack = display.stage !== null && display.stage !== 'ready';
   const canUninstall = agent.installed && agent.source === 'managed' && !busy;
+  const hasChildren = showTrack || failure !== null;
 
   return (
-    <li className="flex items-start gap-3 border-t border-border px-3.5 py-3 first:border-t-0">
-      <span className="flex size-8 flex-none items-center justify-center rounded-md border border-border bg-surface-3 text-foreground">
-        <Icon aria-hidden="true" className="size-4" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <span className="block truncate text-body font-semibold text-foreground">
-          {agent.label}
+    <SettingsRow
+      as="li"
+      detail={display.description}
+      detailTone={display.failed ? 'error' : 'muted'}
+      lead={
+        <span className="flex size-8 items-center justify-center rounded-md border border-border text-foreground">
+          <Icon aria-hidden="true" className="size-4" />
         </span>
-        <p
-          className={cn(
-            'mt-0.5 text-caption',
-            display.failed ? 'text-destructive' : 'text-muted-foreground',
+      }
+      title={agent.label}
+      trail={
+        busy || display.action || canUninstall ? (
+          <>
+            {busy && (
+              <Button disabled loading size="compact" variant="tertiary">
+                Preparing…
+              </Button>
+            )}
+            {!busy && display.action && (
+              <Button
+                onClick={() => onAction(display.action!, agent)}
+                size="compact"
+                variant="tertiary"
+              >
+                {display.action.label}
+              </Button>
+            )}
+            {canUninstall && (
+              <Button onClick={() => onUninstall(agent)} size="compact" variant="ghost">
+                Uninstall
+              </Button>
+            )}
+          </>
+        ) : null
+      }
+    >
+      {hasChildren && (
+        <>
+          {showTrack && (
+            <StageTrack
+              failed={display.failed}
+              stage={display.stage!}
+              stageIndex={display.stageIndex}
+            />
           )}
-        >
-          {display.description}
-        </p>
-        {showTrack && (
-          <StageTrack
-            failed={display.failed}
-            stage={display.stage!}
-            stageIndex={display.stageIndex}
-          />
-        )}
-        {failure && (
-          <p className="mt-1 text-caption text-destructive" role="alert">
-            {failure}
-          </p>
-        )}
-      </div>
-      <div className="mt-0.5 flex flex-none items-center gap-1">
-        {busy && (
-          <Button disabled loading size="compact" variant="tertiary">
-            Preparing…
-          </Button>
-        )}
-        {!busy && display.action && (
-          <Button
-            onClick={() => onAction(display.action!, agent)}
-            size="compact"
-            variant="tertiary"
-          >
-            {display.action.label}
-          </Button>
-        )}
-        {canUninstall && (
-          <Button onClick={() => onUninstall(agent)} size="compact" variant="ghost">
-            Uninstall
-          </Button>
-        )}
-      </div>
-    </li>
+          {failure && (
+            <p className="mt-1 text-caption text-destructive" role="alert">
+              {failure}
+            </p>
+          )}
+        </>
+      )}
+    </SettingsRow>
   );
 }
 
@@ -301,65 +306,64 @@ function DebugBlock({ runtimes }: { runtimes: Runtimes }) {
   const busy = runtimes.updateDebug.isPending || runtimes.resetFirstRun.isPending;
 
   return (
-    <details className="mt-4 overflow-hidden rounded-lg border border-border bg-surface-4">
-      <summary className="flex cursor-pointer items-center gap-2 px-3.5 py-2.5 text-caption font-semibold text-foreground">
-        Agent bootstrap testing
+    <Disclosure
+      badge={
         <Badge color="amber" size="compact">
           Development only
         </Badge>
-      </summary>
-      <div className="border-t border-border px-3.5 py-3">
-        <p className="text-caption text-muted-foreground">
-          These controls change discovery inside StashBase only — they never uninstall a global
-          Agent or clear provider credentials.
-        </p>
-        <DebugSelectRow
+      }
+      summary="Agent bootstrap testing"
+    >
+      <p className="text-caption text-muted-foreground">
+        These controls change discovery inside StashBase only — they never uninstall a global Agent
+        or clear provider credentials.
+      </p>
+      <DebugSelectRow
+        disabled={busy}
+        items={DISCOVERY_POLICIES}
+        label="Discovery source"
+        onChange={(discoveryPolicy) => runtimes.updateDebug.mutate({ discoveryPolicy })}
+        value={debug.discoveryPolicy}
+      />
+      <DebugSelectRow
+        disabled={busy}
+        items={SETUP_FAILURES}
+        label="Next setup result"
+        onChange={(nextFailure) => runtimes.updateDebug.mutate({ nextFailure })}
+        value={debug.nextFailure}
+      />
+      <DebugSelectRow
+        disabled={busy}
+        items={TURN_FAILURES}
+        label="Next turn result"
+        onChange={(nextTurnFailure) => runtimes.updateDebug.mutate({ nextTurnFailure })}
+        value={debug.nextTurnFailure}
+      />
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        <Button
           disabled={busy}
-          items={DISCOVERY_POLICIES}
-          label="Discovery source"
-          onChange={(discoveryPolicy) => runtimes.updateDebug.mutate({ discoveryPolicy })}
-          value={debug.discoveryPolicy}
-        />
-        <DebugSelectRow
+          onClick={() => runtimes.resetFirstRun.mutate('codex')}
+          size="compact"
+          variant="tertiary"
+        >
+          Reset Codex first run
+        </Button>
+        <Button
           disabled={busy}
-          items={SETUP_FAILURES}
-          label="Next setup result"
-          onChange={(nextFailure) => runtimes.updateDebug.mutate({ nextFailure })}
-          value={debug.nextFailure}
-        />
-        <DebugSelectRow
-          disabled={busy}
-          items={TURN_FAILURES}
-          label="Next turn result"
-          onChange={(nextTurnFailure) => runtimes.updateDebug.mutate({ nextTurnFailure })}
-          value={debug.nextTurnFailure}
-        />
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          <Button
-            disabled={busy}
-            onClick={() => runtimes.resetFirstRun.mutate('codex')}
-            size="compact"
-            variant="tertiary"
-          >
-            Reset Codex first run
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() => runtimes.resetFirstRun.mutate('claude')}
-            size="compact"
-            variant="tertiary"
-          >
-            Reset Claude first run
-          </Button>
-        </div>
-        {(runtimes.updateDebug.error ?? runtimes.resetFirstRun.error) && (
-          <p className="mt-2.5 text-caption text-destructive" role="alert">
-            {(runtimes.updateDebug.error ?? runtimes.resetFirstRun.error)?.message ??
-              'Update failed.'}
-          </p>
-        )}
+          onClick={() => runtimes.resetFirstRun.mutate('claude')}
+          size="compact"
+          variant="tertiary"
+        >
+          Reset Claude first run
+        </Button>
       </div>
-    </details>
+      {(runtimes.updateDebug.error ?? runtimes.resetFirstRun.error) && (
+        <p className="mt-2.5 text-caption text-destructive" role="alert">
+          {(runtimes.updateDebug.error ?? runtimes.resetFirstRun.error)?.message ??
+            'Update failed.'}
+        </p>
+      )}
+    </Disclosure>
   );
 }
 
@@ -380,54 +384,71 @@ export function AgentRuntimesPanel({ runtimes }: AgentRuntimesPanelProps) {
     runtimes.uninstall.mutate(id, { onSuccess: () => setUninstallTarget(null) });
   };
 
+  const showAllowance =
+    (runtimes.allowance.isSuccess && runtimes.allowance.data) || runtimes.allowance.isError;
+
   return (
-    <div>
-      <h2 className="mb-1 text-caption font-semibold text-foreground">Agent runtimes</h2>
-      <p className="mb-3.5 text-caption text-muted-foreground">
-        Built-in includes free credits through your fixed 7-day account allowance. Codex and Claude
-        Code remain available as bring-your-own runtimes.
-      </p>
-
-      {runtimes.allowance.isSuccess && runtimes.allowance.data && (
-        <AllowanceCard
-          allowance={runtimes.allowance.data}
-          onRefresh={() => runtimes.allowance.refetch()}
-        />
+    <SettingsPane
+      lede="Built-in includes free credits through your fixed 7-day account allowance. Codex and Claude Code remain available as bring-your-own runtimes."
+      title="Agents"
+    >
+      {showAllowance && (
+        <SettingsGroup title="Allowance">
+          <SettingsList>
+            {runtimes.allowance.isSuccess && runtimes.allowance.data ? (
+              <AllowanceRow
+                allowance={runtimes.allowance.data}
+                onRefresh={() => runtimes.allowance.refetch()}
+              />
+            ) : (
+              <SettingsRow
+                title={
+                  <span className="font-normal text-muted-foreground">
+                    Agent usage is temporarily unavailable.
+                  </span>
+                }
+                trail={
+                  <Button
+                    onClick={() => runtimes.allowance.refetch()}
+                    size="compact"
+                    variant="ghost"
+                  >
+                    Retry
+                  </Button>
+                }
+              />
+            )}
+          </SettingsList>
+        </SettingsGroup>
       )}
-      {runtimes.allowance.isError && (
-        <div className="mb-3.5 flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-4 px-3.5 py-2.5 text-caption text-muted-foreground">
-          <span>Agent usage is temporarily unavailable.</span>
-          <Button onClick={() => runtimes.allowance.refetch()} size="compact" variant="ghost">
-            Retry
-          </Button>
-        </div>
-      )}
 
-      <ul className="overflow-hidden rounded-xl border border-border bg-surface-4">
-        {runtimes.catalog.isLoading && (
-          <li className="px-3.5 py-3 text-caption text-muted-foreground">
-            Checking agent runtimes…
-          </li>
-        )}
-        {runtimes.catalog.isError && (
-          <li className="flex items-center justify-between gap-3 px-3.5 py-3 text-caption text-muted-foreground">
-            <span>Agent runtimes are unavailable.</span>
-            <Button onClick={() => runtimes.catalog.refetch()} size="compact" variant="ghost">
-              Retry
-            </Button>
-          </li>
-        )}
-        {(runtimes.catalog.data?.clis ?? []).map((agent) => (
-          <RuntimeRow
-            agent={agent}
-            busy={isBusy(runtimes, agent.id)}
-            failure={actionFailure(runtimes, agent.id)}
-            key={agent.id}
-            onAction={onAction}
-            onUninstall={setUninstallTarget}
-          />
-        ))}
-      </ul>
+      <SettingsGroup title="Runtimes">
+        <SettingsList as="ul">
+          {runtimes.catalog.isLoading && (
+            <li className="px-3.5 py-2.5 text-caption text-muted-foreground">
+              Checking agent runtimes…
+            </li>
+          )}
+          {runtimes.catalog.isError && (
+            <li className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-caption text-muted-foreground">
+              <span>Agent runtimes are unavailable.</span>
+              <Button onClick={() => runtimes.catalog.refetch()} size="compact" variant="ghost">
+                Retry
+              </Button>
+            </li>
+          )}
+          {(runtimes.catalog.data?.clis ?? []).map((agent) => (
+            <RuntimeRow
+              agent={agent}
+              busy={isBusy(runtimes, agent.id)}
+              failure={actionFailure(runtimes, agent.id)}
+              key={agent.id}
+              onAction={onAction}
+              onUninstall={setUninstallTarget}
+            />
+          ))}
+        </SettingsList>
+      </SettingsGroup>
 
       <DebugBlock runtimes={runtimes} />
 
@@ -442,6 +463,6 @@ export function AgentRuntimesPanel({ runtimes }: AgentRuntimesPanelProps) {
         onConfirm={confirmUninstall}
         pending={runtimes.uninstall.isPending}
       />
-    </div>
+    </SettingsPane>
   );
 }
