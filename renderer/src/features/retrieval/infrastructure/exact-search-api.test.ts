@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { HttpClient } from '@/platform/http/client';
 
-import { createExactSearchApi } from './exact-search-api';
+import { createExactSearchAdapter } from './exact-search-api';
 
 describe('exact search API', () => {
   it('posts a complete scope and maps stable folder-qualified evidence', async () => {
@@ -26,7 +26,7 @@ describe('exact search API', () => {
     const signal = new AbortController().signal;
 
     await expect(
-      createExactSearchApi(client).search(
+      createExactSearchAdapter(client).search(
         {
           caseSensitive: false,
           folderPath: '/library/research',
@@ -57,7 +57,7 @@ describe('exact search API', () => {
   });
 
   it('rejects malformed success and sanitizes server failures', async () => {
-    const malformed = createExactSearchApi({
+    const malformed = createExactSearchAdapter({
       request: vi.fn(async () => ({ body: { files: 'wrong' }, status: 200 })),
     });
     await expect(
@@ -67,7 +67,7 @@ describe('exact search API', () => {
       ),
     ).rejects.toMatchObject({ kind: 'invalid-response' });
 
-    const unavailable = createExactSearchApi({
+    const unavailable = createExactSearchAdapter({
       request: vi.fn(async () => ({
         body: { error: 'private filesystem detail' },
         status: 500,

@@ -1,60 +1,31 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type {
-  ExactSearchApi,
-  IndexDecisionApi,
-  SemanticSearchApi,
+  ExactSearchPort,
+  IndexDecisionPort,
+  SemanticSearchPort,
 } from '@/features/retrieval/application/ports';
 import type {
-  ExactSearchNavigationIntent,
+  ExactSearchFile,
+  SearchNavigationIntent,
   ExactSearchResult,
 } from '@/features/retrieval/domain/exact-search';
-import type { PreparationCounts } from '@/features/retrieval/domain/semantic-readiness';
+import type {
+  PreparationCounts,
+  SemanticReadiness,
+} from '@/features/retrieval/domain/semantic-readiness';
 import type { SemanticSearchResult } from '@/features/retrieval/domain/semantic-search';
-import type { FolderIndexStatus, SemanticIndexStatus } from '@/shared/domain/folder-index-status';
+import { expectFocused, expectNotFocused } from '@/test/dom';
+import { exactSearchApi, indexDecisionApi, semanticSearchApi } from '@/test/fakes/retrieval';
+import { createTestQueryClient, queryWrapper } from '@/test/query';
 
 import { LibrarySearch, type LibrarySearchProps } from './library-search';
 
 const noPreparation: PreparationCounts = { blocked: 0, cancelled: 0, failed: 0, pending: 0 };
 
-function semanticStatus(overrides: Partial<SemanticIndexStatus> = {}): SemanticIndexStatus {
-  return {
-    available: true,
-    disabledReason: null,
-    enabled: true,
-    estimatedBytes: null,
-    indexReady: true,
-    pending: [],
-    settled: true,
-    sourceCount: null,
-    state: 'ready',
-    warning: null,
-    ...overrides,
-  };
-}
-
-function folderStatus(
-  semantic: Partial<SemanticIndexStatus> = {},
-  overrides: Partial<FolderIndexStatus> = {},
-): FolderIndexStatus {
-  return {
-    blockedConversions: [],
-    conversionProgress: {},
-    conversionRevision: 0,
-    conversionVersions: {},
-    folderPath: '/library/research',
-    indexed: 4,
-    pendingConversions: [],
-    preparationFailures: [],
-    semantic: semanticStatus(semantic),
-    total: 5,
-    treeVersion: 0,
-    ...overrides,
-  };
-}
+const READY_INDEX: SemanticReadiness = { state: 'ready' };
 
 const semanticResult: SemanticSearchResult = {
   hits: [
@@ -82,74 +53,47 @@ const semanticResult: SemanticSearchResult = {
   truncated: false,
 };
 
-const idleSemanticApi: SemanticSearchApi = {
-  search: vi.fn(async () => ({ hits: [], truncated: false })),
-};
-
-function decisionApi(): IndexDecisionApi {
-  return {
-    decide: vi.fn(async () => undefined),
-    dismissWarning: vi.fn(async () => undefined),
-    resync: vi.fn(async () => undefined),
-  };
-}
-
-const result: ExactSearchResult = {
-  files: [
+const resultFile: ExactSearchFile = {
+  id: '/library/archive\u0000notes/answer.md',
+  matches: [
     {
-      id: '/library/archive\u0000notes/answer.md',
-      matches: [
-        {
-          line: 7,
-          ranges: [{ end: 10, start: 4 }],
-          text: 'The answer is preserved here.',
-        },
-      ],
-      source: { folderPath: '/library/research', path: 'notes/answer.md' },
-      totalMatches: 2,
+      line: 7,
+      ranges: [{ end: 10, start: 4 }],
+      text: 'The answer is preserved here.',
     },
   ],
+  source: { folderPath: '/library/research', path: 'notes/answer.md' },
+  totalMatches: 2,
+};
+
+const result: ExactSearchResult = {
+  files: [resultFile],
   totalMatches: 2,
   truncated: true,
 };
 
-let getAnimationsDescriptor: PropertyDescriptor | undefined;
-
-beforeEach(() => {
-  getAnimationsDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
-  Object.defineProperty(Element.prototype, 'getAnimations', {
-    configurable: true,
-    value: vi.fn(() => []),
-  });
-});
-
-afterEach(() => {
-  cleanup();
-  if (getAnimationsDescriptor) {
-    Object.defineProperty(Element.prototype, 'getAnimations', getAnimationsDescriptor);
-  } else {
-    Reflect.deleteProperty(Element.prototype, 'getAnimations');
-  }
-});
+afterEach(cleanup);
 
 interface RenderOptions {
-  decisions?: IndexDecisionApi;
+  decisions?: IndexDecisionPort;
   onNavigate?: LibrarySearchProps['onNavigate'];
   onOpenSettings?: LibrarySearchProps['onOpenSettings'];
   preparation?: PreparationCounts;
-  semanticApi?: SemanticSearchApi;
-  status?: FolderIndexStatus | null;
+  readiness?: SemanticReadiness;
+  readyCount?: number;
+  semanticApi?: SemanticSearchPort;
 }
 
-function renderSearch(api: ExactSearchApi, options: RenderOptions = {}) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const onNavigate =
-    options.onNavigate ?? vi.fn(async (_intent: ExactSearchNavigationIntent) => true);
+function renderSearch(api: ExactSearchPort, options: RenderOptions = {}) {
+  const queryClient = createTestQueryClient();
+  const QueryWrapper = queryWrapper(queryClient);
+  const onNavigate = options.onNavigate ?? vi.fn(async (_intent: SearchNavigationIntent) => true);
   const onOpenSettings =
     options.onOpenSettings ?? vi.fn((_section: 'ai-index' | 'transcription') => undefined);
-  const decisions = options.decisions ?? decisionApi();
+  const decisions = options.decisions ?? indexDecisionApi();
+  const semantic = options.semanticApi ?? semanticSearchApi();
   const element = (focusRevision: number) => (
-    <QueryClientProvider client={queryClient}>
+    <QueryWrapper>
       <LibrarySearch
         active
         activeFolderPath="/library/research"
@@ -159,10 +103,11 @@ function renderSearch(api: ExactSearchApi, options: RenderOptions = {}) {
         onNavigate={onNavigate}
         onOpenSettings={onOpenSettings}
         preparation={options.preparation ?? noPreparation}
-        semanticApi={options.semanticApi ?? idleSemanticApi}
-        status={options.status === undefined ? folderStatus() : options.status}
+        readiness={options.readiness ?? READY_INDEX}
+        readyCount={options.readyCount ?? 5}
+        semanticApi={semantic}
       />
-    </QueryClientProvider>
+    </QueryWrapper>
   );
   const rendered = render(element(0));
   return { ...rendered, decisions, element, onNavigate, onOpenSettings, queryClient };
@@ -170,7 +115,7 @@ function renderSearch(api: ExactSearchApi, options: RenderOptions = {}) {
 
 describe('Library Search', () => {
   it('searches only the active workspace and presents occurrence evidence', async () => {
-    const api: ExactSearchApi = { search: vi.fn(async () => result) };
+    const api = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(api);
     const input = screen.getByRole('combobox', { name: 'Search current workspace' });
 
@@ -188,7 +133,7 @@ describe('Library Search', () => {
       },
       expect.any(AbortSignal),
     );
-    expect(option.querySelector('mark')?.textContent).toBe('answer');
+    expect(within(option).getByRole('mark').textContent).toBe('answer');
     expect(screen.getByText('notes')).not.toBeNull();
     expect(screen.getByText('2')).not.toBeNull();
     expect(screen.getByText(/Showing the first results from 2 matches/u)).not.toBeNull();
@@ -210,18 +155,18 @@ describe('Library Search', () => {
   });
 
   it('does not surface a result returned outside the selected workspace', async () => {
-    const api: ExactSearchApi = {
+    const api = exactSearchApi({
       search: vi.fn(async () => ({
         ...result,
         files: [
           {
-            ...result.files[0],
+            ...resultFile,
             id: '/library/archive\u0000notes/answer.md',
             source: { folderPath: '/library/archive', path: 'notes/answer.md' },
           },
         ],
       })),
-    };
+    });
     renderSearch(api);
 
     await userEvent
@@ -236,7 +181,7 @@ describe('Library Search', () => {
     const repeated: ExactSearchResult = {
       files: [
         {
-          ...result.files[0],
+          ...resultFile,
           matches: [
             {
               line: 7,
@@ -252,7 +197,7 @@ describe('Library Search', () => {
       totalMatches: 2,
       truncated: false,
     };
-    const api: ExactSearchApi = { search: vi.fn(async () => repeated) };
+    const api = exactSearchApi({ search: vi.fn(async () => repeated) });
     const rendered = renderSearch(api);
     const user = userEvent.setup();
 
@@ -270,26 +215,27 @@ describe('Library Search', () => {
   });
 
   it('focuses the query again whenever the search command revision changes', async () => {
-    const api: ExactSearchApi = { search: vi.fn(async () => result) };
+    const api = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(api);
     const input = screen.getByRole('combobox', { name: 'Search current workspace' });
-    const elsewhere = globalThis.document.createElement('button');
-    globalThis.document.body.append(elsewhere);
+    const elsewhere = rendered.baseElement.ownerDocument.createElement('button');
+    rendered.baseElement.append(elsewhere);
     elsewhere.focus();
+    expectNotFocused(input);
 
     rendered.rerender(rendered.element(1));
 
-    await waitFor(() => expect(globalThis.document.activeElement).toBe(input));
+    await waitFor(() => expectFocused(input));
   });
 
   it('cancels an obsolete request as soon as the query changes', async () => {
     let firstSignal: AbortSignal | undefined;
-    const api: ExactSearchApi = {
+    const api = exactSearchApi({
       search: vi.fn((_request, signal) => {
         firstSignal ??= signal;
         return new Promise<ExactSearchResult>(() => undefined);
       }),
-    };
+    });
     renderSearch(api);
     const user = userEvent.setup();
     const input = screen.getByRole('combobox', { name: 'Search current workspace' });
@@ -302,8 +248,8 @@ describe('Library Search', () => {
   });
 
   it('switches to Similar mode within the selected folder and navigates by chunk anchor', async () => {
-    const semanticApi: SemanticSearchApi = { search: vi.fn(async () => semanticResult) };
-    const exactApi: ExactSearchApi = { search: vi.fn(async () => result) };
+    const semanticApi = semanticSearchApi({ search: vi.fn(async () => semanticResult) });
+    const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(exactApi, { semanticApi });
     const user = userEvent.setup();
 
@@ -318,7 +264,7 @@ describe('Library Search', () => {
     );
     expect(exactApi.search).not.toHaveBeenCalled();
     expect(screen.queryByRole('group')).toBeNull();
-    expect(option.querySelector('mark')).toBeNull();
+    expect(within(option).queryByRole('mark')).toBeNull();
 
     await user.keyboard('{Enter}');
     await waitFor(() =>
@@ -337,11 +283,11 @@ describe('Library Search', () => {
   });
 
   it('explains a missing AI Index without sending a Similar request and keeps Exact usable', async () => {
-    const semanticApi: SemanticSearchApi = { search: vi.fn(async () => semanticResult) };
-    const exactApi: ExactSearchApi = { search: vi.fn(async () => result) };
+    const semanticApi = semanticSearchApi({ search: vi.fn(async () => semanticResult) });
+    const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(exactApi, {
+      readiness: { state: 'not-set-up' },
       semanticApi,
-      status: folderStatus({ available: false, enabled: false, state: 'disabled' }),
     });
     const user = userEvent.setup();
 
@@ -361,14 +307,12 @@ describe('Library Search', () => {
   });
 
   it('offers the AI Index workload decision in both modes and forwards it folder-explicitly', async () => {
-    const exactApi: ExactSearchApi = { search: vi.fn(async () => result) };
+    const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(exactApi, {
-      status: folderStatus({
-        estimatedBytes: 2 * 1024 * 1024,
-        settled: true,
-        sourceCount: 40,
+      readiness: {
         state: 'awaiting-decision',
-      }),
+        workload: { estimatedBytes: 2 * 1024 * 1024, files: 40 },
+      },
     });
 
     expect(screen.getByText('Large AI Index workload')).not.toBeNull();
@@ -383,10 +327,10 @@ describe('Library Search', () => {
   });
 
   it('shows the preparation readiness line with a transcription setup action', async () => {
-    const exactApi: ExactSearchApi = { search: vi.fn(async () => result) };
+    const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(exactApi, {
       preparation: { blocked: 2, cancelled: 0, failed: 0, pending: 0 },
-      status: folderStatus({}, { total: 9 }),
+      readyCount: 7,
     });
 
     expect(screen.getByText('Transcription setup required')).not.toBeNull();
@@ -398,12 +342,9 @@ describe('Library Search', () => {
   });
 
   it('surfaces the index warning with retry and dismiss', async () => {
-    const exactApi: ExactSearchApi = { search: vi.fn(async () => result) };
+    const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(exactApi, {
-      status: folderStatus({
-        state: 'failed',
-        warning: { at: 'now', message: 'daemon restarted' },
-      }),
+      readiness: { state: 'failed', warning: 'daemon restarted' },
     });
 
     expect(screen.getByText('Search may be incomplete: daemon restarted')).not.toBeNull();

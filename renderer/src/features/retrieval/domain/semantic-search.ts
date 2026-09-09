@@ -1,6 +1,6 @@
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-import { exactSearchFileId, type ExactSearchNavigationIntent } from './exact-search';
+import { exactSearchFileId, type SearchNavigationIntent } from './exact-search';
 
 export const SEMANTIC_SEARCH_CANDIDATES = 30;
 const SNIPPET_LENGTH = 200;
@@ -80,7 +80,7 @@ function anchorLine(content: string): string {
 /** Opens the source at the chunk's first line, using the document Find
  *  target the exact path already understands. A chunk without a line
  *  anchor opens at the top. */
-export function semanticNavigationIntent(hit: SemanticHit): ExactSearchNavigationIntent {
+export function semanticNavigationIntent(hit: SemanticHit): SearchNavigationIntent {
   return {
     source: hit.source,
     target: {

@@ -33,7 +33,7 @@ export interface ExactSearchRequest {
   readonly wholeWord: boolean;
 }
 
-export interface ExactSearchNavigationIntent {
+export interface SearchNavigationIntent {
   readonly source: SourceReference;
   readonly target: {
     readonly audioTimestampMs?: number;
@@ -81,7 +81,7 @@ export function exactSearchOccurrences(file: ExactSearchFile): ExactSearchOccurr
 export function exactSearchNavigationIntent(
   occurrence: ExactSearchOccurrence,
   request: ExactSearchRequest,
-): ExactSearchNavigationIntent {
+): SearchNavigationIntent {
   return {
     source: occurrence.file.source,
     target: {

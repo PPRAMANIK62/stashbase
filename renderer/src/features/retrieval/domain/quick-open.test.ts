@@ -59,13 +59,14 @@ describe('Quick Open ranking', () => {
   });
 
   it('emits an explicit app-resolved intent for open and reveal actions', () => {
-    const items = rankQuickOpenSources(sources, 'report');
+    const [openable, revealable] = rankQuickOpenSources(sources, 'report');
+    if (!openable || !revealable) throw new Error('Expected both report sources to rank.');
 
-    expect(quickOpenNavigationIntent(items[0]!)).toEqual({
+    expect(quickOpenNavigationIntent(openable)).toEqual({
       type: 'open-source',
       source: { folderPath: '/library/notes', path: 'one/report.bin' },
     });
-    expect(quickOpenNavigationIntent(items[1]!)).toEqual({
+    expect(quickOpenNavigationIntent(revealable)).toEqual({
       type: 'reveal-source',
       source: { folderPath: '/library/notes', path: 'two/report.bin' },
     });

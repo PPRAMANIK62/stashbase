@@ -3,7 +3,7 @@ import type {
   QuickOpenSource,
 } from '@/features/retrieval/domain/quick-open';
 
-export type QuickOpenStatus = 'loading' | 'ready' | 'unavailable';
+type QuickOpenStatus = 'loading' | 'ready' | 'unavailable';
 
 export interface QuickOpenProps {
   folderName: string;

@@ -1,7 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
 
-import type { IndexDecisionApi } from '@/features/retrieval/application/ports';
+import { retrievalFailure } from '@/features/retrieval/application/failure-messages';
+import type { IndexDecisionPort } from '@/features/retrieval/application/ports';
+import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 
 export type IndexDecisionAction =
   | 'build'
@@ -11,38 +12,31 @@ export type IndexDecisionAction =
   | 'retry-index';
 
 /** Runs one AI Index decision at a time for the folder; the status poll
- *  owned elsewhere reports the outcome, so nothing here is optimistic. */
-export function useIndexDecisions(api: IndexDecisionApi, folderPath: string) {
-  const controller = useRef<AbortController | null>(null);
-  useEffect(
-    () => () => {
-      controller.current?.abort();
-    },
-    [],
-  );
+ *  owned elsewhere reports the outcome, so nothing here is optimistic. The
+ *  decision lane aborts its own previous call and every call on unmount. */
+export function useIndexDecisions(api: IndexDecisionPort, folderPath: string) {
+  const requestSignal = useRequestSignals<'decision'>();
   const mutation = useMutation({
     mutationFn: async (action: IndexDecisionAction) => {
-      controller.current?.abort();
-      const current = new AbortController();
-      controller.current = current;
+      const signal = requestSignal('decision');
       switch (action) {
         case 'build':
         case 'resume':
-          await api.decide(folderPath, 'start', current.signal);
+          await api.decide(folderPath, 'start', signal);
           return;
         case 'not-now':
-          await api.decide(folderPath, 'defer', current.signal);
+          await api.decide(folderPath, 'defer', signal);
           return;
         case 'dismiss-warning':
-          await api.dismissWarning(folderPath, current.signal);
+          await api.dismissWarning(folderPath, signal);
           return;
         case 'retry-index':
-          await api.resync(folderPath, current.signal);
+          await api.resync(folderPath, signal);
       }
     },
   });
   return {
-    error: mutation.isError ? (mutation.error?.message ?? 'The request failed.') : null,
+    error: mutation.isError ? retrievalFailure(mutation.error).message : null,
     pendingAction: mutation.isPending ? mutation.variables : null,
     run: (action: IndexDecisionAction) => mutation.mutate(action),
   };

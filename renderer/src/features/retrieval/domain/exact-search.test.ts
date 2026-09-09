@@ -29,8 +29,10 @@ describe('exact search domain', () => {
     expect(exactSearchFileId(file.source)).toBe('/library/research\u0000notes/answer.md');
     const occurrences = exactSearchOccurrences(file);
     expect(occurrences).toHaveLength(2);
+    const second = occurrences[1];
+    if (!second) throw new Error('Expected a second occurrence.');
     expect(
-      exactSearchNavigationIntent(occurrences[1], {
+      exactSearchNavigationIntent(second, {
         caseSensitive: false,
         query: 'answer',
         wholeWord: false,

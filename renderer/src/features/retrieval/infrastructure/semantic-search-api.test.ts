@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { HttpClient } from '@/platform/http/client';
 
-import { createSemanticSearchApi } from './semantic-search-api';
+import { createSemanticSearchAdapter } from './semantic-search-api';
 
 const signal = new AbortController().signal;
 
@@ -25,7 +25,7 @@ describe('semantic search API', () => {
       },
       status: 200,
     }));
-    const result = await createSemanticSearchApi({ request }).search(
+    const result = await createSemanticSearchAdapter({ request }).search(
       { folderPath: '/library/research', query: 'idea', topK: 30 },
       signal,
     );
@@ -60,7 +60,7 @@ describe('semantic search API', () => {
       })),
     };
     await expect(
-      createSemanticSearchApi(keyless).search({ query: 'idea', topK: 8 }, signal),
+      createSemanticSearchAdapter(keyless).search({ query: 'idea', topK: 8 }, signal),
     ).rejects.toMatchObject({ kind: 'not-set-up' });
     const quota: HttpClient = {
       request: vi.fn(async () => ({
@@ -69,7 +69,7 @@ describe('semantic search API', () => {
       })),
     };
     await expect(
-      createSemanticSearchApi(quota).search({ query: 'idea', topK: 8 }, signal),
+      createSemanticSearchAdapter(quota).search({ query: 'idea', topK: 8 }, signal),
     ).rejects.toMatchObject({ kind: 'quota-exhausted' });
   });
 
@@ -83,7 +83,7 @@ describe('semantic search API', () => {
       }),
     };
     await expect(
-      createSemanticSearchApi(client).search({ query: 'idea', topK: 8 }, controller.signal),
+      createSemanticSearchAdapter(client).search({ query: 'idea', topK: 8 }, controller.signal),
     ).rejects.toBe(abortError);
   });
 });

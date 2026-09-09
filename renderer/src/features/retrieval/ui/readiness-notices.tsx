@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import type {
   PreparationReadinessLine,
-  SemanticReadiness,
+  SemanticIndexNotice,
   SemanticReadinessAction,
 } from '@/features/retrieval/domain/semantic-readiness';
 import type { IndexDecisionAction } from '@/features/retrieval/hooks/use-index-decisions';
@@ -24,63 +24,66 @@ const PENDING_LABELS: Record<IndexDecisionAction, string> = {
   'retry-index': 'Retrying…',
 };
 
+const PRIMARY_ACTIONS = new Set<SemanticReadinessAction>(['build', 'resume', 'retry-index']);
+
 export interface SemanticReadinessNoticeProps {
   error: string | null;
+  notice: SemanticIndexNotice;
   onDecision(action: IndexDecisionAction): void;
   onOpenSettings(): void;
   pendingAction: IndexDecisionAction | null;
-  readiness: SemanticReadiness;
 }
 
+/** What the AI Index needs from the reader. The notice already decided it
+ *  has something to say, so this view only renders it. */
 export function SemanticReadinessNotice({
   error,
+  notice,
   onDecision,
   onOpenSettings,
   pendingAction,
-  readiness,
 }: SemanticReadinessNoticeProps) {
-  if (!readiness.title && !readiness.detail) return null;
-  const attention = readiness.state === 'failed' || readiness.state === 'quota-exhausted';
+  const attention = notice.tone === 'attention';
   return (
     <div
       className={cn(
         'mx-2 mb-2 rounded-md border px-3 py-2',
-        readiness.prominent ? 'border-border bg-surface-2' : 'border-transparent',
+        notice.prominent ? 'border-border bg-surface-2' : 'border-transparent',
       )}
       role={attention ? 'alert' : 'status'}
     >
-      {readiness.title && (
-        <p
-          className={cn(
-            'text-caption font-medium',
-            attention ? 'text-destructive' : 'text-foreground',
-          )}
-        >
-          {readiness.title}
-        </p>
-      )}
-      {readiness.detail && (
-        <p className="text-caption leading-relaxed text-muted-foreground">{readiness.detail}</p>
+      <p
+        className={cn(
+          'text-caption font-medium',
+          attention ? 'text-destructive' : 'text-foreground',
+        )}
+      >
+        {notice.title}
+      </p>
+      {notice.detail && (
+        <p className="text-caption leading-relaxed text-muted-foreground">{notice.detail}</p>
       )}
       {error && (
         <p className="pt-1 text-caption text-destructive" role="alert">
           {error}
         </p>
       )}
-      {readiness.actions.length > 0 && (
+      {notice.actions.length > 0 && (
         <div className="flex flex-wrap gap-1 pt-1.5">
-          {readiness.actions.map((action) => {
-            const primary = action === 'build' || action === 'resume' || action === 'retry-index';
-            const pending = pendingAction === action;
+          {notice.actions.map((action) => {
+            const pending =
+              pendingAction !== null && pendingAction === action
+                ? PENDING_LABELS[pendingAction]
+                : null;
             return (
               <Button
                 disabled={pendingAction !== null}
                 key={action}
                 onClick={() => (action === 'open-settings' ? onOpenSettings() : onDecision(action))}
                 size="compact"
-                variant={primary ? 'secondary' : 'tertiary'}
+                variant={PRIMARY_ACTIONS.has(action) ? 'secondary' : 'tertiary'}
               >
-                {pending ? PENDING_LABELS[action as IndexDecisionAction] : ACTION_LABELS[action]}
+                {pending ?? ACTION_LABELS[action]}
               </Button>
             );
           })}

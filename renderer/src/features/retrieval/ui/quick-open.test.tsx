@@ -1,8 +1,9 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { QuickOpenSource } from '@/features/retrieval/domain/quick-open';
+import { expectFocused } from '@/test/dom';
 
 import { QuickOpen } from './quick-open';
 
@@ -43,37 +44,24 @@ function renderQuickOpen(onNavigate = vi.fn(async () => true), onClose = vi.fn()
   };
 }
 
-let getAnimationsDescriptor: PropertyDescriptor | undefined;
-
-beforeEach(() => {
-  getAnimationsDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
-  Object.defineProperty(Element.prototype, 'getAnimations', {
-    configurable: true,
-    value: vi.fn(() => []),
-  });
-});
-
-afterEach(() => {
-  cleanup();
-  if (getAnimationsDescriptor) {
-    Object.defineProperty(Element.prototype, 'getAnimations', getAnimationsDescriptor);
-  } else {
-    Reflect.deleteProperty(Element.prototype, 'getAnimations');
-  }
-});
+afterEach(cleanup);
 
 describe('Quick Open', () => {
   it('renders a controlled lazy picker and focuses its query field', async () => {
     renderQuickOpen();
-    const picker = await screen.findByRole('dialog', { name: 'Open file' }, { timeout: 5_000 });
-    expect(picker.className).toContain('top-16');
+
+    // Two awaits, not one: the first waits for the picker's chunk to load and
+    // mount, the second for the dialog's own autofocus to land on the field.
+    // Asserting focus straight after the mount is what made this flaky under
+    // a loaded suite, where the two are no longer the same frame.
+    await screen.findByRole('dialog', { name: 'Open file' }, { timeout: 5_000 });
+    const field = await screen.findByRole('combobox', { name: 'Search files' });
+    await waitFor(() => expectFocused(field));
+
     expect(screen.queryByText('Quick Open')).toBeNull();
     expect(screen.queryByText(/Search files in/u)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
     expect(screen.getByPlaceholderText('Open file…')).not.toBeNull();
-    expect(globalThis.document.activeElement).toBe(
-      screen.getByRole('combobox', { name: 'Search files' }),
-    );
   });
 
   it('searches paths, exposes generic-file context, and emits the selected typed intent', async () => {
@@ -118,7 +106,7 @@ describe('Quick Open', () => {
 
     await user.keyboard('{End}{Home}{PageDown}{Enter}');
 
-    expect(globalThis.document.activeElement).toBe(input);
+    expectFocused(input);
     expect(onNavigate).toHaveBeenCalledWith({
       type: 'reveal-source',
       source: { folderPath: '/library/notes', path: 'linked/report.bin' },
@@ -141,6 +129,6 @@ describe('Quick Open', () => {
 
     await user.keyboard('{Home}');
     await waitFor(() => expect(scrollTo).toHaveBeenLastCalledWith({ top: 0 }));
-    expect(globalThis.document.activeElement).toBe(input);
+    expectFocused(input);
   });
 });

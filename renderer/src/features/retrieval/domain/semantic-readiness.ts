@@ -1,4 +1,12 @@
-import type { SemanticIndexStatus } from '@/shared/domain/folder-index-status';
+/**
+ * AI Index readiness for the search surface.
+ *
+ * The states arrive already reduced: the shell hands search one variant per
+ * observable state, each carrying exactly the facts its notice needs.
+ * `canSemanticSearch` and `semanticIndexNotice` derive the two answers a
+ * surface asks for, so no caller reads a loose flag beside the state it came
+ * from, and nothing here reaches for the daemon's own status shape.
+ */
 
 export type SemanticReadinessAction =
   | 'build'
@@ -8,26 +16,22 @@ export type SemanticReadinessAction =
   | 'resume'
   | 'retry-index';
 
-export type SemanticReadinessState =
-  | 'awaiting-decision'
-  | 'failed'
-  | 'indexing'
-  | 'not-set-up'
-  | 'paused'
-  | 'quota-exhausted'
-  | 'ready'
-  | 'unknown';
-
-export interface SemanticReadiness {
-  readonly actions: readonly SemanticReadinessAction[];
-  /** Whether a Similar search may run now. Exact search never depends on it. */
-  readonly canSearch: boolean;
-  readonly detail: string | null;
-  /** True when the reader should see the notice even without a query. */
-  readonly prominent: boolean;
-  readonly state: SemanticReadinessState;
-  readonly title: string | null;
+/** What an unresolved AI Index build would cost the reader deciding on it. */
+interface SemanticWorkload {
+  readonly estimatedBytes: number | null;
+  readonly files: number;
 }
+
+export type SemanticReadiness =
+  | { readonly state: 'awaiting-decision'; readonly workload: SemanticWorkload }
+  | { readonly state: 'failed'; readonly warning: string }
+  /** `partial` marks an index that already answers while the rest builds. */
+  | { readonly partial: boolean; readonly remaining: number; readonly state: 'indexing' }
+  | { readonly partial: boolean; readonly state: 'paused'; readonly workload: SemanticWorkload }
+  | { readonly state: 'not-set-up' }
+  | { readonly state: 'quota-exhausted' }
+  | { readonly state: 'ready' }
+  | { readonly state: 'unknown' };
 
 const EXACT_STILL_WORKS = 'Exact text search works without AI Index.';
 
@@ -36,96 +40,107 @@ function mebibytes(bytes: number): string {
   return value >= 10 ? Math.round(value).toString() : value.toFixed(1);
 }
 
-function workloadDetail(status: SemanticIndexStatus): string {
-  const files = status.sourceCount ?? status.pending.length;
+function workloadDetail(workload: SemanticWorkload): string {
+  const files = workload.files;
   const size =
-    status.estimatedBytes === null ? '' : ` · about ${mebibytes(status.estimatedBytes)} MiB`;
+    workload.estimatedBytes === null ? '' : ` · about ${mebibytes(workload.estimatedBytes)} MiB`;
   return `About ${files} ${files === 1 ? 'file' : 'files'} waiting${size}. Building AI Index may take a while and use provider quota. Exact text search remains available.`;
 }
 
-export function semanticReadiness(
-  status: SemanticIndexStatus | null | undefined,
-): SemanticReadiness {
-  if (!status) {
-    return {
-      actions: [],
-      canSearch: false,
-      detail: null,
-      prominent: false,
-      state: 'unknown',
-      title: null,
-    };
+/** Whether a Similar search may run now. Exact search never depends on it. */
+export function canSemanticSearch(readiness: SemanticReadiness): boolean {
+  switch (readiness.state) {
+    case 'awaiting-decision':
+    case 'failed':
+    case 'ready':
+      return true;
+    case 'indexing':
+    case 'paused':
+      return readiness.partial;
+    case 'not-set-up':
+    case 'quota-exhausted':
+    case 'unknown':
+      return false;
   }
-  if (!status.enabled || status.state === 'disabled') {
-    return {
-      actions: ['open-settings'],
-      canSearch: false,
-      detail: EXACT_STILL_WORKS,
-      prominent: false,
-      state: 'not-set-up',
-      title: 'Set up AI Index to search by meaning.',
-    };
+}
+
+export interface SemanticIndexNotice {
+  readonly actions: readonly SemanticReadinessAction[];
+  readonly detail: string | null;
+  /** Shown whichever search backend is selected, because it explains an
+   *  index the reader has not resolved yet. */
+  readonly persistent: boolean;
+  /** Drawn in its own box rather than as a quiet line. */
+  readonly prominent: boolean;
+  readonly title: string;
+  readonly tone: 'attention' | 'neutral';
+}
+
+/** What the reader should be told about the AI Index, or null when the state
+ *  has nothing to say. */
+export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndexNotice | null {
+  switch (readiness.state) {
+    case 'awaiting-decision':
+      return {
+        actions: ['build', 'not-now'],
+        detail: workloadDetail(readiness.workload),
+        persistent: true,
+        prominent: true,
+        title: 'Large AI Index workload',
+        tone: 'neutral',
+      };
+    case 'failed':
+      return {
+        actions: ['retry-index', 'dismiss-warning'],
+        detail: `Search may be incomplete: ${readiness.warning}`,
+        persistent: true,
+        prominent: false,
+        title: 'Search needs attention',
+        tone: 'attention',
+      };
+    case 'indexing':
+      return {
+        actions: [],
+        detail:
+          readiness.remaining > 0
+            ? `${readiness.remaining} ${readiness.remaining === 1 ? 'file' : 'files'} remaining.`
+            : null,
+        persistent: false,
+        prominent: false,
+        title: 'Building AI Index…',
+        tone: 'neutral',
+      };
+    case 'not-set-up':
+      return {
+        actions: ['open-settings'],
+        detail: EXACT_STILL_WORKS,
+        persistent: false,
+        prominent: false,
+        title: 'Set up AI Index to search by meaning.',
+        tone: 'neutral',
+      };
+    case 'paused':
+      return {
+        actions: ['resume', 'not-now'],
+        detail: workloadDetail(readiness.workload),
+        persistent: true,
+        prominent: true,
+        title: 'AI Index paused',
+        tone: 'neutral',
+      };
+    case 'quota-exhausted':
+      return {
+        actions: ['open-settings'],
+        detail: 'Exact search is still available.',
+        persistent: false,
+        prominent: false,
+        title: 'Your hosted AI Index allowance is exhausted.',
+        tone: 'attention',
+      };
+    case 'ready':
+    case 'unknown':
+      return null;
   }
-  if (status.state === 'quota-exhausted' || status.state === 'partial-quota-exhausted') {
-    return {
-      actions: ['open-settings'],
-      canSearch: false,
-      detail: 'Exact search is still available.',
-      prominent: false,
-      state: 'quota-exhausted',
-      title: 'Your hosted AI Index allowance is exhausted.',
-    };
-  }
-  if (status.state === 'awaiting-decision') {
-    return {
-      actions: ['build', 'not-now'],
-      canSearch: true,
-      detail: workloadDetail(status),
-      prominent: true,
-      state: 'awaiting-decision',
-      title: 'Large AI Index workload',
-    };
-  }
-  if (status.state === 'paused' || status.state === 'partial-paused') {
-    return {
-      actions: ['resume', 'not-now'],
-      canSearch: status.state === 'partial-paused',
-      detail: workloadDetail(status),
-      prominent: true,
-      state: 'paused',
-      title: 'AI Index paused',
-    };
-  }
-  if (status.state === 'failed' && status.warning) {
-    return {
-      actions: ['retry-index', 'dismiss-warning'],
-      canSearch: true,
-      detail: `Search may be incomplete: ${status.warning.message}`,
-      prominent: false,
-      state: 'failed',
-      title: 'Search needs attention',
-    };
-  }
-  if (status.state === 'indexing' || status.state === 'partial-indexing') {
-    const remaining = status.pending.length;
-    return {
-      actions: [],
-      canSearch: status.state === 'partial-indexing',
-      detail:
-        remaining > 0 ? `${remaining} ${remaining === 1 ? 'file' : 'files'} remaining.` : null,
-      prominent: false,
-      state: 'indexing',
-      title: 'Building AI Index…',
-    };
-  }
-  return {
-    actions: [],
-    canSearch: true,
-    detail: null,
-    prominent: false,
-    state: 'ready',
-    title: null,
-  };
 }
 
 export interface PreparationCounts {

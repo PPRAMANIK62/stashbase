@@ -1,7 +1,15 @@
+import { isRetrievableViewerFormat, type ViewerFormat } from '@/contracts/file-formats';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-export type QuickOpenAction = 'open' | 'reveal';
-export type QuickOpenRetrievalAccess = 'included' | 'excluded';
+type QuickOpenAction = 'open' | 'reveal';
+type QuickOpenRetrievalAccess = 'included' | 'excluded';
+
+/** Whether retrieval reaches a file of this format. A generic file opens and
+ *  reveals like any other; it is only search that cannot see it, which is
+ *  retrieval's own rule rather than the shell's. */
+export function retrievalAccessFor(format: ViewerFormat): QuickOpenRetrievalAccess {
+  return isRetrievableViewerFormat(format) ? 'included' : 'excluded';
+}
 
 export interface QuickOpenSource {
   action: QuickOpenAction;
@@ -57,11 +65,16 @@ function mergeRankedItems(left: QuickOpenItem[], right: QuickOpenItem[]): QuickO
   const merged: QuickOpenItem[] = [];
   let leftIndex = 0;
   let rightIndex = 0;
-  while (leftIndex < left.length && rightIndex < right.length) {
-    if (compareQuickOpenItems(left[leftIndex]!, right[rightIndex]!) <= 0) {
-      merged.push(left[leftIndex++]!);
+  for (;;) {
+    const nextLeft = left[leftIndex];
+    const nextRight = right[rightIndex];
+    if (nextLeft === undefined || nextRight === undefined) break;
+    if (compareQuickOpenItems(nextLeft, nextRight) <= 0) {
+      merged.push(nextLeft);
+      leftIndex += 1;
     } else {
-      merged.push(right[rightIndex++]!);
+      merged.push(nextRight);
+      rightIndex += 1;
     }
   }
   return merged.concat(left.slice(leftIndex), right.slice(rightIndex));

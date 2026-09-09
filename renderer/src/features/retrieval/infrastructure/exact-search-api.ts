@@ -1,9 +1,10 @@
-import { ExactSearchError, type ExactSearchApi } from '@/features/retrieval/application/ports';
+import { ExactSearchError, type ExactSearchPort } from '@/features/retrieval/application/ports';
 import {
   exactSearchFileId,
   type ExactSearchResult,
 } from '@/features/retrieval/domain/exact-search';
-import type { HttpClient, HttpResponse } from '@/platform/http/client';
+import { request } from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import {
   exactSearchFailureSchema,
   exactSearchRequestSchema,
@@ -35,42 +36,30 @@ function mapResult(result: ExactSearchResponseWire): ExactSearchResult {
   };
 }
 
-function mapResponse(response: HttpResponse): ExactSearchResult {
-  if (response.status >= 200 && response.status < 300) {
-    const result = exactSearchResponseSchema.safeParse(response.body);
-    if (result.success) return mapResult(result.data);
-    throw new ExactSearchError('invalid-response', 'Search returned an invalid response.');
-  }
-  const failure = exactSearchFailureSchema.safeParse(response.body);
-  throw new ExactSearchError(
-    'unavailable',
-    'Search is unavailable.',
-    failure.success ? { cause: new Error(failure.data.error) } : undefined,
-  );
-}
-
-export function createExactSearchApi(client: HttpClient): ExactSearchApi {
+export function createExactSearchAdapter(client: HttpClient): ExactSearchPort {
   return {
-    async search(request, signal) {
-      try {
-        const body = exactSearchRequestSchema.parse({
-          case_strict: request.caseSensitive,
-          ...(request.folderPath ? { folder: request.folderPath } : {}),
-          query: request.query,
-          whole_word: request.wholeWord,
-        });
-        return mapResponse(
-          await client.request({
-            body,
-            method: 'POST',
-            path: '/api/library/keyword-search',
-            signal,
-          }),
-        );
-      } catch (error) {
-        if (error instanceof ExactSearchError || signal.aborted) throw error;
-        throw new ExactSearchError('unavailable', 'Search is unavailable.', { cause: error });
-      }
+    async search(search, signal) {
+      const body = exactSearchRequestSchema.parse({
+        case_strict: search.caseSensitive,
+        ...(search.folderPath ? { folder: search.folderPath } : {}),
+        query: search.query,
+        whole_word: search.wholeWord,
+      });
+      return mapResult(
+        await request(client, {
+          body,
+          error: ExactSearchError,
+          failureSchema: exactSearchFailureSchema,
+          messages: {
+            'invalid-response': 'Search returned an invalid response.',
+            unavailable: 'Search is unavailable.',
+          },
+          method: 'POST',
+          path: '/api/library/keyword-search',
+          schema: exactSearchResponseSchema,
+          signal,
+        }),
+      );
     },
   };
 }

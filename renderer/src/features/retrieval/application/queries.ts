@@ -1,44 +1,23 @@
-import type { ExactSearchApi, SemanticSearchApi } from '@/features/retrieval/application/ports';
 import type { ExactSearchRequest } from '@/features/retrieval/domain/exact-search';
 import type { SemanticSearchRequest } from '@/features/retrieval/domain/semantic-search';
 
-export const exactSearchQueryKeys = {
-  all: ['retrieval', 'exact'] as const,
-  result: (request: ExactSearchRequest) =>
-    [
-      ...exactSearchQueryKeys.all,
-      request.folderPath ?? null,
-      request.query,
-      request.caseSensitive,
-      request.wholeWord,
-    ] as const,
+/** Every retrieval query hangs off `all`, so cancelling it stops whatever a
+ *  search backend has in flight without naming the backend. */
+export const retrievalQueryKeys = {
+  all: ['retrieval'] as const,
+  exact: (request: ExactSearchRequest): readonly unknown[] => [
+    ...retrievalQueryKeys.all,
+    'exact',
+    request.folderPath ?? null,
+    request.query,
+    request.caseSensitive,
+    request.wholeWord,
+  ],
+  semantic: (request: SemanticSearchRequest): readonly unknown[] => [
+    ...retrievalQueryKeys.all,
+    'semantic',
+    request.folderPath ?? null,
+    request.query,
+    request.topK,
+  ],
 };
-
-export function exactSearchQuery(api: ExactSearchApi, request: ExactSearchRequest) {
-  return {
-    queryFn: ({ signal }: { signal: AbortSignal }) => api.search(request, signal),
-    queryKey: exactSearchQueryKeys.result(request),
-    retry: false,
-    staleTime: 0,
-  } as const;
-}
-
-export const semanticSearchQueryKeys = {
-  all: ['retrieval', 'semantic'] as const,
-  result: (request: SemanticSearchRequest) =>
-    [
-      ...semanticSearchQueryKeys.all,
-      request.folderPath ?? null,
-      request.query,
-      request.topK,
-    ] as const,
-};
-
-export function semanticSearchQuery(api: SemanticSearchApi, request: SemanticSearchRequest) {
-  return {
-    queryFn: ({ signal }: { signal: AbortSignal }) => api.search(request, signal),
-    queryKey: semanticSearchQueryKeys.result(request),
-    retry: false,
-    staleTime: 0,
-  } as const;
-}

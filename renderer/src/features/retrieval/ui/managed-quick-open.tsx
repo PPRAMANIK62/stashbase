@@ -1,3 +1,10 @@
+/**
+ * The Quick Open picker, loaded only once the reader opens it.
+ *
+ * It ranks the folder's files by the query, reports why a file could not be
+ * opened without leaking filesystem detail, and shares the result-cursor
+ * policy with the search panes.
+ */
 import { ExternalLink } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
@@ -12,10 +19,19 @@ import {
 } from '@/features/retrieval/domain/quick-open';
 import { cn } from '@/lib/utils';
 
+import { listNavigationTarget } from './list-navigation';
 import type { QuickOpenProps } from './quick-open-types';
 
 const RESULT_LIMIT = 50;
 const RESULT_PAGE_SIZE = 8;
+
+/** What went wrong, in the reader's terms: opening a document and revealing
+ *  it in the file manager fail differently. */
+function failureFor(item: QuickOpenItem, revealLabel: string): string {
+  return item.action === 'open'
+    ? 'Could not open this file. Your current document remains available.'
+    : `Could not ${revealLabel.toLowerCase()}.`;
+}
 
 function optionName(item: QuickOpenItem, folderName: string, revealLabel: string): string {
   const location = item.parentPath || folderName;
@@ -64,17 +80,9 @@ export default function ManagedQuickOpen({
         onClose();
         return;
       }
-      setFailure(
-        item.action === 'open'
-          ? 'Could not open this file. Your current document remains available.'
-          : `Could not ${revealLabel.toLocaleLowerCase()}.`,
-      );
+      setFailure(failureFor(item, revealLabel));
     } catch {
-      setFailure(
-        item.action === 'open'
-          ? 'Could not open this file. Your current document remains available.'
-          : `Could not ${revealLabel.toLocaleLowerCase()}.`,
-      );
+      setFailure(failureFor(item, revealLabel));
     } finally {
       setPending(false);
     }
@@ -82,28 +90,20 @@ export default function ManagedQuickOpen({
 
   const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing || items.length === 0) return;
-    if (event.key === 'ArrowDown') {
+    const selected = items[activeIndex];
+    if (event.key === 'Enter' && selected) {
       event.preventDefault();
-      setActiveIndex((current) => Math.min(current + 1, items.length - 1));
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setActiveIndex((current) => Math.max(current - 1, 0));
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      setActiveIndex(0);
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      setActiveIndex(items.length - 1);
-    } else if (event.key === 'PageDown') {
-      event.preventDefault();
-      setActiveIndex((current) => Math.min(current + RESULT_PAGE_SIZE, items.length - 1));
-    } else if (event.key === 'PageUp') {
-      event.preventDefault();
-      setActiveIndex((current) => Math.max(current - RESULT_PAGE_SIZE, 0));
-    } else if (event.key === 'Enter' && items[activeIndex]) {
-      event.preventDefault();
-      void accept(items[activeIndex]);
+      void accept(selected);
+      return;
     }
+    const target = listNavigationTarget(event.key, {
+      activeIndex,
+      count: items.length,
+      pageSize: RESULT_PAGE_SIZE,
+    });
+    if (target === null) return;
+    event.preventDefault();
+    setActiveIndex(target);
   };
 
   return (
@@ -159,7 +159,6 @@ export default function ManagedQuickOpen({
             aria-label="Quick Open results"
             id={resultsId}
             onActiveIndexChange={setActiveIndex}
-            role="listbox"
           >
             {items.map((item, index) => {
               const selected = index === activeIndex;
@@ -167,11 +166,9 @@ export default function ManagedQuickOpen({
               const location = item.parentPath || folderName;
               return (
                 <CommandItem
-                  active={selected}
                   aria-label={optionName(item, folderName, revealLabel)}
                   disabled={pending}
                   id={`${resultsId}-option-${index}`}
-                  index={index}
                   key={`${item.source.folderPath}\u0000${item.source.path}`}
                   onClick={() => void accept(item)}
                 >
