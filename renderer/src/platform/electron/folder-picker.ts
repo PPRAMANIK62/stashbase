@@ -13,7 +13,7 @@ export type LibraryFolderPickerResult =
   | { status: 'cancelled' }
   | { status: 'failed'; failure: LibraryFolderDialogFailure['failure'] };
 
-export interface LibraryFolderPicker {
+export interface LibraryFolderPickerPort {
   chooseFolder(request?: Partial<LibraryFolderDialogRequest>): Promise<LibraryFolderPickerResult>;
 }
 
@@ -25,7 +25,7 @@ export function mapFolderSelection(
   return { status: 'selected', folderPath: response.folderPath };
 }
 
-export function createFolderPicker(bridge: LibraryBridge): LibraryFolderPicker {
+export function createFolderPicker(bridge: LibraryBridge): LibraryFolderPickerPort {
   return {
     async chooseFolder(request) {
       return mapFolderSelection(await bridge.chooseFolder(request));

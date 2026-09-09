@@ -22,7 +22,7 @@ export function createHttpClient(serverOrigin: string, fetchRequest: Fetch = fet
   return {
     async request({ body, method = 'GET', path, signal }) {
       const headers = new Headers({ accept: 'application/json' });
-      const init: RequestInit = { headers, method, signal };
+      const init: RequestInit = { headers, method, ...(signal ? { signal } : {}) };
       if (body !== undefined) {
         headers.set('content-type', 'application/json');
         init.body = JSON.stringify(body);

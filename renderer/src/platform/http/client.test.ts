@@ -19,7 +19,9 @@ describe('HTTP client', () => {
       path: '/api/library/folders/open',
     });
 
-    const [url, init] = fetchRequest.mock.calls[0];
+    const firstCall = fetchRequest.mock.calls[0];
+    if (!firstCall) throw new Error('Expected the client to issue a fetch.');
+    const [url, init] = firstCall;
     expect(String(url)).toBe('http://127.0.0.1:43123/api/library/folders/open');
     expect(init?.method).toBe('POST');
     expect(init?.body).toBe(JSON.stringify({ path: '/library/notes' }));
@@ -50,7 +52,9 @@ describe('HTTP client', () => {
       path: '/api/files/notes.txt?folder=%2Flibrary%2Fnotes',
     });
 
-    const [, init] = fetchRequest.mock.calls[0];
+    const firstCall = fetchRequest.mock.calls[0];
+    if (!firstCall) throw new Error('Expected the client to issue a fetch.');
+    const [, init] = firstCall;
     expect(init?.method).toBe('PUT');
     expect(init?.body).toBe(JSON.stringify({ baseVersion: 'v1', content: 'changed' }));
   });

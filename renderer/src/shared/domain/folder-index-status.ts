@@ -23,31 +23,39 @@ export interface PreparationFailure {
   readonly status: 'failed' | 'cancelled';
 }
 
-export type SemanticIndexingState =
-  | 'disabled'
-  | 'quota-exhausted'
-  | 'partial-quota-exhausted'
-  | 'awaiting-decision'
-  | 'paused'
-  | 'partial-paused'
-  | 'indexing'
-  | 'partial-indexing'
-  | 'ready'
-  | 'failed';
-
-export interface SemanticIndexStatus {
-  readonly available: boolean;
-  readonly disabledReason: string | null;
-  readonly enabled: boolean;
-  readonly estimatedBytes: number | null;
-  readonly indexReady: boolean;
-  /** Visible sources still waiting to be embedded; empty when unavailable. */
-  readonly pending: readonly string[];
-  readonly settled: boolean;
-  readonly sourceCount: number | null;
-  readonly state: SemanticIndexingState;
-  readonly warning: { readonly at: string; readonly message: string } | null;
+/** The daemon's standing warning about one folder's index. `sentence` is
+ *  written by the daemon for the reader — it names the exact piece that is
+ *  missing, which no fixed line here could — so it is carried as a sentence
+ *  rather than as an error's message. */
+interface SemanticIndexWarning {
+  readonly at: string;
+  readonly sentence: string;
 }
+
+/** What an unresolved AI Index build would cost, for the two states that ask
+ *  the reader to decide about it. */
+interface SemanticIndexWorkload {
+  readonly estimatedBytes: number | null;
+  /** Visible sources the build would have to embed. */
+  readonly files: number;
+}
+
+/** One folder's AI Index state, as one variant per observable state carrying
+ *  exactly the facts that state has. A state with nothing to say carries
+ *  nothing, so no reader can consult a flag beside the state it came from. */
+export type SemanticIndexStatus =
+  | { readonly state: 'awaiting-decision'; readonly workload: SemanticIndexWorkload }
+  | { readonly state: 'failed' }
+  /** `partial` marks an index that already answers while the rest builds. */
+  | { readonly partial: boolean; readonly remaining: number; readonly state: 'indexing' }
+  | {
+      readonly partial: boolean;
+      readonly state: 'paused';
+      readonly workload: SemanticIndexWorkload;
+    }
+  | { readonly state: 'not-set-up' }
+  | { readonly state: 'quota-exhausted' }
+  | { readonly state: 'ready' };
 
 export interface FolderIndexStatus {
   readonly blockedConversions: readonly string[];
@@ -56,6 +64,11 @@ export interface FolderIndexStatus {
   readonly conversionVersions: Readonly<Record<string, number>>;
   readonly folderPath: string;
   readonly indexed: number;
+  /** Whether the visible sources' embedding work has come to rest. It paces
+   *  polling beside the conversion queues; it is not a presentation state. */
+  readonly indexSettled: boolean;
+  /** The daemon's standing index warning, whatever the semantic state. */
+  readonly indexWarning: SemanticIndexWarning | null;
   readonly pendingConversions: readonly string[];
   readonly preparationFailures: readonly PreparationFailure[];
   readonly semantic: SemanticIndexStatus;
