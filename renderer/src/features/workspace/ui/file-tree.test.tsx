@@ -58,7 +58,9 @@ const runtimes: WorkspaceRuntime[] = [];
 function renderTree(
   api: FilesApi,
   onOpenSource?: ComponentProps<typeof FileTree>['onOpenSource'],
-  extra: Partial<Pick<ComponentProps<typeof FileTree>, 'onReprocess' | 'rowMarkers'>> = {},
+  extra: Partial<
+    Pick<ComponentProps<typeof FileTree>, 'onReprocess' | 'retireSources' | 'rowMarkers'>
+  > = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -335,5 +337,208 @@ describe('file tree drag source', () => {
       name: 'linked-file, restricted, Show in file manager',
     });
     expect(restricted.getAttribute('draggable')).toBe('false');
+  });
+});
+
+describe('file tree entry operations', () => {
+  it('names a new file from the tree space and a new folder from a folder row', async () => {
+    const api = filesApi();
+    const onOpenSource = vi.fn();
+    renderTree(api, onOpenSource);
+    const user = userEvent.setup();
+
+    const tree = await screen.findByRole('tree', { name: 'Files' });
+    fireEvent.contextMenu(tree, { clientX: 40, clientY: 200 });
+    await user.click(await screen.findByRole('menuitem', { name: 'New file' }));
+    const draft = await screen.findByRole('textbox', { name: 'New file in folder root' });
+    expect(draft.matches(':focus')).toBe(true);
+    await user.keyboard('a/b{Enter}');
+    expect(screen.getByRole('alert').textContent).toBe('A name cannot contain slashes.');
+    expect(api.createEntry).not.toHaveBeenCalled();
+    await user.clear(draft);
+    await user.keyboard('Plan{Enter}');
+    await waitFor(() =>
+      expect(api.createEntry).toHaveBeenCalledWith(
+        '/library/research',
+        'file',
+        '',
+        'Plan',
+        expect.any(AbortSignal),
+      ),
+    );
+    await waitFor(() =>
+      expect(onOpenSource).toHaveBeenCalledWith({ folderPath: '/library/research', path: 'Plan' }),
+    );
+    expect(screen.queryByRole('textbox')).toBeNull();
+
+    fireEvent.contextMenu(screen.getByRole('treeitem', { name: 'docs' }), {
+      clientX: 12,
+      clientY: 12,
+    });
+    await user.click(await screen.findByRole('menuitem', { name: 'New folder' }));
+    const folderDraft = await screen.findByRole('textbox', { name: 'New folder in docs' });
+    expect(folderDraft.closest('[role="treeitem"]')?.getAttribute('aria-level')).toBe('2');
+    expect(screen.getByRole('treeitem', { name: 'docs' }).getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+    await user.keyboard('archive{Enter}');
+    await waitFor(() =>
+      expect(api.createEntry).toHaveBeenLastCalledWith(
+        '/library/research',
+        'folder',
+        'docs',
+        'archive',
+        expect.any(AbortSignal),
+      ),
+    );
+
+    fireEvent.contextMenu(tree, { clientX: 40, clientY: 200 });
+    await user.click(await screen.findByRole('menuitem', { name: 'New folder' }));
+    await screen.findByRole('textbox', { name: 'New folder in folder root' });
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(api.createEntry).toHaveBeenCalledTimes(2);
+  });
+
+  it('renames from F2 with the stem selected and from a double click, retiring open documents first', async () => {
+    const api = filesApi();
+    const onOpenSource = vi.fn();
+    const retireSources = vi.fn(async () => [
+      { folderPath: '/library/research', path: 'docs/plan.md' },
+    ]);
+    renderTree(api, onOpenSource, { retireSources });
+    const user = userEvent.setup();
+
+    const docs = await screen.findByRole('treeitem', { name: 'docs' });
+    docs.focus();
+    await user.keyboard('{Enter}');
+    const plan = await screen.findByRole('treeitem', { name: 'plan.md' });
+    plan.focus();
+    await user.keyboard('{F2}');
+    const field = await screen.findByRole<HTMLInputElement>('textbox', { name: 'Rename plan.md' });
+    expect(field.value).toBe('plan.md');
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 4]);
+    await user.keyboard('outline{Enter}');
+    await waitFor(() =>
+      expect(api.renameEntry).toHaveBeenCalledWith(
+        '/library/research',
+        { kind: 'file', path: 'docs/plan.md' },
+        'outline.md',
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(retireSources).toHaveBeenCalledWith({ kind: 'file', path: 'docs/plan.md' });
+    await waitFor(() =>
+      expect(onOpenSource).toHaveBeenCalledWith({
+        folderPath: '/library/research',
+        path: 'docs/outline.md',
+      }),
+    );
+
+    fireEvent.doubleClick(screen.getByRole('treeitem', { name: 'docs' }));
+    const folderField = await screen.findByRole<HTMLInputElement>('textbox', {
+      name: 'Rename docs',
+    });
+    expect(folderField.value).toBe('docs');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(api.renameEntry).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('treeitem', { name: 'docs' }).matches(':focus')).toBe(true);
+  });
+
+  it('deletes only after confirmation and keeps the entry when a document cannot be saved', async () => {
+    const api = filesApi();
+    const retireSources = vi
+      .fn<NonNullable<ComponentProps<typeof FileTree>['retireSources']>>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce([]);
+    renderTree(api, undefined, { retireSources });
+    const user = userEvent.setup();
+
+    const archive = await screen.findByRole('treeitem', {
+      name: 'archive.zip, excluded from Search and automatic Chat context',
+    });
+    fireEvent.contextMenu(archive, { clientX: 12, clientY: 12 });
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete file?' });
+    expect(dialog.textContent).toContain('archive.zip');
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'An open document could not be saved, so nothing was changed.',
+    );
+    expect(api.deleteEntry).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() =>
+      expect(api.deleteEntry).toHaveBeenCalledWith(
+        '/library/research',
+        { kind: 'file', path: 'archive.zip' },
+        expect.any(AbortSignal),
+      ),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    const docs = screen.getByRole('treeitem', { name: 'docs' });
+    docs.focus();
+    await user.keyboard('{Delete}');
+    expect(await screen.findByRole('dialog', { name: 'Delete folder?' })).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(api.deleteEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the tree menu from the empty scroll space below the rows', async () => {
+    const api = filesApi();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const runtime = createWorkspaceRuntime({
+      folder: { name: 'Research', path: '/library/research' },
+      generation: runtimes.length + 1,
+      queries: {
+        cancel: () => queryClient.cancelQueries(),
+        remove: () => queryClient.removeQueries(),
+      },
+    });
+    runtimes.push(runtime);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <div data-sidebar="sidebar" data-testid="frame">
+          <div data-slot="scroll-area-viewport">
+            <FileTree api={api} revealLabel="Show in file manager" runtime={runtime} />
+          </div>
+          <div data-sidebar="footer">
+            <button type="button">Settings</button>
+          </div>
+        </div>
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('tree', { name: 'Files' });
+
+    fireEvent.contextMenu(screen.getByTestId('frame'), { clientX: 30, clientY: 400 });
+    expect(await screen.findByRole('menuitem', { name: 'New file' })).not.toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Rename' })).toBeNull();
+    await userEvent.setup().keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'New file' })).toBeNull());
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Settings' }), {
+      clientX: 30,
+      clientY: 800,
+    });
+    expect(screen.queryByRole('menuitem', { name: 'New file' })).toBeNull();
+  });
+
+  it('offers restricted entries only the reveal action', async () => {
+    renderTree(filesApi());
+    const user = userEvent.setup();
+
+    const vendor = await screen.findByRole('treeitem', {
+      name: 'vendor, restricted, Show in file manager',
+    });
+    fireEvent.contextMenu(vendor, { clientX: 12, clientY: 12 });
+    expect(await screen.findByRole('menuitem', { name: 'Show in file manager' })).not.toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Rename' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'New file' })).toBeNull();
+    await user.keyboard('{Escape}');
+    fireEvent.doubleClick(vendor);
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
 });
