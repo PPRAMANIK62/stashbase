@@ -8,6 +8,8 @@ release/
 release.nosync/
 graphify-out/
 test/
+# The renderer test toolkit is source, not a scratch directory.
+!renderer/src/test/
 web/dist-app/
 models/
 python/runtime/
