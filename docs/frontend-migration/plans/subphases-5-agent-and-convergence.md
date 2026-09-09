@@ -121,7 +121,7 @@ pending work.
 Transcript: no provenance rail, muted thinking, amber only for permission asks,
 one Copy after the final reply of a settled turn, a hover time per prompt, and
 a day divider where a prompt opens a new day. A permission decision returns
-focus to its heading.
+focus to the activity summary that receives the decided tool (Task 51).
 
 Provider, model, and thinking controls live in the composer, hide when
 unsupported, and lock during turns. Model changes use the native next-turn
@@ -174,8 +174,41 @@ architecture, typecheck, lint, and web build checks.
 
 **Blocked by:** 33, 49, 50.
 
-Review and apply Agent changes through versioned file authority with explicit
-permission, Diff evidence, save recovery, and conflict handling.
+**Status:** Complete.
+
+Research: [Agent document writes and Diffs research](../research/agent-file-changes-task-51.md).
+
+Every runtime's write lands on one file-change shape: a path, an action, the
+text on both sides when the runtime gave it, a unified patch when that is all
+Codex gave, and the server's own counts for a native diff. A permission ask
+for a write shows the diff instead of raw arguments, so the decision is made
+on evidence; the expanded tool row shows the same diff after the fact. Once
+decided, the ask stops being a card: the tool folds into the collapsed
+activity group as an ordinary row that still opens to the same diff and reads
+Denied when rejected, and focus moves to that group's summary. The
+diff is a read-only CodeMirror unified merge view in the code editor's mono
+surface, with unchanged regions collapsed, word-level changes marked, syntax
+from the bundled language data, additions in green, and deletions in red
+through dedicated diff tokens. The Built-in agent's native `file-diff` events enter
+the transcript as settled `FileDiff` blocks, the same shape replayed history
+carries. A settled activity group ends with each changed file once and an
+Open control only for paths inside the scoped folder; opening is the user's
+choice and routes through the shell's document workflow. After a write tool
+settles without error or a native diff arrives, the shell refetches the folder
+listing and the open documents behind the changed sources, then requests a
+folder-explicit sync and refreshes readiness. A clean editor takes the newer
+disk text through the existing reconcile path; a dirty editor keeps its draft
+and meets Task 33's versioned conflict on its next save.
+
+Known gap: a Codex change without a patch, a NotebookEdit, and a deleted file
+list as changed files without diff evidence. Native Claude and Codex writes
+reach the AI Index only through the post-write sync; a sync that is cut short
+leaves the index to the next explicit sync.
+
+Evidence: focused file-change domain, session domain, adapter, runtime, diff
+view, activity, documents query, preparation adapter, protocol, architecture,
+typecheck, lint, and web build checks. J07 E2E evidence stays with the legacy
+renderer until cutover.
 
 ## 52 — Converge Chat conclusions into documents
 
