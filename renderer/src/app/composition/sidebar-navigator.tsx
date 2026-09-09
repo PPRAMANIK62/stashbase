@@ -1,29 +1,38 @@
-import { Bot, FolderTree, ListTree, Search } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { useId } from 'react';
 
 import { SidebarContent, SidebarGroup } from '@/components/ui/sidebar';
 import { TabsSubtle, TabsSubtleItem } from '@/components/ui/tabs-subtle';
 import { Tooltip } from '@/components/ui/tooltip';
-import { DocumentOutline, type DocumentTabsRuntime } from '@/features/documents/public';
+
+import type { SidebarPanel } from './sidebar-panels';
+import type { SidebarPanelId } from './use-workspace-commands';
 
 interface SidebarNavigatorProps {
-  children: ReactNode;
-  chats: ReactNode;
-  onSelect(index: number): void;
-  runtime: DocumentTabsRuntime | null;
-  search: ReactNode;
-  selectedIndex: number;
+  onSelect(panel: SidebarPanelId): void;
+  panels: readonly SidebarPanel[];
+  selected: SidebarPanelId;
 }
 
-export function SidebarNavigator({
-  children,
-  chats,
-  onSelect,
-  runtime,
-  search,
-  selectedIndex,
-}: SidebarNavigatorProps) {
+/** Renders whatever the panel registry declares: one tab per panel, and one
+ *  `tabpanel` per panel in the region its `hidesTree` flag puts it in. */
+export function SidebarNavigator({ onSelect, panels, selected }: SidebarNavigatorProps) {
   const navigatorId = useId();
+  const selectedIndex = panels.findIndex((panel) => panel.id === selected);
+  const hidesTree = panels[selectedIndex]?.hidesTree ?? false;
+
+  const pane = (panel: SidebarPanel, index: number) => (
+    <div
+      aria-labelledby={`${navigatorId}-tab-${index}`}
+      id={`${navigatorId}-panel-${index}`}
+      key={panel.id}
+      role="tabpanel"
+      {...(panel.hidesTree
+        ? { className: selected === panel.id ? 'flex min-h-0 flex-1 flex-col' : 'hidden' }
+        : { hidden: selected !== panel.id })}
+    >
+      {panel.render(selected === panel.id)}
+    </div>
+  );
 
   return (
     <>
@@ -32,82 +41,37 @@ export function SidebarNavigator({
           aria-label="Sidebar navigator"
           iconOnly
           idPrefix={navigatorId}
-          onSelect={onSelect}
+          onSelect={(index) => {
+            const panel = panels[index];
+            if (panel) onSelect(panel.id);
+          }}
           selectedIndex={selectedIndex}
           size="compact"
         >
-          <Tooltip content="Files" side="bottom">
-            <TabsSubtleItem icon={FolderTree} index={0} label="Files" />
-          </Tooltip>
-          <Tooltip content="Document outline" side="bottom">
-            <TabsSubtleItem icon={ListTree} index={1} label="Document outline" />
-          </Tooltip>
-          <Tooltip content="Search · Cmd/Ctrl Shift F" side="bottom">
-            <TabsSubtleItem
-              aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
-              icon={Search}
-              index={2}
-              label="Search"
-            />
-          </Tooltip>
-          <Tooltip content="Chats" side="bottom">
-            <TabsSubtleItem icon={Bot} index={3} label="Chats" />
-          </Tooltip>
+          {panels.map((panel) => (
+            <Tooltip content={panel.hint ?? panel.label} key={panel.id} side="bottom">
+              <TabsSubtleItem
+                aria-keyshortcuts={panel.keyshortcuts}
+                icon={panel.icon}
+                label={panel.label}
+              />
+            </Tooltip>
+          ))}
         </TabsSubtle>
       </div>
 
       {/* The scroll region keeps its own flex frame around the class it is
-          given, so the panel hides through an ancestor: a hidden frame
-          takes no row, and Search or Chats starts right under the tabs. */}
-      <div
-        className={selectedIndex >= 2 ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}
-        hidden={selectedIndex >= 2}
-      >
+          given, so a panel that replaces the tree hides through an ancestor: a
+          hidden frame takes no row, and Search or Chats starts right under the
+          tabs. */}
+      <div className={hidesTree ? 'hidden' : 'flex min-h-0 flex-1 flex-col'} hidden={hidesTree}>
         <SidebarContent>
           <SidebarGroup>
-            <div
-              aria-labelledby={`${navigatorId}-tab-0`}
-              hidden={selectedIndex !== 0}
-              id={`${navigatorId}-panel-0`}
-              role="tabpanel"
-            >
-              {children}
-            </div>
-            <div
-              aria-labelledby={`${navigatorId}-tab-1`}
-              hidden={selectedIndex !== 1}
-              id={`${navigatorId}-panel-1`}
-              role="tabpanel"
-            >
-              {runtime ? (
-                <DocumentOutline runtime={runtime} />
-              ) : (
-                <SidebarGroup aria-label="Document outline section" className="min-h-0 p-0">
-                  <p className="px-4 pt-1 pb-2 text-caption text-muted-foreground">
-                    No outline available
-                  </p>
-                </SidebarGroup>
-              )}
-            </div>
+            {panels.map((panel, index) => (panel.hidesTree ? null : pane(panel, index)))}
           </SidebarGroup>
         </SidebarContent>
       </div>
-      <div
-        aria-labelledby={`${navigatorId}-tab-2`}
-        className={selectedIndex === 2 ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
-        id={`${navigatorId}-panel-2`}
-        role="tabpanel"
-      >
-        {search}
-      </div>
-      <div
-        aria-labelledby={`${navigatorId}-tab-3`}
-        className={selectedIndex === 3 ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
-        id={`${navigatorId}-panel-3`}
-        role="tabpanel"
-      >
-        {chats}
-      </div>
+      {panels.map((panel, index) => (panel.hidesTree ? pane(panel, index) : null))}
     </>
   );
 }

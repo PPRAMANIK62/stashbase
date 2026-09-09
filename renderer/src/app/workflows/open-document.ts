@@ -12,18 +12,18 @@ export async function openDocument(
   source: SourceReference,
   options?: { anchor?: string; search?: DocumentSearchTarget },
 ): Promise<DocumentRuntime | null> {
-  const workspaceScope = workspace.scope;
-  const documentScope = documents.scope;
+  const workspaceOperation = workspace.capture();
+  const documentScope = documents.capture();
   let opening: Promise<DocumentRuntime | null> | null = null;
 
   if (
-    documentScope.folderPath !== workspaceScope.folder.path ||
-    documentScope.generation !== workspaceScope.generation
+    documentScope.scope.folderPath !== workspaceOperation.scope.folder.path ||
+    documentScope.scope.generation !== workspaceOperation.scope.generation
   ) {
     return null;
   }
 
-  workspace.accept(workspaceScope, () => {
+  workspace.accept(workspaceOperation, () => {
     documents.accept(documentScope, () => {
       opening = documents.open(source, options);
     });

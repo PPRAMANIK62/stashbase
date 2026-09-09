@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef } from 'react';
+
+import type { DocumentTabsRuntime } from '@/features/documents/public';
+import type { WorkspaceRuntime } from '@/features/workspace/public';
+import { useCommandSurface, type CommandSurface } from '@/lib/runtime/use-command-surface';
+
+import { useWindowCommand } from './use-window-command';
 
 function isQuickOpenShortcut(event: KeyboardEvent): boolean {
   return (
@@ -9,25 +15,23 @@ function isQuickOpenShortcut(event: KeyboardEvent): boolean {
   );
 }
 
-export function useQuickOpenCommand(scopeKey: string | null) {
-  const [open, setOpen] = useState(false);
-  const focusToRestore = useRef<HTMLElement | null>(null);
+/** Quick open is scoped to one folder generation with its documents mounted;
+ *  the key identifies that pairing, so leaving it closes the surface. */
+function quickOpenScopeKey(
+  workspace: WorkspaceRuntime | null,
+  documents: DocumentTabsRuntime | null,
+): string | null {
+  if (!workspace || !documents) return null;
+  return `${workspace.scope.folder.path}#${workspace.scope.generation}`;
+}
+
+export function useQuickOpenCommand(
+  workspace: WorkspaceRuntime | null,
+  documents: DocumentTabsRuntime | null,
+): Pick<CommandSurface, 'close' | 'open'> {
+  const scopeKey = quickOpenScopeKey(workspace, documents);
+  const { close, open, present } = useCommandSurface();
   const previousScopeKey = useRef(scopeKey);
-
-  const restoreFocus = useCallback(() => {
-    const target = focusToRestore.current;
-    focusToRestore.current = null;
-    queueMicrotask(() => {
-      if (target?.isConnected) target.focus();
-    });
-  }, []);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    restoreFocus();
-  }, [restoreFocus]);
-
-  useEffect(() => restoreFocus, [restoreFocus]);
 
   useLayoutEffect(() => {
     if (previousScopeKey.current === scopeKey) return;
@@ -35,21 +39,13 @@ export function useQuickOpenCommand(scopeKey: string | null) {
     close();
   }, [close, scopeKey]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!isQuickOpenShortcut(event)) return;
-      event.preventDefault();
+  useWindowCommand(
+    isQuickOpenShortcut,
+    useCallback(() => {
       if (!scopeKey || open || globalThis.document.querySelector('[role="dialog"]')) return;
-      focusToRestore.current =
-        globalThis.document.activeElement instanceof HTMLElement
-          ? globalThis.document.activeElement
-          : null;
-      setOpen(true);
-    };
-
-    globalThis.document.addEventListener('keydown', onKeyDown);
-    return () => globalThis.document.removeEventListener('keydown', onKeyDown);
-  }, [open, scopeKey]);
+      present();
+    }, [open, present, scopeKey]),
+  );
 
   return { close, open };
 }

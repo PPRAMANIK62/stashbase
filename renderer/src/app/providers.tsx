@@ -1,13 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MotionConfig } from 'framer-motion';
-import { StrictMode, type PropsWithChildren, useState } from 'react';
+import { StrictMode, useState, type PropsWithChildren } from 'react';
 
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { IconProvider } from '@/lib/icon-context';
-import { ShapeProvider } from '@/lib/shape-context';
-import { SizeProvider } from '@/lib/size-context';
-import { SurfaceProvider } from '@/lib/surface-context';
+import { FluidProviders } from '@/lib/runtime/fluid-providers';
 
+/** The app's outer concerns — StrictMode and the query client — wrapped around
+ *  the same Fluid stack Storybook and the component tests mount, so a surface
+ *  in the running app is the surface those two prove. */
 export function Providers({ children }: PropsWithChildren) {
   const [queryClient] = useState(
     () =>
@@ -20,17 +18,7 @@ export function Providers({ children }: PropsWithChildren) {
   return (
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <MotionConfig reducedMotion="user">
-          <ShapeProvider defaultShape="rounded">
-            <SizeProvider defaultSize="default">
-              <SurfaceProvider value={1}>
-                <IconProvider>
-                  <TooltipProvider>{children}</TooltipProvider>
-                </IconProvider>
-              </SurfaceProvider>
-            </SizeProvider>
-          </ShapeProvider>
-        </MotionConfig>
+        <FluidProviders>{children}</FluidProviders>
       </QueryClientProvider>
     </StrictMode>
   );

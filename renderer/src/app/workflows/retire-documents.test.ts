@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import { createDocumentTabsRuntime, type DocumentSourceApi } from '@/features/documents/public';
-import { createWorkspaceRuntime } from '@/features/workspace/public';
+import { createDocumentTabsRuntime, type DocumentAdapters } from '@/features/documents/public';
+import { createWorkspaceRuntime } from '@/features/workspace/test-support';
 
 import { retireDocuments } from './retire-documents';
 
@@ -14,7 +14,7 @@ function createWorkspace() {
 }
 
 function createDocuments(
-  api: DocumentSourceApi = { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() },
+  api: DocumentAdapters['source'] = { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() },
 ) {
   let next = 0;
   return createDocumentTabsRuntime({
@@ -52,9 +52,7 @@ describe('retire documents workflow', () => {
       { folderPath: '/library/notes', path: 'drafts/plan.md' },
       { folderPath: '/library/notes', path: 'drafts/2026/notes.md' },
     ]);
-    expect(documents.store.getState().tabs.map((tab) => tab.source.path)).toEqual([
-      'drafts-old/keep.md',
-    ]);
+    expect(documents.openSources().map((source) => source.path)).toEqual(['drafts-old/keep.md']);
   });
 
   it('answers nothing to reopen when no document is under the entry', async () => {
@@ -64,7 +62,7 @@ describe('retire documents workflow', () => {
     expect(await retireDocuments(workspace, documents, { kind: 'file', path: 'other.md' })).toEqual(
       [],
     );
-    expect(documents.store.getState().tabs).toHaveLength(3);
+    expect(documents.openSources()).toHaveLength(3);
   });
 
   it('stops at the first document that cannot be closed', async () => {
@@ -76,7 +74,23 @@ describe('retire documents workflow', () => {
       await retireDocuments(workspace, documents, { kind: 'folder', path: 'drafts' }),
     ).toBeNull();
     expect(close).toHaveBeenCalledOnce();
-    expect(documents.store.getState().tabs).toHaveLength(3);
+    expect(documents.openSources()).toHaveLength(3);
+  });
+
+  it('stops when the folder is retired between two closes', async () => {
+    const workspace = createWorkspace();
+    const documents = createDocuments();
+    // The first close settles, then the folder is rebound underneath: the
+    // second document is no longer this folder's to settle.
+    vi.spyOn(documents, 'close').mockImplementationOnce(async () => {
+      workspace.retireOperations();
+      return true;
+    });
+
+    expect(
+      await retireDocuments(workspace, documents, { kind: 'folder', path: 'drafts' }),
+    ).toBeNull();
+    expect(documents.openSources()).toHaveLength(3);
   });
 
   it('leaves a document collection from another folder generation alone', async () => {
@@ -90,6 +104,6 @@ describe('retire documents workflow', () => {
     });
 
     expect(await retireDocuments(later, documents, { kind: 'folder', path: 'drafts' })).toEqual([]);
-    expect(documents.store.getState().tabs).toHaveLength(3);
+    expect(documents.openSources()).toHaveLength(3);
   });
 });

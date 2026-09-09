@@ -1,35 +1,22 @@
+/**
+ * The Agent beside the open document, and the handle between them.
+ *
+ * Both panes are always mounted: the Agent keeps its transcript and its
+ * composer draft while a document is opened and closed beside it, so the split
+ * is a width, not a route. The Agent pane's width is the remembered one; the
+ * document keeps a floor of its own and the Agent yields, which is what makes
+ * a narrow window collapse the chat rather than crush the page being read.
+ */
 import { motion, useReducedMotion } from 'framer-motion';
-import {
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 import { SplitHandle } from '@/components/ui/split-handle';
-import type { DocumentTabsRuntime } from '@/features/documents/public';
-import {
-  DEFAULT_AGENT_PANE_WIDTH,
-  MAX_AGENT_PANE_WIDTH,
-  MIN_AGENT_PANE_WIDTH,
-} from '@/features/workspace/public';
+import { useHasOpenDocuments, type DocumentTabsRuntime } from '@/features/documents/public';
+import { AGENT_PANE_WIDTH } from '@/features/workspace/public';
 import { spring } from '@/lib/springs';
 
 /** The document keeps at least this much of the row; the Agent pane yields. */
 const MIN_DOCUMENT_WIDTH = 320;
-
-/** Whether the tabs runtime holds any open document. Read through one
- *  subscription so the shell header and the split row agree on every frame. */
-export function useHasDocuments(runtime: DocumentTabsRuntime | null): boolean {
-  const subscribe = useCallback(
-    (listener: () => void) => runtime?.store.subscribe(listener) ?? (() => undefined),
-    [runtime],
-  );
-  const snapshot = useCallback(() => (runtime?.store.getState().tabs.length ?? 0) > 0, [runtime]);
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
-}
 
 /** The row's own width in px, or null until it has been measured. */
 function useRowWidth(ref: React.RefObject<HTMLDivElement | null>): number | null {
@@ -71,7 +58,7 @@ export function AgentDocumentWorkspace({
   paneWidth: number;
   runtime: DocumentTabsRuntime | null;
 }) {
-  const hasDocuments = useHasDocuments(runtime);
+  const hasDocuments = useHasOpenDocuments(runtime);
   const rowRef = useRef<HTMLDivElement>(null);
   const rowWidth = useRowWidth(rowRef);
   const reduceMotion = useReducedMotion() ?? false;
@@ -89,7 +76,7 @@ export function AgentDocumentWorkspace({
   const agentWidth = hasDocuments
     ? rowWidth === null
       ? paneWidth
-      : Math.min(paneWidth, Math.max(MIN_AGENT_PANE_WIDTH, rowWidth - MIN_DOCUMENT_WIDTH))
+      : Math.min(paneWidth, Math.max(AGENT_PANE_WIDTH.min, rowWidth - MIN_DOCUMENT_WIDTH))
     : null;
   const documentWidth =
     agentWidth === null
@@ -131,10 +118,10 @@ export function AgentDocumentWorkspace({
         {hasDocuments && (
           <SplitHandle
             className="left-0 -translate-x-1/2"
-            defaultWidth={DEFAULT_AGENT_PANE_WIDTH}
+            defaultWidth={AGENT_PANE_WIDTH.default}
             label="Resize Agent pane"
-            max={MAX_AGENT_PANE_WIDTH}
-            min={MIN_AGENT_PANE_WIDTH}
+            max={AGENT_PANE_WIDTH.max}
+            min={AGENT_PANE_WIDTH.min}
             onWidthChange={onPaneWidthChange}
             pane="right"
             width={paneWidth}

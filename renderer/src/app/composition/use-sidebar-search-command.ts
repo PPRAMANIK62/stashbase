@@ -1,4 +1,6 @@
-import { useEffect } from 'react';
+import { useCallback } from 'react';
+
+import { useWindowCommand } from './use-window-command';
 
 function isSearchShortcut(event: KeyboardEvent): boolean {
   return (
@@ -9,14 +11,13 @@ function isSearchShortcut(event: KeyboardEvent): boolean {
   );
 }
 
+/** Cmd/Ctrl+Shift+F opens the sidebar's search panel. The chord is always
+ *  taken, so it never falls through to the browser's own find. */
 export function useSidebarSearchCommand(available: boolean, openSearch: () => void) {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!isSearchShortcut(event)) return;
-      event.preventDefault();
+  useWindowCommand(
+    isSearchShortcut,
+    useCallback(() => {
       if (available) openSearch();
-    };
-    globalThis.document.addEventListener('keydown', onKeyDown);
-    return () => globalThis.document.removeEventListener('keydown', onKeyDown);
-  }, [available, openSearch]);
+    }, [available, openSearch]),
+  );
 }

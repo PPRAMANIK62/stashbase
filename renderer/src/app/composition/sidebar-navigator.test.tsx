@@ -1,78 +1,49 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Bot, FolderTree } from 'lucide-react';
 import { useState } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, describe, expect, it } from 'vite-plus/test';
 
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { createDocumentTabsRuntime } from '@/features/documents/public';
+import { documentTabsRuntimeOptions } from '@/test/fakes/documents';
 
 import { SidebarNavigator } from './sidebar-navigator';
+import { sidebarPanels, type SidebarPanel } from './sidebar-panels';
+import type { SidebarPanelId } from './use-workspace-commands';
 
 function createRuntime() {
-  return createDocumentTabsRuntime({
-    api: {
-      load: vi.fn(),
-      overwrite: vi.fn(),
-      save: vi.fn(),
-    },
-    createId: () => 'tab-1',
-    createQueries: () => ({
-      cancel: vi.fn(async () => undefined),
-      remove: vi.fn(),
-      replaceSource: vi.fn(),
-    }),
-    folderPath: '/library/notes',
-    generation: 1,
-  });
+  return createDocumentTabsRuntime(documentTabsRuntimeOptions({ createId: () => 'tab-1' }));
 }
 
-let getAnimationsDescriptor: PropertyDescriptor | undefined;
-
-function Navigator({ runtime = null }: { runtime?: ReturnType<typeof createRuntime> | null }) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
+function Navigator({ panels }: { panels: readonly SidebarPanel[] }) {
+  const [selected, setSelected] = useState<SidebarPanelId>('files');
   return (
-    <SidebarNavigator
-      chats={<div>Folder chats</div>}
-      onSelect={setSelectedIndex}
-      runtime={runtime}
-      search={
-        <label>
-          Search panel
-          <input aria-label="Search current workspace" />
-        </label>
-      }
-      selectedIndex={selectedIndex}
-    >
-      <div>Folder files</div>
-    </SidebarNavigator>
+    <SidebarProvider>
+      <SidebarNavigator onSelect={setSelected} panels={panels} selected={selected} />
+    </SidebarProvider>
   );
 }
 
-beforeEach(() => {
-  getAnimationsDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
-  Object.defineProperty(Element.prototype, 'getAnimations', {
-    configurable: true,
-    value: vi.fn(() => []),
+function shellPanels(runtime: ReturnType<typeof createRuntime> | null = null) {
+  return sidebarPanels({
+    chats: <div>Folder chats</div>,
+    files: <div>Folder files</div>,
+    outline: runtime,
+    search: (
+      <label>
+        Search panel
+        <input aria-label="Search current workspace" />
+      </label>
+    ),
   });
-});
+}
 
-afterEach(() => {
-  cleanup();
-  if (getAnimationsDescriptor) {
-    Object.defineProperty(Element.prototype, 'getAnimations', getAnimationsDescriptor);
-  } else {
-    Reflect.deleteProperty(Element.prototype, 'getAnimations');
-  }
-  getAnimationsDescriptor = undefined;
-});
+afterEach(cleanup);
 
 describe('sidebar navigator', () => {
   it('keeps the navigator available while the document runtime initializes', async () => {
-    render(
-      <SidebarProvider>
-        <Navigator />
-      </SidebarProvider>,
-    );
+    render(<Navigator panels={shellPanels()} />);
 
     expect(screen.getByRole('tablist', { name: 'Sidebar navigator' })).not.toBeNull();
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Document outline' }));
@@ -82,14 +53,9 @@ describe('sidebar navigator', () => {
   it('keeps Files, Document outline, Search, and Chats available without an open document', async () => {
     const runtime = createRuntime();
 
-    render(
-      <SidebarProvider>
-        <Navigator runtime={runtime} />
-      </SidebarProvider>,
-    );
+    render(<Navigator panels={shellPanels(runtime)} />);
 
-    const navigator = screen.getByRole('tablist', { name: 'Sidebar navigator' });
-    expect(navigator).not.toBeNull();
+    expect(screen.getByRole('tablist', { name: 'Sidebar navigator' })).not.toBeNull();
     expect(screen.getByRole('tab', { name: 'Files' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tab', { name: 'Search' })).not.toBeNull();
     expect(screen.getByRole('tab', { name: 'Chats' })).not.toBeNull();
@@ -101,32 +67,57 @@ describe('sidebar navigator', () => {
   });
 
   it('shows the Search panel and focuses its field from the tab', async () => {
-    render(
-      <SidebarProvider>
-        <Navigator />
-      </SidebarProvider>,
-    );
+    render(<Navigator panels={shellPanels()} />);
 
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Search' }));
 
     expect(screen.getByRole('tab', { name: 'Search' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('textbox', { name: 'Search current workspace' })).not.toBeNull();
-    // The files region leaves the column entirely, so the Search panel is
-    // not pushed halfway down beside an empty flex frame.
-    const filesRegion = document.querySelector('[data-sidebar="content"]');
+    // The files region leaves the column entirely, so the Search panel is not pushed halfway down
+    // beside an empty flex frame. `data-sidebar="content"` is the app kit's own structural wrapper
+    // with no role or label; the fact under test is the ancestor column's hidden state, not any
+    // one tabpanel's, so there is no role query that reaches it instead.
+    const filesRegion = document.querySelector('[data-sidebar="content"]'); // dom-contract: see comment above
     expect(filesRegion?.closest('[hidden]')).not.toBeNull();
   });
 
-  it('shows the selected workspace chat navigator', async () => {
-    render(
-      <SidebarProvider>
-        <Navigator />
-      </SidebarProvider>,
-    );
+  it('mounts the Chats panel only once it is selected', async () => {
+    render(<Navigator panels={shellPanels()} />);
+
+    expect(screen.queryByText('Folder chats')).toBeNull();
 
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Chats' }));
 
     expect(screen.getByRole('tab', { name: 'Chats' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('Folder chats')).not.toBeNull();
+  });
+
+  it('renders a tab and a pane for whatever the registry declares', async () => {
+    const panels: SidebarPanel[] = [
+      {
+        hidesTree: false,
+        icon: FolderTree,
+        id: 'files',
+        label: 'Files',
+        render: () => <p>Tree</p>,
+      },
+      {
+        hidesTree: true,
+        icon: Bot,
+        id: 'chats',
+        label: 'Notebook',
+        render: () => <p>Notebook pane</p>,
+      },
+    ];
+
+    render(<Navigator panels={panels} />);
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'Notebook' }));
+
+    expect(screen.getByRole('tab', { name: 'Notebook' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByText('Notebook pane')).not.toBeNull();
+    // The tree-region panel keeps its pane mounted; only the frame hides.
+    expect(screen.getByText('Tree').closest('[hidden]')).not.toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { createDocumentTabsRuntime } from '@/features/documents/public';
-import { createWorkspaceRuntime } from '@/features/workspace/public';
+import { createWorkspaceRuntime } from '@/features/workspace/test-support';
 
 import { openDocument } from './open-document';
 
@@ -38,7 +38,7 @@ describe('open document workflow', () => {
     });
 
     expect(opened?.scope.source.path).toBe('plan.md');
-    expect(documents.store.getState().activeTabId).toBe('tab-1');
+    expect(documents.activeSource()).toEqual({ folderPath: '/library/notes', path: 'plan.md' });
   });
 
   it('rejects an open after either captured scope is disposed', async () => {
@@ -52,7 +52,7 @@ describe('open document workflow', () => {
         path: 'late.md',
       }),
     ).toBeNull();
-    expect(documents.store.getState().tabs).toEqual([]);
+    expect(documents.openSources()).toEqual([]);
   });
 
   it('rejects a live document collection belonging to another folder generation', async () => {
@@ -75,6 +75,6 @@ describe('open document workflow', () => {
         path: 'late.md',
       }),
     ).toBeNull();
-    expect(documents.store.getState().tabs).toEqual([]);
+    expect(documents.openSources()).toEqual([]);
   });
 });

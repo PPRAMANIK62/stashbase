@@ -1,503 +1,144 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Settings as SettingsIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect } from 'react';
 
+import { useAgentComposerFocused, useAgentWorkspaceRuntime } from '@/features/agent/public';
+import { useDocumentCommands, useDocumentSaveBarrier } from '@/features/documents/public';
+import { useFolderStatus } from '@/features/preparation/public';
 import {
-  Sidebar,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarHeader,
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from '@/components/ui/sidebar';
-import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
-import {
-  AgentChats,
-  AgentTitlebar,
-  AgentWorkspace,
-  type AgentFilesChanged,
-  type AgentScopeEnvironment,
-  type AgentScopeOutline,
-  type AgentWorkspaceProps,
-  useAgentWorkspaceRuntime,
-} from '@/features/agent/public';
-import {
-  DocumentTabs,
-  DocumentWorkspace,
-  refreshDocumentSources,
-  useDocumentSaveBarrier,
-} from '@/features/documents/public';
-import {
-  folderPreparationSummary,
-  folderStatusQueryKey,
-  SourcePreparationStatus,
-  sourceReadiness,
-  treeMarker,
-  useFolderStatus,
-} from '@/features/preparation/public';
-import { Settings } from '@/features/settings/public';
-import {
-  FileTree,
-  LibrarySidebar,
   LibraryWelcome,
   useFiles,
-  useLibraryLifecycle,
   useLibrary,
-  usePersistWorkspaceSession,
   useWorkspace,
   useWorkspaceSession,
-  workspaceQueryKeys,
-  type FileTreeRowMarker,
 } from '@/features/workspace/public';
-import { spring } from '@/lib/springs';
-import { applyCaptureWatch } from '@/platform/electron/capture';
-import { Logo } from '@/shared/brand/logo';
-import type { SourceReference } from '@/shared/domain/source-reference';
 
-import { AgentDocumentWorkspace, useHasDocuments } from './composition/agent-document-workspace';
-import { ClipboardOffer, useComposerFocusSignal } from './composition/clipboard-offer';
-import { SidebarNavigator } from './composition/sidebar-navigator';
-import { useDocumentCommands } from './composition/use-document-commands';
+import { DependencyProvider, useDependencies } from './composition/dependency-context';
+import { useAgentEnvironment } from './composition/use-agent-environment';
+import { useComposerFocusSignal } from './composition/use-capture-focus';
+import { useDocumentSources } from './composition/use-document-sources';
 import { useDocumentWorkspace } from './composition/use-document-workspace';
-import { useQuickOpenCommand } from './composition/use-quick-open-command';
-import { useSettingsCommand } from './composition/use-settings-command';
-import { useSidebarSearchCommand } from './composition/use-sidebar-search-command';
-import { WorkspaceQuickOpen } from './composition/workspace-quick-open';
-import { WorkspaceSearch } from './composition/workspace-search';
+import { useFolderReadiness } from './composition/use-folder-readiness';
+import { useFolderRefresh } from './composition/use-folder-refresh';
+import { usePreparationCommands } from './composition/use-preparation-commands';
+import { useWorkspaceCommands } from './composition/use-workspace-commands';
+import { WorkspaceDialogs } from './composition/workspace-dialogs';
+import { WorkspaceLayout } from './composition/workspace-layout';
+import { WorkspacePanes } from './composition/workspace-panes';
+import { WorkspaceSidebar } from './composition/workspace-sidebar';
+import { WorkspaceTitlebar } from './composition/workspace-titlebar';
 import type { AppDependencies } from './dependencies';
-import { openDocument } from './workflows/open-document';
-import { retireDocuments } from './workflows/retire-documents';
 
-import './shell.css';
-
-const AGENT_WORKSPACE_SELECTOR = 'section[aria-label="Agent workspace"]';
-
-/** True while a text field inside the Agent workspace owns focus, so a
- *  clipboard image pasted into the composer is never also offered as an import. */
-function useAgentComposerFocused(): boolean {
-  const [focused, setFocused] = useState(false);
-  useEffect(() => {
-    const update = () => {
-      const active = document.activeElement;
-      setFocused(
-        active instanceof HTMLTextAreaElement && active.closest(AGENT_WORKSPACE_SELECTOR) !== null,
-      );
-    };
-    document.addEventListener('focusin', update);
-    document.addEventListener('focusout', update);
-    return () => {
-      document.removeEventListener('focusin', update);
-      document.removeEventListener('focusout', update);
-    };
-  }, []);
-  return focused;
+/** The window's root: it publishes the adapter record and nothing else. Every
+ *  binder below reads what it needs from that one mechanism, so no component
+ *  is handed a port it only passes on. */
+export function App({ dependencies }: { dependencies: AppDependencies }) {
+  return (
+    <DependencyProvider dependencies={dependencies}>
+      <WorkspaceWindow />
+    </DependencyProvider>
+  );
 }
 
-export function App({ dependencies }: { dependencies: AppDependencies }) {
-  const session = useWorkspaceSession(dependencies.library.api, dependencies.session);
-  const library = useLibrary(dependencies.library.api);
-  const workspace = useWorkspace(dependencies.library.api, session.restoredFolder, session.isReady);
-  usePersistWorkspaceSession(session.runtime, workspace);
-  const documents = useDocumentWorkspace(
-    workspace,
-    session.restoredFolder,
-    session.runtime,
-    dependencies.documents.sourceApi,
-    dependencies.documents.createId,
+/** The workspace window, assembled. Every behaviour lives in a hook under
+ *  `./composition` and every port in a binder beside it; this function only
+ *  decides what each one is given. */
+function WorkspaceWindow() {
+  const dependencies = useDependencies();
+  // Two adapter records this function hands on more than once.
+  const { documents: docs, workspace: workspaceDeps } = dependencies;
+  const session = useWorkspaceSession(
+    workspaceDeps.adapters.library,
+    workspaceDeps.adapters.session,
   );
-  const hasDocuments = useHasDocuments(documents);
-  const settings = useSettingsCommand();
-  useEffect(() => {
-    if (!session.isReady || session.isRestoringFolder || !library.data) return;
-    document.body.dataset.bootSettled = '1';
-  }, [library.data, session.isReady, session.isRestoringFolder]);
-  const [agentStarted, setAgentStarted] = useState(false);
-  useEffect(() => {
-    if ((library.data?.members.length ?? 0) > 0) setAgentStarted(true);
-  }, [library.data?.members.length]);
-  const quickOpen = useQuickOpenCommand(
-    workspace && documents
-      ? `${workspace.scope.folder.path}\u0000${workspace.scope.generation}`
-      : null,
-  );
-  const [sidebarNavigatorIndex, setSidebarNavigatorIndex] = useState(0);
-  const [searchFocusRevision, setSearchFocusRevision] = useState(0);
-  const openSearch = useCallback(() => {
-    session.runtime.setSidebarOpen(true);
-    setSidebarNavigatorIndex(2);
-    setSearchFocusRevision((revision) => revision + 1);
-  }, [session.runtime]);
-  useSidebarSearchCommand((library.data?.members.length ?? 0) > 0, openSearch);
+  const library = useLibrary(workspaceDeps.adapters.library).data ?? null;
+  const workspace = useWorkspace(workspaceDeps.adapters.library, session);
+  const documents = useDocumentWorkspace(workspace, session, docs.adapters.source, docs.createId);
   useDocumentCommands(documents?.navigation ?? null, documents);
-  useDocumentSaveBarrier(documents, dependencies.documents.lifecycle);
-  const saveDocumentsForFolder = useCallback(
-    (folderPath: string) =>
-      documents?.scope.folderPath === folderPath ? documents.flush() : Promise.resolve(true),
-    [documents],
-  );
-  const libraryLifecycle = useLibraryLifecycle(
-    dependencies.library.api,
-    dependencies.library.lifecycle,
-    workspace,
-    saveDocumentsForFolder,
-  );
-  const selectedFolderPath = library.data?.activeFolder?.path ?? null;
-  const queryClient = useQueryClient();
-  /** An Agent wrote files: show them at once, reload the open documents they
-   *  touched, then reconcile the folder's index and readiness. Nothing here
-   *  selects a file on the Agent's behalf. */
-  const onAgentFilesChanged = useCallback(
-    ({ scope, sources }: AgentFilesChanged) => {
-      if (scope.kind !== 'folder') return;
-      const folder = scope.path;
-      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.files(folder) });
-      refreshDocumentSources(queryClient, sources);
-      const controller = new AbortController();
-      void dependencies.preparation.controlApi
-        .sync(folder, controller.signal)
-        .catch(() => undefined)
-        .finally(() => {
-          void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.files(folder) });
-          void queryClient.invalidateQueries({ queryKey: folderStatusQueryKey(folder) });
-        });
-    },
-    [dependencies.preparation.controlApi, queryClient],
-  );
-  const agentRuntime = useAgentWorkspaceRuntime({
+  useDocumentSaveBarrier(documents, docs.adapters.windowLifecycle);
+  const sources = useDocumentSources(workspaceDeps.adapters, workspace, documents);
+
+  const activeFolder = library?.activeFolder ?? null;
+  const selectedPath = activeFolder?.path ?? null;
+  const folderPath = workspace?.scope.folder.path ?? null;
+  const listing = useFiles(workspace, workspaceDeps.adapters.files).data;
+  const status = useFolderStatus(dependencies.preparation.statusApi, folderPath).data ?? null;
+  const folder = useFolderReadiness(listing, status);
+  const preparation = usePreparationCommands(dependencies.preparation.controlApi);
+  const refresh = useFolderRefresh({
+    folderPath,
+    reprocessSource: preparation.reprocess,
+    syncFolder: preparation.sync,
+    treeVersion: status?.treeVersion,
+  });
+
+  const agent = useAgentEnvironment(listing, status, documents, folderPath, selectedPath);
+  const runtime = useAgentWorkspaceRuntime({
     context: dependencies.agent.context,
-    createId: dependencies.documents.createId,
-    folderPath: selectedFolderPath,
-    onFilesChanged: onAgentFilesChanged,
+    createId: docs.createId,
+    folderPath: selectedPath,
+    onFilesChanged: refresh.onAgentFilesChanged,
     session: dependencies.agent.session,
-    subscribeFolderRemoved: dependencies.library.lifecycle.onFolderRemoved,
+    subscribeFolderRemoved: workspaceDeps.adapters.lifecycle.onFolderRemoved,
   });
-  const selectedAgentScope = useMemo(
-    () =>
-      selectedFolderPath
-        ? ({ kind: 'folder', path: selectedFolderPath } as const)
-        : ({ kind: 'library' } as const),
-    [selectedFolderPath],
-  );
-  const listing = useFiles(workspace, dependencies.workspace.api).data;
-  const workspaceFolderPath = workspace?.scope.folder.path ?? null;
-  const folderStatus = useFolderStatus(dependencies.preparation.statusApi, workspaceFolderPath);
-  const status = folderStatus.data ?? null;
-  const treeVersion = status?.treeVersion;
-  const seenTreeVersion = useRef<{ folder: string | null; version: number | undefined }>({
-    folder: null,
-    version: undefined,
+  useEffect(() => runtime.setScopeEnvironment(agent.environment), [agent.environment, runtime]);
+  useComposerFocusSignal(dependencies.capture, useAgentComposerFocused());
+
+  const chrome = useWorkspaceCommands({
+    documents,
+    hostFailure: sources.hostFailure,
+    library,
+    preparation,
+    session,
+    workspace,
   });
-  useEffect(() => {
-    if (treeVersion === undefined || !workspaceFolderPath) return;
-    const seen = seenTreeVersion.current;
-    seenTreeVersion.current = { folder: workspaceFolderPath, version: treeVersion };
-    if (seen.folder !== workspaceFolderPath || seen.version === undefined) return;
-    if (seen.version === treeVersion) return;
-    void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.files(workspaceFolderPath) });
-  }, [queryClient, treeVersion, workspaceFolderPath]);
-  const refreshFolderState = useCallback(() => {
-    if (!workspaceFolderPath) return;
-    void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.files(workspaceFolderPath) });
-    void queryClient.invalidateQueries({ queryKey: folderStatusQueryKey(workspaceFolderPath) });
-  }, [queryClient, workspaceFolderPath]);
-  const rowMarkers = useMemo(() => {
-    if (!listing || !status) return undefined;
-    const markers: Record<string, FileTreeRowMarker> = {};
-    for (const file of listing.files) {
-      const marker = treeMarker(sourceReadiness(status, file.path));
-      if (marker) markers[file.path] = marker;
-    }
-    return markers;
-  }, [listing, status]);
-  const preparationSummary = useMemo(() => folderPreparationSummary(status), [status]);
-  const reprocessSource = useCallback(
-    (source: SourceReference) => {
-      const controller = new AbortController();
-      void dependencies.preparation.controlApi
-        .reprocess(source, {}, controller.signal)
-        .catch(() => undefined)
-        .finally(refreshFolderState);
-    },
-    [dependencies.preparation.controlApi, refreshFolderState],
-  );
-  const prepareOnOpen = useCallback(
-    (source: SourceReference) => {
-      const controller = new AbortController();
-      void dependencies.preparation.controlApi
-        .prepare(source, controller.signal)
-        .catch(() => undefined);
-    },
-    [dependencies.preparation.controlApi],
-  );
-  const composerFocused = useAgentComposerFocused();
-  useComposerFocusSignal(dependencies.capture, composerFocused);
-  const agentScopeOutline = useMemo<AgentScopeOutline | null>(() => {
-    if (!listing) return null;
-    const topLevel = (path: string) => !path.includes('/');
-    return {
-      files: listing.files.map((file) => file.path).filter(topLevel),
-      folders: listing.folders.map((folder) => folder.path).filter(topLevel),
-    };
-  }, [listing]);
-  // The Agent feature validates bound context against the folder it can see
-  // without importing workspace or preparation state: the shell publishes one
-  // snapshot of the selected folder's listing and per-source readiness.
-  const agentScopeEnvironment = useMemo<AgentScopeEnvironment | null>(() => {
-    if (!listing || !workspaceFolderPath) return null;
-    const readiness: Record<string, AgentScopeEnvironment['readiness'][string]> = {};
-    if (status) {
-      for (const file of listing.files) {
-        const kind = sourceReadiness(status, file.path).kind;
-        if (kind !== 'current') readiness[file.path] = kind;
-      }
-    }
-    return {
-      folderPath: workspaceFolderPath,
-      listing: {
-        files: listing.files.map((file) => ({ format: file.format, path: file.path })),
-        folders: listing.folders
-          .filter((folder) => folder.kind === 'normal')
-          .map((folder) => folder.path),
-      },
-      readiness,
-      versions: status?.conversionVersions ?? {},
-    };
-  }, [listing, status, workspaceFolderPath]);
-  useEffect(
-    () => agentRuntime.setScopeEnvironment(agentScopeEnvironment),
-    [agentRuntime, agentScopeEnvironment],
-  );
-  const agentProps: AgentWorkspaceProps = {
-    catalog: dependencies.settings.agentRuntimeApi,
-    onOpenExternal: (href) => void dependencies.documents.openExternal(href),
-    onOpenAgentSettings: () => settings.openSettings('agents'),
-    onOpenSource: (source) => {
-      if (workspace && documents) void openDocument(workspace, documents, source);
-    },
-    onReprocess: reprocessSource,
-    runtime: agentRuntime,
-    scopeOutline: agentScopeOutline,
-  };
 
   return (
-    <SidebarProvider
-      className="workspace-shell h-svh min-h-0 overflow-hidden bg-surface-1"
-      persist={false}
-      onOpenChange={session.runtime.setSidebarOpen}
-      onWidthChange={(width) => {
-        const pixels = Number.parseFloat(width);
-        if (Number.isFinite(pixels)) session.runtime.setSidebarWidth(pixels);
-      }}
-      open={session.shell.sidebarOpen}
-      width={`${session.shell.sidebarWidth}px`}
-    >
-      {workspace && documents && (
-        <WorkspaceQuickOpen
+    <WorkspaceLayout
+      dialogs={
+        <WorkspaceDialogs
+          activeFolderPath={selectedPath}
           documents={documents}
-          filesApi={dependencies.workspace.api}
-          onClose={quickOpen.close}
-          open={quickOpen.open}
-          revealLabel={dependencies.workspace.revealLabel}
+          onImported={refresh.refresh}
+          quickOpen={chrome.quickOpen}
+          settings={chrome.settings}
           workspace={workspace}
         />
-      )}
-      <Settings
-        agentRuntimeApi={dependencies.settings.agentRuntimeApi}
-        applyCaptureWatch={(expected) => applyCaptureWatch(dependencies.capture, expected)}
-        captureApi={dependencies.settings.captureApi}
-        embedderApi={dependencies.settings.embedderApi}
-        onClose={settings.close}
-        onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
-        onSectionChange={settings.onSectionChange}
-        open={settings.open}
-        section={settings.section}
-        transcriptionApi={dependencies.settings.transcriptionApi}
-      />
-      <ClipboardOffer
-        activeFolderPath={selectedFolderPath}
-        bridge={dependencies.capture}
-        onImported={refreshFolderState}
-        uploadApi={dependencies.workspace.uploadApi}
-      />
-      <Sidebar className="bg-surface-1" variant="inset">
-        <SidebarHeader className="workspace-titlebar h-11 flex-row items-center gap-2.5 px-4 py-0">
-          <Logo aria-hidden="true" className="size-7 shrink-0" />
-          <span className="text-title font-semibold tracking-tight">StashBase</span>
-        </SidebarHeader>
-        <SidebarGroup className="shrink-0 pb-0">
-          <LibrarySidebar
-            {...dependencies.library}
-            attention={preparationSummary.needsAttention}
-            beforeFolderChange={() =>
-              workspace
-                ? saveDocumentsForFolder(workspace.scope.folder.path)
-                : Promise.resolve(true)
-            }
-          />
-        </SidebarGroup>
-        {library.data?.activeFolder && (
-          <SidebarNavigator
-            chats={
-              sidebarNavigatorIndex === 3 ? (
-                <AgentChats
-                  catalog={dependencies.settings.agentRuntimeApi}
-                  onOpenAgentSettings={() => settings.openSettings('agents')}
-                  runtime={agentRuntime}
-                  scope={selectedAgentScope}
-                  workspaceName={library.data.activeFolder.name}
-                />
-              ) : null
-            }
-            onSelect={setSidebarNavigatorIndex}
-            runtime={documents}
-            search={
-              <WorkspaceSearch
-                active={sidebarNavigatorIndex === 2}
-                activeFolderPath={library.data.activeFolder.path}
-                decisionApi={dependencies.retrieval.decisionApi}
-                documents={documents}
-                exactApi={dependencies.retrieval.exactSearchApi}
-                focusRevision={searchFocusRevision}
-                onOpenSettings={(section) => settings.openSettings(section)}
-                preparation={preparationSummary}
-                semanticApi={dependencies.retrieval.semanticSearchApi}
-                status={status}
-                workspace={workspace}
-              />
-            }
-            selectedIndex={sidebarNavigatorIndex}
-          >
-            {workspace ? (
-              <FileTree
-                api={dependencies.workspace.api}
-                key={workspace.scope.generation}
-                onOpenSource={(source) => {
-                  if (documents) void openDocument(workspace, documents, source);
-                }}
-                onReprocess={reprocessSource}
-                onScopeLost={libraryLifecycle.recoverLostScope}
-                retireSources={(entry) =>
-                  documents ? retireDocuments(workspace, documents, entry) : Promise.resolve([])
-                }
-                revealLabel={dependencies.workspace.revealLabel}
-                rowMarkers={rowMarkers}
-                runtime={workspace}
-              />
-            ) : (
-              <p className="px-4 py-2 text-caption text-muted-foreground">Loading files…</p>
-            )}
-          </SidebarNavigator>
-        )}
-        <SidebarFooter>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton icon={SettingsIcon} onClick={() => settings.openSettings()}>
-                Settings
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarFooter>
-      </Sidebar>
-
-      <SidebarInset className="min-h-0 overflow-hidden">
-        <header className="workspace-titlebar flex h-11 shrink-0 items-center border-b border-border px-2">
-          <div className="workspace-titlebar-controls">
-            <SidebarTrigger aria-label="Toggle files sidebar" />
-          </div>
-          <div className="relative flex min-w-0 flex-1 px-2">
-            <AnimatePresence initial={false} mode="popLayout">
-              {documents && hasDocuments ? (
-                <motion.div
-                  animate={{ opacity: 1 }}
-                  className="flex min-w-0 flex-1"
-                  exit={{ opacity: 0, transition: spring.fast.exit }}
-                  initial={{ opacity: 0 }}
-                  key="tabs"
-                  transition={spring.fast}
-                >
-                  <DocumentTabs
-                    className="workspace-titlebar-controls max-w-full"
-                    runtime={documents}
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  animate={{ opacity: 1 }}
-                  className="flex min-w-0 flex-1"
-                  exit={{ opacity: 0, transition: spring.fast.exit }}
-                  initial={{ opacity: 0 }}
-                  key="agent"
-                  transition={spring.fast}
-                >
-                  <AgentTitlebar runtime={agentRuntime} />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-          <div aria-hidden="true" className="size-9 shrink-0" />
-        </header>
-
-        <section aria-label="Agent workspace" className="min-h-0 flex-1">
-          {library.data && agentStarted ? (
-            <div className="h-full min-h-0">
-              <div className={library.data.activeFolder ? 'h-full min-h-0' : 'hidden'}>
-                <AgentDocumentWorkspace
-                  agent={<AgentWorkspace {...agentProps} />}
-                  onPaneWidthChange={session.runtime.setAgentPaneWidth}
-                  paneWidth={session.shell.agentPaneWidth}
-                  runtime={documents}
-                  document={
-                    documents ? (
-                      <DocumentWorkspace
-                        assetApi={dependencies.documents.assetApi}
-                        docxPreviewApi={dependencies.documents.docxPreviewApi}
-                        genericPreviewApi={dependencies.documents.genericPreviewApi}
-                        mediaApi={dependencies.documents.mediaApi}
-                        onNavigate={(target) => {
-                          if (workspace) {
-                            void openDocument(workspace, documents, target.source, {
-                              anchor: target.anchor,
-                            });
-                          }
-                        }}
-                        onOpenExternal={dependencies.documents.openExternal}
-                        onOpenPrepared={prepareOnOpen}
-                        onReveal={(source, signal) =>
-                          dependencies.workspace.api.reveal(source.folderPath, source.path, signal)
-                        }
-                        renderPreparation={(source, format) => (
-                          <SourcePreparationStatus
-                            controlApi={dependencies.preparation.controlApi}
-                            format={format}
-                            source={source}
-                            status={status}
-                          />
-                        )}
-                        revealLabel={dependencies.workspace.revealLabel}
-                        runtime={documents}
-                        sourceApi={dependencies.documents.sourceApi}
-                      />
-                    ) : null
-                  }
-                />
-              </div>
-              {!library.data.activeFolder && (
-                <LibraryWelcome
-                  {...dependencies.library}
-                  isRestoringSession={session.isRestoringFolder}
-                />
-              )}
-            </div>
-          ) : (
-            <LibraryWelcome
-              {...dependencies.library}
-              isRestoringSession={session.isRestoringFolder}
-            />
-          )}
-        </section>
-      </SidebarInset>
-    </SidebarProvider>
+      }
+      hasActiveFolder={activeFolder !== null}
+      notices={chrome.notices}
+      panes={
+        <WorkspacePanes
+          agent={{ outline: agent.outline, runtime }}
+          documents={documents}
+          onPrepare={preparation.prepare}
+          onReprocess={refresh.reprocess}
+          session={session}
+          settings={chrome.settings}
+          sources={sources}
+          status={status}
+        />
+      }
+      session={session}
+      sidebar={
+        <WorkspaceSidebar
+          activeFolder={activeFolder}
+          agent={{ runtime, scope: agent.scope }}
+          documents={documents}
+          folder={folder}
+          navigator={chrome.navigator}
+          onReprocess={refresh.reprocess}
+          settings={chrome.settings}
+          sources={sources}
+          workspace={workspace}
+        />
+      }
+      started={chrome.started}
+      titlebar={<WorkspaceTitlebar agent={runtime} documents={documents} />}
+      welcome={
+        <LibraryWelcome
+          {...dependencies.library}
+          isRestoringSession={session.status.kind === 'restoring'}
+        />
+      }
+    />
   );
 }

@@ -4,6 +4,7 @@ import { openDocument } from '@/app/workflows/open-document';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
 import {
   QuickOpen,
+  retrievalAccessFor,
   type QuickOpenNavigationIntent,
   type QuickOpenSource,
 } from '@/features/retrieval/public';
@@ -11,34 +12,32 @@ import {
   fileIsRestricted,
   useFiles,
   useReveal,
-  type FilesApi,
   type WorkspaceRuntime,
 } from '@/features/workspace/public';
 
+import { useDependencies } from './dependency-context';
+
 export interface WorkspaceQuickOpenProps {
   documents: DocumentTabsRuntime;
-  filesApi: FilesApi;
   onClose(): void;
   open: boolean;
-  revealLabel: string;
   workspace: WorkspaceRuntime;
 }
 
 export function WorkspaceQuickOpen({
   documents,
-  filesApi,
   onClose,
   open,
-  revealLabel,
   workspace,
 }: WorkspaceQuickOpenProps) {
-  const files = useFiles(workspace, filesApi);
-  const reveal = useReveal(workspace, filesApi);
+  const { adapters, revealLabel } = useDependencies().workspace;
+  const files = useFiles(workspace, adapters.files);
+  const reveal = useReveal(workspace, adapters.files);
   const sources = useMemo<QuickOpenSource[]>(
     () =>
       (files.data?.files ?? []).map((file) => ({
         action: fileIsRestricted(file) ? 'reveal' : 'open',
-        retrievalAccess: file.format === 'generic' ? 'excluded' : 'included',
+        retrievalAccess: retrievalAccessFor(file.format),
         source: { folderPath: workspace.scope.folder.path, path: file.path },
       })),
     [files.data?.files, workspace.scope.folder.path],

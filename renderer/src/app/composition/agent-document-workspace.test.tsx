@@ -1,21 +1,20 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
-import { createStore } from 'zustand/vanilla';
 
-import type { DocumentTabsRuntime } from '@/features/documents/public';
+import { createDocumentTabsRuntime } from '@/features/documents/public';
+import { documentTabsRuntimeOptions } from '@/test/fakes/documents';
 
 import { AgentDocumentWorkspace } from './agent-document-workspace';
 
 afterEach(cleanup);
 
-function tabsRuntime() {
-  const store = createStore<{ tabs: Array<{ id: string }> }>(() => ({ tabs: [] }));
-  return { runtime: { store } as unknown as DocumentTabsRuntime, store };
-}
+/** The row reads only whether any document is open, so the test opens and
+ *  closes one real document rather than reaching into the runtime's store. */
+const PLAN = { folderPath: '/library/notes', path: 'plan.md' } as const;
 
 describe('Agent document workspace row', () => {
-  it('keeps one Agent workspace mounted while documents open and close', () => {
+  it('keeps one Agent workspace mounted while documents open and close', async () => {
     const mounts = vi.fn();
     function AgentProbe() {
       useEffect(() => {
@@ -23,7 +22,7 @@ describe('Agent document workspace row', () => {
       }, []);
       return <div data-testid="agent" />;
     }
-    const { runtime, store } = tabsRuntime();
+    const runtime = createDocumentTabsRuntime(documentTabsRuntimeOptions());
     render(
       <AgentDocumentWorkspace
         agent={<AgentProbe />}
@@ -37,19 +36,18 @@ describe('Agent document workspace row', () => {
     expect(mounts).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('document-slot').getAttribute('aria-hidden')).toBe('true');
     expect(screen.queryByRole('separator', { name: 'Resize Agent pane' })).toBeNull();
-    expect(screen.getByTestId('agent-pane').className).not.toContain('border-l');
 
-    act(() => store.setState({ tabs: [{ id: 'tab-1' }] }));
+    await act(async () => void (await runtime.open(PLAN)));
     expect(mounts).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('document-slot').getAttribute('aria-hidden')).toBe('false');
     expect(screen.getByRole('separator', { name: 'Resize Agent pane' })).not.toBeNull();
-    expect(screen.getByTestId('agent-pane').className).toContain('border-l');
     expect(screen.getByTestId('agent')).not.toBeNull();
 
-    act(() => store.setState({ tabs: [] }));
+    await act(async () => void (await runtime.closeSource(PLAN)));
     expect(mounts).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('document-slot').getAttribute('aria-hidden')).toBe('true');
     expect(screen.queryByRole('separator', { name: 'Resize Agent pane' })).toBeNull();
+    runtime.dispose();
   });
 
   it('gives the Agent the whole row without a documents runtime', () => {

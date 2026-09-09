@@ -1,73 +1,66 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import {
   createDocumentQueryScope,
   createDocumentTabsRuntime,
-  type DocumentSourceApi,
+  type DocumentAdapters,
   type DocumentTabsRuntime,
 } from '@/features/documents/public';
-import type {
-  FolderSessionState,
-  WorkspaceRuntime,
-  WorkspaceSessionRuntime,
-} from '@/features/workspace/public';
+import type { WorkspaceRuntime, WorkspaceSessionController } from '@/features/workspace/public';
+import { useScopedRuntime } from '@/lib/runtime/use-scoped-runtime';
 
 export function useDocumentWorkspace(
   workspace: WorkspaceRuntime | null,
-  restored: FolderSessionState | null,
-  session: WorkspaceSessionRuntime,
-  sourceApi: DocumentSourceApi,
+  session: Pick<WorkspaceSessionController, 'runtime' | 'status'>,
+  sourceApi: DocumentAdapters['source'],
   createId: () => string,
 ): DocumentTabsRuntime | null {
   const queryClient = useQueryClient();
-  const [runtime, setRuntime] = useState<DocumentTabsRuntime | null>(null);
-  const restoredRef = useRef(restored);
-  restoredRef.current = restored;
+  // Only a settled session names a folder to restore tabs from.
+  const restoredRef = useRef(
+    session.status.kind === 'ready' ? session.status.restoredFolder : null,
+  );
+  restoredRef.current = session.status.kind === 'ready' ? session.status.restoredFolder : null;
+  const sessionRuntime = session.runtime;
   const folderPath = workspace?.scope.folder.path ?? null;
   const generation = workspace?.scope.generation ?? null;
 
-  useLayoutEffect(() => {
-    if (!workspace || !folderPath || !generation) {
-      setRuntime(null);
-      return;
-    }
-
-    const restoredFolder =
-      restoredRef.current?.folderPath === folderPath ? restoredRef.current : null;
-    const nextRuntime = createDocumentTabsRuntime({
+  const create = useCallback(() => {
+    // Only ever called for the scope the key below names, so both halves are
+    // present; the fallbacks keep that promise typed rather than asserted.
+    const path = folderPath ?? '';
+    const restoredFolder = restoredRef.current?.folderPath === path ? restoredRef.current : null;
+    return createDocumentTabsRuntime({
       api: sourceApi,
       createId,
       createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-      folderPath,
-      generation,
+      folderPath: path,
+      generation: generation ?? 0,
       restored: restoredFolder
         ? {
             activeTabId: restoredFolder.activeTabId,
             tabs: restoredFolder.tabs.map((tab) => ({
               id: tab.id,
-              source: { folderPath, path: tab.path },
+              source: { folderPath: path, path: tab.path },
             })),
           }
         : null,
     });
-    setRuntime(nextRuntime);
-    return () => nextRuntime.dispose();
-  }, [createId, folderPath, generation, queryClient, sourceApi, workspace]);
+  }, [createId, folderPath, generation, queryClient, sourceApi]);
 
-  const current =
-    workspace &&
-    runtime?.scope.folderPath === workspace.scope.folder.path &&
-    runtime.scope.generation === workspace.scope.generation
-      ? runtime
-      : null;
+  const runtime = useScopedRuntime(
+    workspace && folderPath && generation ? `${folderPath}\u0000${generation}` : null,
+    create,
+    (tabs) => tabs.dispose(),
+  );
 
   useEffect(() => {
-    if (!workspace || !current) return;
-    const record = () => session.recordWorkspace(workspace.store.getState(), current.toSession());
+    if (!workspace || !runtime) return;
+    const record = () => sessionRuntime.recordWorkspace(workspace.toSession(), runtime.toSession());
     record();
-    return current.store.subscribe(record);
-  }, [current, session, workspace]);
+    return runtime.subscribe(record);
+  }, [runtime, sessionRuntime, workspace]);
 
-  return current;
+  return runtime;
 }

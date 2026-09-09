@@ -1,57 +1,54 @@
+/**
+ * Everything the workspace window is built from, resolved once at startup.
+ *
+ * The app names one adapter record per feature and nothing below it: which
+ * port sits on HTTP, which on a desktop bridge, and how many of them there are
+ * is each feature's own business, so a feature that gains a transport does not
+ * change this file. What stays here is the wiring a feature cannot do for
+ * itself — the bridges and the server origin it is handed — and the few
+ * capabilities that belong to the desktop shell rather than to any feature.
+ */
+import type { ComponentProps } from 'react';
+
 import {
-  createAgentContextApi,
-  createAgentSessionApi,
+  createAgentCatalogAdapter,
+  createAgentContextAdapter,
+  createAgentSessionAdapter,
+  type AgentCatalogPort,
   type AgentContextPort,
   type AgentSessionPort,
 } from '@/features/agent/public';
+import { createDocumentAdapters, type DocumentAdapters } from '@/features/documents/public';
 import {
-  createDocumentAssetApi,
-  createDocxPreviewApi,
-  createDocumentSourceApi,
-  createDocumentWindowLifecycle,
-  createGenericFilePreviewApi,
-  createMediaApi,
-  type DocumentAssetApi,
-  type DocumentSourceApi,
-  type DocumentWindowLifecycle,
-  type DocxPreviewApi,
-  type GenericFilePreviewApi,
-  type MediaApi,
-} from '@/features/documents/public';
-import {
-  createPreparationControlApi,
-  createPreparationStatusApi,
-  type PreparationControlApi,
-  type PreparationStatusApi,
+  createPreparationControlAdapter,
+  createPreparationStatusAdapter,
+  type PreparationControlPort,
+  type PreparationStatusPort,
 } from '@/features/preparation/public';
 import {
-  createExactSearchApi,
-  createIndexDecisionApi,
-  createSemanticSearchApi,
-  type ExactSearchApi,
-  type IndexDecisionApi,
-  type SemanticSearchApi,
+  createExactSearchAdapter,
+  createIndexDecisionAdapter,
+  createSemanticSearchAdapter,
+  type ExactSearchPort,
+  type IndexDecisionPort,
+  type SemanticSearchPort,
 } from '@/features/retrieval/public';
 import {
-  createAgentRuntimeApi,
-  createCaptureApi,
-  createEmbedderApi,
-  createTranscriptionApi,
+  createAgentRuntimeAdapter,
+  createCaptureAdapter,
+  createEmbedderAdapter,
+  createTranscriptionAdapter,
   type AgentRuntimePort,
   type CapturePort,
   type EmbedderPort,
   type TranscriptionPort,
 } from '@/features/settings/public';
 import {
-  createFilesApi,
-  createLibraryApi,
-  createLibraryLifecycle,
-  createUploadApi,
-  createWorkspaceSessionPersistence,
-  type FileTreeProps,
-  type LibrarySidebarProps,
-  type LibraryWelcomeProps,
-  type UploadApi,
+  createWorkspaceAdapters,
+  FileTree,
+  LibrarySidebar,
+  LibraryWelcome,
+  type WorkspaceAdapters,
 } from '@/features/workspace/public';
 import { readBridge } from '@/platform/electron/bridge';
 import type { CaptureBridge } from '@/platform/electron/capture';
@@ -60,45 +57,47 @@ import { fileManagerLabel } from '@/platform/electron/file-manager';
 import { createFolderPicker } from '@/platform/electron/folder-picker';
 import { createHttpClient } from '@/platform/http/client';
 
+/** The folder chrome's dependencies, as the two components declare them. */
+type LibraryChrome = Pick<
+  ComponentProps<typeof LibrarySidebar> & ComponentProps<typeof LibraryWelcome>,
+  'api' | 'folderPicker' | 'lifecycle'
+>;
+
 export interface AppDependencies {
   agent: {
+    /** Which runtimes a conversation can open on. Settings reads the same
+     *  endpoint through its own port for its own question. */
+    catalog: AgentCatalogPort;
     context: AgentContextPort;
     session: AgentSessionPort;
   };
   /** Desktop clipboard capture; null outside Electron or when the capability is absent. */
   capture: CaptureBridge | null;
   documents: {
-    assetApi: DocumentAssetApi;
-    docxPreviewApi: DocxPreviewApi;
-    sourceApi: DocumentSourceApi;
+    adapters: DocumentAdapters;
     createId: () => string;
-    genericPreviewApi: GenericFilePreviewApi;
-    lifecycle: DocumentWindowLifecycle;
-    mediaApi: MediaApi;
     openExternal(href: string): Promise<boolean>;
   };
-  library: LibrarySidebarProps & LibraryWelcomeProps;
+  library: LibraryChrome;
   preparation: {
-    controlApi: PreparationControlApi;
-    statusApi: PreparationStatusApi;
+    controlApi: PreparationControlPort;
+    statusApi: PreparationStatusPort;
   };
   retrieval: {
-    decisionApi: IndexDecisionApi;
-    exactSearchApi: ExactSearchApi;
-    semanticSearchApi: SemanticSearchApi;
+    decisionApi: IndexDecisionPort;
+    exactSearchApi: ExactSearchPort;
+    semanticSearchApi: SemanticSearchPort;
   };
-  session: ReturnType<typeof createWorkspaceSessionPersistence>;
   settings: {
     agentRuntimeApi: AgentRuntimePort;
     captureApi: CapturePort;
     embedderApi: EmbedderPort;
     transcriptionApi: TranscriptionPort;
   };
-  workspace: Omit<
-    FileTreeProps,
-    'runtime' | 'onOpenSource' | 'onReprocess' | 'onScopeLost' | 'rowMarkers'
-  > & {
-    uploadApi: UploadApi;
+  workspace: {
+    adapters: WorkspaceAdapters;
+    /** What this platform calls the app that reveals a file. */
+    revealLabel: ComponentProps<typeof FileTree>['revealLabel'];
   };
 }
 
@@ -106,47 +105,49 @@ export function createDependencies(): AppDependencies {
   const bridge = readBridge();
   const http = createHttpClient(bridge.runtime.serverOrigin);
   const externalNavigation = createExternalNavigation(bridge.externalNavigation);
+  const workspace = createWorkspaceAdapters({
+    capture: bridge.capture ?? null,
+    http,
+    library: bridge.library,
+    serverOrigin: bridge.runtime.serverOrigin,
+    workspaceSession: bridge.workspaceSession,
+  });
   return {
     agent: {
-      context: createAgentContextApi(http, bridge.runtime.serverOrigin),
-      session: createAgentSessionApi(http, bridge.runtime.serverOrigin),
+      catalog: createAgentCatalogAdapter(http),
+      context: createAgentContextAdapter(http, bridge.runtime.serverOrigin),
+      session: createAgentSessionAdapter(http, bridge.runtime.serverOrigin),
     },
     capture: bridge.capture ?? null,
     documents: {
-      assetApi: createDocumentAssetApi(http, bridge.runtime.serverOrigin),
-      docxPreviewApi: createDocxPreviewApi(),
-      sourceApi: createDocumentSourceApi(http),
+      adapters: createDocumentAdapters({
+        http,
+        serverOrigin: bridge.runtime.serverOrigin,
+        windowLifecycle: bridge.windowLifecycle,
+      }),
       createId: () => globalThis.crypto.randomUUID(),
-      genericPreviewApi: createGenericFilePreviewApi(http),
-      lifecycle: createDocumentWindowLifecycle(bridge.windowLifecycle),
-      mediaApi: createMediaApi(http),
       openExternal: externalNavigation.open,
     },
     library: {
-      api: createLibraryApi(http),
+      api: workspace.library,
       folderPicker: createFolderPicker(bridge.library),
-      lifecycle: createLibraryLifecycle(bridge.library),
+      lifecycle: workspace.lifecycle,
     },
     preparation: {
-      controlApi: createPreparationControlApi(http),
-      statusApi: createPreparationStatusApi(http),
+      controlApi: createPreparationControlAdapter(http),
+      statusApi: createPreparationStatusAdapter(http),
     },
     retrieval: {
-      decisionApi: createIndexDecisionApi(http),
-      exactSearchApi: createExactSearchApi(http),
-      semanticSearchApi: createSemanticSearchApi(http),
+      decisionApi: createIndexDecisionAdapter(http),
+      exactSearchApi: createExactSearchAdapter(http),
+      semanticSearchApi: createSemanticSearchAdapter(http),
     },
-    session: createWorkspaceSessionPersistence(bridge.workspaceSession),
     settings: {
-      agentRuntimeApi: createAgentRuntimeApi(http),
-      captureApi: createCaptureApi(http),
-      embedderApi: createEmbedderApi(http),
-      transcriptionApi: createTranscriptionApi(http),
+      agentRuntimeApi: createAgentRuntimeAdapter(http),
+      captureApi: createCaptureAdapter(http),
+      embedderApi: createEmbedderAdapter(http),
+      transcriptionApi: createTranscriptionAdapter(http),
     },
-    workspace: {
-      api: createFilesApi(http),
-      revealLabel: fileManagerLabel(),
-      uploadApi: createUploadApi(bridge.runtime.serverOrigin),
-    },
+    workspace: { adapters: workspace, revealLabel: fileManagerLabel() },
   };
 }

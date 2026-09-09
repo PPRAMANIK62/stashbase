@@ -1,19 +1,19 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import {
   createDocumentTabsRuntime,
-  type DocumentSourceApi,
+  type DocumentAdapters,
   type DocumentTabsRuntime,
 } from '@/features/documents/public';
-import {
-  createWorkspaceRuntime,
-  type FilesApi,
-  type WorkspaceRuntime,
-} from '@/features/workspace/public';
+import type { WorkspaceAdapters, WorkspaceRuntime } from '@/features/workspace/public';
+import { createWorkspaceRuntime } from '@/features/workspace/test-support';
+import { appDependencies } from '@/test/fakes/app';
+import { createTestQueryClient } from '@/test/query';
 
+import { DependencyProvider } from './dependency-context';
 import { WorkspaceQuickOpen } from './workspace-quick-open';
 
 let documents: DocumentTabsRuntime;
@@ -41,9 +41,9 @@ afterEach(() => {
 
 describe('workspace Quick Open composition', () => {
   it('maps visible files to typed open and reveal actions resolved by app composition', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const filesApi: FilesApi = {
-      load: vi.fn<FilesApi['load']>(async () => ({
+    const queryClient = createTestQueryClient();
+    const filesApi: WorkspaceAdapters['files'] = {
+      load: vi.fn<WorkspaceAdapters['files']['load']>(async () => ({
         files: [
           {
             availability: 'available',
@@ -74,7 +74,7 @@ describe('workspace Quick Open composition', () => {
       renameEntry: vi.fn(),
       reveal: vi.fn(async () => undefined),
     };
-    const sourceApi: DocumentSourceApi = {
+    const sourceApi: DocumentAdapters['source'] = {
       load: vi.fn(() => new Promise<never>(() => undefined)),
       overwrite: vi.fn(),
       save: vi.fn(),
@@ -99,16 +99,21 @@ describe('workspace Quick Open composition', () => {
       generation: 1,
     });
 
+    const base = appDependencies();
     render(
       <QueryClientProvider client={queryClient}>
-        <WorkspaceQuickOpen
-          documents={documents}
-          filesApi={filesApi}
-          onClose={vi.fn()}
-          open
-          revealLabel="Show in file manager"
-          workspace={workspace}
-        />
+        <DependencyProvider
+          dependencies={{
+            ...base,
+            workspace: {
+              ...base.workspace,
+              adapters: { ...base.workspace.adapters, files: filesApi },
+              revealLabel: 'Show in file manager',
+            },
+          }}
+        >
+          <WorkspaceQuickOpen documents={documents} onClose={vi.fn()} open workspace={workspace} />
+        </DependencyProvider>
       </QueryClientProvider>,
     );
 
@@ -124,11 +129,8 @@ describe('workspace Quick Open composition', () => {
       );
 
     await waitFor(() =>
-      expect(documents.store.getState().tabs).toEqual([
-        {
-          id: 'opened-tab',
-          source: { folderPath: '/library/notes', path: 'archive.bin' },
-        },
+      expect(documents.openSources()).toEqual([
+        { folderPath: '/library/notes', path: 'archive.bin' },
       ]),
     );
 
@@ -147,6 +149,6 @@ describe('workspace Quick Open composition', () => {
       'linked.bin',
       expect.any(AbortSignal),
     );
-    expect(documents.store.getState().tabs).toHaveLength(1);
+    expect(documents.openSources()).toHaveLength(1);
   });
 });
