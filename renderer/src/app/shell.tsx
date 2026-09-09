@@ -68,6 +68,7 @@ import { WorkspaceQuickOpen } from './composition/workspace-quick-open';
 import { WorkspaceSearch } from './composition/workspace-search';
 import type { AppDependencies } from './dependencies';
 import { openDocument } from './workflows/open-document';
+import { retireDocuments } from './workflows/retire-documents';
 
 import './shell.css';
 
@@ -377,6 +378,9 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
                 }}
                 onReprocess={reprocessSource}
                 onScopeLost={libraryLifecycle.recoverLostScope}
+                retireSources={(entry) =>
+                  documents ? retireDocuments(workspace, documents, entry) : Promise.resolve([])
+                }
                 revealLabel={dependencies.workspace.revealLabel}
                 rowMarkers={rowMarkers}
                 runtime={workspace}
