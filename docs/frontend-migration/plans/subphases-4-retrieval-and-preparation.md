@@ -86,8 +86,10 @@ Research: [Preparation and semantic retrieval research](../research/preparation-
 
 Library semantic hits now carry their owning folder and relative path from
 the server, so the renderer never splits paths against roots. One search
-surface offers Exact and Similar modes and a folder or whole-library scope
-that defaults to the selected folder. Semantic requests carry a real abort
+surface offers Exact and Similar modes, both scoped to the selected folder;
+the whole-library scope picker was removed on 2026-09-09 by product decision,
+and the domain grouping keeps the library shape should it return. Semantic
+requests carry a real abort
 signal and run only when the Task 43 readiness projection allows; each
 unavailable, awaiting, paused, indexing, and failed state has its own copy
 and Exact stays usable in all of them. The AI Index notice, index-warning
@@ -95,6 +97,6 @@ recovery, and the AI Index Settings section (hosted account, allowance, sign
 in and out, own key, explicit source) are live. Credentials stay server-side.
 
 Evidence: focused server identity, semantic and embedder protocols, adapters,
-readiness projection, grouping and navigation intent, mode and scope UI,
+readiness projection, grouping and navigation intent, mode UI,
 Settings panel, retrieval and library-files server suites, typecheck, lint,
 and web build checks.

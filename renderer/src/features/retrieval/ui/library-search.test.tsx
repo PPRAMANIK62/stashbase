@@ -301,25 +301,23 @@ describe('Library Search', () => {
     await waitFor(() => expect(firstSignal?.aborted).toBe(true));
   });
 
-  it('switches to Similar mode, groups library results by folder, and navigates by chunk anchor', async () => {
+  it('switches to Similar mode within the selected folder and navigates by chunk anchor', async () => {
     const semanticApi: SemanticSearchApi = { search: vi.fn(async () => semanticResult) };
     const exactApi: ExactSearchApi = { search: vi.fn(async () => result) };
     const rendered = renderSearch(exactApi, { semanticApi });
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('tab', { name: 'Similar' }));
-    await user.click(screen.getByRole('combobox', { name: 'Search scope' }));
-    await user.click(await screen.findByRole('option', { name: 'Whole library' }));
-    await user.type(screen.getByRole('combobox', { name: 'Search library' }), 'answers');
+    expect(screen.queryByRole('combobox', { name: 'Search scope' })).toBeNull();
+    await user.type(screen.getByRole('combobox', { name: 'Search current workspace' }), 'answers');
 
     const option = await screen.findByRole('option', { name: /idea\.md, notes, Answers/u });
     expect(semanticApi.search).toHaveBeenCalledWith(
-      { query: 'answers', topK: 30 },
+      { folderPath: '/library/research', query: 'answers', topK: 30 },
       expect.any(AbortSignal),
     );
     expect(exactApi.search).not.toHaveBeenCalled();
-    expect(screen.getByRole('group', { name: 'research' })).not.toBeNull();
-    expect(screen.getByRole('group', { name: 'archive' })).not.toBeNull();
+    expect(screen.queryByRole('group')).toBeNull();
     expect(option.querySelector('mark')).toBeNull();
 
     await user.keyboard('{Enter}');

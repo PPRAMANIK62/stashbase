@@ -1,11 +1,10 @@
-import { Folder, Library, Search, Sparkles, TextSearch } from 'lucide-react';
+import { Search, Sparkles, TextSearch } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { CommandItem, CommandList } from '@/components/ui/command-menu';
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import { InputField, InputGroup } from '@/components/ui/input-group';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { TabsSubtle, TabsSubtleItem } from '@/components/ui/tabs-subtle';
 import type {
   ExactSearchApi,
@@ -29,7 +28,6 @@ import {
   SEMANTIC_SEARCH_CANDIDATES,
   groupSemanticHits,
   semanticNavigationIntent,
-  type SearchScope,
   type SemanticHit,
 } from '@/features/retrieval/domain/semantic-search';
 import { useExactSearch } from '@/features/retrieval/hooks/use-exact-search';
@@ -128,7 +126,6 @@ export function LibrarySearch({
   status,
 }: LibrarySearchProps) {
   const [mode, setMode] = useState<SearchMode>('exact');
-  const [scope, setScope] = useState<SearchScope>('folder');
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const [navigationFailure, setNavigationFailure] = useState(false);
@@ -163,15 +160,11 @@ export function LibrarySearch({
 
   const semanticRequest = useMemo(() => {
     if (!trimmedQuery || mode !== 'similar') return null;
-    return {
-      ...(scope === 'folder' ? { folderPath: activeFolderPath } : {}),
-      query: trimmedQuery,
-      topK: SEMANTIC_SEARCH_CANDIDATES,
-    };
-  }, [activeFolderPath, mode, scope, trimmedQuery]);
+    return { folderPath: activeFolderPath, query: trimmedQuery, topK: SEMANTIC_SEARCH_CANDIDATES };
+  }, [activeFolderPath, mode, trimmedQuery]);
   const similar = useSemanticSearch(semanticApi, semanticRequest, readiness.canSearch);
   const hits = similar.data?.hits ?? [];
-  const hitGroups = useMemo(() => groupSemanticHits(hits, scope), [hits, scope]);
+  const hitGroups = useMemo(() => groupSemanticHits(hits, 'folder'), [hits]);
 
   const request = mode === 'exact' ? exactRequest : semanticRequest;
   const search = mode === 'exact' ? exact : similar;
@@ -251,8 +244,7 @@ export function LibrarySearch({
     }
   };
 
-  const inputLabel =
-    mode === 'similar' && scope === 'library' ? 'Search library' : 'Search current workspace';
+  const inputLabel = 'Search current workspace';
   const similarTitle = readiness.canSearch
     ? 'Match by meaning'
     : 'Match by meaning — needs AI Index';
@@ -285,7 +277,7 @@ export function LibrarySearch({
             value={query}
           />
         </InputGroup>
-        <div className="flex items-center justify-between gap-2 pt-1.5">
+        <div className="flex items-center pt-1.5">
           <TabsSubtle
             aria-label="Search mode"
             idPrefix={`${resultsId}-mode`}
@@ -296,26 +288,6 @@ export function LibrarySearch({
             <TabsSubtleItem icon={TextSearch} index={0} label="Exact" title="Match exact text" />
             <TabsSubtleItem icon={Sparkles} index={1} label="Similar" title={similarTitle} />
           </TabsSubtle>
-          {mode === 'similar' && (
-            <Select
-              onValueChange={(value) => setScope(value === 'library' ? 'library' : 'folder')}
-              size="compact"
-              value={scope}
-            >
-              <SelectTrigger
-                aria-label="Search scope"
-                icon={scope === 'folder' ? Folder : Library}
-              />
-              <SelectContent>
-                <SelectItem icon={Folder} index={0} value="folder">
-                  This folder
-                </SelectItem>
-                <SelectItem icon={Library} index={1} value="library">
-                  Whole library
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          )}
         </div>
       </div>
 
@@ -436,26 +408,9 @@ export function LibrarySearch({
           onActiveIndexChange={setActiveIndex}
           role="listbox"
         >
-          {hitGroups.map((group, groupIndex) => {
-            const groupId = `${resultsId}-folder-${groupIndex}`;
-            const labelled = scope === 'library';
+          {hitGroups.map((group) => {
             return (
-              <div
-                aria-labelledby={labelled ? groupId : undefined}
-                key={group.folderPath}
-                role={labelled ? 'group' : undefined}
-              >
-                {labelled && (
-                  <div
-                    className="flex min-w-0 items-center gap-2 px-3 pt-2 pb-1 text-caption"
-                    id={groupId}
-                  >
-                    <Folder aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-                      {basename(group.folderPath)}
-                    </span>
-                  </div>
-                )}
+              <div key={group.folderPath}>
                 {group.hits.map((hit) => {
                   const index = hits.indexOf(hit);
                   const selected = index === activeIndex;
