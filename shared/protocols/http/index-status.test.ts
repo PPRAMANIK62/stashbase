@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  folderSyncResponseSchema,
   indexStatusResponseSchema,
   semanticIndexingDecisionRequestSchema,
 } from './index-status.ts';
@@ -62,4 +63,13 @@ test('index status rejects an unknown progress phase and an unknown semantic sta
 test('semantic decision accepts only start or defer', () => {
   assert.equal(semanticIndexingDecisionRequestSchema.safeParse({ decision: 'start' }).success, true);
   assert.equal(semanticIndexingDecisionRequestSchema.safeParse({ decision: 'later' }).success, false);
+});
+
+test('folder sync tolerates change lists and reports only cancellation', () => {
+  assert.equal(
+    folderSyncResponseSchema.parse({ added: ['a.md'], modified: [], removed: [] }).cancelled,
+    undefined,
+  );
+  assert.equal(folderSyncResponseSchema.parse({ cancelled: true }).cancelled, true);
+  assert.throws(() => folderSyncResponseSchema.parse({ cancelled: 'yes' }));
 });

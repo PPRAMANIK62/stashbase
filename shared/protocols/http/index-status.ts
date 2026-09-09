@@ -99,6 +99,13 @@ export const semanticIndexingDecisionRequestSchema = z
 
 export const indexStatusAcknowledgementSchema = z.object({ ok: z.literal(true) }).passthrough();
 
+/** `POST /api/sync?folder=` — the folder-explicit reconcile the renderer
+ *  requests after an Agent changes files. Only cancellation matters to the
+ *  renderer; the change lists are display-only. */
+export const folderSyncResponseSchema = z
+  .object({ cancelled: z.boolean().optional() })
+  .passthrough();
+
 export type ConversionProgressWire = z.infer<typeof conversionProgressSchema>;
 export type IndexStatusResponseWire = z.infer<typeof indexStatusResponseSchema>;
 export type PreparationFailureWire = z.infer<typeof preparationFailureSchema>;
