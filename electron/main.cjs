@@ -9,7 +9,7 @@
  * bundled, typed preload bridge.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -23,6 +23,7 @@ const {
   isCompatibleServerHealth,
   serverStartupTimeoutMs,
 } = require('./main-probe.cjs');
+const { shouldOfferClipboardImage } = require('./clipboard-watch-policy.cjs');
 const { createBugReportService } = require('./bug-report-service.cjs');
 const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
 const { collectRedactedApplicationLog, readApplicationLogTail } = require('./bug-report-log.cjs');
@@ -158,6 +159,8 @@ let libraryLifecycleCapability = null;
 let workspaceSessionCapability = null;
 let windowLifecycleCapability = null;
 let externalNavigationCapability = null;
+let captureCapability = null;
+let captureMonitor = null;
 let replacementWindowLifecycle = null;
 let workspaceSessionRestoreWindow = null;
 let replacementBoundaryInstalled = false;
@@ -205,11 +208,39 @@ function installReplacementBoundary() {
     'window',
     'lifecycle.cjs',
   ));
+  const capture = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'capture',
+    'monitor.cjs',
+  ));
   libraryFolderDialogCapability = boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY;
   libraryLifecycleCapability = lifecycle.LIBRARY_LIFECYCLE_CAPABILITY;
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
   windowLifecycleCapability = windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY;
   externalNavigationCapability = externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY;
+  captureCapability = capture.CAPTURE_CAPABILITY;
+  // Clipboard-image offers fail closed: main re-reads the durable Settings
+  // opt-in from the server on every refresh and never enables from memory.
+  captureMonitor = capture.registerCaptureMonitor({
+    BrowserWindow,
+    clipboard,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    focusedWindow: () => BrowserWindow.getFocusedWindow(),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
+    readPreference: async () => {
+      const response = await fetch(`${SERVER_URL}/api/capture`);
+      if (!response.ok) return false;
+      const preferences = await response.json();
+      return preferences?.clipboardImageImport === true;
+    },
+    shouldOffer: shouldOfferClipboardImage,
+  });
   externalNavigation.registerExternalNavigation({
     BrowserWindow,
     ipcMain,
@@ -886,7 +917,8 @@ async function createWindow(initialFolder) {
     libraryLifecycleCapability &&
     workspaceSessionCapability &&
     windowLifecycleCapability &&
-    externalNavigationCapability
+    externalNavigationCapability &&
+    captureCapability
   ) {
     replacementWindowCapabilities.set(
       win,
@@ -896,6 +928,7 @@ async function createWindow(initialFolder) {
         workspaceSessionCapability,
         windowLifecycleCapability,
         externalNavigationCapability,
+        captureCapability,
       ]),
     );
   }
@@ -903,6 +936,7 @@ async function createWindow(initialFolder) {
   replacementWindowLifecycle?.attach(win);
   win.on('focus', () => {
     lastMainWindow = win;
+    captureMonitor?.offerTo(win);
   });
   win.on('closed', () => {
     bugReports.discardUnreviewedDraftsForSource(webContentsId);

@@ -9,6 +9,8 @@ await build({
   absWorkingDir: repositoryRoot,
   bundle: true,
   entryPoints: {
+    'capture/monitor': 'electron/capture/monitor.ts',
+    'capture/preload': 'electron/capture/preload.ts',
     'external-navigation/handler': 'electron/external-navigation/handler.ts',
     'external-navigation/preload': 'electron/external-navigation/preload.ts',
     'library/dialog': 'electron/library/dialog.ts',

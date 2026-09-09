@@ -3,6 +3,7 @@ import {
   rendererRuntimeConfigSchema,
 } from '@/protocols/electron/runtime';
 
+import { isCaptureBridge, type CaptureBridge } from './capture';
 import type { ExternalNavigationBridge } from './external-navigation';
 import type { LibraryBridge } from './folder-picker';
 import type { LibraryLifecycleBridge } from './library-lifecycle';
@@ -16,6 +17,8 @@ interface DesktopWorkspaceSessionBridge {
 interface DesktopLibraryBridge extends LibraryBridge, LibraryLifecycleBridge {}
 
 interface DesktopBridge {
+  /** Optional: clipboard-image offers exist only in the desktop shell. */
+  capture?: CaptureBridge;
   externalNavigation: ExternalNavigationBridge;
   library: DesktopLibraryBridge;
   runtime: RendererRuntimeConfig;
@@ -26,6 +29,7 @@ interface DesktopBridge {
 declare global {
   interface Window {
     stashbase?: {
+      capture?: unknown;
       externalNavigation?: ExternalNavigationBridge;
       library?: DesktopLibraryBridge;
       runtime?: unknown;
@@ -69,5 +73,13 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   ) {
     throw new Error('The window lifecycle is unavailable.');
   }
-  return { externalNavigation, library, runtime, windowLifecycle, workspaceSession };
+  const capture = globalWindow.stashbase?.capture;
+  return {
+    ...(isCaptureBridge(capture) ? { capture } : {}),
+    externalNavigation,
+    library,
+    runtime,
+    windowLifecycle,
+    workspaceSession,
+  };
 }

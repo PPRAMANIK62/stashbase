@@ -75,6 +75,9 @@ app
     const workspaceSession = require(
       path.join(repositoryRoot, 'dist', 'electron', 'workspace', 'session.cjs'),
     );
+    const capture = require(
+      path.join(repositoryRoot, 'dist', 'electron', 'capture', 'monitor.cjs'),
+    );
     const authorizedWindows = new Set();
     const openedExternalUrls = [];
     const activeFolders = new WeakMap();
@@ -85,7 +88,8 @@ app
       (capability === boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY ||
         capability === externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY ||
         capability === lifecycle.LIBRARY_LIFECYCLE_CAPABILITY ||
-        capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY);
+        capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY ||
+        capability === capture.CAPTURE_CAPABILITY);
     boundary.registerDialog({
       BrowserWindow,
       dialog: {
@@ -121,6 +125,18 @@ app
         [...authorizedWindows].filter(
           (window) => isLiveWindow(window) && activeFolders.get(window) === folder,
         ),
+    });
+    capture.registerCaptureMonitor({
+      BrowserWindow,
+      clipboard: { readImage: () => ({ isEmpty: () => true }) },
+      ipcMain,
+      expectedOrigins: new Set([APP_ORIGIN]),
+      focusedWindow: () => BrowserWindow.getFocusedWindow(),
+      isLiveWindow,
+      hasCapability,
+      readPreference: async () => false,
+      shouldOffer: ({ enabled, focused, composerFocused }) =>
+        enabled === true && focused === true && composerFocused !== true,
     });
     let persistedWorkspaceSession = null;
     workspaceSession.registerWorkspaceSession({
@@ -183,6 +199,9 @@ app
       await new Promise((resolve) => setTimeout(resolve, 25));
       const popup = window.open('https://example.com/');
       return {
+        captureFrozen: Object.isFrozen(window.stashbase.capture),
+        captureKeys: Object.keys(window.stashbase.capture).sort(),
+        captureWatch: await window.stashbase.capture.refreshWatch(),
         externalNavigation: await window.stashbase.externalNavigation.open('https://example.com/docs'),
         externalNavigationFrozen: Object.isFrozen(window.stashbase.externalNavigation),
         folderResult: await window.stashbase.library.chooseFolder(),
@@ -220,10 +239,26 @@ app
   `);
 
     assert.deepEqual(result, {
+      captureFrozen: true,
+      captureKeys: [
+        'markCurrentImageHandled',
+        'markHandled',
+        'onImageAvailable',
+        'refreshWatch',
+        'setComposerFocused',
+      ],
+      captureWatch: false,
       externalNavigation: { ok: true },
       externalNavigationFrozen: true,
       folderResult: { ok: true, folderPath: null },
-      globalKeys: ['externalNavigation', 'runtime', 'library', 'workspaceSession', 'windowLifecycle'],
+      globalKeys: [
+        'capture',
+        'externalNavigation',
+        'runtime',
+        'library',
+        'workspaceSession',
+        'windowLifecycle',
+      ],
       nodeGlobal: 'undefined',
       popupDenied: true,
       preloadFrozen: true,
