@@ -49,4 +49,21 @@ describe('preparation control API', () => {
     };
     await expect(createPreparationControlApi(cancel).cancel(source, signal)).resolves.toBe(true);
   });
+
+  it('syncs one explicit folder and reports a cut-short sync', async () => {
+    const request = vi.fn(async () => ({
+      body: { added: ['new.md'], cancelled: false },
+      status: 200,
+    }));
+    await expect(
+      createPreparationControlApi({ request }).sync('/library/research', signal),
+    ).resolves.toBe(true);
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'POST', path: '/api/sync?folder=%2Flibrary%2Fresearch' }),
+    );
+    const cancelled = vi.fn(async () => ({ body: { cancelled: true }, status: 200 }));
+    await expect(
+      createPreparationControlApi({ request: cancelled }).sync('/library/research', signal),
+    ).resolves.toBe(false);
+  });
 });

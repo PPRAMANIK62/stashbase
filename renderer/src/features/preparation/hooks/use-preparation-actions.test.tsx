@@ -24,6 +24,7 @@ function controlApi(overrides: Partial<PreparationControlApi> = {}): Preparation
     cancel: vi.fn(async () => true),
     prepare: vi.fn(async () => undefined),
     reprocess: vi.fn(async () => 'conversion' as const),
+    sync: vi.fn(async () => true),
     ...overrides,
   };
 }

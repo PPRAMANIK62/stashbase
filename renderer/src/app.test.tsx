@@ -62,7 +62,7 @@ describe('workspace shell', () => {
     },
     capture: null,
     preparation: {
-      controlApi: { cancel: vi.fn(), prepare: vi.fn(), reprocess: vi.fn() },
+      controlApi: { cancel: vi.fn(), prepare: vi.fn(), reprocess: vi.fn(), sync: vi.fn() },
       statusApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
     },
     retrieval: {

@@ -18,6 +18,9 @@ export interface PreparationControlApi {
     signal: AbortSignal,
   ): Promise<'conversion' | 'index'>;
   cancel(source: SourceReference, signal: AbortSignal): Promise<boolean>;
+  /** Reconcile one folder with its disk after something outside the app
+   *  wrote to it. Folder-explicit; resolves false when the sync was cut short. */
+  sync(folderPath: string, signal: AbortSignal): Promise<boolean>;
 }
 
 export type PreparationFailureKind =

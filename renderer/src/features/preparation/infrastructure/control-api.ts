@@ -3,6 +3,7 @@ import {
   type PreparationControlApi,
 } from '@/features/preparation/application/ports';
 import type { HttpClient, HttpResponse } from '@/platform/http/client';
+import { folderSyncResponseSchema } from '@/protocols/http/index-status';
 import {
   preparationAcknowledgementSchema,
   preparationCancelResponseSchema,
@@ -103,6 +104,21 @@ export function createPreparationControlApi(client: HttpClient): PreparationCont
         );
       }
       return parsed.data.cancelled;
+    },
+    async sync(folderPath, signal) {
+      const query = new URLSearchParams({ folder: folderPath });
+      const response = await post(
+        client,
+        `/api/sync?${query}`,
+        undefined,
+        signal,
+        'The folder could not be refreshed.',
+      );
+      const parsed = folderSyncResponseSchema.safeParse(response.body);
+      if (!parsed.success) {
+        throw new PreparationError('invalid-response', 'Sync returned an invalid response.');
+      }
+      return parsed.data.cancelled !== true;
     },
   };
 }
