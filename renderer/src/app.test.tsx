@@ -102,7 +102,13 @@ describe('workspace shell', () => {
       },
     },
     workspace: {
-      api: { load: vi.fn(), reveal: vi.fn() },
+      api: {
+        createEntry: vi.fn(),
+        deleteEntry: vi.fn(),
+        load: vi.fn(),
+        renameEntry: vi.fn(),
+        reveal: vi.fn(),
+      },
       revealLabel: 'Show in file manager',
       uploadApi: { upload: vi.fn() },
     },

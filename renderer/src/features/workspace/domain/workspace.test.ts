@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { createWorkspaceState, selectTreePath, toggleTreeFolder } from './workspace';
+import {
+  createWorkspaceState,
+  expandTreeFolder,
+  forgetTreePath,
+  renameTreePath,
+  selectTreePath,
+  toggleTreeFolder,
+} from './workspace';
 
 describe('workspace tree state', () => {
   it('keeps expansion and selection serializable and folder-scoped', () => {
@@ -43,6 +50,31 @@ describe('workspace tree state', () => {
         generation: 9,
       },
       selectedPath: 'drafts/plan.md',
+    });
+  });
+
+  it('moves expansion and selection with a renamed entry and drops them with a deleted one', () => {
+    const scope = { folder: { name: 'Notes', path: '/library/notes' }, generation: 1 };
+    let state = createWorkspaceState(scope);
+    state = expandTreeFolder(expandTreeFolder(state, 'drafts'), 'drafts/2026');
+    expect(expandTreeFolder(state, 'drafts')).toBe(state);
+    state = selectTreePath(state, 'drafts/2026/plan.md');
+
+    const renamed = renameTreePath(state, 'drafts', 'archive');
+    expect(renamed.expanded).toEqual({ archive: true, 'archive/2026': true });
+    expect(renamed.selectedPath).toBe('archive/2026/plan.md');
+    expect(renameTreePath(state, 'drafts', 'drafts')).toBe(state);
+    expect(renameTreePath(state, 'drafts-old', 'x')).toMatchObject({
+      expanded: { drafts: true, 'drafts/2026': true },
+      selectedPath: 'drafts/2026/plan.md',
+    });
+
+    const forgotten = forgetTreePath(state, 'drafts/2026');
+    expect(forgotten.expanded).toEqual({ drafts: true });
+    expect(forgotten.selectedPath).toBeNull();
+    expect(forgetTreePath(state, 'other')).toMatchObject({
+      expanded: { drafts: true, 'drafts/2026': true },
+      selectedPath: 'drafts/2026/plan.md',
     });
   });
 });

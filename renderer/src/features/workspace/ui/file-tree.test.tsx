@@ -87,7 +87,14 @@ function renderTree(
 
 function filesApi(value: WorkspaceListing = listing): FilesApi {
   return {
+    createEntry: vi.fn(async (_folder, _kind, parentPath, name) => ({
+      path: parentPath ? `${parentPath}/${name}` : name,
+    })),
+    deleteEntry: vi.fn(async () => undefined),
     load: vi.fn(async () => value),
+    renameEntry: vi.fn(async (_folder, entry, name) => ({
+      path: entry.path.replace(/[^/]+$/u, name),
+    })),
     reveal: vi.fn(async () => undefined),
   };
 }
@@ -292,7 +299,7 @@ describe('file tree', () => {
       .fn<FilesApi['load']>()
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue(listing);
-    renderTree({ load, reveal: vi.fn(async () => undefined) });
+    renderTree({ ...filesApi(), load });
 
     expect((await screen.findByRole('alert')).textContent).toBe('Files unavailable.');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));

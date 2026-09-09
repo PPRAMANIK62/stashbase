@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import type { WorkspaceListing } from './tree';
-import { buildTree, fileIsRestricted, nextTreePath, visibleTree } from './tree';
+import {
+  buildTree,
+  entryNameProblem,
+  fileIsRestricted,
+  joinTreePath,
+  nextTreePath,
+  parentTreePath,
+  renamedTreePath,
+  treePathWithin,
+  visibleTree,
+} from './tree';
 
 const listing: WorkspaceListing = {
   files: [
@@ -103,5 +113,26 @@ describe('workspace tree model', () => {
     expect(nextTreePath('ArrowDown', 'notes', rows)).toBe('notes/drafts');
     expect(nextTreePath('ArrowUp', 'notes', rows)).toBe('folder10');
     expect(nextTreePath('PageDown', 'notes', rows)).toBeNull();
+  });
+
+  it('derives entry paths from a parent and one leaf name', () => {
+    expect(parentTreePath('notes/drafts/plan.md')).toBe('notes/drafts');
+    expect(parentTreePath('plan.md')).toBe('');
+    expect(joinTreePath('', 'plan.md')).toBe('plan.md');
+    expect(joinTreePath('notes', 'plan.md')).toBe('notes/plan.md');
+    expect(renamedTreePath('notes/plan.md', 'outline.md')).toBe('notes/outline.md');
+    expect(renamedTreePath('notes', 'archive')).toBe('archive');
+    expect(treePathWithin('notes/plan.md', 'notes')).toBe(true);
+    expect(treePathWithin('notes', 'notes')).toBe(true);
+    expect(treePathWithin('notes-old/plan.md', 'notes')).toBe(false);
+  });
+
+  it('explains names that cannot become entries before any request', () => {
+    expect(entryNameProblem('plan.md')).toBeNull();
+    expect(entryNameProblem('  ')).toBe('Enter a name.');
+    expect(entryNameProblem('a/b')).toBe('A name cannot contain slashes.');
+    expect(entryNameProblem('a\\b')).toBe('A name cannot contain slashes.');
+    expect(entryNameProblem('..')).toBe('That name is reserved.');
+    expect(entryNameProblem('x'.repeat(256))).toBe('That name is too long.');
   });
 });

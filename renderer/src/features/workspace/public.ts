@@ -20,7 +20,13 @@ export {
 } from './domain/session';
 export type { WorkspaceScope } from './domain/workspace';
 export { displayFolderPath, folderName } from './domain/library';
-export { fileIsRestricted, type WorkspaceFile, type WorkspaceListing } from './domain/tree';
+export {
+  fileIsRestricted,
+  treePathWithin,
+  type WorkspaceEntry,
+  type WorkspaceFile,
+  type WorkspaceListing,
+} from './domain/tree';
 export { createFilesApi } from './infrastructure/files-api';
 export { createUploadApi } from './infrastructure/upload-api';
 export { createLibraryApi } from './infrastructure/api';

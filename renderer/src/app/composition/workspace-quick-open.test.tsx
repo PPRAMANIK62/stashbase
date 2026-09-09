@@ -69,6 +69,9 @@ describe('workspace Quick Open composition', () => {
         folderName: 'Notes',
         folders: [],
       })),
+      createEntry: vi.fn(),
+      deleteEntry: vi.fn(),
+      renameEntry: vi.fn(),
       reveal: vi.fn(async () => undefined),
     };
     const sourceApi: DocumentSourceApi = {

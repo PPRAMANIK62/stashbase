@@ -1,6 +1,6 @@
 import type { LibraryFailureKind, LibrarySnapshot } from '@/features/workspace/domain/library';
 import type { WorkspaceSessionSnapshot } from '@/features/workspace/domain/session';
-import type { WorkspaceListing } from '@/features/workspace/domain/tree';
+import type { WorkspaceEntry, WorkspaceListing } from '@/features/workspace/domain/tree';
 
 export type LibraryFolderPickerResult =
   | { status: 'cancelled' }
@@ -48,6 +48,25 @@ export interface LibraryLifecycle {
 export interface FilesApi {
   load(folderPath: string, signal: AbortSignal): Promise<WorkspaceListing>;
   reveal(folderPath: string, entryPath: string, signal: AbortSignal): Promise<void>;
+  /** Creates one file or folder under `parentPath` and returns the settled
+   *  path: the server may complete a file's extension. */
+  createEntry(
+    folderPath: string,
+    kind: WorkspaceEntry['kind'],
+    parentPath: string,
+    name: string,
+    signal: AbortSignal,
+  ): Promise<{ path: string }>;
+  /** Gives an entry a new leaf name in its own parent and returns the
+   *  settled path. */
+  renameEntry(
+    folderPath: string,
+    entry: WorkspaceEntry,
+    name: string,
+    signal: AbortSignal,
+  ): Promise<{ path: string }>;
+  /** Deletes a file, or a folder with everything inside it, from disk. */
+  deleteEntry(folderPath: string, entry: WorkspaceEntry, signal: AbortSignal): Promise<void>;
 }
 
 export interface UploadFile {
@@ -80,10 +99,14 @@ export class LibraryError extends Error {
   }
 }
 
-export class FilesError extends Error {
-  readonly kind: LibraryFailureKind;
+/** Files failures add the mutation outcomes the listing never meets: a
+ *  name already taken, and a request the server refused as invalid. */
+export type FilesFailureKind = LibraryFailureKind | 'conflict' | 'rejected';
 
-  constructor(kind: LibraryFailureKind, message: string, options?: ErrorOptions) {
+export class FilesError extends Error {
+  readonly kind: FilesFailureKind;
+
+  constructor(kind: FilesFailureKind, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'FilesError';
     this.kind = kind;

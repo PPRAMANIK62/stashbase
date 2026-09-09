@@ -57,12 +57,48 @@ export interface TreeRow {
 
 export type ExpandedFolders = Record<string, true>;
 
+/** One file or folder the user can rename or delete, by folder-relative path. */
+export interface WorkspaceEntry {
+  kind: 'file' | 'folder';
+  path: string;
+}
+
 function basename(entryPath: string): string {
   return entryPath.split('/').at(-1) ?? entryPath;
 }
 
 function parentPath(entryPath: string): string {
   return entryPath.split('/').slice(0, -1).join('/');
+}
+
+/** The folder-relative parent of an entry; empty at the folder root. */
+export function parentTreePath(entryPath: string): string {
+  return parentPath(entryPath);
+}
+
+export function joinTreePath(parent: string, name: string): string {
+  return parent ? `${parent}/${name}` : name;
+}
+
+/** The path an entry takes when only its leaf name changes. */
+export function renamedTreePath(entryPath: string, name: string): string {
+  return joinTreePath(parentPath(entryPath), name);
+}
+
+/** True for the entry itself and everything below it. */
+export function treePathWithin(entryPath: string, prefix: string): boolean {
+  return entryPath === prefix || entryPath.startsWith(`${prefix}/`);
+}
+
+/** Why a typed name cannot become an entry, or null when it can. Mirrors
+ *  the wire rule so the tree explains a bad name before any request. */
+export function entryNameProblem(name: string): string | null {
+  const trimmed = name.trim();
+  if (trimmed === '') return 'Enter a name.';
+  if (/[\\/]/u.test(trimmed)) return 'A name cannot contain slashes.';
+  if (trimmed === '.' || trimmed === '..') return 'That name is reserved.';
+  if (trimmed.length > 255) return 'That name is too long.';
+  return null;
 }
 
 function compareNodes(left: TreeNode, right: TreeNode): number {
