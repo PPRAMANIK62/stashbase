@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 import type { AgentContextPort, AgentSessionPort } from '@/features/agent/application/ports';
 import type { AgentFilesChanged } from '@/features/agent/application/session-runtime';
@@ -6,6 +6,7 @@ import {
   createAgentWorkspaceRuntime,
   type AgentWorkspaceRuntime,
 } from '@/features/agent/application/workspace-runtime';
+import { useRetainedRuntime } from '@/lib/runtime/use-retained-runtime';
 
 export interface AgentWorkspaceRuntimeOptions {
   context: AgentContextPort;
@@ -29,27 +30,18 @@ export function useAgentWorkspaceRuntime({
 }: AgentWorkspaceRuntimeOptions): AgentWorkspaceRuntime {
   const filesChangedHandler = useRef(onFilesChanged);
   filesChangedHandler.current = onFilesChanged;
-  const [runtime] = useState(() =>
-    createAgentWorkspaceRuntime({
-      autostart: false,
-      context,
-      createId,
-      folderPath,
-      onFilesChanged: (change) => filesChangedHandler.current?.(change),
-      port: session,
-    }),
+  const runtime = useRetainedRuntime(
+    () =>
+      createAgentWorkspaceRuntime({
+        autostart: false,
+        context,
+        createId,
+        folderPath,
+        onFilesChanged: (change) => filesChangedHandler.current?.(change),
+        port: session,
+      }),
+    (agent) => agent.dispose(),
   );
-  const mountCount = useRef(0);
-
-  useEffect(() => {
-    mountCount.current += 1;
-    return () => {
-      mountCount.current -= 1;
-      queueMicrotask(() => {
-        if (mountCount.current === 0) runtime.dispose();
-      });
-    };
-  }, [runtime]);
 
   useLayoutEffect(() => runtime.setWindowFolder(folderPath), [folderPath, runtime]);
   useEffect(

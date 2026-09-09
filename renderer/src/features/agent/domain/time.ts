@@ -2,6 +2,16 @@ import type { AgentTranscriptBlock } from './session';
 
 const DAY_MS = 86_400_000;
 
+/** How a clock time or a calendar date is spelled for the reader.
+ *
+ *  The runtime's own locale is the default, and nothing in the app passes
+ *  anything else. It is a parameter so a test can pin one: comparing a label
+ *  against the same formatter that produced it proves only that `Intl` is
+ *  deterministic, which is not what these functions are for. */
+export type TimeLocale = Intl.LocalesArgument;
+
+const RUNTIME_LOCALE: TimeLocale = [];
+
 export function startOfLocalDay(value: number): Date {
   const day = new Date(value);
   day.setHours(0, 0, 0, 0);
@@ -10,13 +20,13 @@ export function startOfLocalDay(value: number): Date {
 
 /** "Today", "Yesterday", or a calendar date; the year appears only when it
  *  differs from the current one. */
-export function dayLabel(day: Date, today: Date): string {
+export function dayLabel(day: Date, today: Date, locale: TimeLocale = RUNTIME_LOCALE): string {
   if (day.getTime() === today.getTime()) return 'Today';
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   if (day.getTime() === yesterday.getTime()) return 'Yesterday';
   return day.toLocaleDateString(
-    [],
+    locale,
     day.getFullYear() === today.getFullYear()
       ? { day: 'numeric', month: 'long' }
       : { day: 'numeric', month: 'long', year: 'numeric' },
@@ -25,17 +35,21 @@ export function dayLabel(day: Date, today: Date): string {
 
 /** Time of a prompt as a reader would say it: the clock time today, the
  *  weekday within the past week, otherwise the date. */
-export function promptTimeLabel(at: number, now: number): string {
+export function promptTimeLabel(
+  at: number,
+  now: number,
+  locale: TimeLocale = RUNTIME_LOCALE,
+): string {
   const moment = new Date(at);
-  const time = moment.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const time = moment.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
   const today = startOfLocalDay(now);
   const daysAgo = Math.round((today.getTime() - startOfLocalDay(at).getTime()) / DAY_MS);
   if (daysAgo === 0) return time;
   if (daysAgo > 0 && daysAgo < 7) {
-    return `${moment.toLocaleDateString([], { weekday: 'short' })} ${time}`;
+    return `${moment.toLocaleDateString(locale, { weekday: 'short' })} ${time}`;
   }
   const date = moment.toLocaleDateString(
-    [],
+    locale,
     moment.getFullYear() === today.getFullYear()
       ? { day: 'numeric', month: 'short' }
       : { day: 'numeric', month: 'short', year: 'numeric' },

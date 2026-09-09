@@ -11,11 +11,14 @@ describe('Agent brand icons', () => {
         <CodexIcon size={16} />
       </>,
     );
-    const gradients = [...container.querySelectorAll('linearGradient')].map((node) => node.id);
+    // The marks are aria-hidden, injected third-party SVG markup (@lobehub/icons-static-svg);
+    // gradient id/url wiring is the fact under test, so its DOM shape is the contract.
+    const gradients = [...container.querySelectorAll('linearGradient')].map((node) => node.id); // dom-contract: injected third-party SVG markup
     expect(gradients).toHaveLength(2);
     expect(new Set(gradients).size).toBe(2);
-    for (const svg of container.querySelectorAll('svg')) {
-      const id = svg.querySelector('linearGradient')?.id;
+    const svgs = container.querySelectorAll('svg'); // dom-contract: injected third-party SVG markup
+    for (const svg of svgs) {
+      const id = svg.querySelector('linearGradient')?.id; // dom-contract: injected third-party SVG markup
       expect(id).toMatch(/^lobe-icons-codex-/u);
       expect(svg.innerHTML).toContain(`url(#${id})`);
     }

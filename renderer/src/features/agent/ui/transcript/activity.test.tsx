@@ -2,6 +2,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { expectFocused } from '@/test/dom';
+
 import { AgentActivityGroup, AgentPermissionCard } from './activity';
 import type { AgentToolBlock } from './tool-presentation';
 
@@ -47,10 +49,8 @@ describe('Agent activity', () => {
         tool={{ ...command, permissionRequested: true, status: 'denied' }}
       />,
     );
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-
     const heading = screen.getByRole('heading', { name: 'Run this command?' });
-    expect(heading).toBe(heading.ownerDocument.activeElement);
+    await waitFor(() => expectFocused(heading));
     expect(screen.getByRole('status').textContent).toBe('Denied');
   });
 
@@ -79,8 +79,8 @@ describe('Agent activity', () => {
     expect(screen.queryByLabelText('Edit arguments')).toBeNull();
     expect(screen.getByRole('region', { name: 'Edited notes.md' })).not.toBeNull();
     await waitFor(() => {
-      expect(container.querySelector('.cm-deletedChunk')?.textContent).toContain('Undecided.');
-      expect(container.querySelector('.cm-changedLine')?.textContent).toContain('Accepted');
+      expect(container.querySelector('.cm-deletedChunk')?.textContent).toContain('Undecided.'); // dom-contract: CodeMirror internals
+      expect(container.querySelector('.cm-changedLine')?.textContent).toContain('Accepted'); // dom-contract: CodeMirror internals
     });
     expect(screen.getByRole('button', { name: 'Allow' })).not.toBeNull();
   });

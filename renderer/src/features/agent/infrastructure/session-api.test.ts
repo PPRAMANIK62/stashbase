@@ -1,12 +1,8 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { HttpClient } from '@/platform/http/client';
+import { httpClient } from '@/test/fakes/http';
 
-import { createAgentSessionApi } from './session-api';
-
-function client(body: unknown = [], status = 200): HttpClient {
-  return { request: vi.fn(async () => ({ body, status })) };
-}
+import { createAgentSessionAdapter } from './session-api';
 
 describe('Agent session API', () => {
   it('opens the shared socket without exposing renderer-owned window identity', () => {
@@ -18,7 +14,7 @@ describe('Agent session API', () => {
       close: vi.fn(),
       send: vi.fn(),
     };
-    const api = createAgentSessionApi(client(), 'https://127.0.0.1:43123/', (url) => {
+    const api = createAgentSessionAdapter(httpClient(), 'https://127.0.0.1:43123/', (url) => {
       opened = url;
       return socket;
     });
@@ -47,7 +43,7 @@ describe('Agent session API', () => {
   });
 
   it('validates history, replay, and websocket events at the adapter seam', async () => {
-    const historyClient = client([
+    const historyClient = httpClient([
       {
         id: 'session-1',
         title: 'Research',
@@ -57,7 +53,7 @@ describe('Agent session API', () => {
       },
     ]);
     await expect(
-      createAgentSessionApi(historyClient, 'http://127.0.0.1:1').list(
+      createAgentSessionAdapter(historyClient, 'http://127.0.0.1:1').list(
         'claude',
         { kind: 'folder', path: '/Research' },
         new AbortController().signal,
@@ -76,8 +72,8 @@ describe('Agent session API', () => {
       expect.objectContaining({ path: '/api/agents/claude/sessions?folder=%2FResearch' }),
     );
 
-    const malformed = createAgentSessionApi(
-      client({ protocol: 1, messages: [], effort: null }),
+    const malformed = createAgentSessionAdapter(
+      httpClient({ protocol: 1, messages: [], effort: null }),
       'http://127.0.0.1:1',
     );
     await expect(
@@ -116,7 +112,7 @@ describe('Agent session API', () => {
       close: () => undefined,
       send: () => undefined,
     };
-    createAgentSessionApi(client(), 'http://127.0.0.1:1', () => socket).connect(
+    createAgentSessionAdapter(httpClient(), 'http://127.0.0.1:1', () => socket).connect(
       { agent: 'stashbase', scope: { kind: 'library' } },
       { onClose: vi.fn(), onEvent: (event) => events.push(event), onInvalidResponse: invalid },
     );
@@ -129,6 +125,16 @@ describe('Agent session API', () => {
         activeModel: 'native-model',
       }),
     });
+    messageListeners[0]?.({
+      data: JSON.stringify({
+        t: 'skills',
+        skills: [{ id: 'review', label: 'review', argumentHint: 'a file to review' }],
+        state: 'available',
+      }),
+    });
+    messageListeners[0]?.({
+      data: JSON.stringify({ t: 'skills', skills: [], state: 'failed', error: 'No skill folder.' }),
+    });
     expect(invalid).toHaveBeenCalledOnce();
     expect(events).toEqual([
       { id: 'native-1', kind: 'identified' },
@@ -138,16 +144,23 @@ describe('Agent session API', () => {
         kind: 'models',
         models: [{ id: 'native-model', label: 'Native model', supportedEfforts: ['high'] }],
       },
+      {
+        error: null,
+        kind: 'skills',
+        skills: [{ id: 'review', label: 'review', argumentHint: 'a file to review' }],
+        state: 'available',
+      },
+      { error: 'No skill folder.', kind: 'skills', skills: [], state: 'failed' },
     ]);
   });
 
   it('attributes folder-scoped history rows to the requested folder', async () => {
-    const historyClient = client([
+    const historyClient = httpClient([
       { hasContent: true, id: 'session-1', title: 'Research', lastModified: 42 },
     ]);
 
     await expect(
-      createAgentSessionApi(historyClient, 'http://127.0.0.1:1').list(
+      createAgentSessionAdapter(historyClient, 'http://127.0.0.1:1').list(
         'codex',
         { kind: 'folder', path: '/Library/Research' },
         new AbortController().signal,
@@ -187,7 +200,11 @@ describe('Agent session API', () => {
         sent.push(data);
       },
     };
-    const connection = createAgentSessionApi(client(), 'http://127.0.0.1:1', () => socket).connect(
+    const connection = createAgentSessionAdapter(
+      httpClient(),
+      'http://127.0.0.1:1',
+      () => socket,
+    ).connect(
       { access: 'default', agent: 'codex', scope: { kind: 'library' } },
       { onClose: vi.fn(), onEvent: (event) => events.push(event), onInvalidResponse: vi.fn() },
     );
@@ -205,9 +222,14 @@ describe('Agent session API', () => {
         input: { command: 'pwd' },
       }),
     });
-    expect(connection.send?.({ t: 'permission-reply', id: 'permission-1', allow: true })).toBe(
-      true,
-    );
+    expect(
+      connection.send?.({
+        allow: true,
+        always: null,
+        id: 'permission-1',
+        kind: 'reply-permission',
+      }),
+    ).toBe(true);
     onMessage?.({
       data: JSON.stringify({
         t: 'file-diff',

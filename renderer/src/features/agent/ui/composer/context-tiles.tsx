@@ -1,3 +1,10 @@
+/**
+ * Bound context outside the text. A visual source (an image or a PDF) is a
+ * square tile like the composer's own thumbnails; a non-visual source sent
+ * without a mention is a compact chip with its type glyph and name. Both
+ * share one box surface and one spring. State reads as a dot and a word,
+ * and only a missing or failed source turns red.
+ */
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 
@@ -11,18 +18,11 @@ import {
   type ContextStatus,
   type ContextValidation,
 } from '@/features/agent/domain/context';
+import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
 import { spring } from '@/lib/springs';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
-
-/**
- * Bound context outside the text. A visual source (an image or a PDF) is a
- * square tile like the composer's own thumbnails; a non-visual source sent
- * without a mention is a compact chip with its type glyph and name. Both
- * share one box surface and one spring. State reads as a dot and a word,
- * and only a missing or failed source turns red.
- */
 
 const STATUS_WORD: Record<Exclude<ContextStatus, 'ready'>, string> = {
   blocked: 'Blocked',
@@ -90,7 +90,10 @@ function RemoveBadge({ name, onRemove }: { name: string; onRemove: () => void })
     <Tooltip content="Remove" side="top">
       <button
         aria-label={`Remove ${name}`}
-        className="absolute top-1 right-1 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white opacity-0 transition-opacity duration-80 outline-none group-hover/tile:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]"
+        className={cn(
+          'absolute top-1 right-1 flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white opacity-0 transition-opacity duration-fast outline-none group-hover/tile:opacity-100 focus-visible:opacity-100',
+          focusRing(),
+        )}
         onClick={(event) => {
           event.stopPropagation();
           onRemove();
@@ -103,7 +106,33 @@ function RemoveBadge({ name, onRemove }: { name: string; onRemove: () => void })
   );
 }
 
-export function SourceTile({
+/** The retry a failed source offers. The frame differs between a tile and a
+ *  chip; the label, the action, and keeping the click off the surface behind
+ *  it do not. */
+function ReprocessButton({
+  className,
+  onReprocess,
+  source,
+}: {
+  className: string;
+  onReprocess: (source: SourceReference) => void;
+  source: SourceReference;
+}) {
+  return (
+    <button
+      className={cn(className, focusRing())}
+      onClick={(event) => {
+        event.stopPropagation();
+        onReprocess(source);
+      }}
+      type="button"
+    >
+      Reprocess
+    </button>
+  );
+}
+
+function SourceTile({
   item,
   onReprocess,
   reason,
@@ -111,7 +140,7 @@ export function SourceTile({
   status = 'ready',
 }: {
   item: SourceItem;
-  onReprocess?: (source: SourceReference) => void;
+  onReprocess?: ((source: SourceReference) => void) | undefined;
   reason?: string | null;
   size: number;
   status?: ContextStatus;
@@ -144,16 +173,11 @@ export function SourceTile({
         {status !== 'ready' && <StatusLine status={status} />}
       </div>
       {reprocessable && (
-        <button
-          className="absolute inset-x-1 bottom-1 cursor-pointer rounded-md bg-neutral-900 py-0.5 text-[10px] font-medium text-white opacity-0 transition-opacity duration-80 outline-none group-hover/tile:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]"
-          onClick={(event) => {
-            event.stopPropagation();
-            onReprocess(item.source);
-          }}
-          type="button"
-        >
-          Reprocess
-        </button>
+        <ReprocessButton
+          className="absolute inset-x-1 bottom-1 cursor-pointer rounded-md bg-neutral-900 py-0.5 text-[10px] font-medium text-white opacity-0 transition-opacity duration-fast outline-none group-hover/tile:opacity-100 focus-visible:opacity-100"
+          onReprocess={onReprocess}
+          source={item.source}
+        />
       )}
     </TileBox>
   );
@@ -161,14 +185,14 @@ export function SourceTile({
 
 /** A non-visual source: the glyph and name in one line, state beside them.
  *  Same surface and radius as a tile, at the composer's control height. */
-export function SourceChip({
+function SourceChip({
   item,
   onReprocess,
   reason,
   status = 'ready',
 }: {
   item: SourceItem;
-  onReprocess?: (source: SourceReference) => void;
+  onReprocess?: ((source: SourceReference) => void) | undefined;
   reason?: string | null;
   status?: ContextStatus;
 }) {
@@ -192,16 +216,11 @@ export function SourceChip({
       <span className="min-w-0 truncate">{name}</span>
       {status !== 'ready' && <StatusLine status={status} />}
       {status === 'failed' && onReprocess && (
-        <button
-          className="-mr-1 shrink-0 cursor-pointer rounded-md px-1 text-[11px] font-medium text-foreground transition-colors duration-80 outline-none hover:bg-hover focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]"
-          onClick={(event) => {
-            event.stopPropagation();
-            onReprocess(item.source);
-          }}
-          type="button"
-        >
-          Reprocess
-        </button>
+        <ReprocessButton
+          className="-mr-1 shrink-0 cursor-pointer rounded-md px-1 text-[11px] font-medium text-foreground transition-colors duration-fast outline-none hover:bg-hover"
+          onReprocess={onReprocess}
+          source={item.source}
+        />
       )}
     </div>
   );
@@ -245,7 +264,7 @@ export function DraftSourceTiles({
   validations,
 }: {
   onRemove: (item: AgentContextItem) => void;
-  onReprocess?: (source: SourceReference) => void;
+  onReprocess?: ((source: SourceReference) => void) | undefined;
   size: number;
   validations: ContextValidation[];
 }) {
@@ -289,7 +308,7 @@ export function SentContextTiles({
   size = 64,
 }: {
   align?: 'start' | 'end';
-  fileFor?: (path: string) => File | undefined;
+  fileFor?: ((path: string) => File | undefined) | undefined;
   items: readonly AgentContextItem[];
   size?: number;
 }) {

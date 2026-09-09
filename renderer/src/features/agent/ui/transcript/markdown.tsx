@@ -84,5 +84,3 @@ export const AgentMarkdown = memo(function AgentMarkdown({
     </div>
   );
 });
-
-export { isHttpUrl };

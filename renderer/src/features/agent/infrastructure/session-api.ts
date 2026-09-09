@@ -1,11 +1,21 @@
+/** The Agent session transport: one WebSocket for the live conversation and
+ *  the HTTP calls behind conversation history. Wire vocabulary stops here —
+ *  server frames are translated into the feature's own session events, and
+ *  refusals are reported on the session error ladder — so nothing above this
+ *  module reads a protocol schema. */
 import {
   AgentSessionError,
   type AgentConnectionListener,
+  type AgentConnectRequest,
   type AgentSessionPort,
 } from '@/features/agent/application/ports';
+import type { AgentAccessMode } from '@/features/agent/domain/access';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
+import type { AgentModel, AgentSkill } from '@/features/agent/domain/runtime-catalog';
 import type { AgentId, AgentScope, AgentSessionEvent } from '@/features/agent/domain/session';
-import type { HttpClient, HttpResponse } from '@/platform/http/client';
+import type { AgentSessionCommand } from '@/features/agent/domain/session-command';
+import { request as httpRequest, type TransportRequest } from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import {
   agentSessionEmptyResponseSchema,
   agentSessionFailureSchema,
@@ -19,8 +29,11 @@ import {
   agentClientEventSchema,
   agentServerEventSchema,
   agentSessionConnectSchema,
+  type AgentAccessMode as AgentAccessModeWire,
+  type AgentClientEvent,
+  type AgentModel as AgentModelWire,
   type AgentServerEvent,
-  type AgentAccessMode,
+  type AgentSkill as AgentSkillWire,
 } from '@/protocols/websocket/agent-session';
 
 interface SocketLike {
@@ -36,6 +49,11 @@ interface SocketLike {
 type SocketFactory = (url: string) => SocketLike;
 
 const SOCKET_OPEN = 1;
+
+/** The browser socket, read through the narrow surface this adapter uses. */
+function browserSocket(url: string): SocketLike {
+  return new WebSocket(url);
+}
 
 function scopeQuery(scope: AgentScope): URLSearchParams {
   const query = new URLSearchParams();
@@ -63,6 +81,65 @@ function historyEntry(
   };
 }
 
+/** The wire spells an absent field `key?: T | undefined`; the feature spells
+ *  it as a missing key. Rebuild rather than widen, so nothing above this
+ *  module has to test for both. */
+function toModel(wire: AgentModelWire): AgentModel {
+  return {
+    id: wire.id,
+    label: wire.label,
+    ...(wire.description === undefined ? {} : { description: wire.description }),
+    ...(wire.supportedEfforts === undefined ? {} : { supportedEfforts: wire.supportedEfforts }),
+  };
+}
+
+function toSkill(wire: AgentSkillWire): AgentSkill {
+  return {
+    id: wire.id,
+    label: wire.label,
+    ...(wire.description === undefined ? {} : { description: wire.description }),
+    ...(wire.argumentHint === undefined ? {} : { argumentHint: wire.argumentHint }),
+  };
+}
+
+/** Both spellings of the access mode, paired once. The `satisfies` is what
+ *  makes a wire enum that drifts a compile error rather than a runtime
+ *  refusal at the socket. */
+const ACCESS_MODE_WIRE = {
+  acceptEdits: 'acceptEdits',
+  auto: 'auto',
+  default: 'default',
+  plan: 'plan',
+} as const satisfies Record<AgentAccessMode, AgentAccessModeWire>;
+
+/** One session command, encoded for the socket. A choice the feature spells
+ *  `null` is a field the wire simply omits. */
+function clientEvent(command: AgentSessionCommand): AgentClientEvent {
+  switch (command.kind) {
+    case 'prompt':
+      return {
+        t: 'prompt',
+        text: command.text,
+        ...(command.skill === null ? {} : { skill: command.skill }),
+      };
+    case 'interrupt':
+      return { t: 'interrupt' };
+    case 'reply-permission':
+      return {
+        t: 'permission-reply',
+        id: command.id,
+        allow: command.allow,
+        ...(command.always === null ? {} : { always: command.always }),
+      };
+    case 'select-model':
+      return { t: 'set-model', ...(command.model === null ? {} : { model: command.model }) };
+    case 'set-access-mode':
+      return { t: 'set-mode', mode: ACCESS_MODE_WIRE[command.mode] };
+    case 'refresh-skills':
+      return { t: 'refresh-skills' };
+  }
+}
+
 function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
   switch (event.t) {
     case 'ready':
@@ -84,7 +161,7 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
         activeModel: event.activeModel ?? null,
         fallback: event.fallback ?? null,
         kind: 'models',
-        models: event.models,
+        models: event.models.map(toModel),
       };
     case 'tool':
       return { id: event.id, input: event.input, kind: 'tool-started', name: event.name };
@@ -111,7 +188,7 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
     case 'notice':
       return { kind: 'notice', message: event.message };
     case 'error':
-      return { failure: event.failure, kind: 'failed', message: event.message };
+      return { failure: event.failure?.kind, kind: 'failed', message: event.message };
     case 'exit':
       return 'reason' in event
         ? { folderPath: event.folder, kind: 'scope-retired' }
@@ -127,45 +204,36 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
         path: event.file,
       };
     case 'skills':
+      return {
+        error: event.error ?? null,
+        kind: 'skills',
+        skills: event.skills.map(toSkill),
+        state: event.state,
+      };
     case 'steer-result':
       return null;
   }
 }
 
-function failureMessage(response: HttpResponse): string {
-  const failure = agentSessionFailureSchema.safeParse(response.body);
-  return failure.success ? failure.data.error : 'Agent session service is unavailable.';
+/** One session-history call. The service names its own refusal, so that
+ *  sentence is what the reader sees. */
+function history(path: string, signal: AbortSignal, invalid: string): TransportRequest {
+  return {
+    error: AgentSessionError,
+    failureSchema: agentSessionFailureSchema,
+    messages: { 'invalid-response': invalid, unavailable: 'Agent session service is unavailable.' },
+    path,
+    serverMessage: true,
+    signal,
+  };
 }
 
-function successful(response: HttpResponse): unknown {
-  if (response.status >= 200 && response.status < 300) return response.body;
-  throw new AgentSessionError('unavailable', failureMessage(response));
-}
-
-function parse<T>(parser: { parse(value: unknown): T }, value: unknown, message: string): T {
-  try {
-    return parser.parse(value);
-  } catch (cause) {
-    throw new AgentSessionError('invalid-response', message, { cause });
-  }
-}
-
-function socketUrl(
-  serverOrigin: string,
-  request: {
-    agent: AgentId;
-    scope: AgentScope;
-    resume?: string;
-    effort?: string;
-    model?: string;
-    access?: AgentAccessMode;
-  },
-): string {
+function socketUrl(serverOrigin: string, request: AgentConnectRequest): string {
   const url = new URL('/ws/agent', serverOrigin);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   const wire = agentSessionConnectSchema.parse({
     agent: request.agent,
-    access: request.access ?? 'auto',
+    access: ACCESS_MODE_WIRE[request.access ?? 'auto'],
     effort: request.effort,
     model: request.model,
     resume: request.resume,
@@ -179,10 +247,10 @@ function socketUrl(
   return url.toString();
 }
 
-export function createAgentSessionApi(
+export function createAgentSessionAdapter(
   client: HttpClient,
   serverOrigin: string,
-  createSocket: SocketFactory = (url) => new WebSocket(url) as unknown as SocketLike,
+  createSocket: SocketFactory = browserSocket,
 ): AgentSessionPort {
   return {
     connect(request, listener: AgentConnectionListener) {
@@ -203,12 +271,15 @@ export function createAgentSessionApi(
       socket.addEventListener('message', onMessage);
       socket.addEventListener('close', onClose);
       return {
-        send(event) {
+        send(command) {
           if (socket.readyState !== SOCKET_OPEN) return false;
           try {
-            socket.send(JSON.stringify(agentClientEventSchema.parse(event)));
+            socket.send(JSON.stringify(agentClientEventSchema.parse(clientEvent(command))));
             return true;
           } catch {
+            // swallowed: a socket that refuses the frame is already closing.
+            // Answering false is what tells the runtime to reconnect and
+            // resend, which is a better recovery than any sentence here.
             return false;
           }
         },
@@ -223,34 +294,28 @@ export function createAgentSessionApi(
       };
     },
     async list(agent, scope, signal) {
-      const body = successful(
-        await client.request({
-          path: scopedPath(`/api/agents/${agent}/sessions`, scope),
+      const rows = await httpRequest(client, {
+        ...history(
+          scopedPath(`/api/agents/${agent}/sessions`, scope),
           signal,
-        }),
-      );
-      const rows = parse(
-        agentSessionListResponseSchema,
-        body,
-        'Agent history returned an invalid response.',
-      );
+          'Agent history returned an invalid response.',
+        ),
+        schema: agentSessionListResponseSchema,
+      });
       return rows.map((row) => historyEntry(row, agent, scope));
     },
     async replay(entry, signal) {
-      const body = successful(
-        await client.request({
-          path: scopedPath(
+      const replay = await httpRequest(client, {
+        ...history(
+          scopedPath(
             `/api/agents/${entry.agent}/sessions/${encodeURIComponent(entry.id)}/replay`,
             entry.scope,
           ),
           signal,
-        }),
-      );
-      const replay = parse(
-        agentSessionReplaySchema,
-        body,
-        'Agent replay returned an invalid response.',
-      );
+          'Agent replay returned an invalid response.',
+        ),
+        schema: agentSessionReplaySchema,
+      });
       // Replayed image previews are server routes; the renderer runs on its
       // own origin, so they are absolutized here where the origin is known.
       const transcript = replay.messages.map((block) =>
@@ -268,33 +333,34 @@ export function createAgentSessionApi(
       return { effort: replay.effort, transcript };
     },
     async rename(entry, title, signal) {
-      const request = agentSessionRenameRequestSchema.parse({ title });
-      const body = successful(
-        await client.request({
-          body: request,
-          method: 'PATCH',
-          path: scopedPath(
+      const row = await httpRequest(client, {
+        ...history(
+          scopedPath(
             `/api/agents/${entry.agent}/sessions/${encodeURIComponent(entry.id)}`,
             entry.scope,
           ),
           signal,
-        }),
-      );
-      const row = parse(agentSessionInfoSchema, body, 'Agent rename returned an invalid response.');
+          'Agent rename returned an invalid response.',
+        ),
+        body: agentSessionRenameRequestSchema.parse({ title }),
+        method: 'PATCH',
+        schema: agentSessionInfoSchema,
+      });
       return historyEntry(row, entry.agent, entry.scope);
     },
     async remove(entry, signal) {
-      const body = successful(
-        await client.request({
-          method: 'DELETE',
-          path: scopedPath(
+      await httpRequest(client, {
+        ...history(
+          scopedPath(
             `/api/agents/${entry.agent}/sessions/${encodeURIComponent(entry.id)}`,
             entry.scope,
           ),
           signal,
-        }),
-      );
-      parse(agentSessionEmptyResponseSchema, body, 'Agent delete returned an invalid response.');
+          'Agent delete returned an invalid response.',
+        ),
+        method: 'DELETE',
+        schema: agentSessionEmptyResponseSchema,
+      });
     },
   };
 }

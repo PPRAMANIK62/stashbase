@@ -1,17 +1,10 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { AgentSessionPort } from './ports';
+import { agentContextPort, idleAgentSessionPort } from '@/test/fakes/agent';
+
 import { createAgentWorkspaceRuntime } from './workspace-runtime';
 
-function port(): AgentSessionPort {
-  return {
-    connect: vi.fn(() => ({ close: vi.fn() })),
-    list: vi.fn(async () => []),
-    remove: vi.fn(async () => undefined),
-    rename: vi.fn(),
-    replay: vi.fn(async () => ({ effort: null, transcript: [] })),
-  };
-}
+const noop = (): void => undefined;
 
 describe('AgentWorkspaceRuntime', () => {
   it('starts with one Built-in chat and reuses only a completely blank tab', () => {
@@ -19,7 +12,7 @@ describe('AgentWorkspaceRuntime', () => {
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
       folderPath: '/library/Research',
-      port: port(),
+      port: idleAgentSessionPort(),
     });
 
     expect(runtime.store.getState().tabs).toMatchObject([
@@ -40,7 +33,7 @@ describe('AgentWorkspaceRuntime', () => {
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
       folderPath: '/library/Research',
-      port: port(),
+      port: idleAgentSessionPort(),
     });
     runtime.setWindowFolder('/library/Plans');
     expect(runtime.activeSession().store.getState().scope).toEqual({
@@ -71,10 +64,10 @@ describe('AgentWorkspaceRuntime', () => {
       throw new Error('unreachable');
     });
     const runtime = createAgentWorkspaceRuntime({
-      context: { resolve, upload: vi.fn(async () => []) },
+      context: agentContextPort({ resolve }),
       createId: () => `chat-${++nextId}`,
       folderPath: '/library/Research',
-      port: port(),
+      port: idleAgentSessionPort(),
     });
     runtime.setScopeEnvironment({
       folderPath: '/library/Research',
@@ -101,7 +94,7 @@ describe('AgentWorkspaceRuntime', () => {
   });
 
   it('keeps blank drafts transport-free until active first use', () => {
-    const sessionPort = port();
+    const sessionPort = idleAgentSessionPort();
     const runtime = createAgentWorkspaceRuntime({
       autostart: false,
       createId: () => 'chat-1',
@@ -110,7 +103,7 @@ describe('AgentWorkspaceRuntime', () => {
     });
 
     expect(sessionPort.connect).not.toHaveBeenCalled();
-    expect(runtime.activeSession().store.getState().phase).toBe('draft');
+    expect(runtime.activeSession().store.getState().connection.kind).toBe('draft');
     runtime.start(['stashbase', 'codex']);
     expect(sessionPort.connect).not.toHaveBeenCalled();
 
@@ -129,7 +122,7 @@ describe('AgentWorkspaceRuntime', () => {
     const runtime = createAgentWorkspaceRuntime({
       createId: () => 'chat-1',
       folderPath: '/library/Research',
-      port: port(),
+      port: idleAgentSessionPort(),
     });
     const session = runtime.activeSession();
 
@@ -144,12 +137,12 @@ describe('AgentWorkspaceRuntime', () => {
     });
     expect(runtime.store.getState().tabs[0]?.lastModified).toBe(40);
 
-    session.store.setState({ phase: 'live' });
+    session.store.setState({ connection: { kind: 'live', turn: null } });
     expect(runtime.store.getState().tabs[0]?.lastModified).toBe(40);
   });
 
   it('keeps a restored chat at its recorded recency until a new prompt is sent', async () => {
-    const sessionPort = port();
+    const sessionPort = idleAgentSessionPort();
     vi.mocked(sessionPort.replay).mockResolvedValue({
       effort: null,
       transcript: [
@@ -179,7 +172,7 @@ describe('AgentWorkspaceRuntime', () => {
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
       folderPath: '/library/Research',
-      port: port(),
+      port: idleAgentSessionPort(),
     });
     const retained = runtime.activeSession();
     retained.store.setState({
@@ -190,8 +183,8 @@ describe('AgentWorkspaceRuntime', () => {
 
     runtime.retireFolder('/library/Research');
 
-    expect(retained.store.getState().phase).toBe('retired');
-    expect(blank.store.getState().phase).toBe('disposed');
+    expect(retained.store.getState().connection.kind).toBe('retired');
+    expect(blank.store.getState().connection.kind).toBe('disposed');
     expect(runtime.session(blank.id)?.store.getState().scope).toEqual({ kind: 'library' });
 
     runtime.setWindowFolder('/library/Plans');
@@ -206,7 +199,7 @@ describe('AgentWorkspaceRuntime', () => {
   });
 
   it('routes history mutations through the native agent and scope and reconciles open tabs', async () => {
-    const sessionPort = port();
+    const sessionPort = idleAgentSessionPort();
     vi.mocked(sessionPort.rename).mockResolvedValue({
       agent: 'stashbase',
       hasContent: true,
@@ -239,13 +232,13 @@ describe('AgentWorkspaceRuntime', () => {
 
     await runtime.removeHistory(entry, signal);
     expect(sessionPort.remove).toHaveBeenCalledWith(entry, expect.any(AbortSignal));
-    expect(session.store.getState().phase).toBe('disposed');
+    expect(session.store.getState().connection.kind).toBe('disposed');
     expect(runtime.activeSession().isBlank()).toBe(true);
   });
 
   it('keeps the active conversation in the selected folder after deleting its last open chat', async () => {
     let nextId = 0;
-    const sessionPort = port();
+    const sessionPort = idleAgentSessionPort();
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
       folderPath: '/library/Research',
@@ -267,5 +260,49 @@ describe('AgentWorkspaceRuntime', () => {
 
     expect(runtime.activeSession().store.getState().scope).toEqual(entry.scope);
     expect(runtime.activeSession().isBlank()).toBe(true);
+  });
+
+  it('refuses a history completion that lands after the window folder moved', async () => {
+    let nextId = 0;
+    let settle = noop;
+    const pending = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    const sessionPort = idleAgentSessionPort({
+      remove: vi.fn(async () => {
+        await pending;
+      }),
+      rename: vi.fn(async (entry) => {
+        await pending;
+        return { ...entry, title: 'Renamed' };
+      }),
+    });
+    const runtime = createAgentWorkspaceRuntime({
+      createId: () => `chat-${++nextId}`,
+      folderPath: '/library/Research',
+      port: sessionPort,
+    });
+    const session = runtime.activeSession();
+    session.store.setState({ nativeSessionId: 'native-1', title: 'Before' });
+    const entry = {
+      agent: 'stashbase' as const,
+      hasContent: true,
+      id: 'native-1',
+      lastModified: 41,
+      scope: { kind: 'folder' as const, path: '/library/Research' },
+      title: 'Before',
+    };
+    const signal = new AbortController().signal;
+
+    const renaming = runtime.renameHistory(entry, 'Renamed', signal);
+    const removing = runtime.removeHistory(entry, signal);
+    runtime.setWindowFolder('/library/Plans');
+    settle();
+    await Promise.all([renaming, removing]);
+
+    expect(sessionPort.rename).toHaveBeenCalledWith(entry, 'Renamed', expect.any(AbortSignal));
+    expect(sessionPort.remove).toHaveBeenCalledWith(entry, expect.any(AbortSignal));
+    expect(session.store.getState().title).toBe('Before');
+    expect(session.store.getState().connection.kind).not.toBe('disposed');
   });
 });

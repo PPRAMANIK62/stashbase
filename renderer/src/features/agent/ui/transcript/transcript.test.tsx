@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
+import { expectFocused } from '@/test/dom';
 
 import { AgentTranscript, copyableReplyIds } from './transcript';
 
@@ -30,6 +31,10 @@ function renderTranscript(blocks: AgentTranscriptBlock[], activeTurn: boolean) {
 
 describe('Agent transcript time cues', () => {
   it('shows a day divider only where consecutive prompts change day, and a hover time per prompt', () => {
+    // Pinned, so the cue below is a literal the reader would see rather than
+    // whatever the formatter happens to answer for the machine's clock.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 9, 15, 30));
     const now = Date.now();
     const yesterday = now - 86_400_000;
     renderTranscript(
@@ -43,11 +48,8 @@ describe('Agent transcript time cues', () => {
     );
     const separators = screen.getAllByRole('separator');
     expect(separators.map((node) => node.getAttribute('aria-label'))).toEqual(['Today']);
-    expect(
-      screen.getByText(
-        new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-      ),
-    ).not.toBeNull();
+    expect(screen.getByText(/^3:30\s?PM$/u)).not.toBeNull();
+    vi.useRealTimers();
   });
 });
 
@@ -89,7 +91,7 @@ describe('Agent transcript permission decisions', () => {
 
     expect(screen.queryByRole('heading', { name: 'Apply these changes?' })).toBeNull();
     const summary = screen.getByRole('button', { expanded: false });
-    expect(summary).toBe(summary.ownerDocument.activeElement);
+    expectFocused(summary);
     await userEvent.click(summary);
     expect(screen.getByRole('button', { name: /Wrote.*plan\.md.*Denied/u })).not.toBeNull();
     expect(screen.queryByRole('list', { name: 'Changed files' })).toBeNull();
@@ -100,7 +102,9 @@ describe('Agent transcript copy affordance', () => {
   it('marks only the closing reply of each settled turn', () => {
     expect([...copyableReplyIds(turn, true)]).toEqual([]);
     expect([...copyableReplyIds(turn, false)]).toEqual(['a2']);
-    const twoTurns = [...turn, { id: 'u2', kind: 'user', text: 'Go on' } as const, turn[4]!];
+    const closing = turn[4];
+    if (!closing) throw new Error('The fixture turn has no closing reply.');
+    const twoTurns = [...turn, { id: 'u2', kind: 'user', text: 'Go on' } as const, closing];
     expect([...copyableReplyIds(twoTurns, true)]).toEqual(['a2']);
   });
 

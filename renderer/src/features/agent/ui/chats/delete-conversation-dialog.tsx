@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
+import type { AgentHistoryMutation } from '@/features/agent/hooks/use-conversation-history';
 
 export function DeleteConversationDialog({
   entry,
@@ -22,12 +23,15 @@ export function DeleteConversationDialog({
   entry: AgentHistoryEntry | null;
   failure: string | null;
   onClose(): void;
-  onDelete(entry: AgentHistoryEntry): Promise<boolean>;
+  onDelete(entry: AgentHistoryEntry): Promise<AgentHistoryMutation>;
   pending: boolean;
   workspaceName: string;
 }) {
+  // Only a removal that went through closes the dialog; a refusal leaves it
+  // open so the reason stays in front of the person who asked for it.
   const remove = async () => {
-    if (entry && (await onDelete(entry))) onClose();
+    if (!entry) return;
+    if ((await onDelete(entry)).kind === 'done') onClose();
   };
 
   return (

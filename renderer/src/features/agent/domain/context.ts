@@ -1,19 +1,18 @@
-import type { AgentScope } from '@/features/agent/domain/session';
-import type { SourceReference } from '@/shared/domain/source-reference';
-import {
-  isRetrievableViewerFormat,
-  VIEWABLE_FILE_EXTENSION_ALTERNATION,
-  type ViewerFormat,
-} from '@/shared/file-formats';
-
 /**
  * Bound Agent context: library sources a prompt mentions or attaches, and
  * transient uploads the runtime reads from a temp path. Every item is bound
  * to explicit identity, so a send can re-check it against the live scope
  * instead of trusting a path typed minutes ago.
  */
+import {
+  isRetrievableViewerFormat,
+  VIEWABLE_FILE_EXTENSION_ALTERNATION,
+  type ViewerFormat,
+} from '@/contracts/file-formats';
+import type { AgentScope } from '@/features/agent/domain/session';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
-export type AgentSourceFormat = ViewerFormat;
+type AgentSourceFormat = ViewerFormat;
 
 export interface AgentScopeListing {
   /** Folder-relative source paths with their listing format. */
@@ -32,7 +31,13 @@ export type AgentContextItem =
       /** Conversion version seen when the item was bound; null when unknown. */
       boundVersion: number | null;
     }
-  | { kind: 'transient'; path: string; name: string; dims?: string; previewUrl?: string };
+  | {
+      kind: 'transient';
+      path: string;
+      name: string;
+      dims?: string | undefined;
+      previewUrl?: string | undefined;
+    };
 
 function basename(path: string): string {
   const trimmed = path.replace(/[\\/]+$/u, '');
@@ -96,13 +101,17 @@ function comparePaths(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** Rank the scope item a person is most likely typing and keep ties stable. */
+/** Rank the scope item a person is most likely typing and keep ties stable.
+ *  A document already open beside the chat wins an otherwise equal score, so
+ *  an empty `@` leads with what the user is looking at. */
 export function rankMentionSuggestions(
   listing: AgentScopeListing | null,
   query: string,
+  openPaths: readonly string[] = [],
   limit = 8,
 ): MentionSuggestion[] {
   if (!listing) return [];
+  const open = new Set(openPaths);
   const needle = normalizeMentionText(query);
   const suggestions: MentionSuggestion[] = [
     ...listing.files
@@ -116,9 +125,11 @@ export function rankMentionSuggestions(
       (candidate): candidate is { score: number; suggestion: MentionSuggestion } =>
         candidate.score !== null,
     );
+  const openRank = (suggestion: MentionSuggestion) => (open.has(suggestion.path) ? 0 : 1);
   ranked.sort(
     (a, b) =>
       a.score - b.score ||
+      openRank(a.suggestion) - openRank(b.suggestion) ||
       basename(a.suggestion.path).length - basename(b.suggestion.path).length ||
       comparePaths(a.suggestion.path, b.suggestion.path),
   );
@@ -128,7 +139,9 @@ export function rankMentionSuggestions(
 // Mention text editing
 
 export interface MentionQuery {
-  /** Index of the `@` that opens the query. */
+  /** Which marker opened the query: `@` for a file, `/` for a skill. */
+  kind: 'mention' | 'skill';
+  /** Index of the marker that opens the query. */
   from: number;
   query: string;
 }
@@ -139,7 +152,7 @@ export function mentionQueryAt(text: string, caret: number): MentionQuery | null
   const match = MENTION_QUERY_RE.exec(text.slice(0, caret));
   if (!match) return null;
   const query = match[2] ?? '';
-  return { from: caret - query.length - 1, query };
+  return { from: caret - query.length - 1, kind: 'mention', query };
 }
 
 export function applyMention(
@@ -330,6 +343,9 @@ export function segmentFileMentions(
 export interface AgentScopeEnvironment {
   folderPath: string;
   listing: AgentScopeListing;
+  /** Folder-relative paths of the documents open beside the chat, so an `@`
+   *  list can lead with what the user is looking at. */
+  openPaths?: readonly string[];
   readiness: Readonly<Record<string, AgentContextReadiness>>;
   versions: Readonly<Record<string, number>>;
 }

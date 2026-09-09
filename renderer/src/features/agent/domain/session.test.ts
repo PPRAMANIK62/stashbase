@@ -16,7 +16,7 @@ describe('Agent session domain', () => {
       id: 'chat-1',
       scope: { kind: 'library' },
     });
-    expect(session.phase).toBe('draft');
+    expect(session.connection).toEqual({ kind: 'draft' });
     expect(agentSessionIsBlank(session)).toBe(true);
     expect(agentSessionIsBlank({ ...session, nativeSessionId: 'native-1' })).toBe(false);
     expect(
@@ -33,18 +33,18 @@ describe('Agent session domain', () => {
       id: 'chat-1',
       scope: { kind: 'library' },
     });
-    const connecting = transitionAgentSession(draft, { type: 'connect' });
+    const connecting = transitionAgentSession(draft, { attempt: 0, kind: 'connect' });
     const restored = transitionAgentSession(connecting, {
       effort: 'high',
       lastModified: 42,
       nativeSessionId: 'native-1',
       transcript: [{ id: 'reply-1', kind: 'assistant', text: 'Retained answer' }],
-      type: 'restore',
+      kind: 'restore',
     });
 
-    expect(draft.phase).toBe('draft');
+    expect(draft.connection).toEqual({ kind: 'draft' });
     expect(connecting).not.toBe(draft);
-    expect(connecting.phase).toBe('connecting');
+    expect(connecting.connection).toEqual({ attempt: 0, kind: 'connecting' });
     expect(restored).toMatchObject({
       effort: 'high',
       lastModified: 42,
@@ -81,30 +81,30 @@ describe('Agent session domain', () => {
       name: 'Bash',
       title: 'Delete draft.md?',
       toolUseId: 'tool-1',
-      type: 'request-permission',
+      kind: 'permission-requested',
     });
     const startedLate = transitionAgentSession(awaiting, {
       id: 'tool-1',
       input: { command: 'rm draft.md' },
       name: 'Bash',
-      type: 'start-tool',
+      kind: 'tool-started',
     });
     const denied = transitionAgentSession(startedLate, {
       allow: false,
       toolUseId: 'tool-1',
-      type: 'reply-permission',
+      kind: 'reply-permission',
     });
     const reopenedLate = transitionAgentSession(denied, {
       id: 'tool-1',
       input: { command: 'rm draft.md' },
       name: 'Bash',
-      type: 'start-tool',
+      kind: 'tool-started',
     });
     const lateResult = transitionAgentSession(reopenedLate, {
       content: 'deleted',
       id: 'tool-1',
       isError: false,
-      type: 'finish-tool',
+      kind: 'tool-finished',
     });
 
     expect(startedLate.transcript[0]).toMatchObject({
@@ -113,7 +113,8 @@ describe('Agent session domain', () => {
     });
     expect(reopenedLate.transcript[0]).toMatchObject({ status: 'denied' });
     expect(lateResult.transcript[0]).toMatchObject({ status: 'denied' });
-    expect('result' in lateResult.transcript[0]!).toBe(false);
+    const settled = lateResult.transcript[0];
+    expect(settled && 'result' in settled).toBe(false);
   });
 
   it('cancels pending tools and queued messages when their folder retires', () => {
@@ -126,15 +127,15 @@ describe('Agent session domain', () => {
       id: 'tool-1',
       input: {},
       name: 'Search',
-      type: 'start-tool',
+      kind: 'tool-started',
     });
     const queued = transitionAgentSession(running, {
-      queue: [{ context: [], id: 'queued-1', text: 'Follow up' }],
-      type: 'set-queue',
+      queue: [{ context: [], id: 'queued-1', skill: null, text: 'Follow up' }],
+      kind: 'set-queue',
     });
-    const retired = transitionAgentSession(queued, { type: 'retire' });
+    const retired = transitionAgentSession(queued, { kind: 'retire' });
 
-    expect(retired.phase).toBe('retired');
+    expect(retired.connection).toEqual({ kind: 'retired' });
     expect(retired.queuedPrompts).toEqual([]);
     expect(retired.transcript).toEqual([
       expect.objectContaining({ id: 'tool-1', status: 'cancelled' }),
@@ -155,9 +156,10 @@ describe('Agent session domain', () => {
       queue: Array.from({ length: 25 }, (_, index) => ({
         context: [],
         id: `queued-${index}`,
+        skill: null,
         text: 'Next',
       })),
-      type: 'set-queue',
+      kind: 'set-queue',
     });
 
     expect(queued.queuedPrompts).toHaveLength(20);
@@ -167,7 +169,7 @@ describe('Agent session domain', () => {
   it('records a native file diff once as settled work', () => {
     const live = transitionAgentSession(
       createAgentSessionState({ agent: 'stashbase', id: 'chat-1', scope: { kind: 'library' } }),
-      { type: 'ready' },
+      { kind: 'ready' },
     );
     const change = {
       additions: 1,
@@ -176,7 +178,7 @@ describe('Agent session domain', () => {
       deletions: 0,
       id: 'diff:1',
       path: 'notes.md',
-      type: 'record-file-change' as const,
+      kind: 'file-changed' as const,
     };
     const recorded = transitionAgentSession(live, change);
     expect(recorded.transcript).toEqual([
@@ -211,14 +213,14 @@ describe('Agent session domain', () => {
         source: { folderPath: '/library/Research', path: 'papers/report.pdf' },
       },
     ];
-    const bound = transitionAgentSession(initial, { context, type: 'set-context' });
+    const bound = transitionAgentSession(initial, { context, kind: 'set-context' });
     expect(agentSessionIsBlank(bound)).toBe(false);
     const refused = transitionAgentSession(bound, {
       message: 'This file is no longer in the folder.',
-      type: 'set-context-issue',
+      kind: 'set-context-issue',
     });
     expect(refused.contextIssue).toBe('This file is no longer in the folder.');
-    expect(transitionAgentSession(refused, { draft: 'x', type: 'set-draft' }).contextIssue).toBe(
+    expect(transitionAgentSession(refused, { draft: 'x', kind: 'set-draft' }).contextIssue).toBe(
       null,
     );
 
@@ -227,11 +229,76 @@ describe('Agent session domain', () => {
       context,
       id: 'user-1',
       text: 'Summarize @papers/report.pdf',
-      type: 'submit-prompt',
+      kind: 'submit-prompt',
     });
     expect(sent).toMatchObject({ context: [], contextIssue: null, draft: '' });
     expect(sent.transcript).toEqual([
       { at: 7, context, id: 'user-1', kind: 'user', text: 'Summarize @papers/report.pdf' },
     ]);
+  });
+
+  it('arms a skill only from the live catalog and spends it on one turn', () => {
+    const initial = createAgentSessionState({
+      agent: 'claude',
+      id: 'chat-1',
+      scope: { kind: 'folder', path: '/library/Research' },
+    });
+    expect(initial.skillCatalog).toEqual({ kind: 'empty' });
+
+    const unknown = transitionAgentSession(initial, { skill: 'review', kind: 'set-skill' });
+    expect(unknown.skill).toBe(null);
+
+    const stocked = transitionAgentSession(initial, {
+      error: null,
+      skills: [
+        { id: 'review', label: 'review', description: 'Review the draft' },
+        { id: 'summarize', label: 'summarize' },
+      ],
+      state: 'available',
+      kind: 'skills',
+    });
+    expect(stocked.skillCatalog).toEqual({
+      kind: 'available',
+      skills: [
+        { id: 'review', label: 'review', description: 'Review the draft' },
+        { id: 'summarize', label: 'summarize' },
+      ],
+    });
+
+    const armed = transitionAgentSession(stocked, { skill: 'review', kind: 'set-skill' });
+    expect(armed.skill).toBe('review');
+    expect(agentSessionIsBlank(armed)).toBe(false);
+
+    const sent = transitionAgentSession(armed, {
+      at: 9,
+      context: [],
+      id: 'user-1',
+      text: '/review Check the intro',
+      kind: 'submit-prompt',
+    });
+    expect(sent.skill).toBe(null);
+    expect(sent.transcript).toEqual([
+      { at: 9, id: 'user-1', kind: 'user', text: '/review Check the intro' },
+    ]);
+
+    const shrunk = transitionAgentSession(armed, {
+      error: null,
+      skills: [{ id: 'summarize', label: 'summarize' }],
+      state: 'available',
+      kind: 'skills',
+    });
+    expect(shrunk.skill).toBe(null);
+
+    const failed = transitionAgentSession(armed, {
+      error: 'Skill directory is unreadable.',
+      skills: [],
+      state: 'failed',
+      kind: 'skills',
+    });
+    expect(failed.skillCatalog).toEqual({
+      kind: 'failed',
+      message: 'Skill directory is unreadable.',
+    });
+    expect(failed.skill).toBe(null);
   });
 });

@@ -1,62 +1,41 @@
+/** The session runtime's transport: when a draft first opens one, what the
+ *  normalized lifecycle events move, how a lost connection is retried and
+ *  resumed, and what restoring or retiring a conversation settles. */
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { AgentContextItem } from '@/features/agent/domain/context';
+import { agentSessionPort } from '@/test/fakes/agent';
 
-import {
-  AgentContextError,
-  type AgentConnectionListener,
-  type AgentContextPort,
-  type AgentReconnectScheduler,
-  type AgentSessionPort,
-} from './ports';
+import { type AgentReconnectScheduler, type AgentSessionPort } from './ports';
 import { createAgentSessionRuntime } from './session-runtime';
 
-const reportSource: AgentContextItem = {
-  boundVersion: 4,
-  format: 'pdf',
-  kind: 'source',
-  source: { folderPath: '/library/Research', path: 'papers/report.pdf' },
-};
+type AgentConnectRequest = Parameters<AgentSessionPort['connect']>[0];
 
-function contextPort(overrides: Partial<AgentContextPort> = {}): AgentContextPort {
-  return {
-    resolve: vi.fn(async (source) => ({
-      available: true,
-      folder: 'Research',
-      kind: 'derived' as const,
-      path: `${source.folderPath}/${source.path}`,
-      readPath: '/app-data/derived/report.md',
-      reason: '',
-      sourceFormat: 'pdf',
-      sourcePath: source.path,
-    })),
-    upload: vi.fn(async (files: File[]) =>
-      files.map((file) => ({ name: file.name, path: `/tmp/attach/${file.name}` })),
-    ),
-    ...overrides,
+/** A promise the test opens by hand, so the first replay is still in flight
+ *  when the second one starts. */
+function openGate(): { open: () => void; opened: Promise<void> } {
+  const gate: { open: () => void; opened: Promise<void> } = {
+    open: () => undefined,
+    opened: Promise.resolve(),
   };
+  gate.opened = new Promise<void>((resolve) => {
+    gate.open = resolve;
+  });
+  return gate;
 }
 
+/** One saved conversation, as the history list reports it. */
+const historyEntry = (id: string, title: string) => ({
+  agent: 'claude' as const,
+  hasContent: true,
+  id,
+  lastModified: 1,
+  scope: { kind: 'library' as const },
+  title,
+});
+
 function harness() {
-  const listeners: AgentConnectionListener[] = [];
-  const requests: Array<{ resume?: string }> = [];
-  const sent: unknown[] = [];
   const waits: Array<() => void> = [];
-  const port: AgentSessionPort = {
-    connect(request, listener) {
-      requests.push(request);
-      listeners.push(listener);
-      return {
-        close: vi.fn(),
-        send: vi.fn((event) => {
-          sent.push(event);
-          return true;
-        }),
-      };
-    },
-    list: vi.fn(async () => []),
-    remove: vi.fn(async () => undefined),
-    rename: vi.fn(),
+  const { listeners, port, sent } = agentSessionPort({
     replay: vi.fn(async () => ({
       effort: 'high',
       transcript: [
@@ -64,7 +43,7 @@ function harness() {
         { kind: 'assistant' as const, id: 'assistant-1', text: 'Keep this answer.' },
       ],
     })),
-  };
+  });
   const scheduler: AgentReconnectScheduler = {
     jitter: (value) => value,
     wait: vi.fn(
@@ -74,6 +53,9 @@ function harness() {
         }),
     ),
   };
+  /** Every connect request in order, read back off the port's own spy. */
+  const requests = (): AgentConnectRequest[] =>
+    vi.mocked(port.connect).mock.calls.map(([request]) => request);
   return { listeners, port, requests, scheduler, sent, waits };
 }
 
@@ -89,13 +71,13 @@ describe('AgentSessionRuntime', () => {
       scope: { kind: 'folder', path: '/library/Research' },
     });
 
-    expect(runtime.store.getState().phase).toBe('draft');
-    expect(test.requests).toHaveLength(0);
+    expect(runtime.store.getState().connection).toEqual({ kind: 'draft' });
+    expect(test.requests()).toHaveLength(0);
 
     runtime.start();
 
-    expect(runtime.store.getState().phase).toBe('connecting');
-    expect(test.requests).toHaveLength(1);
+    expect(runtime.store.getState().connection).toEqual({ attempt: 0, kind: 'connecting' });
+    expect(test.requests()).toHaveLength(1);
   });
 
   it('connects a scoped session and handles normalized lifecycle events', () => {
@@ -108,7 +90,7 @@ describe('AgentSessionRuntime', () => {
       scope: { kind: 'folder', path: '/library/Research' },
     });
 
-    expect(test.requests[0]).toEqual({
+    expect(test.requests()[0]).toEqual({
       access: 'auto',
       agent: 'codex',
       effort: undefined,
@@ -119,14 +101,14 @@ describe('AgentSessionRuntime', () => {
     test.listeners[0]?.onEvent({ kind: 'ready' });
     test.listeners[0]?.onEvent({ id: 'native-1', kind: 'identified' });
     expect(runtime.store.getState()).toMatchObject({
+      connection: { kind: 'live', turn: null },
       nativeSessionId: 'native-1',
-      phase: 'live',
     });
 
     runtime.dispose();
     test.listeners[0]?.onEvent({ kind: 'titled', title: 'Too late' });
     expect(runtime.store.getState().title).toBe('New chat');
-    expect(runtime.store.getState().phase).toBe('disposed');
+    expect(runtime.store.getState().connection).toEqual({ kind: 'disposed' });
   });
 
   it('retains runtime model catalogs and reconnects idle thinking changes', () => {
@@ -147,186 +129,13 @@ describe('AgentSessionRuntime', () => {
     test.listeners[0]?.onEvent({ kind: 'ready' });
 
     runtime.setModel('gpt-codex');
-    expect(test.sent.at(-1)).toEqual({ model: 'gpt-codex', t: 'set-model' });
+    expect(test.sent.at(-1)).toEqual({ kind: 'select-model', model: 'gpt-codex' });
     expect(runtime.store.getState().model).toBe('gpt-codex');
 
     runtime.setEffort('high');
-    expect(test.requests).toHaveLength(2);
-    expect(test.requests.at(-1)).toMatchObject({ effort: 'high', model: 'gpt-codex' });
+    expect(test.requests()).toHaveLength(2);
+    expect(test.requests().at(-1)).toMatchObject({ effort: 'high', model: 'gpt-codex' });
     expect(runtime.store.getState().effort).toBe('high');
-  });
-
-  it('sends the retained first-use draft once readiness arrives and streams tool work', async () => {
-    const test = harness();
-    const runtime = createAgentSessionRuntime({
-      agent: 'codex',
-      autostart: false,
-      id: 'chat-1',
-      port: test.port,
-      scheduler: test.scheduler,
-      scope: { kind: 'library' },
-    });
-
-    runtime.setDraft('  Inspect the project  ');
-    await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
-    expect(runtime.store.getState()).toMatchObject({
-      draft: 'Inspect the project',
-      phase: 'connecting',
-    });
-    expect(test.sent).toEqual([]);
-
-    test.listeners[0]?.onEvent({ kind: 'ready' });
-    test.listeners[0]?.onEvent({ kind: 'turn-started' });
-    test.listeners[0]?.onEvent({
-      id: 'tool-1',
-      input: { command: 'pwd' },
-      kind: 'tool-started',
-      name: 'Bash',
-    });
-    test.listeners[0]?.onEvent({ delta: '/project', id: 'tool-1', kind: 'tool-output' });
-
-    expect(test.sent).toEqual([{ t: 'prompt', text: 'Inspect the project' }]);
-    expect(runtime.store.getState()).toMatchObject({ activeTurn: true, draft: '' });
-    expect(runtime.store.getState().transcript).toEqual([
-      expect.objectContaining({ kind: 'user', text: 'Inspect the project' }),
-      {
-        id: 'tool-1',
-        input: { command: 'pwd' },
-        kind: 'tool',
-        name: 'Bash',
-        result: '/project',
-        status: 'running',
-      },
-    ]);
-  });
-
-  it('reports files only after a write settles successfully or a native diff arrives', () => {
-    const test = harness();
-    const onFilesChanged = vi.fn();
-    const runtime = createAgentSessionRuntime({
-      agent: 'claude',
-      id: 'chat-1',
-      onFilesChanged,
-      port: test.port,
-      scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
-    });
-    const listener = test.listeners[0]!;
-    listener.onEvent({ kind: 'ready' });
-    listener.onEvent({
-      id: 'write-1',
-      input: { content: '# Notes', file_path: '/library/Research/notes.md' },
-      kind: 'tool-started',
-      name: 'Write',
-    });
-    listener.onEvent({
-      id: 'read-1',
-      input: { file_path: '/library/Research/notes.md' },
-      kind: 'tool-started',
-      name: 'Read',
-    });
-    listener.onEvent({ content: '', id: 'read-1', isError: false, kind: 'tool-finished' });
-    listener.onEvent({ content: 'EACCES', id: 'write-1', isError: true, kind: 'tool-finished' });
-    expect(onFilesChanged).not.toHaveBeenCalled();
-
-    listener.onEvent({
-      id: 'edit-1',
-      input: { file_path: 'plan.md', new_string: 'b', old_string: 'a' },
-      kind: 'tool-started',
-      name: 'Edit',
-    });
-    listener.onEvent({ content: 'ok', id: 'edit-1', isError: false, kind: 'tool-finished' });
-    listener.onEvent({
-      additions: 1,
-      after: 'x\n',
-      before: '',
-      deletions: 0,
-      id: 'diff:1',
-      kind: 'file-changed',
-      path: 'new.md',
-    });
-
-    expect(onFilesChanged.mock.calls).toEqual([
-      [
-        {
-          paths: ['plan.md'],
-          scope: { kind: 'folder', path: '/library/Research' },
-          sources: [{ folderPath: '/library/Research', path: 'plan.md' }],
-        },
-      ],
-      [
-        {
-          paths: ['new.md'],
-          scope: { kind: 'folder', path: '/library/Research' },
-          sources: [{ folderPath: '/library/Research', path: 'new.md' }],
-        },
-      ],
-    ]);
-    expect(runtime.store.getState().transcript.at(-1)).toMatchObject({
-      name: 'FileDiff',
-      status: 'done',
-    });
-  });
-
-  it('answers only the current permission request and keeps the decision inspectable', () => {
-    const test = harness();
-    const runtime = createAgentSessionRuntime({
-      agent: 'codex',
-      id: 'chat-1',
-      port: test.port,
-      scheduler: test.scheduler,
-      scope: { kind: 'library' },
-    });
-    test.listeners[0]?.onEvent({ kind: 'ready' });
-    test.listeners[0]?.onEvent({
-      id: 'permission-1',
-      input: { command: 'pnpm test' },
-      kind: 'permission-requested',
-      name: 'Bash',
-      title: null,
-      toolUseId: 'tool-1',
-    });
-
-    expect(runtime.replyPermission('tool-1', 'stale', true)).toBe(false);
-    expect(runtime.replyPermission('tool-1', 'permission-1', false)).toBe(true);
-    expect(runtime.replyPermission('tool-1', 'permission-1', true)).toBe(false);
-    expect(test.sent).toEqual([
-      { allow: false, always: undefined, id: 'permission-1', t: 'permission-reply' },
-    ]);
-    expect(runtime.store.getState().transcript).toEqual([
-      expect.objectContaining({
-        id: 'tool-1',
-        permissionRequested: true,
-        status: 'denied',
-      }),
-    ]);
-  });
-
-  it('replays a mode changed during connection and retries without duplicating the prompt', async () => {
-    const test = harness();
-    const runtime = createAgentSessionRuntime({
-      agent: 'codex',
-      id: 'chat-1',
-      port: test.port,
-      scheduler: test.scheduler,
-      scope: { kind: 'library' },
-    });
-    runtime.setAccessMode('default');
-    test.listeners[0]?.onEvent({ kind: 'ready' });
-    expect(test.sent).toEqual([{ mode: 'default', t: 'set-mode' }]);
-
-    runtime.setDraft('Keep one prompt');
-    await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
-    test.listeners[0]?.onEvent({ kind: 'failed', message: 'Network unavailable.' });
-    const failure = runtime.store.getState().transcript.find((block) => block.kind === 'error');
-    expect(failure?.kind).toBe('error');
-    expect(runtime.retry(failure!.id)).toBe(true);
-
-    expect(
-      runtime.store.getState().transcript.filter((block) => block.kind === 'user'),
-    ).toHaveLength(1);
-    expect(runtime.store.getState()).toMatchObject({ activeTurn: true });
-    expect(test.sent.at(-1)).toEqual({ t: 'prompt', text: 'Keep one prompt' });
   });
 
   it('loads replay before reconnecting exactly that native session', async () => {
@@ -349,7 +158,7 @@ describe('AgentSessionRuntime', () => {
     };
     await expect(runtime.restore(entry)).resolves.toBe(true);
     expect(test.port.replay).toHaveBeenCalledWith(entry, runtime.signal);
-    expect(test.requests.at(-1)).toMatchObject({ effort: 'high', resume: 'native-2' });
+    expect(test.requests().at(-1)).toMatchObject({ effort: 'high', resume: 'native-2' });
     expect(runtime.store.getState()).toMatchObject({
       nativeSessionId: 'native-2',
       title: 'Saved conversation',
@@ -360,7 +169,7 @@ describe('AgentSessionRuntime', () => {
     });
 
     runtime.start();
-    expect(test.requests).toHaveLength(2);
+    expect(test.requests()).toHaveLength(2);
   });
 
   it('reconnects raw transport loss with a bounded schedule and retained identity', async () => {
@@ -379,206 +188,62 @@ describe('AgentSessionRuntime', () => {
       test.listeners[index]?.onClose();
       test.waits[index]?.();
       await Promise.resolve();
-      expect(test.requests[index + 1]?.resume).toBe('native-3');
+      expect(test.requests()[index + 1]?.resume).toBe('native-3');
     }
     test.listeners[3]?.onClose();
 
-    expect(runtime.store.getState()).toMatchObject({
-      phase: 'closed',
-      reconnectAttempt: 3,
-    });
-    expect(runtime.store.getState().error).toContain('Reconnect to continue');
+    const { connection } = runtime.store.getState();
+    expect(connection.kind).toBe('failed');
+    expect(connection.kind === 'failed' && connection.message).toContain('Reconnect to continue');
   });
 
-  it('binds mentioned sources to the wire prompt while the transcript keeps the typed text', async () => {
+  it('refuses a completion captured before the folder was retired', async () => {
     const test = harness();
-    const context = contextPort();
     const runtime = createAgentSessionRuntime({
       agent: 'codex',
-      context,
-      environment: () => ({
-        listing: { files: [{ format: 'pdf', path: 'papers/report.pdf' }], folders: [] },
-        readiness: { 'papers/report.pdf': 'current' },
-      }),
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
       scope: { kind: 'folder', path: '/library/Research' },
     });
-    test.listeners[0]?.onEvent({ kind: 'ready' });
-    runtime.addContext(reportSource);
-    runtime.addContext(reportSource);
-    expect(runtime.store.getState().context).toHaveLength(1);
-    runtime.setDraft('Summarize @papers/report.pdf');
 
-    await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
+    const capturedScope = runtime.capture();
+    const applied = vi.fn();
+    expect(runtime.accept(capturedScope, applied)).toBe(true);
 
-    expect(context.resolve).toHaveBeenCalledWith(reportSource.source, runtime.signal);
-    expect(test.sent.at(-1)).toEqual({
-      t: 'prompt',
-      text: [
-        'Summarize @papers/report.pdf',
-        '',
-        'Attached files:',
-        '- papers/report.pdf (for text context, use mcp__stashbase__read_file with path /library/Research/papers/report.pdf; it returns the derived text representation for this pdf)',
-      ].join('\n'),
-    });
-    expect(runtime.store.getState()).toMatchObject({ context: [], draft: '' });
-    expect(runtime.store.getState().transcript).toEqual([
-      expect.objectContaining({
-        context: [reportSource],
-        kind: 'user',
-        text: 'Summarize @papers/report.pdf',
-      }),
-    ]);
-
-    test.listeners[0]?.onEvent({ kind: 'failed', message: 'Rate limited.' });
-    const failure = runtime.store.getState().transcript.find((block) => block.kind === 'error');
-    expect(runtime.retry(failure!.id)).toBe(true);
-    expect(test.sent.at(-1)).toEqual(test.sent.at(-2));
+    runtime.retire('/library/Research');
+    expect(runtime.accept(capturedScope, applied)).toBe(false);
+    expect(applied).toHaveBeenCalledTimes(1);
   });
 
-  it('refuses a send whose source left the folder and keeps the draft', async () => {
+  it('drops a replay that lands after a newer restore started', async () => {
     const test = harness();
-    const context = contextPort();
+    const gate = openGate();
+    let call = 0;
     const runtime = createAgentSessionRuntime({
-      agent: 'codex',
-      context,
-      environment: () => ({ listing: { files: [], folders: [] }, readiness: {} }),
+      agent: 'claude',
+      autostart: false,
       id: 'chat-1',
-      port: test.port,
-      scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
-    });
-    test.listeners[0]?.onEvent({ kind: 'ready' });
-    runtime.addContext(reportSource);
-    runtime.setDraft('Summarize @papers/report.pdf');
-
-    await expect(runtime.sendPrompt()).resolves.toEqual({ ok: false, reason: 'stale' });
-
-    expect(context.resolve).not.toHaveBeenCalled();
-    expect(test.sent).toEqual([]);
-    expect(runtime.store.getState()).toMatchObject({
-      context: [reportSource],
-      contextIssue: 'This file is no longer in the folder.',
-      draft: 'Summarize @papers/report.pdf',
-    });
-    runtime.setDraft('Summarize @papers/report.pdf again');
-    expect(runtime.store.getState().contextIssue).toBeNull();
-  });
-
-  it('treats a source the server no longer finds as stale', async () => {
-    const test = harness();
-    const runtime = createAgentSessionRuntime({
-      agent: 'codex',
-      context: contextPort({
-        resolve: vi.fn(async () => {
-          throw new AgentContextError('not-found', 'That file is no longer in this folder.');
+      port: agentSessionPort({
+        replay: vi.fn(async (entry) => {
+          if (++call === 1) await gate.opened;
+          return {
+            effort: null,
+            transcript: [{ id: entry.id, kind: 'notice' as const, text: entry.title }],
+          };
         }),
-      }),
-      id: 'chat-1',
-      port: test.port,
-      scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
-    });
-    test.listeners[0]?.onEvent({ kind: 'ready' });
-    runtime.addContext(reportSource);
-
-    await expect(runtime.sendPrompt('Read it')).resolves.toEqual({ ok: false, reason: 'stale' });
-    expect(test.sent).toEqual([]);
-    expect(runtime.store.getState().contextIssue).toBe('That file is no longer in this folder.');
-  });
-
-  it('sends a queued prompt with the context it was queued with', async () => {
-    const test = harness();
-    const runtime = createAgentSessionRuntime({
-      agent: 'codex',
-      context: contextPort(),
-      id: 'chat-1',
-      port: test.port,
-      scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
-    });
-    test.listeners[0]?.onEvent({ kind: 'ready' });
-    await runtime.sendPrompt('First');
-    test.listeners[0]?.onEvent({ kind: 'turn-started' });
-
-    runtime.addContext(reportSource);
-    runtime.setQueue([{ id: 'queued-1', text: 'Then read @papers/report.pdf' }]);
-    expect(runtime.store.getState()).toMatchObject({
-      context: [],
-      queuedPrompts: [
-        { context: [reportSource], id: 'queued-1', text: 'Then read @papers/report.pdf' },
-      ],
-    });
-
-    runtime.setQueue([]);
-    test.listeners[0]?.onEvent({ isError: false, kind: 'turn-ended' });
-    await expect(
-      runtime.sendPrompt('Then read @papers/report.pdf', { queuedId: 'queued-1' }),
-    ).resolves.toEqual({ ok: true });
-
-    expect(String((test.sent.at(-1) as { text: string }).text)).toContain('Attached files:');
-    expect(runtime.store.getState().transcript.at(-1)).toMatchObject({
-      context: [reportSource],
-      kind: 'user',
-      text: 'Then read @papers/report.pdf',
-    });
-  });
-
-  it('returns an edited queued message and its context to the composer', () => {
-    const test = harness();
-    const runtime = createAgentSessionRuntime({
-      agent: 'codex',
-      context: contextPort(),
-      id: 'chat-1',
-      port: test.port,
-      scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
-    });
-    runtime.addContext(reportSource);
-    runtime.setQueue([{ id: 'queued-1', text: 'Later' }]);
-    runtime.setDraft('Later');
-    runtime.setQueue([]);
-
-    expect(runtime.store.getState()).toMatchObject({
-      context: [reportSource],
-      draft: 'Later',
-      queuedPrompts: [],
-    });
-  });
-
-  it('binds uploaded files as transient context and reports the ones that failed', async () => {
-    const test = harness();
-    const context = contextPort({
-      upload: vi.fn(async (files: File[]) =>
-        files.map((file, index) =>
-          index === 0
-            ? { name: file.name, path: `/tmp/attach/${file.name}` }
-            : { error: 'disk full', name: file.name },
-        ),
-      ),
-    });
-    const runtime = createAgentSessionRuntime({
-      agent: 'codex',
-      context,
-      id: 'chat-1',
-      port: test.port,
+      }).port,
       scheduler: test.scheduler,
       scope: { kind: 'library' },
     });
 
-    const notes = new File(['a'], 'notes.txt', { type: 'text/plain' });
-    await runtime.attachFiles([notes, new File(['b'], 'more.txt', { type: 'text/plain' })]);
+    const stale = runtime.restore(historyEntry('native-1', 'Stale'), false);
+    const current = runtime.restore(historyEntry('native-2', 'Current'), false);
+    gate.open();
 
-    expect(context.upload).toHaveBeenCalledTimes(1);
-    expect(runtime.fileForTransient('/tmp/attach/notes.txt')).toBe(notes);
-    expect(runtime.store.getState()).toMatchObject({
-      context: [{ kind: 'transient', name: 'notes.txt', path: '/tmp/attach/notes.txt' }],
-      contextIssue: '1 file could not be attached.',
-    });
-    runtime.removeContext('transient:/tmp/attach/notes.txt');
-    expect(runtime.store.getState().context).toEqual([]);
+    await expect(stale).resolves.toBe(false);
+    await expect(current).resolves.toBe(true);
+    expect(runtime.store.getState().nativeSessionId).toBe('native-2');
   });
 
   it('retires a removed folder without reconnecting it', () => {
@@ -593,7 +258,7 @@ describe('AgentSessionRuntime', () => {
     runtime.retire('/library/Research');
     runtime.reconnect();
 
-    expect(runtime.store.getState().phase).toBe('retired');
-    expect(test.requests).toHaveLength(1);
+    expect(runtime.store.getState().connection).toEqual({ kind: 'retired' });
+    expect(test.requests()).toHaveLength(1);
   });
 });

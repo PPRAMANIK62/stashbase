@@ -1,3 +1,6 @@
+import type { AgentContextExtra } from '@/features/agent/application/failure-messages';
+import type { AgentAccessMode } from '@/features/agent/domain/access';
+import type { AgentCatalog } from '@/features/agent/domain/agent-catalog';
 import type { ResolvedContextFile as ResolvedContextText } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import type {
@@ -6,29 +9,27 @@ import type {
   AgentSessionEvent,
   AgentTranscriptBlock,
 } from '@/features/agent/domain/session';
-import type { AgentAccessMode, AgentClientEvent } from '@/protocols/websocket/agent-session';
-import type { AgentsResponse } from '@/shared/agent-runtime';
+import type { AgentSessionCommand } from '@/features/agent/domain/session-command';
+import { featureErrorClass, type FeatureError } from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-export type { AgentHistoryEntry };
-
 export interface AgentCatalogPort {
-  listAgents(signal: AbortSignal): Promise<AgentsResponse>;
+  listAgents(signal: AbortSignal): Promise<AgentCatalog>;
   prepareAgent(
     id: AgentId,
     action: 'bootstrap' | 'login',
     signal: AbortSignal,
-  ): Promise<AgentsResponse>;
+  ): Promise<AgentCatalog>;
 }
 
-export interface AgentReplay {
+interface AgentReplay {
   transcript: AgentTranscriptBlock[];
   effort: string | null;
 }
 
-export interface AgentConnection {
+export interface AgentSocket {
   close(): void;
-  send?(event: AgentClientEvent): boolean;
+  send?(command: AgentSessionCommand): boolean;
 }
 
 export interface AgentConnectionListener {
@@ -37,18 +38,20 @@ export interface AgentConnectionListener {
   onInvalidResponse(): void;
 }
 
+/** What opening a session needs: which runtime, over which scope, and the
+ *  optional turn settings. Named here rather than restated at the call sites,
+ *  so the adapter that builds the socket URL maps this one shape. */
+export interface AgentConnectRequest {
+  agent: AgentId;
+  scope: AgentScope;
+  resume?: string | undefined;
+  effort?: string | undefined;
+  model?: string | undefined;
+  access?: AgentAccessMode | undefined;
+}
+
 export interface AgentSessionPort {
-  connect(
-    request: {
-      agent: AgentId;
-      scope: AgentScope;
-      resume?: string;
-      effort?: string;
-      model?: string;
-      access?: AgentAccessMode;
-    },
-    listener: AgentConnectionListener,
-  ): AgentConnection;
+  connect(request: AgentConnectRequest, listener: AgentConnectionListener): AgentSocket;
   list(agent: AgentId, scope: AgentScope, signal: AbortSignal): Promise<AgentHistoryEntry[]>;
   replay(entry: AgentHistoryEntry, signal: AbortSignal): Promise<AgentReplay>;
   rename(entry: AgentHistoryEntry, title: string, signal: AbortSignal): Promise<AgentHistoryEntry>;
@@ -60,31 +63,11 @@ export interface AgentReconnectScheduler {
   jitter(delayMs: number): number;
 }
 
-export class AgentSessionError extends Error {
-  readonly kind: 'invalid-response' | 'unavailable';
+export type AgentSessionError = FeatureError;
+export const AgentSessionError = featureErrorClass('AgentSessionError');
 
-  constructor(kind: 'invalid-response' | 'unavailable', message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'AgentSessionError';
-    this.kind = kind;
-  }
-}
-
-export type AgentContextErrorKind =
-  | 'not-found'
-  | 'unsupported'
-  | 'unavailable'
-  | 'invalid-response';
-
-export class AgentContextError extends Error {
-  readonly kind: AgentContextErrorKind;
-
-  constructor(kind: AgentContextErrorKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'AgentContextError';
-    this.kind = kind;
-  }
-}
+export type AgentContextError = FeatureError<AgentContextExtra>;
+export const AgentContextError = featureErrorClass<AgentContextExtra>('AgentContextError');
 
 /** The domain's resolved file plus the member folder label the route names. */
 export interface ResolvedContextFile extends ResolvedContextText {
@@ -92,9 +75,9 @@ export interface ResolvedContextFile extends ResolvedContextText {
 }
 
 export interface AgentUploadOutcome {
-  readonly error?: string;
+  readonly error?: string | undefined;
   readonly name: string;
-  readonly path?: string;
+  readonly path?: string | undefined;
 }
 
 export interface AgentContextPort {

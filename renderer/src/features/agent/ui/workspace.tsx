@@ -1,3 +1,7 @@
+/** The Agent conversation surface: the transcript, the connection strip that
+ *  explains a stopped session, and the composer beneath them. The workspace
+ *  only reads session state and hands verbs back to the runtime; every
+ *  decision about what a connection means is a domain selector. */
 import { RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
@@ -5,13 +9,19 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
 import type { QueuedMessage } from '@/components/ui/input-message';
+import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { changedSource } from '@/features/agent/domain/file-change';
-import { scopeLabel, type AgentSessionPhase } from '@/features/agent/domain/session';
+import {
+  agentSkills,
+  agentTurnIsActive,
+  scopeLabel,
+  type AgentConnection,
+} from '@/features/agent/domain/session';
 import { suggestStarters } from '@/features/agent/domain/starters';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
-import { useStickToBottom } from '@/hooks/use-stick-to-bottom';
+import { focusRing } from '@/lib/focus-ring';
+import { useStickToBottom } from '@/lib/runtime/use-stick-to-bottom';
 import { cn } from '@/lib/utils';
-import type { Agent } from '@/shared/agent-runtime';
 
 import { AgentContextComposer } from './composer/context-composer';
 import { AgentPermissionMode } from './composer/permission-mode';
@@ -20,31 +30,44 @@ import { AgentSetup } from './setup';
 import { AgentTranscript } from './transcript/transcript';
 import type { AgentWorkspaceProps } from './workspace-lazy';
 
-function phaseLabel(phase: AgentSessionPhase, error: string | null): string {
-  switch (phase) {
+/** What the status strip under the transcript says, or null when a working
+ *  connection needs no explanation. `settled` marks a connection that has
+ *  stopped for good rather than one still moving. */
+function connectionNotice(connection: AgentConnection): { settled: boolean; text: string } | null {
+  switch (connection.kind) {
     case 'draft':
-      return '';
     case 'restoring':
     case 'connecting':
+    case 'reconnecting':
     case 'live':
-      return '';
+      return null;
     case 'closed':
-      return error ?? 'Disconnected';
+      return { settled: true, text: connection.message ?? 'Disconnected' };
+    case 'failed':
+      return { settled: true, text: connection.message };
     case 'retired':
-      return 'Folder removed · transcript preserved';
+      return { settled: true, text: 'Folder removed · transcript preserved' };
     case 'disposed':
-      return 'Conversation closed';
+      return { settled: true, text: 'Conversation closed' };
+    default: {
+      const unreachable: never = connection;
+      return unreachable;
+    }
   }
 }
 
 function ReadyWorkspace({
   agents,
+  readyAgent,
   onOpenExternal,
   onOpenSource,
   onReprocess,
   runtime,
   scopeOutline,
-}: Omit<AgentWorkspaceProps, 'catalog' | 'onOpenAgentSettings'> & { agents: Agent[] }) {
+}: Omit<AgentWorkspaceProps, 'catalog' | 'onOpenAgentSettings'> & {
+  agents: Agent[];
+  readyAgent: Agent;
+}) {
   const activeId = useStore(runtime.store, (state) => state.activeId);
   const scopeEnvironment = useStore(runtime.store, (state) => state.scopeEnvironment);
   const active = runtime.session(activeId) ?? runtime.activeSession();
@@ -53,20 +76,26 @@ function ReadyWorkspace({
     useShallow((session) => ({
       agent: session.agent,
       accessMode: session.accessMode,
-      activeTurn: session.activeTurn,
       activeModel: session.activeModel,
-      error: session.error,
+      connection: session.connection,
       effort: session.effort,
       model: session.model,
       models: session.models,
       nativeSessionId: session.nativeSessionId,
-      phase: session.phase,
       queuedPrompts: session.queuedPrompts,
       scope: session.scope,
+      skill: session.skill,
+      skillCatalog: session.skillCatalog,
       transcript: session.transcript,
     })),
   );
-  const activeAgent = agents.find((agent) => agent.id === state.agent)!;
+  // The session store is the live authority on the agent (a provider switch
+  // remounts the session under the same tab); the parent's match is the
+  // fallback for the render in which the two have not met yet.
+  const activeAgent = agents.find((agent) => agent.id === state.agent) ?? readyAgent;
+  const activeTurn = agentTurnIsActive(state.connection);
+  const notice = connectionNotice(state.connection);
+  const armedSkill = agentSkills(state.skillCatalog).find((skill) => skill.id === state.skill);
   const empty = state.transcript.length === 0;
   const scopeName = scopeLabel(state.scope);
   const starters = useMemo(
@@ -87,7 +116,7 @@ function ReadyWorkspace({
     <div className="flex h-full min-h-0 w-full flex-col bg-surface-2">
       {empty && <div aria-hidden className="min-h-0 grow basis-0" />}
       <div
-        aria-busy={state.activeTurn}
+        aria-busy={activeTurn}
         aria-live="polite"
         aria-label="Conversation transcript"
         className={cn('min-h-0 overflow-y-auto', empty ? 'flex-initial' : 'flex-1')}
@@ -106,7 +135,7 @@ function ReadyWorkspace({
             </h2>
           ) : (
             <AgentTranscript
-              activeTurn={state.activeTurn}
+              activeTurn={activeTurn}
               blocks={state.transcript}
               key={activeId}
               onOpenExternal={onOpenExternal}
@@ -120,16 +149,16 @@ function ReadyWorkspace({
         </div>
       </div>
 
-      {phaseLabel(state.phase, state.error) !== '' && (
+      {notice && (
         <div className="mx-auto flex w-full max-w-[46rem] shrink-0 items-center gap-2 px-5 pb-2 text-caption text-muted-foreground max-sm:px-4">
           <span
             className={cn(
               'size-1.5 shrink-0 rounded-full',
-              state.phase === 'closed' || state.phase === 'retired' ? 'bg-decision' : 'bg-working',
+              notice.settled ? 'bg-decision' : 'bg-working',
             )}
           />
-          <span>{phaseLabel(state.phase, state.error)}</span>
-          {state.phase === 'closed' && (
+          <span>{notice.text}</span>
+          {(state.connection.kind === 'closed' || state.connection.kind === 'failed') && (
             <Button
               className="ml-auto"
               leadingIcon={RefreshCw}
@@ -143,21 +172,25 @@ function ReadyWorkspace({
         </div>
       )}
 
-      {state.phase !== 'retired' && state.phase !== 'disposed' && (
+      {state.connection.kind !== 'retired' && state.connection.kind !== 'disposed' && (
         <div className="relative shrink-0 px-4 pb-3 max-sm:px-3">
           <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-surface-2 to-transparent" />
           <div className="@container relative mx-auto w-full max-w-[46rem]" ref={composerRef}>
             <AgentContextComposer
-              attachments={activeAgent.capabilities?.attachments === true}
+              attachments={activeAgent.abilities.attachments}
               environment={scopeEnvironment}
               maxRows={6}
               minRows={3}
               onQueueChange={(queue: QueuedMessage[]) =>
                 active.setQueue(queue.map(({ id, text }) => ({ id, text })))
               }
+              onRefreshSkills={active.refreshSkills}
               onReprocess={onReprocess}
+              onSkillChange={active.setSkill}
               onStop={active.interrupt}
-              placeholder={`Ask about ${scopeName}…`}
+              // An armed skill says what it wants next, so its hint replaces
+              // the scope prompt.
+              placeholder={armedSkill?.argumentHint ?? `Ask about ${scopeName}…`}
               queue={state.queuedPrompts.map(({ context, id, text }) => ({
                 files: context.flatMap((item) =>
                   item.kind === 'transient' ? (active.fileForTransient(item.path) ?? []) : [],
@@ -175,16 +208,17 @@ function ReadyWorkspace({
                   onEffortChange={active.setEffort}
                   onModelChange={active.setModel}
                   onRequestCatalog={active.start}
-                  state={state}
+                  state={{ ...state, activeTurn }}
                 />
               }
               rightSlot={
-                activeAgent.capabilities?.modes !== false ? (
+                activeAgent.abilities.modes ? (
                   <AgentPermissionMode mode={state.accessMode} onChange={active.setAccessMode} />
                 ) : null
               }
               session={active}
-              status={state.activeTurn ? 'streaming' : 'idle'}
+              skills={activeAgent.abilities.skills}
+              status={activeTurn ? 'streaming' : 'idle'}
             />
           </div>
         </div>
@@ -193,7 +227,10 @@ function ReadyWorkspace({
         <div className="mx-auto flex w-full max-w-[46rem] shrink-0 flex-wrap gap-2 px-4 pb-3 max-sm:px-3">
           {starters.map((starter) => (
             <button
-              className="h-7 cursor-pointer rounded-full border border-border px-3 text-[13px] text-muted-foreground transition-colors duration-80 outline-none hover:bg-surface-3 hover:text-foreground focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]"
+              className={cn(
+                'h-7 cursor-pointer rounded-full border border-border px-3 text-[13px] text-muted-foreground transition-colors duration-fast outline-none hover:bg-surface-3 hover:text-foreground',
+                focusRing(),
+              )}
               key={starter.id}
               onClick={() => prefill(starter.prompt)}
               type="button"
@@ -218,8 +255,9 @@ export default function ManagedAgentWorkspace(props: AgentWorkspaceProps) {
     props.runtime.start(catalog.readyAgents.map((agent) => agent.id));
   }, [catalog.readyAgents, props.runtime]);
 
-  if (catalog.readyAgents.some((agent) => agent.id === activeAgentId)) {
-    return <ReadyWorkspace {...props} agents={catalog.readyAgents} />;
+  const activeAgent = catalog.readyAgents.find((agent) => agent.id === activeAgentId);
+  if (activeAgent) {
+    return <ReadyWorkspace {...props} agents={catalog.readyAgents} readyAgent={activeAgent} />;
   }
 
   return (

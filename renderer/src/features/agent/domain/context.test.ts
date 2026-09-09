@@ -70,7 +70,7 @@ describe('mention ranking', () => {
   });
 
   it('is stable for an empty query, caps results, and includes folders', () => {
-    expect(rankMentionSuggestions(listing, '', 2).map((s) => s.path)).toEqual([
+    expect(rankMentionSuggestions(listing, '', [], 2).map((s) => s.path)).toEqual([
       'docs',
       'docs/archive',
     ]);
@@ -90,24 +90,57 @@ describe('mention ranking', () => {
     ).toEqual([{ format: 'md', kind: 'file', path: 'Docs/Résumé 2026/案例-总结.md' }]);
     expect(rankMentionSuggestions(null, 'agent')).toEqual([]);
   });
+
+  it('leads with the open documents and keeps them ahead of equal scores', () => {
+    expect(rankMentionSuggestions(listing, '', ['notes/agent.md'], 3).map((s) => s.path)).toEqual([
+      'notes/agent.md',
+      'docs',
+      'docs/archive',
+    ]);
+    expect(rankMentionSuggestions(listing, 'agent', ['notes/agent.md']).map((s) => s.path)).toEqual(
+      ['notes/agent.md', 'docs/agent.md', 'agent-notes.md', 'docs/archive/agent-panel.md'],
+    );
+    // Being open never outranks a closer match.
+    expect(
+      rankMentionSuggestions(listing, 'archive', ['docs/archive/agent-panel.md']).map(
+        (s) => s.path,
+      ),
+    ).toEqual(['docs/archive', 'docs/archive/agent-panel.md']);
+  });
 });
 
 describe('mention text editing', () => {
   it('finds an open query at the start or after whitespace only', () => {
-    expect(mentionQueryAt('@ag', 3)).toEqual({ from: 0, query: 'ag' });
-    expect(mentionQueryAt('read @docs/ag', 13)).toEqual({ from: 5, query: 'docs/ag' });
-    expect(mentionQueryAt('read @', 6)).toEqual({ from: 5, query: '' });
+    expect(mentionQueryAt('@ag', 3)).toEqual({ from: 0, kind: 'mention', query: 'ag' });
+    expect(mentionQueryAt('read @docs/ag', 13)).toEqual({
+      from: 5,
+      kind: 'mention',
+      query: 'docs/ag',
+    });
+    expect(mentionQueryAt('read @', 6)).toEqual({ from: 5, kind: 'mention', query: '' });
     expect(mentionQueryAt('mail@example', 12)).toBeNull();
     expect(mentionQueryAt('read @docs/agent.md ', 20)).toBeNull();
-    expect(mentionQueryAt('read @docs/agent.md now', 12)).toEqual({ from: 5, query: 'docs/a' });
+    expect(mentionQueryAt('read @docs/agent.md now', 12)).toEqual({
+      from: 5,
+      kind: 'mention',
+      query: 'docs/a',
+    });
   });
 
   it('applies and removes a mention run at the end and in the middle', () => {
-    const end = applyMention('read @ag', { from: 5, query: 'ag' }, 'docs/agent.md');
+    const end = applyMention(
+      'read @ag',
+      { from: 5, kind: 'mention', query: 'ag' },
+      'docs/agent.md',
+    );
     expect(end).toEqual({ caret: 20, text: 'read @docs/agent.md ' });
     expect(removeMentionText(end.text, 'docs/agent.md')).toBe('read ');
 
-    const middle = applyMention('read @ag now', { from: 5, query: 'ag' }, 'docs/agent.md');
+    const middle = applyMention(
+      'read @ag now',
+      { from: 5, kind: 'mention', query: 'ag' },
+      'docs/agent.md',
+    );
     expect(middle).toEqual({ caret: 19, text: 'read @docs/agent.md now' });
     expect(removeMentionText(middle.text, 'docs/agent.md')).toBe('read now');
 

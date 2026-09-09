@@ -21,7 +21,9 @@ describe('Agent workspace domain', () => {
   it('keeps the same state when an upserted tab is unchanged', () => {
     const initial = upsertAgentTab(createAgentWorkspaceState('research'), tab('research', '/L/R'));
     const same = tab('research', '/L/R');
-    same.scope = initial.tabs[0]!.scope;
+    const stored = initial.tabs[0];
+    if (!stored) throw new Error('The upsert stored no tab.');
+    same.scope = stored.scope;
     expect(upsertAgentTab(initial, same)).toBe(initial);
     expect(upsertAgentTab(initial, { ...same, title: 'Renamed' })).not.toBe(initial);
   });

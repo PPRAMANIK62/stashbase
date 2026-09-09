@@ -1,3 +1,9 @@
+/**
+ * The evidence behind a file change: one read-only unified diff per change,
+ * in the same mono surface as the code editor, with the runtime's own text
+ * on both sides. Added lines read green and removed lines red through the
+ * theme's own diff tokens.
+ */
 import { LanguageDescription } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { Chunk, unifiedMergeView } from '@codemirror/merge';
@@ -12,16 +18,9 @@ import {
   fileBasename,
   type AgentFileChange,
 } from '@/features/agent/domain/file-change';
+import { codeSyntaxHighlighting } from '@/lib/code-highlight';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
-import { codeSyntaxHighlighting } from '@/shared/styling/code-highlight';
-
-/**
- * The evidence behind a file change: one read-only unified diff per change,
- * in the same mono surface as the code editor, with the runtime's own text
- * on both sides. Added lines read green and removed lines red through the
- * theme's own diff tokens.
- */
 
 // A base theme, not a theme: only base themes may address the merge view's
 // own `&light`/`&dark` rules at equal specificity. Base themes mount in
@@ -168,12 +167,20 @@ function UnifiedDiff({
  *  per line by its marker. */
 function PatchView({ label, patch }: { label: string; patch: string }) {
   const lines = patch.replace(/\n$/u, '').split('\n');
+  // Each line's offset in the patch is its own identity, so the list keys on
+  // the data rather than on its position.
+  let cursor = 0;
+  const rows = lines.map((line) => {
+    const row = { line, offset: cursor };
+    cursor += line.length + 1;
+    return row;
+  });
   return (
     <pre
       aria-label={label}
       className="m-0 py-1 font-mono text-[12px] leading-[1.55] break-words whitespace-pre-wrap"
     >
-      {lines.map((line, index) => {
+      {rows.map(({ line, offset }) => {
         const header = line.startsWith('+++') || line.startsWith('---');
         const kind = header
           ? 'meta'
@@ -193,7 +200,7 @@ function PatchView({ label, patch }: { label: string; patch: string }) {
               kind === 'meta' && 'text-muted-foreground',
             )}
             data-line={kind}
-            key={index}
+            key={offset}
           >
             {line || ' '}
           </span>
@@ -277,8 +284,8 @@ export function AgentChangedFiles({
   sourceFor,
 }: {
   changes: readonly AgentFileChange[];
-  onOpenSource?: (source: SourceReference) => void;
-  sourceFor?: (path: string) => SourceReference | null;
+  onOpenSource?: ((source: SourceReference) => void) | undefined;
+  sourceFor?: ((path: string) => SourceReference | null) | undefined;
 }) {
   if (changes.length === 0) return null;
   return (

@@ -3,13 +3,9 @@ import { Bolt, ChevronDown, FilePenLine, MessageCircleQuestion, ScrollText } fro
 import { Button } from '@/components/ui/button';
 import { DropdownContent, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
 import { MenuItem } from '@/components/ui/menu-item';
-import type { AgentAccessMode } from '@/protocols/websocket/agent-session';
+import type { AgentAccessMode } from '@/features/agent/domain/access';
 
-const MODES: Array<{
-  description: string;
-  id: AgentAccessMode;
-  label: string;
-}> = [
+const MODES = [
   {
     description: 'Ask before actions',
     id: 'default',
@@ -30,7 +26,7 @@ const MODES: Array<{
     id: 'auto',
     label: 'Auto',
   },
-];
+] as const satisfies ReadonlyArray<{ description: string; id: AgentAccessMode; label: string }>;
 
 const MODE_ICONS = {
   default: MessageCircleQuestion,
@@ -52,7 +48,7 @@ export function AgentPermissionMode({
     0,
     MODES.findIndex((entry) => entry.id === mode),
   );
-  const active = MODES[activeIndex];
+  const active = MODES[activeIndex] ?? MODES[0];
   return (
     <DropdownMenu>
       <DropdownTrigger
@@ -69,20 +65,13 @@ export function AgentPermissionMode({
           </Button>
         }
       />
-      <DropdownContent
-        align="end"
-        checkedIndex={activeIndex}
-        className="w-72"
-        selectionAppearance="none"
-        side="top"
-      >
-        {MODES.map((entry, index) => (
+      <DropdownContent align="end" className="w-72" selectionAppearance="none" side="top">
+        {MODES.map((entry) => (
           <MenuItem
             checked={entry.id === mode}
             description={entry.description}
-            descriptionLayout="inline"
+            layout="inline"
             icon={MODE_ICONS[entry.id]}
-            index={index}
             key={entry.id}
             label={entry.label}
             onSelect={() => onChange(entry.id)}

@@ -1,3 +1,7 @@
+/** The Agent workspace for one renderer window: the tabs it shows, which
+ *  session each tab is bound to, and how those bindings follow the window's
+ *  folder. Sessions are mounted and retired here; the per-conversation
+ *  behaviour lives in the session runtime this module composes. */
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
 import type {
@@ -10,10 +14,16 @@ import {
   type AgentFilesChanged,
   type AgentSessionRuntime,
 } from '@/features/agent/application/session-runtime';
+import {
+  AGENT_RUNTIMES,
+  DEFAULT_AGENT_ID,
+  preferredAgent,
+} from '@/features/agent/domain/agent-catalog';
 import type { AgentScopeEnvironment } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import {
   agentScopesEqual,
+  agentSessionPhase,
   scopeForWindowFolder,
   type AgentId,
   type AgentScope,
@@ -27,9 +37,13 @@ import {
   type AgentTabState,
   type AgentWorkspaceState,
 } from '@/features/agent/domain/workspace';
+import { createScopeGuard } from '@/lib/runtime/scope-guard';
+
+/** What the workspace's operations are about: the window folder its sessions
+ *  were bound to when the work started. */
+type AgentWorkspaceScope = { readonly folderPath: string | null };
 
 export interface AgentWorkspaceRuntime {
-  readonly signal: AbortSignal;
   readonly store: StoreApi<AgentWorkspaceState>;
   activate(id: string): void;
   activeSession(): AgentSessionRuntime;
@@ -55,15 +69,15 @@ export interface AgentWorkspaceRuntime {
 }
 
 export interface AgentWorkspaceRuntimeOptions {
-  autostart?: boolean;
-  context?: AgentContextPort;
+  autostart?: boolean | undefined;
+  context?: AgentContextPort | undefined;
   createId(): string;
   folderPath: string | null;
-  initialAgent?: AgentId;
+  initialAgent?: AgentId | undefined;
   /** Files any session's settled write left changed. */
-  onFilesChanged?: (change: AgentFilesChanged) => void;
+  onFilesChanged?: ((change: AgentFilesChanged) => void) | undefined;
   port: AgentSessionPort;
-  scheduler?: AgentReconnectScheduler;
+  scheduler?: AgentReconnectScheduler | undefined;
 }
 
 interface MountedAgentSession {
@@ -72,12 +86,20 @@ interface MountedAgentSession {
   unsubscribe(): void;
 }
 
+/** Whether a mounted session is the one a history entry names. */
+function boundTo({ runtime }: MountedAgentSession, entry: AgentHistoryEntry): boolean {
+  const { agent, nativeSessionId, scope } = runtime.store.getState();
+  return (
+    agent === entry.agent && nativeSessionId === entry.id && agentScopesEqual(scope, entry.scope)
+  );
+}
+
 export function createAgentWorkspaceRuntime({
   autostart = true,
   context,
   createId,
   folderPath: initialFolderPath,
-  initialAgent = 'stashbase',
+  initialAgent = DEFAULT_AGENT_ID,
   onFilesChanged,
   port,
   scheduler,
@@ -93,7 +115,15 @@ export function createAgentWorkspaceRuntime({
   if (!initialId.trim()) throw new Error('Agent tab ids must not be empty.');
   const store = createStore<AgentWorkspaceState>(() => createAgentWorkspaceState(initialId));
 
+  /** The runtime owns one controller, aborted on dispose; a caller's own lane
+   *  signal is joined to it so either can cancel the work. */
   const operationSignal = (signal: AbortSignal) => AbortSignal.any([controller.signal, signal]);
+
+  const guard = createScopeGuard<AgentWorkspaceScope>({
+    disposed: () => disposed,
+    sameScope: (captured, live) => captured.folderPath === live.folderPath,
+    scope: () => ({ folderPath }),
+  });
 
   const syncTab = (id: string) => {
     const mounted = sessions.get(id);
@@ -123,7 +153,7 @@ export function createAgentWorkspaceRuntime({
         id,
         lastModified,
         nativeSessionId: state.nativeSessionId,
-        phase: state.phase,
+        phase: agentSessionPhase(state.connection),
         scope: state.scope,
         title: state.title,
       }),
@@ -131,12 +161,16 @@ export function createAgentWorkspaceRuntime({
     );
   };
 
+  /** Mounts a session under `id`, replacing any previous mount. A session
+   *  that follows the window's folder is rebound when the folder changes;
+   *  one opened for a fixed scope is not. */
   const mountSession = (
     id: string,
     agent: AgentId,
     scope: AgentScope,
+    followsWindow: boolean,
     title = 'New chat',
-  ): AgentSessionRuntime => {
+  ): MountedAgentSession => {
     const previous = sessions.get(id);
     previous?.unsubscribe();
     previous?.runtime.dispose();
@@ -168,25 +202,23 @@ export function createAgentWorkspaceRuntime({
       id,
       lastModified: 0,
       nativeSessionId: sessionState.nativeSessionId,
-      phase: sessionState.phase,
+      phase: agentSessionPhase(sessionState.connection),
       scope: sessionState.scope,
       title: sessionState.title,
     };
     store.setState((workspace) => upsertAgentTab(workspace, tab), true);
-    const followsWindow = previous?.followsWindow ?? false;
-    sessions.set(id, {
+    const mounted: MountedAgentSession = {
       followsWindow,
       runtime: session,
       unsubscribe: session.store.subscribe(() => syncTab(id)),
-    });
-    return session;
+    };
+    sessions.set(id, mounted);
+    return mounted;
   };
 
-  mountSession(initialId, initialAgent, scopeForWindowFolder(folderPath));
-  sessions.get(initialId)!.followsWindow = true;
+  mountSession(initialId, initialAgent, scopeForWindowFolder(folderPath), true);
 
   const runtime: AgentWorkspaceRuntime = {
-    signal: controller.signal,
     store,
     activate(id) {
       if (!disposed && sessions.has(id)) {
@@ -201,8 +233,7 @@ export function createAgentWorkspaceRuntime({
     close(id) {
       if (disposed || !sessions.has(id)) return;
       if (sessions.size === 1) {
-        sessions.get(id)!.followsWindow = true;
-        mountSession(id, initialAgent, scopeForWindowFolder(folderPath));
+        mountSession(id, initialAgent, scopeForWindowFolder(folderPath), true);
         return;
       }
       const wasActive = store.getState().activeId === id;
@@ -214,8 +245,7 @@ export function createAgentWorkspaceRuntime({
       const nextWorkspace = removeAgentTab(store.getState(), id, visibleScope);
       store.setState(nextWorkspace, true);
       if (wasActive && !nextWorkspace.activeId) {
-        mountSession(id, initialAgent, visibleScope);
-        sessions.get(id)!.followsWindow = true;
+        mountSession(id, initialAgent, visibleScope, true);
         store.setState((state) => activateAgentTab(state, id), true);
       }
     },
@@ -233,7 +263,7 @@ export function createAgentWorkspaceRuntime({
     listHistory(agent, scope, signal) {
       return port.list(agent, scope, operationSignal(signal));
     },
-    newChat(agent = 'stashbase', scope?: AgentScope) {
+    newChat(agent = DEFAULT_AGENT_ID, scope?: AgentScope) {
       if (disposed) throw new Error('Agent workspace is disposed.');
       const followsCurrentFolder = scope === undefined;
       const nextScope = scope ?? scopeForWindowFolder(folderPath);
@@ -243,55 +273,49 @@ export function createAgentWorkspaceRuntime({
         throw new Error('Agent tab ids must be non-empty and unique.');
       }
       const existing = blank?.runtime.store.getState();
-      const session =
+      const mounted =
         blank && existing?.agent === agent && agentScopesEqual(existing.scope, nextScope)
-          ? blank.runtime
-          : mountSession(id, agent, nextScope);
-      sessions.get(id)!.followsWindow = followsCurrentFolder;
+          ? blank
+          : mountSession(id, agent, nextScope, followsCurrentFolder);
+      mounted.followsWindow = followsCurrentFolder;
       store.setState((state) => activateAgentTab(state, id), true);
-      return session;
+      return mounted.runtime;
     },
     async removeHistory(entry, signal) {
+      const captured = guard.capture();
       await port.remove(entry, operationSignal(signal));
-      for (const [id, mounted] of sessions) {
-        const state = mounted.runtime.store.getState();
-        if (
-          state.agent === entry.agent &&
-          state.nativeSessionId === entry.id &&
-          agentScopesEqual(state.scope, entry.scope)
-        ) {
-          runtime.close(id);
+      // Re-read the mounted set, and only while it is still the one the
+      // removal started against: a retired folder remounted it.
+      guard.accept(captured, () => {
+        for (const [id, mounted] of sessions) {
+          if (boundTo(mounted, entry)) runtime.close(id);
         }
-      }
+      });
     },
     async renameHistory(entry, title, signal) {
+      const captured = guard.capture();
       const updated = await port.rename(entry, title, operationSignal(signal));
-      for (const mounted of sessions.values()) {
-        const state = mounted.runtime.store.getState();
-        if (
-          state.agent === entry.agent &&
-          state.nativeSessionId === entry.id &&
-          agentScopesEqual(state.scope, entry.scope)
-        ) {
-          mounted.runtime.rename(updated.title);
+      guard.accept(captured, () => {
+        for (const mounted of sessions.values()) {
+          if (boundTo(mounted, entry)) mounted.runtime.rename(updated.title);
         }
-      }
+      });
       return updated;
     },
     async restore(entry) {
+      // A restored chat names its own scope, so newChat leaves it pinned.
       const session = runtime.newChat(entry.agent, entry.scope);
-      sessions.get(session.id)!.followsWindow = false;
       return session.restore(entry, readyAgentIds.has(entry.agent));
     },
     retireFolder(retiredFolderPath) {
       if (disposed) return;
+      guard.retireOperations();
       for (const [id, mounted] of sessions) {
         const session = mounted.runtime;
         const state = session.store.getState();
         if (state.scope.kind !== 'folder' || state.scope.path !== retiredFolderPath) continue;
         if (session.isBlank()) {
-          mountSession(id, state.agent, { kind: 'library' });
-          sessions.get(id)!.followsWindow = true;
+          mountSession(id, state.agent, { kind: 'library' }, true);
         } else {
           session.retire(retiredFolderPath);
         }
@@ -306,9 +330,16 @@ export function createAgentWorkspaceRuntime({
       if (!started) {
         const active = runtime.activeSession();
         const state = active.store.getState();
-        const firstAvailable = [...readyAgentIds][0];
+        const firstAvailable = preferredAgent(
+          AGENT_RUNTIMES.filter((entry) => readyAgentIds.has(entry.id)),
+        )?.id;
         if (active.isBlank() && firstAvailable && !readyAgentIds.has(state.agent)) {
-          mountSession(active.id, firstAvailable, state.scope);
+          mountSession(
+            active.id,
+            firstAvailable,
+            state.scope,
+            sessions.get(active.id)?.followsWindow ?? false,
+          );
         }
         started = true;
       }
@@ -335,7 +366,7 @@ export function createAgentWorkspaceRuntime({
           mounted.followsWindow = false;
           continue;
         }
-        mountSession(id, session.store.getState().agent, scopeForWindowFolder(folderPath));
+        mountSession(id, session.store.getState().agent, scopeForWindowFolder(folderPath), true);
       }
       const nextScope = scopeForWindowFolder(folderPath);
       const current = runtime.activeSession().store.getState();

@@ -17,7 +17,9 @@ describe('suggestStarters', () => {
       'Summarize learning-records/',
       'What does MISSION.md say?',
     ]);
-    expect(starters[1]?.prompt).toBe("Summarize what's in learning-records/ and what each file covers.");
+    expect(starters[1]?.prompt).toBe(
+      "Summarize what's in learning-records/ and what each file covers.",
+    );
   });
 
   it('falls back to the first markdown file, then any file, when no anchor exists', () => {

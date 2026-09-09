@@ -1,6 +1,3 @@
-import type { AgentScope } from '@/features/agent/domain/session';
-import type { SourceReference } from '@/shared/domain/source-reference';
-
 /**
  * One file the Agent changed, as the runtime reported it. Claude and
  * OpenCode name the file and give the text on both sides; Codex names the
@@ -8,9 +5,12 @@ import type { SourceReference } from '@/shared/domain/source-reference';
  * whole files with counts. Every runtime lands on this one shape so the
  * transcript renders one diff surface and one changed-files list.
  */
+import type { AgentScope } from '@/features/agent/domain/session';
+import type { SourceReference } from '@/shared/domain/source-reference';
+
 export type FileChangeAction = 'created' | 'wrote' | 'edited' | 'deleted' | 'changed';
 
-export interface FileChangeText {
+interface FileChangeText {
   before: string;
   after: string;
   /** Whether the texts are the whole file or only the edited fragment. */
@@ -26,6 +26,14 @@ export interface AgentFileChange {
   patch?: string;
   /** Line counts the server computed, when it did. */
   counts?: { additions: number; deletions: number };
+}
+
+/** A stable identity for one parsed change, so a list of them keys on its
+ *  own data. One tool call can report the same path more than once — a
+ *  MultiEdit does — so the changed text discriminates the repeats. */
+export function fileChangeKey(change: AgentFileChange): string {
+  const detail = change.patch ?? change.text?.before ?? '';
+  return `${change.action}\u0000${change.path}\u0000${detail}`;
 }
 
 export const FILE_CHANGE_ACTION_LABEL: Record<FileChangeAction, string> = {

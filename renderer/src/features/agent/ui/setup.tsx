@@ -1,9 +1,9 @@
 import { Layers } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import type { Agent } from '@/features/agent/domain/agent-catalog';
 import type { AgentId } from '@/features/agent/domain/session';
 import { cn } from '@/lib/utils';
-import type { Agent } from '@/shared/agent-runtime';
 
 export function AgentSetup({
   agents,
@@ -18,14 +18,11 @@ export function AgentSetup({
   loading: boolean;
   onOpenSettings(): void;
   onPrepare(id: AgentId, action: 'bootstrap' | 'login'): void;
-  preparingAgentId?: AgentId;
+  preparingAgentId?: AgentId | undefined;
 }) {
   return (
     <div
-      className={cn(
-        'flex h-full min-h-0 items-center justify-center bg-surface-2 p-8',
-        'w-full',
-      )}
+      className={cn('flex h-full min-h-0 items-center justify-center bg-surface-2 p-8', 'w-full')}
     >
       <div className="max-w-md text-center">
         <Layers aria-hidden="true" className="mx-auto size-7 text-muted-foreground" />
@@ -35,7 +32,7 @@ export function AgentSetup({
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           {agents.map((agent) => {
-            const needsLogin = agent.bootstrap?.failure?.code === 'authentication-required';
+            const needsLogin = agent.needsSignIn;
             return (
               <Button
                 key={agent.id}

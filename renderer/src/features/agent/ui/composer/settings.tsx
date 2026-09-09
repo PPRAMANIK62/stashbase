@@ -1,12 +1,15 @@
+/** The composer's left-hand controls: which Agent runs the next turn, which
+ *  model it uses, and how hard it thinks. Every control is disabled while a
+ *  turn streams, because the runtime binds all three when the turn starts. */
 import { BrainCircuit, ChevronDown, Cpu } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { DropdownContent, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
 import { MenuItem } from '@/components/ui/menu-item';
+import type { Agent } from '@/features/agent/domain/agent-catalog';
 import type { AgentSessionState } from '@/features/agent/domain/session';
 import { AGENT_ICONS } from '@/features/agent/ui/identity/agent-icons';
 import { cn } from '@/lib/utils';
-import type { Agent } from '@/shared/agent-runtime';
 
 /** Below this composer width the three controls keep their icons and drop
  *  their labels; the title attribute still names the selection. */
@@ -48,25 +51,20 @@ export function AgentComposerSettings({
 }: {
   activeAgent: Agent;
   agents: Agent[];
-  state: Pick<
-    AgentSessionState,
-    'activeModel' | 'activeTurn' | 'effort' | 'model' | 'models' | 'transcript'
-  >;
+  state: Pick<AgentSessionState, 'activeModel' | 'effort' | 'model' | 'models' | 'transcript'> & {
+    /** Whether a turn is streaming; model and effort are fixed for its run. */
+    activeTurn: boolean;
+  };
   onAgentChange(agent: Agent['id']): void;
   onEffortChange(effort: string | null): void;
   onModelChange(model: string | null): void;
   onRequestCatalog(): void;
 }) {
   const ActiveAgentIcon = AGENT_ICONS[activeAgent.id];
-  const activeAgentIndex = agents.findIndex((agent) => agent.id === activeAgent.id);
   const selectedModel = state.models.find((model) => model.id === state.model);
   const effectiveModel =
     selectedModel ?? state.models.find((model) => model.id === state.activeModel);
   const effortOptions = effectiveModel?.supportedEfforts ?? [];
-  const modelIndex = state.model
-    ? state.models.findIndex((model) => model.id === state.model) + 1
-    : 0;
-  const effortIndex = state.effort ? effortOptions.indexOf(state.effort) + 1 : 0;
   const modelLocked =
     state.activeTurn || (activeAgent.id === 'claude' && state.transcript.length > 0);
 
@@ -89,18 +87,11 @@ export function AgentComposerSettings({
             </Button>
           }
         />
-        <DropdownContent
-          align="start"
-          checkedIndex={activeAgentIndex < 0 ? undefined : activeAgentIndex}
-          className="w-52"
-          selectionAppearance="none"
-          side="top"
-        >
-          {agents.map((agent, index) => (
+        <DropdownContent align="start" className="w-52" selectionAppearance="none" side="top">
+          {agents.map((agent) => (
             <MenuItem
               checked={agent.id === activeAgent.id}
               icon={AGENT_ICONS[agent.id]}
-              index={index}
               key={agent.id}
               label={agent.label}
               onSelect={() => onAgentChange(agent.id)}
@@ -109,7 +100,7 @@ export function AgentComposerSettings({
         </DropdownContent>
       </DropdownMenu>
 
-      {activeAgent.capabilities?.models && (
+      {activeAgent.abilities.models && (
         <DropdownMenu disabled={modelLocked}>
           <DropdownTrigger
             render={
@@ -132,27 +123,22 @@ export function AgentComposerSettings({
           />
           <DropdownContent
             align="start"
-            checkedIndex={Math.max(0, modelIndex)}
             className="w-80 max-w-[calc(100vw-1rem)]"
             selectionAppearance="none"
             side="top"
           >
             <MenuItem
               checked={state.model === null}
-              contentClassName="translate-y-px"
-              index={0}
-              labelLayout="wrap"
+              layout="wrap"
               label="Default"
               onSelect={() => onModelChange(null)}
             />
-            {state.models.map((model, index) => (
+            {state.models.map((model) => (
               <MenuItem
                 checked={model.id === state.model}
-                contentClassName="translate-y-px"
-                index={index + 1}
                 key={model.id}
                 label={model.label}
-                labelLayout="wrap"
+                layout="wrap"
                 onSelect={() => onModelChange(model.id)}
               />
             ))}
@@ -160,7 +146,7 @@ export function AgentComposerSettings({
         </DropdownMenu>
       )}
 
-      {activeAgent.capabilities?.effort && (
+      {activeAgent.abilities.effort && (
         <DropdownMenu disabled={state.activeTurn || effortOptions.length === 0}>
           <DropdownTrigger
             render={
@@ -181,32 +167,25 @@ export function AgentComposerSettings({
               </Button>
             }
           />
-          <DropdownContent
-            align="start"
-            checkedIndex={Math.max(0, effortIndex)}
-            className="w-60"
-            selectionAppearance="none"
-            side="top"
-          >
+          <DropdownContent align="start" className="w-60" selectionAppearance="none" side="top">
             <MenuItem
               checked={state.effort === null}
-              contentClassName="translate-y-px"
-              index={0}
               label="Default"
               onSelect={() => onEffortChange(null)}
             />
-            {effortOptions.map((effort, index) => (
-              <MenuItem
-                checked={effort === state.effort}
-                contentClassName="translate-y-px"
-                description={effortDescription(effort)}
-                descriptionLayout="inline"
-                index={index + 1}
-                key={effort}
-                label={effortLabel(effort)}
-                onSelect={() => onEffortChange(effort)}
-              />
-            ))}
+            {effortOptions.map((effort) => {
+              const description = effortDescription(effort);
+              return (
+                <MenuItem
+                  checked={effort === state.effort}
+                  {...(description === undefined ? {} : { description })}
+                  layout="inline"
+                  key={effort}
+                  label={effortLabel(effort)}
+                  onSelect={() => onEffortChange(effort)}
+                />
+              );
+            })}
           </DropdownContent>
         </DropdownMenu>
       )}

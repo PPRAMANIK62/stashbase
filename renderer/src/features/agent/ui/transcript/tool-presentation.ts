@@ -41,7 +41,7 @@ export function agentToolKind(tool: AgentToolBlock): AgentToolKind {
 
 export function agentToolRow(tool: AgentToolBlock): {
   mono?: boolean;
-  target?: string;
+  target?: string | undefined;
   verb: string;
 } {
   const input = argumentsOf(tool.input);

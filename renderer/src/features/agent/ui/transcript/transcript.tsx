@@ -1,3 +1,7 @@
+/** The conversation as it reads: prompts, replies, thinking, notices and
+ *  activity groups in order, with day breaks between prompts and a copy
+ *  affordance on the last settled reply. Blocks arrive already shaped by the
+ *  session domain; this module only decides how each one is presented. */
 import { Check, Copy } from 'lucide-react';
 import { Fragment, memo, useCallback, useMemo, useState } from 'react';
 
@@ -126,7 +130,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onOpenExternal(href: string): void;
   onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
   onRetry(errorBlockId: string): boolean;
-  transientFile?: (path: string) => File | undefined;
+  transientFile?: ((path: string) => File | undefined) | undefined;
 }) {
   if (block.kind === 'user') {
     const context = sentContext(block);
@@ -201,7 +205,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
       <section className="rounded-md border border-destructive/30 bg-destructive-light p-3">
         <h3 className="text-caption font-medium text-foreground">The Agent could not finish</h3>
         <p className="mt-1 text-caption text-muted-foreground">{block.text}</p>
-        {block.retryablePrompt && (
+        {block.retryablePrompt !== undefined && (
           <Button
             className="mt-2"
             onClick={() => onRetry(block.id)}
@@ -232,13 +236,13 @@ export const AgentTranscript = memo(function AgentTranscript({
   onOpenExternal(href: string): void;
   /** Opens a file the Agent changed beside the chat, without selecting it
    *  on the Agent's behalf. */
-  onOpenSource?: (source: SourceReference) => void;
+  onOpenSource?: ((source: SourceReference) => void) | undefined;
   onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
   onRetry(errorBlockId: string): boolean;
   /** The workspace source behind a changed path, or null when it is not one. */
-  sourceFor?: (path: string) => SourceReference | null;
+  sourceFor?: ((path: string) => SourceReference | null) | undefined;
   /** The File behind a sent upload, when this session still holds it. */
-  transientFile?: (path: string) => File | undefined;
+  transientFile?: ((path: string) => File | undefined) | undefined;
 }) {
   const [visibleCount, setVisibleCount] = useState(TRANSCRIPT_PAGE_SIZE);
   // The ask's card leaves the transcript on decision, so focus follows the

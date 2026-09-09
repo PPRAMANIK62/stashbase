@@ -15,13 +15,13 @@ export class AgentSurfaceBoundary extends Component<
   AgentSurfaceBoundaryProps,
   AgentSurfaceBoundaryState
 > {
-  state: AgentSurfaceBoundaryState = { failed: false };
+  override state: AgentSurfaceBoundaryState = { failed: false };
 
   static getDerivedStateFromError(): AgentSurfaceBoundaryState {
     return { failed: true };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
+  override componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('The Agent surface could not load.', error, info.componentStack);
   }
 
@@ -30,7 +30,7 @@ export class AgentSurfaceBoundary extends Component<
     this.setState({ failed: false });
   };
 
-  render() {
+  override render() {
     if (!this.state.failed) return this.props.children;
     return (
       <div className="flex h-full items-center justify-center bg-surface-2 p-4 text-center">

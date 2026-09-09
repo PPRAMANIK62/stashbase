@@ -1,9 +1,13 @@
+/** The composer card: the mention editor in place of the textarea, the `@`
+ *  and `/` listbox above it, source drops, transient uploads and the preview
+ *  row of tiles, all reading as one surface. This module is the shell —
+ *  binding what the user drops, pastes or types to the session's context —
+ *  while the suggestion panel and the tiles are owned beside it. */
 import { Paperclip } from 'lucide-react';
 import {
   useId,
   useMemo,
   useRef,
-  useState,
   type ClipboardEvent,
   type DragEvent,
   type ReactNode,
@@ -21,22 +25,21 @@ import {
 import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import {
   contextItemKey,
-  rankMentionSuggestions,
   removeMentionText,
   segmentFileMentions,
   validateContext,
   type AgentContextItem,
   type AgentScopeEnvironment,
   type ContextStatus,
-  type MentionQuery,
-  type MentionSuggestion,
 } from '@/features/agent/domain/context';
+import { agentSkills } from '@/features/agent/domain/session';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { dragCarriesSource, readSourceDrag } from '@/shared/utils/source-drag';
 
+import { useMentionRows } from './context-rows';
 import { DraftSourceTiles, isVisualSource } from './context-tiles';
 import { MentionEditor, type MentionEditorHandle, type MentionEditorProps } from './mention-editor';
-import { MentionListbox, mentionOptionId } from './mention-listbox';
+import { MentionListbox } from './mention-listbox';
 
 const ATTACH_ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf';
 
@@ -48,12 +51,18 @@ export interface AgentContextComposerProps {
   maxRows?: number;
   minRows?: number;
   onQueueChange: (queue: QueuedMessage[]) => void;
-  onReprocess?: (source: SourceReference) => void;
+  onReprocess?: ((source: SourceReference) => void) | undefined;
+  /** Asks the runtime to re-read the skills it can run in this scope. */
+  onRefreshSkills: () => void;
+  /** Arms a skill for the next turn, or disarms it with null. */
+  onSkillChange: (skill: string | null) => void;
   onStop: () => void;
   placeholder: string;
   queue: QueuedMessage[];
   rightSlot?: ReactNode;
   session: AgentSessionRuntime;
+  /** The runtime advertises that it can run `/` skills. */
+  skills: boolean;
   status: 'idle' | 'streaming';
 }
 
@@ -106,15 +115,18 @@ export function AgentContextComposer({
   maxRows = 6,
   minRows = 3,
   onQueueChange,
+  onRefreshSkills,
   onReprocess,
+  onSkillChange,
   onStop,
   placeholder,
   queue,
   rightSlot,
   session,
+  skills,
   status,
 }: AgentContextComposerProps) {
-  const { context, contextIssue, draft, queuedPrompts, scope } = useStore(
+  const { context, contextIssue, draft, queuedPrompts, scope, skill, skillCatalog } = useStore(
     session.store,
     useShallow((state) => ({
       context: state.context,
@@ -122,12 +134,12 @@ export function AgentContextComposer({
       draft: state.draft,
       queuedPrompts: state.queuedPrompts,
       scope: state.scope,
+      skill: state.skill,
+      skillCatalog: state.skillCatalog,
     })),
   );
   const editorRef = useRef<MentionEditorHandle>(null);
   const listboxId = useId();
-  const [query, setQuery] = useState<MentionQuery | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
 
   const scoped =
     environment && scope.kind === 'folder' && environment.folderPath === scope.path
@@ -206,12 +218,18 @@ export function AgentContextComposer({
     if (fresh.length > 0) void session.attachFiles(fresh);
   };
 
-  const suggestions = useMemo(
-    () => (query && scoped ? rankMentionSuggestions(scoped.listing, query.query) : []),
-    [query, scoped],
+  const armedSkill = useMemo(
+    () => agentSkills(skillCatalog).find((entry) => entry.id === skill) ?? null,
+    [skill, skillCatalog],
   );
-  const open = query !== null && suggestions.length > 0;
-  const activeRow = Math.min(activeIndex, Math.max(0, suggestions.length - 1));
+  const panel = useMentionRows({
+    editorRef,
+    listboxId,
+    onRefreshSkills,
+    onSkillChange,
+    scoped,
+    skillCatalog,
+  });
 
   const bindSource = (source: SourceReference) => {
     const listed = scoped?.listing.files.find((file) => file.path === source.path);
@@ -233,13 +251,6 @@ export function AgentContextComposer({
   const onMentionRemoved = (path: string) => {
     if (scope.kind !== 'folder') return;
     session.removeContext(`source:${scope.path}/${path}`);
-  };
-
-  const pick = (suggestion: MentionSuggestion): boolean => {
-    if (!query) return false;
-    editorRef.current?.insertMention(suggestion.path);
-    setActiveIndex(0);
-    return true;
   };
 
   const removeTile = (item: AgentContextItem) => {
@@ -275,33 +286,22 @@ export function AgentContextComposer({
     void session.attachFiles(files);
   };
 
-  const listbox = {
-    activeOptionId: open ? mentionOptionId(listboxId, activeRow) : undefined,
-    controls: open ? listboxId : undefined,
-    onAccept: () => {
-      const suggestion = suggestions[activeRow];
-      return suggestion ? pick(suggestion) : false;
-    },
-    onDismiss: () => setActiveIndex(0),
-    onNavigate: (direction: 1 | -1) =>
-      setActiveIndex((activeRow + direction + suggestions.length) % suggestions.length),
-    open,
-  };
-
   return (
     <div
-      className="relative flex flex-col rounded-2xl bg-surface-3 shadow-surface-3 transition-[box-shadow] duration-80 focus-within:ring-1 focus-within:ring-foreground/20"
+      className="relative flex flex-col rounded-2xl bg-surface-3 shadow-surface-3 transition-[box-shadow] duration-fast focus-within:ring-1 focus-within:ring-foreground/20"
       onDragOverCapture={onDragOverCapture}
       onDropCapture={onDropCapture}
       onPasteCapture={onPasteCapture}
     >
-      {open && (
+      {panel.open && (
         <MentionListbox
-          activeIndex={activeRow}
+          activeIndex={panel.activeRow}
           id={listboxId}
-          onHover={setActiveIndex}
-          onPick={pick}
-          suggestions={suggestions}
+          label={panel.label}
+          notice={panel.notice}
+          onHover={panel.onHover}
+          onPick={panel.onPick}
+          rows={panel.rows}
         />
       )}
       {contextIssue && (
@@ -317,14 +317,14 @@ export function AgentContextComposer({
         {...(attachments ? { files: uploads, onFilesChange: syncUploads } : {})}
         editor={mentionEditorSlot({
           chipPaths,
-          listbox,
+          listbox: panel.binding,
           onMentionAdded,
           onMentionRemoved,
-          onQueryChange: (next) => {
-            setQuery(next);
-            if (next === null) setActiveIndex(0);
-          },
+          onQueryChange: panel.onQueryChange,
+          onSkillRemoved: () => onSkillChange(null),
           ref: editorRef,
+          skill: armedSkill,
+          skillsEnabled: skills,
           statuses,
         })}
         leftSlot={attachSlot(attachments, leftSlot)}
@@ -351,6 +351,8 @@ export function AgentContextComposer({
         }
         queue={queue}
         rightSlot={rightSlot}
+        // A skill or a bound tile is a sendable prompt on its own.
+        sendableWithoutText={armedSkill !== null || context.length > 0}
         status={status}
         value={draft}
       />

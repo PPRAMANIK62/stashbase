@@ -3,78 +3,44 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 
 import { createAgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
+import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { cn } from '@/lib/utils';
-import type { Agent } from '@/shared/agent-runtime';
 
 import { AgentTitlebar } from './titlebar';
 import ManagedAgentWorkspace from './workspace';
 
-const capabilities: NonNullable<Agent['capabilities']> = {
-  approvals: true,
+const abilities: Agent['abilities'] = {
   attachments: true,
-  connection: true,
   effort: true,
-  history: true,
-  interrupt: true,
   models: true,
   modes: true,
-  prompts: true,
   skills: true,
-  steering: true,
-  titleHint: true,
-  transcript: true,
 };
 
 const agents: Agent[] = [
-  {
-    bootstrap: { phase: 'ready' },
-    capabilities,
-    id: 'codex',
-    installHint: '',
-    installed: true,
-    label: 'Codex',
-    launchCommand: 'codex',
-    source: 'system',
-    state: 'available',
-    vendor: 'OpenAI',
-  },
-  {
-    bootstrap: { phase: 'ready' },
-    capabilities,
-    id: 'claude',
-    installHint: '',
-    installed: true,
-    label: 'Claude Code',
-    launchCommand: 'claude',
-    source: 'system',
-    state: 'available',
-    vendor: 'Anthropic',
-  },
-  {
-    bootstrap: { phase: 'ready' },
-    capabilities,
-    id: 'stashbase',
-    installHint: '',
-    installed: true,
-    label: 'Built-in',
-    launchCommand: '',
-    source: 'system',
-    state: 'available',
-    vendor: 'StashBase',
-  },
+  { abilities, id: 'codex', label: 'Codex', needsSignIn: false, ready: true },
+  { abilities, id: 'claude', label: 'Claude Code', needsSignIn: false, ready: true },
+  { abilities, id: 'stashbase', label: 'Built-in', needsSignIn: false, ready: true },
 ];
 
 const STORY_IMAGE =
   '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="#6B97FF"/><path d="M24 124 65 74l26 31 19-18 26 37Z" fill="#fff"/></svg>';
 
+const SKILLS = [
+  { id: 'review', label: 'review', description: 'Review a draft', argumentHint: 'what to review' },
+  { id: 'summarize', label: 'summarize', description: 'Summarize a folder' },
+];
+
 function WorkspacePreview({
   context = false,
   docked = false,
   empty = false,
+  skills = false,
 }: {
   context?: boolean;
   docked?: boolean;
   empty?: boolean;
+  skills?: boolean;
 }) {
   const queryClient = useMemo(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
@@ -101,7 +67,10 @@ function WorkspacePreview({
       folderPath: '/Library/Research',
       port: {
         connect: (_request, listener) => {
-          queueMicrotask(() => listener.onEvent({ kind: 'ready' }));
+          queueMicrotask(() => {
+            listener.onEvent({ error: null, kind: 'skills', skills: SKILLS, state: 'available' });
+            listener.onEvent({ kind: 'ready' });
+          });
           return { close: () => undefined, send: () => true };
         },
         list: async () => [],
@@ -128,7 +97,7 @@ function WorkspacePreview({
           supportedEfforts: ['low', 'medium', 'high'],
         },
       ],
-      phase: empty ? 'draft' : 'live',
+      connection: empty ? { kind: 'draft' } : { kind: 'live', turn: null },
       title: empty ? 'New chat' : 'Screenshot research',
       transcript: empty
         ? []
@@ -214,8 +183,14 @@ function WorkspacePreview({
         new File([STORY_IMAGE], 'workspace-cover.svg', { type: 'image/svg+xml' }),
       ]);
     }
+    if (skills) {
+      const session = next.activeSession();
+      session.start();
+      // The catalog arrives on the connection, so the armed skill waits for it.
+      queueMicrotask(() => session.setSkill('review'));
+    }
     return next;
-  }, [context, empty]);
+  }, [context, empty, skills]);
 
   useEffect(() => () => runtime.dispose(), [runtime]);
 
@@ -228,8 +203,8 @@ function WorkspacePreview({
         <div className="h-[calc(100%-2.75rem)]">
           <ManagedAgentWorkspace
             catalog={{
-              listAgents: async () => ({ clis: agents }),
-              prepareAgent: async () => ({ clis: agents }),
+              listAgents: async () => ({ agents }),
+              prepareAgent: async () => ({ agents }),
             }}
             onOpenExternal={() => undefined}
             onOpenAgentSettings={() => undefined}
@@ -265,6 +240,10 @@ export const EmptyWorkspace: Story = {
 
 export const BoundContext: Story = {
   args: { context: true, empty: true },
+};
+
+export const ArmedSkill: Story = {
+  args: { empty: true, skills: true },
 };
 
 export const Docked: Story = {

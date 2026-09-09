@@ -4,7 +4,8 @@ import {
   type AgentUploadOutcome,
   type ResolvedContextFile,
 } from '@/features/agent/application/ports';
-import type { HttpClient, HttpResponse } from '@/platform/http/client';
+import { classifyResponse, request, type TransportFailure } from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import {
   agentAttachResponseSchema,
   agentContextFileFailureSchema,
@@ -13,26 +14,22 @@ import {
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-function resolveError(response: HttpResponse): AgentContextError {
-  const failure = agentContextFileFailureSchema.safeParse(response.body);
-  const cause = failure.success ? { cause: new Error(failure.data.error) } : undefined;
+/** Resolution meets two refusals the shared ladder cannot see: the file left
+ *  the folder, and the Agent cannot read that format at all. */
+function resolveFailure({ response, serverMessage }: TransportFailure): AgentContextError | null {
+  const cause = serverMessage === null ? undefined : { cause: new Error(serverMessage) };
   if (response.status === 404) {
     return new AgentContextError('not-found', 'That file is no longer in this folder.', cause);
   }
-  if (response.status === 415) {
-    return new AgentContextError(
-      'unsupported',
-      'This file type cannot be given to the Agent.',
-      cause,
-    );
-  }
-  return new AgentContextError('unavailable', 'StashBase could not resolve that file.', cause);
+  return response.status === 415
+    ? new AgentContextError('unsupported', 'This file type cannot be given to the Agent.', cause)
+    : null;
 }
 
 /** Library source resolution through the JSON client and transient uploads
  *  through the server origin directly, because the JSON client cannot carry
  *  multipart bodies. */
-export function createAgentContextApi(
+export function createAgentContextAdapter(
   client: HttpClient,
   serverOrigin: string,
   fetchRequest: Fetch = fetch,
@@ -41,27 +38,18 @@ export function createAgentContextApi(
   return {
     async resolve(source, signal): Promise<ResolvedContextFile> {
       const query = new URLSearchParams({ path: `${source.folderPath}/${source.path}` });
-      let response: HttpResponse;
-      try {
-        response = await client.request({
-          path: `/api/library/agent-context-file?${query}`,
-          signal,
-        });
-      } catch (error) {
-        if (signal.aborted) throw error;
-        throw new AgentContextError('unavailable', 'StashBase could not resolve that file.', {
-          cause: error,
-        });
-      }
-      if (response.status < 200 || response.status >= 300) throw resolveError(response);
-      const parsed = agentContextFileResponseSchema.safeParse(response.body);
-      if (!parsed.success) {
-        throw new AgentContextError(
-          'invalid-response',
-          'File resolution returned an invalid response.',
-        );
-      }
-      return parsed.data;
+      return request(client, {
+        error: AgentContextError,
+        failure: resolveFailure,
+        failureSchema: agentContextFileFailureSchema,
+        messages: {
+          'invalid-response': 'File resolution returned an invalid response.',
+          unavailable: 'StashBase could not resolve that file.',
+        },
+        path: `/api/library/agent-context-file?${query}`,
+        schema: agentContextFileResponseSchema,
+        signal,
+      });
     },
     async upload(files, signal): Promise<AgentUploadOutcome[]> {
       const form = new FormData();
@@ -82,9 +70,11 @@ export function createAgentContextApi(
         body = null;
       }
       if (response.status < 200 || response.status >= 300) {
+        // Multipart cannot go through the JSON client, so the shared ladder is
+        // applied here to the status the attach route answered with.
         const failure = agentContextFileFailureSchema.safeParse(body);
         throw new AgentContextError(
-          'unavailable',
+          classifyResponse({ body, status: response.status }),
           failure.success ? failure.data.error : 'The attachment could not be uploaded.',
         );
       }

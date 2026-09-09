@@ -1,3 +1,7 @@
+/** The chat list in the sidebar: recency groups, each conversation as a row
+ *  that opens on a click and renames in place on a slow second click or F2,
+ *  and a per-row menu for deletion. Grouping and ordering are decided in the
+ *  domain; this module owns the interaction and the editing affordance. */
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 
@@ -46,7 +50,6 @@ function HistoryActions({
         <MenuItem
           className="text-destructive"
           icon={Trash2}
-          index={0}
           label="Delete"
           onSelect={() => onDelete(entry)}
         />
@@ -132,8 +135,8 @@ function ConversationRow({
         >
           <InlineInput
             aria-label={`Rename ${conversation.title}`}
-            caretOffset={caretOffset}
             className="min-w-0 text-inherit [font:inherit]"
+            {...(caretOffset === undefined ? {} : { caretOffset })}
             onCancel={cancelEdit}
             onChange={setTitle}
             onCommit={submitEdit}
@@ -163,10 +166,9 @@ function ConversationRow({
               beginEdit();
             }
           }}
+          label={conversation.title}
           title={conversation.title}
-        >
-          {conversation.title}
-        </SidebarMenuButton>
+        />
       )}
       {!editing && conversation.entry && (
         <HistoryActions entry={conversation.entry} onDelete={onDelete} />

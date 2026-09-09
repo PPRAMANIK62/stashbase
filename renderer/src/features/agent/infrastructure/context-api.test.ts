@@ -1,16 +1,12 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { AgentContextError } from '@/features/agent/application/ports';
-import type { HttpClient } from '@/platform/http/client';
+import { httpClient } from '@/test/fakes/http';
 
-import { createAgentContextApi } from './context-api';
+import { createAgentContextAdapter } from './context-api';
 
 const origin = 'http://127.0.0.1:43123';
 const source = { folderPath: '/Library/Research', path: 'papers/report.pdf' };
-
-function client(body: unknown, status = 200): HttpClient {
-  return { request: vi.fn(async () => ({ body, status })) };
-}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -30,7 +26,7 @@ async function kindOf(promise: Promise<unknown>): Promise<string> {
 
 describe('Agent context API', () => {
   it('resolves a derived source through the JSON client', async () => {
-    const http = client({
+    const http = httpClient({
       available: true,
       folder: 'Research',
       kind: 'derived',
@@ -40,7 +36,7 @@ describe('Agent context API', () => {
       sourceFormat: 'pdf',
       sourcePath: 'papers/report.pdf',
     });
-    const api = createAgentContextApi(http, origin);
+    const api = createAgentContextAdapter(http, origin);
     const resolved = await api.resolve(source, new AbortController().signal);
     expect(resolved).toMatchObject({ kind: 'derived', readPath: '/app-data/derived/report.md' });
     const request = vi.mocked(http.request).mock.calls[0]?.[0];
@@ -53,19 +49,24 @@ describe('Agent context API', () => {
     const signal = new AbortController().signal;
     expect(
       await kindOf(
-        createAgentContextApi(client({ error: 'not found' }, 404), origin).resolve(source, signal),
+        createAgentContextAdapter(httpClient({ error: 'not found' }, 404), origin).resolve(
+          source,
+          signal,
+        ),
       ),
     ).toBe('not-found');
     expect(
       await kindOf(
-        createAgentContextApi(client({ error: 'unsupported format' }, 415), origin).resolve(
+        createAgentContextAdapter(httpClient({ error: 'unsupported format' }, 415), origin).resolve(
           source,
           signal,
         ),
       ),
     ).toBe('unsupported');
     expect(
-      await kindOf(createAgentContextApi(client({ path: 1 }), origin).resolve(source, signal)),
+      await kindOf(
+        createAgentContextAdapter(httpClient({ path: 1 }), origin).resolve(source, signal),
+      ),
     ).toBe('invalid-response');
   });
 
@@ -78,7 +79,7 @@ describe('Agent context API', () => {
         ],
       }),
     );
-    const api = createAgentContextApi(client(null), origin, fetchRequest);
+    const api = createAgentContextAdapter(httpClient(null), origin, fetchRequest);
     const outcomes = await api.upload(
       [new File(['png'], 'shot.png', { type: 'image/png' }), new File(['x'], 'big.bin')],
       new AbortController().signal,
@@ -87,19 +88,20 @@ describe('Agent context API', () => {
       { name: 'shot.png', path: '/tmp/stashbase-attachments/1/shot.png' },
       { error: 'write failed', name: 'big.bin' },
     ]);
-    const [url, init] = fetchRequest.mock.calls[0]!;
+    const [url, init] = fetchRequest.mock.calls[0] ?? [];
     expect(String(url)).toBe(`${origin}/api/agent/attach`);
     expect(init?.method).toBe('POST');
-    const form = init?.body as FormData;
-    expect(form.getAll('files').map((entry) => (entry as File).name)).toEqual([
+    const form = init?.body;
+    if (!(form instanceof FormData)) throw new Error('The upload sent no multipart body.');
+    expect(form.getAll('files').map((entry) => (entry instanceof File ? entry.name : ''))).toEqual([
       'shot.png',
       'big.bin',
     ]);
   });
 
   it('maps a failed upload to unavailable with the server message', async () => {
-    const api = createAgentContextApi(
-      client(null),
+    const api = createAgentContextAdapter(
+      httpClient(null),
       origin,
       vi.fn(async () => jsonResponse({ error: 'could not secure attachment storage' }, 500)),
     );

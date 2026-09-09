@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useStore } from 'zustand';
 
 import { Button } from '@/components/ui/button';
+import { preferredAgent } from '@/features/agent/domain/agent-catalog';
 import {
   buildConversationGroups,
   type AgentConversationItem,
@@ -35,7 +36,7 @@ export default function AgentChats({
     (total, group) => total + group.items.length,
     0,
   );
-  const defaultAgent = readyAgents.find((agent) => agent.id === 'stashbase') ?? readyAgents[0];
+  const defaultAgent = preferredAgent(readyAgents);
 
   const closeDelete = () => {
     history.clearMutationFailure();

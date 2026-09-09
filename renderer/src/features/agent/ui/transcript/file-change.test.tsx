@@ -31,11 +31,11 @@ describe('Agent file change evidence', () => {
     expect(section.textContent).toContain('/library/Research');
     expect(screen.getByLabelText('1 added, 1 removed').textContent).toBe('+1−1');
     await waitFor(() => {
-      expect(container.querySelector('.cm-deletedChunk')?.textContent).toContain('bravo');
-      expect(container.querySelector('.cm-changedLine')?.textContent).toContain('beta');
+      expect(container.querySelector('.cm-deletedChunk')?.textContent).toContain('bravo'); // dom-contract: CodeMirror internals
+      expect(container.querySelector('.cm-changedLine')?.textContent).toContain('beta'); // dom-contract: CodeMirror internals
     });
-    expect(container.querySelector('.cm-lineNumbers')).toBeNull();
-    expect(container.querySelector('.cm-content')?.getAttribute('contenteditable')).toBe('false');
+    expect(container.querySelector('.cm-lineNumbers')).toBeNull(); // dom-contract: CodeMirror internals
+    expect(container.querySelector('.cm-content')?.getAttribute('contenteditable')).toBe('false'); // dom-contract: CodeMirror internals
   });
 
   it('shows server counts, line numbers for whole files, and patches by marker', () => {
@@ -60,11 +60,12 @@ describe('Agent file change evidence', () => {
     );
 
     expect(screen.getByLabelText('3 added, 2 removed').textContent).toBe('+3−2');
-    expect(container.querySelector('.cm-lineNumbers')).not.toBeNull();
+    expect(container.querySelector('.cm-lineNumbers')).not.toBeNull(); // dom-contract: CodeMirror internals
     const patch = screen.getByLabelText('Edited plan.md patch');
-    const kinds = [...patch.querySelectorAll('[data-line]')].map((row) =>
-      row.getAttribute('data-line'),
-    );
+    // The patch is a plain `<pre>` of spans with no role of its own; `data-line` is the app-published
+    // classification (add/del/ctx/meta) a reader has no other way to read back.
+    const lineNodes = patch.querySelectorAll('[data-line]'); // dom-contract: see comment above
+    const kinds = [...lineNodes].map((row) => row.getAttribute('data-line'));
     expect(kinds).toEqual(['meta', 'meta', 'meta', 'del', 'add', 'ctx']);
   });
 

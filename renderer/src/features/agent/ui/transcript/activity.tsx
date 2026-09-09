@@ -1,3 +1,7 @@
+/** The Agent's work as the reader sees it: consecutive tool calls collapse
+ *  into one expandable group, a tool awaiting permission becomes a card with
+ *  the decision on it, and a file write shows the diff it produced. Only the
+ *  presentation lives here; what a tool means is decided in the domain. */
 import {
   Ban,
   Check,
@@ -12,14 +16,18 @@ import {
 import { useEffect, useId, useRef, useState, type ComponentType } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import {
   ThinkingSteps,
   ThinkingStepsContent,
   ThinkingStepsHeader,
 } from '@/components/ui/thinking-steps';
-import { fileChangesForTool, settledFileChanges } from '@/features/agent/domain/file-change';
+import {
+  fileChangeKey,
+  fileChangesForTool,
+  settledFileChanges,
+} from '@/features/agent/domain/file-change';
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
+import { focusRing } from '@/lib/focus-ring';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
@@ -66,13 +74,7 @@ function iconFor(tool: AgentToolBlock): ToolIcon {
 /** The payload a tool surface renders once, shared by the row and the
  *  permission card so the ladder cannot drift: the diff when the call is a
  *  file change with evidence, the bounded inert text otherwise. */
-export function AgentToolPayload({
-  indent = true,
-  tool,
-}: {
-  indent?: boolean;
-  tool: AgentToolBlock;
-}) {
+function AgentToolPayload({ indent = true, tool }: { indent?: boolean; tool: AgentToolBlock }) {
   const changes = fileChangesForTool(tool.name, tool.input).filter(
     (change) => change.text !== undefined || change.patch !== undefined,
   );
@@ -85,8 +87,8 @@ export function AgentToolPayload({
         indent ? 'pl-7' : 'pt-2',
       )}
     >
-      {changes.map((change, index) => (
-        <AgentFileChangeView change={change} key={`${change.path}:${index}`} />
+      {changes.map((change) => (
+        <AgentFileChangeView change={change} key={fileChangeKey(change)} />
       ))}
       {payload !== null && (
         <pre
@@ -111,7 +113,7 @@ export function AgentToolPayload({
   );
 }
 
-export function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
+function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const Icon = iconFor(tool);
@@ -130,7 +132,7 @@ export function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
         aria-expanded={hasDetails ? open : undefined}
         className={cn(
           'group flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[12px] outline-none',
-          'hover:bg-hover focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]',
+          focusRing('hover:bg-hover'),
           !hasDetails && 'cursor-default',
         )}
         disabled={!hasDetails}
@@ -186,8 +188,8 @@ export function AgentActivityGroup({
   /** A tool whose ask was just decided: the group that receives it takes
    *  focus once, at its summary, so the decision stays reachable. */
   focusToolId?: string | null;
-  onOpenSource?: (source: SourceReference) => void;
-  sourceFor?: (path: string) => SourceReference | null;
+  onOpenSource?: ((source: SourceReference) => void) | undefined;
+  sourceFor?: ((path: string) => SourceReference | null) | undefined;
   tools: AgentToolBlock[];
 }) {
   const active = tools.some((tool) => tool.status === 'running');
@@ -231,7 +233,7 @@ export function AgentPermissionCard({
     requestAnimationFrame(() => headingRef.current?.focus());
   };
   return (
-    <Card className="border border-decision/30 bg-decision-soft/45 shadow-sm">
+    <div className="relative flex min-h-[60px] min-w-0 flex-col overflow-hidden rounded-xl border border-decision/30 bg-decision-soft/45 pb-4 shadow-sm">
       <div className="p-3">
         <div className="flex items-start gap-2">
           <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-decision" />
@@ -264,7 +266,7 @@ export function AgentPermissionCard({
           </p>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 

@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
+import type { AgentAccessMode } from '@/features/agent/domain/access';
 import { AgentPermissionMode } from '@/features/agent/ui/composer/permission-mode';
-import type { AgentAccessMode } from '@/protocols/websocket/agent-session';
 
 import { AgentActivityGroup, AgentPermissionCard } from './activity';
 import type { AgentToolBlock } from './tool-presentation';
