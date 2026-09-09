@@ -301,3 +301,32 @@ describe('file tree', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('file tree drag source', () => {
+  it('offers regular files as a source drag and never generic or restricted entries', async () => {
+    const { SOURCE_DRAG_MIME } = await import('@/shared/utils/source-drag');
+    renderTree(filesApi(), vi.fn());
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: 'none',
+      setData: (type: string, value: string) => void data.set(type, value),
+    };
+    await userEvent.setup().click(await screen.findByRole('treeitem', { name: 'docs' }));
+    const regular = await screen.findByRole('treeitem', { name: 'plan.md' });
+    expect(regular.getAttribute('draggable')).toBe('true');
+    fireEvent.dragStart(regular, { dataTransfer });
+    expect(JSON.parse(data.get(SOURCE_DRAG_MIME) ?? 'null')).toEqual({
+      folderPath: '/library/research',
+      path: 'docs/plan.md',
+    });
+
+    const generic = screen.getByRole('treeitem', {
+      name: 'archive.zip, excluded from Search and automatic Chat context',
+    });
+    expect(generic.getAttribute('draggable')).toBe('false');
+    const restricted = screen.getByRole('treeitem', {
+      name: 'linked-file, restricted, Show in file manager',
+    });
+    expect(restricted.getAttribute('draggable')).toBe('false');
+  });
+});

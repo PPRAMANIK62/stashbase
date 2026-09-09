@@ -51,6 +51,7 @@ import { useShape } from '@/lib/shape-context';
 import { spring } from '@/lib/springs';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { writeSourceDrag } from '@/shared/utils/source-drag';
 
 const EMPTY_LISTING: WorkspaceListing = { files: [], folderName: '', folders: [] };
 const TREE_PAGE_SIZE = 240;
@@ -395,8 +396,19 @@ export function FileTree({
                   )}
                   data-path={row.node.path}
                   data-proximity-index={index}
+                  draggable={row.node.type === 'file' && !restricted && !generic}
                   leadingIcon={ItemIcon}
                   onClick={() => activate(row)}
+                  onDragStart={(event) => {
+                    if (row.node.type !== 'file' || restricted || generic) {
+                      event.preventDefault();
+                      return;
+                    }
+                    writeSourceDrag(event.dataTransfer, {
+                      folderPath: runtime.scope.folder.path,
+                      path: row.node.path,
+                    });
+                  }}
                   onFocus={() => setRovingPath(row.node.path)}
                   onKeyDown={(event) => onKeyDown(event, row)}
                   ref={(element) => {
