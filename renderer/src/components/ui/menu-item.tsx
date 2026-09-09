@@ -218,7 +218,10 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
             sizer and the visible label keep identical boxes. The trimmed box
             ends at the cap line and the baseline, so a truncating label pads
             its clip box back out to cover ascenders and descenders and pulls
-            the layout box in again with a matching negative margin. */}
+            the layout box in again with a matching negative margin. The sizer
+            truncates on the same rule as the label: left free to wrap, a long
+            label makes it two lines tall and pushes the row's icons off the
+            visible text. */}
         <span
           className={cn(
             'flex min-w-0 flex-1',
@@ -232,7 +235,7 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
             <span
               className={cn(
                 'invisible col-start-1 row-start-1 [text-box:trim-both_cap_alphabetic]',
-                wrapsLabel && 'break-words whitespace-normal',
+                wrapsLabel ? 'break-words whitespace-normal' : 'truncate',
               )}
               style={{ fontVariationSettings: fontWeights.semibold }}
               aria-hidden="true"
