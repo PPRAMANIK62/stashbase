@@ -210,6 +210,17 @@ test('application menu exposes VS Code window commands on Windows and Linux', ()
     onNewWindow: () => {},
     onCloseWindow: () => {},
   });
+  // Cmd/Ctrl+W belongs to the renderer's close-tab command on every platform.
+  const items = (menu) => menu.flatMap((item) => [item, ...(item.submenu ? items(item.submenu) : [])]);
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    const all = items(createApplicationMenuTemplate({
+      platform,
+      onNewWindow: () => {},
+      onCloseWindow: () => {},
+    }));
+    assert.equal(all.some((item) => item.role === 'close' || item.role === 'windowMenu'), false, platform);
+    assert.equal(all.some((item) => /^(Command|Control|CommandOrControl)\+W$/.test(item.accelerator ?? '')), false, platform);
+  }
   const linuxCloseWindow = linuxTemplate
     .find((item) => item.label === 'File')
     .submenu.find((item) => item.label === 'Close Window');

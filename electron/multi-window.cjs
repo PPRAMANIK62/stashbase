@@ -83,7 +83,19 @@ function createApplicationMenuTemplate({
         { role: 'togglefullscreen' },
       ],
     },
-    { role: 'windowMenu' },
+    // Not `role: 'windowMenu'`: on Windows and Linux that stock menu quietly
+    // adds a Close item bound to Ctrl+W, which would take the renderer's
+    // close-tab chord and, with one window open, quit the app. The window
+    // menu keeps only what the platform expects from it.
+    {
+      label: 'Window',
+      role: 'window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [{ type: 'separator' }, { role: 'front' }] : []),
+      ],
+    },
     // Help is where both platforms train people to look when they are
     // stuck, and it is the only route out of the app that survives a
     // renderer that has failed to paint. `role: 'help'` matters on macOS:

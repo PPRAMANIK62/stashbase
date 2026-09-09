@@ -65,7 +65,10 @@ after readiness, a save failure or timeout keeps the window open.
   from the exact native handler.
 - macOS may remain alive without a window and recreate one on activation.
   Windows and Linux quit after the final window closes. Platform window
-  accelerators never masquerade as document-tab commands.
+  accelerators never masquerade as document-tab commands: the Window menu is
+  built by hand rather than from the stock `windowMenu` role, whose Close item
+  would bind Cmd/Ctrl+W, and Close Window stays on Cmd+Shift+W or Alt+F4 so
+  the renderer keeps Cmd/Ctrl+W for closing the active document tab.
 - Native Help remains main-process-owned and usable when the renderer cannot
   paint. Website, Community Discord, and Report an Issue open fixed shared URLs
   in the system browser; Report a Bug enters the J09 review flow. These are
