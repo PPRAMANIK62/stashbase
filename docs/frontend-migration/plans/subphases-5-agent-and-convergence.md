@@ -166,14 +166,30 @@ text-only contract with the `Attached files:` suffix both runtimes and history
 replay already read, and a retry resends exactly what went out. Replayed
 history shows the same tiles from the server's preview route.
 
-Known gap: the shared composer offers Send only with text, so a prompt of
-tiles alone cannot be submitted. Mentions are offered only for the selected
-folder's chat; a Library or cross-folder chat validates dropped sources as
-stale until the server resolves them.
+Follow-up (2026-09-09): typing `/` opens the runtime's skill catalog the way
+`@` opens the listing, for a runtime whose capabilities advertise skills. The
+catalog arrives on the session's `skills` event and lives on the session with
+its state. Picking a skill seats one atomic `/label` token at the head of the
+draft and arms the skill for one turn; the token serializes to nothing,
+because the server composes the skill into the wire prompt. Deleting the
+token disarms, a catalog refresh that drops the armed id disarms, a queued
+follow-up snapshots its skill beside its context, and a retry resends the
+same skill. The transcript shows the turn as `/label text`, and a skill with
+an argument hint lends it to the composer as the placeholder. A failed
+catalog reads "Could not load skills." with Retry, which asks the runtime to
+re-read them; an empty one says so, and Enter over an empty skill panel never
+sends. The shared composer gained a sendable-without-text switch, so a skill
+alone or bound tiles alone can be sent.
+
+Known gap: mentions are offered only for the selected folder's chat; a
+Library or cross-folder chat validates dropped sources as stale until the
+server resolves them. A skill catalog arrives only once the session is
+connected, so a chat that has not sent yet lists no skills.
 
 Evidence: focused context domain, session and workspace runtime, context
 adapter, protocol, composer, transcript, file-tree drag, shell composition,
-architecture, typecheck, lint, and web build checks.
+skill catalog domain, runtime, adapter, editor, composer, and shared input
+tests, architecture, typecheck, lint, and web build checks.
 
 ## 51 — Apply Agent document writes and Diffs
 
@@ -212,12 +228,45 @@ leaves the index to the next explicit sync.
 
 Evidence: focused file-change domain, session domain, adapter, runtime, diff
 view, activity, documents query, preparation adapter, protocol, architecture,
-typecheck, lint, and web build checks. J07 E2E evidence stays with the legacy
-renderer until cutover.
+typecheck, lint, and web build checks. The legacy J07 Playwright journey no
+longer runs against the served build; J07 E2E evidence is deferred to
+finalization (see Task 52).
 
 ## 52 — Converge Chat conclusions into documents
 
 **Blocked by:** 51.
 
+**Status:** Complete.
+
+Research: [Chat convergence research](../research/chat-convergence-task-52.md).
+
 Complete J07 by writing explicitly accepted conclusions into ordinary durable
 source documents rather than treating conversation as source truth.
+
+The journey needed no new surface. The split row already keeps the Canvas
+beside the conversation, Task 51's permission card and post-write refresh
+already carry the write, and Task 33's reconcile and conflict decisions
+already keep the source recoverable. Task 52 adds the explicit gesture that
+names the target and proves the chain. Every open document tab is a drag
+source carrying the same payload as a file-tree row, so dropping the Canvas
+tab on the composer binds it as a mention chip through the drop path Task 50
+validates. The shell publishes the open tabs' folder-relative paths beside
+the listing, and the mention ranking places an open document ahead of an
+otherwise equal match and first for an empty `@`; nothing is attached
+without the user's gesture. The shell's clipboard-image guard now recognises
+the CodeMirror composer as a text entry, so an image pasted into the
+composer is no longer also offered as an import. One composition test drives
+a settled Agent write while `Welcome.md` is open and checks that the listing
+refetches, the active tab and focus stay put, the changed-files Open routes
+into the document workflow, a clean editor adopts the newer text, and a
+dirty editor meets the reload, merge, or overwrite decision.
+
+Known gap: the composition test stubs the Milkdown builder, so it proves the
+shell-to-conflict chain rather than the editor's own editing. The legacy J07
+Playwright journey targets selectors the replacement renderer does not have
+and cannot run against the served build; it is rewritten at finalization.
+
+Evidence: focused tab drag, mention ranking, shell composer-focus, and J07
+composition tests; typecheck, lint, architecture, and web build checks.
+Playwright J07, visual, accessibility, and real-runtime Canvas write evidence
+remain deferred to finalization.
