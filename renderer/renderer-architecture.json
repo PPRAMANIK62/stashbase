@@ -32,6 +32,7 @@
     "shared/protocols/electron/runtime.ts",
     "shared/protocols/electron/window-lifecycle.ts",
     "shared/protocols/electron/workspace-session.ts",
+    "shared/protocols/http/agent-context.ts",
     "shared/protocols/http/agent-runtime.ts",
     "shared/protocols/http/agent-sessions.ts",
     "shared/protocols/http/capture.ts",
