@@ -120,7 +120,7 @@ function convertImage(
         const tail = stderr.trim().split('\n').slice(-3).join('\n');
         if (isMissingRapidOcrError(tail)) {
           reject(new Error(
-            'OCR engine is not installed. Run `pnpm setup:python` and restart StashBase; the image still opens, but its text cannot be searched until OCR is available.',
+            'OCR engine is not installed. Run `pnpm setup:python-extract` and restart StashBase; the image still opens, but its text cannot be searched until OCR is available.',
           ));
           return;
         }

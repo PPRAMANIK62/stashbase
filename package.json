@@ -52,6 +52,7 @@
     "build": "pnpm build:web && pnpm build:electron-boundary && pnpm build:server && pnpm build:mcp",
     "build:desktop": "pnpm build && pnpm build:python-sidecar && pnpm build:transcription-sidecar",
     "setup:python": "node scripts/setup-python.mjs",
+    "setup:python-extract": "node scripts/setup-python.mjs --with-extract",
     "test:python": "node scripts/test-python.mjs",
     "test:config": "node --import tsx --test server/app-config.test.ts server/embedding-availability.test.ts server/hosted-account.test.ts server/account-route.test.ts",
     "lint:web": "vp run @stashbase/renderer#lint && pnpm check:renderer-architecture",

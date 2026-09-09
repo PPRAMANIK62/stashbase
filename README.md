@@ -358,6 +358,9 @@ cd stashbase
 pnpm install
 pnpm setup:python
 
+# Optional: local PDF and image OCR extraction from this checkout
+pnpm setup:python-extract
+
 # Build the renderer and run Electron
 pnpm build:web
 pnpm electron
