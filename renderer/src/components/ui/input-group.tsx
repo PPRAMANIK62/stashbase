@@ -102,6 +102,10 @@ interface InputFieldProps extends Omit<
   onChange: (value: string) => void;
   error?: string;
   disabled?: boolean;
+  /** Show the field box at rest as a quiet tint instead of only on hover or
+   *  focus — for a field standing alone inside a settings row, where the
+   *  proximity reveal reads as plain text. */
+  filled?: boolean;
   className?: string;
 }
 
@@ -117,6 +121,7 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
       onChange,
       error,
       disabled,
+      filled = false,
       className,
       ...props
     },
@@ -151,8 +156,15 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
     let ringClass: string;
 
     if (disabled) {
-      bgClass = 'bg-transparent';
+      bgClass = filled ? 'bg-hover' : 'bg-transparent';
       ringClass = 'ring-border';
+    } else if (filled) {
+      bgClass = isActive && !isFocused ? 'bg-active' : 'bg-hover';
+      ringClass = error
+        ? 'ring-destructive/50'
+        : isFocused
+          ? 'ring-[color:var(--focus-ring,#6B97FF)]'
+          : 'ring-transparent';
     } else if (error) {
       bgClass = isFocused ? 'bg-card' : isActive ? 'bg-destructive-light/60' : 'bg-transparent';
       ringClass = isFocused || isActive ? 'ring-destructive/50' : 'ring-transparent';

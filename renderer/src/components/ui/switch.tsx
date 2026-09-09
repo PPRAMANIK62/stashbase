@@ -18,6 +18,9 @@ import { cn } from '@/lib/utils';
 
 interface SwitchProps extends HTMLAttributes<HTMLDivElement> {
   label: string;
+  /** Keep the label for assistive tech but don't render it — for a switch
+   *  sitting in a settings row whose title already names the setting. */
+  labelHidden?: boolean;
   checked: boolean;
   onToggle: () => void;
   disabled?: boolean;
@@ -53,7 +56,17 @@ const DRAG_DEAD_ZONE = 2;
 
 const Switch = forwardRef<HTMLDivElement, SwitchProps>(
   (
-    { label, checked, onToggle, disabled = false, thumbTransition, size, className, ...props },
+    {
+      label,
+      labelHidden = false,
+      checked,
+      onToggle,
+      disabled = false,
+      thumbTransition,
+      size,
+      className,
+      ...props
+    },
     ref,
   ) => {
     const labelId = useId();
@@ -181,8 +194,9 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
         className={cn(
           'relative z-10 flex cursor-pointer touch-none items-center select-none',
           sizeClasses.gap,
-          sizeClasses.px,
-          sizeClasses.variant === 'compact' ? 'py-1' : 'py-2',
+          labelHidden
+            ? 'p-0'
+            : [sizeClasses.px, sizeClasses.variant === 'compact' ? 'py-1' : 'py-2'],
           disabled && 'pointer-events-none opacity-50',
           className,
         )}
@@ -273,6 +287,7 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
             'transition-[color] duration-80 [text-box:trim-both_cap_alphabetic]',
             sizeClasses.text,
             checked ? 'text-foreground' : 'text-muted-foreground',
+            labelHidden && 'sr-only',
           )}
         >
           {label}
