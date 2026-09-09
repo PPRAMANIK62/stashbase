@@ -1,4 +1,8 @@
-import type { WorkspaceSessionPersistence } from '@/features/workspace/application/ports';
+import { SESSION_MESSAGES } from '@/features/workspace/application/failure-messages';
+import {
+  WorkspaceSessionError,
+  type WorkspaceSessionPort,
+} from '@/features/workspace/application/ports';
 import type { WorkspaceSessionSnapshot } from '@/features/workspace/domain/session';
 import {
   workspaceSessionReadResponseSchema,
@@ -31,20 +35,28 @@ function toWire(snapshot: WorkspaceSessionSnapshot): WorkspaceSessionSnapshotWir
   return workspaceSessionSnapshotSchema.parse(snapshot);
 }
 
-export function createWorkspaceSessionPersistence(
+/** The desktop's own sentence names the file it could not touch, so it travels
+ *  as the cause; what a reader would see comes from the workspace ladder. */
+function sessionRefusal(operation: 'load' | 'save', serverMessage: string): WorkspaceSessionError {
+  return new WorkspaceSessionError('unavailable', SESSION_MESSAGES[operation], {
+    cause: new Error(serverMessage),
+  });
+}
+
+export function createWorkspaceSessionAdapter(
   bridge: WorkspaceSessionBridge,
-): WorkspaceSessionPersistence {
+): WorkspaceSessionPort {
   return {
     async load() {
       const response = workspaceSessionReadResponseSchema.parse(await bridge.read());
-      if (!response.ok) throw new Error(response.failure.message);
+      if (!response.ok) throw sessionRefusal('load', response.failure.message);
       return response.session ? toDomain(response.session) : null;
     },
     async save(snapshot) {
       const response = workspaceSessionWriteResponseSchema.parse(
         await bridge.write(toWire(snapshot)),
       );
-      if (!response.ok) throw new Error(response.failure.message);
+      if (!response.ok) throw sessionRefusal('save', response.failure.message);
     },
   };
 }

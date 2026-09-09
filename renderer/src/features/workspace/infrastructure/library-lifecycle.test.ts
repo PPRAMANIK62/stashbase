@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import { LibraryError } from '@/features/workspace/application/ports';
 import type { LibraryLifecycleBridge } from '@/platform/electron/library-lifecycle';
 
-import { createLibraryLifecycle } from './library-lifecycle';
+import { createLibraryLifecycleAdapter } from './library-lifecycle';
 
 function bridge(overrides: Partial<LibraryLifecycleBridge> = {}): LibraryLifecycleBridge {
   return {
@@ -19,7 +19,7 @@ function bridge(overrides: Partial<LibraryLifecycleBridge> = {}): LibraryLifecyc
 describe('library lifecycle adapter', () => {
   it('maps the typed bridge without exposing Electron to the feature', async () => {
     const native = bridge();
-    const lifecycle = createLibraryLifecycle(native);
+    const lifecycle = createLibraryLifecycleAdapter(native);
     const prepare = vi.fn(async () => true);
     const removed = vi.fn();
 
@@ -34,7 +34,7 @@ describe('library lifecycle adapter', () => {
   });
 
   it('retains classified lifecycle failure', async () => {
-    const lifecycle = createLibraryLifecycle(
+    const lifecycle = createLibraryLifecycleAdapter(
       bridge({
         prepareFolderRemoval: vi.fn(async () => ({
           failure: { kind: 'unauthorized' as const, message: 'Window retired.' },

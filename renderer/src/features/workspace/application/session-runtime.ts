@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
-import type { WorkspaceSessionPersistence } from '@/features/workspace/application/ports';
+import type { WorkspaceSessionPort } from '@/features/workspace/application/ports';
 import {
   createWorkspaceSessionSnapshot,
   normalizeWorkspaceSession,
@@ -15,7 +15,7 @@ import {
 } from '@/features/workspace/domain/session';
 import type { WorkspaceState } from '@/features/workspace/domain/workspace';
 
-export interface WorkspaceSessionRuntimeState {
+interface WorkspaceSessionRuntimeState {
   lifecycle: 'active' | 'disposed';
   restoreStatus: 'loading' | 'ready';
   snapshot: WorkspaceSessionSnapshot;
@@ -35,7 +35,7 @@ export interface WorkspaceSessionRuntime {
 }
 
 export function createWorkspaceSessionRuntime(
-  persistence: WorkspaceSessionPersistence,
+  persistence: WorkspaceSessionPort,
 ): WorkspaceSessionRuntime {
   const store = createStore<WorkspaceSessionRuntimeState>(() => ({
     lifecycle: 'active',

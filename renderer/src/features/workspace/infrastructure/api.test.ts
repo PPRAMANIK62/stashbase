@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { HttpClient } from '@/platform/http/client';
 
-import { createLibraryApi } from './api';
+import { createLibraryAdapter } from './api';
 
 describe('library API', () => {
   it('validates and maps library snapshots', async () => {
@@ -18,7 +18,7 @@ describe('library API', () => {
         status: 200,
       })),
     };
-    const api = createLibraryApi(client);
+    const api = createLibraryAdapter(client);
     await expect(api.load(new AbortController().signal)).resolves.toEqual({
       activeFolder: { name: 'Notes', path: '/library/notes' },
       homeDirectory: '/library',
@@ -27,14 +27,14 @@ describe('library API', () => {
   });
 
   it('rejects malformed success and classifies unavailable responses', async () => {
-    const malformed = createLibraryApi({
+    const malformed = createLibraryAdapter({
       request: vi.fn(async () => ({ body: { current: 'wrong' }, status: 200 })),
     });
     await expect(malformed.load(new AbortController().signal)).rejects.toMatchObject({
       kind: 'invalid-response',
     });
 
-    const unavailable = createLibraryApi({
+    const unavailable = createLibraryAdapter({
       request: vi.fn(async () => ({
         body: { code: 'FOLDER_MISSING', error: 'private path detail' },
         status: 400,
@@ -54,7 +54,9 @@ describe('library API', () => {
     };
     const signal = new AbortController().signal;
 
-    await expect(createLibraryApi(client).removeFolder('/library/notes', signal)).resolves.toEqual({
+    await expect(
+      createLibraryAdapter(client).removeFolder('/library/notes', signal),
+    ).resolves.toEqual({
       activeFolder: null,
       homeDirectory: '/library',
       members: [],

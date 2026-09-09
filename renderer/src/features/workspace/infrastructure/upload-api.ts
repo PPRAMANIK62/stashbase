@@ -1,8 +1,5 @@
-import {
-  FilesError,
-  type UploadApi,
-  type UploadOutcome,
-} from '@/features/workspace/application/ports';
+import { FilesError, type UploadPort } from '@/features/workspace/application/ports';
+import { classifyResponse } from '@/platform/http/classify';
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -12,7 +9,10 @@ interface UploadResponseBody {
   error?: unknown;
 }
 
-function mapOutcomes(body: UploadResponseBody | null): UploadOutcome[] {
+/** The route reports a per-file refusal inside an otherwise successful body.
+ *  It becomes a rejection on the files ladder here, so no caller has to
+ *  remember to inspect a resolved result for a failure. */
+function settledPaths(body: UploadResponseBody | null): string[] {
   if (!body || !Array.isArray(body.files)) {
     throw new FilesError('invalid-response', 'The upload returned an invalid response.');
   }
@@ -20,15 +20,18 @@ function mapOutcomes(body: UploadResponseBody | null): UploadOutcome[] {
     if (typeof entry?.file !== 'string') {
       throw new FilesError('invalid-response', 'The upload returned an invalid response.');
     }
-    return typeof entry.error === 'string'
-      ? { error: entry.error, file: entry.file }
-      : { file: entry.file };
+    if (typeof entry.error === 'string') {
+      throw new FilesError('rejected', 'The server refused one of the uploaded files.', {
+        cause: new Error(entry.error),
+      });
+    }
+    return entry.file;
   });
 }
 
 /** Multipart import through `POST /api/upload`. The JSON HTTP client cannot
  *  carry file bodies, so this adapter speaks to the server origin directly. */
-export function createUploadApi(serverOrigin: string, fetchRequest: Fetch = fetch): UploadApi {
+export function createUploadAdapter(serverOrigin: string, fetchRequest: Fetch = fetch): UploadPort {
   const target = new URL('/api/upload', serverOrigin);
   return {
     async upload(folderPath, files, signal) {
@@ -54,17 +57,15 @@ export function createUploadApi(serverOrigin: string, fetchRequest: Fetch = fetc
         body = null;
       }
       if (response.status < 200 || response.status >= 300) {
-        const scopeLost =
-          response.status === 404 ||
-          response.status === 412 ||
-          body?.code === 'FOLDER_NOT_FOUND' ||
-          body?.code === 'NO_FOLDER';
+        // Multipart cannot go through the JSON client, so the shared ladder is
+        // applied here to the status the upload route answered with.
+        const folderGone = body?.code === 'FOLDER_NOT_FOUND' || body?.code === 'NO_FOLDER';
         throw new FilesError(
-          scopeLost ? 'scope-lost' : 'unavailable',
+          folderGone ? 'scope-lost' : classifyResponse({ body, status: response.status }),
           typeof body?.error === 'string' ? body.error : 'The upload failed.',
         );
       }
-      return mapOutcomes(body);
+      return settledPaths(body);
     },
   };
 }

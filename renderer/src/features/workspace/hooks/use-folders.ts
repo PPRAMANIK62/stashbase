@@ -1,14 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
 
 import { addFolder } from '@/features/workspace/application/add-folder';
+import { FOLDER_CHANGE_BLOCKED } from '@/features/workspace/application/failure-messages';
 import { openFolder } from '@/features/workspace/application/open-folder';
 import type {
   FolderPickerOptions,
-  LibraryApi,
-  LibraryFolderPicker,
+  LibraryPort,
+  LibraryFolderPickerPort,
 } from '@/features/workspace/application/ports';
-import { libraryQueryKey } from '@/features/workspace/application/queries';
+import { workspaceQueryKeys } from '@/features/workspace/application/queries';
+import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 
 type FolderRequest =
   | { kind: 'select'; path: string }
@@ -16,80 +17,46 @@ type FolderRequest =
   | { kind: 'create'; options: FolderPickerOptions };
 
 interface FolderOperation {
-  controller: AbortController;
-  generation: number;
   request: FolderRequest;
+  signal: AbortSignal;
 }
 
-interface CurrentFolderOperation {
-  controller: AbortController;
-  generation: number;
-}
-
+/** Folder changes share one lane: asking for a second folder abandons the
+ *  first, and the request that was abandoned is exactly the one whose signal
+ *  is aborted, so a late answer can never overwrite the newer folder. */
 export function useFolders(
-  api: LibraryApi,
-  folderPicker: LibraryFolderPicker,
+  api: LibraryPort,
+  folderPicker: LibraryFolderPickerPort,
   beforeFolderChange: () => Promise<boolean> = async () => true,
 ) {
   const queryClient = useQueryClient();
-  const currentOperation = useRef<CurrentFolderOperation | null>(null);
-  const nextGeneration = useRef(0);
+  const signalFor = useRequestSignals<'folder'>();
   const operation = useMutation({
-    mutationFn: async ({ controller, request }: FolderOperation) => {
+    mutationFn: async ({ request, signal }: FolderOperation) => {
       if (!(await beforeFolderChange())) {
-        return {
-          status: 'failed' as const,
-          message: 'The folder could not be changed because a document could not be saved.',
-        };
+        return { status: 'failed' as const, message: FOLDER_CHANGE_BLOCKED };
       }
-      if (controller.signal.aborted) return { status: 'cancelled' as const };
+      if (signal.aborted) return { status: 'cancelled' as const };
       if (request.kind === 'select') {
-        return openFolder(api, request.path, controller.signal);
+        return openFolder(api, request.path, signal);
       }
       return addFolder(
         folderPicker,
         api,
-        controller.signal,
+        signal,
         request.kind === 'create' ? request.options : undefined,
       );
     },
-    onSettled: (_result, _error, variables) => {
-      if (
-        currentOperation.current?.controller === variables.controller &&
-        currentOperation.current.generation === variables.generation
-      ) {
-        currentOperation.current = null;
-      }
-    },
     onSuccess: (result, variables) => {
-      const current = currentOperation.current;
-      if (
-        !current ||
-        current.controller !== variables.controller ||
-        current.generation !== variables.generation ||
-        variables.controller.signal.aborted
-      ) {
-        return;
-      }
+      if (variables.signal.aborted) return;
       if (result.status === 'opened') {
-        queryClient.setQueryData(libraryQueryKey, result.snapshot);
+        queryClient.setQueryData(workspaceQueryKeys.library, result.snapshot);
       }
     },
   });
 
-  useEffect(
-    () => () => {
-      currentOperation.current?.controller.abort();
-    },
-    [],
-  );
-
   const run = (request: FolderRequest) => {
-    currentOperation.current?.controller.abort();
-    const controller = new AbortController();
-    const generation = ++nextGeneration.current;
-    currentOperation.current = { controller, generation };
-    operation.mutate({ controller, generation, request });
+    operation.mutate({ request, signal: signalFor('folder') });
   };
 
   return {

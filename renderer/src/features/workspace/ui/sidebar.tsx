@@ -1,3 +1,8 @@
+/**
+ * The Library section of the sidebar: the active folder, the chooser over the
+ * folders this window may open, and the removal confirmation. Folder changes
+ * are explicit and pass the document save barrier before anything is released.
+ */
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronsUpDown,
@@ -18,9 +23,9 @@ import {
 import { MenuItem } from '@/components/ui/menu-item';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import type {
-  LibraryApi,
-  LibraryFolderPicker,
-  LibraryLifecycle,
+  LibraryPort,
+  LibraryFolderPickerPort,
+  LibraryLifecyclePort,
 } from '@/features/workspace/application/ports';
 import { libraryQuery } from '@/features/workspace/application/queries';
 import { displayFolderPath, folderName } from '@/features/workspace/domain/library';
@@ -30,12 +35,12 @@ import { useRemoveFolder } from '@/features/workspace/hooks/use-remove-folder';
 import { RemoveFolderDialog } from './remove-folder-dialog';
 
 export interface LibrarySidebarProps {
-  api: LibraryApi;
+  api: LibraryPort;
   /** True when preparation or the AI Index in the active folder needs the user. */
   attention?: boolean;
   beforeFolderChange?: () => Promise<boolean>;
-  folderPicker: LibraryFolderPicker;
-  lifecycle: LibraryLifecycle;
+  folderPicker: LibraryFolderPickerPort;
+  lifecycle: LibraryLifecyclePort;
 }
 
 export function LibrarySidebar({
@@ -60,9 +65,11 @@ export function LibrarySidebar({
         </p>
         <SidebarMenu aria-label="Library recovery" className="mt-1">
           <SidebarMenuItem>
-            <SidebarMenuButton icon={RefreshCw} onClick={() => void library.refetch()}>
-              Retry
-            </SidebarMenuButton>
+            <SidebarMenuButton
+              icon={RefreshCw}
+              label="Retry"
+              onClick={() => void library.refetch()}
+            />
           </SidebarMenuItem>
         </SidebarMenu>
       </div>
@@ -88,8 +95,7 @@ export function LibrarySidebar({
               >
                 <DropdownTrigger
                   render={
-                    <SidebarMenuButton icon={Folder} isActive>
-                      {activeFolder.name}
+                    <SidebarMenuButton icon={Folder} isActive label={activeFolder.name}>
                       {attention && (
                         <span
                           className="ml-1.5 inline-flex size-1.5 shrink-0 rounded-full bg-destructive"
@@ -102,26 +108,20 @@ export function LibrarySidebar({
                     </SidebarMenuButton>
                   }
                 />
-                <DropdownContent
-                  checkedIndex={activeIndex >= 0 ? activeIndex : undefined}
-                  className="w-64"
-                >
+                <DropdownContent className="w-64">
                   {library.data.members.map((member, index) => {
-                    const name = names[index];
+                    const name = folderName(member.path);
                     const duplicate = names.indexOf(name) !== names.lastIndexOf(name);
                     const path = displayFolderPath(member.path, library.data.homeDirectory);
                     return (
                       <MenuItem
                         checked={index === activeIndex}
                         icon={Folder}
-                        index={index}
                         key={member.path}
                         label={duplicate ? `${name} — ${path}` : name}
-                        onSelect={
-                          member.path === activeFolder.path
-                            ? undefined
-                            : () => folders.select(member.path)
-                        }
+                        {...(member.path === activeFolder.path
+                          ? {}
+                          : { onSelect: () => folders.select(member.path) })}
                         trailingAction={{
                           icon: FolderMinus,
                           label: `Remove ${name} from Library`,
@@ -135,15 +135,9 @@ export function LibrarySidebar({
                     );
                   })}
                   <DropdownSeparator />
-                  <MenuItem
-                    icon={FolderOpen}
-                    index={library.data.members.length}
-                    label="Open folder"
-                    onSelect={folders.open}
-                  />
+                  <MenuItem icon={FolderOpen} label="Open folder" onSelect={folders.open} />
                   <MenuItem
                     icon={FolderPlus}
-                    index={library.data.members.length + 1}
                     label="Create folder"
                     onSelect={() => folders.create(library.data.homeDirectory)}
                   />

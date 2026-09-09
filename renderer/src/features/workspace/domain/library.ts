@@ -1,9 +1,11 @@
+import type { TransportFailureKind } from '@/shared/domain/feature-error';
+
 export interface ActiveLibraryFolder {
   name: string;
   path: string;
 }
 
-export interface LibraryMember {
+interface LibraryMember {
   favorite: boolean;
   openedAt: string;
   path: string;
@@ -15,7 +17,9 @@ export interface LibrarySnapshot {
   members: LibraryMember[];
 }
 
-export type LibraryFailureKind = 'invalid-response' | 'scope-lost' | 'unauthorized' | 'unavailable';
+/** The library owns no failures of its own: it meets exactly the shared
+ *  transport ladder. */
+export type LibraryFailureKind = TransportFailureKind;
 
 export function folderName(folderPath: string): string {
   const withoutTrailingSeparators = folderPath.replace(/[\\/]+$/u, '');

@@ -27,17 +27,17 @@ export function FileTreeNameRow({
   selection,
   style,
 }: {
-  caretOffset?: number;
+  caretOffset?: number | undefined;
   icon: LucideIcon;
   initialValue: string;
   label: string;
   level: number;
   onCancel(): void;
   onCommit(name: string): void;
-  placeholder?: string;
+  placeholder?: string | undefined;
   problem: string | null;
   rails?: ReactNode;
-  selection?: { end: number; start: number };
+  selection?: { end: number; start: number } | undefined;
   style: CSSProperties;
 }) {
   const [value, setValue] = useState(initialValue);
@@ -64,8 +64,9 @@ export function FileTreeNameRow({
           aria-invalid={problem !== null || undefined}
           aria-label={label}
           autoComplete="off"
-          caretOffset={caretOffset}
           className="min-w-0 flex-1 text-inherit [font:inherit] placeholder:text-muted-foreground"
+          {...(caretOffset === undefined ? {} : { caretOffset })}
+          {...(selection === undefined ? {} : { selection })}
           onBlur={() => {
             // Leaving an empty field abandons the task; a typed name commits.
             if (trimmed === '' && initialValue === '') onCancel();
@@ -74,7 +75,6 @@ export function FileTreeNameRow({
           onChange={setValue}
           onCommit={() => onCommit(value)}
           placeholder={placeholder}
-          selection={selection}
           spellCheck={false}
           value={value}
         />

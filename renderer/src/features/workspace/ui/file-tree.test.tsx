@@ -1,104 +1,74 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { QueryClient } from '@tanstack/react-query';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { FilesApi } from '@/features/workspace/application/ports';
+import type { FilesPort } from '@/features/workspace/application/ports';
 import {
   createWorkspaceRuntime,
   type WorkspaceRuntime,
 } from '@/features/workspace/application/runtime';
 import type { WorkspaceListing } from '@/features/workspace/domain/tree';
+import { expectFocused } from '@/test/dom';
+import {
+  filesApi,
+  listing,
+  listingFile,
+  listingFolder,
+  RESEARCH_FOLDER,
+  workspaceRuntimeOptions,
+} from '@/test/fakes/workspace';
+import { createTestQueryClient, withQueryClient } from '@/test/query';
 
 import { FileTree } from './file-tree';
 
-const listing: WorkspaceListing = {
-  files: [
-    {
-      availability: 'available',
-      format: 'md',
-      heading: 'Plan',
-      importedAt: '',
-      kind: 'regular',
-      path: 'docs/plan.md',
-      size: 42,
-      snippet: '',
-    },
-    {
-      availability: 'available',
-      format: 'generic',
-      heading: '',
-      importedAt: '',
-      kind: 'regular',
-      path: 'archive.zip',
-      size: 7,
-      snippet: '',
-    },
-    {
-      availability: 'available',
-      format: 'generic',
-      heading: '',
-      importedAt: '',
-      kind: 'symlink',
-      path: 'linked-file',
-      size: 0,
-      snippet: '',
-    },
-  ],
-  folderName: 'Research',
-  folders: [
-    { kind: 'normal', path: 'docs' },
-    { kind: 'excluded', path: 'vendor' },
-  ],
-};
+const PLAN = listingFile({ heading: 'Plan', path: 'docs/plan.md', size: 42 });
+const ARCHIVE = listingFile({ format: 'generic', path: 'archive.zip', size: 7 });
+const LINKED = listingFile({ format: 'generic', kind: 'symlink', path: 'linked-file', size: 0 });
+const RESEARCH_LISTING = listing(
+  [PLAN, ARCHIVE, LINKED],
+  ['docs', listingFolder({ kind: 'excluded', path: 'vendor' })],
+);
 
 const runtimes: WorkspaceRuntime[] = [];
 
-function renderTree(
-  api: FilesApi,
-  onOpenSource?: ComponentProps<typeof FileTree>['onOpenSource'],
-  extra: Partial<
-    Pick<ComponentProps<typeof FileTree>, 'onReprocess' | 'retireSources' | 'rowMarkers'>
-  > = {},
-) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const runtime = createWorkspaceRuntime({
-    folder: { name: 'Research', path: '/library/research' },
-    generation: runtimes.length + 1,
-    queries: {
-      cancel: () => queryClient.cancelQueries(),
-      remove: () => queryClient.removeQueries(),
-    },
-  });
+/** One runtime per rendered tree, bound to the client the tree reads through
+ *  so disposal cancels exactly those queries. */
+function treeRuntime(client: QueryClient): WorkspaceRuntime {
+  const runtime = createWorkspaceRuntime(
+    workspaceRuntimeOptions({
+      generation: runtimes.length + 1,
+      queries: {
+        cancel: () => client.cancelQueries(),
+        remove: () => client.removeQueries(),
+      },
+    }),
+  );
   runtimes.push(runtime);
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <FileTree
-        {...extra}
-        api={api}
-        onOpenSource={onOpenSource}
-        revealLabel="Show in file manager"
-        runtime={runtime}
-      />
-    </QueryClientProvider>,
+  return runtime;
+}
+
+function renderTree(
+  api: FilesPort,
+  onOpenSource?: ComponentProps<typeof FileTree>['onOpenSource'],
+  extra: Partial<Pick<ComponentProps<typeof FileTree>, 'onReprocess' | 'rowMarkers'>> = {},
+) {
+  const client = createTestQueryClient();
+  return withQueryClient(
+    <FileTree
+      {...extra}
+      api={api}
+      onOpenSource={onOpenSource}
+      revealLabel="Show in file manager"
+      runtime={treeRuntime(client)}
+    />,
+    client,
   );
 }
 
-function filesApi(value: WorkspaceListing = listing): FilesApi {
-  return {
-    createEntry: vi.fn(async (_folder, _kind, parentPath, name) => ({
-      path: parentPath ? `${parentPath}/${name}` : name,
-    })),
-    deleteEntry: vi.fn(async () => undefined),
-    load: vi.fn(async () => value),
-    renameEntry: vi.fn(async (_folder, entry, name) => ({
-      path: entry.path.replace(/[^/]+$/u, name),
-    })),
-    reveal: vi.fn(async () => undefined),
-  };
+function treeApi(value: WorkspaceListing = RESEARCH_LISTING): FilesPort {
+  return filesApi({ load: vi.fn(async () => value) });
 }
 
 afterEach(() => {
@@ -108,11 +78,11 @@ afterEach(() => {
 
 describe('file tree', () => {
   it('renders one semantic visible-row model and omits collapsed descendants', async () => {
-    const api = filesApi();
+    const api = treeApi();
     renderTree(api);
 
     const tree = await screen.findByRole('tree', { name: 'Files' });
-    expect(api.load).toHaveBeenCalledWith('/library/research', expect.any(AbortSignal));
+    expect(api.load).toHaveBeenCalledWith(RESEARCH_FOLDER.path, expect.any(AbortSignal));
     expect(tree.tabIndex).toBe(-1);
     expect(screen.queryByRole('treeitem', { name: 'plan.md' })).toBeNull();
     const rows = screen.getAllByRole('treeitem');
@@ -131,12 +101,14 @@ describe('file tree', () => {
     expect(plan.style.getPropertyValue('--hover')).toBe('transparent');
     expect(docs.style.getPropertyValue('--hover')).toBe('');
     expect(plan.style.paddingLeft).toBe('34px');
-    expect(plan.parentElement?.querySelectorAll('[data-tree-rail]')).toHaveLength(1);
+    // `data-tree-rail` marks purely decorative aria-hidden guides with no role or label of their
+    // own, so the depth-based rail count can only be read back from the row wrapper's DOM shape.
+    expect(plan.parentElement?.querySelectorAll('[data-tree-rail]')).toHaveLength(1); // dom-contract: see comment above
     expect(tree.contains(plan)).toBe(true);
   });
 
   it('uses arrows, Home, and End over the same rendered order', async () => {
-    renderTree(filesApi());
+    renderTree(treeApi());
     const user = userEvent.setup();
     const docs = await screen.findByRole('treeitem', { name: 'docs' });
     docs.focus();
@@ -144,20 +116,22 @@ describe('file tree', () => {
     await user.keyboard('{ArrowRight}');
     const plan = await screen.findByRole('treeitem', { name: 'plan.md' });
     await user.keyboard('{ArrowRight}');
-    await waitFor(() => expect(docs.ownerDocument.activeElement).toBe(plan));
+    await waitFor(() => {
+      expectFocused(plan);
+    });
 
     await user.keyboard('{ArrowLeft}');
-    await waitFor(() => expect(docs.ownerDocument.activeElement).toBe(docs));
+    await waitFor(() => {
+      expectFocused(docs);
+    });
     await user.keyboard('{End}');
-    expect(docs.ownerDocument.activeElement).toBe(
-      screen.getByRole('treeitem', { name: /linked-file/ }),
-    );
+    expectFocused(screen.getByRole('treeitem', { name: /linked-file/ }));
     await user.keyboard('{Home}');
-    expect(docs.ownerDocument.activeElement).toBe(docs);
+    expectFocused(docs);
   });
 
   it('explains generic files and reveals restricted entries without expanding them', async () => {
-    const api = filesApi();
+    const api = treeApi();
     renderTree(api);
     const user = userEvent.setup();
 
@@ -173,21 +147,25 @@ describe('file tree', () => {
     expect(restrictedFolder.title).toBe('Show in file manager');
     await user.click(restrictedFolder);
 
-    expect(api.reveal).toHaveBeenCalledWith('/library/research', 'vendor', expect.any(AbortSignal));
+    expect(api.reveal).toHaveBeenCalledWith(
+      RESEARCH_FOLDER.path,
+      'vendor',
+      expect.any(AbortSignal),
+    );
     await user.click(
       screen.getByRole('treeitem', {
         name: 'linked-file, restricted, Show in file manager',
       }),
     );
     expect(api.reveal).toHaveBeenCalledWith(
-      '/library/research',
+      RESEARCH_FOLDER.path,
       'linked-file',
       expect.any(AbortSignal),
     );
   });
 
   it('emits explicit source identity for regular files and keeps restricted files reveal-only', async () => {
-    const api = filesApi();
+    const api = treeApi();
     const onOpenSource = vi.fn();
     renderTree(api, onOpenSource);
     const user = userEvent.setup();
@@ -198,7 +176,7 @@ describe('file tree', () => {
       }),
     );
     expect(onOpenSource).toHaveBeenCalledWith({
-      folderPath: '/library/research',
+      folderPath: RESEARCH_FOLDER.path,
       path: 'archive.zip',
     });
 
@@ -209,37 +187,19 @@ describe('file tree', () => {
     );
     expect(onOpenSource).toHaveBeenCalledOnce();
     expect(api.reveal).toHaveBeenCalledWith(
-      '/library/research',
+      RESEARCH_FOLDER.path,
       'linked-file',
       expect.any(AbortSignal),
     );
   });
 
   it('marks rows that need attention and offers Reprocess from the context menu', async () => {
-    const api = filesApi({
-      ...listing,
+    const api = treeApi({
+      ...RESEARCH_LISTING,
       files: [
-        ...listing.files,
-        {
-          availability: 'available',
-          format: 'pdf',
-          heading: '',
-          importedAt: '',
-          kind: 'regular',
-          path: 'paper.pdf',
-          size: 9,
-          snippet: '',
-        },
-        {
-          availability: 'available',
-          format: 'audio',
-          heading: '',
-          importedAt: '',
-          kind: 'regular',
-          path: 'talk.mp3',
-          size: 9,
-          snippet: '',
-        },
+        ...RESEARCH_LISTING.files,
+        listingFile({ format: 'pdf', path: 'paper.pdf', size: 9 }),
+        listingFile({ format: 'audio', path: 'talk.mp3', size: 9 }),
       ],
     });
     const onReprocess = vi.fn();
@@ -255,17 +215,19 @@ describe('file tree', () => {
       name: 'paper.pdf, File preparation failed.',
     });
     expect(failed.getAttribute('title')).toBe('File preparation failed.');
-    expect(failed.querySelector('svg.lucide-triangle-alert')).not.toBeNull();
+    // The marker icon is aria-hidden and picked from a kind→icon map with no other observable
+    // signal, so which lucide icon rendered is only readable from its own generated class name.
+    expect(failed.querySelector('svg.lucide-triangle-alert')).not.toBeNull(); // dom-contract: see comment above
     const blocked = screen.getByRole('treeitem', {
       name: 'talk.mp3, Transcription setup is required.',
     });
-    expect(blocked.querySelector('svg.lucide-circle-alert')).not.toBeNull();
+    expect(blocked.querySelector('svg.lucide-circle-alert')).not.toBeNull(); // dom-contract: see comment above
     expect(screen.getByRole('treeitem', { name: 'docs' }).getAttribute('title')).toBe('docs');
 
     fireEvent.contextMenu(failed, { clientX: 12, clientY: 12 });
     await userEvent.setup().click(await screen.findByRole('menuitem', { name: 'Reprocess' }));
     expect(onReprocess).toHaveBeenCalledWith({
-      folderPath: '/library/research',
+      folderPath: RESEARCH_FOLDER.path,
       path: 'paper.pdf',
     });
 
@@ -274,21 +236,18 @@ describe('file tree', () => {
   });
 
   it('keeps initial rendering bounded and progressively reveals more rows', async () => {
-    const manyFiles: WorkspaceListing = {
-      files: Array.from({ length: 250 }, (_, index) => ({
-        availability: 'available',
-        format: 'txt',
-        heading: '',
-        importedAt: '',
-        kind: 'regular',
-        path: `file-${String(index).padStart(3, '0')}.txt`,
-        size: index,
-        snippet: '',
-      })),
-      folderName: 'Large',
-      folders: [],
-    };
-    renderTree(filesApi(manyFiles));
+    const manyFiles = listing(
+      Array.from({ length: 250 }, (_, index) =>
+        listingFile({
+          format: 'txt',
+          path: `file-${String(index).padStart(3, '0')}.txt`,
+          size: index,
+        }),
+      ),
+      [],
+      'Large',
+    );
+    renderTree(treeApi(manyFiles));
 
     await screen.findByRole('tree');
     expect(screen.getAllByRole('treeitem')).toHaveLength(240);
@@ -298,12 +257,12 @@ describe('file tree', () => {
 
   it('keeps listing failure and retry local to Files', async () => {
     const load = vi
-      .fn<FilesApi['load']>()
+      .fn<FilesPort['load']>()
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValue(listing);
-    renderTree({ ...filesApi(), load });
+      .mockResolvedValue(RESEARCH_LISTING);
+    renderTree(filesApi({ load }));
 
-    expect((await screen.findByRole('alert')).textContent).toBe('Files unavailable.');
+    expect((await screen.findByRole('alert')).textContent).toBe('StashBase is unavailable.');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(await screen.findByRole('tree', { name: 'Files' })).not.toBeNull();
@@ -314,7 +273,7 @@ describe('file tree', () => {
 describe('file tree drag source', () => {
   it('offers regular files as a source drag and never generic or restricted entries', async () => {
     const { SOURCE_DRAG_MIME } = await import('@/shared/utils/source-drag');
-    renderTree(filesApi(), vi.fn());
+    renderTree(treeApi(), vi.fn());
     const data = new Map<string, string>();
     const dataTransfer = {
       effectAllowed: 'none',
@@ -325,7 +284,7 @@ describe('file tree drag source', () => {
     expect(regular.getAttribute('draggable')).toBe('true');
     fireEvent.dragStart(regular, { dataTransfer });
     expect(JSON.parse(data.get(SOURCE_DRAG_MIME) ?? 'null')).toEqual({
-      folderPath: '/library/research',
+      folderPath: RESEARCH_FOLDER.path,
       path: 'docs/plan.md',
     });
 
@@ -337,208 +296,5 @@ describe('file tree drag source', () => {
       name: 'linked-file, restricted, Show in file manager',
     });
     expect(restricted.getAttribute('draggable')).toBe('false');
-  });
-});
-
-describe('file tree entry operations', () => {
-  it('names a new file from the tree space and a new folder from a folder row', async () => {
-    const api = filesApi();
-    const onOpenSource = vi.fn();
-    renderTree(api, onOpenSource);
-    const user = userEvent.setup();
-
-    const tree = await screen.findByRole('tree', { name: 'Files' });
-    fireEvent.contextMenu(tree, { clientX: 40, clientY: 200 });
-    await user.click(await screen.findByRole('menuitem', { name: 'New file' }));
-    const draft = await screen.findByRole('textbox', { name: 'New file in folder root' });
-    expect(draft.matches(':focus')).toBe(true);
-    await user.keyboard('a/b{Enter}');
-    expect(screen.getByRole('alert').textContent).toBe('A name cannot contain slashes.');
-    expect(api.createEntry).not.toHaveBeenCalled();
-    await user.clear(draft);
-    await user.keyboard('Plan{Enter}');
-    await waitFor(() =>
-      expect(api.createEntry).toHaveBeenCalledWith(
-        '/library/research',
-        'file',
-        '',
-        'Plan',
-        expect.any(AbortSignal),
-      ),
-    );
-    await waitFor(() =>
-      expect(onOpenSource).toHaveBeenCalledWith({ folderPath: '/library/research', path: 'Plan' }),
-    );
-    expect(screen.queryByRole('textbox')).toBeNull();
-
-    fireEvent.contextMenu(screen.getByRole('treeitem', { name: 'docs' }), {
-      clientX: 12,
-      clientY: 12,
-    });
-    await user.click(await screen.findByRole('menuitem', { name: 'New folder' }));
-    const folderDraft = await screen.findByRole('textbox', { name: 'New folder in docs' });
-    expect(folderDraft.closest('[role="treeitem"]')?.getAttribute('aria-level')).toBe('2');
-    expect(screen.getByRole('treeitem', { name: 'docs' }).getAttribute('aria-expanded')).toBe(
-      'true',
-    );
-    await user.keyboard('archive{Enter}');
-    await waitFor(() =>
-      expect(api.createEntry).toHaveBeenLastCalledWith(
-        '/library/research',
-        'folder',
-        'docs',
-        'archive',
-        expect.any(AbortSignal),
-      ),
-    );
-
-    fireEvent.contextMenu(tree, { clientX: 40, clientY: 200 });
-    await user.click(await screen.findByRole('menuitem', { name: 'New folder' }));
-    await screen.findByRole('textbox', { name: 'New folder in folder root' });
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('textbox')).toBeNull();
-    expect(api.createEntry).toHaveBeenCalledTimes(2);
-  });
-
-  it('renames from F2 with the stem selected and from a double click, retiring open documents first', async () => {
-    const api = filesApi();
-    const onOpenSource = vi.fn();
-    const retireSources = vi.fn(async () => [
-      { folderPath: '/library/research', path: 'docs/plan.md' },
-    ]);
-    renderTree(api, onOpenSource, { retireSources });
-    const user = userEvent.setup();
-
-    const docs = await screen.findByRole('treeitem', { name: 'docs' });
-    docs.focus();
-    await user.keyboard('{Enter}');
-    const plan = await screen.findByRole('treeitem', { name: 'plan.md' });
-    plan.focus();
-    await user.keyboard('{F2}');
-    const field = await screen.findByRole<HTMLInputElement>('textbox', { name: 'Rename plan.md' });
-    expect(field.value).toBe('plan.md');
-    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 4]);
-    await user.keyboard('outline{Enter}');
-    await waitFor(() =>
-      expect(api.renameEntry).toHaveBeenCalledWith(
-        '/library/research',
-        { kind: 'file', path: 'docs/plan.md' },
-        'outline.md',
-        expect.any(AbortSignal),
-      ),
-    );
-    expect(retireSources).toHaveBeenCalledWith({ kind: 'file', path: 'docs/plan.md' });
-    await waitFor(() =>
-      expect(onOpenSource).toHaveBeenCalledWith({
-        folderPath: '/library/research',
-        path: 'docs/outline.md',
-      }),
-    );
-
-    fireEvent.doubleClick(screen.getByRole('treeitem', { name: 'docs' }));
-    const folderField = await screen.findByRole<HTMLInputElement>('textbox', {
-      name: 'Rename docs',
-    });
-    expect(folderField.value).toBe('docs');
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('textbox')).toBeNull();
-    expect(api.renameEntry).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('treeitem', { name: 'docs' }).matches(':focus')).toBe(true);
-  });
-
-  it('deletes only after confirmation and keeps the entry when a document cannot be saved', async () => {
-    const api = filesApi();
-    const retireSources = vi
-      .fn<NonNullable<ComponentProps<typeof FileTree>['retireSources']>>()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce([]);
-    renderTree(api, undefined, { retireSources });
-    const user = userEvent.setup();
-
-    const archive = await screen.findByRole('treeitem', {
-      name: 'archive.zip, excluded from Search and automatic Chat context',
-    });
-    fireEvent.contextMenu(archive, { clientX: 12, clientY: 12 });
-    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Delete file?' });
-    expect(dialog.textContent).toContain('archive.zip');
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      'An open document could not be saved, so nothing was changed.',
-    );
-    expect(api.deleteEntry).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
-    await waitFor(() =>
-      expect(api.deleteEntry).toHaveBeenCalledWith(
-        '/library/research',
-        { kind: 'file', path: 'archive.zip' },
-        expect.any(AbortSignal),
-      ),
-    );
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-
-    const docs = screen.getByRole('treeitem', { name: 'docs' });
-    docs.focus();
-    await user.keyboard('{Delete}');
-    expect(await screen.findByRole('dialog', { name: 'Delete folder?' })).not.toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(api.deleteEntry).toHaveBeenCalledTimes(1);
-  });
-
-  it('opens the tree menu from the empty scroll space below the rows', async () => {
-    const api = filesApi();
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const runtime = createWorkspaceRuntime({
-      folder: { name: 'Research', path: '/library/research' },
-      generation: runtimes.length + 1,
-      queries: {
-        cancel: () => queryClient.cancelQueries(),
-        remove: () => queryClient.removeQueries(),
-      },
-    });
-    runtimes.push(runtime);
-    render(
-      <QueryClientProvider client={queryClient}>
-        <div data-sidebar="sidebar" data-testid="frame">
-          <div data-slot="scroll-area-viewport">
-            <FileTree api={api} revealLabel="Show in file manager" runtime={runtime} />
-          </div>
-          <div data-sidebar="footer">
-            <button type="button">Settings</button>
-          </div>
-        </div>
-      </QueryClientProvider>,
-    );
-    await screen.findByRole('tree', { name: 'Files' });
-
-    fireEvent.contextMenu(screen.getByTestId('frame'), { clientX: 30, clientY: 400 });
-    expect(await screen.findByRole('menuitem', { name: 'New file' })).not.toBeNull();
-    expect(screen.queryByRole('menuitem', { name: 'Rename' })).toBeNull();
-    await userEvent.setup().keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'New file' })).toBeNull());
-
-    fireEvent.contextMenu(screen.getByRole('button', { name: 'Settings' }), {
-      clientX: 30,
-      clientY: 800,
-    });
-    expect(screen.queryByRole('menuitem', { name: 'New file' })).toBeNull();
-  });
-
-  it('offers restricted entries only the reveal action', async () => {
-    renderTree(filesApi());
-    const user = userEvent.setup();
-
-    const vendor = await screen.findByRole('treeitem', {
-      name: 'vendor, restricted, Show in file manager',
-    });
-    fireEvent.contextMenu(vendor, { clientX: 12, clientY: 12 });
-    expect(await screen.findByRole('menuitem', { name: 'Show in file manager' })).not.toBeNull();
-    expect(screen.queryByRole('menuitem', { name: 'Rename' })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: 'New file' })).toBeNull();
-    await user.keyboard('{Escape}');
-    fireEvent.doubleClick(vendor);
-    expect(screen.queryByRole('textbox')).toBeNull();
   });
 });

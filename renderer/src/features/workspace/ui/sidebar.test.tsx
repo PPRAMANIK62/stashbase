@@ -1,90 +1,64 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { LibraryApi, LibraryLifecycle } from '@/features/workspace/application/ports';
-import type { LibrarySnapshot } from '@/features/workspace/domain/library';
+import type { LibraryPort } from '@/features/workspace/application/ports';
+import {
+  folderPicker,
+  libraryApi,
+  libraryLifecycle,
+  librarySnapshot,
+  pendingLibraryApi,
+} from '@/test/fakes/workspace';
+import { withQueryClient } from '@/test/query';
 
 import { LibrarySidebar, type LibrarySidebarProps } from './sidebar';
 
-const emptyLibrary: LibrarySnapshot = {
+const emptyLibrary = librarySnapshot({
   activeFolder: null,
   homeDirectory: '/library',
   members: [],
+});
+
+const RESEARCH = { name: 'Research', path: '/library/research' };
+const researchMember = {
+  favorite: false,
+  openedAt: '2026-08-31T12:00:00.000Z',
+  path: RESEARCH.path,
+};
+const activeLibrary = librarySnapshot({
+  ...emptyLibrary,
+  activeFolder: RESEARCH,
+  members: [researchMember],
+});
+
+type SidebarTestProps = Omit<LibrarySidebarProps, 'api' | 'folderPicker' | 'lifecycle'> & {
+  api: Partial<LibraryPort>;
+  folderPicker?: LibrarySidebarProps['folderPicker'];
+  lifecycle?: LibrarySidebarProps['lifecycle'];
 };
 
-type SidebarTestProps = Omit<LibrarySidebarProps, 'api' | 'lifecycle'> & {
-  api: Omit<LibraryApi, 'removeFolder'> & Partial<Pick<LibraryApi, 'removeFolder'>>;
-  lifecycle?: LibraryLifecycle;
-};
-
-function lifecycle(): LibraryLifecycle {
-  return {
-    notifyFolderRemoved: vi.fn(async () => undefined),
-    onFolderRemoved: vi.fn(() => () => undefined),
-    onPrepareFolderRemoval: vi.fn(() => () => undefined),
-    prepareFolderRemoval: vi.fn(async () => true),
-    setActiveFolder: vi.fn(async () => undefined),
-  };
-}
-
-function renderLibrary({ api, lifecycle: lifecycleOverride, ...props }: SidebarTestProps) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <LibrarySidebar
-        {...props}
-        api={{ removeFolder: vi.fn(), ...api }}
-        lifecycle={lifecycleOverride ?? lifecycle()}
-      />
-    </QueryClientProvider>,
+function renderLibrary({ api, folderPicker: picker, lifecycle, ...props }: SidebarTestProps) {
+  return withQueryClient(
+    <LibrarySidebar
+      {...props}
+      api={libraryApi(api)}
+      folderPicker={picker ?? folderPicker()}
+      lifecycle={lifecycle ?? libraryLifecycle()}
+    />,
   );
 }
 
+afterEach(cleanup);
+
 describe('library sidebar', () => {
-  beforeEach(() => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn().mockReturnValue({
-        addEventListener: vi.fn(),
-        matches: false,
-        media: '',
-        removeEventListener: vi.fn(),
-      }),
-    );
-  });
-
-  afterEach(() => {
-    cleanup();
-    vi.unstubAllGlobals();
-  });
-
   it('does not claim the library is empty before membership resolves', () => {
-    renderLibrary({
-      folderPicker: { chooseFolder: vi.fn() },
-      api: {
-        load: () => new Promise(() => {}),
-        openFolder: vi.fn(),
-      },
-    });
+    renderLibrary({ api: pendingLibraryApi() });
     expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('renders the authoritative active folder', async () => {
-    const activeLibrary: LibrarySnapshot = {
-      ...emptyLibrary,
-      activeFolder: { name: 'Research', path: '/library/research' },
-      members: [
-        { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/library/research' },
-      ],
-    };
-    renderLibrary({
-      folderPicker: { chooseFolder: vi.fn() },
-      api: { load: vi.fn(async () => activeLibrary), openFolder: vi.fn() },
-    });
+    renderLibrary({ api: { load: vi.fn(async () => activeLibrary) } });
 
     expect(
       (await screen.findByRole('button', { name: 'Research' })).getAttribute('aria-current'),
@@ -92,32 +66,20 @@ describe('library sidebar', () => {
   });
 
   it('adds a non-color attention cue to the active folder when asked', async () => {
-    const activeLibrary: LibrarySnapshot = {
-      ...emptyLibrary,
-      activeFolder: { name: 'Research', path: '/library/research' },
-      members: [
-        { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/library/research' },
-      ],
-    };
-    renderLibrary({
-      attention: true,
-      folderPicker: { chooseFolder: vi.fn() },
-      api: { load: vi.fn(async () => activeLibrary), openFolder: vi.fn() },
-    });
+    renderLibrary({ attention: true, api: { load: vi.fn(async () => activeLibrary) } });
 
     const button = await screen.findByRole('button', { name: 'Research Needs attention' });
-    expect(button.querySelector('[data-folder-attention]')).not.toBeNull();
+    // The accessible name above already proves the sr-only cue; `data-folder-attention` marks the
+    // separate visual dot, which carries no role or label of its own to query instead.
+    expect(button.querySelector('[data-folder-attention]')).not.toBeNull(); // dom-contract: see comment above
   });
 
   it('exposes local retry after membership failure', async () => {
     const load = vi
-      .fn<() => Promise<LibrarySnapshot>>()
+      .fn<LibraryPort['load']>()
       .mockRejectedValueOnce(new Error('server offline'))
       .mockResolvedValue(emptyLibrary);
-    renderLibrary({
-      folderPicker: { chooseFolder: vi.fn() },
-      api: { load, openFolder: vi.fn() },
-    });
+    renderLibrary({ api: { load } });
 
     expect((await screen.findByRole('alert')).textContent).toContain('Library unavailable.');
     const user = userEvent.setup();
@@ -128,38 +90,32 @@ describe('library sidebar', () => {
 
   it('does not represent an inactive member as the active folder', async () => {
     renderLibrary({
-      folderPicker: { chooseFolder: vi.fn() },
       api: {
-        load: vi.fn(async () => ({
-          ...emptyLibrary,
-          members: [
-            { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/library/notes' },
-          ],
-        })),
-        openFolder: vi.fn(),
+        load: vi.fn(async () =>
+          librarySnapshot({
+            ...emptyLibrary,
+            members: [{ ...researchMember, path: '/library/notes' }],
+          }),
+        ),
       },
     });
     await waitFor(() => expect(screen.queryByRole('button')).toBeNull());
   });
 
   it('lists every member from the scoped query and selects another folder', async () => {
-    const activeLibrary: LibrarySnapshot = {
-      ...emptyLibrary,
-      activeFolder: { name: 'Research', path: '/library/research' },
+    const listed = librarySnapshot({
+      ...activeLibrary,
       members: [
-        { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/library/research' },
+        researchMember,
         { favorite: false, openedAt: '2026-08-30T12:00:00.000Z', path: '/library/notes' },
       ],
-    };
-    const selectedLibrary: LibrarySnapshot = {
-      ...activeLibrary,
-      activeFolder: { name: 'notes', path: '/library/notes' },
-    };
-    const openFolder = vi.fn(async () => selectedLibrary);
-    renderLibrary({
-      folderPicker: { chooseFolder: vi.fn() },
-      api: { load: vi.fn(async () => activeLibrary), openFolder },
     });
+    const selectedLibrary = librarySnapshot({
+      ...listed,
+      activeFolder: { name: 'notes', path: '/library/notes' },
+    });
+    const openFolder = vi.fn(async () => selectedLibrary);
+    renderLibrary({ api: { load: vi.fn(async () => listed), openFolder } });
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Research' }));
@@ -172,29 +128,22 @@ describe('library sidebar', () => {
   });
 
   it('adds a subsequent folder from the active-folder chooser', async () => {
-    const activeLibrary: LibrarySnapshot = {
-      ...emptyLibrary,
-      activeFolder: { name: 'Research', path: '/library/research' },
-      members: [
-        { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/library/research' },
-      ],
-    };
-    const addedLibrary: LibrarySnapshot = {
+    const addedLibrary = librarySnapshot({
       ...activeLibrary,
       activeFolder: { name: 'Writing', path: '/library/writing' },
       members: [
         { favorite: false, openedAt: '2026-08-31T12:05:00.000Z', path: '/library/writing' },
         ...activeLibrary.members,
       ],
-    };
+    });
     const chooseFolder = vi.fn(async () => ({
       status: 'selected' as const,
       folderPath: '/library/writing',
     }));
     const openFolder = vi.fn(async () => addedLibrary);
     renderLibrary({
-      folderPicker: { chooseFolder },
       api: { load: vi.fn(async () => activeLibrary), openFolder },
+      folderPicker: folderPicker({ chooseFolder }),
     });
 
     const user = userEvent.setup();
@@ -207,36 +156,22 @@ describe('library sidebar', () => {
   });
 
   it('uses a trailing folder action and confirms the complete retained path', async () => {
-    const activeLibrary: LibrarySnapshot = {
+    const homeLibrary = librarySnapshot({
       activeFolder: { name: 'Research', path: '/home/person/Research' },
       homeDirectory: '/home/person',
       members: [
-        {
-          favorite: false,
-          openedAt: '2026-08-31T12:00:00.000Z',
-          path: '/home/person/Research',
-        },
-        {
-          favorite: false,
-          openedAt: '2026-08-30T12:00:00.000Z',
-          path: '/home/person/Notes',
-        },
+        { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/home/person/Research' },
+        { favorite: false, openedAt: '2026-08-30T12:00:00.000Z', path: '/home/person/Notes' },
       ],
-    };
-    const removeFolder = vi.fn(async () => ({
-      ...activeLibrary,
-      members: activeLibrary.members.slice(0, 1),
-    }));
+    });
+    const removeFolder = vi.fn(async () =>
+      librarySnapshot({ ...homeLibrary, members: homeLibrary.members.slice(0, 1) }),
+    );
     const prepareFolderRemoval = vi.fn(async () => true);
     const notifyFolderRemoved = vi.fn(async () => undefined);
     renderLibrary({
-      folderPicker: { chooseFolder: vi.fn() },
-      api: { load: vi.fn(async () => activeLibrary), openFolder: vi.fn(), removeFolder },
-      lifecycle: {
-        ...lifecycle(),
-        notifyFolderRemoved,
-        prepareFolderRemoval,
-      },
+      api: { load: vi.fn(async () => homeLibrary), removeFolder },
+      lifecycle: libraryLifecycle({ notifyFolderRemoved, prepareFolderRemoval }),
     });
 
     const user = userEvent.setup();

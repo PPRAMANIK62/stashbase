@@ -31,24 +31,53 @@ describe('Workspace runtime', () => {
         generation: 7,
       },
     });
-    expect(runtime.accept(runtime.scope, completion)).toBe(true);
+    expect(runtime.accept(runtime.capture(), completion)).toBe(true);
     expect(completion).toHaveBeenCalledOnce();
+    expect(runtime.capture().scope).toBe(runtime.scope);
 
+    const captured = runtime.capture();
     expect(
       runtime.accept(
-        { folder: runtime.scope.folder, generation: runtime.scope.generation - 1 },
+        {
+          ...captured,
+          scope: { folder: runtime.scope.folder, generation: runtime.scope.generation - 1 },
+        },
         completion,
       ),
     ).toBe(false);
     expect(
       runtime.accept(
         {
-          folder: { name: 'Writing', path: '/library/writing' },
-          generation: runtime.scope.generation,
+          ...captured,
+          scope: {
+            folder: { name: 'Writing', path: '/library/writing' },
+            generation: runtime.scope.generation,
+          },
         },
         completion,
       ),
     ).toBe(false);
+    expect(completion).toHaveBeenCalledOnce();
+  });
+
+  it('refuses a completion for work retired while it was in flight', () => {
+    const runtime = createWorkspaceRuntime({
+      folder: { name: 'Notes', path: '/library/notes' },
+      generation: 1,
+      queries: { cancel: vi.fn(async () => undefined), remove: vi.fn() },
+    });
+    // Captured while the folder was open, the way an async operation takes it
+    // before its first await.
+    const captured = runtime.capture();
+    const completion = vi.fn();
+
+    runtime.retireOperations();
+
+    expect(runtime.accept(captured, completion)).toBe(false);
+    expect(completion).not.toHaveBeenCalled();
+    // The folder itself is still open, so work started after the retirement
+    // still lands.
+    expect(runtime.accept(runtime.capture(), completion)).toBe(true);
     expect(completion).toHaveBeenCalledOnce();
   });
 
@@ -59,7 +88,9 @@ describe('Workspace runtime', () => {
       generation: 1,
       queries,
     });
-    const capturedScope = runtime.scope;
+    // Captured while the folder was open, the way an async operation takes it
+    // before its first await.
+    const capturedScope = runtime.capture();
     const lateCompletion = vi.fn();
 
     runtime.dispose();

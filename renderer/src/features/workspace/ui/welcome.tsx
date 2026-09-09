@@ -2,15 +2,17 @@ import { useQuery } from '@tanstack/react-query';
 import { Folder, FolderOpen, FolderPlus, LoaderCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { LibraryApi, LibraryFolderPicker } from '@/features/workspace/application/ports';
+import type { LibraryPort, LibraryFolderPickerPort } from '@/features/workspace/application/ports';
 import { libraryQuery } from '@/features/workspace/application/queries';
 import { displayFolderPath, folderName } from '@/features/workspace/domain/library';
 import { useFolders } from '@/features/workspace/hooks/use-folders';
+import { focusRing } from '@/lib/focus-ring';
+import { cn } from '@/lib/utils';
 import { Logo } from '@/shared/brand/logo';
 
 export interface LibraryWelcomeProps {
-  api: LibraryApi;
-  folderPicker: LibraryFolderPicker;
+  api: LibraryPort;
+  folderPicker: LibraryFolderPickerPort;
   isRestoringSession?: boolean;
 }
 
@@ -60,7 +62,10 @@ export function LibraryWelcome({
               return (
                 <li key={member.path}>
                   <button
-                    className="group flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-left transition-colors duration-80 outline-none hover:bg-hover focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)] disabled:pointer-events-none disabled:opacity-50"
+                    className={cn(
+                      'group flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-left transition-colors duration-fast outline-none hover:bg-hover disabled:pointer-events-none disabled:opacity-50',
+                      focusRing(),
+                    )}
                     disabled={folders.isPending}
                     onClick={() => folders.select(member.path)}
                     title={member.path}
@@ -68,7 +73,7 @@ export function LibraryWelcome({
                   >
                     <Folder
                       aria-hidden="true"
-                      className="size-4 shrink-0 text-muted-foreground transition-[color,stroke-width] duration-80 group-hover:stroke-2 group-hover:text-foreground"
+                      className="size-4 shrink-0 text-muted-foreground transition-[color,stroke-width] duration-fast group-hover:stroke-2 group-hover:text-foreground"
                       strokeWidth={1.5}
                     />
                     <span className="min-w-0 flex-1">

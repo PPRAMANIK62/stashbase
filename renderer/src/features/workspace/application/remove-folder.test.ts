@@ -1,35 +1,17 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { LibrarySnapshot } from '@/features/workspace/domain/library';
+import {
+  libraryApi as api,
+  libraryLifecycle as lifecycle,
+  librarySnapshot,
+} from '@/test/fakes/workspace';
 
-import { LibraryError, type LibraryApi, type LibraryLifecycle } from './ports';
+import { libraryFailureMessage } from './failure-messages';
+import { LibraryError } from './ports';
 import { removeFolder } from './remove-folder';
 
-const removed: LibrarySnapshot = {
-  activeFolder: null,
-  homeDirectory: '/library',
-  members: [],
-};
-
-function api(overrides: Partial<LibraryApi> = {}): LibraryApi {
-  return {
-    load: vi.fn(),
-    openFolder: vi.fn(),
-    removeFolder: vi.fn(async () => removed),
-    ...overrides,
-  };
-}
-
-function lifecycle(overrides: Partial<LibraryLifecycle> = {}): LibraryLifecycle {
-  return {
-    notifyFolderRemoved: vi.fn(async () => undefined),
-    onFolderRemoved: vi.fn(() => () => undefined),
-    onPrepareFolderRemoval: vi.fn(() => () => undefined),
-    prepareFolderRemoval: vi.fn(async () => true),
-    setActiveFolder: vi.fn(async () => undefined),
-    ...overrides,
-  };
-}
+/** What the fake library reports after an authoritative removal. */
+const removed = librarySnapshot({ activeFolder: null, members: [] });
 
 describe('remove library folder', () => {
   it('crosses window release before the authoritative removal and notification', async () => {
@@ -72,12 +54,15 @@ describe('remove library folder', () => {
   it('keeps classified server failure local and reports notification lag after commit', async () => {
     const failedApi = api({
       removeFolder: vi.fn(async () => {
-        throw new LibraryError('unavailable', 'Removal is unavailable.');
+        throw new LibraryError('unavailable', 'HTTP 503 from /api/library');
       }),
     });
     await expect(
       removeFolder(failedApi, lifecycle(), '/library/notes', new AbortController().signal),
-    ).resolves.toEqual({ status: 'failed', message: 'Removal is unavailable.' });
+    ).resolves.toEqual({
+      status: 'failed',
+      message: libraryFailureMessage('unavailable', 'removed'),
+    });
 
     await expect(
       removeFolder(

@@ -11,6 +11,7 @@ import {
 import { useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 
 import type { WorkspaceEntry } from '@/features/workspace/domain/tree';
+import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
@@ -127,7 +128,7 @@ export function FileTreeMenu({
                 <ContextMenu.Item
                   className={cn(
                     'flex h-7 cursor-pointer items-center gap-2 px-2 text-[12px] outline-none',
-                    'focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)] data-[highlighted]:bg-hover',
+                    focusRing('data-[highlighted]:bg-hover'),
                     row.destructive && 'text-destructive',
                     shape.bg,
                   )}

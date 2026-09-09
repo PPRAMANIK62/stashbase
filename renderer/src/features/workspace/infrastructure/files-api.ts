@@ -1,6 +1,18 @@
-import { FilesError, type FilesApi } from '@/features/workspace/application/ports';
+/**
+ * The files transport. Beyond the shared ladder these routes can refuse a
+ * mutation two ways the listing never meets — a name already taken and a name
+ * the server rejects — and they report a folder that moved under an open
+ * window as a 409, so scope loss is read from the body as well as the status.
+ */
+import { FilesError, type FilesPort } from '@/features/workspace/application/ports';
 import { joinTreePath, type WorkspaceListing } from '@/features/workspace/domain/tree';
-import type { HttpClient, HttpResponse } from '@/platform/http/client';
+import {
+  request,
+  type ResponseSchema,
+  type TransportFailure,
+  type TransportRequest,
+} from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import {
   workspaceCreateEntryRequestSchema,
   workspaceDeleteEntryResponseSchema,
@@ -34,7 +46,10 @@ function mapListing(listing: WorkspaceFilesWire): WorkspaceListing {
   };
 }
 
-function operationError(response: HttpResponse): FilesError {
+/** The files routes answer with a wider ladder than the shared one: a folder
+ *  that moved under an open window (409 FOLDER_CHANGED), a name already taken,
+ *  and a name the server refuses outright. */
+function operationFailure({ response, serverMessage }: TransportFailure): FilesError {
   const failure = workspaceFailureSchema.safeParse(response.body);
   const folderChanged =
     response.status === 409 && failure.success && failure.data.code === 'FOLDER_CHANGED';
@@ -65,166 +80,148 @@ function operationError(response: HttpResponse): FilesError {
           : rejected
             ? 'That name cannot be used.'
             : 'The files are unavailable.',
-    failure.success ? { cause: new Error(failure.data.error) } : undefined,
+    serverMessage === null ? undefined : { cause: new Error(serverMessage) },
   );
 }
 
-function encodePath(entryPath: string): string {
-  return entryPath.split('/').map(encodeURIComponent).join('/');
+function encodePath(relativePath: string): string {
+  return relativePath.split('/').map(encodeURIComponent).join('/');
 }
 
 function folderQuery(folderPath: string): string {
   return new URLSearchParams({ folder: folderPath }).toString();
 }
 
-/** Sends one mutation, mapping transport failure, refusal, and a malformed
- *  success body onto the files failure ladder. */
-async function mutate<Result>(
-  client: HttpClient,
-  request: { body?: unknown; method: 'POST' | 'PATCH' | 'DELETE'; path: string },
+/** One files call: the shared envelope plus the files failure ladder. */
+function files(
+  path: string,
   signal: AbortSignal,
-  parse: (body: unknown) => Result | null,
   messages: { invalid: string; unavailable: string },
-): Promise<Result> {
-  let response: HttpResponse;
-  try {
-    response = await client.request({ ...request, signal });
-  } catch (error) {
-    if (signal.aborted) throw error;
-    throw new FilesError('unavailable', messages.unavailable, { cause: error });
-  }
-  if (response.status < 200 || response.status >= 300) throw operationError(response);
-  const result = parse(response.body);
-  if (result === null) throw new FilesError('invalid-response', messages.invalid);
-  return result;
+  extra?: { body?: unknown; method?: TransportRequest['method'] },
+): TransportRequest<'conflict' | 'rejected'> {
+  return {
+    ...(extra?.body === undefined ? {} : { body: extra.body }),
+    error: FilesError,
+    failure: operationFailure,
+    failureSchema: workspaceFailureSchema,
+    messages: { 'invalid-response': messages.invalid, unavailable: messages.unavailable },
+    ...(extra?.method === undefined ? {} : { method: extra.method }),
+    path,
+    signal,
+  };
 }
 
-function entryPath(body: unknown): { path: string } | null {
-  const parsed = workspaceEntryPathResponseSchema.safeParse(body);
-  const path: string | undefined = parsed.success
-    ? (parsed.data.name ?? parsed.data.path)
-    : undefined;
-  return path === undefined ? null : { path };
-}
+/** The server settles a created or renamed entry's own path, and answers with
+ *  it under either key. */
+const entryPathSchema: ResponseSchema<{ path: string }> = {
+  safeParse(input) {
+    const parsed = workspaceEntryPathResponseSchema.safeParse(input);
+    const path = parsed.success ? (parsed.data.name ?? parsed.data.path) : undefined;
+    return path === undefined ? { success: false } : { success: true, data: { path } };
+  },
+};
 
-export function createFilesApi(client: HttpClient): FilesApi {
+export function createFilesAdapter(client: HttpClient): FilesPort {
   return {
     async load(folderPath, signal) {
-      const query = new URLSearchParams({ folder: folderPath });
-      let response: HttpResponse;
-      try {
-        response = await client.request({ path: `/api/files?${query}`, signal });
-      } catch (error) {
-        if (signal.aborted) throw error;
-        throw new FilesError('unavailable', 'The files are unavailable.', { cause: error });
-      }
-      if (response.status < 200 || response.status >= 300) throw operationError(response);
-      const listing = workspaceFilesSchema.safeParse(response.body);
-      if (!listing.success) {
-        throw new FilesError('invalid-response', 'The folder returned an invalid file listing.');
-      }
-      return mapListing(listing.data);
+      return mapListing(
+        await request(client, {
+          ...files(`/api/files?${folderQuery(folderPath)}`, signal, {
+            invalid: 'The folder returned an invalid file listing.',
+            unavailable: 'The files are unavailable.',
+          }),
+          schema: workspaceFilesSchema,
+        }),
+      );
     },
-    async reveal(folderPath, entryPath, signal) {
-      const request = workspaceRevealRequestSchema.safeParse({ folderPath, path: entryPath });
-      if (!request.success) {
-        throw new FilesError('unavailable', 'The item identity is invalid.');
-      }
-      const query = new URLSearchParams({ folder: request.data.folderPath });
-      let response: HttpResponse;
-      try {
-        response = await client.request({
-          method: 'POST',
-          path: `/api/reveal/${encodePath(request.data.path)}?${query}`,
+    async reveal(folderPath, targetPath, signal) {
+      const reveal = workspaceRevealRequestSchema.safeParse({ folderPath, path: targetPath });
+      if (!reveal.success) throw new FilesError('unavailable', 'The item identity is invalid.');
+      await request(client, {
+        ...files(
+          `/api/reveal/${encodePath(reveal.data.path)}?${folderQuery(reveal.data.folderPath)}`,
           signal,
-        });
-      } catch (error) {
-        if (signal.aborted) throw error;
-        throw new FilesError('unavailable', 'The item could not be shown.', { cause: error });
-      }
-      if (response.status < 200 || response.status >= 300) throw operationError(response);
-      if (!workspaceRevealResponseSchema.safeParse(response.body).success) {
-        throw new FilesError(
-          'invalid-response',
-          'The reveal operation returned an invalid response.',
-        );
-      }
+          {
+            invalid: 'The reveal operation returned an invalid response.',
+            unavailable: 'The item could not be shown.',
+          },
+          { method: 'POST' },
+        ),
+        schema: workspaceRevealResponseSchema,
+      });
     },
     async createEntry(folderPath, kind, parentPath, name, signal) {
-      const request = workspaceCreateEntryRequestSchema.safeParse({
+      const create = workspaceCreateEntryRequestSchema.safeParse({
         folderPath,
         kind,
         name,
         parentPath,
       });
-      if (!request.success) throw new FilesError('rejected', 'That name cannot be used.');
-      const { data } = request;
-      return mutate(
-        client,
-        data.kind === 'file'
-          ? {
-              body: { dir: data.parentPath, name: data.name },
-              method: 'POST',
-              path: `/api/files?${folderQuery(data.folderPath)}`,
-            }
-          : {
-              body: { path: joinTreePath(data.parentPath, data.name) },
-              method: 'POST',
-              path: `/api/folders?${folderQuery(data.folderPath)}`,
-            },
-        signal,
-        entryPath,
-        {
-          invalid: 'The create operation returned an invalid response.',
-          unavailable: `The ${data.kind} could not be created.`,
-        },
-      );
+      if (!create.success) throw new FilesError('rejected', 'That name cannot be used.');
+      const { data } = create;
+      return request(client, {
+        ...files(
+          data.kind === 'file'
+            ? `/api/files?${folderQuery(data.folderPath)}`
+            : `/api/folders?${folderQuery(data.folderPath)}`,
+          signal,
+          {
+            invalid: 'The create operation returned an invalid response.',
+            unavailable: `The ${data.kind} could not be created.`,
+          },
+          {
+            body:
+              data.kind === 'file'
+                ? { dir: data.parentPath, name: data.name }
+                : { path: joinTreePath(data.parentPath, data.name) },
+            method: 'POST',
+          },
+        ),
+        schema: entryPathSchema,
+      });
     },
     async renameEntry(folderPath, entry, name, signal) {
-      const request = workspaceRenameEntryRequestSchema.safeParse({
+      const rename = workspaceRenameEntryRequestSchema.safeParse({
         folderPath,
         kind: entry.kind,
         name,
         path: entry.path,
       });
-      if (!request.success) throw new FilesError('rejected', 'That name cannot be used.');
-      const { data } = request;
-      return mutate(
-        client,
-        {
-          body: { new_name: data.name },
-          method: 'PATCH',
-          path: `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePath(data.path)}?${folderQuery(data.folderPath)}`,
-        },
-        signal,
-        entryPath,
-        {
-          invalid: 'The rename operation returned an invalid response.',
-          unavailable: `The ${data.kind} could not be renamed.`,
-        },
-      );
+      if (!rename.success) throw new FilesError('rejected', 'That name cannot be used.');
+      const { data } = rename;
+      return request(client, {
+        ...files(
+          `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePath(data.path)}?${folderQuery(data.folderPath)}`,
+          signal,
+          {
+            invalid: 'The rename operation returned an invalid response.',
+            unavailable: `The ${data.kind} could not be renamed.`,
+          },
+          { body: { new_name: data.name }, method: 'PATCH' },
+        ),
+        schema: entryPathSchema,
+      });
     },
     async deleteEntry(folderPath, entry, signal) {
-      const request = workspaceEntryRequestSchema.safeParse({
+      const remove = workspaceEntryRequestSchema.safeParse({
         folderPath,
         kind: entry.kind,
         path: entry.path,
       });
-      if (!request.success) throw new FilesError('rejected', 'The item identity is invalid.');
-      const { data } = request;
-      await mutate(
-        client,
-        {
-          method: 'DELETE',
-          path: `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePath(data.path)}?${folderQuery(data.folderPath)}`,
-        },
-        signal,
-        (body) => (workspaceDeleteEntryResponseSchema.safeParse(body).success ? {} : null),
-        {
-          invalid: 'The delete operation returned an invalid response.',
-          unavailable: `The ${data.kind} could not be deleted.`,
-        },
-      );
+      if (!remove.success) throw new FilesError('rejected', 'The item identity is invalid.');
+      const { data } = remove;
+      await request(client, {
+        ...files(
+          `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePath(data.path)}?${folderQuery(data.folderPath)}`,
+          signal,
+          {
+            invalid: 'The delete operation returned an invalid response.',
+            unavailable: `The ${data.kind} could not be deleted.`,
+          },
+          { method: 'DELETE' },
+        ),
+        schema: workspaceDeleteEntryResponseSchema,
+      });
     },
   };
 }

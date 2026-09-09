@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { HttpClient } from '@/platform/http/client';
+import { listing, listingFile } from '@/test/fakes/workspace';
 
-import { createFilesApi } from './files-api';
+import { createFilesAdapter } from './files-api';
 
 describe('files API', () => {
   it('requests the explicit folder and maps validated defaults', async () => {
@@ -27,22 +28,20 @@ describe('files API', () => {
     };
     const signal = new AbortController().signal;
 
-    await expect(createFilesApi(client).load('/library/research', signal)).resolves.toEqual({
-      files: [
-        {
-          availability: 'available',
-          format: 'md',
-          heading: 'Plan',
-          importedAt: '2026-09-01T00:00:00.000Z',
-          kind: 'regular',
-          path: 'notes/plan.md',
-          size: 42,
-          snippet: 'First step',
-        },
-      ],
-      folderName: 'Research',
-      folders: [{ kind: 'normal', path: 'notes' }],
-    });
+    await expect(createFilesAdapter(client).load('/library/research', signal)).resolves.toEqual(
+      listing(
+        [
+          listingFile({
+            heading: 'Plan',
+            importedAt: '2026-09-01T00:00:00.000Z',
+            path: 'notes/plan.md',
+            size: 42,
+            snippet: 'First step',
+          }),
+        ],
+        ['notes'],
+      ),
+    );
     expect(client.request).toHaveBeenCalledWith({
       path: '/api/files?folder=%2Flibrary%2Fresearch',
       signal,
@@ -50,7 +49,7 @@ describe('files API', () => {
   });
 
   it('rejects malformed success responses at the adapter boundary', async () => {
-    const api = createFilesApi({
+    const api = createFilesAdapter({
       request: vi.fn(async () => ({ body: { files: [], folder: 'Notes' }, status: 200 })),
     });
 
@@ -65,7 +64,7 @@ describe('files API', () => {
     };
     const signal = new AbortController().signal;
 
-    await createFilesApi(client).reveal('/library/notes', 'drafts/a #1.md', signal);
+    await createFilesAdapter(client).reveal('/library/notes', 'drafts/a #1.md', signal);
 
     expect(client.request).toHaveBeenCalledWith({
       method: 'POST',
@@ -78,13 +77,13 @@ describe('files API', () => {
     const client: HttpClient = { request: vi.fn() };
 
     await expect(
-      createFilesApi(client).reveal('', 'drafts/plan.md', new AbortController().signal),
+      createFilesAdapter(client).reveal('', 'drafts/plan.md', new AbortController().signal),
     ).rejects.toMatchObject({ kind: 'unavailable', message: 'The item identity is invalid.' });
     expect(client.request).not.toHaveBeenCalled();
   });
 
   it('classifies a cleared window context as scope loss', async () => {
-    const api = createFilesApi({
+    const api = createFilesAdapter({
       request: vi.fn(async () => ({
         body: { code: 'NO_FOLDER', error: 'no folder open' },
         status: 412,
@@ -105,7 +104,7 @@ describe('files API', () => {
         .mockResolvedValueOnce({ body: { path: 'drafts/archive' }, status: 200 }),
     };
     const signal = new AbortController().signal;
-    const api = createFilesApi(client);
+    const api = createFilesAdapter(client);
 
     await expect(
       api.createEntry('/library/notes', 'file', 'drafts', 'Plan', signal),
@@ -146,7 +145,7 @@ describe('files API', () => {
         .mockResolvedValueOnce({ body: { error: 'new_name required' }, status: 400 }),
     };
     const signal = new AbortController().signal;
-    const api = createFilesApi(client);
+    const api = createFilesAdapter(client);
 
     await expect(
       api.renameEntry(

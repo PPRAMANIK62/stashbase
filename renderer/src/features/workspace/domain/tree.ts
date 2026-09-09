@@ -1,20 +1,19 @@
-export type FileFormat =
-  | 'md'
-  | 'html'
-  | 'json'
-  | 'txt'
-  | 'pdf'
-  | 'image'
-  | 'docx'
-  | 'audio'
-  | 'generic';
+/**
+ * The workspace tree's own model: the listing the server sends, the node and
+ * row shapes the sidebar renders, and the path arithmetic every mutation and
+ * keyboard move relies on. Format vocabulary comes from the cross-process
+ * `ViewerFormat`, so the listing wire and the tree cannot drift.
+ */
+import type { ViewerFormat } from '@/contracts/file-formats';
 
-export type FileKind = 'regular' | 'symlink' | 'special' | 'cloud-placeholder';
-export type FolderKind = 'normal' | 'excluded' | 'unreadable';
+export type { ViewerFormat };
+
+type FileKind = 'regular' | 'symlink' | 'special' | 'cloud-placeholder';
+type FolderKind = 'normal' | 'excluded' | 'unreadable';
 
 export interface WorkspaceFile {
   availability: 'available' | 'unreadable';
-  format: FileFormat;
+  format: ViewerFormat;
   heading: string;
   importedAt: string;
   kind: FileKind;
@@ -34,12 +33,12 @@ export interface WorkspaceListing {
   folders: WorkspaceFolder[];
 }
 
-export interface FileNode extends WorkspaceFile {
+interface FileNode extends WorkspaceFile {
   name: string;
   type: 'file';
 }
 
-export interface FolderNode extends WorkspaceFolder {
+interface FolderNode extends WorkspaceFolder {
   children: TreeNode[];
   name: string;
   type: 'folder';
@@ -177,7 +176,7 @@ export function visibleTree(nodes: TreeNode[], expanded: ExpandedFolders): TreeR
 export function nextTreePath(
   key: string,
   currentPath: string | null,
-  rows: TreeRow[],
+  rows: readonly TreeRow[],
 ): string | null {
   if (rows.length === 0) return null;
   const currentIndex = Math.max(

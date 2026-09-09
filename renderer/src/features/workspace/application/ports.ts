@@ -1,8 +1,13 @@
 import type { LibraryFailureKind, LibrarySnapshot } from '@/features/workspace/domain/library';
 import type { WorkspaceSessionSnapshot } from '@/features/workspace/domain/session';
 import type { WorkspaceEntry, WorkspaceListing } from '@/features/workspace/domain/tree';
+import {
+  featureErrorClass,
+  type FeatureError,
+  type FeatureFailureKind,
+} from '@/shared/domain/feature-error';
 
-export type LibraryFolderPickerResult =
+type LibraryFolderPickerResult =
   | { status: 'cancelled' }
   | {
       status: 'failed';
@@ -13,7 +18,7 @@ export type LibraryFolderPickerResult =
     }
   | { status: 'selected'; folderPath: string };
 
-export interface LibraryApi {
+export interface LibraryPort {
   load(signal: AbortSignal): Promise<LibrarySnapshot>;
   openFolder(path: string, signal: AbortSignal): Promise<LibrarySnapshot>;
   removeFolder(path: string, signal: AbortSignal): Promise<LibrarySnapshot>;
@@ -23,7 +28,7 @@ export interface FolderPickerOptions {
   defaultPath?: string;
 }
 
-export interface LibraryFolderPicker {
+export interface LibraryFolderPickerPort {
   chooseFolder(options?: FolderPickerOptions): Promise<LibraryFolderPickerResult>;
 }
 
@@ -32,12 +37,12 @@ export interface WorkspaceQueryScope {
   remove(): void;
 }
 
-export interface WorkspaceSessionPersistence {
+export interface WorkspaceSessionPort {
   load(): Promise<WorkspaceSessionSnapshot | null>;
   save(snapshot: WorkspaceSessionSnapshot): Promise<void>;
 }
 
-export interface LibraryLifecycle {
+export interface LibraryLifecyclePort {
   notifyFolderRemoved(folderPath: string): Promise<void>;
   onFolderRemoved(handler: (folderPath: string) => void): () => void;
   onPrepareFolderRemoval(handler: (folderPath: string) => boolean | Promise<boolean>): () => void;
@@ -45,7 +50,7 @@ export interface LibraryLifecycle {
   setActiveFolder(folderPath: string | null): Promise<void>;
 }
 
-export interface FilesApi {
+export interface FilesPort {
   load(folderPath: string, signal: AbortSignal): Promise<WorkspaceListing>;
   reveal(folderPath: string, entryPath: string, signal: AbortSignal): Promise<void>;
   /** Creates one file or folder under `parentPath` and returns the settled
@@ -69,46 +74,61 @@ export interface FilesApi {
   deleteEntry(folderPath: string, entry: WorkspaceEntry, signal: AbortSignal): Promise<void>;
 }
 
-export interface UploadFile {
+interface UploadFile {
   readonly blob: Blob;
   /** Folder-relative destination path; a bare name lands at the folder root. */
   readonly name: string;
 }
 
-export interface UploadOutcome {
-  readonly error?: string;
-  /** Folder-relative path the server published, after any collision renaming. */
-  readonly file: string;
+export interface UploadPort {
+  /**
+   * Imports files into `folderPath` and answers the folder-relative paths the
+   * server settled on, in request order, after any collision renaming.
+   *
+   * A file the server refused raises on the files ladder rather than arriving
+   * as a field inside a resolved result: a refusal every caller has to remember
+   * to look for is one most callers do not, and this one used to reach the
+   * reader as a sentence the server wrote.
+   */
+  upload(folderPath: string, files: readonly UploadFile[], signal: AbortSignal): Promise<string[]>;
 }
 
-export interface UploadApi {
-  upload(
-    folderPath: string,
-    files: readonly UploadFile[],
-    signal: AbortSignal,
-  ): Promise<UploadOutcome[]>;
+/** An image the desktop found on the clipboard, offered for import. The
+ *  transport's own encoding never reaches here: an offer that cannot be decoded
+ *  is not an offer. */
+export interface ClipboardImageOffer {
+  /** Stable identity of the copied image, so one offer is settled exactly once. */
+  readonly id: string;
+  readonly bytes: Blob;
+  /** The file name the import should land under. */
+  readonly name: string;
 }
 
-export class LibraryError extends Error {
-  readonly kind: LibraryFailureKind;
-
-  constructor(kind: LibraryFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'LibraryError';
-    this.kind = kind;
-  }
+export interface ClipboardCapturePort {
+  /** Re-reads the clipboard, so an offer can appear without waiting for the
+   *  next copy. */
+  refresh(): void;
+  /** Reports one offer settled — imported or dismissed — so the desktop does
+   *  not offer the same image again. */
+  settle(id: string): void;
+  /** Calls back with each image the desktop offers; answers an unsubscribe. */
+  subscribe(handler: (offer: ClipboardImageOffer) => void): () => void;
 }
+
+export type LibraryError = FeatureError;
+export const LibraryError = featureErrorClass('LibraryError');
+
+/** The saved-session bridge fails on the workspace ladder like every other
+ *  workspace transport: the desktop refused the read or the write, and it
+ *  names why in a sentence the reader never sees directly. */
+export type WorkspaceSessionError = FeatureError;
+export const WorkspaceSessionError = featureErrorClass('WorkspaceSessionError');
 
 /** Files failures add the mutation outcomes the listing never meets: a
  *  name already taken, and a request the server refused as invalid. */
-export type FilesFailureKind = LibraryFailureKind | 'conflict' | 'rejected';
+type FilesExtra = 'conflict' | 'rejected';
 
-export class FilesError extends Error {
-  readonly kind: FilesFailureKind;
+export type FilesFailureKind = FeatureFailureKind<FilesExtra>;
 
-  constructor(kind: FilesFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'FilesError';
-    this.kind = kind;
-  }
-}
+export type FilesError = FeatureError<FilesExtra>;
+export const FilesError = featureErrorClass<FilesExtra>('FilesError');

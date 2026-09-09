@@ -1,6 +1,7 @@
 import type { LibrarySnapshot } from '@/features/workspace/domain/library';
 
-import { type LibraryApi, LibraryError } from './ports';
+import { libraryFailureMessage } from './failure-messages';
+import { type LibraryPort, LibraryError } from './ports';
 
 export type OpenFolderResult =
   | { status: 'cancelled' }
@@ -8,7 +9,7 @@ export type OpenFolderResult =
   | { status: 'opened'; snapshot: LibrarySnapshot };
 
 export async function openFolder(
-  api: LibraryApi,
+  api: LibraryPort,
   path: string,
   signal: AbortSignal,
 ): Promise<OpenFolderResult> {
@@ -19,9 +20,12 @@ export async function openFolder(
     return signal.aborted ? { status: 'cancelled' } : { status: 'opened', snapshot };
   } catch (error) {
     if (signal.aborted) return { status: 'cancelled' };
-    if (error instanceof LibraryError) {
-      return { status: 'failed', message: error.message };
-    }
-    return { status: 'failed', message: 'The folder could not be opened.' };
+    return {
+      status: 'failed',
+      message: libraryFailureMessage(
+        error instanceof LibraryError ? error.kind : undefined,
+        'opened',
+      ),
+    };
   }
 }

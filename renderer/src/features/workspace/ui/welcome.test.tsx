@@ -1,31 +1,29 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { LibraryError, type LibraryApi } from '@/features/workspace/application/ports';
-import type { LibrarySnapshot } from '@/features/workspace/domain/library';
+import { libraryFailureMessage } from '@/features/workspace/application/failure-messages';
+import { LibraryError, type LibraryPort } from '@/features/workspace/application/ports';
+import {
+  folderPicker,
+  libraryApi,
+  librarySnapshot,
+  pendingLibraryApi,
+} from '@/test/fakes/workspace';
+import { withQueryClient } from '@/test/query';
 
 import { LibraryWelcome, type LibraryWelcomeProps } from './welcome';
 
-const emptyLibrary: LibrarySnapshot = {
-  activeFolder: null,
-  homeDirectory: '/home/person',
-  members: [],
+const emptyLibrary = librarySnapshot({ activeFolder: null, members: [] });
+
+type WelcomeTestProps = Omit<LibraryWelcomeProps, 'api' | 'folderPicker'> & {
+  api: Partial<LibraryPort>;
+  folderPicker?: LibraryWelcomeProps['folderPicker'];
 };
 
-type WelcomeTestProps = Omit<LibraryWelcomeProps, 'api'> & {
-  api: Omit<LibraryApi, 'removeFolder'> & Partial<Pick<LibraryApi, 'removeFolder'>>;
-};
-
-function renderWelcome({ api, ...props }: WelcomeTestProps) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <LibraryWelcome {...props} api={{ removeFolder: vi.fn(), ...api }} />
-    </QueryClientProvider>,
+function renderWelcome({ api, folderPicker: picker, ...props }: WelcomeTestProps) {
+  return withQueryClient(
+    <LibraryWelcome {...props} api={libraryApi(api)} folderPicker={picker ?? folderPicker()} />,
   );
 }
 
@@ -33,10 +31,7 @@ afterEach(cleanup);
 
 describe('library welcome', () => {
   it('waits for membership before presenting first-run actions', () => {
-    renderWelcome({
-      folderPicker: { chooseFolder: vi.fn() },
-      api: { load: () => new Promise(() => {}), openFolder: vi.fn() },
-    });
+    renderWelcome({ api: pendingLibraryApi() });
 
     expect(screen.queryByRole('heading', { name: 'StashBase' })).toBeNull();
   });
@@ -44,8 +39,8 @@ describe('library welcome', () => {
   it('offers existing and new folder paths after membership settles', async () => {
     const chooseFolder = vi.fn(async () => ({ status: 'cancelled' as const }));
     renderWelcome({
-      folderPicker: { chooseFolder },
-      api: { load: vi.fn(async () => emptyLibrary), openFolder: vi.fn() },
+      api: { load: vi.fn(async () => emptyLibrary) },
+      folderPicker: folderPicker({ chooseFolder }),
     });
 
     const user = userEvent.setup();
@@ -67,26 +62,22 @@ describe('library welcome', () => {
   });
 
   it('opens the selected folder and leaves the welcome state', async () => {
-    const opened: LibrarySnapshot = {
+    const opened = librarySnapshot({
       ...emptyLibrary,
       activeFolder: { name: 'Research', path: '/home/person/Research' },
       members: [
-        {
-          favorite: false,
-          openedAt: '2026-08-31T12:00:00.000Z',
-          path: '/home/person/Research',
-        },
+        { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/home/person/Research' },
       ],
-    };
+    });
     const openFolder = vi.fn(async () => opened);
     renderWelcome({
-      folderPicker: {
+      api: { load: vi.fn(async () => emptyLibrary), openFolder },
+      folderPicker: folderPicker({
         chooseFolder: vi.fn(async () => ({
           folderPath: '/home/person/Research',
           status: 'selected' as const,
         })),
-      },
-      api: { load: vi.fn(async () => emptyLibrary), openFolder },
+      }),
     });
 
     const user = userEvent.setup();
@@ -97,30 +88,19 @@ describe('library welcome', () => {
   });
 
   it('presents every known member when no folder is active', async () => {
-    const knownLibrary: LibrarySnapshot = {
+    const knownLibrary = librarySnapshot({
       ...emptyLibrary,
       members: [
-        {
-          favorite: false,
-          openedAt: '2026-08-31T12:00:00.000Z',
-          path: '/home/person/Research',
-        },
-        {
-          favorite: false,
-          openedAt: '2026-08-30T12:00:00.000Z',
-          path: '/home/person/Writing',
-        },
+        { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/home/person/Research' },
+        { favorite: false, openedAt: '2026-08-30T12:00:00.000Z', path: '/home/person/Writing' },
       ],
-    };
-    const openedLibrary: LibrarySnapshot = {
+    });
+    const openedLibrary = librarySnapshot({
       ...knownLibrary,
       activeFolder: { name: 'Writing', path: '/home/person/Writing' },
-    };
-    const openFolder = vi.fn(async () => openedLibrary);
-    renderWelcome({
-      folderPicker: { chooseFolder: vi.fn() },
-      api: { load: vi.fn(async () => knownLibrary), openFolder },
     });
+    const openFolder = vi.fn(async () => openedLibrary);
+    renderWelcome({ api: { load: vi.fn(async () => knownLibrary), openFolder } });
 
     expect(await screen.findByRole('heading', { name: 'Choose a folder' })).not.toBeNull();
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
@@ -133,27 +113,29 @@ describe('library welcome', () => {
   });
 
   it('keeps open failure local and allows another attempt', async () => {
-    const opened: LibrarySnapshot = {
+    const opened = librarySnapshot({
       ...emptyLibrary,
       activeFolder: { name: 'Notes', path: '/home/person/Notes' },
-    };
+    });
     const openFolder = vi
-      .fn()
-      .mockRejectedValueOnce(new LibraryError('unavailable', 'The library is unavailable.'))
+      .fn<LibraryPort['openFolder']>()
+      .mockRejectedValueOnce(new LibraryError('unavailable', 'HTTP 503 from /api/library'))
       .mockResolvedValue(opened);
     renderWelcome({
-      folderPicker: {
+      api: { load: vi.fn(async () => emptyLibrary), openFolder },
+      folderPicker: folderPicker({
         chooseFolder: vi.fn(async () => ({
           folderPath: '/home/person/Notes',
           status: 'selected' as const,
         })),
-      },
-      api: { load: vi.fn(async () => emptyLibrary), openFolder },
+      }),
     });
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Open folder' }));
-    expect((await screen.findByRole('alert')).textContent).toContain('The library is unavailable.');
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      libraryFailureMessage('unavailable', 'opened'),
+    );
 
     await user.click(screen.getByRole('button', { name: 'Open folder' }));
     expect(screen.queryByRole('heading', { name: 'StashBase' })).toBeNull();

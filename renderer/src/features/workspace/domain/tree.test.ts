@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { WorkspaceListing } from './tree';
+import { listing, listingFile, listingFolder } from '@/test/fakes/workspace';
+
 import {
   buildTree,
   entryNameProblem,
@@ -13,51 +14,23 @@ import {
   visibleTree,
 } from './tree';
 
-const listing: WorkspaceListing = {
-  files: [
-    {
-      availability: 'available',
-      format: 'md',
-      heading: '',
-      importedAt: '',
-      kind: 'regular',
-      path: 'notes/chapter10.md',
-      size: 10,
-      snippet: '',
-    },
-    {
-      availability: 'available',
-      format: 'md',
-      heading: '',
-      importedAt: '',
-      kind: 'regular',
-      path: 'notes/chapter2.md',
-      size: 2,
-      snippet: '',
-    },
-    {
-      availability: 'unreadable',
-      format: 'generic',
-      heading: '',
-      importedAt: '',
-      kind: 'special',
-      path: 'socket',
-      size: 0,
-      snippet: '',
-    },
-  ],
-  folderName: 'Research',
-  folders: [
-    { kind: 'excluded', path: 'vendor' },
-    { kind: 'normal', path: 'notes/drafts' },
-    { kind: 'normal', path: 'folder10' },
-    { kind: 'normal', path: 'folder2' },
-  ],
-};
+const CHAPTER10 = listingFile({ path: 'notes/chapter10.md', size: 10 });
+const CHAPTER2 = listingFile({ path: 'notes/chapter2.md', size: 2 });
+const SOCKET = listingFile({
+  availability: 'unreadable',
+  format: 'generic',
+  kind: 'special',
+  path: 'socket',
+  size: 0,
+});
+const RESEARCH_LISTING = listing(
+  [CHAPTER10, CHAPTER2, SOCKET],
+  [listingFolder({ kind: 'excluded', path: 'vendor' }), 'notes/drafts', 'folder10', 'folder2'],
+);
 
 describe('workspace tree model', () => {
   it('builds implied parents and sorts folders before files with natural names', () => {
-    const tree = buildTree(listing);
+    const tree = buildTree(RESEARCH_LISTING);
 
     expect(tree.map((node) => node.name)).toEqual([
       'folder2',
@@ -78,14 +51,8 @@ describe('workspace tree model', () => {
 
   it('uses expanded state as the only source of visible order and hides restricted descendants', () => {
     const tree = buildTree({
-      ...listing,
-      files: [
-        ...listing.files,
-        {
-          ...listing.files[0]!,
-          path: 'vendor/private.md',
-        },
-      ],
+      ...RESEARCH_LISTING,
+      files: [...RESEARCH_LISTING.files, { ...CHAPTER10, path: 'vendor/private.md' }],
     });
 
     expect(visibleTree(tree, {}).map((row) => row.node.path)).not.toContain('notes/chapter2.md');
@@ -101,12 +68,12 @@ describe('workspace tree model', () => {
   });
 
   it('classifies non-regular and unreadable files as reveal-only', () => {
-    expect(fileIsRestricted(listing.files[2]!)).toBe(true);
-    expect(fileIsRestricted(listing.files[0]!)).toBe(false);
+    expect(fileIsRestricted(SOCKET)).toBe(true);
+    expect(fileIsRestricted(CHAPTER10)).toBe(false);
   });
 
   it('moves within the same visible rows used for rendering', () => {
-    const rows = visibleTree(buildTree(listing), { notes: true });
+    const rows = visibleTree(buildTree(RESEARCH_LISTING), { notes: true });
 
     expect(nextTreePath('Home', 'notes', rows)).toBe('folder2');
     expect(nextTreePath('End', 'notes', rows)).toBe('socket');

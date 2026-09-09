@@ -1,17 +1,27 @@
+/**
+ * The durable shape of a workspace session: which folders were open, what each
+ * one had expanded and selected, and the pane widths the window restores. Every
+ * bound here is a restore-time guard — a snapshot read back from disk is
+ * untrusted input, so it is clamped and truncated rather than believed.
+ */
 import type { WorkspaceState } from './workspace';
 
-export const WORKSPACE_SESSION_VERSION = 1 as const;
-export const DEFAULT_SIDEBAR_WIDTH = 240;
-export const MIN_SIDEBAR_WIDTH = 160;
-export const MAX_SIDEBAR_WIDTH = 360;
-export const DEFAULT_AGENT_PANE_WIDTH = 576;
-export const MIN_AGENT_PANE_WIDTH = 320;
-export const MAX_AGENT_PANE_WIDTH = 960;
-export const MAX_SESSION_FOLDERS = 32;
-export const MAX_SESSION_EXPANDED_PATHS = 2_048;
-export const MAX_SESSION_TABS = 50;
+const WORKSPACE_SESSION_VERSION = 1 as const;
+const DEFAULT_SIDEBAR_WIDTH = 240;
+const MIN_SIDEBAR_WIDTH = 160;
+const MAX_SIDEBAR_WIDTH = 360;
+/** The Agent pane's remembered width and the bounds it is clamped to. One
+ *  record, because a caller that reads one of these always reads the others. */
+export const AGENT_PANE_WIDTH = {
+  default: 576,
+  max: 960,
+  min: 320,
+} as const;
+const MAX_SESSION_FOLDERS = 32;
+const MAX_SESSION_EXPANDED_PATHS = 2_048;
+const MAX_SESSION_TABS = 50;
 
-export interface WorkspaceTabIdentity {
+interface WorkspaceTabIdentity {
   id: string;
   path: string;
 }
@@ -29,7 +39,7 @@ export interface FolderSessionState {
   tabs: WorkspaceTabIdentity[];
 }
 
-export interface WorkspaceShellSessionState {
+interface WorkspaceShellSessionState {
   agentPaneWidth: number;
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -47,7 +57,7 @@ export function createWorkspaceSessionSnapshot(): WorkspaceSessionSnapshot {
     activeFolderPath: null,
     folders: [],
     shell: {
-      agentPaneWidth: DEFAULT_AGENT_PANE_WIDTH,
+      agentPaneWidth: AGENT_PANE_WIDTH.default,
       sidebarOpen: true,
       sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
     },
@@ -190,7 +200,7 @@ export function setSessionSidebarOpen(
 }
 
 function clampAgentPaneWidth(width: number): number {
-  return Math.max(MIN_AGENT_PANE_WIDTH, Math.min(MAX_AGENT_PANE_WIDTH, Math.round(width)));
+  return Math.max(AGENT_PANE_WIDTH.min, Math.min(AGENT_PANE_WIDTH.max, Math.round(width)));
 }
 
 export function setSessionAgentPaneWidth(

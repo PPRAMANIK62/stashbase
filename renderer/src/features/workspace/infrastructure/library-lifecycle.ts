@@ -1,4 +1,4 @@
-import { LibraryError, type LibraryLifecycle } from '@/features/workspace/application/ports';
+import { LibraryError, type LibraryLifecyclePort } from '@/features/workspace/application/ports';
 import type { LibraryLifecycleBridge } from '@/platform/electron/library-lifecycle';
 import type { LibraryLifecycleResponse } from '@/protocols/electron/library';
 
@@ -16,7 +16,9 @@ function accept(response: LibraryLifecycleResponse): void {
   if (!response.ok) throw lifecycleFailure(response);
 }
 
-export function createLibraryLifecycle(bridge: LibraryLifecycleBridge): LibraryLifecycle {
+export function createLibraryLifecycleAdapter(
+  bridge: LibraryLifecycleBridge,
+): LibraryLifecyclePort {
   return {
     async notifyFolderRemoved(folderPath) {
       accept(await bridge.notifyFolderRemoved(folderPath));

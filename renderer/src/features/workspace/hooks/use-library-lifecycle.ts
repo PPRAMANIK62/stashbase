@@ -1,31 +1,43 @@
+/**
+ * Reconciliation between native folder membership and the mounted workspace.
+ *
+ * Both recovery paths — a folder the host says was removed, and a scope this
+ * window lost — share one reconciliation lane: starting either abandons the
+ * other, and every step after an await asks whether its own signal is still
+ * the live one before writing anything. Unmounting aborts the lane.
+ *
+ * Telling the host which folder this window is on can itself fail, and a
+ * window whose host disagrees about its folder can no longer reconcile
+ * anything. That refusal is reported rather than swallowed.
+ */
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import type { LibraryApi, LibraryLifecycle } from '@/features/workspace/application/ports';
+import { filesFailure } from '@/features/workspace/application/failure-messages';
+import type { LibraryPort, LibraryLifecyclePort } from '@/features/workspace/application/ports';
 import {
-  libraryQueryKey,
-  retireWorkspaceQueries,
   workspaceQueryKeys,
+  retireWorkspaceQueries,
 } from '@/features/workspace/application/queries';
 import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
 import type { LibrarySnapshot } from '@/features/workspace/domain/library';
 import type { WorkspaceScope } from '@/features/workspace/domain/workspace';
+import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 
 export function useLibraryLifecycle(
-  api: LibraryApi,
-  lifecycle: LibraryLifecycle,
+  api: LibraryPort,
+  lifecycle: LibraryLifecyclePort,
   runtime: WorkspaceRuntime | null,
   beforeRelease: (folderPath: string) => Promise<boolean> = async () => true,
 ) {
   const queryClient = useQueryClient();
   const runtimeRef = useRef(runtime);
-  const reconciliation = useRef<{ controller: AbortController; generation: number } | null>(null);
-  const nextGeneration = useRef(0);
+  const signalFor = useRequestSignals<'reconcile'>();
 
   useLayoutEffect(() => {
     const previous = runtimeRef.current;
     if (!runtime && previous) {
-      const snapshot = queryClient.getQueryData<LibrarySnapshot>(libraryQueryKey);
+      const snapshot = queryClient.getQueryData<LibrarySnapshot>(workspaceQueryKeys.library);
       const remainsAuthorized = snapshot?.members.some(
         (member) => member.path === previous.scope.folder.path,
       );
@@ -33,21 +45,6 @@ export function useLibraryLifecycle(
     }
     runtimeRef.current = runtime;
   }, [queryClient, runtime]);
-
-  const beginReconciliation = useCallback(() => {
-    reconciliation.current?.controller.abort();
-    const controller = new AbortController();
-    const generation = ++nextGeneration.current;
-    reconciliation.current = { controller, generation };
-    return { controller, generation };
-  }, []);
-
-  const isCurrent = useCallback(
-    (generation: number) =>
-      reconciliation.current?.generation === generation &&
-      !reconciliation.current.controller.signal.aborted,
-    [],
-  );
 
   const retireFolder = useCallback(
     async (folderPath: string) => {
@@ -64,22 +61,22 @@ export function useLibraryLifecycle(
 
   const reconcileRemovedFolder = useCallback(
     (folderPath: string) => {
-      const { controller, generation } = beginReconciliation();
+      const signal = signalFor('reconcile');
       void api
-        .load(controller.signal)
+        .load(signal)
         .then(async (snapshot) => {
-          if (!isCurrent(generation)) return;
+          if (signal.aborted) return;
           const remainsAuthorized = snapshot.members.some((member) => member.path === folderPath);
           if (!remainsAuthorized && !(await retireFolder(folderPath))) return;
-          if (!isCurrent(generation)) return;
-          queryClient.setQueryData(libraryQueryKey, snapshot);
+          if (signal.aborted) return;
+          queryClient.setQueryData(workspaceQueryKeys.library, snapshot);
         })
         .catch(() => {
           // The event is a reconciliation hint. Without authoritative membership,
           // preserve the mounted workspace and let its local recovery stay visible.
         });
     },
-    [api, beginReconciliation, isCurrent, queryClient, retireFolder],
+    [api, queryClient, retireFolder, signalFor],
   );
 
   const recoverLostScope = useCallback(
@@ -92,24 +89,28 @@ export function useLibraryLifecycle(
       ) {
         return;
       }
-      const { controller, generation } = beginReconciliation();
+      const signal = signalFor('reconcile');
       void api
-        .load(controller.signal)
+        .load(signal)
         .then(async (snapshot) => {
-          if (!isCurrent(generation) || runtimeRef.current !== current) return;
+          if (signal.aborted || runtimeRef.current !== current) return;
           const remainsAuthorized = snapshot.members.some(
             (member) => member.path === capturedScope.folder.path,
           );
           if (!remainsAuthorized) {
             if (!(await retireFolder(capturedScope.folder.path))) return;
-            if (isCurrent(generation)) queryClient.setQueryData(libraryQueryKey, snapshot);
+            if (!signal.aborted) queryClient.setQueryData(workspaceQueryKeys.library, snapshot);
             return;
           }
 
           try {
-            const rebound = await api.openFolder(capturedScope.folder.path, controller.signal);
-            if (!isCurrent(generation) || runtimeRef.current !== current) return;
-            queryClient.setQueryData(libraryQueryKey, rebound);
+            const rebound = await api.openFolder(capturedScope.folder.path, signal);
+            if (signal.aborted || runtimeRef.current !== current) return;
+            // The folder is being re-read from scratch. Work captured against
+            // the tree before that is no longer about this folder, so its
+            // completions are retired rather than allowed to land on top.
+            current.retireOperations();
+            queryClient.setQueryData(workspaceQueryKeys.library, rebound);
             await queryClient.invalidateQueries({
               queryKey: workspaceQueryKeys.folder(capturedScope.folder.path),
             });
@@ -122,7 +123,7 @@ export function useLibraryLifecycle(
           // Server loss is not proof of scope loss; retain the runtime for retry.
         });
     },
-    [api, beginReconciliation, isCurrent, queryClient, retireFolder],
+    [api, queryClient, retireFolder, signalFor],
   );
 
   useEffect(() => {
@@ -134,16 +135,21 @@ export function useLibraryLifecycle(
     };
   }, [beforeRelease, lifecycle, reconcileRemovedFolder]);
 
+  const [failure, setFailure] = useState<string | null>(null);
   useEffect(() => {
-    void lifecycle.setActiveFolder(runtime?.scope.folder.path ?? null).catch(() => undefined);
+    let current = true;
+    void lifecycle
+      .setActiveFolder(runtime?.scope.folder.path ?? null)
+      .then(() => {
+        if (current) setFailure(null);
+      })
+      .catch((error: unknown) => {
+        if (current) setFailure(filesFailure(error).message);
+      });
+    return () => {
+      current = false;
+    };
   }, [lifecycle, runtime?.scope.folder.path]);
 
-  useEffect(
-    () => () => {
-      reconciliation.current?.controller.abort();
-    },
-    [],
-  );
-
-  return { recoverLostScope };
+  return { failure, recoverLostScope };
 }

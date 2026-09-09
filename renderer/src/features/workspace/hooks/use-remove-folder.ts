@@ -1,34 +1,28 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
-import type { LibraryApi, LibraryLifecycle } from '@/features/workspace/application/ports';
-import { libraryQueryKey, retireWorkspaceQueries } from '@/features/workspace/application/queries';
+import type { LibraryPort, LibraryLifecyclePort } from '@/features/workspace/application/ports';
+import {
+  workspaceQueryKeys,
+  retireWorkspaceQueries,
+} from '@/features/workspace/application/queries';
 import { removeFolder } from '@/features/workspace/application/remove-folder';
+import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 
-export function useRemoveFolder(api: LibraryApi, lifecycle: LibraryLifecycle) {
+export function useRemoveFolder(api: LibraryPort, lifecycle: LibraryLifecyclePort) {
   const queryClient = useQueryClient();
   const [target, setTarget] = useState<string | null>(null);
-  const [controller, setController] = useState<AbortController | null>(null);
+  const signalFor = useRequestSignals<'remove'>();
   const operation = useMutation({
     mutationFn: ({ folderPath, signal }: { folderPath: string; signal: AbortSignal }) =>
       removeFolder(api, lifecycle, folderPath, signal),
     onSuccess(result, variables) {
       if (result.status !== 'removed') return;
       void retireWorkspaceQueries(queryClient, variables.folderPath);
-      queryClient.setQueryData(libraryQueryKey, result.snapshot);
+      queryClient.setQueryData(workspaceQueryKeys.library, result.snapshot);
       setTarget(null);
     },
-    onSettled() {
-      setController(null);
-    },
   });
-
-  useEffect(
-    () => () => {
-      controller?.abort();
-    },
-    [controller],
-  );
 
   const request = (folderPath: string) => {
     if (operation.isPending) return;
@@ -44,9 +38,7 @@ export function useRemoveFolder(api: LibraryApi, lifecycle: LibraryLifecycle) {
 
   const confirm = () => {
     if (!target || operation.isPending) return;
-    const nextController = new AbortController();
-    setController(nextController);
-    operation.mutate({ folderPath: target, signal: nextController.signal });
+    operation.mutate({ folderPath: target, signal: signalFor('remove') });
   };
 
   return {
