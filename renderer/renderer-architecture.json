@@ -1,13 +1,32 @@
 {
   "features": [
-    { "name": "agent", "productArea": "Agent Panel" },
-    { "name": "documents", "productArea": "Documents" },
-    { "name": "preparation", "productArea": "Preparation" },
-    { "name": "retrieval", "productArea": "Search and Retrieval" },
-    { "name": "settings", "productArea": "Workspace / Agent Panel" },
-    { "name": "workspace", "productArea": "Workspace" }
+    {
+      "name": "agent",
+      "productArea": "Agent Panel"
+    },
+    {
+      "name": "documents",
+      "productArea": "Documents"
+    },
+    {
+      "name": "preparation",
+      "productArea": "Preparation"
+    },
+    {
+      "name": "retrieval",
+      "productArea": "Search and Retrieval"
+    },
+    {
+      "name": "settings",
+      "productArea": "Workspace / Agent Panel"
+    },
+    {
+      "name": "workspace",
+      "productArea": "Workspace"
+    }
   ],
   "wireSchemaModules": [
+    "shared/protocols/electron/capture.ts",
     "shared/protocols/electron/external-navigation.ts",
     "shared/protocols/electron/library.ts",
     "shared/protocols/electron/runtime.ts",
@@ -15,10 +34,16 @@
     "shared/protocols/electron/workspace-session.ts",
     "shared/protocols/http/agent-runtime.ts",
     "shared/protocols/http/agent-sessions.ts",
+    "shared/protocols/http/capture.ts",
+    "shared/protocols/http/embedder.ts",
     "shared/protocols/http/files.ts",
+    "shared/protocols/http/index-status.ts",
     "shared/protocols/http/library.ts",
     "shared/protocols/http/media.ts",
+    "shared/protocols/http/preparation.ts",
     "shared/protocols/http/search.ts",
+    "shared/protocols/http/semantic-search.ts",
+    "shared/protocols/http/transcription.ts",
     "shared/protocols/websocket/agent-session.ts"
   ]
 }
