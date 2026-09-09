@@ -25,6 +25,7 @@ import {
   AgentChats,
   AgentTitlebar,
   AgentWorkspace,
+  type AgentFilesChanged,
   type AgentScopeEnvironment,
   type AgentScopeOutline,
   type AgentWorkspaceProps,
@@ -33,6 +34,7 @@ import {
 import {
   DocumentTabs,
   DocumentWorkspace,
+  refreshDocumentSources,
   useDocumentSaveBarrier,
 } from '@/features/documents/public';
 import {
@@ -192,10 +194,32 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     saveDocumentsForFolder,
   );
   const selectedFolderPath = library.data?.activeFolder?.path ?? null;
+  const queryClient = useQueryClient();
+  /** An Agent wrote files: show them at once, reload the open documents they
+   *  touched, then reconcile the folder's index and readiness. Nothing here
+   *  selects a file on the Agent's behalf. */
+  const onAgentFilesChanged = useCallback(
+    ({ scope, sources }: AgentFilesChanged) => {
+      if (scope.kind !== 'folder') return;
+      const folder = scope.path;
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.files(folder) });
+      refreshDocumentSources(queryClient, sources);
+      const controller = new AbortController();
+      void dependencies.preparation.controlApi
+        .sync(folder, controller.signal)
+        .catch(() => undefined)
+        .finally(() => {
+          void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.files(folder) });
+          void queryClient.invalidateQueries({ queryKey: folderStatusQueryKey(folder) });
+        });
+    },
+    [dependencies.preparation.controlApi, queryClient],
+  );
   const agentRuntime = useAgentWorkspaceRuntime({
     context: dependencies.agent.context,
     createId: dependencies.documents.createId,
     folderPath: selectedFolderPath,
+    onFilesChanged: onAgentFilesChanged,
     session: dependencies.agent.session,
     subscribeFolderRemoved: dependencies.library.lifecycle.onFolderRemoved,
   });
@@ -207,7 +231,6 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     [selectedFolderPath],
   );
   const listing = useFiles(workspace, dependencies.workspace.api).data;
-  const queryClient = useQueryClient();
   const workspaceFolderPath = workspace?.scope.folder.path ?? null;
   const folderStatus = useFolderStatus(dependencies.preparation.statusApi, workspaceFolderPath);
   const status = folderStatus.data ?? null;
@@ -300,6 +323,9 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     catalog: dependencies.settings.agentRuntimeApi,
     onOpenExternal: (href) => void dependencies.documents.openExternal(href),
     onOpenAgentSettings: () => settings.openSettings('agents'),
+    onOpenSource: (source) => {
+      if (workspace && documents) void openDocument(workspace, documents, source);
+    },
     onReprocess: reprocessSource,
     runtime: agentRuntime,
     scopeOutline: agentScopeOutline,
