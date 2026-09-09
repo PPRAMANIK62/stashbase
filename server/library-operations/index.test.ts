@@ -37,6 +37,7 @@ test('Library Operations distinguishes exhausted hosted quota', async () => {
 test('Library Operations keeps search result identity at the visible source path', async () => {
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
+    memberFolderRoots: () => ['/library'],
     retrieval: { search: async () => ({
       evidence: [{ sourcePath: '/library/paper.pdf', snippet: 'derived evidence', heading: '', locator: {}, score: 1, chunkIndex: 0 }],
       availability: { state: 'ready' as const }, truncated: false,
@@ -45,8 +46,29 @@ test('Library Operations keeps search result identity at the visible source path
 
   assert.deepEqual(
     await operations.search({ query: 'paper', topK: 8 }),
-    { hits: [{ fileName: '/library/paper.pdf', chunkIndex: 0, content: 'derived evidence', heading: '', score: 1 }] },
+    { hits: [{ fileName: '/library/paper.pdf', folder: '/library', path: 'paper.pdf', chunkIndex: 0, content: 'derived evidence', heading: '', score: 1 }] },
   );
+});
+
+test('Library Operations places semantic hits under their longest member root and drops orphans', async () => {
+  const operations = createLibraryOperations({
+    getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
+    memberFolderRoots: () => ['/library', '/library/nested'],
+    retrieval: { search: async () => ({
+      evidence: [
+        { sourcePath: '/library/nested/deep/note.md', snippet: 'a', heading: '', locator: { line: 1 }, score: 2, chunkIndex: 4 },
+        { sourcePath: '/library/top.md', snippet: 'b', heading: '', locator: {}, score: 1, chunkIndex: 0 },
+        { sourcePath: '/elsewhere/orphan.md', snippet: 'c', heading: '', locator: {}, score: 0.5, chunkIndex: 0 },
+      ],
+      availability: { state: 'ready' as const }, truncated: false,
+    }) },
+  });
+
+  const result = await operations.search({ query: 'note' });
+  assert.deepEqual(result.hits.map((hit) => [hit.folder, hit.path]), [
+    ['/library/nested', 'deep/note.md'],
+    ['/library', 'top.md'],
+  ]);
 });
 
 test('Library Operations forwards file-type filters to Retrieval', async () => {
@@ -127,6 +149,8 @@ test('Library Operations forwards keyword mode, options, and a prefix-only scope
   });
   assert.deepEqual(result.hits, [{
     fileName: '/library/notes/a.md',
+    folder: '/library',
+    path: 'notes/a.md',
     chunkIndex: 0,
     content: 'ExactMatch',
     heading: '',
@@ -138,6 +162,7 @@ test('Library Operations forwards keyword mode, options, and a prefix-only scope
 test('Library Operations surfaces a truncated result signal to the caller', async () => {
   const operations = createLibraryOperations({
     getLibraryInfo: () => ({ folder_home: '/library', folders: [] }),
+    memberFolderRoots: () => ['/library'],
     retrieval: { search: async () => ({
       evidence: [{ sourcePath: '/library/a.md', snippet: 'match', heading: '', locator: { line: 3 } }],
       availability: { state: 'partial' as const, reason: 'truncated' as const },

@@ -156,8 +156,9 @@ export function createLibraryOperations(
           'EMBEDDER_KEY_REQUIRED',
         );
       }
+      const memberRoots = scope.folderRoot ? [scope.folderRoot] : await deps.memberFolderRoots();
       return {
-        hits: searchHitsFromEvidence(result.evidence),
+        hits: searchHitsFromEvidence(result.evidence, memberRoots),
         ...(result.truncated ? { truncated: true } : {}),
       };
     },

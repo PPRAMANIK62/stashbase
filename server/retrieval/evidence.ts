@@ -23,10 +23,31 @@ export interface SourceEvidence {
   sourceMatchCount?: number;
 }
 
-/** Compatibility adapter for the flat HTTP and MCP search-hit payload. */
-export function searchHitsFromEvidence(evidence: SourceEvidence[]): SearchHit[] {
-  return evidence.map((entry, index) => ({
+/** Longest member root that owns `sourcePath`, with the folder-relative path. */
+function ownerOf(sourcePath: string, memberRoots: readonly string[]): { folder: string; path: string } | null {
+  let best: { folder: string; path: string } | null = null;
+  for (const root of memberRoots) {
+    const rel = filesystemPath.relative(root, sourcePath);
+    if (rel == null || rel === '') continue;
+    if (!best || root.length > best.folder.length) best = { folder: root, path: rel };
+  }
+  return best;
+}
+
+/** Compatibility adapter for the flat HTTP and MCP search-hit payload.
+ *  With `memberRoots`, each hit also carries its owning `folder` and
+ *  folder-relative `path`; evidence outside every root is dropped so a
+ *  caller never receives an identity it cannot open. */
+export function searchHitsFromEvidence(evidence: SourceEvidence[], memberRoots?: readonly string[]): SearchHit[] {
+  const placed = memberRoots
+    ? evidence.flatMap((entry) => {
+      const owner = ownerOf(entry.sourcePath, memberRoots);
+      return owner ? [{ entry, owner }] : [];
+    })
+    : evidence.map((entry) => ({ entry, owner: null }));
+  return placed.map(({ entry, owner }, index) => ({
     fileName: entry.sourcePath,
+    ...(owner ? { folder: owner.folder, path: owner.path } : {}),
     chunkIndex: entry.chunkIndex ?? index,
     content: entry.snippet,
     heading: entry.heading ?? '',
