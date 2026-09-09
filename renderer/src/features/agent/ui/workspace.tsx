@@ -1,11 +1,10 @@
 import { RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useRef, type ComponentProps } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
-import { InputMessage, type QueuedMessage } from '@/components/ui/input-message';
-import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
+import type { QueuedMessage } from '@/components/ui/input-message';
 import { scopeLabel, type AgentSessionPhase } from '@/features/agent/domain/session';
 import { suggestStarters } from '@/features/agent/domain/starters';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
@@ -13,6 +12,7 @@ import { useStickToBottom } from '@/hooks/use-stick-to-bottom';
 import { cn } from '@/lib/utils';
 import type { Agent } from '@/shared/agent-runtime';
 
+import { AgentContextComposer } from './composer/context-composer';
 import { AgentPermissionMode } from './composer/permission-mode';
 import { AgentComposerSettings } from './composer/settings';
 import { AgentSetup } from './setup';
@@ -36,26 +36,15 @@ function phaseLabel(phase: AgentSessionPhase, error: string | null): string {
   }
 }
 
-/** Subscribes to the draft alone, so a keystroke re-renders the composer and
- *  nothing above it. */
-function AgentComposer({
-  session,
-  ...props
-}: { session: AgentSessionRuntime } & Omit<
-  ComponentProps<typeof InputMessage>,
-  'onValueChange' | 'value'
->) {
-  const draft = useStore(session.store, (state) => state.draft);
-  return <InputMessage {...props} onValueChange={session.setDraft} value={draft} />;
-}
-
 function ReadyWorkspace({
   agents,
   onOpenExternal,
+  onReprocess,
   runtime,
   scopeOutline,
 }: Omit<AgentWorkspaceProps, 'catalog' | 'onOpenAgentSettings'> & { agents: Agent[] }) {
   const activeId = useStore(runtime.store, (state) => state.activeId);
+  const scopeEnvironment = useStore(runtime.store, (state) => state.scopeEnvironment);
   const active = runtime.session(activeId) ?? runtime.activeSession();
   const state = useStore(
     active.store,
@@ -87,14 +76,12 @@ function ReadyWorkspace({
   useStickToBottom(logRef, activeId);
   const prefill = (prompt: string) => {
     active.setDraft(prompt);
-    composerRef.current?.querySelector('textarea')?.focus();
+    composerRef.current?.querySelector<HTMLElement>('textarea, [contenteditable="true"]')?.focus();
   };
 
   return (
-    <div
-      className="flex h-full w-full min-h-0 flex-col bg-surface-2"
-    >
-      {empty && <div aria-hidden className="min-h-0 basis-0 grow" />}
+    <div className="flex h-full min-h-0 w-full flex-col bg-surface-2">
+      {empty && <div aria-hidden className="min-h-0 grow basis-0" />}
       <div
         aria-busy={state.activeTurn}
         aria-live="polite"
@@ -121,6 +108,7 @@ function ReadyWorkspace({
               onOpenExternal={onOpenExternal}
               onPermission={active.replyPermission}
               onRetry={active.retry}
+              transientFile={active.fileForTransient}
             />
           )}
         </div>
@@ -152,18 +140,25 @@ function ReadyWorkspace({
       {state.phase !== 'retired' && state.phase !== 'disposed' && (
         <div className="relative shrink-0 px-4 pb-3 max-sm:px-3">
           <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-surface-2 to-transparent" />
-          <div className="relative mx-auto w-full max-w-[46rem] @container" ref={composerRef}>
-            <AgentComposer
-              className="rounded-2xl bg-surface-3 shadow-surface-3"
+          <div className="@container relative mx-auto w-full max-w-[46rem]" ref={composerRef}>
+            <AgentContextComposer
+              attachments={activeAgent.capabilities?.attachments === true}
+              environment={scopeEnvironment}
               maxRows={6}
               minRows={3}
               onQueueChange={(queue: QueuedMessage[]) =>
                 active.setQueue(queue.map(({ id, text }) => ({ id, text })))
               }
-              onSend={(text) => active.sendPrompt(text)}
+              onReprocess={onReprocess}
               onStop={active.interrupt}
               placeholder={`Ask about ${scopeName}…`}
-              queue={state.queuedPrompts.map(({ id, text }) => ({ files: [], id, text }))}
+              queue={state.queuedPrompts.map(({ context, id, text }) => ({
+                files: context.flatMap((item) =>
+                  item.kind === 'transient' ? (active.fileForTransient(item.path) ?? []) : [],
+                ),
+                id,
+                text,
+              }))}
               leftSlot={
                 <AgentComposerSettings
                   activeAgent={activeAgent}
@@ -202,7 +197,7 @@ function ReadyWorkspace({
           ))}
         </div>
       )}
-      {empty && <div aria-hidden className="min-h-0 basis-0 grow-[1.3]" />}
+      {empty && <div aria-hidden className="min-h-0 grow-[1.3] basis-0" />}
     </div>
   );
 }

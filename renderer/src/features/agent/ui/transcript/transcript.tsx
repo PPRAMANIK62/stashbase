@@ -3,7 +3,9 @@ import { Fragment, memo, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { ChatMessage } from '@/components/ui/chat-message';
+import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import { ThinkingIndicator } from '@/components/ui/thinking-indicator';
+import { segmentFileMentions, type AgentContextItem } from '@/features/agent/domain/context';
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
 import {
   dayLabel,
@@ -11,6 +13,7 @@ import {
   startOfLocalDay,
   transcriptDayBreaks,
 } from '@/features/agent/domain/time';
+import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
 
 import { AgentActivityGroup, AgentPermissionCard, isAgentToolBlock } from './activity';
 import { AgentMarkdown } from './markdown';
@@ -92,6 +95,19 @@ function transcriptGroups(blocks: AgentTranscriptBlock[]): TranscriptGroup[] {
   return groups;
 }
 
+/** Context as it was sent, or the replayed attachments a native history
+ *  record kept when this renderer never bound them. */
+function sentContext(block: Extract<AgentTranscriptBlock, { kind: 'user' }>): AgentContextItem[] {
+  if (block.context) return block.context;
+  return (block.attachments ?? []).map((attachment) => ({
+    dims: attachment.dims,
+    kind: 'transient',
+    name: attachment.name,
+    path: attachment.path,
+    previewUrl: attachment.previewUrl,
+  }));
+}
+
 const TranscriptBlock = memo(function TranscriptBlock({
   block,
   copyable,
@@ -99,6 +115,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onOpenExternal,
   onPermission,
   onRetry,
+  transientFile,
 }: {
   block: AgentTranscriptBlock;
   copyable: boolean;
@@ -106,31 +123,70 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onOpenExternal(href: string): void;
   onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
   onRetry(errorBlockId: string): boolean;
+  transientFile?: (path: string) => File | undefined;
 }) {
   if (block.kind === 'user') {
+    const context = sentContext(block);
+    const transientPaths = context.flatMap((item) =>
+      item.kind === 'transient' ? [item.path] : [],
+    );
+    const segments = segmentFileMentions(block.text, transientPaths);
+    const mentioned = new Set(
+      segments.flatMap((segment) => (segment.kind === 'mention' ? [segment.path] : [])),
+    );
+    // A source the text already mentions inline is not repeated as a tile;
+    // only sources bound without a mention, such as a dropped row, get one.
+    const tiles = context.filter(
+      (item) => item.kind !== 'source' || !mentioned.has(item.source.path),
+    );
     return (
-      <ChatMessage
-        className="not-first:mt-4"
-        from="user"
-        time={block.at === undefined ? undefined : promptTimeLabel(block.at, now)}
-      >
-        <span className="sr-only">You: </span>
-        {block.text}
-      </ChatMessage>
+      <div className="flex max-w-[72%] flex-col items-end gap-1.5 self-end not-first:mt-4">
+        <SentContextTiles fileFor={transientFile} items={tiles} />
+        <ChatMessage
+          className="max-w-full"
+          from="user"
+          time={block.at === undefined ? undefined : promptTimeLabel(block.at, now)}
+        >
+          <span className="sr-only">You: </span>
+          {segments.map((segment) =>
+            segment.kind === 'text' ? (
+              segment.text
+            ) : (
+              <span
+                className="mx-px inline-flex max-w-full items-center gap-1 rounded-md bg-foreground/8 px-1.5 py-px align-baseline font-medium"
+                key={`${segment.start}:${segment.path}`}
+                title={segment.path}
+              >
+                <FileTypeIcon
+                  aria-hidden="true"
+                  className="shrink-0"
+                  path={segment.path}
+                  size={12}
+                />
+                <span className="truncate">
+                  {segment.path.slice(segment.path.lastIndexOf('/') + 1)}
+                </span>
+                <span className="sr-only"> (file mention: {segment.path})</span>
+              </span>
+            ),
+          )}
+        </ChatMessage>
+      </div>
     );
   }
   if (block.kind === 'assistant') {
     return (
-      <ChatMessage actions={copyable ? <CopyReply text={block.text} /> : undefined} from="assistant">
+      <ChatMessage
+        actions={copyable ? <CopyReply text={block.text} /> : undefined}
+        from="assistant"
+      >
         <span className="sr-only">Agent: </span>
         <AgentMarkdown markdown={block.text} onOpenExternal={onOpenExternal} />
       </ChatMessage>
     );
   }
   if (block.kind === 'thinking') {
-    return (
-      <p className="text-[13px] leading-5 text-muted-foreground">{block.text}</p>
-    );
+    return <p className="text-[13px] leading-5 text-muted-foreground">{block.text}</p>;
   }
   if (block.kind === 'notice') {
     return (
@@ -164,12 +220,15 @@ export const AgentTranscript = memo(function AgentTranscript({
   onOpenExternal,
   onPermission,
   onRetry,
+  transientFile,
 }: {
   activeTurn: boolean;
   blocks: AgentTranscriptBlock[];
   onOpenExternal(href: string): void;
   onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
   onRetry(errorBlockId: string): boolean;
+  /** The File behind a sent upload, when this session still holds it. */
+  transientFile?: (path: string) => File | undefined;
 }) {
   const [visibleCount, setVisibleCount] = useState(TRANSCRIPT_PAGE_SIZE);
   const hiddenCount = Math.max(0, blocks.length - visibleCount);
@@ -211,6 +270,7 @@ export const AgentTranscript = memo(function AgentTranscript({
               onOpenExternal={onOpenExternal}
               onPermission={onPermission}
               onRetry={onRetry}
+              transientFile={transientFile}
             />
           </Fragment>
         ),

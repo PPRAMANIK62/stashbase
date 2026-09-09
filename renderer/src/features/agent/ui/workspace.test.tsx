@@ -1,15 +1,21 @@
+import { EditorView } from '@codemirror/view';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, StrictMode, type PropsWithChildren } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { AgentConnectionListener, AgentSessionPort } from '@/features/agent/application/ports';
+import type {
+  AgentConnectionListener,
+  AgentContextPort,
+  AgentSessionPort,
+} from '@/features/agent/application/ports';
 import {
   createAgentWorkspaceRuntime,
   type AgentWorkspaceRuntime,
 } from '@/features/agent/application/workspace-runtime';
 import type { Agent } from '@/shared/agent-runtime';
+import { SOURCE_DRAG_MIME } from '@/shared/utils/source-drag';
 
 import AgentChats from './chats/chats';
 import ManagedAgentWorkspace from './workspace';
@@ -73,6 +79,11 @@ const runtimes: AgentWorkspaceRuntime[] = [];
 
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  // jsdom has no object URLs; the image tile needs one to render its preview.
+  Object.assign(URL, {
+    createObjectURL: vi.fn((file: File) => `blob:${file.name.replace(/\..*$/u, '')}`),
+    revokeObjectURL: vi.fn(),
+  });
   getAnimationsDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
   Object.defineProperty(Element.prototype, 'getAnimations', {
     configurable: true,
@@ -90,11 +101,17 @@ afterEach(() => {
   }
 });
 
-function renderWorkspace(session: AgentSessionPort, agents: Agent[] = [builtIn, codex, claude]) {
+function renderWorkspace(
+  session: AgentSessionPort,
+  agents: Agent[] = [builtIn, codex, claude],
+  context?: AgentContextPort,
+  onReprocess?: (source: { folderPath: string; path: string }) => void,
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   let id = 0;
   const runtime = createAgentWorkspaceRuntime({
     autostart: false,
+    context,
     createId: () => `chat-${++id}`,
     folderPath: '/Library/Research',
     port: session,
@@ -125,6 +142,7 @@ function renderWorkspace(session: AgentSessionPort, agents: Agent[] = [builtIn, 
             catalog,
             onOpenExternal: vi.fn(),
             onOpenAgentSettings: vi.fn(),
+            onReprocess,
             runtime,
             scopeOutline: { files: ['MISSION.md', 'notes.md'], folders: ['lessons'] },
           }),
@@ -169,7 +187,7 @@ describe('Agent workspace', () => {
     expect(runtime.activeSession().store.getState().draft).toBe(
       "Summarize what's in lessons/ and what each file covers.",
     );
-    const composer = screen.getByPlaceholderText('Ask about Research…');
+    const composer = screen.getByRole('textbox', { name: 'Message' });
     expect(composer.ownerDocument.activeElement).toBe(composer);
     expect(connect).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Chat scope: Research')).toBeNull();
@@ -274,7 +292,7 @@ describe('Agent workspace', () => {
   it('starts the first composer turn and presents an explicit permission decision', async () => {
     let listener: AgentConnectionListener | undefined;
     const sent: unknown[] = [];
-    renderWorkspace({
+    const { runtime } = renderWorkspace({
       connect: vi.fn((_request, nextListener) => {
         listener = nextListener;
         return {
@@ -295,9 +313,9 @@ describe('Agent workspace', () => {
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
 
     const composer = screen.getByRole('textbox', { name: 'Message' });
-    await userEvent.type(composer, 'Inspect the workspace');
+    typeInto(composer, 'Inspect the workspace');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
-    expect((composer as HTMLTextAreaElement).value).toBe('Inspect the workspace');
+    expect(draftOf(runtime)).toBe('Inspect the workspace');
 
     act(() => listener?.onEvent({ kind: 'ready' }));
     expect(await screen.findByText('Inspect the workspace')).not.toBeNull();
@@ -626,5 +644,264 @@ describe('Agent workspace', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Today' }));
     expect(screen.queryByRole('button', { name: 'Today newer' })).toBeNull();
+  });
+});
+
+const researchEnvironment = {
+  folderPath: '/Library/Research',
+  listing: {
+    files: [
+      { format: 'md' as const, path: 'notes.md' },
+      { format: 'pdf' as const, path: 'papers/report.pdf' },
+    ],
+    folders: ['lessons'],
+  },
+  readiness: { 'papers/report.pdf': 'pending' as const },
+  versions: {},
+};
+
+function idlePort(): AgentSessionPort {
+  return {
+    connect: vi.fn(() => ({ close: vi.fn(), send: vi.fn(() => true) })),
+    list: vi.fn(async () => []),
+    remove: vi.fn(async () => undefined),
+    rename: vi.fn(),
+    replay: vi.fn(async () => ({ effort: null, transcript: [] })),
+  };
+}
+
+function contextPort(): AgentContextPort {
+  return {
+    resolve: vi.fn(async (source) => ({
+      available: true,
+      folder: 'Research',
+      kind: 'direct' as const,
+      path: `${source.folderPath}/${source.path}`,
+      readPath: source.path,
+      reason: '',
+      sourceFormat: 'md',
+      sourcePath: source.path,
+    })),
+    upload: vi.fn(async (files: File[]) =>
+      files.map((file) => ({ name: file.name, path: `/tmp/attach/${file.name}` })),
+    ),
+  };
+}
+
+/** The message field is a CodeMirror document; jsdom cannot type into a
+ *  contenteditable, so text enters through the view and keys hit its DOM. */
+function editorOf(field: HTMLElement): EditorView {
+  const view = EditorView.findFromDOM(field.closest('.cm-editor') as HTMLElement);
+  if (!view) throw new Error('No CodeMirror view behind the message field.');
+  return view;
+}
+
+function typeInto(field: HTMLElement, text: string) {
+  const view = editorOf(field);
+  const at = view.state.doc.length;
+  act(() => {
+    view.dispatch({
+      changes: { from: at, insert: text },
+      selection: { anchor: at + text.length },
+    });
+  });
+}
+
+function pressKey(field: HTMLElement, key: string, init: KeyboardEventInit = {}) {
+  act(() => {
+    fireEvent.keyDown(field, { key, ...init });
+  });
+}
+
+function draftOf(runtime: AgentWorkspaceRuntime): string {
+  return runtime.activeSession().store.getState().draft;
+}
+
+describe('Agent composer context', () => {
+  it('suggests scope files for @ and binds the accepted one as an inline chip', async () => {
+    const { runtime } = renderWorkspace(idlePort(), undefined, contextPort());
+    act(() => runtime.setScopeEnvironment(researchEnvironment));
+    await screen.findByText('What should we work on?');
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+
+    typeInto(composer, 'Read @no');
+    const listbox = await screen.findByRole('listbox', { name: 'Mention a file or folder' });
+    expect(listbox).not.toBeNull();
+    expect(screen.getByRole('option', { name: 'notes.md' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(composer.getAttribute('aria-expanded')).toBe('true');
+
+    pressKey(composer, 'Enter');
+    expect(draftOf(runtime)).toBe('Read @notes.md ');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    const chip = composer.querySelector('[data-mention="notes.md"]');
+    expect(chip?.textContent).toContain('notes.md');
+    expect(chip?.textContent).toContain('(file mention: notes.md)');
+    expect(runtime.activeSession().store.getState().context).toEqual([
+      {
+        boundVersion: null,
+        format: 'md',
+        kind: 'source',
+        source: { folderPath: '/Library/Research', path: 'notes.md' },
+      },
+    ]);
+    // A non-visual source lives inline only; the preview row stays empty.
+    expect(screen.queryByRole('list', { name: 'Attached context' })).toBeNull();
+
+    // Backspace over the trailing space, then over the chip: one keystroke
+    // removes the whole mention and unbinds its source.
+    pressKey(composer, 'Backspace');
+    expect(draftOf(runtime)).toBe('Read @notes.md');
+    pressKey(composer, 'Backspace');
+    expect(draftOf(runtime)).toBe('Read ');
+    expect(composer.querySelector('[data-mention]')).toBeNull();
+    expect(runtime.activeSession().store.getState().context).toEqual([]);
+  });
+
+  it('keeps Enter as accept while the listbox is open and Escape dismisses it', async () => {
+    const port = idlePort();
+    const { runtime } = renderWorkspace(port, undefined, contextPort());
+    act(() => runtime.setScopeEnvironment(researchEnvironment));
+    await screen.findByText('What should we work on?');
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+    typeInto(composer, '@less');
+    expect(await screen.findByRole('option', { name: 'lessons' })).not.toBeNull();
+    pressKey(composer, 'Escape');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(draftOf(runtime)).toBe('@less');
+    expect(runtime.activeSession().store.getState().transcript).toEqual([]);
+
+    // With the listbox closed, Enter submits the draft as a prompt.
+    pressKey(composer, 'Enter');
+    await waitFor(() => expect(port.connect).toHaveBeenCalled());
+  });
+
+  it('shows visual sources as tiles, reads preparation state, and refuses to send stale context', async () => {
+    const port = idlePort();
+    const onReprocess = vi.fn();
+    const { runtime } = renderWorkspace(port, undefined, contextPort(), onReprocess);
+    await screen.findByText('What should we work on?');
+    act(() => {
+      runtime.setScopeEnvironment({
+        ...researchEnvironment,
+        readiness: { 'papers/report.pdf': 'pending', 'scans/blurry.png': 'failed' },
+      });
+      const session = runtime.activeSession();
+      session.addContext({
+        boundVersion: null,
+        format: 'pdf',
+        kind: 'source',
+        source: { folderPath: '/Library/Research', path: 'papers/report.pdf' },
+      });
+      session.addContext({
+        boundVersion: null,
+        format: 'md',
+        kind: 'source',
+        source: { folderPath: '/Library/Research', path: 'gone.md' },
+      });
+    });
+    // The PDF is visual and unmentioned, so it is a tile; the Markdown file
+    // is not in the text yet, so it is bound but has no chip.
+    const tiles = screen.getByRole('list', { name: 'Attached context' });
+    const items = within(tiles).getAllByRole('listitem');
+    expect(items).toHaveLength(1);
+    expect(items[0]?.textContent).toContain('Preparing');
+
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+    typeInto(composer, 'Summarise these');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'This file is no longer in the folder.',
+    );
+    expect(draftOf(runtime)).toBe('Summarise these');
+    expect(port.connect).not.toHaveBeenCalled();
+
+    act(() => {
+      runtime.setScopeEnvironment({
+        ...researchEnvironment,
+        listing: {
+          ...researchEnvironment.listing,
+          files: [
+            ...researchEnvironment.listing.files,
+            { format: 'image', path: 'scans/blurry.png' },
+          ],
+        },
+        readiness: { 'scans/blurry.png': 'failed' },
+      });
+      runtime.activeSession().removeContext('source:/Library/Research/gone.md');
+      runtime.activeSession().addContext({
+        boundVersion: null,
+        format: 'image',
+        kind: 'source',
+        source: { folderPath: '/Library/Research', path: 'scans/blurry.png' },
+      });
+    });
+    expect(screen.getByRole('list', { name: 'Attached context' }).textContent).toContain('Failed');
+    await userEvent.click(screen.getByRole('button', { name: 'Reprocess' }));
+    expect(onReprocess).toHaveBeenCalledWith({
+      folderPath: '/Library/Research',
+      path: 'scans/blurry.png',
+    });
+
+    // Removing the tile strips nothing from the text and unbinds the source.
+    await userEvent.click(screen.getByRole('button', { name: 'Remove report.pdf' }));
+    await waitFor(() =>
+      expect(runtime.activeSession().store.getState().context).toEqual([
+        expect.objectContaining({ source: expect.objectContaining({ path: 'scans/blurry.png' }) }),
+      ]),
+    );
+  });
+
+  it('drops a non-visual source inline, a visual one as a tile, and uploads only when the runtime reads them', async () => {
+    const context = contextPort();
+    const { runtime } = renderWorkspace(idlePort(), undefined, context);
+    act(() => runtime.setScopeEnvironment(researchEnvironment));
+    await screen.findByText('What should we work on?');
+    expect(screen.queryByRole('button', { name: 'Attach files' })).toBeNull();
+
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+    const drop = (path: string) => {
+      const payload = JSON.stringify({ folderPath: '/Library/Research', path });
+      act(() => {
+        fireEvent.drop(composer, {
+          dataTransfer: {
+            files: [],
+            getData: (type: string) => (type === SOURCE_DRAG_MIME ? payload : ''),
+            types: [SOURCE_DRAG_MIME],
+          },
+        });
+      });
+    };
+    drop('notes.md');
+    expect(draftOf(runtime)).toBe('@notes.md ');
+    expect(composer.querySelector('[data-mention="notes.md"]')).not.toBeNull();
+    expect(screen.queryByRole('list', { name: 'Attached context' })).toBeNull();
+
+    drop('papers/report.pdf');
+    expect(draftOf(runtime)).toBe('@notes.md ');
+    expect(screen.getByRole('list', { name: 'Attached context' }).textContent).toContain(
+      'report.pdf',
+    );
+    expect(runtime.activeSession().store.getState().context).toEqual([
+      expect.objectContaining({ format: 'md', kind: 'source' }),
+      expect.objectContaining({ format: 'pdf', kind: 'source' }),
+    ]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Built-in' }));
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
+    expect(await screen.findByRole('button', { name: 'Attach files' })).not.toBeNull();
+    const file = new File(['png'], 'shot.png', { type: 'image/png' });
+    fireEvent.paste(screen.getByRole('textbox', { name: 'Message' }), {
+      clipboardData: { files: [file], getData: () => '' },
+    });
+    await waitFor(() =>
+      expect(context.upload).toHaveBeenCalledWith([file], expect.any(AbortSignal)),
+    );
+    // The upload becomes the shared composer's own tile, not a name chip.
+    const tile = await screen.findByRole('img', { name: 'shot.png' });
+    expect(tile.getAttribute('src')).toBe('blob:shot');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove shot.png' }));
+    await waitFor(() => expect(runtime.activeSession().store.getState().context).toEqual([]));
   });
 });

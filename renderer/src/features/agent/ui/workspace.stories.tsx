@@ -64,10 +64,15 @@ const agents: Agent[] = [
   },
 ];
 
+const STORY_IMAGE =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="#6B97FF"/><path d="M24 124 65 74l26 31 19-18 26 37Z" fill="#fff"/></svg>';
+
 function WorkspacePreview({
+  context = false,
   docked = false,
   empty = false,
 }: {
+  context?: boolean;
   docked?: boolean;
   empty?: boolean;
 }) {
@@ -78,6 +83,20 @@ function WorkspacePreview({
   const runtime = useMemo(() => {
     const next = createAgentWorkspaceRuntime({
       autostart: false,
+      context: {
+        resolve: async (source) => ({
+          available: true,
+          folder: 'Research',
+          kind: 'direct',
+          path: `${source.folderPath}/${source.path}`,
+          readPath: source.path,
+          reason: '',
+          sourceFormat: 'md',
+          sourcePath: source.path,
+        }),
+        upload: async (files) =>
+          files.map((file) => ({ name: file.name, path: `/tmp/attach/${file.name}` })),
+      },
       createId: () => 'preview-chat',
       folderPath: '/Library/Research',
       port: {
@@ -158,16 +177,51 @@ function WorkspacePreview({
             { id: 'reply-2', kind: 'assistant', text: 'Only Screely does, on its free plan.' },
           ],
     });
+    if (context) {
+      next.setScopeEnvironment({
+        folderPath: '/Library/Research',
+        listing: {
+          files: [
+            { format: 'md', path: 'MISSION.md' },
+            { format: 'md', path: 'NOTES.md' },
+            { format: 'md', path: 'research/screenshot-tools.md' },
+            { format: 'pdf', path: 'reference/style-guide.pdf' },
+          ],
+          folders: ['assets', 'lessons', 'reference'],
+        },
+        readiness: { 'reference/style-guide.pdf': 'pending' },
+        versions: {},
+      });
+      const session = next.activeSession();
+      session.addContext({
+        boundVersion: null,
+        format: 'md',
+        kind: 'source',
+        source: { folderPath: '/Library/Research', path: 'research/screenshot-tools.md' },
+      });
+      session.addContext({
+        boundVersion: null,
+        format: 'pdf',
+        kind: 'source',
+        source: { folderPath: '/Library/Research', path: 'reference/style-guide.pdf' },
+      });
+      // Context first, then the draft: the editor's sync turns each known
+      // `@path` run into an inline chip.
+      session.setDraft(
+        'Compare @research/screenshot-tools.md with @reference/style-guide.pdf and list gaps.',
+      );
+      void session.attachFiles([
+        new File([STORY_IMAGE], 'workspace-cover.svg', { type: 'image/svg+xml' }),
+      ]);
+    }
     return next;
-  }, [empty]);
+  }, [context, empty]);
 
   useEffect(() => () => runtime.dispose(), [runtime]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div
-        className={cn('h-[46rem]', docked ? 'w-[36rem] border-l border-border' : 'w-[64rem]')}
-      >
+      <div className={cn('h-[46rem]', docked ? 'w-[36rem] border-l border-border' : 'w-[64rem]')}>
         <div className="flex h-11 items-center border-b border-border px-3">
           <AgentTitlebar runtime={runtime} />
         </div>
@@ -207,6 +261,10 @@ export const FullWorkspace: Story = {};
 
 export const EmptyWorkspace: Story = {
   args: { empty: true },
+};
+
+export const BoundContext: Story = {
+  args: { context: true, empty: true },
 };
 
 export const Docked: Story = {
