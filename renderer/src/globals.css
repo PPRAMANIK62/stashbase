@@ -83,6 +83,10 @@
   --decision: light-dark(#b45309, #fbbf24);
   --decision-soft: light-dark(#fffbeb, #451a03);
 
+  /* Diff evidence: added lines read green, removed lines read red. */
+  --diff-add: light-dark(#15803d, #4ade80);
+  --diff-remove: light-dark(#dc2626, #f87171);
+
   /* ── Focus indicator ──
      Every component focus ring reads var(--focus-ring, #6B97FF), so this is
      the single theming point. The literal fallback keeps registry components
@@ -277,6 +281,8 @@
   --color-working-soft: var(--working-soft);
   --color-decision: var(--decision);
   --color-decision-soft: var(--decision-soft);
+  --color-diff-add: var(--diff-add);
+  --color-diff-remove: var(--diff-remove);
   --color-hover: var(--hover);
   --color-active: var(--active);
 

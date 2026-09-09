@@ -9,7 +9,7 @@ import {
   Terminal,
   Wrench,
 } from 'lucide-react';
-import { useId, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useId, useRef, useState, type ComponentType } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -18,9 +18,12 @@ import {
   ThinkingStepsContent,
   ThinkingStepsHeader,
 } from '@/components/ui/thinking-steps';
+import { fileChangesForTool, settledFileChanges } from '@/features/agent/domain/file-change';
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
 import { cn } from '@/lib/utils';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
+import { AgentChangedFiles, AgentFileChangeView } from './file-change';
 import {
   agentActivitySummary,
   agentPermissionTitle,
@@ -60,17 +63,39 @@ function iconFor(tool: AgentToolBlock): ToolIcon {
   }
 }
 
-export function AgentToolPayload({ tool }: { tool: AgentToolBlock }) {
-  const payload = agentToolPayload(tool.input);
+/** The payload a tool surface renders once, shared by the row and the
+ *  permission card so the ladder cannot drift: the diff when the call is a
+ *  file change with evidence, the bounded inert text otherwise. */
+export function AgentToolPayload({
+  indent = true,
+  tool,
+}: {
+  indent?: boolean;
+  tool: AgentToolBlock;
+}) {
+  const changes = fileChangesForTool(tool.name, tool.input).filter(
+    (change) => change.text !== undefined || change.patch !== undefined,
+  );
+  const payload = changes.length > 0 ? null : agentToolPayload(tool.input);
   const result = tool.result ? agentToolResult(tool.result) : null;
   return (
-    <div className="space-y-2 pr-2 pb-2 pl-7 text-[12px] text-muted-foreground">
-      <pre
-        aria-label={`${tool.name} arguments`}
-        className="max-h-72 overflow-auto font-mono break-words whitespace-pre-wrap"
-      >
-        {payload}
-      </pre>
+    <div
+      className={cn(
+        'space-y-2 pr-2 pb-2 text-[12px] text-muted-foreground',
+        indent ? 'pl-7' : 'pt-2',
+      )}
+    >
+      {changes.map((change, index) => (
+        <AgentFileChangeView change={change} key={`${change.path}:${index}`} />
+      ))}
+      {payload !== null && (
+        <pre
+          aria-label={`${tool.name} arguments`}
+          className="max-h-72 overflow-auto font-mono break-words whitespace-pre-wrap"
+        >
+          {payload}
+        </pre>
+      )}
       {result && (
         <pre
           aria-label={`${tool.name} result`}
@@ -152,19 +177,43 @@ export function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
   );
 }
 
-export function AgentActivityGroup({ tools }: { tools: AgentToolBlock[] }) {
+export function AgentActivityGroup({
+  focusToolId = null,
+  onOpenSource,
+  sourceFor,
+  tools,
+}: {
+  /** A tool whose ask was just decided: the group that receives it takes
+   *  focus once, at its summary, so the decision stays reachable. */
+  focusToolId?: string | null;
+  onOpenSource?: (source: SourceReference) => void;
+  sourceFor?: (path: string) => SourceReference | null;
+  tools: AgentToolBlock[];
+}) {
   const active = tools.some((tool) => tool.status === 'running');
+  const changes = settledFileChanges(tools);
+  const headerRef = useRef<HTMLButtonElement>(null);
+  const focusedFor = useRef<string | null>(null);
+  const holdsFocusTool = focusToolId !== null && tools.some((tool) => tool.id === focusToolId);
+  useEffect(() => {
+    if (!holdsFocusTool || focusedFor.current === focusToolId) return;
+    focusedFor.current = focusToolId;
+    headerRef.current?.focus();
+  }, [focusToolId, holdsFocusTool]);
   return (
-    <ThinkingSteps className="-ml-2 w-[calc(100%+0.5rem)]" defaultOpen={false}>
-      <ThinkingStepsHeader className="px-2 py-1.5 text-[13px]">
-        {agentActivitySummary(tools, active)}
-      </ThinkingStepsHeader>
-      <ThinkingStepsContent className="gap-0.5 pl-2">
-        {tools.map((tool) => (
-          <AgentToolRow key={tool.id} tool={tool} />
-        ))}
-      </ThinkingStepsContent>
-    </ThinkingSteps>
+    <div className="-ml-2 flex w-[calc(100%+0.5rem)] flex-col gap-1">
+      <ThinkingSteps className="w-full" defaultOpen={false}>
+        <ThinkingStepsHeader className="px-2 py-1.5 text-[13px]" ref={headerRef}>
+          {agentActivitySummary(tools, active)}
+        </ThinkingStepsHeader>
+        <ThinkingStepsContent className="gap-0.5 pl-2">
+          {tools.map((tool) => (
+            <AgentToolRow key={tool.id} tool={tool} />
+          ))}
+        </ThinkingStepsContent>
+      </ThinkingSteps>
+      <AgentChangedFiles changes={changes} onOpenSource={onOpenSource} sourceFor={sourceFor} />
+    </div>
   );
 }
 
@@ -194,7 +243,7 @@ export function AgentPermissionCard({
             {agentPermissionTitle(tool)}
           </h3>
         </div>
-        <AgentToolPayload tool={tool} />
+        <AgentToolPayload indent={false} tool={tool} />
         {permissionId ? (
           <div className="mt-1 flex justify-end gap-2">
             <Button

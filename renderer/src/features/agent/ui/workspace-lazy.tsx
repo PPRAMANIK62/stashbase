@@ -12,6 +12,8 @@ export interface AgentWorkspaceProps {
   catalog: AgentCatalogPort;
   onOpenExternal(href: string): void;
   onOpenAgentSettings(): void;
+  /** Opens a file the Agent changed beside the chat; the user chose it. */
+  onOpenSource?(source: SourceReference): void;
   /** Restarts preparation for a bound source whose prepared text failed. */
   onReprocess?(source: SourceReference): void;
   runtime: AgentWorkspaceRuntime;

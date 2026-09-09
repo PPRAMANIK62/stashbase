@@ -1,4 +1,5 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
@@ -47,6 +48,51 @@ describe('Agent transcript time cues', () => {
         new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       ),
     ).not.toBeNull();
+  });
+});
+
+describe('Agent transcript permission decisions', () => {
+  it('folds a decided ask into the activity group and moves focus to its summary', async () => {
+    const onPermission = vi.fn(() => true);
+    const ask: AgentTranscriptBlock = {
+      id: 'tool-2',
+      input: { content: '# Plan', file_path: '/library/Research/plan.md' },
+      kind: 'tool',
+      name: 'Write',
+      permissionId: 'permission-1',
+      permissionRequested: true,
+      permissionTitle: null,
+      status: 'awaiting',
+    };
+    const { rerender } = render(
+      <AgentTranscript
+        activeTurn
+        blocks={[...turn.slice(0, 4), ask]}
+        onOpenExternal={vi.fn()}
+        onPermission={onPermission}
+        onRetry={vi.fn(() => true)}
+      />,
+    );
+    expect(screen.getByRole('heading', { name: 'Apply these changes?' })).not.toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    expect(onPermission).toHaveBeenCalledWith('tool-2', 'permission-1', false);
+    rerender(
+      <AgentTranscript
+        activeTurn
+        blocks={[...turn.slice(0, 4), { ...ask, permissionId: undefined, status: 'denied' }]}
+        onOpenExternal={vi.fn()}
+        onPermission={onPermission}
+        onRetry={vi.fn(() => true)}
+      />,
+    );
+
+    expect(screen.queryByRole('heading', { name: 'Apply these changes?' })).toBeNull();
+    const summary = screen.getByRole('button', { expanded: false });
+    expect(summary).toBe(summary.ownerDocument.activeElement);
+    await userEvent.click(summary);
+    expect(screen.getByRole('button', { name: /Wrote.*plan\.md.*Denied/u })).not.toBeNull();
+    expect(screen.queryByRole('list', { name: 'Changed files' })).toBeNull();
   });
 });
 

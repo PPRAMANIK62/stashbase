@@ -1,5 +1,5 @@
 import { Check, Copy } from 'lucide-react';
-import { Fragment, memo, useMemo, useState } from 'react';
+import { Fragment, memo, useCallback, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { ChatMessage } from '@/components/ui/chat-message';
@@ -14,6 +14,7 @@ import {
   transcriptDayBreaks,
 } from '@/features/agent/domain/time';
 import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { AgentActivityGroup, AgentPermissionCard, isAgentToolBlock } from './activity';
 import { AgentMarkdown } from './markdown';
@@ -84,7 +85,9 @@ function transcriptGroups(blocks: AgentTranscriptBlock[]): TranscriptGroup[] {
     tools = [];
   };
   for (const block of blocks) {
-    if (isAgentToolBlock(block) && block.status !== 'awaiting' && !block.permissionRequested) {
+    // Only an ask still waiting stands alone; a decided one is ordinary
+    // settled work and folds into the group, where its row stays inspectable.
+    if (isAgentToolBlock(block) && block.status !== 'awaiting') {
       tools.push(block);
       continue;
     }
@@ -218,19 +221,37 @@ export const AgentTranscript = memo(function AgentTranscript({
   activeTurn,
   blocks,
   onOpenExternal,
+  onOpenSource,
   onPermission,
   onRetry,
+  sourceFor,
   transientFile,
 }: {
   activeTurn: boolean;
   blocks: AgentTranscriptBlock[];
   onOpenExternal(href: string): void;
+  /** Opens a file the Agent changed beside the chat, without selecting it
+   *  on the Agent's behalf. */
+  onOpenSource?: (source: SourceReference) => void;
   onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
   onRetry(errorBlockId: string): boolean;
+  /** The workspace source behind a changed path, or null when it is not one. */
+  sourceFor?: (path: string) => SourceReference | null;
   /** The File behind a sent upload, when this session still holds it. */
   transientFile?: (path: string) => File | undefined;
 }) {
   const [visibleCount, setVisibleCount] = useState(TRANSCRIPT_PAGE_SIZE);
+  // The ask's card leaves the transcript on decision, so focus follows the
+  // decided tool into the activity group that now holds it.
+  const [decidedToolId, setDecidedToolId] = useState<string | null>(null);
+  const decide = useCallback(
+    (toolUseId: string, permissionId: string, allow: boolean) => {
+      const accepted = onPermission(toolUseId, permissionId, allow);
+      if (accepted) setDecidedToolId(toolUseId);
+      return accepted;
+    },
+    [onPermission],
+  );
   const hiddenCount = Math.max(0, blocks.length - visibleCount);
   const visibleBlocks = blocks.slice(hiddenCount);
   const groups = useMemo(() => transcriptGroups(visibleBlocks), [visibleBlocks]);
@@ -257,7 +278,13 @@ export const AgentTranscript = memo(function AgentTranscript({
       )}
       {groups.map((group) =>
         Array.isArray(group) ? (
-          <AgentActivityGroup key={`activity-${group[0]?.id}`} tools={group} />
+          <AgentActivityGroup
+            focusToolId={decidedToolId}
+            key={`activity-${group[0]?.id}`}
+            onOpenSource={onOpenSource}
+            sourceFor={sourceFor}
+            tools={group}
+          />
         ) : (
           <Fragment key={group.id}>
             {group.kind === 'user' && group.at !== undefined && dayBreaks.has(group.id) && (
@@ -268,7 +295,7 @@ export const AgentTranscript = memo(function AgentTranscript({
               copyable={copyable.has(group.id)}
               now={now}
               onOpenExternal={onOpenExternal}
-              onPermission={onPermission}
+              onPermission={decide}
               onRetry={onRetry}
               transientFile={transientFile}
             />

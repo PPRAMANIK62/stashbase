@@ -33,6 +33,7 @@ export function agentToolKind(tool: AgentToolBlock): AgentToolKind {
   if (/read_file$/i.test(tool.name) || /^read$/i.test(tool.name)) return 'read';
   if (/write_file$/i.test(tool.name) || /^write$/i.test(tool.name)) return 'write';
   if (/edit_file$/i.test(tool.name) || /file change/i.test(tool.name)) return 'edit';
+  if (/^(?:edit|multiedit|notebookedit|filediff)$/i.test(tool.name)) return 'edit';
   if (/list_directory$/i.test(tool.name) || /^list/i.test(tool.name)) return 'list';
   if (/search|grep|find/i.test(tool.name)) return 'search';
   return 'other';
@@ -53,6 +54,7 @@ export function agentToolRow(tool: AgentToolBlock): {
     case 'write':
       return { target: path, verb: path ? 'Wrote' : 'Wrote a file' };
     case 'edit':
+      if (tool.name === 'FileDiff') return { target: path, verb: 'Changed' };
       return { target: path, verb: path ? 'Edited' : 'Edited a file' };
     case 'list':
       return { target: path, verb: 'Listed files' };

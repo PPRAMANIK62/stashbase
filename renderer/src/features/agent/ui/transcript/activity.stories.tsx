@@ -44,6 +44,127 @@ const permission: AgentToolBlock = {
   status: 'awaiting',
 };
 
+const PLAN_BEFORE = [
+  '# Screenshot tools',
+  '',
+  '## Decision',
+  '',
+  'Undecided. Compare Screely, Screenshot.rocks, and Pika first.',
+  '',
+  '## Open questions',
+  '',
+  '- Which one exports SVG?',
+  '- Does the free plan watermark?',
+].join('\n');
+
+const PLAN_AFTER = [
+  '# Screenshot tools',
+  '',
+  '## Decision',
+  '',
+  'Use Screely for lesson screenshots: browser frames, gradients, and PNG export on the free plan.',
+  '',
+  '## Open questions',
+  '',
+  '- Does the free plan watermark?',
+  '',
+  '## Next steps',
+  '',
+  '- Export the three lesson screenshots and compare them side by side.',
+].join('\n');
+
+const editPermission: AgentToolBlock = {
+  id: 'edit-permission',
+  input: {
+    file_path: '/Library/Research/notes/screenshot-tools.md',
+    new_string: PLAN_AFTER.split('\n').slice(2, 6).join('\n'),
+    old_string: PLAN_BEFORE.split('\n').slice(2, 6).join('\n'),
+  },
+  kind: 'tool',
+  name: 'Edit',
+  permissionId: 'permission-2',
+  permissionRequested: true,
+  permissionTitle: null,
+  status: 'awaiting',
+};
+
+const fileChangeTools: AgentToolBlock[] = [
+  {
+    id: 'read-plan',
+    input: { file_path: '/Library/Research/notes/screenshot-tools.md' },
+    kind: 'tool',
+    name: 'Read',
+    result: PLAN_BEFORE,
+    status: 'done',
+  },
+  {
+    id: 'diff-plan',
+    input: {
+      additions: 6,
+      after: `${PLAN_AFTER}\n`,
+      before: `${PLAN_BEFORE}\n`,
+      deletions: 2,
+      path: 'notes/screenshot-tools.md',
+    },
+    kind: 'tool',
+    name: 'FileDiff',
+    status: 'done',
+  },
+  {
+    id: 'write-summary',
+    input: {
+      content: '# Lesson screenshots\n\nExported with Screely on 2026-09-09.\n',
+      file_path: '/Library/Research/notes/lesson-screenshots.md',
+    },
+    kind: 'tool',
+    name: 'Write',
+    status: 'done',
+  },
+  {
+    id: 'codex-change',
+    input: {
+      changes: [
+        {
+          diff: '@@ -1,3 +1,3 @@\n # Assets\n-- pending\n+- three lesson screenshots\n done\n',
+          kind: { type: 'update' },
+          path: 'assets/README.md',
+        },
+      ],
+    },
+    kind: 'tool',
+    name: 'File change',
+    status: 'done',
+  },
+];
+
+function FileChangeHarness() {
+  const [decision, setDecision] = useState<AgentToolBlock>(editPermission);
+  return (
+    <div className="w-[34rem] space-y-5">
+      <AgentPermissionCard
+        onReply={(_toolUseId, _permissionId, allow) => {
+          setDecision((tool) => ({
+            ...tool,
+            permissionId: undefined,
+            status: allow ? 'running' : 'denied',
+          }));
+          return true;
+        }}
+        tool={decision}
+      />
+      <AgentActivityGroup
+        onOpenSource={() => undefined}
+        sourceFor={(path) => {
+          const folder = '/Library/Research';
+          const relative = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
+          return relative.startsWith('/') ? null : { folderPath: folder, path: relative };
+        }}
+        tools={fileChangeTools}
+      />
+    </div>
+  );
+}
+
 function AgentActivityHarness({ compact = false }: { compact?: boolean }) {
   const [mode, setMode] = useState<AgentAccessMode>('auto');
   const [decision, setDecision] = useState<AgentToolBlock>(permission);
@@ -78,6 +199,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Standard: Story = {};
+
+export const FileChanges: Story = {
+  render: () => <FileChangeHarness />,
+};
 
 export const Compact: Story = {
   args: { compact: true },

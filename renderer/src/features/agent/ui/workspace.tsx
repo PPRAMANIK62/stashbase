@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
 import type { QueuedMessage } from '@/components/ui/input-message';
+import { changedSource } from '@/features/agent/domain/file-change';
 import { scopeLabel, type AgentSessionPhase } from '@/features/agent/domain/session';
 import { suggestStarters } from '@/features/agent/domain/starters';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
@@ -39,6 +40,7 @@ function phaseLabel(phase: AgentSessionPhase, error: string | null): string {
 function ReadyWorkspace({
   agents,
   onOpenExternal,
+  onOpenSource,
   onReprocess,
   runtime,
   scopeOutline,
@@ -71,6 +73,8 @@ function ReadyWorkspace({
     () => (scopeOutline ? suggestStarters(scopeName, scopeOutline) : []),
     [scopeName, scopeOutline],
   );
+  const scope = state.scope;
+  const sourceFor = useMemo(() => (path: string) => changedSource(scope, path), [scope]);
   const composerRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   useStickToBottom(logRef, activeId);
@@ -106,8 +110,10 @@ function ReadyWorkspace({
               blocks={state.transcript}
               key={activeId}
               onOpenExternal={onOpenExternal}
+              onOpenSource={onOpenSource}
               onPermission={active.replyPermission}
               onRetry={active.retry}
+              sourceFor={sourceFor}
               transientFile={active.fileForTransient}
             />
           )}
