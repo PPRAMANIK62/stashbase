@@ -145,8 +145,8 @@ test('dependency-cruiser accepts inward dependencies inside one feature', (conte
 
 test('dependency-cruiser rejects cycles, sibling access, deep imports, and layer inversion', (context) => {
   const root = fixture(context);
-  write(root, 'renderer/src/shared/utilities/first.ts', "import './second';\n");
-  write(root, 'renderer/src/shared/utilities/second.ts', "import './first';\n");
+  write(root, 'renderer/src/shared/utils/first.ts', "import './second';\n");
+  write(root, 'renderer/src/shared/utils/second.ts', "import './first';\n");
   write(root, 'renderer/src/features/documents/domain/model.ts', 'export const document = true;\n');
   write(
     root,

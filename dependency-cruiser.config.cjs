@@ -151,10 +151,10 @@ module.exports = {
       to: { path: '^renderer/src/(?:app|features|platform)/' },
     },
     {
-      name: 'shared-domain-and-utilities-are-pure',
+      name: 'shared-domain-and-utils-are-pure',
       severity: 'error',
       comment: 'The shared domain kernel and utilities cannot depend on React or browser presentation.',
-      from: { path: '^renderer/src/shared/(?:domain|utilities)/' },
+      from: { path: '^renderer/src/shared/(?:domain|utils)/' },
       to: {
         path: [
           '^renderer/src/shared/(?:styling|ui)/',

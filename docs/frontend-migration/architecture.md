@@ -83,7 +83,7 @@ src/
     domain/
     ui/
     styling/
-    utilities/
+    utils/
   features/
     agent/
     documents/

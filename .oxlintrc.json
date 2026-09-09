@@ -33,7 +33,7 @@
       "files": [
         "**/renderer/src/features/*/domain/**",
         "**/renderer/src/shared/domain/**",
-        "**/renderer/src/shared/utilities/**"
+        "**/renderer/src/shared/utils/**"
       ],
       "rules": {
         "no-restricted-globals": [
