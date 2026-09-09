@@ -1,14 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Settings as SettingsIcon } from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   Sidebar,
@@ -20,7 +13,6 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
-import { SplitHandle } from '@/components/ui/split-handle';
 import {
   AgentChats,
   AgentTitlebar,
@@ -47,12 +39,9 @@ import {
 } from '@/features/preparation/public';
 import { Settings } from '@/features/settings/public';
 import {
-  DEFAULT_AGENT_PANE_WIDTH,
   FileTree,
   LibrarySidebar,
   LibraryWelcome,
-  MAX_AGENT_PANE_WIDTH,
-  MIN_AGENT_PANE_WIDTH,
   useFiles,
   useLibraryLifecycle,
   useLibrary,
@@ -62,10 +51,12 @@ import {
   workspaceQueryKeys,
   type FileTreeRowMarker,
 } from '@/features/workspace/public';
+import { spring } from '@/lib/springs';
 import { applyCaptureWatch } from '@/platform/electron/capture';
 import { Logo } from '@/shared/brand/logo';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
+import { AgentDocumentWorkspace, useHasDocuments } from './composition/agent-document-workspace';
 import { ClipboardOffer, useComposerFocusSignal } from './composition/clipboard-offer';
 import { SidebarNavigator } from './composition/sidebar-navigator';
 import { useDocumentCommands } from './composition/use-document-commands';
@@ -103,49 +94,6 @@ function useAgentComposerFocused(): boolean {
   return focused;
 }
 
-function AgentDocumentWorkspace({
-  agent,
-  document,
-  onPaneWidthChange,
-  paneWidth,
-  runtime,
-}: {
-  agent: AgentWorkspaceProps;
-  document: ReactNode;
-  onPaneWidthChange(width: number): void;
-  paneWidth: number;
-  runtime: ReturnType<typeof useDocumentWorkspace>;
-}) {
-  const subscribe = useCallback(
-    (listener: () => void) => runtime?.store.subscribe(listener) ?? (() => undefined),
-    [runtime],
-  );
-  const snapshot = useCallback(() => (runtime?.store.getState().tabs.length ?? 0) > 0, [runtime]);
-  const hasDocuments = useSyncExternalStore(subscribe, snapshot, snapshot);
-  if (!hasDocuments) return <AgentWorkspace {...agent} />;
-  return (
-    <div className="flex h-full min-h-0">
-      <div className="min-w-0 flex-1">{document}</div>
-      <div
-        className="relative h-full max-w-[calc(100%-20rem)] shrink-0 border-l border-border"
-        style={{ width: paneWidth }}
-      >
-        <SplitHandle
-          className="left-0 -translate-x-1/2"
-          defaultWidth={DEFAULT_AGENT_PANE_WIDTH}
-          label="Resize Agent pane"
-          max={MAX_AGENT_PANE_WIDTH}
-          min={MIN_AGENT_PANE_WIDTH}
-          onWidthChange={onPaneWidthChange}
-          pane="right"
-          width={paneWidth}
-        />
-        <AgentWorkspace {...agent} />
-      </div>
-    </div>
-  );
-}
-
 export function App({ dependencies }: { dependencies: AppDependencies }) {
   const session = useWorkspaceSession(dependencies.library.api, dependencies.session);
   const library = useLibrary(dependencies.library.api);
@@ -158,6 +106,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     dependencies.documents.sourceApi,
     dependencies.documents.createId,
   );
+  const hasDocuments = useHasDocuments(documents);
   const settings = useSettingsCommand();
   useEffect(() => {
     if (!session.isReady || session.isRestoringFolder || !library.data) return;
@@ -453,16 +402,35 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
           <div className="workspace-titlebar-controls">
             <SidebarTrigger aria-label="Toggle files sidebar" />
           </div>
-          <div className="flex min-w-0 flex-1 px-2">
-            {documents ? (
-              <DocumentTabs
-                className="workspace-titlebar-controls max-w-full"
-                emptyContent={<AgentTitlebar runtime={agentRuntime} />}
-                runtime={documents}
-              />
-            ) : (
-              <AgentTitlebar runtime={agentRuntime} />
-            )}
+          <div className="relative flex min-w-0 flex-1 px-2">
+            <AnimatePresence initial={false} mode="popLayout">
+              {documents && hasDocuments ? (
+                <motion.div
+                  animate={{ opacity: 1 }}
+                  className="flex min-w-0 flex-1"
+                  exit={{ opacity: 0, transition: spring.fast.exit }}
+                  initial={{ opacity: 0 }}
+                  key="tabs"
+                  transition={spring.fast}
+                >
+                  <DocumentTabs
+                    className="workspace-titlebar-controls max-w-full"
+                    runtime={documents}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  animate={{ opacity: 1 }}
+                  className="flex min-w-0 flex-1"
+                  exit={{ opacity: 0, transition: spring.fast.exit }}
+                  initial={{ opacity: 0 }}
+                  key="agent"
+                  transition={spring.fast}
+                >
+                  <AgentTitlebar runtime={agentRuntime} />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
           <div aria-hidden="true" className="size-9 shrink-0" />
         </header>
@@ -472,7 +440,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
             <div className="h-full min-h-0">
               <div className={library.data.activeFolder ? 'h-full min-h-0' : 'hidden'}>
                 <AgentDocumentWorkspace
-                  agent={agentProps}
+                  agent={<AgentWorkspace {...agentProps} />}
                   onPaneWidthChange={session.runtime.setAgentPaneWidth}
                   paneWidth={session.shell.agentPaneWidth}
                   runtime={documents}

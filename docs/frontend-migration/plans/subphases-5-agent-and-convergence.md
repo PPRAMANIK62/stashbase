@@ -100,6 +100,11 @@ An empty chat centers a greeting, a three-row composer, and up to three
 starter chips drawn from the folder's top-level entries; chips prefill and
 never send. The shell maps the listing to `AgentScopeOutline` so the features
 stay decoupled. The first message docks the composer without resizing it.
+Opening the first document, or closing the last, changes only pane widths in
+one always-mounted row: the Agent workspace keeps its transcript, draft, and
+focus, both panes hold their final widths from the first frame, and only the
+seam moves on the moderate spring while the titlebar crossfades to the tabs.
+Dragging the seam stays instant, and reduced motion snaps.
 Connecting and restoring are silent; only disconnect, folder removal, or a
 closed chat shows a status row.
 
