@@ -1,3 +1,4 @@
+import type { ResolvedContextFile as ResolvedContextText } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import type {
   AgentId,
@@ -7,6 +8,7 @@ import type {
 } from '@/features/agent/domain/session';
 import type { AgentAccessMode, AgentClientEvent } from '@/protocols/websocket/agent-session';
 import type { AgentsResponse } from '@/shared/agent-runtime';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
 export type { AgentHistoryEntry };
 
@@ -66,4 +68,40 @@ export class AgentSessionError extends Error {
     this.name = 'AgentSessionError';
     this.kind = kind;
   }
+}
+
+export type AgentContextErrorKind =
+  | 'not-found'
+  | 'unsupported'
+  | 'unavailable'
+  | 'invalid-response';
+
+export class AgentContextError extends Error {
+  readonly kind: AgentContextErrorKind;
+
+  constructor(kind: AgentContextErrorKind, message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'AgentContextError';
+    this.kind = kind;
+  }
+}
+
+/** The domain's resolved file plus the member folder label the route names. */
+export interface ResolvedContextFile extends ResolvedContextText {
+  readonly folder: string;
+}
+
+export interface AgentUploadOutcome {
+  readonly error?: string;
+  readonly name: string;
+  readonly path?: string;
+}
+
+export interface AgentContextPort {
+  /** Resolves one library source to what the Agent should read. A missing
+   *  file is `not-found`; a format the Agent cannot read is `unsupported`. */
+  resolve(source: SourceReference, signal: AbortSignal): Promise<ResolvedContextFile>;
+  /** Uploads transient files outside every library folder; outcomes follow
+   *  request order. */
+  upload(files: File[], signal: AbortSignal): Promise<AgentUploadOutcome[]>;
 }

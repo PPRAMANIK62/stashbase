@@ -242,7 +242,21 @@ export function createAgentSessionApi(
         body,
         'Agent replay returned an invalid response.',
       );
-      return { effort: replay.effort, transcript: replay.messages };
+      // Replayed image previews are server routes; the renderer runs on its
+      // own origin, so they are absolutized here where the origin is known.
+      const transcript = replay.messages.map((block) =>
+        block.kind === 'user' && block.attachments
+          ? {
+              ...block,
+              attachments: block.attachments.map((attachment) =>
+                attachment.previewUrl
+                  ? { ...attachment, previewUrl: new URL(attachment.previewUrl, serverOrigin).href }
+                  : attachment,
+              ),
+            }
+          : block,
+      );
+      return { effort: replay.effort, transcript };
     },
     async rename(entry, title, signal) {
       const request = agentSessionRenameRequestSchema.parse({ title });

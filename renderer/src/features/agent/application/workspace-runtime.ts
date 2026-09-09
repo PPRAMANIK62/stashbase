@@ -1,10 +1,15 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
-import type { AgentReconnectScheduler, AgentSessionPort } from '@/features/agent/application/ports';
+import type {
+  AgentContextPort,
+  AgentReconnectScheduler,
+  AgentSessionPort,
+} from '@/features/agent/application/ports';
 import {
   createAgentSessionRuntime,
   type AgentSessionRuntime,
 } from '@/features/agent/application/session-runtime';
+import type { AgentScopeEnvironment } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import {
   agentScopesEqual,
@@ -42,11 +47,15 @@ export interface AgentWorkspaceRuntime {
   session(id: string): AgentSessionRuntime | null;
   start(availableAgents?: readonly AgentId[]): void;
   startActive(): void;
+  /** Publishes the window folder's listing and preparation state so sessions
+   *  bound to that folder validate context against it. */
+  setScopeEnvironment(environment: AgentScopeEnvironment | null): void;
   setWindowFolder(folderPath: string | null): void;
 }
 
 export interface AgentWorkspaceRuntimeOptions {
   autostart?: boolean;
+  context?: AgentContextPort;
   createId(): string;
   folderPath: string | null;
   initialAgent?: AgentId;
@@ -62,6 +71,7 @@ interface MountedAgentSession {
 
 export function createAgentWorkspaceRuntime({
   autostart = true,
+  context,
   createId,
   folderPath: initialFolderPath,
   initialAgent = 'stashbase',
@@ -129,6 +139,16 @@ export function createAgentWorkspaceRuntime({
     const session = createAgentSessionRuntime({
       agent,
       autostart: false,
+      context,
+      environment: () => {
+        const environment = store.getState().scopeEnvironment;
+        const sessionScope = sessions.get(id)?.runtime.store.getState().scope ?? scope;
+        return environment &&
+          sessionScope.kind === 'folder' &&
+          environment.folderPath === sessionScope.path
+          ? { listing: environment.listing, readiness: environment.readiness }
+          : null;
+      },
       id,
       port,
       scheduler,
@@ -295,6 +315,10 @@ export function createAgentWorkspaceRuntime({
     startActive() {
       if (disposed || !started) return;
       runtime.activeSession().start();
+    },
+    setScopeEnvironment(environment) {
+      if (disposed || store.getState().scopeEnvironment === environment) return;
+      store.setState((state) => ({ ...state, scopeEnvironment: environment }), true);
     },
     setWindowFolder(nextFolderPath) {
       if (disposed || nextFolderPath === folderPath) return;

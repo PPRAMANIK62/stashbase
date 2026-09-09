@@ -13,6 +13,10 @@ describe('workspace shell', () => {
   let getAnimationsDescriptor: PropertyDescriptor | undefined;
   const dependencies: AppDependencies = {
     agent: {
+      context: {
+        resolve: vi.fn(() => new Promise<never>(() => undefined)),
+        upload: vi.fn(async () => []),
+      },
       session: {
         connect: vi.fn(() => ({ close: vi.fn() })),
         list: vi.fn(async () => []),
@@ -187,7 +191,9 @@ describe('workspace shell', () => {
     expect(sidebar?.getAttribute('data-state')).toBe('collapsed');
     await act(async () => Promise.resolve());
     expect(dependencies.session.save).toHaveBeenCalledWith(
-      expect.objectContaining({ shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 240 } }),
+      expect.objectContaining({
+        shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 240 },
+      }),
     );
   });
 

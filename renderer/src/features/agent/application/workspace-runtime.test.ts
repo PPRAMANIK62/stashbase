@@ -65,6 +65,41 @@ describe('AgentWorkspaceRuntime', () => {
     expect(runtime.activeSession().id).toBe(retainedId);
   });
 
+  it('validates bound context only for sessions in the published window folder', async () => {
+    let nextId = 0;
+    const resolve = vi.fn(async () => {
+      throw new Error('unreachable');
+    });
+    const runtime = createAgentWorkspaceRuntime({
+      context: { resolve, upload: vi.fn(async () => []) },
+      createId: () => `chat-${++nextId}`,
+      folderPath: '/library/Research',
+      port: port(),
+    });
+    runtime.setScopeEnvironment({
+      folderPath: '/library/Research',
+      listing: { files: [], folders: [] },
+      readiness: {},
+      versions: {},
+    });
+    const missing = {
+      boundVersion: null,
+      format: 'md' as const,
+      kind: 'source' as const,
+      source: { folderPath: '/library/Research', path: 'gone.md' },
+    };
+
+    const inFolder = runtime.activeSession();
+    inFolder.addContext(missing);
+    await expect(inFolder.sendPrompt('Read it')).resolves.toEqual({ ok: false, reason: 'stale' });
+    expect(resolve).not.toHaveBeenCalled();
+
+    const elsewhere = runtime.newChat('codex', { kind: 'folder', path: '/library/Plans' });
+    elsewhere.addContext({ ...missing, source: { folderPath: '/library/Plans', path: 'gone.md' } });
+    await expect(elsewhere.sendPrompt('Read it')).resolves.toEqual({ ok: true });
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps blank drafts transport-free until active first use', () => {
     const sessionPort = port();
     const runtime = createAgentWorkspaceRuntime({

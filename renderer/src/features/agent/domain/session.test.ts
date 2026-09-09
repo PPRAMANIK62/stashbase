@@ -129,7 +129,7 @@ describe('Agent session domain', () => {
       type: 'start-tool',
     });
     const queued = transitionAgentSession(running, {
-      queue: [{ id: 'queued-1', text: 'Follow up' }],
+      queue: [{ context: [], id: 'queued-1', text: 'Follow up' }],
       type: 'set-queue',
     });
     const retired = transitionAgentSession(queued, { type: 'retire' });
@@ -152,11 +152,53 @@ describe('Agent session domain', () => {
       scope: { kind: 'library' },
     });
     const queued = transitionAgentSession(initial, {
-      queue: Array.from({ length: 25 }, (_, index) => ({ id: `queued-${index}`, text: 'Next' })),
+      queue: Array.from({ length: 25 }, (_, index) => ({
+        context: [],
+        id: `queued-${index}`,
+        text: 'Next',
+      })),
       type: 'set-queue',
     });
 
     expect(queued.queuedPrompts).toHaveLength(20);
     expect(queued.queuedPrompts.at(-1)?.id).toBe('queued-19');
+  });
+
+  it('sends bound context with the prompt and clears it from the draft', () => {
+    const initial = createAgentSessionState({
+      agent: 'codex',
+      id: 'chat-1',
+      scope: { kind: 'folder', path: '/library/Research' },
+    });
+    const context = [
+      {
+        boundVersion: 3,
+        format: 'pdf' as const,
+        kind: 'source' as const,
+        source: { folderPath: '/library/Research', path: 'papers/report.pdf' },
+      },
+    ];
+    const bound = transitionAgentSession(initial, { context, type: 'set-context' });
+    expect(agentSessionIsBlank(bound)).toBe(false);
+    const refused = transitionAgentSession(bound, {
+      message: 'This file is no longer in the folder.',
+      type: 'set-context-issue',
+    });
+    expect(refused.contextIssue).toBe('This file is no longer in the folder.');
+    expect(transitionAgentSession(refused, { draft: 'x', type: 'set-draft' }).contextIssue).toBe(
+      null,
+    );
+
+    const sent = transitionAgentSession(refused, {
+      at: 7,
+      context,
+      id: 'user-1',
+      text: 'Summarize @papers/report.pdf',
+      type: 'submit-prompt',
+    });
+    expect(sent).toMatchObject({ context: [], contextIssue: null, draft: '' });
+    expect(sent.transcript).toEqual([
+      { at: 7, context, id: 'user-1', kind: 'user', text: 'Summarize @papers/report.pdf' },
+    ]);
   });
 });

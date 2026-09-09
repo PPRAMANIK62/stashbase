@@ -1,4 +1,9 @@
-import { createAgentSessionApi, type AgentSessionPort } from '@/features/agent/public';
+import {
+  createAgentContextApi,
+  createAgentSessionApi,
+  type AgentContextPort,
+  type AgentSessionPort,
+} from '@/features/agent/public';
 import {
   createDocumentAssetApi,
   createDocxPreviewApi,
@@ -57,6 +62,7 @@ import { createHttpClient } from '@/platform/http/client';
 
 export interface AppDependencies {
   agent: {
+    context: AgentContextPort;
     session: AgentSessionPort;
   };
   /** Desktop clipboard capture; null outside Electron or when the capability is absent. */
@@ -102,6 +108,7 @@ export function createDependencies(): AppDependencies {
   const externalNavigation = createExternalNavigation(bridge.externalNavigation);
   return {
     agent: {
+      context: createAgentContextApi(http, bridge.runtime.serverOrigin),
       session: createAgentSessionApi(http, bridge.runtime.serverOrigin),
     },
     capture: bridge.capture ?? null,

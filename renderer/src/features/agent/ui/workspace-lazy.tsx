@@ -4,6 +4,7 @@ import type { AgentCatalogPort } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
 import type { AgentScopeOutline } from '@/features/agent/domain/starters';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { AgentSurfaceBoundary } from './surface-boundary';
 
@@ -11,6 +12,8 @@ export interface AgentWorkspaceProps {
   catalog: AgentCatalogPort;
   onOpenExternal(href: string): void;
   onOpenAgentSettings(): void;
+  /** Restarts preparation for a bound source whose prepared text failed. */
+  onReprocess?(source: SourceReference): void;
   runtime: AgentWorkspaceRuntime;
   /** Top-level entries of the scoped folder, or null while unknown. Seeds the
    *  empty chat's starter prompts. */

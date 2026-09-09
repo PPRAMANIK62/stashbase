@@ -1,7 +1,41 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { AgentConnectionListener, AgentReconnectScheduler, AgentSessionPort } from './ports';
+import type { AgentContextItem } from '@/features/agent/domain/context';
+
+import {
+  AgentContextError,
+  type AgentConnectionListener,
+  type AgentContextPort,
+  type AgentReconnectScheduler,
+  type AgentSessionPort,
+} from './ports';
 import { createAgentSessionRuntime } from './session-runtime';
+
+const reportSource: AgentContextItem = {
+  boundVersion: 4,
+  format: 'pdf',
+  kind: 'source',
+  source: { folderPath: '/library/Research', path: 'papers/report.pdf' },
+};
+
+function contextPort(overrides: Partial<AgentContextPort> = {}): AgentContextPort {
+  return {
+    resolve: vi.fn(async (source) => ({
+      available: true,
+      folder: 'Research',
+      kind: 'derived' as const,
+      path: `${source.folderPath}/${source.path}`,
+      readPath: '/app-data/derived/report.md',
+      reason: '',
+      sourceFormat: 'pdf',
+      sourcePath: source.path,
+    })),
+    upload: vi.fn(async (files: File[]) =>
+      files.map((file) => ({ name: file.name, path: `/tmp/attach/${file.name}` })),
+    ),
+    ...overrides,
+  };
+}
 
 function harness() {
   const listeners: AgentConnectionListener[] = [];
@@ -122,7 +156,7 @@ describe('AgentSessionRuntime', () => {
     expect(runtime.store.getState().effort).toBe('high');
   });
 
-  it('sends the retained first-use draft once readiness arrives and streams tool work', () => {
+  it('sends the retained first-use draft once readiness arrives and streams tool work', async () => {
     const test = harness();
     const runtime = createAgentSessionRuntime({
       agent: 'codex',
@@ -134,7 +168,7 @@ describe('AgentSessionRuntime', () => {
     });
 
     runtime.setDraft('  Inspect the project  ');
-    expect(runtime.sendPrompt()).toBe(true);
+    await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
     expect(runtime.store.getState()).toMatchObject({
       draft: 'Inspect the project',
       phase: 'connecting',
@@ -200,7 +234,7 @@ describe('AgentSessionRuntime', () => {
     ]);
   });
 
-  it('replays a mode changed during connection and retries without duplicating the prompt', () => {
+  it('replays a mode changed during connection and retries without duplicating the prompt', async () => {
     const test = harness();
     const runtime = createAgentSessionRuntime({
       agent: 'codex',
@@ -214,7 +248,7 @@ describe('AgentSessionRuntime', () => {
     expect(test.sent).toEqual([{ mode: 'default', t: 'set-mode' }]);
 
     runtime.setDraft('Keep one prompt');
-    expect(runtime.sendPrompt()).toBe(true);
+    await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
     test.listeners[0]?.onEvent({ kind: 'failed', message: 'Network unavailable.' });
     const failure = runtime.store.getState().transcript.find((block) => block.kind === 'error');
     expect(failure?.kind).toBe('error');
@@ -286,6 +320,197 @@ describe('AgentSessionRuntime', () => {
       reconnectAttempt: 3,
     });
     expect(runtime.store.getState().error).toContain('Reconnect to continue');
+  });
+
+  it('binds mentioned sources to the wire prompt while the transcript keeps the typed text', async () => {
+    const test = harness();
+    const context = contextPort();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      context,
+      environment: () => ({
+        listing: { files: [{ format: 'pdf', path: 'papers/report.pdf' }], folders: [] },
+        readiness: { 'papers/report.pdf': 'current' },
+      }),
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'folder', path: '/library/Research' },
+    });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    runtime.addContext(reportSource);
+    runtime.addContext(reportSource);
+    expect(runtime.store.getState().context).toHaveLength(1);
+    runtime.setDraft('Summarize @papers/report.pdf');
+
+    await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
+
+    expect(context.resolve).toHaveBeenCalledWith(reportSource.source, runtime.signal);
+    expect(test.sent.at(-1)).toEqual({
+      t: 'prompt',
+      text: [
+        'Summarize @papers/report.pdf',
+        '',
+        'Attached files:',
+        '- papers/report.pdf (for text context, use mcp__stashbase__read_file with path /library/Research/papers/report.pdf; it returns the derived text representation for this pdf)',
+      ].join('\n'),
+    });
+    expect(runtime.store.getState()).toMatchObject({ context: [], draft: '' });
+    expect(runtime.store.getState().transcript).toEqual([
+      expect.objectContaining({
+        context: [reportSource],
+        kind: 'user',
+        text: 'Summarize @papers/report.pdf',
+      }),
+    ]);
+
+    test.listeners[0]?.onEvent({ kind: 'failed', message: 'Rate limited.' });
+    const failure = runtime.store.getState().transcript.find((block) => block.kind === 'error');
+    expect(runtime.retry(failure!.id)).toBe(true);
+    expect(test.sent.at(-1)).toEqual(test.sent.at(-2));
+  });
+
+  it('refuses a send whose source left the folder and keeps the draft', async () => {
+    const test = harness();
+    const context = contextPort();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      context,
+      environment: () => ({ listing: { files: [], folders: [] }, readiness: {} }),
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'folder', path: '/library/Research' },
+    });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    runtime.addContext(reportSource);
+    runtime.setDraft('Summarize @papers/report.pdf');
+
+    await expect(runtime.sendPrompt()).resolves.toEqual({ ok: false, reason: 'stale' });
+
+    expect(context.resolve).not.toHaveBeenCalled();
+    expect(test.sent).toEqual([]);
+    expect(runtime.store.getState()).toMatchObject({
+      context: [reportSource],
+      contextIssue: 'This file is no longer in the folder.',
+      draft: 'Summarize @papers/report.pdf',
+    });
+    runtime.setDraft('Summarize @papers/report.pdf again');
+    expect(runtime.store.getState().contextIssue).toBeNull();
+  });
+
+  it('treats a source the server no longer finds as stale', async () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      context: contextPort({
+        resolve: vi.fn(async () => {
+          throw new AgentContextError('not-found', 'That file is no longer in this folder.');
+        }),
+      }),
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'folder', path: '/library/Research' },
+    });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    runtime.addContext(reportSource);
+
+    await expect(runtime.sendPrompt('Read it')).resolves.toEqual({ ok: false, reason: 'stale' });
+    expect(test.sent).toEqual([]);
+    expect(runtime.store.getState().contextIssue).toBe('That file is no longer in this folder.');
+  });
+
+  it('sends a queued prompt with the context it was queued with', async () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      context: contextPort(),
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'folder', path: '/library/Research' },
+    });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    await runtime.sendPrompt('First');
+    test.listeners[0]?.onEvent({ kind: 'turn-started' });
+
+    runtime.addContext(reportSource);
+    runtime.setQueue([{ id: 'queued-1', text: 'Then read @papers/report.pdf' }]);
+    expect(runtime.store.getState()).toMatchObject({
+      context: [],
+      queuedPrompts: [
+        { context: [reportSource], id: 'queued-1', text: 'Then read @papers/report.pdf' },
+      ],
+    });
+
+    runtime.setQueue([]);
+    test.listeners[0]?.onEvent({ isError: false, kind: 'turn-ended' });
+    await expect(
+      runtime.sendPrompt('Then read @papers/report.pdf', { queuedId: 'queued-1' }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(String((test.sent.at(-1) as { text: string }).text)).toContain('Attached files:');
+    expect(runtime.store.getState().transcript.at(-1)).toMatchObject({
+      context: [reportSource],
+      kind: 'user',
+      text: 'Then read @papers/report.pdf',
+    });
+  });
+
+  it('returns an edited queued message and its context to the composer', () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      context: contextPort(),
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'folder', path: '/library/Research' },
+    });
+    runtime.addContext(reportSource);
+    runtime.setQueue([{ id: 'queued-1', text: 'Later' }]);
+    runtime.setDraft('Later');
+    runtime.setQueue([]);
+
+    expect(runtime.store.getState()).toMatchObject({
+      context: [reportSource],
+      draft: 'Later',
+      queuedPrompts: [],
+    });
+  });
+
+  it('binds uploaded files as transient context and reports the ones that failed', async () => {
+    const test = harness();
+    const context = contextPort({
+      upload: vi.fn(async (files: File[]) =>
+        files.map((file, index) =>
+          index === 0
+            ? { name: file.name, path: `/tmp/attach/${file.name}` }
+            : { error: 'disk full', name: file.name },
+        ),
+      ),
+    });
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      context,
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'library' },
+    });
+
+    const notes = new File(['a'], 'notes.txt', { type: 'text/plain' });
+    await runtime.attachFiles([notes, new File(['b'], 'more.txt', { type: 'text/plain' })]);
+
+    expect(context.upload).toHaveBeenCalledTimes(1);
+    expect(runtime.fileForTransient('/tmp/attach/notes.txt')).toBe(notes);
+    expect(runtime.store.getState()).toMatchObject({
+      context: [{ kind: 'transient', name: 'notes.txt', path: '/tmp/attach/notes.txt' }],
+      contextIssue: '1 file could not be attached.',
+    });
+    runtime.removeContext('transient:/tmp/attach/notes.txt');
+    expect(runtime.store.getState().context).toEqual([]);
   });
 
   it('retires a removed folder without reconnecting it', () => {

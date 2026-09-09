@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import type { AgentSessionPort } from '@/features/agent/application/ports';
+import type { AgentContextPort, AgentSessionPort } from '@/features/agent/application/ports';
 import {
   createAgentWorkspaceRuntime,
   type AgentWorkspaceRuntime,
 } from '@/features/agent/application/workspace-runtime';
 
 export interface AgentWorkspaceRuntimeOptions {
+  context: AgentContextPort;
   createId(): string;
   folderPath: string | null;
   session: AgentSessionPort;
@@ -16,6 +17,7 @@ export interface AgentWorkspaceRuntimeOptions {
 /** Owns the Agent workspace for one renderer window. Blank drafts stay local;
  * the catalog readiness gate allows the first turn to start transport. */
 export function useAgentWorkspaceRuntime({
+  context,
   createId,
   folderPath,
   session,
@@ -24,6 +26,7 @@ export function useAgentWorkspaceRuntime({
   const [runtime] = useState(() =>
     createAgentWorkspaceRuntime({
       autostart: false,
+      context,
       createId,
       folderPath,
       port: session,

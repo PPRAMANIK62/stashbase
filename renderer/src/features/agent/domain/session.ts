@@ -1,3 +1,4 @@
+import type { AgentContextItem } from '@/features/agent/domain/context';
 import type {
   AgentAccessMode,
   AgentModel,
@@ -24,6 +25,8 @@ export type AgentTranscriptBlock =
         dims?: string;
         previewUrl?: string;
       }>;
+      /** The bound context this prompt was sent with. */
+      context?: AgentContextItem[];
       at?: number;
     }
   | { kind: 'assistant'; id: string; text: string; at?: number }
@@ -88,6 +91,13 @@ export type AgentSessionPhase =
   | 'retired'
   | 'disposed';
 
+export interface AgentQueuedPrompt {
+  id: string;
+  text: string;
+  /** Snapshot of the bound context taken when the prompt was queued. */
+  context: AgentContextItem[];
+}
+
 export interface AgentSessionState {
   readonly id: string;
   readonly agent: AgentId;
@@ -96,7 +106,11 @@ export interface AgentSessionState {
   accessMode: AgentAccessMode;
   activeTurn: boolean;
   draft: string;
-  queuedPrompts: Array<{ id: string; text: string }>;
+  /** Bound context for the draft: mentioned sources and transient uploads. */
+  context: AgentContextItem[];
+  /** Why the last send or attach was refused; cleared by any draft change. */
+  contextIssue: string | null;
+  queuedPrompts: AgentQueuedPrompt[];
   nativeSessionId: string | null;
   transcript: AgentTranscriptBlock[];
   lastModified: number;
@@ -127,6 +141,8 @@ export function createAgentSessionState(options: {
     accessMode: 'auto',
     activeTurn: false,
     draft: '',
+    context: [],
+    contextIssue: null,
     queuedPrompts: [],
     nativeSessionId: null,
     transcript: [],
@@ -158,8 +174,10 @@ export type AgentSessionAction =
       fallback: string | null;
     }
   | { type: 'set-draft'; draft: string }
-  | { type: 'set-queue'; queue: Array<{ id: string; text: string }> }
-  | { type: 'submit-prompt'; id: string; text: string; at: number }
+  | { type: 'set-context'; context: AgentContextItem[] }
+  | { type: 'set-context-issue'; message: string | null }
+  | { type: 'set-queue'; queue: AgentQueuedPrompt[] }
+  | { type: 'submit-prompt'; id: string; text: string; context: AgentContextItem[]; at: number }
   | { type: 'turn-start' }
   | { type: 'append-text'; id: string; delta: string }
   | { type: 'append-thinking'; id: string; delta: string }
@@ -233,17 +251,29 @@ export function transitionAgentSession(
       };
     }
     case 'set-draft':
-      return { ...state, draft: action.draft };
+      return { ...state, contextIssue: null, draft: action.draft };
+    case 'set-context':
+      return { ...state, context: action.context, contextIssue: null };
+    case 'set-context-issue':
+      return { ...state, contextIssue: action.message };
     case 'set-queue':
       return { ...state, queuedPrompts: action.queue.slice(0, MAX_QUEUED_PROMPTS) };
     case 'submit-prompt':
       return {
         ...state,
         activeTurn: true,
+        context: [],
+        contextIssue: null,
         draft: '',
         transcript: [
           ...state.transcript,
-          { at: action.at, id: action.id, kind: 'user', text: action.text },
+          {
+            at: action.at,
+            ...(action.context.length > 0 ? { context: action.context } : {}),
+            id: action.id,
+            kind: 'user',
+            text: action.text,
+          },
         ],
       };
     case 'turn-start':
@@ -379,6 +409,7 @@ export function transitionAgentSession(
       return {
         ...state,
         activeTurn: false,
+        contextIssue: null,
         error: null,
         phase: 'retired',
         queuedPrompts: [],
@@ -405,6 +436,7 @@ export function agentSessionIsBlank(state: AgentSessionState): boolean {
     state.nativeSessionId === null &&
     state.transcript.length === 0 &&
     state.draft.length === 0 &&
+    state.context.length === 0 &&
     state.queuedPrompts.length === 0 &&
     !state.activeTurn
   );

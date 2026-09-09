@@ -1,3 +1,5 @@
+import type { AgentScopeEnvironment } from '@/features/agent/domain/context';
+
 import { agentScopesEqual, type AgentId, type AgentScope, type AgentSessionPhase } from './session';
 
 export interface AgentTabState {
@@ -14,12 +16,15 @@ export interface AgentTabState {
 
 export interface AgentWorkspaceState {
   activeId: string;
+  /** The window folder's live listing and preparation state, or null while
+   *  no folder is selected or the shell has not published it yet. */
+  scopeEnvironment: AgentScopeEnvironment | null;
   disposed: boolean;
   tabs: AgentTabState[];
 }
 
 export function createAgentWorkspaceState(activeId: string): AgentWorkspaceState {
-  return { activeId, disposed: false, tabs: [] };
+  return { activeId, disposed: false, scopeEnvironment: null, tabs: [] };
 }
 
 function tabsEqual(left: AgentTabState, right: AgentTabState): boolean {

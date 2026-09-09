@@ -25,6 +25,7 @@ import {
   AgentChats,
   AgentTitlebar,
   AgentWorkspace,
+  type AgentScopeEnvironment,
   type AgentScopeOutline,
   type AgentWorkspaceProps,
   useAgentWorkspaceRuntime,
@@ -192,6 +193,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
   );
   const selectedFolderPath = library.data?.activeFolder?.path ?? null;
   const agentRuntime = useAgentWorkspaceRuntime({
+    context: dependencies.agent.context,
     createId: dependencies.documents.createId,
     folderPath: selectedFolderPath,
     session: dependencies.agent.session,
@@ -266,10 +268,39 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
       folders: listing.folders.map((folder) => folder.path).filter(topLevel),
     };
   }, [listing]);
+  // The Agent feature validates bound context against the folder it can see
+  // without importing workspace or preparation state: the shell publishes one
+  // snapshot of the selected folder's listing and per-source readiness.
+  const agentScopeEnvironment = useMemo<AgentScopeEnvironment | null>(() => {
+    if (!listing || !workspaceFolderPath) return null;
+    const readiness: Record<string, AgentScopeEnvironment['readiness'][string]> = {};
+    if (status) {
+      for (const file of listing.files) {
+        const kind = sourceReadiness(status, file.path).kind;
+        if (kind !== 'current') readiness[file.path] = kind;
+      }
+    }
+    return {
+      folderPath: workspaceFolderPath,
+      listing: {
+        files: listing.files.map((file) => ({ format: file.format, path: file.path })),
+        folders: listing.folders
+          .filter((folder) => folder.kind === 'normal')
+          .map((folder) => folder.path),
+      },
+      readiness,
+      versions: status?.conversionVersions ?? {},
+    };
+  }, [listing, status, workspaceFolderPath]);
+  useEffect(
+    () => agentRuntime.setScopeEnvironment(agentScopeEnvironment),
+    [agentRuntime, agentScopeEnvironment],
+  );
   const agentProps: AgentWorkspaceProps = {
     catalog: dependencies.settings.agentRuntimeApi,
     onOpenExternal: (href) => void dependencies.documents.openExternal(href),
     onOpenAgentSettings: () => settings.openSettings('agents'),
+    onReprocess: reprocessSource,
     runtime: agentRuntime,
     scopeOutline: agentScopeOutline,
   };
