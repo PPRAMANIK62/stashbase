@@ -1,3 +1,10 @@
+/**
+ * The active document's Find and outline authority.
+ *
+ * Exactly one viewer owns Find at a time: it claims the controller while it is
+ * on screen and releases it on unmount, so a stale controller from a hidden
+ * tab can never answer a query. Outline publication follows the same claim.
+ */
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
 import type { DocumentHeading } from '@/features/documents/domain/outline';
@@ -28,25 +35,25 @@ export interface DocumentFindController {
   setQuery(query: string, options: FindOptions): FindMatchInfo | Promise<FindMatchInfo>;
 }
 
-export interface DocumentFindState extends FindOptions, FindMatchInfo {
+interface DocumentFindState extends FindOptions, FindMatchInfo {
   available: boolean;
   focusRevision: number;
   open: boolean;
   query: string;
 }
 
-export interface DocumentOutlineState {
+interface DocumentOutlineState {
   activeId: string | null;
   available: boolean;
   headings: DocumentHeading[];
 }
 
-export interface PendingDocumentAnchor {
+interface PendingDocumentAnchor {
   id: string;
   tabId: string;
 }
 
-export interface DocumentNavigationState {
+interface DocumentNavigationState {
   find: DocumentFindState;
   outline: DocumentOutlineState;
   pendingAnchor: PendingDocumentAnchor | null;
@@ -57,11 +64,14 @@ export interface DocumentNavigationRuntime {
   activate(tabId: string | null): void;
   claimFind(tabId: string, owner: symbol, controller: DocumentFindController): () => void;
   claimOutline(tabId: string, owner: symbol): () => void;
-  closeFind(): void;
+  /** Closes Find; answers whether it was open. */
+  closeFind(): boolean;
   consumeAnchor(tabId: string, id: string): void;
   dispose(): void;
-  findNext(): void;
-  findPrevious(): void;
+  /** Steps Find forward; answers whether Find was open to take the step. */
+  findNext(): boolean;
+  /** Steps Find backward; answers whether Find was open to take the step. */
+  findPrevious(): boolean;
   openFind(): boolean;
   publishOutline(
     tabId: string,
@@ -218,10 +228,12 @@ export function createDocumentNavigationRuntime(
       };
     },
     closeFind() {
-      if (disposed) return;
+      if (disposed) return false;
+      const wasOpen = store.getState().find.open;
       requestSequence += 1;
       findController?.close();
       updateFind({ current: 0, open: false, total: 0 });
+      return wasOpen;
     },
     consumeAnchor(tabId, id) {
       if (disposed) return;
@@ -241,10 +253,14 @@ export function createDocumentNavigationRuntime(
       store.setState((state) => ({ ...state, pendingAnchor: null }));
     },
     findNext() {
-      if (!disposed && findController) applyMatch(findController.next());
+      if (disposed || !store.getState().find.open) return false;
+      if (findController) applyMatch(findController.next());
+      return true;
     },
     findPrevious() {
-      if (!disposed && findController) applyMatch(findController.previous());
+      if (disposed || !store.getState().find.open) return false;
+      if (findController) applyMatch(findController.previous());
+      return true;
     },
     openFind() {
       if (disposed || !findController) return false;

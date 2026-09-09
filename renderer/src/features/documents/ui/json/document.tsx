@@ -1,3 +1,7 @@
+/**
+ * The JSON surface: a source-preserving outline beside the raw text, with one
+ * Find controller following whichever pane the reader is in.
+ */
 import { useEffect, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
 
@@ -9,15 +13,16 @@ import type {
   FindOptions,
 } from '@/features/documents/application/navigation-runtime';
 import type { JsonDocumentSession } from '@/features/documents/domain/document';
+import { matchingJsonTreeNodes } from '@/features/documents/domain/json-search';
 import {
   analyzeJsonSource,
   formatJsonPath,
-  matchingJsonTreeNodes,
-  type JsonTreeAnalysis,
   type JsonSourceNode,
+  type JsonTreeAnalysis,
 } from '@/features/documents/domain/json-source';
+import { useCodeEditorSession } from '@/features/documents/ui/code-editor/use-editor-session';
 
-import { createJsonSourceEditor, type JsonSourceEditorSession } from './source-editor';
+import { createJsonSourceEditor } from './source-editor';
 import { JsonTree } from './tree';
 
 export interface JsonDocumentProps {
@@ -39,11 +44,9 @@ export function JsonDocument({
   runtime,
   value,
 }: JsonDocumentProps) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const editorRef = useRef<JsonSourceEditorSession | null>(null);
   const valueRef = useRef(value);
-  const sessionRef = useRef<JsonDocumentSession>(runtime.store.getState().jsonSession);
+  const jsonSessionRef = useRef<JsonDocumentSession>(runtime.store.getState().jsonSession);
   const registrationOwnerRef = useRef(Symbol(runtime.scope.id));
   const session = useStore(runtime.store, (state) => state.jsonSession);
   const analysis = useMemo(() => analyzeJsonSource(value), [value]);
@@ -52,41 +55,26 @@ export function JsonDocument({
       ? 'source'
       : (session.viewMode ?? (analysis.available ? 'tree' : 'source'));
   valueRef.current = value;
-  sessionRef.current = session;
+  jsonSessionRef.current = session;
 
   useEffect(() => {
     if (session.viewMode !== activePane) runtime.setJsonSession({ viewMode: activePane });
   }, [activePane, runtime, session.viewMode]);
 
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const editor = createJsonSourceEditor(host, {
-      content: valueRef.current,
-      onChange,
-      readOnly,
-    });
-    editorRef.current = editor;
-    return () => {
-      if (editorRef.current === editor) editorRef.current = null;
-      editor.destroy();
-    };
-    // The document runtime owns the tab lifetime; one editor instance keeps
-    // selection and undo history while this JSON surface is mounted.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runtime.scope.id]);
-
-  useEffect(() => editorRef.current?.setReadOnly(readOnly), [readOnly]);
-
-  useEffect(() => {
-    editorRef.current?.applySourcePatch(value);
-  }, [value]);
+  const { hostRef, sessionRef: editorRef } = useCodeEditorSession({
+    content: value,
+    create: (host, report) =>
+      createJsonSourceEditor(host, { content: value, onChange: report, readOnly }),
+    onChange,
+    readOnly,
+    tabId: runtime.scope.id,
+  });
 
   const treeFindRef = useRef<DocumentFindController | null>(null);
   if (!treeFindRef.current) {
     treeFindRef.current = createJsonTreeFindController(
       () => valueRef.current,
-      () => sessionRef.current,
+      () => jsonSessionRef.current,
       (patch) => runtime.setJsonSession(patch),
       () => rootRef.current,
     );
@@ -97,14 +85,14 @@ export function JsonDocument({
     const controller = activePane === 'tree' ? treeFindRef.current : editorRef.current?.find;
     if (!controller) return;
     return navigation.claimFind(runtime.scope.id, registrationOwnerRef.current, controller);
-  }, [active, activePane, navigation, runtime.scope.id]);
+  }, [active, activePane, editorRef, navigation, runtime.scope.id]);
 
   const activatePane = (pane: 'source' | 'tree') => {
     if (pane === 'tree' && !analysis.available) return;
     if (pane !== activePane) runtime.setJsonSession({ viewMode: pane });
   };
   const applyTreeChange = (next: string) => {
-    editorRef.current?.applySourcePatch(next);
+    editorRef.current?.applyContent(next);
     onChange(next);
   };
 
@@ -205,7 +193,8 @@ export function createJsonTreeFindController(
   };
   const recompute = (preserveSelection: boolean, scroll: boolean) => {
     const analysis = analyzeJsonSource(getSource());
-    const previousPath = matches[cursor] ? formatJsonPath(matches[cursor].path) : null;
+    const previousMatch = matches[cursor];
+    const previousPath = previousMatch ? formatJsonPath(previousMatch.path) : null;
     matches =
       analysis.available && query ? matchingJsonTreeNodes(analysis.root, query, options) : [];
     cursor =

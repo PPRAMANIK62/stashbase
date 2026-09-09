@@ -1,12 +1,17 @@
-import { Maximize2, Minus, Plus, RefreshCw } from 'lucide-react';
+/**
+ * PDF viewing: pages render lazily at the current scale, the reader's page is
+ * remembered on the document runtime, and Find is served by pdf.js text
+ * content rather than the DOM.
+ */
+import { Maximize2, Minus, Plus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
 import type { DocumentAsset } from '@/features/documents/application/ports';
 
 import './document.css';
+import { AssetStatus } from '@/features/documents/ui/source/status';
 import {
   ViewerToolbar,
   ViewerToolbarButton,
@@ -21,44 +26,6 @@ import { usePdfDocument } from './use-pdf-document';
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 3;
 const FALLBACK_PAGE_SIZE = { height: 792, width: 612 };
-
-function PdfStatus({
-  detail,
-  failed = false,
-  name,
-  retry,
-}: {
-  detail?: string;
-  failed?: boolean;
-  name: string;
-  retry?: () => void;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <div className="max-w-md">
-        <p className="text-body font-medium">
-          {failed ? `Could not open ${name}` : `Loading ${name}`}
-        </p>
-        {failed && (
-          <>
-            <p className="mt-1 text-caption text-muted-foreground" role="alert">
-              {detail || 'The PDF may have moved, changed, or be unreadable.'}
-            </p>
-            <Button
-              className="mt-4"
-              leadingIcon={RefreshCw}
-              onClick={retry}
-              size="compact"
-              variant="tertiary"
-            >
-              Retry
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function PdfViewer({
   name,
@@ -177,9 +144,16 @@ function PdfViewer({
     };
   }, [currentPage, pdf.document, runtime]);
 
-  if (pdf.loading) return <PdfStatus name={name} />;
+  if (pdf.loading) return <AssetStatus name={name} />;
   if (!pdf.document || pdf.error) {
-    return <PdfStatus detail={pdf.error ?? undefined} failed name={name} retry={onRetry} />;
+    return (
+      <AssetStatus
+        detail={pdf.error ?? 'The PDF may have moved, changed, or be unreadable.'}
+        failed
+        name={name}
+        retry={onRetry}
+      />
+    );
   }
   const document = pdf.document;
 

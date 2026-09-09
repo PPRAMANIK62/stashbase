@@ -4,13 +4,13 @@ import type { DocumentScope, DocumentTextSource } from '@/features/documents/dom
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import type {
-  DocumentAssetApi,
+  DocumentAssetPort,
   DocumentQueryScope,
-  DocumentSourceApi,
+  DocumentSourcePort,
   DocxDocumentAsset,
-  DocxPreviewApi,
-  GenericFilePreviewApi,
-  MediaApi,
+  DocxPreviewPort,
+  GenericFilePreviewPort,
+  MediaPort,
 } from './ports';
 
 export const documentQueryKeys = {
@@ -71,7 +71,7 @@ export function createDocumentQueryScope(
 }
 
 export function docxPreviewQuery(
-  api: DocxPreviewApi,
+  api: DocxPreviewPort,
   scope: DocumentScope,
   resource: DocxDocumentAsset,
 ) {
@@ -83,7 +83,7 @@ export function docxPreviewQuery(
   } as const;
 }
 
-export function documentAssetQuery(api: DocumentAssetApi, scope: DocumentScope) {
+export function documentAssetQuery(api: DocumentAssetPort, scope: DocumentScope) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => api.load(scope.source, signal),
     queryKey: documentQueryKeys.asset(scope),
@@ -92,7 +92,7 @@ export function documentAssetQuery(api: DocumentAssetApi, scope: DocumentScope) 
   } as const;
 }
 
-export function documentSourceQuery(api: DocumentSourceApi, scope: DocumentScope) {
+export function documentSourceQuery(api: DocumentSourcePort, scope: DocumentScope) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => api.load(scope.source, signal),
     queryKey: documentQueryKeys.source(scope),
@@ -101,7 +101,7 @@ export function documentSourceQuery(api: DocumentSourceApi, scope: DocumentScope
   } as const;
 }
 
-export function genericFilePreviewQuery(api: GenericFilePreviewApi, scope: DocumentScope) {
+export function genericFilePreviewQuery(api: GenericFilePreviewPort, scope: DocumentScope) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => api.load(scope.source, signal),
     queryKey: documentQueryKeys.genericPreview(scope),
@@ -110,7 +110,7 @@ export function genericFilePreviewQuery(api: GenericFilePreviewApi, scope: Docum
   } as const;
 }
 
-export function mediaTranscriptQuery(api: MediaApi, scope: DocumentScope, version: string) {
+export function mediaTranscriptQuery(api: MediaPort, scope: DocumentScope, version: string) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => api.loadTranscript(scope.source, signal),
     queryKey: documentQueryKeys.mediaTranscript(scope, version),
@@ -119,7 +119,7 @@ export function mediaTranscriptQuery(api: MediaApi, scope: DocumentScope, versio
   } as const;
 }
 
-export function mediaPreviewStatusQuery(api: MediaApi, scope: DocumentScope, version: string) {
+export function mediaPreviewStatusQuery(api: MediaPort, scope: DocumentScope, version: string) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => api.loadPreviewStatus(scope.source, signal),
     queryKey: documentQueryKeys.mediaPreviewStatus(scope, version),

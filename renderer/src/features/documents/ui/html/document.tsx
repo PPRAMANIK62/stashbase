@@ -1,3 +1,8 @@
+/**
+ * HTML previews render inside a sandboxed frame: the archived page's own
+ * markup never runs in the renderer, and every link it offers is routed back
+ * through the workspace's navigation callbacks.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 
@@ -44,7 +49,7 @@ export interface SandboxedHtmlFrameProps {
   active: boolean;
   name: string;
   navigation: DocumentNavigationRuntime;
-  onNavigate(target: { anchor?: string; source: SourceReference }): void;
+  onNavigate(target: { anchor?: string | undefined; source: SourceReference }): void;
   onOpenExternal(href: string): Promise<boolean>;
   source: SourceReference;
   tabId: string;
@@ -138,6 +143,8 @@ export function SandboxedHtmlFrame({
       try {
         external = new URL(link.href);
       } catch {
+        // swallowed: a link the document authored that is not a URL at all is
+        // not ours to open, and there is nothing to tell the reader about it.
         return;
       }
       if (

@@ -1,27 +1,39 @@
+/**
+ * The honest fallback viewer: a name StashBase claims no format for still
+ * opens, showing either bounded read-only text or a placeholder that names
+ * what the file is and offers to reveal it on disk.
+ */
 import { useQuery } from '@tanstack/react-query';
 import { FileQuestion, RefreshCw } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
+import {
+  documentFailure,
+  GENERIC_PREVIEW_MESSAGES,
+} from '@/features/documents/application/failure-messages';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
 import {
   GenericFilePreviewError,
-  type GenericFilePreviewApi,
+  type GenericFilePreviewPort,
 } from '@/features/documents/application/ports';
 import { genericFilePreviewQuery } from '@/features/documents/application/queries';
 import { CodeEditorDocument } from '@/features/documents/ui/code-editor/document';
+import type { DocumentViewerStatus } from '@/features/documents/ui/source/viewer';
+import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { formatFileSize, genericPreviewCopy } from './presentation';
 
 export interface GenericFileDocumentProps {
   active: boolean;
-  api: GenericFilePreviewApi;
+  api: GenericFilePreviewPort;
   navigation: DocumentNavigationRuntime;
   onReveal(source: SourceReference, signal: AbortSignal): Promise<void>;
   revealLabel: string;
   runtime: DocumentRuntime;
+  status(status: DocumentViewerStatus): ReactNode;
 }
 
 export function GenericFileDocument({
@@ -31,42 +43,31 @@ export function GenericFileDocument({
   onReveal,
   revealLabel,
   runtime,
+  status,
 }: GenericFileDocumentProps) {
   const preview = useQuery(genericFilePreviewQuery(api, runtime.scope));
-  const revealController = useRef<AbortController | null>(null);
+  const signalFor = useRequestSignals<'reveal'>();
   const [revealState, setRevealState] = useState<'error' | 'idle' | 'pending'>('idle');
   const name = runtime.scope.source.path.split('/').at(-1) ?? runtime.scope.source.path;
 
-  useEffect(
-    () => () => {
-      revealController.current?.abort();
-    },
-    [],
-  );
-
   const reveal = async () => {
-    revealController.current?.abort();
-    const controller = new AbortController();
-    revealController.current = controller;
+    const signal = signalFor('reveal');
     setRevealState('pending');
     try {
-      await onReveal(runtime.scope.source, controller.signal);
-      if (!controller.signal.aborted) setRevealState('idle');
+      await onReveal(runtime.scope.source, signal);
+      if (!signal.aborted) setRevealState('idle');
     } catch {
-      if (!controller.signal.aborted) setRevealState('error');
+      if (!signal.aborted) setRevealState('error');
     }
   };
 
-  if (preview.isPending) {
-    return (
-      <div
-        className="flex min-h-0 flex-1 items-center justify-center text-caption text-muted-foreground"
-        role="status"
-      >
-        Inspecting {name}
-      </div>
-    );
-  }
+  const revealError = revealState === 'error' && (
+    <p className="mt-2 text-caption text-destructive" role="alert">
+      The file could not be shown in the system file manager.
+    </p>
+  );
+
+  if (preview.isPending) return <>{status({ name })}</>;
 
   if (!preview.data) {
     const formatSpecific =
@@ -80,10 +81,12 @@ export function GenericFileDocument({
           </h2>
           <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role="alert">
             {formatSpecific
-              ? 'This document viewer is not available yet.'
-              : preview.error instanceof Error
-                ? preview.error.message
-                : 'The file could not be inspected. It has not been changed.'}
+              ? GENERIC_PREVIEW_MESSAGES['not-generic']
+              : documentFailure<'not-generic'>(
+                  preview.error,
+                  'GenericFilePreviewError',
+                  GENERIC_PREVIEW_MESSAGES,
+                ).message}
           </p>
           {!formatSpecific && (
             <div className="mt-4 flex justify-center gap-2">
@@ -105,11 +108,7 @@ export function GenericFileDocument({
               </Button>
             </div>
           )}
-          {revealState === 'error' && (
-            <p className="mt-2 text-caption text-destructive" role="alert">
-              The file could not be shown in the system file manager.
-            </p>
-          )}
+          {revealError}
         </div>
       </div>
     );
@@ -152,11 +151,7 @@ export function GenericFileDocument({
         >
           {revealLabel}
         </Button>
-        {revealState === 'error' && (
-          <p className="mt-2 text-caption text-destructive" role="alert">
-            The file could not be shown in the system file manager.
-          </p>
-        )}
+        {revealError}
       </div>
     </div>
   );

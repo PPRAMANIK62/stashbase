@@ -4,9 +4,15 @@ import type {
 } from '@/features/documents/domain/document';
 import type { GenericFilePreview } from '@/features/documents/domain/generic-preview';
 import type { MediaPreviewStatus, MediaTranscriptState } from '@/features/documents/domain/media';
+import {
+  featureErrorClass,
+  FeatureError,
+  type FeatureFailureKind,
+  type TransportFailureKind,
+} from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-export interface DocumentSourceApi {
+export interface DocumentSourcePort {
   load(source: SourceReference, signal: AbortSignal): Promise<DocumentTextSource>;
   overwrite(
     source: SourceReference,
@@ -20,11 +26,11 @@ export interface DocumentSourceApi {
   ): Promise<DocumentTextSaveResult>;
 }
 
-export interface GenericFilePreviewApi {
+export interface GenericFilePreviewPort {
   load(source: SourceReference, signal: AbortSignal): Promise<GenericFilePreview>;
 }
 
-export interface SourceDocumentAsset {
+interface SourceDocumentAsset {
   kind: 'source';
   url: string;
   version: string;
@@ -46,19 +52,19 @@ export interface MediaDocumentAsset {
 
 export type DocumentAsset = DocxDocumentAsset | MediaDocumentAsset | SourceDocumentAsset;
 
-export interface DocumentAssetApi {
+export interface DocumentAssetPort {
   load(source: SourceReference, signal: AbortSignal): Promise<DocumentAsset>;
 }
 
-export interface DocxPreview {
+interface DocxPreview {
   html: string;
 }
 
-export interface DocxPreviewApi {
+export interface DocxPreviewPort {
   load(resource: DocxDocumentAsset, signal: AbortSignal): Promise<DocxPreview>;
 }
 
-export interface MediaApi {
+export interface MediaPort {
   cancelTranscript(source: SourceReference, signal: AbortSignal): Promise<boolean>;
   loadPreviewStatus(source: SourceReference, signal: AbortSignal): Promise<MediaPreviewStatus>;
   loadTranscript(source: SourceReference, signal: AbortSignal): Promise<MediaTranscriptState>;
@@ -72,103 +78,48 @@ export interface DocumentQueryScope {
   replaceSource(source: DocumentTextSource): void;
 }
 
-export interface DocumentWindowLifecycle {
+export interface DocumentWindowLifecyclePort {
   onPrepareContextRelease(handler: () => boolean | Promise<boolean>): () => void;
 }
 
-export type DocumentSourceFailureKind =
-  | 'invalid-response'
-  | 'scope-lost'
-  | 'unauthorized'
-  | 'unavailable'
-  | 'unsupported-encoding';
+export type DocumentSourceFailureKind = FeatureFailureKind<'unsupported-encoding'>;
 
-export class DocumentSourceError extends Error {
-  readonly kind: DocumentSourceFailureKind;
+export type DocumentSourceError = FeatureError<'unsupported-encoding'>;
+export const DocumentSourceError = featureErrorClass<'unsupported-encoding'>('DocumentSourceError');
 
-  constructor(kind: DocumentSourceFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'DocumentSourceError';
-    this.kind = kind;
-  }
-}
+export type GenericFilePreviewFailureKind = FeatureFailureKind<'not-generic'>;
 
-export type GenericFilePreviewFailureKind =
-  | 'invalid-response'
-  | 'not-generic'
-  | 'scope-lost'
-  | 'unauthorized'
-  | 'unavailable';
+export type GenericFilePreviewError = FeatureError<'not-generic'>;
+export const GenericFilePreviewError = featureErrorClass<'not-generic'>('GenericFilePreviewError');
 
-export class GenericFilePreviewError extends Error {
-  readonly kind: GenericFilePreviewFailureKind;
+export type DocumentAssetFailureKind = TransportFailureKind;
 
-  constructor(kind: GenericFilePreviewFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'GenericFilePreviewError';
-    this.kind = kind;
-  }
-}
+export type DocumentAssetError = FeatureError;
+export const DocumentAssetError = featureErrorClass('DocumentAssetError');
 
-export type DocumentAssetFailureKind =
-  | 'invalid-response'
-  | 'scope-lost'
-  | 'unauthorized'
-  | 'unavailable';
+export type DocxPreviewFailureKind = FeatureFailureKind<'timeout'>;
 
-export class DocumentAssetError extends Error {
-  readonly kind: DocumentAssetFailureKind;
+export type DocxPreviewError = FeatureError<'timeout'>;
+export const DocxPreviewError = featureErrorClass<'timeout'>('DocxPreviewError');
 
-  constructor(kind: DocumentAssetFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'DocumentAssetError';
-    this.kind = kind;
-  }
-}
+export type MediaFailureKind = TransportFailureKind;
 
-export type DocxPreviewFailureKind = 'invalid-response' | 'timeout' | 'unavailable';
+export type MediaError = FeatureError;
+export const MediaError = featureErrorClass('MediaError');
 
-export class DocxPreviewError extends Error {
-  readonly kind: DocxPreviewFailureKind;
+export type DocumentSaveFailureKind = FeatureFailureKind<'conflict'>;
 
-  constructor(kind: DocxPreviewFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'DocxPreviewError';
-    this.kind = kind;
-  }
-}
-
-export type MediaFailureKind = 'invalid-response' | 'scope-lost' | 'unauthorized' | 'unavailable';
-
-export class MediaError extends Error {
-  readonly kind: MediaFailureKind;
-
-  constructor(kind: MediaFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'MediaError';
-    this.kind = kind;
-  }
-}
-
-export type DocumentSaveFailureKind =
-  | 'conflict'
-  | 'invalid-response'
-  | 'scope-lost'
-  | 'unauthorized'
-  | 'unavailable';
-
-export class DocumentSaveError extends Error {
+/** The only failure that carries state: a conflict reports the version the
+ *  server holds so the editor can offer an overwrite against a known base. */
+export class DocumentSaveError extends FeatureError<'conflict'> {
   readonly currentVersion: string | null;
-  readonly kind: DocumentSaveFailureKind;
 
   constructor(
     kind: DocumentSaveFailureKind,
     message: string,
-    options?: ErrorOptions & { currentVersion?: string | null },
+    options?: ErrorOptions & { currentVersion?: string | null | undefined },
   ) {
-    super(message, options);
-    this.name = 'DocumentSaveError';
+    super('DocumentSaveError', kind, message, options);
     this.currentVersion = options?.currentVersion ?? null;
-    this.kind = kind;
   }
 }

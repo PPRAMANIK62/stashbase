@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import { MediaError } from '@/features/documents/application/ports';
 import type { HttpClient } from '@/platform/http/client';
 
-import { createMediaApi } from './media-api';
+import { createMediaAdapter } from './media-api';
 
 const source = { folderPath: '/library/research calls', path: 'weekly/demo #1.mp4' };
 
@@ -32,7 +32,7 @@ describe('media API', () => {
     const client: HttpClient = {
       request: vi.fn(async () => ({ body: readyTranscript(), status: 200 })),
     };
-    const api = createMediaApi(client);
+    const api = createMediaAdapter(client);
     const signal = new AbortController().signal;
 
     await expect(api.loadTranscript(source, signal)).resolves.toEqual({
@@ -60,7 +60,7 @@ describe('media API', () => {
           status: 200,
         }),
     };
-    const api = createMediaApi(client);
+    const api = createMediaAdapter(client);
     const signal = new AbortController().signal;
 
     await expect(api.preparePreview(source, signal)).resolves.toBeUndefined();
@@ -85,7 +85,7 @@ describe('media API', () => {
         .mockResolvedValueOnce({ body: { mode: 'conversion', ok: true }, status: 200 })
         .mockResolvedValueOnce({ body: { cancelled: true, ok: true }, status: 200 }),
     };
-    const api = createMediaApi(client);
+    const api = createMediaAdapter(client);
     const signal = new AbortController().signal;
 
     await expect(api.reprocessTranscript(source, signal)).resolves.toBeUndefined();
@@ -99,14 +99,14 @@ describe('media API', () => {
   });
 
   it('rejects malformed responses and stale folder scope', async () => {
-    const malformed = createMediaApi({
+    const malformed = createMediaAdapter({
       request: vi.fn(async () => ({ body: { status: 'ready', transcript: {} }, status: 200 })),
     });
     await expect(
       malformed.loadTranscript(source, new AbortController().signal),
     ).rejects.toMatchObject({ kind: 'invalid-response' } satisfies Partial<MediaError>);
 
-    const stale = createMediaApi({
+    const stale = createMediaAdapter({
       request: vi.fn(async () => ({ body: { error: '/private/path missing' }, status: 410 })),
     });
     await expect(stale.loadTranscript(source, new AbortController().signal)).rejects.toMatchObject({
@@ -117,7 +117,7 @@ describe('media API', () => {
 
   it('rejects non-media sources before transport', async () => {
     const client: HttpClient = { request: vi.fn() };
-    const api = createMediaApi(client);
+    const api = createMediaAdapter(client);
 
     await expect(
       api.loadTranscript(

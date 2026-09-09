@@ -1,4 +1,8 @@
-import { VIDEO_SOURCE_EXTENSIONS } from '@/shared/file-formats';
+/**
+ * Recording vocabulary: audio versus video, transcript and preview status
+ * copy, timestamp formatting, and the WebVTT projection of a transcript.
+ */
+import { VIDEO_SOURCE_EXTENSIONS } from '@/contracts/file-formats';
 
 export type MediaKind = 'audio' | 'video';
 
@@ -16,13 +20,13 @@ export interface MediaTranscript {
   segments: MediaTranscriptSegment[];
 }
 
-export type MediaTranscriptProgress =
+type MediaTranscriptProgress =
   | { lane: 'heavy' | 'light'; phase: 'queued' | 'yielded'; tasksAhead: number }
   | {
-      completedUnits?: number;
-      currentPage?: number;
+      completedUnits?: number | undefined;
+      currentPage?: number | undefined;
       phase: 'extracting';
-      totalUnits?: number;
+      totalUnits?: number | undefined;
     }
   | { phase: 'indexing' };
 
@@ -120,4 +124,38 @@ export function mediaTranscriptStatusCopy(state: MediaTranscriptState): string |
     return `Transcribing · ${Math.min(100, Math.round((progress.completedUnits / progress.totalUnits) * 100))}%`;
   }
   return 'Transcribing…';
+}
+
+function vttTime(milliseconds: number): string {
+  const total = Math.max(0, Math.round(milliseconds));
+  const hours = Math.floor(total / 3_600_000);
+  const minutes = Math.floor((total % 3_600_000) / 60_000);
+  const seconds = Math.floor((total % 60_000) / 1000);
+  const remainder = total % 1000;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(remainder).padStart(3, '0')}`;
+}
+
+/** Cue text is markup to a WebVTT parser, and a blank line or an arrow would
+ *  end the cue early, so both are neutralised. */
+function vttCueText(text: string): string {
+  return text
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/\r\n?|\n/gu, ' ')
+    .trim();
+}
+
+/**
+ * The transcript as a WebVTT track, so a recording carries real captions
+ * rather than a silent player beside a separate list.
+ */
+export function mediaTranscriptVtt(transcript: MediaTranscript | null): string {
+  const cues = (transcript?.segments ?? [])
+    .filter((segment) => segment.endMs > segment.startMs && vttCueText(segment.text).length > 0)
+    .map(
+      (segment) =>
+        `${segment.id}\n${vttTime(segment.startMs)} --> ${vttTime(segment.endMs)}\n${vttCueText(segment.text)}`,
+    );
+  return `WEBVTT\n\n${cues.join('\n\n')}${cues.length > 0 ? '\n' : ''}`;
 }

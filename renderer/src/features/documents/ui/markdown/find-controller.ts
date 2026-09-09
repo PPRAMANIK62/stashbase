@@ -1,6 +1,11 @@
+/**
+ * Find over rendered prose. Matches are located in the flattened text of the
+ * live DOM and painted with CSS custom highlights, so highlighting never
+ * mutates the document a viewer is showing.
+ */
+import { createFindMatchCursor } from '@/features/documents/application/find-cursor';
 import type {
   DocumentFindController,
-  FindMatchInfo,
   FindOptions,
 } from '@/features/documents/application/navigation-runtime';
 
@@ -102,11 +107,10 @@ function collectMatches(document: Document, root: HTMLElement, expression: RegEx
   const matches: Range[] = [];
   let segmentIndex = 0;
   const segmentAt = (offset: number) => {
-    while (
-      segmentIndex + 1 < textSegments.length &&
-      textSegments[segmentIndex + 1].start <= offset
-    ) {
+    let next = textSegments[segmentIndex + 1];
+    while (next !== undefined && next.start <= offset) {
       segmentIndex += 1;
+      next = textSegments[segmentIndex + 1];
     }
     return textSegments[segmentIndex];
   };
@@ -133,7 +137,7 @@ interface HighlightRegistry {
   set(name: string, value: unknown): void;
 }
 
-function paint(window: Window, matches: Range[], current: Range | null): void {
+function paint(window: Window, matches: readonly Range[], current: Range | null): void {
   const environment = window as unknown as {
     CSS?: { highlights?: HighlightRegistry };
     Highlight?: new (...ranges: Range[]) => unknown;
@@ -176,68 +180,45 @@ export function createMarkdownFindController(
 ): DisposableDocumentFindController {
   const document = root.ownerDocument;
   const window = document.defaultView;
-  let matches: Range[] = [];
-  let cursor = -1;
-  let query = '';
-  let options: FindOptions = { caseSensitive: false, wholeWord: false };
   let disposed = false;
   let refreshQueued = false;
 
-  const report = (): FindMatchInfo => ({
-    current: cursor < 0 ? 0 : cursor + 1,
-    total: matches.length,
+  const cursor = createFindMatchCursor<Range>({
+    collect(query, options) {
+      const expression = findExpression(query, options);
+      return expression ? collectMatches(document, root, expression) : [];
+    },
+    present(matches, active) {
+      if (window) paint(window, matches, active);
+    },
+    reveal(range) {
+      scrollRangeIntoView(range, scroller);
+    },
   });
-  const recompute = (preserveSelection: boolean, scroll: boolean): FindMatchInfo => {
-    const priorCursor = cursor;
-    const expression = findExpression(query, options);
-    matches = expression ? collectMatches(document, root, expression) : [];
-    cursor =
-      matches.length === 0 ? -1 : preserveSelection ? Math.min(priorCursor, matches.length - 1) : 0;
-    if (window) paint(window, matches, matches[cursor] ?? null);
-    if (scroll && cursor >= 0) scrollRangeIntoView(matches[cursor], scroller);
-    return report();
-  };
+
+  // Milkdown rewrites the rendered tree as the reader types, so every match
+  // Find is holding can be replaced without a new query. Coalesce the bursts
+  // into one re-enumeration per microtask.
   const observer = new MutationObserver(() => {
-    if (disposed || !query || refreshQueued) return;
+    if (disposed || refreshQueued) return;
     refreshQueued = true;
     queueMicrotask(() => {
       refreshQueued = false;
-      if (!disposed && query) recompute(true, false);
+      if (!disposed) cursor.refresh();
     });
   });
   observer.observe(root, { characterData: true, childList: true, subtree: true });
 
-  const step = (offset: 1 | -1): FindMatchInfo => {
-    if (matches.length === 0) return report();
-    cursor = (cursor + offset + matches.length) % matches.length;
-    if (window) paint(window, matches, matches[cursor]);
-    scrollRangeIntoView(matches[cursor], scroller);
-    return report();
-  };
-
   return {
-    close() {
-      matches = [];
-      cursor = -1;
-      query = '';
-      if (window) paint(window, [], null);
-    },
+    close: cursor.close,
     dispose() {
       disposed = true;
       observer.disconnect();
-      this.close();
+      cursor.close();
     },
-    next: () => step(1),
-    previous: () => step(-1),
-    restoreQuery(nextQuery, nextOptions) {
-      query = nextQuery;
-      options = nextOptions;
-      return recompute(true, false);
-    },
-    setQuery(nextQuery, nextOptions) {
-      query = nextQuery;
-      options = nextOptions;
-      return recompute(false, true);
-    },
+    next: cursor.next,
+    previous: cursor.previous,
+    restoreQuery: cursor.restoreQuery,
+    setQuery: cursor.setQuery,
   };
 }

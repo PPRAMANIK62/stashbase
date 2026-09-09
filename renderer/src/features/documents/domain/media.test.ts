@@ -5,6 +5,7 @@ import {
   mediaKind,
   mediaPreviewStatusCopy,
   mediaTranscriptStatusCopy,
+  mediaTranscriptVtt,
 } from './media';
 
 describe('media presentation', () => {
@@ -45,5 +46,45 @@ describe('media presentation', () => {
         status: 'pending',
       }),
     ).toBe('Transcribing · 25%');
+  });
+
+  it('projects the transcript as a WebVTT track browsers can parse', () => {
+    const vtt = mediaTranscriptVtt({
+      durationMs: 4_000,
+      language: 'en',
+      model: 'whisper',
+      segments: [
+        { endMs: 2_000, id: 1, startMs: 0, text: 'Hello there' },
+        { endMs: 3_661_500, id: 2, startMs: 3_600_000, text: 'Later' },
+      ],
+    });
+
+    expect(vtt.startsWith('WEBVTT\n\n')).toBe(true);
+    expect(vtt).toContain('00:00:00.000 --> 00:00:02.000\nHello there');
+    expect(vtt).toContain('01:00:00.000 --> 01:01:01.500\nLater');
+  });
+
+  it('never lets cue text end its own cue or inject markup', () => {
+    const vtt = mediaTranscriptVtt({
+      durationMs: 1_000,
+      language: 'en',
+      model: 'whisper',
+      segments: [{ endMs: 1_000, id: 1, startMs: 0, text: 'a --> b\n\n<i>& more</i>' }],
+    });
+
+    expect(vtt).toContain('a --&gt; b  &lt;i&gt;&amp; more&lt;/i&gt;');
+    expect(vtt.split('\n\n')).toHaveLength(2);
+  });
+
+  it('is still a valid, empty track before any speech is recognised', () => {
+    expect(mediaTranscriptVtt(null)).toBe('WEBVTT\n\n');
+    expect(
+      mediaTranscriptVtt({
+        durationMs: 0,
+        language: 'en',
+        model: 'whisper',
+        segments: [{ endMs: 0, id: 1, startMs: 0, text: '   ' }],
+      }),
+    ).toBe('WEBVTT\n\n');
   });
 });

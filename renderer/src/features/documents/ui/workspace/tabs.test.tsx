@@ -1,25 +1,38 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { DocumentSourceApi } from '@/features/documents/application/ports';
+import type { DocumentSourcePort } from '@/features/documents/application/ports';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
+import type { DocumentTextSource } from '@/features/documents/domain/document';
+import { SOURCE_DRAG_MIME } from '@/shared/utils/source-drag';
+import { expectFocused } from '@/test/dom';
+import {
+  assetApi,
+  documentQueryScope,
+  docxPreviewApi,
+  genericPreviewApi,
+  mediaApi,
+  sourceApi,
+  textSource,
+} from '@/test/fakes/documents';
+import { withQueryClient } from '@/test/query';
 
 import { DocumentOutline } from './outline';
 import { DocumentTabs } from './tabs';
 import { DocumentWorkspace } from './workspace';
 
-function createRuntime(api: DocumentSourceApi = sourceApi) {
+/** A port call that never settles, for the viewers these tests leave pending. */
+function pending(): () => Promise<never> {
+  return () => new Promise<never>(() => undefined);
+}
+
+function createRuntime(api: DocumentSourcePort = loadedSourceApi) {
   let next = 2;
   const runtime = createDocumentTabsRuntime({
     api,
     createId: () => `tab-${++next}`,
-    createQueries: () => ({
-      cancel: vi.fn(async () => undefined),
-      remove: vi.fn(),
-      replaceSource: vi.fn(),
-    }),
+    createQueries: () => documentQueryScope(),
     folderPath: '/library/notes',
     generation: 1,
     restored: {
@@ -36,58 +49,24 @@ function createRuntime(api: DocumentSourceApi = sourceApi) {
   return runtime;
 }
 
-const sourceApi = {
-  load: vi.fn(async () => ({ content: '# Loaded', format: 'md' as const, version: 'v1' })),
-  overwrite: vi.fn(),
-  save: vi.fn(),
-};
+const loadedSourceApi = sourceApi({
+  load: vi.fn(async () => textSource({ content: '# Loaded' })),
+});
 
 const documentWorkspaceProps = {
-  assetApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
-  docxPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
-  genericPreviewApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
-  mediaApi: {
-    cancelTranscript: vi.fn(),
-    loadPreviewStatus: vi.fn(),
-    loadTranscript: vi.fn(() => new Promise<never>(() => undefined)),
-    preparePreview: vi.fn(),
-    reprocessTranscript: vi.fn(),
-  },
+  assetApi: assetApi({ load: vi.fn(pending()) }),
+  docxPreviewApi: docxPreviewApi({ load: vi.fn(pending()) }),
+  genericPreviewApi: genericPreviewApi({ load: vi.fn(pending()) }),
+  mediaApi: mediaApi({ loadTranscript: vi.fn(pending()) }),
   onReveal: vi.fn(async () => undefined),
   revealLabel: 'Show in file manager',
 };
 
-function testQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
-}
-
 const runtimes: ReturnType<typeof createRuntime>[] = [];
-let scrollIntoViewDescriptor: PropertyDescriptor | undefined;
-let getAnimationsDescriptor: PropertyDescriptor | undefined;
-
-beforeEach(() => {
-  getAnimationsDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
-  Object.defineProperty(Element.prototype, 'getAnimations', {
-    configurable: true,
-    value: vi.fn(() => []),
-  });
-});
 
 afterEach(() => {
   cleanup();
   for (const runtime of runtimes.splice(0)) runtime.dispose();
-  if (scrollIntoViewDescriptor) {
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', scrollIntoViewDescriptor);
-  } else {
-    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
-  }
-  scrollIntoViewDescriptor = undefined;
-  if (getAnimationsDescriptor) {
-    Object.defineProperty(Element.prototype, 'getAnimations', getAnimationsDescriptor);
-  } else {
-    Reflect.deleteProperty(Element.prototype, 'getAnimations');
-  }
-  getAnimationsDescriptor = undefined;
 });
 
 describe('document tabs', () => {
@@ -110,19 +89,15 @@ describe('document tabs', () => {
 
     const section = screen.getByLabelText('Document outline section');
     expect(section.dataset.sidebar).toBe('group');
-    expect(section.classList.contains('p-0')).toBe(true);
-    expect(section.classList.contains('border-t')).toBe(false);
-    expect(screen.getByLabelText('other.md outline, 2 headings').className).toContain('h-7');
-    expect(section.querySelector('[data-slot="scroll-area"]')).toBeNull();
-    expect(
-      screen
-        .getByRole('navigation', { name: 'Document outline' })
-        .querySelector('[data-sidebar="menu-sub"]'),
-    ).not.toBeNull();
+    expect(screen.getByLabelText('other.md outline, 2 headings')).not.toBeNull();
+    expect(section.querySelector('[data-slot="scroll-area"]')).toBeNull(); // dom-contract: Base UI ScrollArea internals (@base-ui/react/scroll-area)
+    const nav = screen.getByRole('navigation', { name: 'Document outline' });
+    // `data-sidebar="menu-sub"` is the app's own structural nesting marker for the heading
+    // hierarchy; the wrapper carries no role or label of its own.
+    expect(nav.querySelector('[data-sidebar="menu-sub"]')).not.toBeNull(); // dom-contract: see comment above
     expect(
       screen.getByRole('button', { name: 'Heading level 2: Details' }).getAttribute('aria-current'),
     ).toBe('location');
-    expect(screen.getByRole('button', { name: 'Collapse Plan' }).className).toContain('left-1');
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Collapse Plan' }));
     expect(screen.queryByRole('button', { name: 'Heading level 2: Details' })).toBeNull();
@@ -155,16 +130,18 @@ describe('document tabs', () => {
   it('renders one accessible tab per source and activates through the primitive', async () => {
     const runtime = createRuntime();
     runtimes.push(runtime);
-    render(
-      <QueryClientProvider client={testQueryClient()}>
+    withQueryClient(
+      <>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={sourceApi} />
-      </QueryClientProvider>,
+        <DocumentWorkspace
+          {...documentWorkspaceProps}
+          runtime={runtime}
+          sourceApi={loadedSourceApi}
+        />
+      </>,
     );
 
     const tabList = screen.getByRole('tablist', { name: 'Open documents' });
-    expect(tabList.classList.contains('overflow-x-auto')).toBe(true);
-    expect(tabList.classList.contains('scrollbar-hide')).toBe(true);
     const tabs = within(tabList).getAllByRole('tab');
     expect(tabs).toHaveLength(2);
     expect(tabs.map((tab) => tab.getAttribute('data-proximity-index'))).toEqual(['0', '1']);
@@ -175,24 +152,27 @@ describe('document tabs', () => {
     await userEvent.setup().click(screen.getByRole('tab', { name: 'plan.md' }));
 
     expect(runtime.store.getState().activeTabId).toBe('tab-1');
-    expect(screen.getByRole('region', { name: 'plan.md document' })).not.toBeNull();
-    expect(
-      screen
-        .getByRole('region', { name: 'plan.md document' })
-        .ownerDocument.querySelector('[aria-label="other.md document"]')
-        ?.classList.contains('hidden'),
-    ).toBe(true);
+    const active = screen.getByRole('region', { name: 'plan.md document' });
+    expect(active).not.toBeNull();
+    // getByRole excludes elements hidden from the accessibility tree, so the inactive panel — the
+    // very thing under test — has to be found through getByLabelText, which does not filter on it.
+    const inactive = screen.getByLabelText('other.md document');
+    expect(inactive.hasAttribute('hidden')).toBe(true);
   });
 
   it('closes the focused tab with Delete and exposes an active-tab close control', async () => {
     const runtime = createRuntime();
     runtimes.push(runtime);
     const user = userEvent.setup();
-    render(
-      <QueryClientProvider client={testQueryClient()}>
+    withQueryClient(
+      <>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={sourceApi} />
-      </QueryClientProvider>,
+        <DocumentWorkspace
+          {...documentWorkspaceProps}
+          runtime={runtime}
+          sourceApi={loadedSourceApi}
+        />
+      </>,
     );
 
     const other = screen.getByRole('tab', { name: 'other.md' });
@@ -200,27 +180,24 @@ describe('document tabs', () => {
     await user.keyboard('{Delete}');
 
     expect(runtime.store.getState().tabs.map((tab) => tab.id)).toEqual(['tab-1']);
-    expect(other.ownerDocument.activeElement).toBe(screen.getByRole('tab', { name: 'plan.md' }));
+    expectFocused(screen.getByRole('tab', { name: 'plan.md' }));
+    // `data-tab-trailing` marks the tab's trailing icon, which is aria-hidden by design (the tab's
+    // own accessible name already covers dirty/close state), so only the DOM shape reaches it.
     const closeGlyph = screen
       .getByRole('tab', { name: 'plan.md' })
-      .querySelector<HTMLElement>('[data-tab-trailing]');
+      .querySelector<HTMLElement>('[data-tab-trailing]'); // dom-contract: see comment above
     expect(closeGlyph).not.toBeNull();
-    await user.click(closeGlyph as HTMLElement);
+    if (!closeGlyph) throw new Error('The active tab must expose a close control.');
+    await user.click(closeGlyph);
     expect(screen.queryByRole('region', { name: 'Document workspace' })).toBeNull();
   });
 
   it('keeps a newly opened active tab visible in an overflowing tab list', async () => {
     const runtime = createRuntime();
     runtimes.push(runtime);
-    const scrollIntoView = vi.fn();
-    scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'scrollIntoView',
-    );
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      configurable: true,
-      value: scrollIntoView,
-    });
+    const scrollIntoView = vi
+      .spyOn(HTMLElement.prototype, 'scrollIntoView')
+      .mockImplementation(() => undefined);
     render(<DocumentTabs runtime={runtime} />);
     scrollIntoView.mockClear();
 
@@ -236,11 +213,15 @@ describe('document tabs', () => {
   it('switches one retained Markdown surface between Writer and Reading modes', async () => {
     const runtime = createRuntime();
     runtimes.push(runtime);
-    render(
-      <QueryClientProvider client={testQueryClient()}>
+    withQueryClient(
+      <>
         <DocumentTabs runtime={runtime} />
-        <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={sourceApi} />
-      </QueryClientProvider>,
+        <DocumentWorkspace
+          {...documentWorkspaceProps}
+          runtime={runtime}
+          sourceApi={loadedSourceApi}
+        />
+      </>,
     );
 
     const document = await screen.findByRole(
@@ -248,10 +229,11 @@ describe('document tabs', () => {
       { name: 'other.md Markdown content' },
       { timeout: 5_000 },
     );
-    await waitFor(() => expect(document.querySelector('.ProseMirror')).not.toBeNull(), {
-      timeout: 5_000,
-    });
-    const editor = document.querySelector('.ProseMirror');
+    await waitFor(
+      () => expect(document.querySelector('.ProseMirror')).not.toBeNull(), // dom-contract: ProseMirror internals
+      { timeout: 5_000 },
+    );
+    const editor = document.querySelector('.ProseMirror'); // dom-contract: ProseMirror internals
     const modes = screen.getByRole('tablist', { name: 'Markdown mode' });
     expect(document.contains(modes)).toBe(true);
     expect(within(modes).queryByText('Writer')).toBeNull();
@@ -261,32 +243,27 @@ describe('document tabs', () => {
 
     expect(runtime.getDocument('tab-2')?.store.getState().markdownMode).toBe('reading');
     await waitFor(() => expect(editor?.getAttribute('contenteditable')).toBe('false'));
-    expect(document.querySelector('.ProseMirror')).toBe(editor);
+    expect(document.querySelector('.ProseMirror')).toBe(editor); // dom-contract: ProseMirror internals
 
     await userEvent.setup().click(within(modes).getByRole('tab', { name: 'Writer' }));
 
     expect(runtime.getDocument('tab-2')?.store.getState().markdownMode).toBe('writer');
     await waitFor(() => expect(editor?.getAttribute('contenteditable')).toBe('true'));
-    expect(document.querySelector('.ProseMirror')).toBe(editor);
+    expect(document.querySelector('.ProseMirror')).toBe(editor); // dom-contract: ProseMirror internals
   });
 
   it('keeps a recent Markdown editor mounted and revalidates it when reactivated', async () => {
-    const api = {
-      load: vi.fn(async (source: { path: string }) => ({
-        content: source.path === 'plan.md' ? '# Plan' : '# Other',
-        format: 'md' as const,
-        version: 'v1',
-      })),
-      overwrite: vi.fn(),
-      save: vi.fn(),
-    };
+    const load = vi.fn<DocumentSourcePort['load']>(async (source) =>
+      textSource({ content: source.path === 'plan.md' ? '# Plan' : '# Other' }),
+    );
+    const api = sourceApi({ load });
     const runtime = createRuntime(api);
     runtimes.push(runtime);
-    render(
-      <QueryClientProvider client={testQueryClient()}>
+    withQueryClient(
+      <>
         <DocumentTabs runtime={runtime} />
         <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={api} />
-      </QueryClientProvider>,
+      </>,
     );
 
     const retained = await screen.findByRole(
@@ -299,33 +276,31 @@ describe('document tabs', () => {
     await userEvent.setup().click(screen.getByRole('tab', { name: 'other.md' }));
 
     expect(screen.getByRole('document', { name: 'other.md Markdown content' })).toBe(retained);
-    await waitFor(() => expect(api.load).toHaveBeenCalledTimes(3));
-    expect(api.load.mock.calls.at(-1)?.[0]).toEqual({
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(3));
+    expect(load.mock.calls.at(-1)?.[0]).toEqual({
       folderPath: '/library/notes',
       path: 'drafts/other.md',
     });
   });
 
   it('replaces the close glyph with a filled circle until an edit is saved', async () => {
-    let acceptSave: ((value: { content: string; format: 'md'; version: string }) => void) | null =
-      null;
-    const api = {
-      load: vi.fn(async () => ({ content: '# Loaded', format: 'md' as const, version: 'v1' })),
-      overwrite: vi.fn(),
+    let acceptSave: ((value: DocumentTextSource) => void) | null = null;
+    const api = sourceApi({
+      load: vi.fn(async () => textSource({ content: '# Loaded' })),
       save: vi.fn(
         () =>
-          new Promise<{ content: string; format: 'md'; version: string }>((resolve) => {
+          new Promise<DocumentTextSource>((resolve) => {
             acceptSave = resolve;
           }),
       ),
-    };
+    });
     const runtime = createRuntime(api);
     runtimes.push(runtime);
-    render(
-      <QueryClientProvider client={testQueryClient()}>
+    withQueryClient(
+      <>
         <DocumentTabs runtime={runtime} />
         <DocumentWorkspace {...documentWorkspaceProps} runtime={runtime} sourceApi={api} />
-      </QueryClientProvider>,
+      </>,
     );
 
     await userEvent.setup().click(screen.getByRole('tab', { name: 'plan.md' }));
@@ -334,24 +309,51 @@ describe('document tabs', () => {
     );
     act(() => runtime.getDocument('tab-1')?.change('# Draft'));
 
+    // `data-unsaved-indicator` and `data-tab-trailing` mark aria-hidden trailing-icon elements —
+    // the tab's own accessible name already carries dirty state, so only the icon swap is untested by role.
     const dirtyTab = screen.getByRole('tab', { name: 'plan.md, unsaved changes' });
-    expect(dirtyTab.querySelector('[data-unsaved-indicator]')).not.toBeNull();
+    expect(dirtyTab.querySelector('[data-unsaved-indicator]')).not.toBeNull(); // dom-contract: see comment above
     expect(dirtyTab.getAttribute('data-document-dirty')).toBe('true');
 
     let save: Promise<boolean> | undefined;
     act(() => {
       save = runtime.getDocument('tab-1')?.save(api);
     });
-    expect(dirtyTab.querySelector('[data-unsaved-indicator]')).not.toBeNull();
+    expect(dirtyTab.querySelector('[data-unsaved-indicator]')).not.toBeNull(); // dom-contract: see comment above
 
     await act(async () => {
-      acceptSave?.({ content: '# Draft', format: 'md', version: 'v2' });
+      acceptSave?.(textSource({ content: '# Draft', version: 'v2' }));
       await save;
     });
 
     const savedTab = screen.getByRole('tab', { name: 'plan.md' });
-    expect(savedTab.querySelector('[data-unsaved-indicator]')).toBeNull();
+    expect(savedTab.querySelector('[data-unsaved-indicator]')).toBeNull(); // dom-contract: see comment above
     expect(savedTab.getAttribute('data-document-dirty')).toBeNull();
-    expect(savedTab.querySelector('[data-tab-trailing]')).not.toBeNull();
+    expect(savedTab.querySelector('[data-tab-trailing]')).not.toBeNull(); // dom-contract: see comment above
+  });
+
+  it('offers each open document as a source drag without disturbing activation', async () => {
+    const runtime = createRuntime();
+    runtimes.push(runtime);
+    render(<DocumentTabs runtime={runtime} />);
+
+    const tab = screen.getByRole('tab', { name: 'plan.md' });
+    expect(tab.getAttribute('draggable')).toBe('true');
+    const data = new Map<string, string>();
+    fireEvent.dragStart(tab, {
+      dataTransfer: {
+        effectAllowed: 'none',
+        setData: (type: string, value: string) => void data.set(type, value),
+      },
+    });
+
+    expect(JSON.parse(data.get(SOURCE_DRAG_MIME) ?? 'null')).toEqual({
+      folderPath: '/library/notes',
+      path: 'plan.md',
+    });
+    expect(runtime.store.getState().activeTabId).toBe('tab-2');
+
+    await userEvent.setup().click(tab);
+    expect(runtime.store.getState().activeTabId).toBe('tab-1');
   });
 });

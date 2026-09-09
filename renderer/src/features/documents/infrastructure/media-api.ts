@@ -1,7 +1,8 @@
-import { MediaError, type MediaApi } from '@/features/documents/application/ports';
+import { MediaError, type MediaPort } from '@/features/documents/application/ports';
 import { documentViewerFormat } from '@/features/documents/domain/document-format';
 import type { MediaTranscriptState } from '@/features/documents/domain/media';
-import type { HttpClient, HttpResponse } from '@/platform/http/client';
+import { request, type TransportRequest } from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import {
   mediaCancelResponseSchema,
   mediaFailureSchema,
@@ -14,37 +15,17 @@ import {
 } from '@/protocols/http/media';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-function mediaResponseError(response: HttpResponse): MediaError {
-  const failure = mediaFailureSchema.safeParse(response.body);
-  const cause = failure.success ? { cause: new Error(failure.data.error) } : undefined;
-  if (response.status === 401 || response.status === 403) {
-    return new MediaError(
-      'unauthorized',
-      'This window can no longer access that media file.',
-      cause,
-    );
-  }
-  if (response.status === 410 || response.status === 412) {
-    return new MediaError(
-      'scope-lost',
-      'The media folder is no longer available in this window.',
-      cause,
-    );
-  }
-  return new MediaError('unavailable', 'The media information could not be loaded.', cause);
-}
-
 function mediaRequest(source: SourceReference) {
-  const request = mediaRequestSchema.safeParse(source);
-  if (!request.success || documentViewerFormat(source.path) !== 'media') {
+  const parsed = mediaRequestSchema.safeParse(source);
+  if (!parsed.success || documentViewerFormat(source.path) !== 'audio') {
     throw new MediaError('unavailable', 'The media identity is invalid.');
   }
-  return request.data;
+  return parsed.data;
 }
 
 function mediaQuery(source: SourceReference): string {
-  const request = mediaRequest(source);
-  return new URLSearchParams({ folder: request.folderPath, path: request.path }).toString();
+  const identity = mediaRequest(source);
+  return new URLSearchParams({ folder: identity.folderPath, path: identity.path }).toString();
 }
 
 function mapTranscript(response: MediaTranscriptResponseWire): MediaTranscriptState {
@@ -73,95 +54,92 @@ function mapTranscript(response: MediaTranscriptResponseWire): MediaTranscriptSt
   return { status: response.status };
 }
 
-async function request(
-  client: HttpClient,
-  input: Parameters<HttpClient['request']>[0],
-): Promise<HttpResponse> {
-  try {
-    const response = await client.request(input);
-    if (response.status < 200 || response.status >= 300) throw mediaResponseError(response);
-    return response;
-  } catch (error) {
-    if (error instanceof MediaError || input.signal?.aborted) throw error;
-    throw new MediaError('unavailable', 'The media information could not be loaded.', {
-      cause: error,
-    });
-  }
+/** One media call: every media route reads the same file identity and reports
+ *  the same ladder. */
+function media(
+  path: string,
+  signal: AbortSignal,
+  invalid: string,
+  body?: unknown,
+): TransportRequest {
+  return {
+    ...(body === undefined ? {} : { body, method: 'POST' as const }),
+    error: MediaError,
+    failureSchema: mediaFailureSchema,
+    messages: {
+      'invalid-response': invalid,
+      'scope-lost': 'The media folder is no longer available in this window.',
+      unauthorized: 'This window can no longer access that media file.',
+      unavailable: 'The media information could not be loaded.',
+    },
+    path,
+    signal,
+  };
 }
 
-export function createMediaApi(client: HttpClient): MediaApi {
+export function createMediaAdapter(client: HttpClient): MediaPort {
   return {
     async cancelTranscript(source, signal) {
       const identity = mediaRequest(source);
-      const response = await request(client, {
-        body: { folder: identity.folderPath, path: identity.path },
-        method: 'POST',
-        path: '/api/files/cancel-preparation',
-        signal,
-      });
-      const body = mediaCancelResponseSchema.safeParse(response.body);
-      if (!body.success) {
-        throw new MediaError(
-          'invalid-response',
+      const body = await request(client, {
+        ...media(
+          '/api/files/cancel-preparation',
+          signal,
           'The transcript cancellation returned an invalid response.',
-        );
-      }
-      return body.data.cancelled;
-    },
-    async loadPreviewStatus(source, signal) {
-      const response = await request(client, {
-        path: `/api/audio/preview/status?${mediaQuery(source)}`,
-        signal,
+          { folder: identity.folderPath, path: identity.path },
+        ),
+        schema: mediaCancelResponseSchema,
       });
-      const body = mediaPreviewStatusSchema.safeParse(response.body);
-      if (!body.success) {
-        throw new MediaError(
-          'invalid-response',
+      return body.cancelled;
+    },
+    loadPreviewStatus(source, signal) {
+      return request(client, {
+        ...media(
+          `/api/audio/preview/status?${mediaQuery(source)}`,
+          signal,
           'The compatible preview returned invalid progress.',
-        );
-      }
-      return body.data;
+        ),
+        schema: mediaPreviewStatusSchema,
+      });
     },
     async loadTranscript(source, signal) {
-      const response = await request(client, {
-        path: `/api/audio/transcript?${mediaQuery(source)}`,
-        signal,
-      });
-      const body = mediaTranscriptResponseSchema.safeParse(response.body);
-      if (!body.success) {
-        throw new MediaError('invalid-response', 'The transcript returned an invalid response.');
-      }
-      return mapTranscript(body.data);
+      return mapTranscript(
+        await request(client, {
+          ...media(
+            `/api/audio/transcript?${mediaQuery(source)}`,
+            signal,
+            'The transcript returned an invalid response.',
+          ),
+          schema: mediaTranscriptResponseSchema,
+        }),
+      );
     },
     async preparePreview(source, signal) {
       const identity = mediaRequest(source);
-      const response = await request(client, {
-        body: { folder: identity.folderPath, path: identity.path },
-        method: 'POST',
-        path: '/api/audio/preview/prepare',
-        signal,
-      });
-      if (!mediaPrepareResponseSchema.safeParse(response.body).success) {
-        throw new MediaError(
-          'invalid-response',
+      await request(client, {
+        ...media(
+          '/api/audio/preview/prepare',
+          signal,
           'The compatible preview returned an invalid response.',
-        );
-      }
+          { folder: identity.folderPath, path: identity.path },
+        ),
+        schema: mediaPrepareResponseSchema,
+      });
     },
     async reprocessTranscript(source, signal) {
       const identity = mediaRequest(source);
-      const response = await request(client, {
-        body: { folder: identity.folderPath, path: identity.path },
-        method: 'POST',
-        path: '/api/files/reprocess',
-        signal,
-      });
-      if (!mediaReprocessResponseSchema.safeParse(response.body).success) {
-        throw new MediaError(
-          'invalid-response',
+      await request(client, {
+        ...media(
+          '/api/files/reprocess',
+          signal,
           'The transcript retry returned an invalid response.',
-        );
-      }
+          {
+            folder: identity.folderPath,
+            path: identity.path,
+          },
+        ),
+        schema: mediaReprocessResponseSchema,
+      });
     },
   };
 }

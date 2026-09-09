@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 function editorView(host: HTMLElement): EditorView {
-  const editor = host.querySelector<HTMLElement>('.cm-editor');
+  const editor = host.querySelector<HTMLElement>('.cm-editor'); // dom-contract: CodeMirror internals
   const view = editor ? EditorView.findFromDOM(editor) : null;
   if (!view) throw new Error('CodeMirror did not mount.');
   return view;
@@ -57,7 +57,7 @@ describe('code editor', () => {
     expect(onChange).not.toHaveBeenCalled();
 
     editor.destroy();
-    expect(host.querySelector('.cm-editor')).toBeNull();
+    expect(host.querySelector('.cm-editor')).toBeNull(); // dom-contract: CodeMirror internals
   });
 
   it('loads a recognized filename grammar without making code editable', async () => {

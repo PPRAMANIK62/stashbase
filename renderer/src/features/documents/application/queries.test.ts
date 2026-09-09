@@ -1,5 +1,7 @@
-import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vite-plus/test';
+
+import { docxPreviewApi, genericPreviewApi, sourceApi, textSource } from '@/test/fakes/documents';
+import { createTestQueryClient } from '@/test/query';
 
 import {
   createDocumentQueryScope,
@@ -29,14 +31,14 @@ describe('document source queries', () => {
   });
 
   it('loads generic inspection through a separate read-only query', async () => {
-    const api = {
+    const api = genericPreviewApi({
       load: vi.fn(async () => ({
         content: 'const answer = 42;',
         kind: 'text' as const,
         name: 'drafts/plan.md',
         size: 18,
       })),
-    };
+    });
     const controller = new AbortController();
     const query = genericFilePreviewQuery(api, scope);
 
@@ -55,11 +57,7 @@ describe('document source queries', () => {
   });
 
   it('loads through the source port with query cancellation', async () => {
-    const api = {
-      load: vi.fn(async () => ({ content: '# Plan', format: 'md' as const, version: 'v1' })),
-      overwrite: vi.fn(),
-      save: vi.fn(),
-    };
+    const api = sourceApi({ load: vi.fn(async () => textSource()) });
     const controller = new AbortController();
     const query = documentSourceQuery(api, scope);
 
@@ -79,7 +77,7 @@ describe('document source queries', () => {
       url: 'http://127.0.0.1/asset/report.docx?v=v2',
       version: 'v2',
     };
-    const api = { load: vi.fn(async () => ({ html: '<p>Report</p>' })) };
+    const api = docxPreviewApi({ load: vi.fn(async () => ({ html: '<p>Report</p>' })) });
     const controller = new AbortController();
     const query = docxPreviewQuery(api, scope, resource);
 
@@ -99,12 +97,12 @@ describe('document source queries', () => {
   });
 
   it('cancels and removes every query owned by one document scope', async () => {
-    const queryClient = new QueryClient();
+    const queryClient = createTestQueryClient();
     const cancel = vi.spyOn(queryClient, 'cancelQueries');
     const remove = vi.spyOn(queryClient, 'removeQueries');
     const setQueryData = vi.spyOn(queryClient, 'setQueryData');
     const queryScope = createDocumentQueryScope(queryClient, scope);
-    const replacement = { content: 'saved', format: 'md' as const, version: 'v2' };
+    const replacement = textSource({ content: 'saved', version: 'v2' });
 
     queryScope.replaceSource(replacement);
     await queryScope.cancel();
@@ -117,7 +115,7 @@ describe('document source queries', () => {
   });
 
   it('refetches only the open documents behind externally written sources', () => {
-    const queryClient = new QueryClient();
+    const queryClient = createTestQueryClient();
     const other = { ...scope, id: 'tab-other', source: { ...scope.source, path: 'other.md' } };
     queryClient.setQueryData(documentQueryKeys.source(scope), { content: 'a', version: 'v1' });
     queryClient.setQueryData(documentQueryKeys.source(other), { content: 'b', version: 'v1' });

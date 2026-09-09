@@ -7,7 +7,7 @@ import {
   IMAGE_SOURCE_EXTENSIONS,
   PDF_EXTENSIONS,
   VIDEO_SOURCE_EXTENSIONS,
-} from '@/shared/file-formats';
+} from '@/contracts/file-formats';
 
 import { documentTextFormat, documentViewerFormat } from './document-format';
 
@@ -18,6 +18,7 @@ describe('document format', () => {
     expect(documentTextFormat('notes/literal.TXT')).toBe('txt');
     expect(documentTextFormat('notes/data.json')).toBe('json');
     expect(documentTextFormat('notes/no-extension')).toBeNull();
+    expect(documentViewerFormat('notes/no-extension')).toBe('generic');
   });
 
   it('routes every canonical PDF and image extension without making it editable text', () => {
@@ -29,7 +30,7 @@ describe('document format', () => {
       expect(documentViewerFormat(`images/source.${extension.toUpperCase()}`)).toBe('image');
       expect(documentTextFormat(`images/source.${extension}`)).toBeNull();
     }
-    expect(documentViewerFormat('images/animation.gif')).toBeNull();
+    expect(documentViewerFormat('images/animation.gif')).toBe('generic');
   });
 
   it('routes HTML and DOCX to preview-only viewers', () => {
@@ -45,7 +46,7 @@ describe('document format', () => {
 
   it('routes every canonical audio and video extension to media viewing', () => {
     for (const extension of [...AUDIO_ONLY_SOURCE_EXTENSIONS, ...VIDEO_SOURCE_EXTENSIONS]) {
-      expect(documentViewerFormat(`recordings/source.${extension.toUpperCase()}`)).toBe('media');
+      expect(documentViewerFormat(`recordings/source.${extension.toUpperCase()}`)).toBe('audio');
       expect(documentTextFormat(`recordings/source.${extension}`)).toBeNull();
     }
   });

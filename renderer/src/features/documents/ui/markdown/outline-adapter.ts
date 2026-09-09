@@ -50,7 +50,7 @@ function sameHeading(
   );
 }
 
-export function resolveCurrentDocumentHeading(
+function resolveCurrentDocumentHeading(
   current: DocumentHeading[],
   selected: DocumentHeading,
 ): DocumentHeading | null {
@@ -58,7 +58,7 @@ export function resolveCurrentDocumentHeading(
   const identityMatches = selectedNode
     ? current.filter((heading) => headingNodes.get(heading) === selectedNode)
     : [];
-  if (identityMatches.length === 1) return identityMatches[0];
+  if (identityMatches.length === 1) return identityMatches[0] ?? null;
   if (identityMatches.length > 1) {
     return (
       identityMatches.find((heading) => sameHeading(heading, selected, true)) ??

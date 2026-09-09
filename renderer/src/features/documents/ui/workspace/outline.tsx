@@ -1,3 +1,8 @@
+/**
+ * The heading outline for the active document, as a collapsible sidebar tree.
+ * A format that never publishes headings says so rather than reading as a
+ * document whose outline has not arrived.
+ */
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useStore } from 'zustand';
@@ -16,10 +21,12 @@ import {
 } from '@/components/ui/sidebar';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { sourceName } from '@/features/documents/domain/document';
+import { documentViewerFormat } from '@/features/documents/domain/document-format';
 import {
   buildDocumentOutline,
   type DocumentOutlineNode,
 } from '@/features/documents/domain/outline';
+import { documentViewerEntry } from '@/features/documents/ui/source/registry';
 
 interface OutlineNodeItemProps {
   collapsed: ReadonlySet<string>;
@@ -50,14 +57,13 @@ function OutlineNodeItem({ collapsed, depth, node, runtime, toggle }: OutlineNod
   };
   const button =
     depth === 0 ? (
-      <SidebarMenuButton {...buttonProps}>{label}</SidebarMenuButton>
+      <SidebarMenuButton {...buttonProps} label={label} />
     ) : (
       <SidebarMenuSubButton
         {...buttonProps}
+        label={label}
         render={<button aria-label={buttonProps['aria-label']} type="button" />}
-      >
-        {label}
-      </SidebarMenuSubButton>
+      />
     );
   const branch = (
     <>
@@ -134,9 +140,16 @@ export function DocumentOutline({ runtime }: { runtime: DocumentTabsRuntime }) {
     );
   }
   const name = activeTab ? sourceName(activeTab.source) : 'Document';
+  // A format that never publishes headings says so, instead of reading as a
+  // document whose outline has not arrived yet.
+  const outlines =
+    activeTab === undefined ||
+    documentViewerEntry(documentViewerFormat(activeTab.source.path)).outline;
   const outlineSummary = outline.available
     ? `${outline.headings.length} ${outline.headings.length === 1 ? 'heading' : 'headings'}`
-    : 'unavailable';
+    : outlines
+      ? 'unavailable'
+      : 'not available for this file type';
 
   const toggle = (id: string) => {
     setCollapsed((current) => {

@@ -1,133 +1,35 @@
-import { LoaderCircle } from 'lucide-react';
-import { lazy, Suspense, type ReactNode } from 'react';
+import { Suspense } from 'react';
 
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
-import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
-import type {
-  DocumentAssetApi,
-  DocumentSourceApi,
-  DocxPreviewApi,
-  GenericFilePreviewApi,
-  MediaApi,
-} from '@/features/documents/application/ports';
 import { sourceName } from '@/features/documents/domain/document';
 import { documentViewerFormat } from '@/features/documents/domain/document-format';
-import type { SourceReference } from '@/shared/domain/source-reference';
 
-import { AssetDocument } from './asset';
+import { documentViewerEntry } from './registry';
+import type { DocumentViewerRegistry, DocumentViewerServices } from './viewer';
 
-const GenericFileDocument = lazy(async () => {
-  const module = await import('@/features/documents/ui/generic/document');
-  return { default: module.GenericFileDocument };
-});
-
-const TextDocument = lazy(async () => {
-  const module = await import('./text');
-  return { default: module.TextDocument };
-});
-
-export type PreparationSlotFormat = 'docx' | 'image' | 'pdf';
-export type PreparedOnOpenFormat = 'docx' | 'media';
-
-export interface DocumentSourceProps {
+export interface DocumentSourceProps extends DocumentViewerServices {
   active: boolean;
-  assetApi: DocumentAssetApi;
-  docxPreviewApi: DocxPreviewApi;
-  genericPreviewApi: GenericFilePreviewApi;
-  mediaApi: MediaApi;
-  navigation: DocumentNavigationRuntime;
-  onNavigate(target: { anchor?: string; source: SourceReference }): void;
-  onOpenExternal(href: string): Promise<boolean>;
-  onOpenPrepared?(source: SourceReference, format: PreparedOnOpenFormat): void;
-  onReveal(source: SourceReference, signal: AbortSignal): Promise<void>;
-  renderPreparation?(source: SourceReference, format: PreparationSlotFormat): ReactNode;
-  revealLabel: string;
   runtime: DocumentRuntime;
-  sourceApi: DocumentSourceApi;
+  /** Overridable so a test can register a viewer of its own. */
+  viewers?: DocumentViewerRegistry | undefined;
 }
 
-function PendingDocument({ name }: { name: string }) {
-  return (
-    <div
-      className="flex min-h-0 flex-1 items-center justify-center gap-2 text-caption text-muted-foreground"
-      role="status"
-    >
-      <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />
-      Loading {name}
-    </div>
-  );
-}
-
-export function DocumentSource({
-  active,
-  assetApi,
-  docxPreviewApi,
-  genericPreviewApi,
-  mediaApi,
-  navigation,
-  onNavigate,
-  onOpenExternal,
-  onOpenPrepared,
-  onReveal,
-  renderPreparation,
-  revealLabel,
-  runtime,
-  sourceApi,
-}: DocumentSourceProps) {
+/** Routes one open document to the viewer its format registers. */
+export function DocumentSource({ active, runtime, viewers, ...services }: DocumentSourceProps) {
   const name = sourceName(runtime.scope.source);
   const format = documentViewerFormat(runtime.scope.source.path);
-
-  if (
-    format === 'media' ||
-    format === 'docx' ||
-    format === 'html' ||
-    format === 'image' ||
-    format === 'pdf'
-  ) {
-    return (
-      <AssetDocument
-        active={active}
-        api={assetApi}
-        docxPreviewApi={docxPreviewApi}
-        format={format}
-        mediaApi={mediaApi}
-        name={name}
-        navigation={navigation}
-        onNavigate={onNavigate}
-        onOpenExternal={onOpenExternal}
-        onOpenPrepared={onOpenPrepared}
-        renderPreparation={renderPreparation}
-        runtime={runtime}
-      />
-    );
-  }
-
-  if (format === null) {
-    return (
-      <Suspense fallback={<PendingDocument name={name} />}>
-        <GenericFileDocument
-          active={active}
-          api={genericPreviewApi}
-          navigation={navigation}
-          onReveal={onReveal}
-          revealLabel={revealLabel}
-          runtime={runtime}
-        />
-      </Suspense>
-    );
-  }
+  const entry = documentViewerEntry(format, viewers);
+  const Viewer = entry.component;
 
   return (
-    <Suspense fallback={<PendingDocument name={name} />}>
-      <TextDocument
+    <Suspense fallback={entry.status({ name })}>
+      <Viewer
+        {...services}
         active={active}
         format={format}
         name={name}
-        navigation={navigation}
-        onNavigate={onNavigate}
-        onOpenExternal={onOpenExternal}
         runtime={runtime}
-        sourceApi={sourceApi}
+        status={entry.status}
       />
     </Suspense>
   );

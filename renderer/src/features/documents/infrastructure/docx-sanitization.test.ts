@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { sanitizeDocxHtml } from '@/shared/html-sanitization';
+import { sanitizeDocxHtml } from '@/contracts/html-sanitization';
 
 describe('DOCX preview sanitization', () => {
   it('keeps document structure and safe embedded images while removing executable content', () => {

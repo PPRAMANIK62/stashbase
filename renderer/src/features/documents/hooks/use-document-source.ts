@@ -3,15 +3,18 @@ import { useEffect, useRef } from 'react';
 import { useStore } from 'zustand';
 
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
-import type { DocumentSourceApi } from '@/features/documents/application/ports';
+import type { DocumentSourcePort } from '@/features/documents/application/ports';
 import { documentSourceQuery } from '@/features/documents/application/queries';
-import type { DocumentConflictResolution } from '@/features/documents/domain/document';
+import {
+  isDocumentDirty,
+  type DocumentConflictResolution,
+} from '@/features/documents/domain/document';
 
 const AUTOSAVE_DELAY_MS = 500;
 
 export function useDocumentSource(
   runtime: DocumentRuntime,
-  api: DocumentSourceApi,
+  api: DocumentSourcePort,
   active: boolean,
 ) {
   const access = useStore(runtime.store, (state) => state.access);
@@ -20,6 +23,8 @@ export function useDocumentSource(
   const source = useQuery(documentSourceQuery(api, runtime.scope));
   const { isFetching, isPending, refetch } = source;
   const wasActive = useRef(false);
+  const dirty = editor !== null && isDocumentDirty(editor);
+  const conflicted = editor?.save.kind === 'conflict';
 
   useEffect(() => {
     if (source.data) runtime.reconcile(source.data);
@@ -28,17 +33,17 @@ export function useDocumentSource(
   useEffect(() => {
     const becameActive = active && !wasActive.current;
     wasActive.current = active;
-    if (!becameActive || isPending || isFetching || editor?.dirty) return;
+    if (!becameActive || isPending || isFetching || dirty) return;
     void refetch();
-  }, [active, editor?.dirty, isFetching, isPending, refetch]);
+  }, [active, dirty, isFetching, isPending, refetch]);
 
   useEffect(() => {
-    if (!editor?.dirty || editor.conflict) return;
+    if (!dirty || conflicted) return;
     const timeout = setTimeout(() => {
       void runtime.save(api);
     }, AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timeout);
-  }, [api, editor?.conflict, editor?.dirty, editor?.revision, runtime]);
+  }, [api, conflicted, dirty, editor?.revision, runtime]);
 
   return {
     access,

@@ -2,20 +2,25 @@
 
 import mammoth from 'mammoth';
 
-import { sanitizeDocxHtml } from '@/shared/html-sanitization';
+import { sanitizeDocxHtml } from '@/contracts/html-sanitization';
 
-type DocxWorkerResponse = { html: string; ok: true } | { error: string; ok: false };
+/** A refused conversion answers with the converter's own diagnostic. It is
+ *  written for a developer, so it travels as `detail` and reaches the reader
+ *  only as the cause behind the preview ladder's sentence. */
+type DocxWorkerResponse = { detail: string; ok: false } | { html: string; ok: true };
 
-const workerScope = globalThis as unknown as DedicatedWorkerGlobalScope;
+/** Module-local redeclaration of the worker's own global, so the scope is
+ *  typed by what it is rather than cast away from the DOM's `Window`. */
+declare const self: DedicatedWorkerGlobalScope;
 
-workerScope.addEventListener('message', (event: MessageEvent<{ arrayBuffer: ArrayBuffer }>) => {
+self.addEventListener('message', (event: MessageEvent<{ arrayBuffer: ArrayBuffer }>) => {
   void mammoth
     .convertToHtml(
       { arrayBuffer: event.data.arrayBuffer },
       { convertImage: mammoth.images.dataUri },
     )
     .then((result) => {
-      workerScope.postMessage(
+      self.postMessage(
         {
           html: sanitizeDocxHtml(result.value),
           ok: true,
@@ -23,10 +28,10 @@ workerScope.addEventListener('message', (event: MessageEvent<{ arrayBuffer: Arra
         [],
       );
     })
-    .catch((error: unknown) => {
-      workerScope.postMessage(
+    .catch((cause: unknown) => {
+      self.postMessage(
         {
-          error: error instanceof Error ? error.message : String(error),
+          detail: cause instanceof Error ? cause.message : String(cause),
           ok: false,
         } satisfies DocxWorkerResponse,
         [],

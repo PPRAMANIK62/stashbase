@@ -1,3 +1,8 @@
+/**
+ * The floating control strip document viewers share: a page or zoom value the
+ * reader can click to edit, and the buttons beside it. One toolbar recipe so
+ * PDF, image, and future viewers do not each invent their own.
+ */
 import {
   useEffect,
   useRef,
@@ -33,7 +38,7 @@ export function ViewerToolbar({
       <div
         aria-label={label}
         className={cn(
-          'pointer-events-auto flex h-10 max-w-full items-center gap-1 border border-border bg-[color-mix(in_oklab,var(--surface-3)_72%,transparent)] px-1.5 text-foreground shadow-surface-5 backdrop-blur-xl backdrop-saturate-150 transition-[background-color,box-shadow] duration-80 focus-within:bg-[color-mix(in_oklab,var(--surface-3)_82%,transparent)] focus-within:shadow-surface-6 hover:bg-[color-mix(in_oklab,var(--surface-3)_82%,transparent)] hover:shadow-surface-6',
+          'pointer-events-auto flex h-10 max-w-full items-center gap-1 border border-border bg-[color-mix(in_oklab,var(--surface-3)_72%,transparent)] px-1.5 text-foreground shadow-surface-5 backdrop-blur-xl backdrop-saturate-150 transition-[background-color,box-shadow] duration-fast focus-within:bg-[color-mix(in_oklab,var(--surface-3)_82%,transparent)] focus-within:shadow-surface-6 hover:bg-[color-mix(in_oklab,var(--surface-3)_82%,transparent)] hover:shadow-surface-6',
           shape.container,
           className,
         )}

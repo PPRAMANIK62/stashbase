@@ -23,6 +23,7 @@ export function openPdfDocument(url: string): PdfLoadTask {
     async destroy() {
       if (destroyed) return;
       destroyed = true;
+      // swallowed: the load was abandoned, so a failed teardown has no reader.
       await task.destroy().catch(() => undefined);
       worker.destroy();
       port.terminate();

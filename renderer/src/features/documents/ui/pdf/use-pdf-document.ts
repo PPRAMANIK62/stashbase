@@ -29,6 +29,7 @@ export function usePdfDocument(url: string, load: PdfLoader): PdfDocumentState {
     void task.promise.then(
       async (document) => {
         if (cancelled) {
+          // swallowed: the effect was cancelled, so a failed teardown has no reader.
           await document.destroy().catch(() => undefined);
           return;
         }
@@ -42,11 +43,12 @@ export function usePdfDocument(url: string, load: PdfLoader): PdfDocumentState {
         }
         if (!cancelled) setState({ document, error: null, loading: false, pageSize });
       },
-      (error: unknown) => {
+      () => {
         if (cancelled) return;
+        // PDF.js says why in developer terms; the reader gets one sentence.
         setState({
           document: null,
-          error: error instanceof Error ? error.message : 'The PDF could not be opened.',
+          error: 'The PDF could not be opened.',
           loading: false,
           pageSize: null,
         });

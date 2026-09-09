@@ -1,3 +1,11 @@
+/**
+ * One subscription to the open-tab set, shared by the tab strip and the
+ * document workspace.
+ *
+ * Both views need the same three answers and the same two commands. Reading
+ * them here means the strip and the pane beneath it cannot disagree about
+ * which tab is active on a frame, and neither view holds the store itself.
+ */
 import { useCallback } from 'react';
 import { useStore } from 'zustand';
 

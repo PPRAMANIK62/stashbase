@@ -1,63 +1,64 @@
-import { AlertCircle, LoaderCircle, LockKeyhole, RefreshCw, TriangleAlert } from 'lucide-react';
-import { lazy, Suspense } from 'react';
+/**
+ * The frame every editable text format shares: load the versioned source,
+ * surface a refresh that failed, hand a conflict to the comparison view, and
+ * report the save outcome. The format-specific editor is the child, so
+ * Markdown, JSON, and plain text differ only in what they render inside.
+ */
+import { AlertCircle, LockKeyhole, TriangleAlert } from 'lucide-react';
+import { lazy, Suspense, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
-import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
 import {
-  DocumentSourceError,
-  type DocumentSourceApi,
-} from '@/features/documents/application/ports';
-import type { DocumentTextFormat } from '@/features/documents/domain/document-format';
+  documentFailure,
+  DOCUMENT_SOURCE_MESSAGES,
+} from '@/features/documents/application/failure-messages';
+import type { DocumentSourcePort } from '@/features/documents/application/ports';
+import {
+  documentSaveMessage,
+  type DocumentAccess,
+  type DocumentEditorState,
+  type DocumentSaveState,
+} from '@/features/documents/domain/document';
 import { useDocumentSource } from '@/features/documents/hooks/use-document-source';
-import type { SourceReference } from '@/shared/domain/source-reference';
+
+import { DocumentFailure, DocumentPending } from './status';
+import type { DocumentViewerStatus } from './viewer';
 
 const DocumentConflict = lazy(async () => {
   const module = await import('./conflict');
   return { default: module.DocumentConflict };
 });
 
-const MarkdownDocument = lazy(async () => {
-  const module = await import('@/features/documents/ui/markdown/document');
-  return { default: module.MarkdownDocument };
-});
+/** What the format-specific editor is handed once the source has landed. */
+interface TextSurfaceSlot {
+  access: DocumentAccess;
+  editor: DocumentEditorState | null;
+  markdownMode: 'reading' | 'writer';
+  onChange(value: string): void;
+  readOnly: boolean;
+  value: string;
+}
 
-const JsonDocument = lazy(async () => {
-  const module = await import('@/features/documents/ui/json/document');
-  return { default: module.JsonDocument };
-});
+export interface TextSurfaceProps {
+  active: boolean;
+  children(slot: TextSurfaceSlot): ReactNode;
+  editorLabel: string;
+  name: string;
+  runtime: DocumentRuntime;
+  sourceApi: DocumentSourcePort;
+  status(status: DocumentViewerStatus): ReactNode;
+}
 
-const CodeEditorDocument = lazy(async () => {
-  const module = await import('@/features/documents/ui/code-editor/document');
-  return { default: module.CodeEditorDocument };
-});
-
-function SaveFeedback({
-  editor,
-  retry,
-}: {
-  editor: NonNullable<ReturnType<typeof useDocumentSource>['editor']>;
-  retry: () => void;
-}) {
-  if (
-    editor.savePhase !== 'conflict' &&
-    editor.savePhase !== 'error' &&
-    editor.savePhase !== 'warning'
-  ) {
-    return null;
-  }
-  const failed = editor.savePhase === 'conflict' || editor.savePhase === 'error';
-  const text =
-    editor.savePhase === 'conflict'
-      ? 'Conflict detected'
-      : editor.savePhase === 'error'
-        ? (editor.saveMessage ?? 'Save failed')
-        : (editor.saveMessage ?? 'Saved with a warning');
+function SaveFeedback({ retry, save }: { retry: () => void; save: DocumentSaveState }) {
+  if (save.kind !== 'failed' && save.kind !== 'warned') return null;
+  const failed = save.kind === 'failed';
+  const text = documentSaveMessage(save) ?? '';
 
   return (
     <div
       className="absolute right-4 bottom-3 flex max-w-[min(32rem,calc(100%-2rem))] items-center gap-2 rounded-md border border-border bg-surface-2/95 px-2.5 py-1.5 text-caption shadow-sm"
-      data-save-phase={editor.savePhase}
+      data-save-state={save.kind}
     >
       {failed ? (
         <AlertCircle aria-hidden="true" className="size-3.5 shrink-0 text-destructive" />
@@ -73,8 +74,8 @@ function SaveFeedback({
       >
         {text}
       </span>
-      {editor.savePhase === 'error' && (
-        <Button onClick={retry} size="sm" variant="tertiary">
+      {failed && (
+        <Button onClick={retry} size="compact" variant="tertiary">
           Retry
         </Button>
       )}
@@ -82,82 +83,37 @@ function SaveFeedback({
   );
 }
 
-function PendingSource({ name }: { name: string }) {
-  return (
-    <div
-      className="flex min-h-0 flex-1 items-center justify-center gap-2 text-caption text-muted-foreground"
-      role="status"
-    >
-      <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />
-      Loading {name}
-    </div>
-  );
-}
-
-function FailedSource({ error, name, retry }: { error: unknown; name: string; retry: () => void }) {
-  const unsupported = error instanceof DocumentSourceError && error.kind === 'unsupported-encoding';
-  const message =
-    error instanceof DocumentSourceError
-      ? error.message
-      : 'The document could not be loaded. Your source file has not been changed.';
-
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
-      <div className="max-w-md">
-        <TriangleAlert aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
-        <h2 className="mt-3 text-body font-medium">
-          {unsupported ? 'Unsupported text encoding' : `Could not open ${name}`}
-        </h2>
-        <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role="alert">
-          {message}
-        </p>
-        <Button
-          className="mt-4"
-          leadingIcon={RefreshCw}
-          onClick={retry}
-          size="sm"
-          variant="tertiary"
-        >
-          Retry
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-export function TextDocument({
+export function TextSurface({
   active,
-  format,
+  children,
+  editorLabel,
   name,
-  navigation,
-  onNavigate,
-  onOpenExternal,
   runtime,
   sourceApi,
-}: {
-  active: boolean;
-  format: DocumentTextFormat;
-  name: string;
-  navigation: DocumentNavigationRuntime;
-  onNavigate(target: { anchor?: string; source: SourceReference }): void;
-  onOpenExternal(href: string): Promise<boolean>;
-  runtime: DocumentRuntime;
-  sourceApi: DocumentSourceApi;
-}) {
+  status,
+}: TextSurfaceProps) {
   const { access, change, editor, markdownMode, resolveConflict, retrySave, source } =
     useDocumentSource(runtime, sourceApi, active);
 
-  if (source.isPending) return <PendingSource name={name} />;
+  if (source.isPending) return <>{status({ name })}</>;
   if (!source.data) {
-    return <FailedSource error={source.error} name={name} retry={() => void source.refetch()} />;
-  }
-
-  if (access === 'editable' && !editor) return <PendingSource name={name} />;
-
-  if (access === 'editable' && editor?.conflict) {
     return (
-      <Suspense fallback={<PendingSource name="conflict comparison" />}>
-        <DocumentConflict editor={editor} name={name} resolve={resolveConflict} />
+      <DocumentFailure
+        message={
+          documentFailure(source.error, 'DocumentSourceError', DOCUMENT_SOURCE_MESSAGES).message
+        }
+        name={name}
+        retry={() => void source.refetch()}
+      />
+    );
+  }
+  if (access === 'editable' && !editor) return <>{status({ name })}</>;
+
+  const conflict = editor?.save.kind === 'conflict' ? editor.save.conflict : null;
+  if (access === 'editable' && conflict) {
+    return (
+      <Suspense fallback={<DocumentPending label="Loading conflict comparison" />}>
+        <DocumentConflict conflict={conflict} name={name} resolve={resolveConflict} />
       </Suspense>
     );
   }
@@ -178,71 +134,26 @@ export function TextDocument({
       {source.isError && (
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
           <span className="text-destructive">Refresh failed. Showing the last loaded source.</span>
-          <Button onClick={() => void source.refetch()} size="sm" variant="tertiary">
+          <Button onClick={() => void source.refetch()} size="compact" variant="tertiary">
             Retry
           </Button>
         </div>
       )}
-      {format === 'md' ? (
-        <div className="relative min-h-0 flex-1">
-          <Suspense fallback={<PendingSource name="Markdown editor" />}>
-            <MarkdownDocument
-              active={active}
-              canChangeMode={access === 'editable' && editor !== null}
-              dirty={editor?.dirty ?? false}
-              mode={markdownMode}
-              name={name}
-              navigation={navigation}
-              onChange={change}
-              onModeChange={(mode) => runtime.setMarkdownMode(mode)}
-              onNavigate={onNavigate}
-              onOpenExternal={onOpenExternal}
-              readOnly={access === 'read-only' || editor === null || markdownMode === 'reading'}
-              source={runtime.scope.source}
-              tabId={runtime.scope.id}
-              value={editor?.value ?? source.data.content}
-            />
-          </Suspense>
-          {access === 'editable' && editor && (
-            <SaveFeedback editor={editor} retry={() => void retrySave()} />
-          )}
-        </div>
-      ) : format === 'json' ? (
-        <div className="relative min-h-0 flex-1">
-          <Suspense fallback={<PendingSource name="JSON editor" />}>
-            <JsonDocument
-              active={active}
-              name={name}
-              navigation={navigation}
-              onChange={change}
-              readOnly={access === 'read-only' || editor === null}
-              runtime={runtime}
-              value={editor?.value ?? source.data.content}
-            />
-          </Suspense>
-          {access === 'editable' && editor && (
-            <SaveFeedback editor={editor} retry={() => void retrySave()} />
-          )}
-        </div>
-      ) : (
-        <div className="relative min-h-0 flex-1">
-          <Suspense fallback={<PendingSource name="text editor" />}>
-            <CodeEditorDocument
-              active={active}
-              ariaLabel={`${name} source`}
-              content={editor?.value ?? source.data.content}
-              language={{ kind: 'plain' }}
-              navigation={navigation}
-              onChange={change}
-              readOnly={access === 'read-only' || editor === null}
-              runtime={runtime}
-            />
-          </Suspense>
-          {access === 'editable' && editor && (
-            <SaveFeedback editor={editor} retry={() => void retrySave()} />
-          )}
-        </div>
-      )}
+      <div className="relative min-h-0 flex-1">
+        <Suspense fallback={<DocumentPending label={`Loading ${editorLabel}`} />}>
+          {children({
+            access,
+            editor,
+            markdownMode,
+            onChange: change,
+            readOnly: access === 'read-only' || editor === null,
+            value: editor?.value ?? source.data.content,
+          })}
+        </Suspense>
+        {access === 'editable' && editor && (
+          <SaveFeedback retry={() => void retrySave()} save={editor.save} />
+        )}
+      </div>
     </div>
   );
 }

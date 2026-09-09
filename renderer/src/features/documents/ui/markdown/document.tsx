@@ -1,3 +1,8 @@
+/**
+ * The Markdown surface. Reading and writer modes share one Milkdown editor
+ * instance per tab so selection, history, and scroll survive a mode switch,
+ * and the heading outline is published from the live document.
+ */
 import { languages } from '@codemirror/language-data';
 import { CrepeBuilder } from '@milkdown/crepe/builder';
 import { blockEdit } from '@milkdown/crepe/feature/block-edit';
@@ -51,7 +56,7 @@ export interface MarkdownDocumentProps {
   mode: MarkdownViewMode;
   name: string;
   onChange(value: string): void;
-  onNavigate(target: { anchor?: string; source: SourceReference }): void;
+  onNavigate(target: { anchor?: string | undefined; source: SourceReference }): void;
   onModeChange(mode: MarkdownViewMode): void;
   onOpenExternal(href: string): Promise<boolean>;
   navigation: DocumentNavigationRuntime;
@@ -318,8 +323,8 @@ export function MarkdownDocument({
           selectedIndex={mode === 'writer' ? 0 : 1}
           size="compact"
         >
-          <TabsSubtleItem icon={PenLine} index={0} label="Writer" title="Writer" />
-          <TabsSubtleItem icon={BookOpen} index={1} label="Reading" title="Reading" />
+          <TabsSubtleItem icon={PenLine} label="Writer" title="Writer" />
+          <TabsSubtleItem icon={BookOpen} label="Reading" title="Reading" />
         </TabsSubtle>
       )}
       {creationState === 'creating' && (

@@ -1,12 +1,12 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { createDocumentRuntime } from '@/features/documents/application/document-runtime';
 import { createDocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
-import type { MediaApi, MediaDocumentAsset } from '@/features/documents/application/ports';
+import type { MediaPort, MediaDocumentAsset } from '@/features/documents/application/ports';
+import { documentQueryScope, mediaApi } from '@/test/fakes/documents';
+import { createTestQueryClient, withQueryClient } from '@/test/query';
 
 import { MediaDocument } from './document';
 
@@ -30,110 +30,56 @@ const readyState = {
   },
 };
 
-function mediaApi(overrides: Partial<MediaApi> = {}): MediaApi {
-  return {
-    cancelTranscript: vi.fn(async () => true),
+/** The toolkit media port, defaulted to this file's unprepared preview and
+ *  ready transcript. */
+function readyMediaApi(overrides: Partial<MediaPort> = {}): MediaPort {
+  return mediaApi({
     loadPreviewStatus: vi.fn(async () => ({ status: 'idle' as const })),
     loadTranscript: vi.fn(async () => readyState),
-    preparePreview: vi.fn(async () => undefined),
-    reprocessTranscript: vi.fn(async () => undefined),
     ...overrides,
-  };
+  });
 }
 
-function renderMedia(path: string, api = mediaApi(), strict = false) {
+function renderMedia(path: string, api = readyMediaApi(), strict = false) {
   const runtime = createDocumentRuntime({
     activeFolderPath: '/library',
     generation: 1,
     id: 'tab-1',
-    queries: {
-      cancel: vi.fn(async () => undefined),
-      remove: vi.fn(),
-      replaceSource: vi.fn(),
-    },
+    queries: documentQueryScope(),
     source: { folderPath: '/library', path },
   });
   const navigation = createDocumentNavigationRuntime('tab-1');
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const document = (
-    <QueryClientProvider client={client}>
-      <MediaDocument
-        active
-        api={api}
-        name={path.split('/').at(-1) ?? path}
-        navigation={navigation}
-        resource={resource}
-        runtime={runtime}
-      />
-    </QueryClientProvider>
+  const client = createTestQueryClient();
+  const rendered = withQueryClient(
+    <MediaDocument
+      active
+      api={api}
+      name={path.split('/').at(-1) ?? path}
+      navigation={navigation}
+      resource={resource}
+      runtime={runtime}
+    />,
+    client,
+    { strict },
   );
-  const rendered = render(strict ? <StrictMode>{document}</StrictMode> : document);
-  return { ...rendered, api, client, navigation, runtime };
+  return { ...rendered, api, navigation, runtime };
 }
 
-let playDescriptor: PropertyDescriptor | undefined;
-let pauseDescriptor: PropertyDescriptor | undefined;
-let loadDescriptor: PropertyDescriptor | undefined;
-let getAnimationsDescriptor: PropertyDescriptor | undefined;
-
+// happy-dom parses media elements but never plays them, and these tests assert
+// on the transport calls a seek makes.
 beforeEach(() => {
-  getAnimationsDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
-  Object.defineProperty(Element.prototype, 'getAnimations', {
-    configurable: true,
-    value: vi.fn(() => []),
-  });
-  playDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'play');
-  pauseDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'pause');
-  loadDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'load');
-  Object.defineProperty(HTMLMediaElement.prototype, 'play', {
-    configurable: true,
-    value: vi.fn(async () => undefined),
-  });
-  Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
-    configurable: true,
-    value: vi.fn(),
-  });
-  Object.defineProperty(HTMLMediaElement.prototype, 'load', {
-    configurable: true,
-    value: vi.fn(),
-  });
-  vi.stubGlobal(
-    'matchMedia',
-    vi.fn(() => ({
-      addEventListener: vi.fn(),
-      matches: false,
-      media: '',
-      removeEventListener: vi.fn(),
-    })),
-  );
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async () => undefined);
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   cleanup();
-  vi.unstubAllGlobals();
-  if (playDescriptor) {
-    Object.defineProperty(HTMLMediaElement.prototype, 'play', playDescriptor);
-  }
-  playDescriptor = undefined;
-  if (pauseDescriptor) {
-    Object.defineProperty(HTMLMediaElement.prototype, 'pause', pauseDescriptor);
-  }
-  if (loadDescriptor) {
-    Object.defineProperty(HTMLMediaElement.prototype, 'load', loadDescriptor);
-  }
-  pauseDescriptor = undefined;
-  loadDescriptor = undefined;
-  if (getAnimationsDescriptor) {
-    Object.defineProperty(Element.prototype, 'getAnimations', getAnimationsDescriptor);
-  } else {
-    Reflect.deleteProperty(Element.prototype, 'getAnimations');
-  }
-  getAnimationsDescriptor = undefined;
 });
 
 describe('media document', () => {
   it('retains its playback source through Strict Mode ref replay', async () => {
-    const rendered = renderMedia('recordings/interview.mp3', mediaApi(), true);
+    const rendered = renderMedia('recordings/interview.mp3', readyMediaApi(), true);
     const audio = screen.getByLabelText('interview.mp3 playback');
 
     expect(audio.getAttribute('src')).toBe(resource.url);
@@ -144,7 +90,7 @@ describe('media document', () => {
 
   it('plays audio with native controls and seeks through synchronized transcript rows', async () => {
     const rendered = renderMedia('recordings/interview.mp3');
-    const audio = screen.getByLabelText('interview.mp3 playback') as HTMLAudioElement;
+    const audio = screen.getByLabelText<HTMLAudioElement>('interview.mp3 playback');
     expect(audio.controls).toBe(true);
     expect(audio.src).toBe(resource.url);
     expect(await screen.findByRole('heading', { name: 'Transcript' })).not.toBeNull();
@@ -166,16 +112,16 @@ describe('media document', () => {
   });
 
   it('shows direct video and preserves its time when falling back to compatible audio', async () => {
-    const api = mediaApi();
+    const api = readyMediaApi();
     const rendered = renderMedia('recordings/interview.mp4', api);
-    const video = screen.getByLabelText('interview.mp4 playback') as HTMLVideoElement;
+    const video = screen.getByLabelText<HTMLVideoElement>('interview.mp4 playback');
     expect(video.tagName).toBe('VIDEO');
     video.currentTime = 12;
     fireEvent.timeUpdate(video);
     fireEvent.error(video);
 
     expect(await screen.findByText('Preparing a compatible preview…')).not.toBeNull();
-    const audio = (await screen.findByLabelText('interview.mp4 playback')) as HTMLAudioElement;
+    const audio = await screen.findByLabelText<HTMLAudioElement>('interview.mp4 playback');
     fireEvent.loadedMetadata(audio);
     expect(audio.tagName).toBe('AUDIO');
     expect(audio.src).toBe(resource.fallbackUrl);
@@ -194,7 +140,7 @@ describe('media document', () => {
 
   it('aborts compatible-preview work when the viewer is removed', async () => {
     const preparationSignal: { current?: AbortSignal } = {};
-    const api = mediaApi({
+    const api = readyMediaApi({
       preparePreview: vi.fn((_source, signal) => {
         preparationSignal.current = signal;
         return new Promise<void>(() => undefined);
@@ -215,10 +161,10 @@ describe('media document', () => {
 
   it('restarts a failed transcript independently from healthy playback', async () => {
     const loadTranscript = vi
-      .fn<MediaApi['loadTranscript']>()
+      .fn<MediaPort['loadTranscript']>()
       .mockResolvedValueOnce({ status: 'failed' })
       .mockResolvedValueOnce(readyState);
-    const api = mediaApi({ loadTranscript });
+    const api = readyMediaApi({ loadTranscript });
     const rendered = renderMedia('recordings/interview.m4a', api);
 
     expect(await screen.findByText('Transcript preparation failed.')).not.toBeNull();

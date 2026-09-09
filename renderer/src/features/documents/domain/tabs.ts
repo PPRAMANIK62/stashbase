@@ -18,6 +18,26 @@ export interface RestoredDocumentTabs {
   tabs: DocumentTab[];
 }
 
+/**
+ * The one place `tabs` and `activeTabId` move together.
+ *
+ * The active tab is always a member of `tabs` or null. Every transition below
+ * states which ids it would like active, in order of preference, and the first
+ * that names a member wins; nothing else may assign either field, so the
+ * invariant cannot be broken one call site at a time.
+ */
+function withTabs(
+  state: DocumentTabsState,
+  tabs: DocumentTab[],
+  intended: ReadonlyArray<string | null>,
+): DocumentTabsState {
+  const activeTabId =
+    intended.find((id) => id !== null && tabs.some((tab) => tab.id === id)) ?? null;
+  return state.tabs === tabs && state.activeTabId === activeTabId
+    ? state
+    : { ...state, activeTabId, tabs };
+}
+
 export function createDocumentTabsState(
   restored: RestoredDocumentTabs | null = null,
 ): DocumentTabsState {
@@ -37,37 +57,22 @@ export function createDocumentTabsState(
   }
 
   const requestedActiveId = restored?.activeTabId ?? null;
-  const activeTabId = requestedActiveId
-    ? (sources.find((tab) => tab.id === requestedActiveId)?.id ??
-      remappedIds.get(requestedActiveId) ??
-      null)
-    : null;
-
-  return { activeTabId, lifecycle: 'active', tabs: sources };
+  return withTabs({ activeTabId: null, lifecycle: 'active', tabs: [] }, sources, [
+    requestedActiveId,
+    requestedActiveId === null ? null : (remappedIds.get(requestedActiveId) ?? null),
+  ]);
 }
 
 export function openDocumentTab(state: DocumentTabsState, tab: DocumentTab): DocumentTabsState {
   if (state.lifecycle === 'disposed') return state;
   const existing = state.tabs.find((candidate) => sameSource(candidate.source, tab.source));
-  if (existing) {
-    return state.activeTabId === existing.id ? state : { ...state, activeTabId: existing.id };
-  }
-  return {
-    ...state,
-    activeTabId: tab.id,
-    tabs: [...state.tabs, { id: tab.id, source: { ...tab.source } }],
-  };
+  if (existing) return withTabs(state, state.tabs, [existing.id]);
+  return withTabs(state, [...state.tabs, { id: tab.id, source: { ...tab.source } }], [tab.id]);
 }
 
 export function activateDocumentTab(state: DocumentTabsState, tabId: string): DocumentTabsState {
-  if (
-    state.lifecycle === 'disposed' ||
-    state.activeTabId === tabId ||
-    !state.tabs.some((tab) => tab.id === tabId)
-  ) {
-    return state;
-  }
-  return { ...state, activeTabId: tabId };
+  if (state.lifecycle === 'disposed') return state;
+  return withTabs(state, state.tabs, [tabId, state.activeTabId]);
 }
 
 export function closeDocumentTab(state: DocumentTabsState, tabId: string): DocumentTabsState {
@@ -75,11 +80,8 @@ export function closeDocumentTab(state: DocumentTabsState, tabId: string): Docum
   const index = state.tabs.findIndex((tab) => tab.id === tabId);
   if (index === -1) return state;
   const tabs = state.tabs.filter((tab) => tab.id !== tabId);
-  const activeTabId =
-    state.activeTabId === tabId
-      ? (tabs[Math.min(index, tabs.length - 1)]?.id ?? null)
-      : state.activeTabId;
-  return { ...state, activeTabId, tabs };
+  const neighbour = tabs[Math.min(index, tabs.length - 1)]?.id ?? null;
+  return withTabs(state, tabs, [state.activeTabId === tabId ? neighbour : state.activeTabId]);
 }
 
 export function disposeDocumentTabsState(state: DocumentTabsState): DocumentTabsState {

@@ -1,22 +1,28 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
 import type {
-  DocumentAssetApi,
-  DocumentSourceApi,
-  DocxPreviewApi,
-  GenericFilePreviewApi,
-  MediaApi,
+  DocumentAssetPort,
+  DocumentSourcePort,
+  DocxPreviewPort,
+  GenericFilePreviewPort,
+  MediaPort,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { sourceName } from '@/features/documents/domain/document';
-import { documentTextFormat } from '@/features/documents/domain/document-format';
+import {
+  documentTextFormat,
+  documentViewerFormat,
+} from '@/features/documents/domain/document-format';
 import { retainMarkdownTabIds } from '@/features/documents/domain/markdown';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
-import {
-  DocumentSource,
-  type PreparationSlotFormat,
-  type PreparedOnOpenFormat,
-} from '@/features/documents/ui/source/document';
+import { DocumentSource } from '@/features/documents/ui/source/document';
+import { documentViewerEntry } from '@/features/documents/ui/source/registry';
+import type {
+  DocumentNavigationTarget,
+  DocumentViewerRegistry,
+  PreparationSlotFormat,
+  PreparedOnOpenFormat,
+} from '@/features/documents/ui/source/viewer';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { DocumentFind } from './find';
@@ -25,21 +31,25 @@ const ignoreNavigation = () => undefined;
 const rejectExternalNavigation = async () => false;
 
 export interface DocumentWorkspaceProps {
-  assetApi: DocumentAssetApi;
-  docxPreviewApi: DocxPreviewApi;
-  genericPreviewApi: GenericFilePreviewApi;
-  mediaApi: MediaApi;
-  onNavigate?(target: { anchor?: string; source: SourceReference }): void;
-  onOpenExternal?(href: string): Promise<boolean>;
+  assetApi: DocumentAssetPort;
+  docxPreviewApi: DocxPreviewPort;
+  genericPreviewApi: GenericFilePreviewPort;
+  mediaApi: MediaPort;
+  onNavigate?: ((target: DocumentNavigationTarget) => void) | undefined;
+  onOpenExternal?: ((href: string) => Promise<boolean>) | undefined;
   /** Fired once when a DOCX or media document mounts so preparation can be
    *  queued at interactive priority. Fire-and-forget. */
-  onOpenPrepared?(source: SourceReference, format: PreparedOnOpenFormat): void;
+  onOpenPrepared?: ((source: SourceReference, format: PreparedOnOpenFormat) => void) | undefined;
   onReveal(source: SourceReference, signal: AbortSignal): Promise<void>;
   /** Composes a preparation status row above PDF, image, and DOCX viewers. */
-  renderPreparation?(source: SourceReference, format: PreparationSlotFormat): ReactNode;
+  renderPreparation?:
+    | ((source: SourceReference, format: PreparationSlotFormat) => ReactNode)
+    | undefined;
   revealLabel: string;
   runtime: DocumentTabsRuntime;
-  sourceApi: DocumentSourceApi;
+  sourceApi: DocumentSourcePort;
+  /** Overridable so a test can register a viewer of its own. */
+  viewers?: DocumentViewerRegistry | undefined;
 }
 
 export function DocumentWorkspace({
@@ -55,6 +65,7 @@ export function DocumentWorkspace({
   revealLabel,
   runtime,
   sourceApi,
+  viewers,
 }: DocumentWorkspaceProps) {
   const { activeTab, activeTabId, tabs } = useDocumentTabs(runtime);
   const [retention, setRetention] = useState<{ ids: string[]; runtime: DocumentTabsRuntime }>(
@@ -87,6 +98,10 @@ export function DocumentWorkspace({
   }, [activeTabId, runtime, tabs]);
   if (tabs.length === 0) return null;
   const activeIsRetainedMarkdown = activeTab ? retainedMarkdownIds.includes(activeTab.id) : false;
+  // A format that never claims a find controller shows no find bar at all.
+  const activeFindable = activeTab
+    ? documentViewerEntry(documentViewerFormat(activeTab.source.path), viewers).find
+    : false;
 
   const renderDocument = (tabId: string, hidden: boolean) => {
     const tab = tabs.find((candidate) => candidate.id === tabId);
@@ -115,6 +130,7 @@ export function DocumentWorkspace({
           revealLabel={revealLabel}
           runtime={document}
           sourceApi={sourceApi}
+          viewers={viewers}
         />
       </div>
     );
@@ -127,7 +143,7 @@ export function DocumentWorkspace({
         documentTextFormat(activeTab.source.path) !== 'md' &&
         !activeIsRetainedMarkdown &&
         renderDocument(activeTab.id, false)}
-      <DocumentFind runtime={runtime.navigation} />
+      {activeFindable && <DocumentFind runtime={runtime.navigation} />}
     </section>
   );
 }

@@ -1,21 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
-import type { MediaApi } from '@/features/documents/application/ports';
+import type { MediaPort } from '@/features/documents/application/ports';
 import { mediaTranscriptQuery } from '@/features/documents/application/queries';
+import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 
 type TranscriptAction = 'cancel' | 'retry' | null;
 
 export function useMediaTranscript(
   active: boolean,
-  api: MediaApi,
+  api: MediaPort,
   runtime: DocumentRuntime,
   version: string,
 ) {
   const [action, setAction] = useState<TranscriptAction>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
+  const signalFor = useRequestSignals<'transcript-action'>();
   const query = useQuery({
     ...mediaTranscriptQuery(api, runtime.scope, version),
     enabled: active,
@@ -27,27 +28,16 @@ export function useMediaTranscript(
     },
   });
 
-  useEffect(
-    () => () => {
-      controllerRef.current?.abort();
-    },
-    [],
-  );
-
   const run = async (next: Exclude<TranscriptAction, null>) => {
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
+    const signal = signalFor('transcript-action');
     setAction(next);
     setActionError(null);
     try {
-      if (next === 'cancel') await api.cancelTranscript(runtime.scope.source, controller.signal);
-      else await api.reprocessTranscript(runtime.scope.source, controller.signal);
-      if (!controller.signal.aborted && controllerRef.current === controller) {
-        await query.refetch();
-      }
+      if (next === 'cancel') await api.cancelTranscript(runtime.scope.source, signal);
+      else await api.reprocessTranscript(runtime.scope.source, signal);
+      if (!signal.aborted) await query.refetch();
     } catch {
-      if (!controller.signal.aborted && controllerRef.current === controller) {
+      if (!signal.aborted) {
         setActionError(
           next === 'cancel'
             ? 'Transcript preparation could not be cancelled.'
@@ -55,10 +45,7 @@ export function useMediaTranscript(
         );
       }
     } finally {
-      if (controllerRef.current === controller) {
-        controllerRef.current = null;
-        setAction(null);
-      }
+      if (!signal.aborted) setAction(null);
     }
   };
 

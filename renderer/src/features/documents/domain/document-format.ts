@@ -7,11 +7,15 @@ import {
   PDF_EXTENSIONS,
   PLAIN_TEXT_EXTENSIONS,
   STRUCTURED_DATA_EXTENSIONS,
-} from '@/shared/file-formats';
+  type ViewerFormat,
+} from '@/contracts/file-formats';
 
-export type DocumentTextFormat = 'json' | 'md' | 'txt';
+/** The formats whose source file is itself the editable text. */
+export type DocumentTextFormat = Extract<ViewerFormat, 'json' | 'md' | 'txt'>;
 
-export type DocumentViewerFormat = DocumentTextFormat | 'docx' | 'html' | 'image' | 'media' | 'pdf';
+/** The renderer speaks the same format vocabulary as the server file listing;
+ *  a name nothing claims opens as `generic`. */
+export type DocumentViewerFormat = ViewerFormat;
 
 function extensionOf(path: string): string | null {
   return path.split('.').at(-1)?.toLowerCase() ?? null;
@@ -28,13 +32,13 @@ export function documentTextFormat(path: string): DocumentTextFormat | null {
   return includesExtension(PLAIN_TEXT_EXTENSIONS, extension) ? 'txt' : null;
 }
 
-export function documentViewerFormat(path: string): DocumentViewerFormat | null {
+export function documentViewerFormat(path: string): DocumentViewerFormat {
   const text = documentTextFormat(path);
   if (text) return text;
   const extension = extensionOf(path);
   if (includesExtension(HTML_NOTE_EXTENSIONS, extension)) return 'html';
   if (includesExtension(DOCX_EXTENSIONS, extension)) return 'docx';
   if (includesExtension(PDF_EXTENSIONS, extension)) return 'pdf';
-  if (includesExtension(AUDIO_SOURCE_EXTENSIONS, extension)) return 'media';
-  return includesExtension(IMAGE_SOURCE_EXTENSIONS, extension) ? 'image' : null;
+  if (includesExtension(AUDIO_SOURCE_EXTENSIONS, extension)) return 'audio';
+  return includesExtension(IMAGE_SOURCE_EXTENSIONS, extension) ? 'image' : 'generic';
 }

@@ -1,14 +1,31 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import { createDocumentRuntime } from './document-runtime';
-import { DocumentSaveError, type DocumentSourceApi } from './ports';
+import {
+  documentConflict,
+  type DocumentEditorState,
+  type DocumentTextSource,
+} from '@/features/documents/domain/document';
+import { documentQueryScope, sourceApi, textSource } from '@/test/fakes/documents';
 
-function queryScope() {
-  return { cancel: vi.fn(async () => undefined), remove: vi.fn(), replaceSource: vi.fn() };
+import { createDocumentRuntime, type DocumentRuntime } from './document-runtime';
+import { DOCUMENT_OVERWRITE_MESSAGES } from './failure-messages';
+import { DocumentSaveError, type DocumentSourcePort } from './ports';
+
+/** The editor a live runtime holds; every conflict assertion needs it. */
+function editorOf(runtime: DocumentRuntime): DocumentEditorState {
+  const editor = runtime.store.getState().editor;
+  if (!editor) throw new Error('The runtime has no editor state.');
+  return editor;
 }
 
 function missingSaveSettlement(): never {
   throw new Error('First save did not start.');
+}
+
+function conflictingSave(): DocumentSourcePort['save'] {
+  return vi.fn(async () => {
+    throw new DocumentSaveError('conflict', 'changed', { currentVersion: 'v2' });
+  });
 }
 
 describe('Document runtime', () => {
@@ -17,17 +34,21 @@ describe('Document runtime', () => {
       activeFolderPath: '/library/notes',
       generation: 4,
       id: 'tab-1',
-      queries: queryScope(),
+      queries: documentQueryScope(),
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
     const completion = vi.fn();
 
-    expect(runtime.accept(runtime.scope, completion)).toBe(true);
+    const captured = runtime.capture();
+    expect(runtime.accept(captured, completion)).toBe(true);
     expect(
       runtime.accept(
         {
-          ...runtime.scope,
-          source: { folderPath: '/library/archive', path: 'plan.md' },
+          ...captured,
+          scope: {
+            ...captured.scope,
+            source: { folderPath: '/library/archive', path: 'plan.md' },
+          },
         },
         completion,
       ),
@@ -35,8 +56,29 @@ describe('Document runtime', () => {
     expect(completion).toHaveBeenCalledOnce();
   });
 
+  it('refuses a completion for work retired while it was in flight', () => {
+    const runtime = createDocumentRuntime({
+      activeFolderPath: '/library/notes',
+      generation: 1,
+      id: 'tab-1',
+      queries: documentQueryScope(),
+      source: { folderPath: '/library/notes', path: 'plan.md' },
+    });
+    // Captured the way a save takes its token before its first await.
+    const captured = runtime.capture();
+    const completion = vi.fn();
+
+    runtime.retireOperations();
+
+    expect(runtime.accept(captured, completion)).toBe(false);
+    expect(completion).not.toHaveBeenCalled();
+    // The document stays open, so work started afterwards still lands.
+    expect(runtime.accept(runtime.capture(), completion)).toBe(true);
+    expect(completion).toHaveBeenCalledOnce();
+  });
+
   it('cancels owned work and rejects stale completions after disposal', () => {
-    const queries = queryScope();
+    const queries = documentQueryScope();
     const runtime = createDocumentRuntime({
       activeFolderPath: '/library/notes',
       generation: 1,
@@ -44,7 +86,7 @@ describe('Document runtime', () => {
       queries,
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    const capturedScope = runtime.scope;
+    const capturedScope = runtime.capture();
     const completion = vi.fn();
 
     runtime.dispose();
@@ -63,7 +105,7 @@ describe('Document runtime', () => {
       activeFolderPath: '/library/notes',
       generation: 1,
       id: 'tab-1',
-      queries: queryScope(),
+      queries: documentQueryScope(),
       source: { folderPath: '/library/archive', path: 'plan.md' },
     });
 
@@ -71,7 +113,7 @@ describe('Document runtime', () => {
   });
 
   it('saves the live draft against its accepted version and reconciles authority', async () => {
-    const queries = queryScope();
+    const queries = documentQueryScope();
     const runtime = createDocumentRuntime({
       activeFolderPath: '/library/notes',
       generation: 1,
@@ -79,16 +121,10 @@ describe('Document runtime', () => {
       queries,
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    const api: DocumentSourceApi = {
-      load: vi.fn(),
-      overwrite: vi.fn(),
-      save: vi.fn<DocumentSourceApi['save']>(async () => ({
-        content: 'changed\r\n',
-        format: 'md',
-        version: 'v2',
-      })),
-    };
-    runtime.reconcile({ content: 'before\r\n', format: 'md', version: 'v1' });
+    const api = sourceApi({
+      save: vi.fn(async () => textSource({ content: 'changed\r\n', version: 'v2' })),
+    });
+    runtime.reconcile(textSource({ content: 'before\r\n' }));
     runtime.change('changed\n');
 
     await expect(runtime.save(api)).resolves.toBe(true);
@@ -100,8 +136,7 @@ describe('Document runtime', () => {
     );
     expect(runtime.store.getState().editor).toMatchObject({
       baseline: 'changed\n',
-      dirty: false,
-      savePhase: 'saved',
+      save: { kind: 'saved' },
       value: 'changed\n',
       version: 'v2',
     });
@@ -117,11 +152,11 @@ describe('Document runtime', () => {
       activeFolderPath: '/library/notes',
       generation: 1,
       id: 'tab-1',
-      queries: queryScope(),
+      queries: documentQueryScope(),
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    const api: DocumentSourceApi = { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() };
-    runtime.reconcile({ content: 'same', format: 'md', version: 'v1' });
+    const api = sourceApi();
+    runtime.reconcile(textSource({ content: 'same' }));
     runtime.change('different');
     runtime.change('same');
 
@@ -134,84 +169,72 @@ describe('Document runtime', () => {
       activeFolderPath: '/library/notes',
       generation: 1,
       id: 'tab-1',
-      queries: queryScope(),
+      queries: documentQueryScope(),
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    const api: DocumentSourceApi = {
-      load: vi.fn(async () => ({ content: 'newer disk', format: 'md' as const, version: 'v2' })),
-      overwrite: vi.fn(),
+    const api = sourceApi({
+      load: vi.fn(async () => textSource({ content: 'newer disk', version: 'v2' })),
       save: vi.fn(async () => {
         throw new DocumentSaveError('conflict', 'The file changed on disk.', {
           currentVersion: 'v2',
         });
       }),
-    };
-    runtime.reconcile({ content: 'before', format: 'md', version: 'v1' });
+    });
+    runtime.reconcile(textSource({ content: 'before' }));
     runtime.change('recoverable draft');
 
     await expect(runtime.save(api)).resolves.toBe(false);
     expect(runtime.store.getState().editor).toMatchObject({
-      conflict: {
-        diskContent: 'newer disk',
-        diskVersion: 'v2',
-        editorContent: 'recoverable draft',
-        resolving: null,
+      save: {
+        conflict: {
+          diskContent: 'newer disk',
+          diskVersion: 'v2',
+          editorContent: 'recoverable draft',
+          resolving: null,
+        },
+        kind: 'conflict',
       },
-      conflictVersion: 'v2',
-      dirty: true,
-      savePhase: 'conflict',
       value: 'recoverable draft',
       version: 'v1',
     });
   });
 
   it('captures typing completed while the stale save and disk read are in flight', async () => {
-    let finishLoad: (source: { content: string; format: 'md'; version: string }) => void =
-      missingSaveSettlement;
-    const api: DocumentSourceApi = {
-      load: vi.fn<DocumentSourceApi['load']>(
+    let finishLoad: (source: DocumentTextSource) => void = missingSaveSettlement;
+    const api = sourceApi({
+      load: vi.fn<DocumentSourcePort['load']>(
         () =>
           new Promise((resolve) => {
             finishLoad = resolve;
           }),
       ),
-      overwrite: vi.fn(),
-      save: vi.fn(async () => {
-        throw new DocumentSaveError('conflict', 'changed', { currentVersion: 'v2' });
-      }),
-    };
+      save: conflictingSave(),
+    });
     const runtime = createDocumentRuntime({
       activeFolderPath: '/library/notes',
       generation: 1,
       id: 'tab-1',
-      queries: queryScope(),
+      queries: documentQueryScope(),
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    runtime.reconcile({ content: 'before', format: 'md', version: 'v1' });
+    runtime.reconcile(textSource({ content: 'before' }));
     runtime.change('first draft');
 
     const saving = runtime.save(api);
     await vi.waitFor(() => expect(api.load).toHaveBeenCalledOnce());
     runtime.change('latest draft');
-    finishLoad({ content: 'disk source', format: 'md', version: 'v2' });
+    finishLoad(textSource({ content: 'disk source', version: 'v2' }));
 
     await expect(saving).resolves.toBe(false);
-    expect(runtime.store.getState().editor?.conflict?.editorContent).toBe('latest draft');
+    expect(documentConflict(editorOf(runtime))?.editorContent).toBe('latest draft');
   });
 
   it('reloads the captured disk snapshot and clears the failed barrier', async () => {
-    const queries = queryScope();
-    const api: DocumentSourceApi = {
-      load: vi.fn<DocumentSourceApi['load']>(async () => ({
-        content: 'disk source',
-        format: 'md',
-        version: 'v2',
-      })),
-      overwrite: vi.fn(),
-      save: vi.fn(async () => {
-        throw new DocumentSaveError('conflict', 'changed', { currentVersion: 'v2' });
-      }),
-    };
+    const queries = documentQueryScope();
+    const api = sourceApi({
+      load: vi.fn(async () => textSource({ content: 'disk source', version: 'v2' })),
+      save: conflictingSave(),
+    });
     const runtime = createDocumentRuntime({
       activeFolderPath: '/library/notes',
       generation: 1,
@@ -219,15 +242,14 @@ describe('Document runtime', () => {
       queries,
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    runtime.reconcile({ content: 'before', format: 'md', version: 'v1' });
+    runtime.reconcile(textSource({ content: 'before' }));
     runtime.change('editor draft');
     await runtime.save(api);
 
     await expect(runtime.resolveConflict(api, 'reload')).resolves.toBe(true);
     expect(runtime.store.getState().editor).toMatchObject({
       baseline: 'disk source',
-      conflict: null,
-      dirty: false,
+      save: { kind: 'clean' },
       value: 'disk source',
       version: 'v2',
     });
@@ -240,35 +262,28 @@ describe('Document runtime', () => {
 
   it('turns merge into a dirty draft based on the disk snapshot', async () => {
     const save = vi
-      .fn<DocumentSourceApi['save']>()
+      .fn<DocumentSourcePort['save']>()
       .mockRejectedValueOnce(new DocumentSaveError('conflict', 'changed', { currentVersion: 'v2' }))
-      .mockResolvedValueOnce({ content: 'merged', format: 'md', version: 'v3' });
-    const api: DocumentSourceApi = {
-      load: vi.fn<DocumentSourceApi['load']>(async () => ({
-        content: 'shared\ndisk',
-        format: 'md',
-        version: 'v2',
-      })),
-      overwrite: vi.fn(),
+      .mockResolvedValueOnce(textSource({ content: 'merged', version: 'v3' }));
+    const api = sourceApi({
+      load: vi.fn(async () => textSource({ content: 'shared\ndisk', version: 'v2' })),
       save,
-    };
+    });
     const runtime = createDocumentRuntime({
       activeFolderPath: '/library/notes',
       generation: 1,
       id: 'tab-1',
-      queries: queryScope(),
+      queries: documentQueryScope(),
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    runtime.reconcile({ content: 'shared\nbefore', format: 'md', version: 'v1' });
+    runtime.reconcile(textSource({ content: 'shared\nbefore' }));
     runtime.change('shared\neditor');
     await runtime.save(api);
 
     await expect(runtime.resolveConflict(api, 'merge')).resolves.toBe(true);
     expect(runtime.store.getState().editor).toMatchObject({
       baseline: 'shared\ndisk',
-      conflict: null,
-      dirty: true,
-      savePhase: 'unsaved',
+      save: { kind: 'dirty' },
       value: [
         'shared',
         '<<<<<<< Editor Version',
@@ -289,40 +304,33 @@ describe('Document runtime', () => {
   });
 
   it('gives one overwrite decision exclusive ownership until it settles', async () => {
-    let finishOverwrite: (source: { content: string; format: 'md'; version: string }) => void =
-      missingSaveSettlement;
-    const api: DocumentSourceApi = {
-      load: vi.fn<DocumentSourceApi['load']>(async () => ({
-        content: 'disk source',
-        format: 'md',
-        version: 'v2',
-      })),
-      overwrite: vi.fn<DocumentSourceApi['overwrite']>(
+    let finishOverwrite: (source: DocumentTextSource) => void = missingSaveSettlement;
+    const api = sourceApi({
+      load: vi.fn(async () => textSource({ content: 'disk source', version: 'v2' })),
+      overwrite: vi.fn<DocumentSourcePort['overwrite']>(
         () =>
           new Promise((resolve) => {
             finishOverwrite = resolve;
           }),
       ),
-      save: vi.fn(async () => {
-        throw new DocumentSaveError('conflict', 'changed', { currentVersion: 'v2' });
-      }),
-    };
+      save: conflictingSave(),
+    });
     const runtime = createDocumentRuntime({
       activeFolderPath: '/library/notes',
       generation: 1,
       id: 'tab-1',
-      queries: queryScope(),
+      queries: documentQueryScope(),
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    runtime.reconcile({ content: 'before', format: 'md', version: 'v1' });
+    runtime.reconcile(textSource({ content: 'before' }));
     runtime.change('editor draft');
     await runtime.save(api);
 
     const overwrite = runtime.resolveConflict(api, 'overwrite');
-    expect(runtime.store.getState().editor?.conflict?.resolving).toBe('overwrite');
+    expect(documentConflict(editorOf(runtime))?.resolving).toBe('overwrite');
     await expect(runtime.resolveConflict(api, 'reload')).resolves.toBe(false);
     await expect(runtime.save(api)).resolves.toBe(false);
-    finishOverwrite({ content: 'editor draft', format: 'md', version: 'v3' });
+    finishOverwrite(textSource({ content: 'editor draft', version: 'v3' }));
 
     await expect(overwrite).resolves.toBe(true);
     expect(api.overwrite).toHaveBeenCalledWith(
@@ -331,78 +339,73 @@ describe('Document runtime', () => {
       runtime.signal,
     );
     expect(runtime.store.getState().editor).toMatchObject({
-      conflict: null,
-      dirty: false,
+      save: { kind: 'saved' },
       value: 'editor draft',
       version: 'v3',
     });
   });
 
   it('keeps both versions and releases the decision after overwrite fails', async () => {
-    const api: DocumentSourceApi = {
-      load: vi.fn<DocumentSourceApi['load']>(async () => ({
-        content: 'disk source',
-        format: 'md',
-        version: 'v2',
-      })),
-      overwrite: vi.fn<DocumentSourceApi['overwrite']>(async () => {
-        throw new DocumentSaveError('unavailable', 'The overwrite failed.');
+    const api = sourceApi({
+      load: vi.fn(async () => textSource({ content: 'disk source', version: 'v2' })),
+      overwrite: vi.fn<DocumentSourcePort['overwrite']>(async () => {
+        throw new DocumentSaveError('unavailable', 'HTTP 503 from /api/files');
       }),
-      save: vi.fn(async () => {
-        throw new DocumentSaveError('conflict', 'changed', { currentVersion: 'v2' });
-      }),
-    };
+      save: conflictingSave(),
+    });
     const runtime = createDocumentRuntime({
       activeFolderPath: '/library/notes',
       generation: 1,
       id: 'tab-1',
-      queries: queryScope(),
+      queries: documentQueryScope(),
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    runtime.reconcile({ content: 'before', format: 'md', version: 'v1' });
+    runtime.reconcile(textSource({ content: 'before' }));
     runtime.change('editor draft');
     await runtime.save(api);
 
     await expect(runtime.resolveConflict(api, 'overwrite')).resolves.toBe(false);
     expect(runtime.store.getState().editor).toMatchObject({
-      conflict: {
-        diskContent: 'disk source',
-        editorContent: 'editor draft',
-        resolving: null,
+      save: {
+        conflict: {
+          diskContent: 'disk source',
+          editorContent: 'editor draft',
+          resolving: null,
+        },
+        kind: 'conflict',
       },
-      dirty: true,
-      saveMessage: 'The overwrite failed.',
-      savePhase: 'conflict',
     });
+    expect(documentConflict(editorOf(runtime))?.resolutionMessage).toBe(
+      DOCUMENT_OVERWRITE_MESSAGES.unavailable,
+    );
     await expect(runtime.resolveConflict(api, 'reload')).resolves.toBe(true);
   });
 
   it('preserves newer typing and drains a queued save against the accepted result', async () => {
-    let settleFirst: (value: { content: string; format: 'md'; version: string }) => void =
-      missingSaveSettlement;
+    let settleFirst: (value: DocumentTextSource) => void = missingSaveSettlement;
     const save = vi
-      .fn<DocumentSourceApi['save']>()
+      .fn<DocumentSourcePort['save']>()
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
             settleFirst = resolve;
           }),
       )
-      .mockResolvedValueOnce({ content: 'second', format: 'md', version: 'v3' });
-    const api: DocumentSourceApi = { load: vi.fn(), overwrite: vi.fn(), save };
+      .mockResolvedValueOnce(textSource({ content: 'second', version: 'v3' }));
+    const api = sourceApi({ save });
     const runtime = createDocumentRuntime({
       activeFolderPath: '/library/notes',
       generation: 1,
       id: 'tab-1',
-      queries: queryScope(),
+      queries: documentQueryScope(),
       source: { folderPath: '/library/notes', path: 'plan.md' },
     });
-    runtime.reconcile({ content: 'before', format: 'md', version: 'v1' });
+    runtime.reconcile(textSource({ content: 'before' }));
     runtime.change('first');
     const first = runtime.save(api);
     runtime.change('second');
     const second = runtime.save(api);
-    settleFirst({ content: 'first', format: 'md', version: 'v2' });
+    settleFirst(textSource({ content: 'first', version: 'v2' }));
 
     await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
     expect(save).toHaveBeenNthCalledWith(
@@ -412,7 +415,7 @@ describe('Document runtime', () => {
       runtime.signal,
     );
     expect(runtime.store.getState().editor).toMatchObject({
-      dirty: false,
+      save: { kind: 'saved' },
       value: 'second',
       version: 'v3',
     });

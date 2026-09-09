@@ -1,4 +1,4 @@
-export interface StatusAwareMarkdownEditor {
+interface StatusAwareMarkdownEditor {
   destroy(): Promise<unknown>;
   editor: { status: string };
 }
@@ -7,7 +7,7 @@ export interface CreatableMarkdownEditor extends StatusAwareMarkdownEditor {
   create(): Promise<unknown>;
 }
 
-export function destroyMarkdownEditorIfCreated(editor: StatusAwareMarkdownEditor): boolean {
+function destroyMarkdownEditorIfCreated(editor: StatusAwareMarkdownEditor): boolean {
   if (editor.editor.status !== 'Created') return false;
   void editor.destroy();
   return true;

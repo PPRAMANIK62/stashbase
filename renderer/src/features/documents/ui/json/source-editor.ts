@@ -5,8 +5,10 @@ import { bracketMatching, indentOnInput, indentUnit, syntaxTree } from '@codemir
 import { EditorState, type Range } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
 
-import type { DocumentFindController } from '@/features/documents/application/navigation-runtime';
-import { createCodeEditor } from '@/features/documents/ui/code-editor/editor';
+import {
+  createCodeEditor,
+  type CodeEditorSession,
+} from '@/features/documents/ui/code-editor/editor';
 import { codeSyntaxHighlighting } from '@/features/documents/ui/code-editor/surface';
 
 export { textMatches } from '@/features/documents/ui/code-editor/find-controller';
@@ -68,19 +70,12 @@ const jsonTheme = EditorView.theme({
   },
 });
 
-export interface JsonSourceEditorSession {
-  applySourcePatch(next: string): void;
-  destroy(): void;
-  find: DocumentFindController;
-  focus(): void;
-  setReadOnly(readOnly: boolean): void;
-}
-
+/** The JSON source pane: the shared code editor plus JSON grammar and affordances. */
 export function createJsonSourceEditor(
   host: HTMLElement,
   options: { content: string; onChange(value: string): void; readOnly: boolean },
-): JsonSourceEditorSession {
-  const editor = createCodeEditor(host, {
+): CodeEditorSession {
+  return createCodeEditor(host, {
     ariaLabel: 'JSON source editor',
     content: options.content,
     extensions: [
@@ -99,12 +94,4 @@ export function createJsonSourceEditor(
     onChange: options.onChange,
     readOnly: options.readOnly,
   });
-
-  return {
-    applySourcePatch: editor.applyContent,
-    destroy: editor.destroy,
-    find: editor.find,
-    focus: editor.focus,
-    setReadOnly: editor.setReadOnly,
-  };
 }

@@ -1,6 +1,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { expectNoA11yViolations } from '@/test/axe';
+import { pressKey } from '@/test/dom';
+
 import { ViewerToolbar, ViewerToolbarValue } from './viewer-toolbar';
 
 afterEach(() => {
@@ -9,13 +12,12 @@ afterEach(() => {
 });
 
 describe('viewer toolbar value', () => {
-  it('uses a visibly translucent, strongly blurred floating material', () => {
-    render(<ViewerToolbar label="Viewer controls">Controls</ViewerToolbar>);
+  it('exposes the floating controls as one labelled toolbar', async () => {
+    const { container } = render(<ViewerToolbar label="Viewer controls">Controls</ViewerToolbar>);
 
     const toolbar = screen.getByRole('toolbar', { name: 'Viewer controls' });
-    expect(toolbar.className).toContain('backdrop-blur-xl');
-    expect(toolbar.className).toContain('backdrop-saturate-150');
-    expect(toolbar.className).toContain('var(--surface-3)_72%');
+    expect(toolbar.textContent).toBe('Controls');
+    await expectNoA11yViolations(container);
   });
 
   it('resets zoom on a single click and edits it in place on a double-click', () => {
@@ -50,17 +52,10 @@ describe('viewer toolbar value', () => {
 
     const input = screen.getByRole('textbox', { name: 'Zoom percentage' });
     expect(input.getAttribute('value')).toBe('227');
-    expect(input.className).toContain('rounded-none');
-    expect(input.className).toContain('font-sans');
-    expect(input.className).toContain('text-[12px]');
-    expect(input.parentElement?.className).toContain('h-7');
-    expect(input.parentElement?.className).toContain('justify-center');
     expect(input.style.width).toBe('3ch');
-    expect(input.parentElement?.className).not.toContain('ring-1');
-    expect(input.parentElement?.className).not.toContain('bg-card');
     fireEvent.change(input, { target: { value: '75' } });
     expect(input.style.width).toBe('2ch');
-    fireEvent.keyDown(input, { key: 'Enter' });
+    pressKey(input, 'Enter');
     expect(commit).toHaveBeenCalledWith(75);
   });
 
@@ -82,13 +77,9 @@ describe('viewer toolbar value', () => {
     );
 
     const pageButton = screen.getByRole('button', { name: 'Page number' });
-    expect(pageButton.className).toContain('justify-end');
-    expect(pageButton.className).toContain('text-foreground');
     expect(pageButton.style.width).toBe('calc(3ch + 0.75rem)');
     fireEvent.click(pageButton);
     const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'Page number' });
-    expect(input.className).toContain('text-right');
-    expect(input.className).toContain('text-foreground');
     expect(input.style.width).toBe('');
     expect(input.parentElement?.style.width).toBe('calc(3ch + 0.75rem)');
     expect(input.selectionStart).toBe(2);

@@ -20,15 +20,16 @@ export function foldPdfText(value: string): string {
 }
 
 function isBoundary(text: string, index: number): boolean {
-  return index < 0 || index >= text.length || !/[\p{L}\p{N}_]/u.test(text[index]);
+  const character = text[index];
+  return character === undefined || !/[\p{L}\p{N}_]/u.test(character);
 }
 
 export function textOffsets(text: string, query: string, options: FindOptions): number[] {
   const foldedText = foldPdfText(text);
   const foldedQuery = foldPdfText(query).trim();
   if (!foldedQuery) return [];
-  const haystack = options.caseSensitive ? foldedText : foldedText.toLocaleLowerCase();
-  const needle = options.caseSensitive ? foldedQuery : foldedQuery.toLocaleLowerCase();
+  const haystack = options.caseSensitive ? foldedText : foldedText.toLowerCase();
+  const needle = options.caseSensitive ? foldedQuery : foldedQuery.toLowerCase();
   const matches: number[] = [];
   for (
     let offset = haystack.indexOf(needle);
@@ -110,13 +111,15 @@ export function createPdfFindController(
     if (disposed || request !== generation) return { current: 0, total: 0 };
     matches = found;
     current = matches.length > 0 ? 0 : -1;
-    if (select && current >= 0) onMatch(matches[current]);
+    const first = matches[current];
+    if (select && first) onMatch(first);
     return report();
   };
   const step = (direction: 1 | -1) => {
     if (matches.length === 0) return report();
     current = (current + direction + matches.length) % matches.length;
-    onMatch(matches[current]);
+    const active = matches[current];
+    if (active) onMatch(active);
     return report();
   };
   return {

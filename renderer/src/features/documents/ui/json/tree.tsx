@@ -1,41 +1,47 @@
-import { Check, ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+/**
+ * The JSON outline: a treegrid over the parsed source with in-place editing.
+ *
+ * Every edit is applied to the source text and handed straight back up, so
+ * this view holds no copy of the document — only which row is selected and
+ * which edit is open. Row rendering lives in `tree-rows`, the projection in
+ * `tree-model`, and the keyboard contract in `tree-keyboard`.
+ */
+import { X } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { caretOffsetAtPoint, InlineInput } from '@/components/ui/inline-input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { jsonEditFailureMessage } from '@/features/documents/application/failure-messages';
 import type { JsonDocumentSession } from '@/features/documents/domain/document';
 import {
   addJsonChild,
-  analyzeJsonSource,
   deleteJsonPath,
-  formatJsonPath,
   renameJsonProperty,
   replaceJsonNode,
+} from '@/features/documents/domain/json-edit';
+import {
+  analyzeJsonSource,
+  formatJsonPath,
   type JsonSourceNode,
 } from '@/features/documents/domain/json-source';
-import { cn } from '@/lib/utils';
 
-type EditIntent =
-  | { kind: 'add'; node: JsonSourceNode }
-  | { kind: 'rename'; node: JsonSourceNode }
-  | { caretOffset?: number; kind: 'replace'; node: JsonSourceNode };
-
-interface VisibleNode {
-  node: JsonSourceNode;
-  parent: JsonSourceNode | null;
-  position: number;
-  setSize: number;
-}
+import { jsonTreeKeyCommand } from './tree-keyboard';
+import {
+  isJsonContainer,
+  jsonTableValueSource,
+  lastVisibleDescendantIndex,
+  visibleJsonNodes,
+  type JsonEditIntent,
+  type VisibleJsonNode,
+} from './tree-model';
+import {
+  JsonAddButton,
+  JsonInlineAddRow,
+  JsonInlineEditRow,
+  JsonTreeToolbar,
+  JsonValueRow,
+} from './tree-rows';
 
 export interface JsonTreeProps {
   active: boolean;
@@ -58,7 +64,7 @@ export function JsonTree({
 }: JsonTreeProps) {
   const analysis = useMemo(() => analyzeJsonSource(source), [source]);
   const selectedRef = useRef<HTMLTableRowElement | null>(null);
-  const [intent, setIntent] = useState<EditIntent | null>(null);
+  const [intent, setIntent] = useState<JsonEditIntent | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -86,21 +92,22 @@ export function JsonTree({
     0,
     visible.findIndex(({ node }) => formatJsonPath(node.path) === session.selectedPath),
   );
-  const selectedItem = visible[selectedIndex] ?? visible[0]!;
+  const selectedItem = visible[selectedIndex] ?? visible[0];
   const selected = selectedItem.node;
-  const selectedContainer = isContainer(selected);
-  const addTarget = selectedContainer
+  const addTarget = isJsonContainer(selected)
     ? selected
-    : selectedItem.parent && isContainer(selectedItem.parent)
+    : selectedItem.parent && isJsonContainer(selectedItem.parent)
       ? selectedItem.parent
       : null;
   const addAfterIndex =
     intent?.kind === 'add' ? lastVisibleDescendantIndex(visible, intent.node.path) : -1;
 
   const publishExpanded = (next: Set<string>) => onSessionChange({ expandedPaths: [...next] });
+  const focusSelected = () =>
+    queueMicrotask(() => selectedRef.current?.focus({ preventScroll: true }));
   const selectNode = (node: JsonSourceNode, focus = false) => {
     onSessionChange({ selectedPath: formatJsonPath(node.path) });
-    if (focus) queueMicrotask(() => selectedRef.current?.focus({ preventScroll: true }));
+    if (focus) focusSelected();
   };
   const toggleNode = (node: JsonSourceNode) => {
     const path = formatJsonPath(node.path);
@@ -109,7 +116,7 @@ export function JsonTree({
     else next.add(path);
     publishExpanded(next);
   };
-  const beginEdit = (nextIntent: EditIntent) => {
+  const beginEdit = (nextIntent: JsonEditIntent) => {
     setError(null);
     setIntent(nextIntent);
     if (nextIntent.kind === 'add') {
@@ -126,45 +133,26 @@ export function JsonTree({
       onSessionChange({ selectedPath: selectedPath ?? session.selectedPath });
       onChange(next);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The JSON edit could not be applied.');
+      setError(jsonEditFailureMessage(caught));
     }
   };
   const cancelEdit = () => {
     setError(null);
     setIntent(null);
-    queueMicrotask(() => selectedRef.current?.focus({ preventScroll: true }));
+    focusSelected();
   };
-  const onTreeKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>, item: VisibleNode) => {
-    const index = visible.indexOf(item);
-    const container = isContainer(item.node);
-    const path = formatJsonPath(item.node.path);
-    let next: JsonSourceNode | null = null;
-    if (event.key === 'ArrowDown') next = visible[Math.min(index + 1, visible.length - 1)]?.node;
-    else if (event.key === 'ArrowUp') next = visible[Math.max(index - 1, 0)]?.node;
-    else if (event.key === 'Home') next = visible[0]?.node;
-    else if (event.key === 'End') next = visible.at(-1)?.node ?? null;
-    else if (event.key === 'ArrowRight' && container) {
-      if (!expanded.has(path)) toggleNode(item.node);
-      else next = item.node.children[0] ?? null;
-    } else if (event.key === 'ArrowLeft') {
-      if (container && expanded.has(path)) toggleNode(item.node);
-      else next = item.parent;
-    } else if (event.key === 'Enter' && editable && !container) {
-      beginEdit({ kind: 'replace', node: item.node });
-      return;
-    } else if (event.key === 'F2' && editable && item.node.key !== undefined) {
-      beginEdit({ kind: 'rename', node: item.node });
-      return;
-    } else if (event.key === 'Delete' && editable && item.node.path.length > 0) {
-      event.preventDefault();
-      apply(
-        () => deleteJsonPath(source, item.node.path),
-        formatJsonPath(item.node.path.slice(0, -1)),
-      );
-      return;
-    } else return;
-    event.preventDefault();
-    if (next) selectNode(next, true);
+  const deleteNode = (node: JsonSourceNode) =>
+    apply(() => deleteJsonPath(source, node.path), formatJsonPath(node.path.slice(0, -1)));
+
+  const onRowKeyDown = (key: string, item: VisibleJsonNode, preventDefault: () => void) => {
+    const result = jsonTreeKeyCommand(key, { editable, expanded, item, visible });
+    if (!result) return;
+    if (result.preventDefault) preventDefault();
+    const command = result.command;
+    if (command.kind === 'select') selectNode(command.node, true);
+    else if (command.kind === 'toggle') toggleNode(command.node);
+    else if (command.kind === 'edit') beginEdit(command.intent);
+    else if (command.kind === 'delete') deleteNode(command.node);
   };
 
   return (
@@ -179,25 +167,10 @@ export function JsonTree({
       <JsonTreeToolbar
         actions={
           editable ? (
-            <Tooltip
-              content={
-                addTarget
-                  ? addTarget.type === 'object'
-                    ? 'Add property'
-                    : 'Add item'
-                  : 'Select an object or array'
-              }
-            >
-              <Button
-                aria-label={addTarget?.type === 'array' ? 'Add item' : 'Add property'}
-                disabled={!addTarget}
-                onClick={() => addTarget && beginEdit({ kind: 'add', node: addTarget })}
-                size="icon-compact"
-                variant="ghost"
-              >
-                <Plus />
-              </Button>
-            </Tooltip>
+            <JsonAddButton
+              onAdd={(target) => beginEdit({ kind: 'add', node: target })}
+              target={addTarget}
+            />
           ) : null
         }
       />
@@ -223,15 +196,16 @@ export function JsonTree({
                 </TableHead>
                 <TableHead scope="col">Value</TableHead>
                 <TableHead scope="col">Type</TableHead>
-                <TableHead aria-label="Actions" className="w-16 px-1" scope="col" />
+                <TableHead className="w-16 px-1" scope="col">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visible.map((item, rowIndex) => {
-                const { node, position, setSize } = item;
+                const { node } = item;
                 const path = formatJsonPath(node.path);
                 const isSelected = path === formatJsonPath(selected.path);
-                const container = isContainer(node);
                 const isExpanded = expanded.has(path);
                 const activeIntent =
                   intent && intent.kind !== 'add' && formatJsonPath(intent.node.path) === path
@@ -245,6 +219,7 @@ export function JsonTree({
                         error={error}
                         intent={activeIntent}
                         isExpanded={isExpanded}
+                        item={item}
                         onCancel={cancelEdit}
                         onSubmit={(key, value) => {
                           if (activeIntent.kind === 'rename') {
@@ -253,93 +228,27 @@ export function JsonTree({
                               formatJsonPath([...node.path.slice(0, -1), key]),
                             );
                           } else {
-                            apply(() => replaceJsonNode(source, node, value, container));
+                            apply(() =>
+                              replaceJsonNode(source, node, value, isJsonContainer(node)),
+                            );
                           }
                         }}
-                        onToggle={() => container && toggleNode(node)}
-                        item={item}
+                        onToggle={() => isJsonContainer(node) && toggleNode(node)}
                       />
                     ) : (
-                      <TableRow
-                        aria-expanded={container ? isExpanded : undefined}
-                        aria-level={node.path.length + 1}
-                        aria-keyshortcuts={editable && node.path.length > 0 ? 'Delete' : undefined}
-                        aria-posinset={position}
-                        aria-selected={isSelected}
-                        aria-setsize={setSize}
-                        className={cn(
-                          'cursor-default outline-none',
-                          isSelected && 'bg-active [&>td]:text-foreground',
-                          'focus-visible:ring-1 focus-visible:ring-border focus-visible:ring-inset',
-                        )}
-                        data-json-node-row=""
-                        index={rowIndex}
-                        onClick={() => selectNode(node)}
-                        onKeyDown={(event) => onTreeKeyDown(event, item)}
-                        ref={isSelected ? selectedRef : undefined}
-                        tabIndex={isSelected ? 0 : -1}
-                      >
-                        <TableCell
-                          onDoubleClick={() =>
-                            editable &&
-                            node.key !== undefined &&
-                            beginEdit({ kind: 'rename', node })
-                          }
-                        >
-                          <JsonKeyCell
-                            isExpanded={isExpanded}
-                            node={node}
-                            onToggle={() => toggleNode(node)}
-                          />
-                        </TableCell>
-                        <TableCell
-                          className={cn(
-                            'truncate',
-                            editable && !container && 'cursor-text',
-                            node.type !== 'string' && 'text-foreground',
-                          )}
-                          onDoubleClick={(event) => {
-                            if (!editable || container) return;
-                            event.preventDefault();
-                            beginEdit({
-                              caretOffset: caretOffsetAtPoint(
-                                event.currentTarget,
-                                event.clientX,
-                                event.clientY,
-                              ),
-                              kind: 'replace',
-                              node,
-                            });
-                          }}
-                          title={node.raw}
-                        >
-                          {jsonNodeDisplayValue(node)}
-                        </TableCell>
-                        <TableCell className="font-sans text-caption">{node.type}</TableCell>
-                        <TableCell className="w-16 px-1 py-0 text-right">
-                          {editable && node.path.length > 0 && (
-                            <Tooltip content="Delete value">
-                              <Button
-                                aria-label={`Delete ${nodeLabel(node)}`}
-                                className="pointer-events-none text-destructive opacity-0 group-hover/row:pointer-events-auto group-hover/row:opacity-100 hover:text-destructive"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  apply(
-                                    () => deleteJsonPath(source, node.path),
-                                    formatJsonPath(node.path.slice(0, -1)),
-                                  );
-                                }}
-                                size="icon-compact"
-                                tabIndex={-1}
-                                type="button"
-                                variant="ghost"
-                              >
-                                <Trash2 />
-                              </Button>
-                            </Tooltip>
-                          )}
-                        </TableCell>
-                      </TableRow>
+                      <JsonValueRow
+                        editable={editable}
+                        isExpanded={isExpanded}
+                        isSelected={isSelected}
+                        item={item}
+                        onDelete={deleteNode}
+                        onEdit={beginEdit}
+                        onKeyDown={onRowKeyDown}
+                        onSelect={selectNode}
+                        onToggle={toggleNode}
+                        rowIndex={rowIndex}
+                        selectedRef={selectedRef}
+                      />
                     )}
 
                     {intent?.kind === 'add' && rowIndex === addAfterIndex && (
@@ -390,313 +299,4 @@ export function JsonTree({
       )}
     </section>
   );
-}
-
-function JsonTreeToolbar({ actions }: { actions?: ReactNode }) {
-  return (
-    <div className="flex h-9 shrink-0 items-center gap-2 px-3">
-      <span className="text-caption font-medium text-muted-foreground">Preview</span>
-      {actions && <div className="ml-auto flex items-center gap-1">{actions}</div>}
-    </div>
-  );
-}
-
-function JsonKeyCell({
-  isExpanded,
-  node,
-  onToggle,
-}: {
-  isExpanded: boolean;
-  node: JsonSourceNode;
-  onToggle(): void;
-}) {
-  const container = isContainer(node);
-  return (
-    <div
-      className="flex min-w-0 items-center gap-1 pr-4"
-      style={{ paddingLeft: `${Math.max(0, node.path.length) * 16}px` }}
-    >
-      {container ? (
-        <Button
-          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${formatJsonPath(node.path)}`}
-          className="shrink-0"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggle();
-          }}
-          size="icon-compact"
-          tabIndex={-1}
-          type="button"
-          variant="ghost"
-        >
-          {isExpanded ? <ChevronDown /> : <ChevronRight />}
-        </Button>
-      ) : (
-        <span aria-hidden="true" className="size-7 shrink-0" />
-      )}
-      <span className="min-w-0 truncate text-foreground">{nodeLabel(node)}</span>
-    </div>
-  );
-}
-
-function JsonInlineEditRow({
-  error,
-  intent,
-  isExpanded,
-  item,
-  onCancel,
-  onSubmit,
-  onToggle,
-}: {
-  error: string | null;
-  intent: Exclude<EditIntent, { kind: 'add' }>;
-  isExpanded: boolean;
-  item: VisibleNode;
-  onCancel(): void;
-  onSubmit(key: string, value: string): void;
-  onToggle(): void;
-}) {
-  const { node, position, setSize } = item;
-  const [key, setKey] = useState(node.key ?? '');
-  const initialValue = jsonNodeEditableValue(node);
-  const [value, setValue] = useState(initialValue);
-  const renaming = intent.kind === 'rename';
-
-  return (
-    <TableRow
-      aria-label={`Editing ${formatJsonPath(node.path)}`}
-      aria-level={node.path.length + 1}
-      aria-posinset={position}
-      aria-selected="true"
-      aria-setsize={setSize}
-      className="bg-active [&>td]:text-foreground"
-      data-json-inline-editor=""
-      tabIndex={-1}
-    >
-      <TableCell className={cn('relative', renaming && 'bg-card ring-1 ring-border ring-inset')}>
-        {renaming ? (
-          <div
-            className="flex min-w-0 items-center gap-1"
-            style={{ paddingLeft: `${Math.max(0, node.path.length) * 16}px` }}
-          >
-            <span aria-hidden="true" className="size-7 shrink-0" />
-            <InlineInput
-              aria-label="Key"
-              onCancel={onCancel}
-              onChange={setKey}
-              onCommit={() => (key === node.key ? onCancel() : onSubmit(key, value))}
-              value={key}
-            />
-          </div>
-        ) : (
-          <JsonKeyCell isExpanded={isExpanded} node={node} onToggle={onToggle} />
-        )}
-        {renaming && error && <JsonCellError message={error} />}
-      </TableCell>
-      <TableCell className={cn('relative', !renaming && 'bg-card ring-1 ring-border ring-inset')}>
-        {renaming ? (
-          <span className="block truncate text-muted-foreground" title={node.raw}>
-            {jsonNodeDisplayValue(node)}
-          </span>
-        ) : (
-          <InlineInput
-            aria-label="JSON value"
-            caretOffset={intent.kind === 'replace' ? intent.caretOffset : undefined}
-            onCancel={onCancel}
-            onChange={setValue}
-            onCommit={() =>
-              value === initialValue ? onCancel() : onSubmit(key, jsonNodeSourceValue(node, value))
-            }
-            spellCheck={false}
-            value={value}
-          />
-        )}
-        {!renaming && error && <JsonCellError message={error} />}
-      </TableCell>
-      <TableCell className="font-sans text-caption">{node.type}</TableCell>
-      <TableCell aria-hidden="true" className="w-16 px-1 py-0" />
-    </TableRow>
-  );
-}
-
-function JsonCellError({ message }: { message: string }) {
-  return (
-    <span className="mt-1 block font-sans text-caption text-destructive" role="alert">
-      {message}
-    </span>
-  );
-}
-
-function JsonInlineAddRow({
-  error,
-  node,
-  onCancel,
-  onSubmit,
-}: {
-  error: string | null;
-  node: JsonSourceNode;
-  onCancel(): void;
-  onSubmit(key: string, value: string): void;
-}) {
-  const [key, setKey] = useState('');
-  const [value, setValue] = useState('');
-  const objectAdd = node.type === 'object';
-  const submit = () => {
-    if (objectAdd && key.length === 0) return;
-    onSubmit(key, value);
-  };
-
-  return (
-    <TableRow
-      aria-label={`Adding to ${formatJsonPath(node.path)}`}
-      className="[&>td]:text-foreground"
-      data-json-inline-editor=""
-    >
-      <TableCell
-        className={cn(
-          'relative',
-          objectAdd &&
-            'bg-card focus-within:ring-1 focus-within:ring-border focus-within:ring-inset',
-        )}
-      >
-        <div
-          className="flex min-w-0 items-center gap-1"
-          style={{ paddingLeft: `${(node.path.length + 1) * 16}px` }}
-        >
-          <span aria-hidden="true" className="size-7 shrink-0" />
-          {objectAdd ? (
-            <InlineInput
-              aria-label="New property key"
-              commitOnBlur={false}
-              onCancel={onCancel}
-              onChange={setKey}
-              onCommit={submit}
-              placeholder="Key"
-              value={key}
-            />
-          ) : (
-            <span className="font-sans text-caption text-muted-foreground">
-              [{node.children.length}]
-            </span>
-          )}
-        </div>
-      </TableCell>
-      <TableCell className="relative bg-card focus-within:ring-1 focus-within:ring-border focus-within:ring-inset">
-        <InlineInput
-          aria-label="New JSON value"
-          commitOnBlur={false}
-          focusOnMount={!objectAdd}
-          onCancel={onCancel}
-          onChange={setValue}
-          onCommit={submit}
-          placeholder="Value"
-          spellCheck={false}
-          value={value}
-        />
-        {error && <JsonCellError message={error} />}
-      </TableCell>
-      <TableCell className="font-sans text-caption">new</TableCell>
-      <TableCell className="w-16 px-1 py-0">
-        <span className="flex shrink-0 items-center justify-end">
-          <Tooltip content="Add value">
-            <Button
-              aria-label="Add value"
-              disabled={objectAdd && key.length === 0}
-              onClick={submit}
-              size="icon-compact"
-              type="button"
-              variant="ghost"
-            >
-              <Check />
-            </Button>
-          </Tooltip>
-          <Tooltip content="Cancel">
-            <Button
-              aria-label="Cancel add"
-              onClick={onCancel}
-              size="icon-compact"
-              type="button"
-              variant="ghost"
-            >
-              <X />
-            </Button>
-          </Tooltip>
-        </span>
-      </TableCell>
-    </TableRow>
-  );
-}
-
-function isContainer(node: JsonSourceNode): boolean {
-  return node.type === 'array' || node.type === 'object';
-}
-
-function jsonTableValueSource(value: string): string {
-  const trimmed = value.trim();
-  if (!looksLikeJsonSyntax(trimmed)) return JSON.stringify(value);
-
-  const analysis = analyzeJsonSource(trimmed);
-  if (!analysis.available) {
-    const detail = analysis.message.replace(/\s*Fix it in Source mode\.?$/u, '');
-    throw new Error(`Invalid JSON value: ${detail}`);
-  }
-  return trimmed;
-}
-
-function looksLikeJsonSyntax(value: string): boolean {
-  if (value.startsWith('[') || value.startsWith('{') || value.startsWith('"')) return true;
-  if (/^(?:true|false|null)$/u.test(value)) return true;
-  return /^(?:-?(?:\d|\.)|NaN$|Infinity$|-Infinity$)/u.test(value);
-}
-
-function nodeLabel(node: JsonSourceNode): string {
-  if (node.key !== undefined) return node.key;
-  const index = node.path.at(-1);
-  return typeof index === 'number' ? `[${index}]` : 'Root';
-}
-
-function containerSummary(node: JsonSourceNode): string {
-  const count = node.children.length;
-  if (node.type === 'array') return `${count.toLocaleString()} ${count === 1 ? 'item' : 'items'}`;
-  return `${count.toLocaleString()} ${count === 1 ? 'property' : 'properties'}`;
-}
-
-function jsonNodeDisplayValue(node: JsonSourceNode): string {
-  if (isContainer(node)) return containerSummary(node);
-  return jsonNodeEditableValue(node);
-}
-
-function jsonNodeEditableValue(node: JsonSourceNode): string {
-  if (node.type !== 'string') return node.raw;
-  const value: unknown = JSON.parse(node.raw);
-  return typeof value === 'string' ? value : node.raw;
-}
-
-function jsonNodeSourceValue(node: JsonSourceNode, value: string): string {
-  return node.type === 'string' ? JSON.stringify(value) : value;
-}
-
-function lastVisibleDescendantIndex(visible: VisibleNode[], parentPath: JsonSourceNode['path']) {
-  for (let index = visible.length - 1; index >= 0; index -= 1) {
-    const path = visible[index]?.node.path;
-    if (path && parentPath.every((part, pathIndex) => path[pathIndex] === part)) return index;
-  }
-  return -1;
-}
-
-export function visibleJsonNodes(root: JsonSourceNode, expanded: Set<string>): VisibleNode[] {
-  const result: VisibleNode[] = [];
-  const visit = (
-    node: JsonSourceNode,
-    parent: JsonSourceNode | null,
-    position: number,
-    setSize: number,
-  ) => {
-    result.push({ node, parent, position, setSize });
-    if (isContainer(node) && expanded.has(formatJsonPath(node.path))) {
-      node.children.forEach((child, index) => visit(child, node, index + 1, node.children.length));
-    }
-  };
-  visit(root, null, 1, 1);
-  return result;
 }

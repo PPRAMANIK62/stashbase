@@ -1,0 +1,57 @@
+import type {
+  DocumentAssetPort,
+  DocumentSourcePort,
+  DocumentWindowLifecyclePort,
+  DocxPreviewPort,
+  GenericFilePreviewPort,
+  MediaPort,
+} from '@/features/documents/application/ports';
+import type { WindowLifecycleBridge } from '@/platform/electron/window-lifecycle';
+import type { HttpClient } from '@/platform/http/client';
+
+import { createDocumentAssetAdapter } from './asset-api';
+import { createDocxPreviewAdapter } from './docx-preview-api';
+import { createGenericFilePreviewAdapter } from './generic-preview-api';
+import { createMediaAdapter } from './media-api';
+import { createDocumentSourceAdapter } from './source-api';
+import { createDocumentWindowLifecycleAdapter } from './window-lifecycle';
+
+/** Every port the Documents feature needs a real implementation of, in one
+ *  record so the app wires the feature rather than its six transports. */
+export interface DocumentAdapters {
+  asset: DocumentAssetPort;
+  docxPreview: DocxPreviewPort;
+  genericPreview: GenericFilePreviewPort;
+  media: MediaPort;
+  source: DocumentSourcePort;
+  windowLifecycle: DocumentWindowLifecyclePort;
+}
+
+export interface DocumentAdapterOptions {
+  http: HttpClient;
+  serverOrigin: string;
+  windowLifecycle: WindowLifecycleBridge;
+}
+
+/**
+ * The Documents feature, bound to this window's transports.
+ *
+ * Six factories used to leave the feature one by one, so adding a viewer that
+ * needed a seventh changed the app's dependency shape and every fake with it.
+ * The feature answers for its own wiring here instead; which transport each
+ * port ends up on is not the app's business.
+ */
+export function createDocumentAdapters({
+  http,
+  serverOrigin,
+  windowLifecycle,
+}: DocumentAdapterOptions): DocumentAdapters {
+  return {
+    asset: createDocumentAssetAdapter(http, serverOrigin),
+    docxPreview: createDocxPreviewAdapter(),
+    genericPreview: createGenericFilePreviewAdapter(http),
+    media: createMediaAdapter(http),
+    source: createDocumentSourceAdapter(http),
+    windowLifecycle: createDocumentWindowLifecycleAdapter(windowLifecycle),
+  };
+}

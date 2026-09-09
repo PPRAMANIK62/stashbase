@@ -1,10 +1,17 @@
+/**
+ * The HTTP adapter for reading and writing a document's text. Refusals are
+ * classified onto the documents failure ladders here — a version conflict, a
+ * lost folder grant, an undecodable encoding — so nothing above this seam
+ * inspects a status code.
+ */
 import {
   DocumentSaveError,
   DocumentSourceError,
-  type DocumentSourceApi,
+  type DocumentSourcePort,
 } from '@/features/documents/application/ports';
 import { documentTextFormat } from '@/features/documents/domain/document-format';
-import type { HttpClient, HttpResponse } from '@/platform/http/client';
+import { request, type TransportFailure, type TransportRequest } from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import {
   documentTextSaveFailureSchema,
   documentTextOverwriteRequestSchema,
@@ -16,122 +23,102 @@ import {
 } from '@/protocols/http/files';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
+const READ_SCOPE_LOST = 'The document folder is no longer available in this window.';
+const SAVE_SCOPE_LOST = 'The document folder is no longer active in this window.';
+
 function encodePath(entryPath: string): string {
   return entryPath.split('/').map(encodeURIComponent).join('/');
 }
 
-function saveResponseError(response: HttpResponse): DocumentSaveError {
+function cause(serverMessage: string | null): ErrorOptions | undefined {
+  return serverMessage === null ? undefined : { cause: new Error(serverMessage) };
+}
+
+/** A save meets one refusal the shared ladder cannot see: the file changed
+ *  under the editor, which is recoverable and carries the version on disk. */
+function saveFailure({ response, serverMessage }: TransportFailure): DocumentSaveError | null {
   const failure = documentTextSaveFailureSchema.safeParse(response.body);
-  const cause = failure.success ? { cause: new Error(failure.data.error) } : undefined;
   if (response.status === 409 && failure.success && failure.data.code === 'FILE_CHANGED') {
     return new DocumentSaveError(
       'conflict',
       'The file changed on disk. Your unsaved changes are still available.',
-      { ...cause, currentVersion: failure.data.currentVersion },
+      { ...cause(serverMessage), currentVersion: failure.data.currentVersion },
     );
   }
   if (
     response.status === 409 ||
-    response.status === 410 ||
-    response.status === 412 ||
     (failure.success &&
       (failure.data.code === 'FOLDER_CHANGED' ||
         failure.data.code === 'FOLDER_UNAVAILABLE' ||
         failure.data.code === 'NO_FOLDER'))
   ) {
-    return new DocumentSaveError(
-      'scope-lost',
-      'The document folder is no longer active in this window.',
-      cause,
-    );
+    return new DocumentSaveError('scope-lost', SAVE_SCOPE_LOST, cause(serverMessage));
   }
-  if (response.status === 401 || response.status === 403) {
-    return new DocumentSaveError(
-      'unauthorized',
-      'This window can no longer save that document.',
-      cause,
-    );
-  }
-  return new DocumentSaveError('unavailable', 'The document could not be saved.', cause);
+  return null;
 }
 
-function responseError(response: HttpResponse): DocumentSourceError {
+/** The read route names a folder that went away in the body as well as in
+ *  the status. */
+function readScopeFailure({
+  response,
+  serverMessage,
+}: TransportFailure): DocumentSourceError | null {
   const failure = documentTextSourceFailureSchema.safeParse(response.body);
-  const cause = failure.success ? { cause: new Error(failure.data.error) } : undefined;
-  if (response.status === 401 || response.status === 403) {
-    return new DocumentSourceError(
-      'unauthorized',
-      'This window can no longer read that document.',
-      cause,
-    );
-  }
-  if (
-    response.status === 410 ||
-    response.status === 412 ||
-    (failure.success &&
-      (failure.data.code === 'FOLDER_UNAVAILABLE' || failure.data.code === 'NO_FOLDER'))
-  ) {
-    return new DocumentSourceError(
-      'scope-lost',
-      'The document folder is no longer available in this window.',
-      cause,
-    );
-  }
-  return new DocumentSourceError('unavailable', 'The document could not be loaded.', cause);
+  return failure.success &&
+    (failure.data.code === 'FOLDER_UNAVAILABLE' || failure.data.code === 'NO_FOLDER')
+    ? new DocumentSourceError('scope-lost', READ_SCOPE_LOST, cause(serverMessage))
+    : null;
 }
 
-function mapResponse(source: SourceReference, response: HttpResponse) {
-  if (response.status < 200 || response.status >= 300) throw responseError(response);
-  const body = documentTextSourceResponseSchema.safeParse(response.body);
-  if (!body.success) {
-    throw new DocumentSourceError('invalid-response', 'The document returned an invalid response.');
-  }
-  const expectedFormat = documentTextFormat(source.path);
-  if (
-    expectedFormat === null ||
-    body.data.name !== source.path ||
-    body.data.format !== expectedFormat
-  ) {
-    throw new DocumentSourceError('invalid-response', 'The document returned an invalid response.');
-  }
-  if ('error' in body.data) {
-    throw new DocumentSourceError(
-      'unsupported-encoding',
-      'This text file is not valid UTF-8. It remains unchanged and read-only.',
-      { cause: new Error(body.data.error.message) },
-    );
-  }
+function saveRequest(
+  path: string,
+  body: unknown,
+  signal: AbortSignal,
+  unavailable: string,
+): TransportRequest<'conflict'> {
   return {
-    content: body.data.content,
-    format: expectedFormat,
-    version: body.data.version,
+    body,
+    error: DocumentSaveError,
+    failure: saveFailure,
+    failureSchema: documentTextSaveFailureSchema,
+    messages: {
+      'invalid-response': 'The document save returned an invalid response.',
+      'scope-lost': SAVE_SCOPE_LOST,
+      unauthorized: 'This window can no longer save that document.',
+      unavailable,
+    },
+    method: 'PUT',
+    path,
+    signal,
   };
 }
 
-function mapSaveResponse(source: SourceReference, response: HttpResponse) {
-  if (response.status < 200 || response.status >= 300) throw saveResponseError(response);
-  const body = documentTextSaveResponseSchema.safeParse(response.body);
+type SaveResponse = ReturnType<typeof documentTextSaveResponseSchema.parse>;
+
+/** A saved document must come back as the same file in the same format the
+ *  editor sent, or the response belongs to something else. */
+function savedDocument(source: SourceReference, body: SaveResponse) {
   const expectedFormat = documentTextFormat(source.path);
-  if (
-    !body.success ||
-    expectedFormat === null ||
-    body.data.name !== source.path ||
-    body.data.format !== expectedFormat
-  ) {
+  if (expectedFormat === null || body.name !== source.path || body.format !== expectedFormat) {
     throw new DocumentSaveError(
       'invalid-response',
       'The document save returned an invalid response.',
     );
   }
   return {
-    content: body.data.content,
+    content: body.content,
     format: expectedFormat,
-    version: body.data.version,
-    ...(body.data.indexWarning ? { indexWarning: body.data.indexWarning } : {}),
+    version: body.version,
+    ...(body.indexWarning ? { indexWarning: body.indexWarning } : {}),
   };
 }
 
-export function createDocumentSourceApi(client: HttpClient): DocumentSourceApi {
+function documentPath(folderPath: string, entryPath: string): string {
+  const query = new URLSearchParams({ folder: folderPath });
+  return `/api/files/${encodePath(entryPath)}?${query}`;
+}
+
+export function createDocumentSourceAdapter(client: HttpClient): DocumentSourcePort {
   return {
     async load(source, signal) {
       if (documentTextFormat(source.path) === null) {
@@ -140,77 +127,86 @@ export function createDocumentSourceApi(client: HttpClient): DocumentSourceApi {
           'This document format is not available in the text source loader.',
         );
       }
-      const request = documentTextSourceRequestSchema.safeParse(source);
-      if (!request.success) {
+      const identity = documentTextSourceRequestSchema.safeParse(source);
+      if (!identity.success) {
         throw new DocumentSourceError('unavailable', 'The document identity is invalid.');
       }
-      const query = new URLSearchParams({ folder: request.data.folderPath });
-      let response: HttpResponse;
-      try {
-        response = await client.request({
-          path: `/api/files/${encodePath(request.data.path)}?${query}`,
-          signal,
-        });
-      } catch (error) {
-        if (error instanceof DocumentSourceError || signal.aborted) throw error;
-        throw new DocumentSourceError('unavailable', 'The document could not be loaded.', {
-          cause: error,
-        });
+      const body = await request(client, {
+        error: DocumentSourceError,
+        failure: readScopeFailure,
+        failureSchema: documentTextSourceFailureSchema,
+        messages: {
+          'invalid-response': 'The document returned an invalid response.',
+          'scope-lost': READ_SCOPE_LOST,
+          unauthorized: 'This window can no longer read that document.',
+          unavailable: 'The document could not be loaded.',
+        },
+        path: documentPath(identity.data.folderPath, identity.data.path),
+        schema: documentTextSourceResponseSchema,
+        signal,
+      });
+      const expectedFormat = documentTextFormat(source.path);
+      if (expectedFormat === null || body.name !== source.path || body.format !== expectedFormat) {
+        throw new DocumentSourceError(
+          'invalid-response',
+          'The document returned an invalid response.',
+        );
       }
-      return mapResponse(source, response);
+      if ('error' in body) {
+        throw new DocumentSourceError(
+          'unsupported-encoding',
+          'This text file is not valid UTF-8. It remains unchanged and read-only.',
+          { cause: new Error(body.error.message) },
+        );
+      }
+      return { content: body.content, format: expectedFormat, version: body.version };
     },
     async overwrite(source, input, signal) {
-      const request = documentTextOverwriteRequestSchema.safeParse({
+      const overwrite = documentTextOverwriteRequestSchema.safeParse({
         ...input,
         folderPath: source.folderPath,
         overwrite: true,
         path: source.path,
       });
-      if (!request.success || documentTextFormat(source.path) === null) {
+      if (!overwrite.success || documentTextFormat(source.path) === null) {
         throw new DocumentSaveError('unavailable', 'The document overwrite request is invalid.');
       }
-      const query = new URLSearchParams({ folder: request.data.folderPath });
-      let response: HttpResponse;
-      try {
-        response = await client.request({
-          body: { content: request.data.content, overwrite: true },
-          method: 'PUT',
-          path: `/api/files/${encodePath(request.data.path)}?${query}`,
-          signal,
-        });
-      } catch (error) {
-        if (error instanceof DocumentSaveError || signal.aborted) throw error;
-        throw new DocumentSaveError('unavailable', 'The document could not be overwritten.', {
-          cause: error,
-        });
-      }
-      return mapSaveResponse(source, response);
+      const { data } = overwrite;
+      return savedDocument(
+        source,
+        await request(client, {
+          ...saveRequest(
+            documentPath(data.folderPath, data.path),
+            { content: data.content, overwrite: true },
+            signal,
+            'The document could not be overwritten.',
+          ),
+          schema: documentTextSaveResponseSchema,
+        }),
+      );
     },
     async save(source, input, signal) {
-      const request = documentTextSaveRequestSchema.safeParse({
+      const save = documentTextSaveRequestSchema.safeParse({
         ...input,
         folderPath: source.folderPath,
         path: source.path,
       });
-      if (!request.success || documentTextFormat(source.path) === null) {
+      if (!save.success || documentTextFormat(source.path) === null) {
         throw new DocumentSaveError('unavailable', 'The document save request is invalid.');
       }
-      const query = new URLSearchParams({ folder: request.data.folderPath });
-      let response: HttpResponse;
-      try {
-        response = await client.request({
-          body: { baseVersion: request.data.baseVersion, content: request.data.content },
-          method: 'PUT',
-          path: `/api/files/${encodePath(request.data.path)}?${query}`,
-          signal,
-        });
-      } catch (error) {
-        if (error instanceof DocumentSaveError || signal.aborted) throw error;
-        throw new DocumentSaveError('unavailable', 'The document could not be saved.', {
-          cause: error,
-        });
-      }
-      return mapSaveResponse(source, response);
+      const { data } = save;
+      return savedDocument(
+        source,
+        await request(client, {
+          ...saveRequest(
+            documentPath(data.folderPath, data.path),
+            { baseVersion: data.baseVersion, content: data.content },
+            signal,
+            'The document could not be saved.',
+          ),
+          schema: documentTextSaveResponseSchema,
+        }),
+      );
     },
   };
 }

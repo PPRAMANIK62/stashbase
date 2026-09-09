@@ -1,26 +1,18 @@
-import {
-  Circle,
-  FileAudio,
-  FileCode2,
-  FileImage,
-  FileText,
-  FileType2,
-  FileVideo,
-  X,
-} from 'lucide-react';
+import { Circle, X } from 'lucide-react';
 import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
 import { TabItem, Tabs, TabsList } from '@/components/ui/tabs';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
-import { sourceName } from '@/features/documents/domain/document';
+import { isDocumentDirty, sourceName } from '@/features/documents/domain/document';
 import { documentViewerFormat } from '@/features/documents/domain/document-format';
-import { mediaKind } from '@/features/documents/domain/media';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
+import { documentViewerEntry } from '@/features/documents/ui/source/registry';
 import type { IconComponentProps } from '@/lib/icon-context';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { writeSourceDrag } from '@/shared/utils/source-drag';
 
 export interface DocumentTabsProps {
   className?: string;
@@ -46,7 +38,6 @@ function DocumentTab({
   register,
   source,
   value,
-  _index = 0,
 }: {
   closeWithDelete: (event: KeyboardEvent<HTMLButtonElement>, tabId: string) => void;
   document: DocumentRuntime;
@@ -54,39 +45,30 @@ function DocumentTab({
   register: (tabId: string, element: HTMLButtonElement | null) => void;
   source: SourceReference;
   value: string;
-  /** @internal Assigned by TabsList. */
-  _index?: number;
 }) {
-  const dirty = useStore(document.store, (state) => state.editor?.dirty ?? false);
+  const dirty = useStore(document.store, (state) =>
+    state.editor ? isDocumentDirty(state.editor) : false,
+  );
   const name = sourceName(source);
-  const format = documentViewerFormat(source.path);
-  const icon =
-    format === 'media'
-      ? mediaKind(source.path) === 'video'
-        ? FileVideo
-        : FileAudio
-      : format === 'image'
-        ? FileImage
-        : format === 'pdf'
-          ? FileType2
-          : format === 'html'
-            ? FileCode2
-            : FileText;
+  const icon = documentViewerEntry(documentViewerFormat(source.path)).icon(source.path);
 
   return (
     <TabItem
       aria-keyshortcuts="Delete"
       aria-label={dirty ? `${name}, unsaved changes` : name}
       data-document-dirty={dirty || undefined}
+      draggable
       icon={icon}
       label={name}
+      // The open document is a source the user can hand to another surface —
+      // dropping a tab on the Agent composer binds it as explicit context.
+      onDragStart={(event) => writeSourceDrag(event.dataTransfer, source)}
       onKeyDown={(event) => closeWithDelete(event, value)}
       onTrailingClick={() => onClose(value)}
       ref={(element) => register(value, element)}
       title={`${source.folderPath}/${source.path}${dirty ? ' — Unsaved changes' : ''}`}
       trailingIcon={dirty ? UnsavedIndicator : X}
       value={value}
-      _index={_index}
     />
   );
 }

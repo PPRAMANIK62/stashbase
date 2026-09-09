@@ -23,11 +23,11 @@ function findMatches(
   query: string,
   options: FindOptions,
 ): MediaFindMatch[] {
-  const needle = options.caseSensitive ? query : query.toLocaleLowerCase();
+  const needle = options.caseSensitive ? query : query.toLowerCase();
   if (!needle) return [];
   const matches: MediaFindMatch[] = [];
   for (const segment of segments) {
-    const text = options.caseSensitive ? segment.text : segment.text.toLocaleLowerCase();
+    const text = options.caseSensitive ? segment.text : segment.text.toLowerCase();
     let offset = 0;
     while (offset <= text.length - needle.length) {
       const found = text.indexOf(needle, offset);

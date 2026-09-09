@@ -1,10 +1,8 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import {
-  createDocumentNavigationRuntime,
-  createDocumentTabsRuntime,
-} from '@/features/documents/public';
+import { createDocumentTabsRuntime } from '@/features/documents/public';
+import { documentTabsRuntimeOptions } from '@/test/fakes/documents';
 
 import { useDocumentCommands } from './use-document-commands';
 
@@ -22,7 +20,17 @@ function dispatchCommand(key: string, options: KeyboardEventInit = {}): Keyboard
 
 describe('document commands composition', () => {
   it('routes Find shortcuts to the active document navigation runtime', () => {
-    const runtime = createDocumentNavigationRuntime('tab-1');
+    // The navigation runtime is reached the way the shell reaches it: through
+    // the tabs runtime that owns it.
+    const tabs = createDocumentTabsRuntime(
+      documentTabsRuntimeOptions({
+        restored: {
+          activeTabId: 'tab-1',
+          tabs: [{ id: 'tab-1', source: { folderPath: '/library/notes', path: 'plan.md' } }],
+        },
+      }),
+    );
+    const runtime = tabs.navigation;
     const controller = {
       close: vi.fn(),
       next: vi.fn(() => ({ current: 2, total: 2 })),
@@ -33,7 +41,7 @@ describe('document commands composition', () => {
     const { unmount } = renderHook(() => useDocumentCommands(runtime));
 
     expect(dispatchCommand('f').defaultPrevented).toBe(true);
-    expect(runtime.store.getState().find.open).toBe(true);
+    // Find is open, so the step chord is taken and reaches the controller.
     expect(dispatchCommand('g').defaultPrevented).toBe(true);
     expect(controller.next).toHaveBeenCalledOnce();
     dispatchCommand('g', { shiftKey: true });
@@ -42,28 +50,24 @@ describe('document commands composition', () => {
     const escape = dispatchCommand('Escape', { ctrlKey: false });
     expect(escape.defaultPrevented).toBe(true);
     expect(controller.close).toHaveBeenCalledOnce();
-    expect(runtime.store.getState().find.open).toBe(false);
+    // Find is closed, so the step chord falls through untouched.
+    expect(dispatchCommand('g').defaultPrevented).toBe(false);
+    expect(controller.next).toHaveBeenCalledOnce();
 
     unmount();
-    runtime.dispose();
+    tabs.dispose();
   });
 
   it('closes the active document tab on Cmd/Ctrl+W and always keeps the chord', async () => {
-    const tabs = createDocumentTabsRuntime({
-      api: { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() },
-      createId: () => 'tab-2',
-      createQueries: () => ({
-        cancel: vi.fn(async () => undefined),
-        remove: vi.fn(),
-        replaceSource: vi.fn(),
+    const tabs = createDocumentTabsRuntime(
+      documentTabsRuntimeOptions({
+        createId: () => 'tab-2',
+        restored: {
+          activeTabId: 'tab-1',
+          tabs: [{ id: 'tab-1', source: { folderPath: '/library/notes', path: 'plan.md' } }],
+        },
       }),
-      folderPath: '/library/notes',
-      generation: 1,
-      restored: {
-        activeTabId: 'tab-1',
-        tabs: [{ id: 'tab-1', source: { folderPath: '/library/notes', path: 'plan.md' } }],
-      },
-    });
+    );
     const close = vi.spyOn(tabs, 'close');
     const { unmount } = renderHook(() => useDocumentCommands(tabs.navigation, tabs));
 
@@ -81,7 +85,7 @@ describe('document commands composition', () => {
     editor.dispatchEvent(fromEditor);
     expect(fromEditor.defaultPrevented).toBe(true);
     expect(close).toHaveBeenCalledWith('tab-1');
-    await vi.waitFor(() => expect(tabs.store.getState().tabs).toEqual([]));
+    await vi.waitFor(() => expect(tabs.openSources()).toEqual([]));
     editor.remove();
 
     expect(dispatchCommand('w').defaultPrevented).toBe(true);

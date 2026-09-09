@@ -5,9 +5,14 @@ import {
   closeDocumentTab,
   createDocumentTabsState,
   openDocumentTab,
+  type DocumentTabsState,
 } from './tabs';
 
 const notes = { folderPath: '/library/notes', path: 'plan.md' };
+
+/** The invariant every transition below has to leave standing. */
+const isConsistent = (state: DocumentTabsState) =>
+  state.activeTabId === null || state.tabs.some((tab) => tab.id === state.activeTabId);
 
 describe('document tabs', () => {
   it('restores only one tab per exact source and retains distinct folders', () => {
@@ -61,5 +66,28 @@ describe('document tabs', () => {
     expect(state.activeTabId).toBe('three');
     state = closeDocumentTab(state, 'three');
     expect(state.activeTabId).toBe('one');
+  });
+  it('keeps the active tab a member of the tab set through every transition', () => {
+    const two = { folderPath: '/library/notes', path: 'two.md' };
+    // A restored active id that names no surviving tab is dropped, not kept.
+    let state = createDocumentTabsState({
+      activeTabId: 'missing',
+      tabs: [{ id: 'one', source: notes }],
+    });
+    expect(state.activeTabId).toBeNull();
+    expect(isConsistent(state)).toBe(true);
+
+    // Activating an unknown tab leaves the previous member active.
+    state = openDocumentTab(state, { id: 'two', source: two });
+    state = activateDocumentTab(state, 'unknown');
+    expect(state.activeTabId).toBe('two');
+    expect(isConsistent(state)).toBe(true);
+
+    // Closing the last tab leaves no dangling active id behind.
+    state = closeDocumentTab(state, 'two');
+    state = closeDocumentTab(state, 'one');
+    expect(state.tabs).toEqual([]);
+    expect(state.activeTabId).toBeNull();
+    expect(isConsistent(state)).toBe(true);
   });
 });

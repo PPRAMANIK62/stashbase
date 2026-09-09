@@ -1,4 +1,5 @@
-import { DocxPreviewError, type DocxPreviewApi } from '@/features/documents/application/ports';
+import { DOCX_PREVIEW_MESSAGES } from '@/features/documents/application/failure-messages';
+import { DocxPreviewError, type DocxPreviewPort } from '@/features/documents/application/ports';
 
 const DIRECT_PREVIEW_TIMEOUT_MS = 20_000;
 
@@ -54,20 +55,29 @@ function convert(
         finish({ html: (message as { html: string }).html });
         return;
       }
+      // The converter's own diagnostic names a DOCX feature it choked on, so
+      // it is kept as the cause; what a reader sees comes off the ladder.
       const detail =
         message &&
         typeof message === 'object' &&
         (message as Record<string, unknown>).ok === false &&
-        typeof (message as Record<string, unknown>).error === 'string'
-          ? (message as { error: string }).error
-          : 'The DOCX converter returned an invalid response.';
-      finish({ error: new DocxPreviewError('invalid-response', detail) });
+        typeof (message as Record<string, unknown>).detail === 'string'
+          ? (message as { detail: string }).detail
+          : null;
+      finish({
+        error: new DocxPreviewError(
+          'invalid-response',
+          DOCX_PREVIEW_MESSAGES['invalid-response'],
+          detail === null ? undefined : { cause: new Error(detail) },
+        ),
+      });
     };
     const fail = (event: ErrorEvent) =>
       finish({
         error: new DocxPreviewError(
           'unavailable',
-          event.message || 'The DOCX converter stopped unexpectedly.',
+          DOCX_PREVIEW_MESSAGES.unavailable,
+          event.message ? { cause: new Error(event.message) } : undefined,
         ),
       });
     worker.addEventListener('message', receive);
@@ -81,11 +91,11 @@ function convert(
   });
 }
 
-export function createDocxPreviewApi({
+export function createDocxPreviewAdapter({
   createWorker = createDocxWorker,
   fetchRequest = fetch,
   timeoutMs = DIRECT_PREVIEW_TIMEOUT_MS,
-}: DocxPreviewApiOptions = {}): DocxPreviewApi {
+}: DocxPreviewApiOptions = {}): DocxPreviewPort {
   return {
     async load(resource, signal) {
       const controller = new AbortController();

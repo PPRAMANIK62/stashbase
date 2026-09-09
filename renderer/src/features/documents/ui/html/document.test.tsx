@@ -39,14 +39,11 @@ describe('HTML document', () => {
       />,
     );
 
-    const frame = screen.getByTitle('archive.html HTML preview') as HTMLIFrameElement;
+    const frame = screen.getByTitle<HTMLIFrameElement>('archive.html HTML preview');
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
     expect(frame.referrerPolicy).toBe('no-referrer');
     expect(frame.src).toBe('data:text/html,archive');
-    expect(frame.parentElement?.className).toContain('rounded-xl');
-    expect(frame.parentElement?.parentElement?.className).toContain('bg-surface-2');
-    expect(frame.parentElement?.parentElement?.className).toContain('p-2');
 
     const frameWindow = frame.contentWindow;
     expect(frameWindow).not.toBeNull();
@@ -87,7 +84,7 @@ describe('HTML document', () => {
         tabId="tab-1"
       />,
     );
-    const frame = screen.getByTitle('archive.html HTML preview') as HTMLIFrameElement;
+    const frame = screen.getByTitle<HTMLIFrameElement>('archive.html HTML preview');
     const frameWindow = frame.contentWindow;
     expect(frameWindow).not.toBeNull();
     if (!frameWindow) throw new Error('HTML preview frame has no content window.');

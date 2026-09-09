@@ -1,16 +1,25 @@
+/**
+ * Audio and video playback beside its synchronized transcript.
+ *
+ * The transcript is also published as a real WebVTT captions track, so the
+ * player carries captions itself rather than relying on the list beside it.
+ */
 import { RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
+import { documentFailure, MEDIA_MESSAGES } from '@/features/documents/application/failure-messages';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
-import type { MediaApi, MediaDocumentAsset } from '@/features/documents/application/ports';
+import type { MediaPort, MediaDocumentAsset } from '@/features/documents/application/ports';
 import {
   formatMediaTime,
   mediaKind,
   mediaPreviewStatusCopy,
   mediaTranscriptStatusCopy,
+  mediaTranscriptVtt,
+  type MediaTranscript,
   type MediaTranscriptSegment,
   type MediaTranscriptState,
 } from '@/features/documents/domain/media';
@@ -20,6 +29,22 @@ import { cn } from '@/lib/utils';
 import { createMediaFindController } from './find-controller';
 import { useMediaFallback } from './use-media-fallback';
 import { useMediaTranscript } from './use-media-transcript';
+
+/** A blob-backed WebVTT track for the loaded transcript. Always present, so
+ *  the player exposes a captions track even before speech is recognised. */
+function useCaptionsUrl(transcript: MediaTranscript | null): string {
+  const vtt = useMemo(() => mediaTranscriptVtt(transcript), [transcript]);
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+    setUrl(objectUrl);
+    return () => {
+      setUrl(null);
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [vtt]);
+  return url ?? `data:text/vtt;charset=utf-8,${encodeURIComponent(vtt)}`;
+}
 
 function TranscriptState({
   action,
@@ -120,7 +145,7 @@ export function MediaDocument({
   runtime,
 }: {
   active: boolean;
-  api: MediaApi;
+  api: MediaPort;
   name: string;
   navigation: DocumentNavigationRuntime;
   resource: MediaDocumentAsset;
@@ -138,6 +163,7 @@ export function MediaDocument({
   const [findSegmentId, setFindSegmentId] = useState<number | null>(null);
   const readyTranscript =
     transcript.query.data?.status === 'ready' ? transcript.query.data.transcript : null;
+  const captionsUrl = useCaptionsUrl(readyTranscript);
   const currentSegmentId = useMemo(
     () =>
       readyTranscript?.segments.find(
@@ -152,6 +178,7 @@ export function MediaDocument({
     const media = mediaRef.current;
     if (!media) return;
     media.currentTime = segment.startMs / 1000;
+    // swallowed: a browser that refuses autoplay leaves the reader the controls.
     if (play) void media.play().catch(() => undefined);
   }, []);
 
@@ -250,8 +277,6 @@ export function MediaDocument({
               </Button>
             </div>
           ) : showVideo ? (
-            // The synchronized, timestamped transcript is rendered beside this player.
-            // eslint-disable-next-line jsx-a11y/media-has-caption
             <video
               aria-label={`${name} playback`}
               className="block max-h-full max-w-full"
@@ -261,11 +286,11 @@ export function MediaDocument({
               onTimeUpdate={updateTime}
               preload="metadata"
               ref={assignMedia}
-            />
+            >
+              <track default kind="captions" label="Transcript" src={captionsUrl} />
+            </video>
           ) : (
             <>
-              {/* The synchronized, timestamped transcript is rendered beside this player. */}
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
               <audio
                 aria-label={`${name} playback`}
                 className="block w-full max-w-2xl"
@@ -275,7 +300,9 @@ export function MediaDocument({
                 onTimeUpdate={updateTime}
                 preload="metadata"
                 ref={assignMedia}
-              />
+              >
+                <track default kind="captions" label="Transcript" src={captionsUrl} />
+              </audio>
               {kind === 'video' && fallback.usingFallback && (
                 <p className="text-caption text-muted-foreground">
                   Video playback is unavailable. Playing its audio track instead.
@@ -316,7 +343,7 @@ export function MediaDocument({
           <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
             <div>
               <p className="text-caption text-muted-foreground" role="alert">
-                The transcript could not be loaded.
+                {documentFailure(transcript.query.error, 'MediaError', MEDIA_MESSAGES).message}
               </p>
               <Button
                 className="mt-3"

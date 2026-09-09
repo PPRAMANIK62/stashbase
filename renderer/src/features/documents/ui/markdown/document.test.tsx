@@ -72,7 +72,7 @@ afterEach(() => {
 });
 
 describe('Markdown document surface', () => {
-  it('keeps the document canvas on the raised workspace plane', () => {
+  it('names the read-only document canvas and offers its mode switch', () => {
     const navigation = createDocumentNavigationRuntime('tab-1');
     render(
       <MarkdownDocument
@@ -93,11 +93,9 @@ describe('Markdown document surface', () => {
       />,
     );
 
-    expect(
-      screen
-        .getByRole('document', { name: 'plan.md Markdown content' })
-        .classList.contains('bg-surface-2'),
-    ).toBe(true);
+    const canvas = screen.getByRole('document', { name: 'plan.md Markdown content' });
+    expect(canvas.getAttribute('data-read-only')).toBe('true');
+    expect(screen.getByRole('tablist', { name: 'Markdown mode' })).not.toBeNull();
   });
 
   it('reattaches valid frontmatter when Milkdown serializes a Writer change', async () => {
@@ -156,6 +154,7 @@ describe('Markdown document surface', () => {
     );
     await waitFor(() => expect(editorHarness.instances).toHaveLength(1));
     const instance = editorHarness.instances[0];
+    if (!instance) throw new Error('Expected a Milkdown editor instance.');
 
     rerender(
       <MarkdownDocument

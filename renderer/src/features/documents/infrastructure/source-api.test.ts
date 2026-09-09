@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { HttpClient } from '@/platform/http/client';
 
-import { createDocumentSourceApi } from './source-api';
+import { createDocumentSourceAdapter } from './source-api';
 
 describe('document source API', () => {
   it('loads explicit-folder Markdown and retains the byte version', async () => {
@@ -18,7 +18,7 @@ describe('document source API', () => {
       })),
     };
     const signal = new AbortController().signal;
-    const api = createDocumentSourceApi(client);
+    const api = createDocumentSourceAdapter(client);
 
     await expect(
       api.load({ folderPath: '/library/research notes', path: 'drafts/plan #1.markdown' }, signal),
@@ -30,7 +30,7 @@ describe('document source API', () => {
   });
 
   it('keeps invalid UTF-8 TXT explicit and never returns replacement text', async () => {
-    const api = createDocumentSourceApi({
+    const api = createDocumentSourceAdapter({
       request: vi.fn(async () => ({
         body: {
           content: '',
@@ -52,7 +52,7 @@ describe('document source API', () => {
   });
 
   it('rejects mismatched identities and classifies lost folder scope', async () => {
-    const mismatched = createDocumentSourceApi({
+    const mismatched = createDocumentSourceAdapter({
       request: vi.fn(async () => ({
         body: { content: 'wrong', format: 'txt', name: 'other.txt', version: 'v1' },
         status: 200,
@@ -65,7 +65,7 @@ describe('document source API', () => {
       ),
     ).rejects.toMatchObject({ kind: 'invalid-response' });
 
-    const lost = createDocumentSourceApi({
+    const lost = createDocumentSourceAdapter({
       request: vi.fn(async () => ({
         body: { code: 'FOLDER_UNAVAILABLE', error: 'private server detail' },
         status: 410,
@@ -81,7 +81,7 @@ describe('document source API', () => {
 
   it('rejects an invalid source identity before transport', async () => {
     const client: HttpClient = { request: vi.fn() };
-    const api = createDocumentSourceApi(client);
+    const api = createDocumentSourceAdapter(client);
 
     await expect(
       api.load({ folderPath: ' ', path: 'notes.txt' }, new AbortController().signal),
@@ -105,7 +105,7 @@ describe('document source API', () => {
       })),
     };
     const signal = new AbortController().signal;
-    const api = createDocumentSourceApi(client);
+    const api = createDocumentSourceAdapter(client);
 
     await expect(
       api.save(
@@ -145,7 +145,7 @@ describe('document source API', () => {
           status: 200,
         }),
     };
-    const api = createDocumentSourceApi(client);
+    const api = createDocumentSourceAdapter(client);
     const source = { folderPath: '/library/notes', path: 'data.json' };
     const signal = new AbortController().signal;
 
@@ -176,7 +176,7 @@ describe('document source API', () => {
       })),
     };
     const signal = new AbortController().signal;
-    const api = createDocumentSourceApi(client);
+    const api = createDocumentSourceAdapter(client);
 
     await expect(
       api.overwrite(
@@ -198,7 +198,7 @@ describe('document source API', () => {
   });
 
   it('classifies a stale save without exposing server detail', async () => {
-    const api = createDocumentSourceApi({
+    const api = createDocumentSourceAdapter({
       request: vi.fn(async () => ({
         body: {
           code: 'FILE_CHANGED',
@@ -223,7 +223,7 @@ describe('document source API', () => {
   });
 
   it('rejects a mismatched save response identity', async () => {
-    const api = createDocumentSourceApi({
+    const api = createDocumentSourceAdapter({
       request: vi.fn(async () => ({
         body: { content: 'saved', format: 'txt', name: 'other.txt', version: 'v2' },
         status: 200,

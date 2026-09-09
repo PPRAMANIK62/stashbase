@@ -37,7 +37,6 @@ export function DocumentFind({ runtime }: { runtime: DocumentNavigationRuntime }
       <div className="flex items-center gap-0.5">
         <InputGroup className="w-40 shrink-0" ref={inputGroupRef} size="compact">
           <InputField
-            index={0}
             label="Find in document"
             labelHidden
             onChange={runtime.setFindQuery}

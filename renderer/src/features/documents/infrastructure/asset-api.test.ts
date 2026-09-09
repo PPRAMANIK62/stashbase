@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import { DocumentAssetError } from '@/features/documents/application/ports';
 import type { HttpClient } from '@/platform/http/client';
 
-import { createDocumentAssetApi } from './asset-api';
+import { createDocumentAssetAdapter } from './asset-api';
 
 describe('document asset API', () => {
   it('resolves a version-keyed explicit-folder asset URL', async () => {
@@ -14,7 +14,7 @@ describe('document asset API', () => {
         status: 204,
       })),
     };
-    const api = createDocumentAssetApi(client, 'http://127.0.0.1:8090');
+    const api = createDocumentAssetAdapter(client, 'http://127.0.0.1:8090');
 
     await expect(
       api.load(
@@ -41,7 +41,7 @@ describe('document asset API', () => {
         status: 204,
       })),
     };
-    const api = createDocumentAssetApi(client, 'http://127.0.0.1:8090');
+    const api = createDocumentAssetAdapter(client, 'http://127.0.0.1:8090');
 
     await expect(
       api.load(
@@ -58,7 +58,7 @@ describe('document asset API', () => {
   });
 
   it('adds a compatible audio fallback for media assets', async () => {
-    const api = createDocumentAssetApi(
+    const api = createDocumentAssetAdapter(
       {
         request: vi.fn(async () => ({
           body: null,
@@ -84,7 +84,7 @@ describe('document asset API', () => {
   });
 
   it('rejects missing versions and lost scopes', async () => {
-    const invalid = createDocumentAssetApi(
+    const invalid = createDocumentAssetAdapter(
       { request: vi.fn(async () => ({ body: null, status: 204 })) },
       'http://127.0.0.1:8090',
     );
@@ -92,7 +92,7 @@ describe('document asset API', () => {
       invalid.load({ folderPath: '/library', path: 'paper.pdf' }, new AbortController().signal),
     ).rejects.toMatchObject({ kind: 'invalid-response' } satisfies Partial<DocumentAssetError>);
 
-    const lost = createDocumentAssetApi(
+    const lost = createDocumentAssetAdapter(
       { request: vi.fn(async () => ({ body: null, status: 410 })) },
       'http://127.0.0.1:8090',
     );

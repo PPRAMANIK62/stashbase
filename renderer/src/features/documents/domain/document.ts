@@ -1,3 +1,11 @@
+/**
+ * One open document's editable state.
+ *
+ * The save lifecycle is a single discriminated union rather than a phase enum
+ * beside loose flags, so a conflict always carries its two versions and a
+ * failure always carries its sentence. `dirty` is derived from the text —
+ * `value !== baseline` — because storing it separately let the two disagree.
+ */
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import type { DocumentTextFormat } from './document-format';
@@ -22,7 +30,7 @@ export type DocumentAccess = 'editable' | 'read-only';
 
 export type MarkdownViewMode = 'reading' | 'writer';
 
-export type JsonViewMode = 'source' | 'tree';
+type JsonViewMode = 'source' | 'tree';
 
 export interface JsonDocumentSession {
   expandedPaths: string[];
@@ -42,15 +50,6 @@ export interface DocumentTextSaveResult extends DocumentTextSource {
   indexWarning?: string;
 }
 
-export type DocumentSavePhase =
-  | 'conflict'
-  | 'error'
-  | 'idle'
-  | 'saved'
-  | 'saving'
-  | 'unsaved'
-  | 'warning';
-
 export type DocumentConflictResolution = 'merge' | 'overwrite' | 'reload';
 
 export interface DocumentConflictState {
@@ -61,16 +60,55 @@ export interface DocumentConflictState {
   resolving: DocumentConflictResolution | null;
 }
 
+/**
+ * Where one document sits in the save lifecycle. Exactly one variant holds at
+ * a time and each carries only what that outcome means: a warning sentence
+ * belongs to a landed save, a conflict to the two versions being compared.
+ */
+export type DocumentSaveState =
+  | { kind: 'clean' }
+  | { kind: 'conflict'; conflict: DocumentConflictState }
+  | { kind: 'dirty' }
+  | { kind: 'failed'; message: string }
+  | { kind: 'saved' }
+  | { kind: 'saving' }
+  | { kind: 'warned'; message: string };
+
 export interface DocumentEditorState {
   baseline: string;
-  conflict: DocumentConflictState | null;
-  conflictVersion: string | null;
-  dirty: boolean;
   revision: number;
-  saveMessage: string | null;
-  savePhase: DocumentSavePhase;
+  save: DocumentSaveState;
   value: string;
   version: string;
+}
+
+/** Unsaved text, or a conflict whose editor side is still the user's draft. */
+export function isDocumentDirty(editor: DocumentEditorState): boolean {
+  return editor.save.kind === 'conflict' || editor.value !== editor.baseline;
+}
+
+export function documentConflict(editor: DocumentEditorState): DocumentConflictState | null {
+  return editor.save.kind === 'conflict' ? editor.save.conflict : null;
+}
+
+/** The sentence a save outcome shows, if it has one. */
+export function documentSaveMessage(save: DocumentSaveState): string | null {
+  switch (save.kind) {
+    case 'failed':
+    case 'warned':
+      return save.message;
+    case 'conflict':
+      return save.conflict.resolutionMessage;
+    case 'clean':
+    case 'dirty':
+    case 'saved':
+    case 'saving':
+      return null;
+    default: {
+      const exhaustive: never = save;
+      return exhaustive;
+    }
+  }
 }
 
 export function sourceIdentity(source: SourceReference): string {
@@ -154,11 +192,12 @@ export function reconcileDocumentSource(
 ): DocumentState {
   if (state.lifecycle === 'disposed' || state.access !== 'editable') return state;
   const baseline = documentEditorText(source.content);
-  if (state.editor?.dirty || state.editor?.savePhase === 'saving') return state;
+  const editor = state.editor;
+  if (editor && (isDocumentDirty(editor) || editor.save.kind === 'saving')) return state;
   if (
-    state.editor?.baseline === baseline &&
-    state.editor.value === baseline &&
-    state.editor.version === source.version
+    editor?.baseline === baseline &&
+    editor.value === baseline &&
+    editor.version === source.version
   ) {
     return state;
   }
@@ -166,12 +205,8 @@ export function reconcileDocumentSource(
     ...state,
     editor: {
       baseline,
-      conflict: null,
-      conflictVersion: null,
-      dirty: false,
-      revision: state.editor?.revision ?? 0,
-      saveMessage: null,
-      savePhase: 'idle',
+      revision: editor?.revision ?? 0,
+      save: { kind: 'clean' },
       value: baseline,
       version: source.version,
     },
@@ -180,30 +215,27 @@ export function reconcileDocumentSource(
 
 export function changeDocumentText(state: DocumentState, value: string): DocumentState {
   if (state.lifecycle === 'disposed' || state.access !== 'editable' || !state.editor) return state;
-  if (state.editor.conflict) return state;
-  if (state.editor.value === value) return state;
-  const dirty = value !== state.editor.baseline;
-  const savePhase = state.editor.savePhase === 'saving' ? 'saving' : dirty ? 'unsaved' : 'saved';
+  const editor = state.editor;
+  if (editor.save.kind === 'conflict') return state;
+  if (editor.value === value) return state;
+  const dirty = value !== editor.baseline;
+  const save: DocumentSaveState =
+    editor.save.kind === 'saving'
+      ? { kind: 'saving' }
+      : dirty
+        ? { kind: 'dirty' }
+        : { kind: 'saved' };
   return {
     ...state,
-    editor: {
-      ...state.editor,
-      conflictVersion: null,
-      dirty,
-      revision: state.editor.revision + 1,
-      saveMessage: null,
-      savePhase,
-      value,
-    },
+    editor: { ...editor, revision: editor.revision + 1, save, value },
   };
 }
 
 export function beginDocumentSave(state: DocumentState): DocumentState {
-  if (!state.editor?.dirty || state.editor.conflict || state.lifecycle === 'disposed') return state;
-  return {
-    ...state,
-    editor: { ...state.editor, saveMessage: null, savePhase: 'saving' },
-  };
+  const editor = state.editor;
+  if (!editor || state.lifecycle === 'disposed') return state;
+  if (editor.save.kind === 'conflict' || !isDocumentDirty(editor)) return state;
+  return { ...state, editor: { ...editor, save: { kind: 'saving' } } };
 }
 
 export function acceptDocumentSave(
@@ -211,63 +243,48 @@ export function acceptDocumentSave(
   capturedRevision: number,
   result: DocumentTextSaveResult,
 ): DocumentState {
-  if (!state.editor || state.lifecycle === 'disposed') return state;
+  const editor = state.editor;
+  if (!editor || state.lifecycle === 'disposed') return state;
   const baseline = documentEditorText(result.content);
-  const value = state.editor.revision === capturedRevision ? baseline : state.editor.value;
-  const dirty = value !== baseline;
+  const value = editor.revision === capturedRevision ? baseline : editor.value;
+  const warning = result.indexWarning ?? null;
+  const save: DocumentSaveState =
+    value === baseline
+      ? warning === null
+        ? { kind: 'saved' }
+        : { kind: 'warned', message: warning }
+      : { kind: 'dirty' };
   return {
     ...state,
-    editor: {
-      ...state.editor,
-      baseline,
-      conflict: null,
-      conflictVersion: null,
-      dirty,
-      saveMessage: dirty ? null : (result.indexWarning ?? null),
-      savePhase: dirty ? 'unsaved' : result.indexWarning ? 'warning' : 'saved',
-      value,
-      version: result.version,
-    },
+    editor: { ...editor, baseline, save, value, version: result.version },
   };
 }
 
-export function rejectDocumentSave(
-  state: DocumentState,
-  failure: { conflictVersion?: string | null; message: string },
-): DocumentState {
+export function rejectDocumentSave(state: DocumentState, message: string): DocumentState {
   if (!state.editor || state.lifecycle === 'disposed') return state;
-  return {
-    ...state,
-    editor: {
-      ...state.editor,
-      conflictVersion: failure.conflictVersion ?? null,
-      saveMessage: failure.message,
-      savePhase: 'error',
-    },
-  };
+  return { ...state, editor: { ...state.editor, save: { kind: 'failed', message } } };
 }
 
 export function enterDocumentConflict(
   state: DocumentState,
   diskSource: DocumentTextSource,
-  message: string,
 ): DocumentState {
-  if (!state.editor || state.lifecycle === 'disposed') return state;
+  const editor = state.editor;
+  if (!editor || state.lifecycle === 'disposed') return state;
   return {
     ...state,
     editor: {
-      ...state.editor,
-      conflict: {
-        diskContent: documentEditorText(diskSource.content),
-        diskVersion: diskSource.version,
-        editorContent: state.editor.value,
-        resolutionMessage: null,
-        resolving: null,
+      ...editor,
+      save: {
+        kind: 'conflict',
+        conflict: {
+          diskContent: documentEditorText(diskSource.content),
+          diskVersion: diskSource.version,
+          editorContent: editor.value,
+          resolutionMessage: null,
+          resolving: null,
+        },
       },
-      conflictVersion: diskSource.version,
-      dirty: true,
-      saveMessage: message,
-      savePhase: 'conflict',
     },
   };
 }
@@ -276,19 +293,17 @@ export function beginDocumentConflictResolution(
   state: DocumentState,
   resolution: DocumentConflictResolution,
 ): DocumentState {
-  if (
-    !state.editor?.conflict ||
-    state.editor.conflict.resolving ||
-    state.lifecycle === 'disposed'
-  ) {
-    return state;
-  }
+  const editor = state.editor;
+  const conflict = editor ? documentConflict(editor) : null;
+  if (!editor || !conflict || conflict.resolving || state.lifecycle === 'disposed') return state;
   return {
     ...state,
     editor: {
-      ...state.editor,
-      conflict: { ...state.editor.conflict, resolutionMessage: null, resolving: resolution },
-      saveMessage: null,
+      ...editor,
+      save: {
+        kind: 'conflict',
+        conflict: { ...conflict, resolutionMessage: null, resolving: resolution },
+      },
     },
   };
 }
@@ -297,31 +312,31 @@ export function failDocumentConflictResolution(
   state: DocumentState,
   message: string,
 ): DocumentState {
-  if (!state.editor?.conflict || state.lifecycle === 'disposed') return state;
+  const editor = state.editor;
+  const conflict = editor ? documentConflict(editor) : null;
+  if (!editor || !conflict || state.lifecycle === 'disposed') return state;
   return {
     ...state,
     editor: {
-      ...state.editor,
-      conflict: { ...state.editor.conflict, resolutionMessage: message, resolving: null },
-      saveMessage: message,
-      savePhase: 'conflict',
+      ...editor,
+      save: {
+        kind: 'conflict',
+        conflict: { ...conflict, resolutionMessage: message, resolving: null },
+      },
     },
   };
 }
 
 export function reloadDocumentConflict(state: DocumentState): DocumentState {
-  const conflict = state.editor?.conflict;
-  if (!state.editor || !conflict || conflict.resolving !== 'reload') return state;
+  const editor = state.editor;
+  const conflict = editor ? documentConflict(editor) : null;
+  if (!editor || !conflict || conflict.resolving !== 'reload') return state;
   return {
     ...state,
     editor: {
-      ...state.editor,
+      ...editor,
       baseline: conflict.diskContent,
-      conflict: null,
-      conflictVersion: null,
-      dirty: false,
-      saveMessage: null,
-      savePhase: 'idle',
+      save: { kind: 'clean' },
       value: conflict.diskContent,
       version: conflict.diskVersion,
     },
@@ -329,19 +344,16 @@ export function reloadDocumentConflict(state: DocumentState): DocumentState {
 }
 
 export function mergeDocumentConflict(state: DocumentState, mergedContent: string): DocumentState {
-  const conflict = state.editor?.conflict;
-  if (!state.editor || !conflict || conflict.resolving !== 'merge') return state;
+  const editor = state.editor;
+  const conflict = editor ? documentConflict(editor) : null;
+  if (!editor || !conflict || conflict.resolving !== 'merge') return state;
   return {
     ...state,
     editor: {
-      ...state.editor,
+      ...editor,
       baseline: conflict.diskContent,
-      conflict: null,
-      conflictVersion: null,
-      dirty: mergedContent !== conflict.diskContent,
-      revision: state.editor.revision + 1,
-      saveMessage: null,
-      savePhase: mergedContent === conflict.diskContent ? 'saved' : 'unsaved',
+      revision: editor.revision + 1,
+      save: mergedContent === conflict.diskContent ? { kind: 'saved' } : { kind: 'dirty' },
       value: mergedContent,
       version: conflict.diskVersion,
     },
@@ -352,18 +364,17 @@ export function acceptDocumentOverwrite(
   state: DocumentState,
   result: DocumentTextSaveResult,
 ): DocumentState {
-  if (!state.editor?.conflict || state.editor.conflict.resolving !== 'overwrite') return state;
+  const editor = state.editor;
+  const conflict = editor ? documentConflict(editor) : null;
+  if (!editor || conflict?.resolving !== 'overwrite') return state;
   const baseline = documentEditorText(result.content);
+  const warning = result.indexWarning ?? null;
   return {
     ...state,
     editor: {
-      ...state.editor,
+      ...editor,
       baseline,
-      conflict: null,
-      conflictVersion: null,
-      dirty: false,
-      saveMessage: result.indexWarning ?? null,
-      savePhase: result.indexWarning ? 'warning' : 'saved',
+      save: warning === null ? { kind: 'saved' } : { kind: 'warned', message: warning },
       value: baseline,
       version: result.version,
     },

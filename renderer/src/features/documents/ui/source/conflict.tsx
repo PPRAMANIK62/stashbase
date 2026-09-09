@@ -6,23 +6,21 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { computeConflictDiff } from '@/features/documents/domain/conflict-diff';
 import type {
   DocumentConflictResolution,
-  DocumentEditorState,
+  DocumentConflictState,
 } from '@/features/documents/domain/document';
 import { cn } from '@/lib/utils';
 
 export interface DocumentConflictProps {
-  editor: DocumentEditorState;
+  conflict: DocumentConflictState;
   name: string;
   resolve: (resolution: DocumentConflictResolution) => Promise<boolean>;
 }
 
-export function DocumentConflict({ editor, name, resolve }: DocumentConflictProps) {
-  const conflict = editor.conflict;
+export function DocumentConflict({ conflict, name, resolve }: DocumentConflictProps) {
   const rows = useMemo(
-    () => (conflict ? computeConflictDiff(conflict.editorContent, conflict.diskContent) : []),
+    () => computeConflictDiff(conflict.editorContent, conflict.diskContent),
     [conflict],
   );
-  if (!conflict) return null;
   const resolving = conflict.resolving;
 
   return (

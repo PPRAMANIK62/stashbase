@@ -32,10 +32,12 @@ export function computeConflictDiff(editorContent: string, diskContent: string):
     type: ConflictDiffRow['type'],
   ) => {
     rows.push({
-      diskLineNumber: diskIndex === undefined ? undefined : diskIndex + 1,
-      diskText: diskIndex === undefined ? undefined : diskLines[diskIndex],
-      editorLineNumber: editorIndex === undefined ? undefined : editorIndex + 1,
-      editorText: editorIndex === undefined ? undefined : editorLines[editorIndex],
+      ...(diskIndex === undefined
+        ? {}
+        : { diskLineNumber: diskIndex + 1, diskText: diskLines[diskIndex] ?? '' }),
+      ...(editorIndex === undefined
+        ? {}
+        : { editorLineNumber: editorIndex + 1, editorText: editorLines[editorIndex] ?? '' }),
       type,
     });
   };
@@ -63,24 +65,10 @@ export function computeConflictDiff(editorContent: string, diskContent: string):
 
 export function buildConflictMarkerDraft(editorContent: string, diskContent: string): string {
   const mergedLines: string[] = [];
-  const rows = computeConflictDiff(editorContent, diskContent);
-  let index = 0;
-  while (index < rows.length) {
-    const row = rows[index];
-    if (row.type === 'equal') {
-      mergedLines.push(row.editorText ?? '');
-      index += 1;
-      continue;
-    }
-
-    const editorBlock: string[] = [];
-    const diskBlock: string[] = [];
-    while (index < rows.length && rows[index]?.type !== 'equal') {
-      const changedRow = rows[index];
-      if (changedRow?.editorText !== undefined) editorBlock.push(changedRow.editorText);
-      if (changedRow?.diskText !== undefined) diskBlock.push(changedRow.diskText);
-      index += 1;
-    }
+  const editorBlock: string[] = [];
+  const diskBlock: string[] = [];
+  const flushChangedBlock = () => {
+    if (editorBlock.length === 0 && diskBlock.length === 0) return;
     mergedLines.push(
       '<<<<<<< Editor Version',
       ...editorBlock,
@@ -88,6 +76,19 @@ export function buildConflictMarkerDraft(editorContent: string, diskContent: str
       ...diskBlock,
       '>>>>>>> Disk Version',
     );
+    editorBlock.length = 0;
+    diskBlock.length = 0;
+  };
+
+  for (const row of computeConflictDiff(editorContent, diskContent)) {
+    if (row.type === 'equal') {
+      flushChangedBlock();
+      mergedLines.push(row.editorText ?? '');
+      continue;
+    }
+    if (row.editorText !== undefined) editorBlock.push(row.editorText);
+    if (row.diskText !== undefined) diskBlock.push(row.diskText);
   }
+  flushChangedBlock();
   return mergedLines.join('\n');
 }

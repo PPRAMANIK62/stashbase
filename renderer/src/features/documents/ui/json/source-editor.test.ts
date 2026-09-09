@@ -33,7 +33,7 @@ describe('JSON source editor', () => {
       onChange,
       readOnly: true,
     });
-    const view = EditorView.findFromDOM(host.querySelector('.cm-editor') as HTMLElement);
+    const view = EditorView.findFromDOM(host.querySelector('.cm-editor') as HTMLElement); // dom-contract: CodeMirror internals
     expect(view).not.toBeNull();
     expect(view?.state.facet(EditorState.readOnly)).toBe(true);
 
@@ -42,7 +42,7 @@ describe('JSON source editor', () => {
     expect(onChange).toHaveBeenCalledWith('{"broken": tru}\n');
 
     onChange.mockClear();
-    editor.applySourcePatch('{"still": "malformed"');
+    editor.applyContent('{"still": "malformed"');
     expect(view?.state.doc.toString()).toBe('{"still": "malformed"');
     expect(onChange).not.toHaveBeenCalled();
     expect(editor.find.setQuery('still', { caseSensitive: true, wholeWord: true })).toEqual({
@@ -51,7 +51,7 @@ describe('JSON source editor', () => {
     });
 
     editor.destroy();
-    expect(host.querySelector('.cm-editor')).toBeNull();
+    expect(host.querySelector('.cm-editor')).toBeNull(); // dom-contract: CodeMirror internals
   });
 
   it('closes JSON delimiters and indents between braces', () => {
@@ -62,7 +62,7 @@ describe('JSON source editor', () => {
       onChange: vi.fn(),
       readOnly: false,
     });
-    const view = EditorView.findFromDOM(host.querySelector('.cm-editor') as HTMLElement);
+    const view = EditorView.findFromDOM(host.querySelector('.cm-editor') as HTMLElement); // dom-contract: CodeMirror internals
     expect(view).not.toBeNull();
     if (!view) return;
 

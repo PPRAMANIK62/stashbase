@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { DocumentTextSaveResult } from '@/features/documents/domain/document';
+import { documentQueryScope, sourceApi, textSource } from '@/test/fakes/documents';
 
-import type { DocumentSourceApi } from './ports';
+import type { DocumentSourcePort } from './ports';
 import { createDocumentTabsRuntime } from './tabs-runtime';
 
 function idFactory() {
@@ -10,25 +11,17 @@ function idFactory() {
   return () => `tab-${++next}`;
 }
 
-function createQueries() {
-  return { cancel: vi.fn(async () => undefined), remove: vi.fn(), replaceSource: vi.fn() };
-}
-
-function createApi(): DocumentSourceApi {
-  return {
-    load: vi.fn(),
-    overwrite: vi.fn(),
-    save: vi.fn(async (_source, input) => ({
-      content: input.content,
-      format: 'md' as const,
-      version: 'saved',
-    })),
-  };
+function createApi(): DocumentSourcePort {
+  return sourceApi({
+    save: vi.fn<DocumentSourcePort['save']>(async (_source, input) =>
+      textSource({ content: input.content, version: 'saved' }),
+    ),
+  });
 }
 
 function makeDirty(runtime: ReturnType<typeof createDocumentTabsRuntime>, tabId: string) {
   const document = runtime.getDocument(tabId);
-  document?.reconcile({ content: 'before', format: 'md', version: 'v1' });
+  document?.reconcile(textSource({ content: 'before' }));
   document?.change('draft');
   return document;
 }
@@ -38,7 +31,7 @@ describe('Document tabs runtime', () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),
       createId: idFactory(),
-      createQueries,
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 3,
       restored: {
@@ -65,7 +58,7 @@ describe('Document tabs runtime', () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),
       createId,
-      createQueries,
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 1,
     });
@@ -83,7 +76,7 @@ describe('Document tabs runtime', () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),
       createId: idFactory(),
-      createQueries,
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 1,
     });
@@ -103,7 +96,7 @@ describe('Document tabs runtime', () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),
       createId: idFactory(),
-      createQueries,
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 1,
     });
@@ -138,13 +131,13 @@ describe('Document tabs runtime', () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),
       createId: idFactory(),
-      createQueries,
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 1,
     });
     const first = await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
     const second = await runtime.open({ folderPath: '/library/notes', path: 'two.md' });
-    const capturedScope = first?.scope;
+    const capturedScope = first?.capture();
     const completion = vi.fn();
 
     await runtime.close('tab-1');
@@ -159,21 +152,26 @@ describe('Document tabs runtime', () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),
       createId: idFactory(),
-      createQueries,
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 2,
     });
     const document = await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
     const completion = vi.fn();
 
-    expect(runtime.accept({ folderPath: '/library/notes', generation: 1 }, completion)).toBe(false);
+    expect(
+      runtime.accept(
+        { generation: 0, scope: { folderPath: '/library/notes', generation: 1 } },
+        completion,
+      ),
+    ).toBe(false);
     runtime.dispose();
     runtime.dispose();
 
     expect(runtime.signal.aborted).toBe(true);
     expect(document?.signal.aborted).toBe(true);
     expect(runtime.store.getState().lifecycle).toBe('disposed');
-    expect(runtime.accept(runtime.scope, completion)).toBe(false);
+    expect(runtime.accept({ generation: 0, scope: runtime.scope }, completion)).toBe(false);
     expect(completion).not.toHaveBeenCalled();
   });
 
@@ -181,7 +179,7 @@ describe('Document tabs runtime', () => {
     const runtime = createDocumentTabsRuntime({
       api: createApi(),
       createId: idFactory(),
-      createQueries,
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 1,
     });
@@ -194,17 +192,15 @@ describe('Document tabs runtime', () => {
   });
 
   it('keeps the current tab mounted when its save barrier fails', async () => {
-    const api: DocumentSourceApi = {
-      load: vi.fn(),
-      overwrite: vi.fn(),
+    const api = sourceApi({
       save: vi.fn(async () => {
         throw new Error('offline');
       }),
-    };
+    });
     const runtime = createDocumentTabsRuntime({
       api,
       createId: idFactory(),
-      createQueries,
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 1,
       restored: {
@@ -227,20 +223,18 @@ describe('Document tabs runtime', () => {
 
   it('waits for the latest live value before closing a dirty tab', async () => {
     const finishSaves: Array<(value: DocumentTextSaveResult) => void> = [];
-    const api: DocumentSourceApi = {
-      load: vi.fn(),
-      overwrite: vi.fn(),
+    const api = sourceApi({
       save: vi.fn(
         () =>
           new Promise<DocumentTextSaveResult>((resolve) => {
             finishSaves.push(resolve);
           }),
       ),
-    };
+    });
     const runtime = createDocumentTabsRuntime({
       api,
       createId: idFactory(),
-      createQueries,
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 1,
     });
@@ -252,9 +246,9 @@ describe('Document tabs runtime', () => {
     document?.change('newer draft');
     expect(document?.signal.aborted).toBe(false);
 
-    finishSaves.shift()?.({ content: 'draft', format: 'md', version: 'v2' });
+    finishSaves.shift()?.(textSource({ content: 'draft', version: 'v2' }));
     await vi.waitFor(() => expect(api.save).toHaveBeenCalledTimes(2));
-    finishSaves.shift()?.({ content: 'newer draft', format: 'md', version: 'v3' });
+    finishSaves.shift()?.(textSource({ content: 'newer draft', version: 'v3' }));
 
     await expect(closing).resolves.toBe(true);
     expect(document?.signal.aborted).toBe(true);
@@ -263,5 +257,54 @@ describe('Document tabs runtime', () => {
       { baseVersion: 'v2', content: 'newer draft' },
       expect.any(AbortSignal),
     );
+  });
+
+  it('retires a token once the open set has moved past it', async () => {
+    const runtime = createDocumentTabsRuntime({
+      api: createApi(),
+      createId: idFactory(),
+      createQueries: () => documentQueryScope(),
+      folderPath: '/library/notes',
+      generation: 1,
+    });
+    const captured = runtime.capture();
+    const completion = vi.fn();
+
+    await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
+
+    expect(runtime.accept(captured, completion)).toBe(false);
+    expect(runtime.accept(runtime.capture(), completion)).toBe(true);
+    expect(completion).toHaveBeenCalledOnce();
+  });
+
+  it('opens nothing when the save an open awaited outlives the collection', async () => {
+    const finishSaves: Array<(value: DocumentTextSaveResult) => void> = [];
+    const createId = vi.fn(idFactory());
+    const api = sourceApi({
+      save: vi.fn(
+        () =>
+          new Promise<DocumentTextSaveResult>((resolve) => {
+            finishSaves.push(resolve);
+          }),
+      ),
+    });
+    const runtime = createDocumentTabsRuntime({
+      api,
+      createId,
+      createQueries: () => documentQueryScope(),
+      folderPath: '/library/notes',
+      generation: 1,
+    });
+    await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
+    makeDirty(runtime, 'tab-1');
+
+    const opening = runtime.open({ folderPath: '/library/notes', path: 'two.md' });
+    await vi.waitFor(() => expect(api.save).toHaveBeenCalledOnce());
+    runtime.dispose();
+    finishSaves.shift()?.(textSource({ content: 'draft', version: 'v2' }));
+
+    await expect(opening).resolves.toBeNull();
+    expect(createId).toHaveBeenCalledOnce();
+    expect(runtime.store.getState().tabs).toMatchObject([{ id: 'tab-1' }]);
   });
 });

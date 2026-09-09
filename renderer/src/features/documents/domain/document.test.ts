@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 
+import { textSource } from '@/test/fakes/documents';
+
 import {
   acceptDocumentSave,
   beginDocumentSave,
@@ -9,6 +11,7 @@ import {
   documentEditorText,
   disposeDocumentState,
   enterDocumentConflict,
+  isDocumentDirty,
   reconcileDocumentSource,
   sameSource,
   setDocumentJsonSession,
@@ -123,16 +126,15 @@ describe('document identity', () => {
       id: 'tab-1',
       source: { folderPath: '/library/notes', path: 'notes.txt' },
     };
-    const loaded = reconcileDocumentSource(createDocumentState(scope, 'editable'), {
-      content: '\uFEFFone\r\ntwo\r\n',
-      format: 'txt',
-      version: 'v1',
-    });
+    const loaded = reconcileDocumentSource(
+      createDocumentState(scope, 'editable'),
+      textSource({ content: '\uFEFFone\r\ntwo\r\n', format: 'txt' }),
+    );
 
     expect(documentEditorText('one\rtwo\r\n')).toBe('one\ntwo\n');
     expect(loaded.editor).toMatchObject({
       baseline: '\uFEFFone\ntwo\n',
-      dirty: false,
+      save: { kind: 'clean' },
       value: '\uFEFFone\ntwo\n',
       version: 'v1',
     });
@@ -144,25 +146,23 @@ describe('document identity', () => {
       id: 'tab-1',
       source: { folderPath: '/library/notes', path: 'plan.md' },
     };
-    let state = reconcileDocumentSource(createDocumentState(scope, 'editable'), {
-      content: 'one\r\n',
-      format: 'md',
-      version: 'v1',
-    });
+    let state = reconcileDocumentSource(
+      createDocumentState(scope, 'editable'),
+      textSource({ content: 'one\r\n' }),
+    );
     state = changeDocumentText(state, 'first edit\n');
     const capturedRevision = state.editor?.revision ?? -1;
     state = beginDocumentSave(state);
     state = changeDocumentText(state, 'newer edit\n');
-    state = acceptDocumentSave(state, capturedRevision, {
-      content: 'first edit\r\n',
-      format: 'md',
-      version: 'v2',
-    });
+    state = acceptDocumentSave(
+      state,
+      capturedRevision,
+      textSource({ content: 'first edit\r\n', version: 'v2' }),
+    );
 
     expect(state.editor).toMatchObject({
       baseline: 'first edit\n',
-      dirty: true,
-      savePhase: 'unsaved',
+      save: { kind: 'dirty' },
       value: 'newer edit\n',
       version: 'v2',
     });
@@ -174,31 +174,27 @@ describe('document identity', () => {
       id: 'tab-1',
       source: { folderPath: '/library/notes', path: 'plan.md' },
     };
-    let state = reconcileDocumentSource(createDocumentState(scope, 'editable'), {
-      content: 'before',
-      format: 'md',
-      version: 'v1',
-    });
-    state = changeDocumentText(state, 'draft');
-    state = enterDocumentConflict(
-      state,
-      { content: 'newer disk', format: 'md', version: 'v2' },
-      'changed on disk',
+    let state = reconcileDocumentSource(
+      createDocumentState(scope, 'editable'),
+      textSource({ content: 'before' }),
     );
+    state = changeDocumentText(state, 'draft');
+    state = enterDocumentConflict(state, textSource({ content: 'newer disk', version: 'v2' }));
 
     expect(state.editor).toMatchObject({
-      conflictVersion: 'v2',
-      conflict: {
-        diskContent: 'newer disk',
-        diskVersion: 'v2',
-        editorContent: 'draft',
-        resolving: null,
+      save: {
+        conflict: {
+          diskContent: 'newer disk',
+          diskVersion: 'v2',
+          editorContent: 'draft',
+          resolutionMessage: null,
+          resolving: null,
+        },
+        kind: 'conflict',
       },
-      dirty: true,
-      saveMessage: 'changed on disk',
-      savePhase: 'conflict',
       value: 'draft',
       version: 'v1',
     });
+    expect(state.editor && isDocumentDirty(state.editor)).toBe(true);
   });
 });

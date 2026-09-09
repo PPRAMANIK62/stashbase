@@ -1,11 +1,12 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { createDocumentRuntime } from '@/features/documents/application/document-runtime';
 import { createDocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
-import type { DocxPreviewApi } from '@/features/documents/application/ports';
+import type { DocxPreviewPort } from '@/features/documents/application/ports';
+import { documentQueryScope, docxPreviewApi } from '@/test/fakes/documents';
+import { createTestQueryClient, withQueryClient } from '@/test/query';
 
 import { DocxDocument } from './document';
 
@@ -16,35 +17,30 @@ const resource = {
   version: 'one',
 };
 
-function renderDocument(api: DocxPreviewApi) {
+function renderDocument(api: DocxPreviewPort) {
   const runtime = createDocumentRuntime({
     activeFolderPath: '/library',
     generation: 1,
     id: 'tab-1',
-    queries: {
-      cancel: vi.fn(async () => undefined),
-      remove: vi.fn(),
-      replaceSource: vi.fn(),
-    },
+    queries: documentQueryScope(),
     source: { folderPath: '/library', path: 'documents/report.docx' },
   });
   const navigation = createDocumentNavigationRuntime('tab-1');
   const onNavigate = vi.fn();
   const onOpenExternal = vi.fn(async () => true);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <DocxDocument
-        active
-        api={api}
-        name="report.docx"
-        navigation={navigation}
-        onNavigate={onNavigate}
-        onOpenExternal={onOpenExternal}
-        resource={resource}
-        runtime={runtime}
-      />
-    </QueryClientProvider>,
+  const client = createTestQueryClient();
+  withQueryClient(
+    <DocxDocument
+      active
+      api={api}
+      name="report.docx"
+      navigation={navigation}
+      onNavigate={onNavigate}
+      onOpenExternal={onOpenExternal}
+      resource={resource}
+      runtime={runtime}
+    />,
+    client,
   );
   return { client, navigation, onNavigate, onOpenExternal, runtime };
 }
@@ -52,17 +48,16 @@ function renderDocument(api: DocxPreviewApi) {
 afterEach(() => cleanup());
 
 describe('DOCX document', () => {
-  it('renders sanitized worker output as a paper surface with Find, outline, and links', async () => {
-    const api: DocxPreviewApi = {
+  it('renders sanitized worker output with Find, outline, and links', async () => {
+    const api = docxPreviewApi({
       load: vi.fn(async () => ({
         html: '<h1>Quarterly report</h1><p>Local results</p><a href="notes.md">Notes</a>',
       })),
-    };
+    });
     const rendered = renderDocument(api);
     const document = await screen.findByRole('article', { name: 'report.docx document content' });
 
-    expect(document.className).toContain('max-w-[56rem]');
-    expect(document.parentElement?.className).toContain('bg-surface-2');
+    expect(document.textContent).toContain('Local results');
     await waitFor(() => expect(rendered.navigation.store.getState().find.available).toBe(true));
     await waitFor(() =>
       expect(rendered.navigation.store.getState().outline.headings).toEqual([
@@ -80,7 +75,9 @@ describe('DOCX document', () => {
   });
 
   it('keeps source identity visible and uses the prepared sandbox after direct failure', async () => {
-    const api: DocxPreviewApi = { load: vi.fn(async () => Promise.reject(new Error('broken'))) };
+    const api = docxPreviewApi({
+      load: vi.fn<DocxPreviewPort['load']>(async () => Promise.reject(new Error('broken'))),
+    });
     const rendered = renderDocument(api);
 
     expect(await screen.findByText(/Direct preview unavailable/u)).not.toBeNull();

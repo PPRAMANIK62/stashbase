@@ -1,8 +1,8 @@
-import { Expand, Maximize2, Minus, RefreshCw } from 'lucide-react';
+import { Expand, Maximize2, Minus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
 import type { DocumentAsset } from '@/features/documents/application/ports';
+import { AssetStatus } from '@/features/documents/ui/source/status';
 import {
   ViewerToolbar,
   ViewerToolbarButton,
@@ -71,7 +71,12 @@ export function ImageDocument({ name, resource }: { name: string; resource: Docu
       </ViewerToolbar>
       <div className="min-h-0 flex-1 overflow-auto" ref={viewportRef}>
         {loadFailed ? (
-          <ImageStatus failed name={name} retry={() => setLoadFailed(false)} />
+          <AssetStatus
+            detail="The image may have moved, changed, or become unavailable."
+            failed
+            name={name}
+            retry={() => setLoadFailed(false)}
+          />
         ) : (
           <div className="flex min-h-full min-w-full items-center justify-center px-6 pt-16 pb-6">
             <img
@@ -99,42 +104,6 @@ export function ImageDocument({ name, resource }: { name: string; resource: Docu
           src={resource.url}
         />
       )}
-    </div>
-  );
-}
-
-function ImageStatus({
-  failed = false,
-  name,
-  retry,
-}: {
-  failed?: boolean;
-  name: string;
-  retry?: () => void;
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <div>
-        <p className="text-body font-medium">
-          {failed ? `Could not open ${name}` : `Loading ${name}`}
-        </p>
-        {failed && (
-          <>
-            <p className="mt-1 text-caption text-muted-foreground" role="alert">
-              The image may have moved, changed, or become unavailable.
-            </p>
-            <Button
-              className="mt-4"
-              leadingIcon={RefreshCw}
-              onClick={retry}
-              size="compact"
-              variant="tertiary"
-            >
-              Retry
-            </Button>
-          </>
-        )}
-      </div>
     </div>
   );
 }

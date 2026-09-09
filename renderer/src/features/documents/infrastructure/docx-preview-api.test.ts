@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { DocxPreviewError } from '@/features/documents/application/ports';
 
-import { createDocxPreviewApi } from './docx-preview-api';
+import { createDocxPreviewAdapter } from './docx-preview-api';
 
 class FakeWorker {
   readonly listeners = {
@@ -40,7 +40,7 @@ describe('DOCX preview API', () => {
   it('transfers source bytes to one worker and returns its sanitized HTML', async () => {
     const worker = new FakeWorker();
     const bytes = new Uint8Array([80, 75, 3, 4]);
-    const api = createDocxPreviewApi({
+    const api = createDocxPreviewAdapter({
       createWorker: () => worker,
       fetchRequest: vi.fn(async () => new Response(bytes, { status: 200 })),
     });
@@ -59,7 +59,7 @@ describe('DOCX preview API', () => {
   it('terminates conversion on cancellation and classifies malformed worker replies', async () => {
     const cancelledWorker = new FakeWorker();
     const controller = new AbortController();
-    const cancelledApi = createDocxPreviewApi({
+    const cancelledApi = createDocxPreviewAdapter({
       createWorker: () => cancelledWorker,
       fetchRequest: vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 })),
     });
@@ -70,7 +70,7 @@ describe('DOCX preview API', () => {
     expect(cancelledWorker.terminate).toHaveBeenCalledOnce();
 
     const invalidWorker = new FakeWorker();
-    const invalidApi = createDocxPreviewApi({
+    const invalidApi = createDocxPreviewAdapter({
       createWorker: () => invalidWorker,
       fetchRequest: vi.fn(async () => new Response(new Uint8Array([1]), { status: 200 })),
     });
@@ -85,7 +85,7 @@ describe('DOCX preview API', () => {
 
   it('bounds a stalled direct preview independently from preparation', async () => {
     vi.useFakeTimers();
-    const api = createDocxPreviewApi({
+    const api = createDocxPreviewAdapter({
       fetchRequest: vi.fn(
         async (_input, init) =>
           new Promise<Response>((_resolve, reject) => {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { HttpClient } from '@/platform/http/client';
 
-import { createGenericFilePreviewApi } from './generic-preview-api';
+import { createGenericFilePreviewAdapter } from './generic-preview-api';
 
 describe('generic file preview API', () => {
   it('loads a bounded preview through its explicit member folder', async () => {
@@ -19,7 +19,7 @@ describe('generic file preview API', () => {
       })),
     };
     const signal = new AbortController().signal;
-    const api = createGenericFilePreviewApi(client);
+    const api = createGenericFilePreviewAdapter(client);
 
     await expect(
       api.load({ folderPath: '/library/source code', path: 'src/answer #1.ts' }, signal),
@@ -37,7 +37,7 @@ describe('generic file preview API', () => {
   });
 
   it('rejects mismatched identities and recognizes format-specific viewers', async () => {
-    const mismatched = createGenericFilePreviewApi({
+    const mismatched = createGenericFilePreviewAdapter({
       request: vi.fn(async () => ({
         body: { content: 'secret', kind: 'text', name: 'other.ts', size: 6 },
         status: 200,
@@ -50,7 +50,7 @@ describe('generic file preview API', () => {
       ),
     ).rejects.toMatchObject({ kind: 'invalid-response' });
 
-    const formatSpecific = createGenericFilePreviewApi({
+    const formatSpecific = createGenericFilePreviewAdapter({
       request: vi.fn(async () => ({
         body: { error: 'known document formats use the document read route' },
         status: 415,
@@ -65,7 +65,7 @@ describe('generic file preview API', () => {
   });
 
   it('classifies scope loss without exposing transport detail', async () => {
-    const api = createGenericFilePreviewApi({
+    const api = createGenericFilePreviewAdapter({
       request: vi.fn(async () => ({
         body: { code: 'FOLDER_UNAVAILABLE', error: '/private/folder is gone' },
         status: 410,

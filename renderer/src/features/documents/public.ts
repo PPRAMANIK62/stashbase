@@ -1,47 +1,21 @@
-export {
-  DocumentAssetError,
-  DocumentSaveError,
-  DocumentSourceError,
-  DocxPreviewError,
-  GenericFilePreviewError,
-  MediaError,
-  type DocumentAssetApi,
-  type DocumentAssetFailureKind,
-  type DocumentQueryScope,
-  type DocumentSaveFailureKind,
-  type DocumentSourceApi,
-  type DocumentSourceFailureKind,
-  type DocumentWindowLifecycle,
-  type DocxPreviewApi,
-  type DocxPreviewFailureKind,
-  type GenericFilePreviewApi,
-  type GenericFilePreviewFailureKind,
-  type MediaApi,
-  type MediaFailureKind,
-} from './application/ports';
+/**
+ * The Documents feature's whole surface to `renderer/src/app`.
+ *
+ * Everything here is imported by app composition; nothing else leaves the
+ * feature. The viewer registry, the save state, the format vocabulary, and
+ * every view below the workspace stay internal, so adding a format or
+ * reshaping the save lifecycle never reaches the shell. What only a test
+ * builds lives in `test-support.ts`.
+ */
 export { createDocumentQueryScope, refreshDocumentSources } from './application/queries';
-export {
-  createDocumentTabsRuntime,
-  type DocumentSessionProjection,
-  type DocumentTabsScope,
-  type DocumentTabsRuntime,
-} from './application/tabs-runtime';
+export { createDocumentTabsRuntime, type DocumentTabsRuntime } from './application/tabs-runtime';
 export type { DocumentRuntime } from './application/document-runtime';
-export {
-  createDocumentNavigationRuntime,
-  type DocumentFindController,
-  type DocumentNavigationRuntime,
-  type DocumentSearchTarget,
-  type FindMatchInfo,
-  type FindOptions,
-} from './application/navigation-runtime';
-export { createDocumentSourceApi } from './infrastructure/source-api';
-export { createDocumentAssetApi } from './infrastructure/asset-api';
-export { createDocxPreviewApi } from './infrastructure/docx-preview-api';
-export { createGenericFilePreviewApi } from './infrastructure/generic-preview-api';
-export { createMediaApi } from './infrastructure/media-api';
-export { createDocumentWindowLifecycle } from './infrastructure/window-lifecycle';
+export type { DocumentSearchTarget } from './application/navigation-runtime';
+export { createDocumentAdapters, type DocumentAdapters } from './infrastructure/adapters';
+export { useDocumentCommands } from './hooks/use-document-commands';
 export { useDocumentSaveBarrier } from './hooks/use-document-save-barrier';
-export { DocumentTabs, type DocumentTabsProps } from './ui/workspace/tabs';
+export { useHasOpenDocuments, useOpenDocumentSources } from './hooks/use-open-documents';
+export { DocumentTabs } from './ui/workspace/tabs';
 export { DocumentOutline } from './ui/workspace/outline';
-export { DocumentWorkspace, type DocumentWorkspaceProps } from './ui/workspace/workspace';
+export { DocumentWorkspace } from './ui/workspace/workspace';
+export type { DocumentNavigationTarget } from './ui/source/viewer';

@@ -1,11 +1,13 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type {
-  DocumentSourceApi,
-  DocumentWindowLifecycle,
-} from '@/features/documents/application/ports';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
+import {
+  documentQueryScope,
+  documentWindowLifecycle,
+  sourceApi,
+  textSource,
+} from '@/test/fakes/documents';
 
 import { useDocumentSaveBarrier } from './use-document-save-barrier';
 
@@ -14,29 +16,23 @@ afterEach(cleanup);
 describe('document native save barrier', () => {
   it('answers from the live runtime and retains a failed draft', async () => {
     const handlers: Array<() => boolean | Promise<boolean>> = [];
-    const lifecycle: DocumentWindowLifecycle = {
+    const lifecycle = documentWindowLifecycle({
       onPrepareContextRelease: vi.fn((handler) => {
         handlers.push(handler);
         return () => {
           handlers.splice(handlers.indexOf(handler), 1);
         };
       }),
-    };
-    const api: DocumentSourceApi = {
-      load: vi.fn(),
-      overwrite: vi.fn(),
+    });
+    const api = sourceApi({
       save: vi.fn(async () => {
         throw new Error('offline');
       }),
-    };
+    });
     const runtime = createDocumentTabsRuntime({
       api,
       createId: vi.fn(),
-      createQueries: () => ({
-        cancel: vi.fn(async () => undefined),
-        remove: vi.fn(),
-        replaceSource: vi.fn(),
-      }),
+      createQueries: () => documentQueryScope(),
       folderPath: '/library/notes',
       generation: 1,
       restored: {
@@ -45,7 +41,7 @@ describe('document native save barrier', () => {
       },
     });
     const document = runtime.getDocument('plan');
-    document?.reconcile({ content: 'before', format: 'md', version: 'v1' });
+    document?.reconcile(textSource({ content: 'before' }));
     document?.change('draft');
 
     const hook = renderHook(({ current }) => useDocumentSaveBarrier(current, lifecycle), {

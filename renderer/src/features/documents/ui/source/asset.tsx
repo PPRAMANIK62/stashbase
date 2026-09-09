@@ -1,177 +1,76 @@
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
-import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
+import { Suspense, useEffect, useRef, type ReactNode } from 'react';
 
-import { Button } from '@/components/ui/button';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
-import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
-import type {
-  DocumentAssetApi,
-  DocxPreviewApi,
-  MediaApi,
-} from '@/features/documents/application/ports';
+import type { DocumentAsset, DocumentAssetPort } from '@/features/documents/application/ports';
 import { documentAssetQuery } from '@/features/documents/application/queries';
-import type { DocumentViewerFormat } from '@/features/documents/domain/document-format';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-const DocxDocument = lazy(async () => {
-  const module = await import('@/features/documents/ui/docx/document');
-  return { default: module.DocxDocument };
-});
+import type { DocumentViewerStatus, PreparationSlotFormat, PreparedOnOpenFormat } from './viewer';
 
-const HtmlDocument = lazy(async () => {
-  const module = await import('@/features/documents/ui/html/document');
-  return { default: module.HtmlDocument };
-});
-
-const ImageDocument = lazy(async () => {
-  const module = await import('@/features/documents/ui/image/document');
-  return { default: module.ImageDocument };
-});
-
-const PdfDocument = lazy(async () => {
-  const module = await import('@/features/documents/ui/pdf/document');
-  return { default: module.PdfDocument };
-});
-
-const MediaDocument = lazy(async () => {
-  const module = await import('@/features/documents/ui/media/document');
-  return { default: module.MediaDocument };
-});
-
-function AssetStatus({
-  failed = false,
-  name,
-  retry,
-}: {
-  failed?: boolean;
-  name: string;
-  retry?: () => void;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <div>
-        <p className="text-body font-medium">
-          {failed ? `Could not open ${name}` : `Loading ${name}`}
-        </p>
-        {failed && (
-          <>
-            <p className="mt-1 text-caption text-muted-foreground" role="alert">
-              The file may have moved, changed, or become unavailable.
-            </p>
-            <Button
-              className="mt-4"
-              leadingIcon={RefreshCw}
-              onClick={retry}
-              size="compact"
-              variant="tertiary"
-            >
-              Retry
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
-  );
+/** The loaded asset, plus the retry a viewer offers when the bytes are not
+ *  the shape it can render. */
+interface AssetSurfaceSlot {
+  asset: DocumentAsset;
+  retry(): void;
 }
 
-export function AssetDocument({
+export interface AssetSurfaceProps {
+  active: boolean;
+  api: DocumentAssetPort;
+  children(slot: AssetSurfaceSlot): ReactNode;
+  name: string;
+  onOpenPrepared?: ((source: SourceReference, format: PreparedOnOpenFormat) => void) | undefined;
+  /** Opening this format is the explicit gesture that promotes preparation. */
+  prepareOnOpen?: PreparedOnOpenFormat | undefined;
+  /** Composes a preparation status row above the viewer. */
+  preparationSlot?: PreparationSlotFormat | undefined;
+  renderPreparation?:
+    | ((source: SourceReference, format: PreparationSlotFormat) => ReactNode)
+    | undefined;
+  runtime: DocumentRuntime;
+  status(status: DocumentViewerStatus): ReactNode;
+}
+
+/**
+ * The frame every byte-backed viewer shares: resolve the versioned asset URL,
+ * promote preparation once per open, and compose the preparation status row.
+ */
+export function AssetSurface({
   active,
   api,
-  docxPreviewApi,
-  format,
-  mediaApi,
+  children,
   name,
-  navigation,
-  onNavigate,
-  onOpenExternal,
   onOpenPrepared,
+  prepareOnOpen,
+  preparationSlot,
   renderPreparation,
   runtime,
-}: {
-  active: boolean;
-  api: DocumentAssetApi;
-  docxPreviewApi: DocxPreviewApi;
-  format: Exclude<DocumentViewerFormat, 'json' | 'md' | 'txt'>;
-  mediaApi: MediaApi;
-  name: string;
-  navigation: DocumentNavigationRuntime;
-  onNavigate(target: { anchor?: string; source: SourceReference }): void;
-  onOpenExternal(href: string): Promise<boolean>;
-  onOpenPrepared?(source: SourceReference, format: 'docx' | 'media'): void;
-  renderPreparation?(source: SourceReference, format: 'docx' | 'image' | 'pdf'): ReactNode;
-  runtime: DocumentRuntime;
-}) {
+  status,
+}: AssetSurfaceProps) {
   const asset = useQuery({ ...documentAssetQuery(api, runtime.scope), enabled: active });
   const source = runtime.scope.source;
 
-  // Opening is the explicit gesture that promotes DOCX and media preparation.
   // Fire once per mounted document, independent of the asset load.
   const openedRef = useRef(false);
   useEffect(() => {
-    if (openedRef.current || (format !== 'docx' && format !== 'media')) return;
+    if (openedRef.current || prepareOnOpen === undefined) return;
     openedRef.current = true;
-    onOpenPrepared?.(source, format);
-  }, [format, onOpenPrepared, source]);
+    onOpenPrepared?.(source, prepareOnOpen);
+  }, [onOpenPrepared, prepareOnOpen, source]);
 
-  if (asset.isPending) return <AssetStatus name={name} />;
+  const retry = () => void asset.refetch();
+  if (asset.isPending) return <>{status({ name })}</>;
   if (!asset.data || asset.isError) {
-    return <AssetStatus failed name={name} retry={() => void asset.refetch()} />;
+    return <>{status({ error: asset.error ?? new Error(name), name, retry })}</>;
   }
-  const preparation =
-    format === 'pdf' || format === 'image' || format === 'docx'
-      ? renderPreparation?.(source, format)
-      : null;
+
+  // The preparation row sits outside the boundary so it is readable while the
+  // viewer's own chunk is still arriving.
   return (
-    <Suspense fallback={<AssetStatus name={name} />}>
-      {preparation}
-      {format === 'image' ? (
-        <ImageDocument key={asset.data.version} name={name} resource={asset.data} />
-      ) : format === 'media' && asset.data.kind === 'media' ? (
-        <MediaDocument
-          active={active}
-          api={mediaApi}
-          key={asset.data.version}
-          name={name}
-          navigation={navigation}
-          resource={asset.data}
-          runtime={runtime}
-        />
-      ) : format === 'pdf' ? (
-        <PdfDocument
-          key={asset.data.version}
-          name={name}
-          navigation={navigation}
-          resource={asset.data}
-          runtime={runtime}
-        />
-      ) : format === 'html' ? (
-        <HtmlDocument
-          active={active}
-          key={asset.data.version}
-          name={name}
-          navigation={navigation}
-          onNavigate={onNavigate}
-          onOpenExternal={onOpenExternal}
-          resource={asset.data}
-          source={runtime.scope.source}
-          tabId={runtime.scope.id}
-        />
-      ) : asset.data.kind === 'docx' ? (
-        <DocxDocument
-          active={active}
-          api={docxPreviewApi}
-          key={asset.data.version}
-          name={name}
-          navigation={navigation}
-          onNavigate={onNavigate}
-          onOpenExternal={onOpenExternal}
-          resource={asset.data}
-          runtime={runtime}
-        />
-      ) : (
-        <AssetStatus failed name={name} retry={() => void asset.refetch()} />
-      )}
-    </Suspense>
+    <>
+      {preparationSlot === undefined ? null : renderPreparation?.(source, preparationSlot)}
+      <Suspense fallback={status({ name })}>{children({ asset: asset.data, retry })}</Suspense>
+    </>
   );
 }

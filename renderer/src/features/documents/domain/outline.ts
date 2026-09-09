@@ -27,11 +27,13 @@ export function buildDocumentOutline(headings: DocumentHeading[]): DocumentOutli
   const roots: DocumentOutlineNode[] = [];
   const ancestors: Array<{ level: number; node: DocumentOutlineNode }> = [];
   for (const heading of headings) {
-    while (ancestors.length > 0 && ancestors[ancestors.length - 1].level >= heading.level) {
+    let top = ancestors.at(-1);
+    while (top !== undefined && top.level >= heading.level) {
       ancestors.pop();
+      top = ancestors.at(-1);
     }
     const node: DocumentOutlineNode = { children: [], heading };
-    const parent = ancestors.at(-1)?.node;
+    const parent = top?.node;
     if (parent) parent.children.push(node);
     else roots.push(node);
     ancestors.push({ level: heading.level, node });
