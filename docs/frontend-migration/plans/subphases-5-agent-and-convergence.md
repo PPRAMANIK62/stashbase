@@ -16,13 +16,51 @@ invent source readiness, attachment, or mention behavior ahead of that owner.
 **Status:** Complete.
 
 Settings opens as a lazy responsive dialog whose section rail becomes a mobile
-drawer. Agents is the only live section; the rest show “Soon.” A pure runtime
-description drives staged setup, allowance, managed uninstall, and debug-gated
-bootstrap testing. React Query boundaries poll only while preparing and keep
-mutation failures at their owning control.
+drawer. Agents, General, AI Index, and Transcription are live; Appearance (task 61) and
+MCP (task 53) show “Soon.” A pure runtime description drives staged setup, allowance,
+managed uninstall, and debug-gated bootstrap testing. React Query boundaries
+poll only while preparing and keep mutation failures at their owning control.
+
+Every section is built from one row grammar owned by the settings feature: a
+pane title, titled groups, hairline lists, and rows of leading slot, title
+with one-line detail, and trailing control. A control inside a row never
+renders its own label, because the row title is the label. A setting that
+picks one of several options is a choice row whose radio sits in the leading
+slot, so the whole row is the option; short single-word options use a
+segmented control in the trailing slot instead. The modal has one ground and
+one shared tint for pressable or typeable controls: no card fills, no tinted
+notice rows, and the section rail sits on the page background. State reads as
+form (a dot-and-word chip, a bar, a red icon and title) rather than as colored
+sentences. The Fluid `RadioGroup` and `InputGroup` lists are not used inside
+Settings rows, since their fixed width and own labels were the cause of the
+duplicated labels, pill highlights, and squeezed model list in the first pass.
 
 Evidence: focused domain, adapter, hook, component, protocol, architecture,
 typecheck, lint, and renderer test checks.
+
+## 61 — Choose appearance preferences
+
+**Blocked by:** 12, 46.
+
+**Status:** Not started.
+
+Add the Appearance section to the Settings shell so a person can choose the
+theme (match system, light, dark), the interface size, and the reading text
+size as the same three presets the legacy panel offers. Each preference is one
+row on the task 46 grammar with a segmented control in the trailing slot; the
+presets are small single-word choices, so they never become choice rows. The
+section reads and writes the existing `AppearancePreferences` presets over the
+appearance HTTP route through a registered wire schema and a Settings-owned
+port. A change applies to the window at once through the stylesheet's forced
+theme classes and size scale, saves optimistically, and rolls back only when
+the newest write fails, so an older failed save never undoes a newer one. Other
+open windows follow through a renderer-side broadcast rather than server
+window context. Reading text size changes reading surfaces only; interface
+size changes chrome only. Applying the saved preferences before first paint at
+startup stays with task 59.
+
+Evidence: focused protocol, adapter, hook, component, architecture, typecheck,
+lint, and renderer test checks.
 
 ## 47 — Create and restore Agent sessions
 
