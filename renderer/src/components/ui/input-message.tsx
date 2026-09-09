@@ -98,6 +98,25 @@ interface InputMessageSlotContext {
 
 type InputMessageSlot = ReactNode | ((ctx: InputMessageSlotContext) => ReactNode);
 
+/** What a consumer-owned editor needs to stand in for the textarea. */
+interface InputMessageEditorContext {
+  value: string;
+  onValueChange(value: string): void;
+  /** Exactly what Enter does on the textarea: send, or queue while streaming. */
+  submit(): void;
+  disabled: boolean;
+  /** Already swapped to the drop hint while a file drag hovers. */
+  placeholder: string;
+  minRows: number;
+  maxRows: number;
+  /** The textarea's step typography, so the editor sits where typed text would. */
+  metrics: { fontSize: number; lineHeight: number; paddingX: number; paddingY: number };
+  ariaLabel: string;
+  ariaDescribedBy?: string;
+  /** Report keyboard-visible focus so the composer can draw its ring. */
+  onFocusChange(focused: boolean): void;
+}
+
 /** A message held in the queue while the assistant is responding. Carries the
  *  trimmed text plus a snapshot of the files attached when it was queued, so
  *  double-click-to-edit can restore both. `id` is a stable key minted on enqueue. */
@@ -150,6 +169,16 @@ interface InputMessageProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChan
   maxFiles?: number;
   /** Side of each preview tile in pixels. Defaults to 80. */
   filePreviewSize?: number;
+  /** Extra tiles rendered in the preview row ahead of the attached files,
+   *  for attachments the consumer binds itself (a library mention, say).
+   *  Pass it only when there is something to show; the row collapses when
+   *  both it and `files` are empty. */
+  previewSlot?: ReactNode;
+  /** Replace the textarea with a consumer-owned editor (a rich mention
+   *  field). The composer keeps its chrome: preview row, queue, slots, send
+   *  button, drop handling. History recall, suggestion navigation, the ghost
+   *  placeholder, and auto-resize are textarea behaviors and do not apply. */
+  editor?: (ctx: InputMessageEditorContext) => ReactNode;
   /** Extra props forwarded to the underlying textarea. */
   textareaProps?: Omit<
     TextareaHTMLAttributes<HTMLTextAreaElement>,
@@ -451,6 +480,8 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
       accept = DEFAULT_ACCEPT,
       maxFiles,
       filePreviewSize = 80,
+      previewSlot,
+      editor,
       textareaProps,
       status,
       onStop,
@@ -473,6 +504,15 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
     const isTouch = useIsTouch();
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const editorHostRef = useRef<HTMLDivElement>(null);
+    /** The one input, whichever renders: the textarea or the editor's field. */
+    const focusInput = useCallback(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        return;
+      }
+      editorHostRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+    }, []);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [focusVisible, setFocusVisible] = useState(false);
     const [dragOver, setDragOver] = useState(false);
@@ -642,7 +682,7 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
         onQueueChange?.([...queueRef.current, item]);
         onValueChange('');
         if (supportsFiles) onFilesChange?.([]);
-        requestAnimationFrame(() => textareaRef.current?.focus());
+        requestAnimationFrame(focusInput);
         return;
       }
       onSend?.(trimmed, filesArr);
@@ -657,6 +697,7 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
       onValueChange,
       supportsFiles,
       onFilesChange,
+      focusInput,
     ]);
 
     const handleStop = useCallback(() => onStop?.(), [onStop]);
@@ -691,13 +732,20 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
         }
         onQueueChange?.(queueRef.current.filter((q) => q.id !== item.id));
         requestAnimationFrame(() => {
+          focusInput();
           const el = textareaRef.current;
-          if (!el) return;
-          el.focus();
-          el.setSelectionRange(el.value.length, el.value.length);
+          el?.setSelectionRange(el.value.length, el.value.length);
         });
       },
-      [supportsQueue, supportsFiles, onValueChange, onFilesChange, maxFiles, onQueueChange],
+      [
+        supportsQueue,
+        supportsFiles,
+        onValueChange,
+        onFilesChange,
+        maxFiles,
+        onQueueChange,
+        focusInput,
+      ],
     );
 
     const removeQueued = useCallback(
@@ -858,9 +906,9 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
           return;
         }
         e.preventDefault();
-        textareaRef.current?.focus();
+        focusInput();
       },
-      [clickToFocus, disabled],
+      [clickToFocus, disabled, focusInput],
     );
 
     // ── File helpers ──────────────────────────────────────────────────
@@ -1029,7 +1077,7 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
               (no index) so removing the first file doesn't re-key — and
               remount — every surviving sibling. */}
           <AnimatePresence initial={false}>
-            {filesArr.length > 0 && (
+            {(filesArr.length > 0 || previewSlot != null) && (
               <motion.div
                 key="preview-row"
                 initial={{ height: 0, opacity: 0 }}
@@ -1039,6 +1087,7 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
                 className="overflow-hidden"
               >
                 <div ref={filesRegionRef} className="flex flex-wrap gap-2 pb-1">
+                  {previewSlot}
                   <AnimatePresence initial={false} mode="popLayout">
                     {filesArr.map((file, i) => (
                       <FilePreviewTile
@@ -1098,92 +1147,113 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
             </AnimatePresence>
           )}
 
-          <div className="relative">
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(e) => {
-                // Real typing exits history mode (recall sets the value
-                // programmatically, which doesn't fire onChange) and drops
-                // any suggestion highlight.
-                setHistoryIndex(null);
-                setActiveSuggestion(null);
-                onValueChange(e.target.value);
-              }}
-              onKeyDown={handleKeyDown}
-              // Compose the consumer's textareaProps handlers with the internal
-              // focus-visible tracking (the spread below would otherwise
-              // overwrite these).
-              onFocus={(e) => {
-                if (e.target.matches(':focus-visible')) setFocusVisible(true);
-                textareaProps?.onFocus?.(e);
-              }}
-              onBlur={(e) => {
-                setFocusVisible(false);
-                setActiveSuggestion(null);
-                textareaProps?.onBlur?.(e);
-              }}
-              placeholder={
-                dragOver && supportsFiles
-                  ? 'Drop files here to add to chat'
-                  : placeholderSuggestion
-                    ? undefined // the ghost overlay below renders it
-                    : placeholder
-              }
-              disabled={disabled}
-              rows={minRows}
-              aria-label={textareaProps?.['aria-label'] ?? 'Message'}
-              aria-describedby={
-                [showGhost ? ghostHintId : null, textareaDescribedBy].filter(Boolean).join(' ') ||
-                undefined
-              }
-              aria-activedescendant={
-                activeSuggestion != null ? `${suggestionListId}-${activeSuggestion}` : undefined
-              }
-              className={cn(
-                'w-full resize-none bg-transparent outline-none',
-                'text-foreground placeholder:text-muted-foreground',
-                compactStep
-                  ? 'px-1.5 py-1.5 text-[13px] leading-[18px]'
-                  : 'px-2 py-2 text-[14px] leading-5',
-              )}
-              style={{ fontVariationSettings: fontWeights.normal }}
-              {...restTextareaProps}
-            />
-            {/* Ghost placeholder: the suggested prompt with a Tab keycap. A
-                real overlay (not the native placeholder) so the keycap can
-                render inline after the text; typography mirrors the textarea
-                exactly so it sits where typed text will. */}
-            {showGhost && (
-              <div
-                aria-hidden="true"
+          {editor ? (
+            <div className="relative" ref={editorHostRef}>
+              {editor({
+                ariaDescribedBy: textareaDescribedBy,
+                ariaLabel: textareaProps?.['aria-label'] ?? 'Message',
+                disabled: disabled ?? false,
+                maxRows,
+                metrics: compactStep
+                  ? { fontSize: 13, lineHeight: 18, paddingX: 6, paddingY: 6 }
+                  : { fontSize: 14, lineHeight: 20, paddingX: 8, paddingY: 8 },
+                minRows,
+                onFocusChange: setFocusVisible,
+                onValueChange,
+                placeholder:
+                  dragOver && supportsFiles ? 'Drop files here to add to chat' : placeholder,
+                submit: handleSend,
+                value,
+              })}
+            </div>
+          ) : (
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                value={value}
+                onChange={(e) => {
+                  // Real typing exits history mode (recall sets the value
+                  // programmatically, which doesn't fire onChange) and drops
+                  // any suggestion highlight.
+                  setHistoryIndex(null);
+                  setActiveSuggestion(null);
+                  onValueChange(e.target.value);
+                }}
+                onKeyDown={handleKeyDown}
+                // Compose the consumer's textareaProps handlers with the internal
+                // focus-visible tracking (the spread below would otherwise
+                // overwrite these).
+                onFocus={(e) => {
+                  if (e.target.matches(':focus-visible')) setFocusVisible(true);
+                  textareaProps?.onFocus?.(e);
+                }}
+                onBlur={(e) => {
+                  setFocusVisible(false);
+                  setActiveSuggestion(null);
+                  textareaProps?.onBlur?.(e);
+                }}
+                placeholder={
+                  dragOver && supportsFiles
+                    ? 'Drop files here to add to chat'
+                    : placeholderSuggestion
+                      ? undefined // the ghost overlay below renders it
+                      : placeholder
+                }
+                disabled={disabled}
+                rows={minRows}
+                aria-label={textareaProps?.['aria-label'] ?? 'Message'}
+                aria-describedby={
+                  [showGhost ? ghostHintId : null, textareaDescribedBy].filter(Boolean).join(' ') ||
+                  undefined
+                }
+                aria-activedescendant={
+                  activeSuggestion != null ? `${suggestionListId}-${activeSuggestion}` : undefined
+                }
                 className={cn(
-                  'pointer-events-none absolute inset-0 overflow-hidden text-muted-foreground',
-                  // Mirror the textarea's step typography exactly so the ghost
-                  // sits where typed text will.
+                  'w-full resize-none bg-transparent outline-none',
+                  'text-foreground placeholder:text-muted-foreground',
                   compactStep
                     ? 'px-1.5 py-1.5 text-[13px] leading-[18px]'
                     : 'px-2 py-2 text-[14px] leading-5',
                 )}
                 style={{ fontVariationSettings: fontWeights.normal }}
-              >
-                <span>{placeholderSuggestion}</span>{' '}
-                <kbd
+                {...restTextareaProps}
+              />
+              {/* Ghost placeholder: the suggested prompt with a Tab keycap. A
+                real overlay (not the native placeholder) so the keycap can
+                render inline after the text; typography mirrors the textarea
+                exactly so it sits where typed text will. */}
+              {showGhost && (
+                <div
+                  aria-hidden="true"
                   className={cn(
-                    'mx-0.5 inline-flex -translate-y-px items-center rounded-[5px] border border-border bg-background px-1 align-middle font-sans text-muted-foreground',
-                    compactStep ? 'h-4 text-[10px]' : 'h-[18px] text-[11px]',
+                    'pointer-events-none absolute inset-0 overflow-hidden text-muted-foreground',
+                    // Mirror the textarea's step typography exactly so the ghost
+                    // sits where typed text will.
+                    compactStep
+                      ? 'px-1.5 py-1.5 text-[13px] leading-[18px]'
+                      : 'px-2 py-2 text-[14px] leading-5',
                   )}
+                  style={{ fontVariationSettings: fontWeights.normal }}
                 >
-                  Tab
-                </kbd>
-              </div>
-            )}
-            {showGhost && (
-              <span id={ghostHintId} className="sr-only">
-                Suggested prompt: {placeholderSuggestion}. Press Tab to fill the composer with it.
-              </span>
-            )}
-          </div>
+                  <span>{placeholderSuggestion}</span>{' '}
+                  <kbd
+                    className={cn(
+                      'mx-0.5 inline-flex -translate-y-px items-center rounded-[5px] border border-border bg-background px-1 align-middle font-sans text-muted-foreground',
+                      compactStep ? 'h-4 text-[10px]' : 'h-[18px] text-[11px]',
+                    )}
+                  >
+                    Tab
+                  </kbd>
+                </div>
+              )}
+              {showGhost && (
+                <span id={ghostHintId} className="sr-only">
+                  Suggested prompt: {placeholderSuggestion}. Press Tab to fill the composer with it.
+                </span>
+              )}
+            </div>
+          )}
           <div
             className={cn(
               'flex items-center justify-between',
@@ -1348,5 +1418,10 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
 InputMessage.displayName = 'InputMessage';
 
 export { InputMessage };
-export type { InputMessageProps, InputMessageSlotContext, QueuedMessage };
+export type {
+  InputMessageEditorContext,
+  InputMessageProps,
+  InputMessageSlotContext,
+  QueuedMessage,
+};
 export default InputMessage;
