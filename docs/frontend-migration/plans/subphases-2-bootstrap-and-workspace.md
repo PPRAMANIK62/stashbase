@@ -132,11 +132,34 @@ focus behavior remain distinct. Opening selected documents remains with the
 document-runtime tasks; folder loss/removal and restored expansion/selection
 remain Tasks 27–28.
 
+Follow-up (2026-09-09): the tree now carries the explicit entry operations
+the Workspace area promises. One context menu serves the tree and the empty
+sidebar space below it down to the footer: that space offers New file and New
+folder at the root, a
+folder row offers them inside itself plus Rename and Delete, a file row offers
+Rename and Delete (and Reprocess when its preparation needs the user), and a
+restricted row keeps only the platform reveal. New entries and renames are
+named inline in the row's own geometry, with the draft placed first under its
+parent, a file's stem preselected, and a bad name explained beside the field
+before any request; double click and F2 rename the way the Chats tree does,
+while a single click still acts at once so a folder toggle never waits. Delete asks for confirmation and names the path. Every mutation is
+folder-explicit: the adapter sends `?folder=` and the server refuses a folder
+that is no longer the window's with `409 FOLDER_CHANGED`. Before a rename or
+delete, the shell saves and closes the open documents under the entry; a
+failed save keeps the entry where it is, and a rename reopens the documents
+at their new paths. Expansion and selection move with a renamed entry and
+leave with a deleted one before the listing refetches. Cascade rewriting of
+links stays on by default with no per-rename preview yet, and Move to… is
+still deferred; the server keeps its Markdown-first rule for new files, so a
+name without a note extension gains `.md`.
+
 Evidence: `renderer/src/features/workspace/domain/tree.test.ts`,
 `renderer/src/features/workspace/domain/workspace.test.ts`,
 `renderer/src/features/workspace/infrastructure/files-api.test.ts`,
 `renderer/src/features/workspace/ui/file-tree.test.tsx`,
-`renderer/src/platform/electron/file-manager.test.ts`, and
+`renderer/src/app/workflows/retire-documents.test.ts`,
+`renderer/src/platform/electron/file-manager.test.ts`,
+`server/routes/file-mutations.test.ts`, and
 `shared/protocols/http/files.test.ts`; `pnpm test:library-files`,
 `node --import tsx --test server/files.test.ts`, `pnpm test:protocols`,
 `pnpm test:renderer`, `pnpm typecheck`, `pnpm format:web`,
