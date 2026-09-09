@@ -61,6 +61,62 @@ export const workspaceRevealRequestSchema = z
   })
   .strict();
 
+/** One leaf name: no separators, no traversal, and something left once
+ *  trimmed. Whether the server keeps or completes an extension is the
+ *  server's rule; the wire only rules out names that could leave the parent. */
+export const workspaceEntryNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .refine((name) => !/[\\/]/u.test(name) && name !== '.' && name !== '..', {
+    message: 'entry names cannot contain separators',
+  });
+
+export const workspaceEntryKindSchema = z.enum(['file', 'folder']);
+
+/** Identity of one file or folder inside an explicit member folder. */
+export const workspaceEntryRequestSchema = z
+  .object({
+    folderPath: folderPathSchema,
+    kind: workspaceEntryKindSchema,
+    path: relativePathSchema,
+  })
+  .strict();
+
+export const workspaceCreateEntryRequestSchema = z
+  .object({
+    folderPath: folderPathSchema,
+    kind: workspaceEntryKindSchema,
+    name: workspaceEntryNameSchema,
+    /** Folder-relative parent; empty for the folder root. */
+    parentPath: z.string().trim().max(4096),
+  })
+  .strict();
+
+export const workspaceRenameEntryRequestSchema = z
+  .object({
+    folderPath: folderPathSchema,
+    kind: workspaceEntryKindSchema,
+    name: workspaceEntryNameSchema,
+    path: relativePathSchema,
+  })
+  .strict();
+
+/** The created or renamed entry's settled folder-relative path. File
+ *  routes answer with `name`, folder routes with `path`; both may carry
+ *  extra detail such as an index warning. */
+export const workspaceEntryPathResponseSchema = z
+  .object({ name: relativePathSchema.optional(), path: relativePathSchema.optional() })
+  .passthrough()
+  .refine((body) => body.name !== undefined || body.path !== undefined, {
+    message: 'name or path required',
+  });
+
+export const workspaceDeleteEntryResponseSchema = z
+  .object({ alreadyGone: z.boolean().optional() })
+  .passthrough();
+
 export const documentTextSourceRequestSchema = z
   .object({
     folderPath: folderPathSchema,
@@ -168,6 +224,11 @@ export const documentTextSaveFailureSchema = z
 
 export type WorkspaceFilesWire = z.infer<typeof workspaceFilesSchema>;
 export type WorkspaceRevealRequestWire = z.infer<typeof workspaceRevealRequestSchema>;
+export type WorkspaceEntryKindWire = z.infer<typeof workspaceEntryKindSchema>;
+export type WorkspaceEntryRequestWire = z.infer<typeof workspaceEntryRequestSchema>;
+export type WorkspaceCreateEntryRequestWire = z.infer<typeof workspaceCreateEntryRequestSchema>;
+export type WorkspaceRenameEntryRequestWire = z.infer<typeof workspaceRenameEntryRequestSchema>;
+export type WorkspaceEntryPathResponseWire = z.infer<typeof workspaceEntryPathResponseSchema>;
 export type DocumentTextSourceRequestWire = z.infer<typeof documentTextSourceRequestSchema>;
 export type DocumentTextSourceResponseWire = z.infer<typeof documentTextSourceResponseSchema>;
 export type GenericFilePreviewResponseWire = z.infer<typeof genericFilePreviewResponseSchema>;

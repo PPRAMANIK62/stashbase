@@ -10,7 +10,11 @@ import {
   documentTextSourceRequestSchema,
   documentTextSourceResponseSchema,
   genericFilePreviewResponseSchema,
+  workspaceCreateEntryRequestSchema,
+  workspaceDeleteEntryResponseSchema,
+  workspaceEntryPathResponseSchema,
   workspaceFilesSchema,
+  workspaceRenameEntryRequestSchema,
   workspaceRevealRequestSchema,
 } from './files.ts';
 
@@ -30,6 +34,63 @@ test('workspace reveal requires an explicit folder and relative entry identity',
     workspaceRevealRequestSchema.safeParse({ folderPath: '/library/notes', path: '' }).success,
     false,
   );
+});
+
+test('workspace entry mutations carry an explicit folder and one leaf name', () => {
+  assert.deepEqual(
+    workspaceCreateEntryRequestSchema.parse({
+      folderPath: '/library/notes',
+      kind: 'file',
+      name: ' Plan ',
+      parentPath: 'drafts',
+    }),
+    { folderPath: '/library/notes', kind: 'file', name: 'Plan', parentPath: 'drafts' },
+  );
+  assert.deepEqual(
+    workspaceRenameEntryRequestSchema.parse({
+      folderPath: '/library/notes',
+      kind: 'folder',
+      name: 'archive',
+      path: 'drafts',
+    }),
+    { folderPath: '/library/notes', kind: 'folder', name: 'archive', path: 'drafts' },
+  );
+  for (const name of ['', '  ', 'a/b', 'a\\b', '.', '..']) {
+    assert.equal(
+      workspaceCreateEntryRequestSchema.safeParse({
+        folderPath: '/library/notes',
+        kind: 'file',
+        name,
+        parentPath: '',
+      }).success,
+      false,
+      `name ${JSON.stringify(name)} must be rejected`,
+    );
+  }
+  assert.equal(
+    workspaceRenameEntryRequestSchema.safeParse({
+      folderPath: '',
+      kind: 'file',
+      name: 'Plan.md',
+      path: 'plan.md',
+    }).success,
+    false,
+  );
+});
+
+test('workspace entry responses settle on one path and tolerate route detail', () => {
+  assert.deepEqual(
+    workspaceEntryPathResponseSchema.parse({ linksUpdated: 2, name: 'drafts/Plan.md' }),
+    { linksUpdated: 2, name: 'drafts/Plan.md' },
+  );
+  assert.deepEqual(workspaceEntryPathResponseSchema.parse({ path: 'archive' }), {
+    path: 'archive',
+  });
+  assert.equal(workspaceEntryPathResponseSchema.safeParse({ ok: true }).success, false);
+  assert.deepEqual(workspaceDeleteEntryResponseSchema.parse({ alreadyGone: true }), {
+    alreadyGone: true,
+  });
+  assert.deepEqual(workspaceDeleteEntryResponseSchema.parse({}), {});
 });
 
 test('generic preview contracts distinguish strict text from truthful refusal states', () => {
