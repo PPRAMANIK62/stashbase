@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import type {
   DocumentAssetApi,
@@ -12,7 +12,11 @@ import { sourceName } from '@/features/documents/domain/document';
 import { documentTextFormat } from '@/features/documents/domain/document-format';
 import { retainMarkdownTabIds } from '@/features/documents/domain/markdown';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
-import { DocumentSource } from '@/features/documents/ui/source/document';
+import {
+  DocumentSource,
+  type PreparationSlotFormat,
+  type PreparedOnOpenFormat,
+} from '@/features/documents/ui/source/document';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { DocumentFind } from './find';
@@ -27,7 +31,12 @@ export interface DocumentWorkspaceProps {
   mediaApi: MediaApi;
   onNavigate?(target: { anchor?: string; source: SourceReference }): void;
   onOpenExternal?(href: string): Promise<boolean>;
+  /** Fired once when a DOCX or media document mounts so preparation can be
+   *  queued at interactive priority. Fire-and-forget. */
+  onOpenPrepared?(source: SourceReference, format: PreparedOnOpenFormat): void;
   onReveal(source: SourceReference, signal: AbortSignal): Promise<void>;
+  /** Composes a preparation status row above PDF, image, and DOCX viewers. */
+  renderPreparation?(source: SourceReference, format: PreparationSlotFormat): ReactNode;
   revealLabel: string;
   runtime: DocumentTabsRuntime;
   sourceApi: DocumentSourceApi;
@@ -40,7 +49,9 @@ export function DocumentWorkspace({
   mediaApi,
   onNavigate = ignoreNavigation,
   onOpenExternal = rejectExternalNavigation,
+  onOpenPrepared,
   onReveal,
+  renderPreparation,
   revealLabel,
   runtime,
   sourceApi,
@@ -98,7 +109,9 @@ export function DocumentWorkspace({
           navigation={runtime.navigation}
           onNavigate={onNavigate}
           onOpenExternal={onOpenExternal}
+          onOpenPrepared={onOpenPrepared}
           onReveal={onReveal}
+          renderPreparation={renderPreparation}
           revealLabel={revealLabel}
           runtime={document}
           sourceApi={sourceApi}

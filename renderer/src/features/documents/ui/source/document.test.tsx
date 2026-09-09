@@ -47,7 +47,9 @@ function renderSource(
     genericPreviewApi?: GenericFilePreviewApi;
     onNavigate?: Parameters<typeof DocumentWorkspace>[0]['onNavigate'];
     onOpenExternal?: Parameters<typeof DocumentWorkspace>[0]['onOpenExternal'];
+    onOpenPrepared?: Parameters<typeof DocumentWorkspace>[0]['onOpenPrepared'];
     onReveal?: Parameters<typeof DocumentWorkspace>[0]['onReveal'];
+    renderPreparation?: Parameters<typeof DocumentWorkspace>[0]['renderPreparation'];
   } = {},
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -84,7 +86,9 @@ function renderSource(
         }}
         onNavigate={options.onNavigate}
         onOpenExternal={options.onOpenExternal}
+        onOpenPrepared={options.onOpenPrepared}
         onReveal={options.onReveal ?? vi.fn(async () => undefined)}
+        renderPreparation={options.renderPreparation}
         revealLabel="Show in file manager"
         runtime={runtime}
         sourceApi={api}
@@ -204,6 +208,46 @@ describe('document text source', () => {
       expect(genericPreviewApi.load).not.toHaveBeenCalled();
     },
   );
+
+  it('queues DOCX and media preparation once on open and never for PDF', async () => {
+    const assetApi = { load: vi.fn(() => new Promise<never>(() => undefined)) };
+    for (const path of ['report.docx', 'interview.mp4', 'paper.pdf']) {
+      const onOpenPrepared = vi.fn();
+      renderSource(
+        { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() },
+        { folderPath: '/library/notes', path },
+        { assetApi, onOpenPrepared },
+      );
+      await waitFor(() => expect(assetApi.load).toHaveBeenCalled());
+      if (path === 'paper.pdf') expect(onOpenPrepared).not.toHaveBeenCalled();
+      else {
+        expect(onOpenPrepared).toHaveBeenCalledOnce();
+        expect(onOpenPrepared).toHaveBeenCalledWith(
+          { folderPath: '/library/notes', path },
+          path.endsWith('.docx') ? 'docx' : 'media',
+        );
+      }
+      cleanup();
+    }
+  });
+
+  it('composes the preparation row above a loaded PDF viewer', async () => {
+    const assetApi = {
+      load: vi.fn(async () => ({ kind: 'source' as const, url: 'blob:pdf', version: '1' })),
+    };
+    const renderPreparation = vi.fn(() => <p data-testid="preparation">Reading page 2…</p>);
+    renderSource(
+      { load: vi.fn(), overwrite: vi.fn(), save: vi.fn() },
+      { folderPath: '/library/notes', path: 'paper.pdf' },
+      { assetApi, renderPreparation },
+    );
+
+    expect(await screen.findByTestId('preparation')).not.toBeNull();
+    expect(renderPreparation).toHaveBeenCalledWith(
+      { folderPath: '/library/notes', path: 'paper.pdf' },
+      'pdf',
+    );
+  });
 
   it('opens strict JSON as a source-preserving tree and saves a structural edit', async () => {
     const original = '\uFEFF{\r\n  "title" : "before",\r\n  "items": [1, 2]\r\n}\r\n';

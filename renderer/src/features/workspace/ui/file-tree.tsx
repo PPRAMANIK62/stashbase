@@ -1,7 +1,10 @@
+import { ContextMenu } from '@base-ui/react/context-menu';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   ChevronDown,
   ChevronRight,
+  CircleAlert,
+  CircleSlash,
   ExternalLink,
   FileAudio,
   FileCode2,
@@ -13,6 +16,7 @@ import {
   Folder,
   LoaderCircle,
   RefreshCw,
+  TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -23,6 +27,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -65,15 +70,78 @@ const FILE_ICONS: Record<FileFormat, LucideIcon> = {
   txt: FileText,
 };
 
+/** Preparation states that need the user. Pending work stays unmarked. */
+export interface FileTreeRowMarker {
+  kind: 'blocked' | 'cancelled' | 'failed';
+  title: string;
+}
+
+const MARKER_ICONS: Record<FileTreeRowMarker['kind'], LucideIcon> = {
+  blocked: CircleAlert,
+  cancelled: CircleSlash,
+  failed: TriangleAlert,
+};
+
 export interface FileTreeProps {
   api: FilesApi;
   onOpenSource?: (source: SourceReference) => void;
+  /** Offered from the row context menu for failed or cancelled sources. */
+  onReprocess?: (source: SourceReference) => void;
   onScopeLost?: (scope: WorkspaceScope) => void;
   revealLabel: string;
+  /** Keyed by folder-relative file path. */
+  rowMarkers?: Readonly<Record<string, FileTreeRowMarker>>;
   runtime: WorkspaceRuntime;
 }
 
-export function FileTree({ api, onOpenSource, onScopeLost, revealLabel, runtime }: FileTreeProps) {
+function RowContextMenu({
+  children,
+  onReprocess,
+}: {
+  children: ReactNode;
+  onReprocess: () => void;
+}) {
+  const shape = useShape();
+  return (
+    <ContextMenu.Root>
+      <ContextMenu.Trigger className="relative z-10" role="none">
+        {children}
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Positioner className="z-50 outline-none">
+          <ContextMenu.Popup
+            className={cn(
+              'min-w-44 border border-border bg-surface-3 p-1 text-foreground shadow-surface-5 outline-none select-none',
+              shape.container,
+            )}
+          >
+            <ContextMenu.Item
+              className={cn(
+                'flex h-7 cursor-pointer items-center px-2 text-[12px] outline-none',
+                'focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)] data-[highlighted]:bg-hover',
+                shape.bg,
+              )}
+              onClick={onReprocess}
+              title="Rebuild the searchable version of this file"
+            >
+              Reprocess
+            </ContextMenu.Item>
+          </ContextMenu.Popup>
+        </ContextMenu.Positioner>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
+  );
+}
+
+export function FileTree({
+  api,
+  onOpenSource,
+  onReprocess,
+  onScopeLost,
+  revealLabel,
+  rowMarkers,
+  runtime,
+}: FileTreeProps) {
   const files = useFiles(runtime, api);
   const tree = useTree(runtime, files.data ?? EMPTY_LISTING);
   const reveal = useReveal(runtime, api);
@@ -273,6 +341,11 @@ export function FileTree({ api, onOpenSource, onScopeLost, revealLabel, runtime 
                 ? folderIsRestricted(row.node)
                 : fileIsRestricted(row.node);
             const generic = row.node.type === 'file' && row.node.format === 'generic';
+            const marker = row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined;
+            const reprocessable =
+              marker && marker.kind !== 'blocked' && onReprocess && !restricted
+                ? onReprocess
+                : null;
             const selected = tree.selectedPath === row.node.path;
             const proximityActive = activeIndex === index;
             const expanded = row.node.type === 'folder' && tree.expanded[row.node.path] === true;
@@ -280,7 +353,9 @@ export function FileTree({ api, onOpenSource, onScopeLost, revealLabel, runtime 
               ? `${row.node.name}, restricted, ${revealLabel}`
               : generic
                 ? `${row.node.name}, excluded from Search and automatic Chat context`
-                : row.node.name;
+                : marker
+                  ? `${row.node.name}, ${marker.title}`
+                  : row.node.name;
             const ItemIcon =
               row.node.type === 'folder'
                 ? restricted
@@ -290,8 +365,8 @@ export function FileTree({ api, onOpenSource, onScopeLost, revealLabel, runtime 
                     : ChevronRight
                 : FILE_ICONS[row.node.format];
 
-            return (
-              <div className="relative z-10" key={row.node.path} role="none">
+            const rowContent = (
+              <>
                 {Array.from({ length: Math.max(0, row.depth - 1) }, (_, level) => (
                   <span
                     aria-hidden="true"
@@ -342,13 +417,30 @@ export function FileTree({ api, onOpenSource, onScopeLost, revealLabel, runtime 
                       ? revealLabel
                       : generic
                         ? 'Search and automatic Chat context exclude this file.'
-                        : row.node.path
+                        : (marker?.title ?? row.node.path)
                   }
-                  trailingIcon={restricted ? ExternalLink : undefined}
+                  trailingIcon={
+                    restricted ? ExternalLink : marker ? MARKER_ICONS[marker.kind] : undefined
+                  }
                   variant="ghost"
                 >
                   {row.node.name}
                 </Button>
+              </>
+            );
+
+            return reprocessable ? (
+              <RowContextMenu
+                key={row.node.path}
+                onReprocess={() =>
+                  reprocessable({ folderPath: runtime.scope.folder.path, path: row.node.path })
+                }
+              >
+                {rowContent}
+              </RowContextMenu>
+            ) : (
+              <div className="relative z-10" key={row.node.path} role="none">
+                {rowContent}
               </div>
             );
           })}

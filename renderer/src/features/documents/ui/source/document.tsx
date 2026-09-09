@@ -1,5 +1,5 @@
 import { LoaderCircle } from 'lucide-react';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
@@ -26,6 +26,9 @@ const TextDocument = lazy(async () => {
   return { default: module.TextDocument };
 });
 
+export type PreparationSlotFormat = 'docx' | 'image' | 'pdf';
+export type PreparedOnOpenFormat = 'docx' | 'media';
+
 export interface DocumentSourceProps {
   active: boolean;
   assetApi: DocumentAssetApi;
@@ -35,7 +38,9 @@ export interface DocumentSourceProps {
   navigation: DocumentNavigationRuntime;
   onNavigate(target: { anchor?: string; source: SourceReference }): void;
   onOpenExternal(href: string): Promise<boolean>;
+  onOpenPrepared?(source: SourceReference, format: PreparedOnOpenFormat): void;
   onReveal(source: SourceReference, signal: AbortSignal): Promise<void>;
+  renderPreparation?(source: SourceReference, format: PreparationSlotFormat): ReactNode;
   revealLabel: string;
   runtime: DocumentRuntime;
   sourceApi: DocumentSourceApi;
@@ -62,7 +67,9 @@ export function DocumentSource({
   navigation,
   onNavigate,
   onOpenExternal,
+  onOpenPrepared,
   onReveal,
+  renderPreparation,
   revealLabel,
   runtime,
   sourceApi,
@@ -88,6 +95,8 @@ export function DocumentSource({
         navigation={navigation}
         onNavigate={onNavigate}
         onOpenExternal={onOpenExternal}
+        onOpenPrepared={onOpenPrepared}
+        renderPreparation={renderPreparation}
         runtime={runtime}
       />
     );

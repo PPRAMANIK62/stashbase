@@ -31,6 +31,8 @@ import { RemoveFolderDialog } from './remove-folder-dialog';
 
 export interface LibrarySidebarProps {
   api: LibraryApi;
+  /** True when preparation or the AI Index in the active folder needs the user. */
+  attention?: boolean;
   beforeFolderChange?: () => Promise<boolean>;
   folderPicker: LibraryFolderPicker;
   lifecycle: LibraryLifecycle;
@@ -38,6 +40,7 @@ export interface LibrarySidebarProps {
 
 export function LibrarySidebar({
   api,
+  attention = false,
   beforeFolderChange,
   folderPicker,
   lifecycle,
@@ -87,6 +90,14 @@ export function LibrarySidebar({
                   render={
                     <SidebarMenuButton icon={Folder} isActive>
                       {activeFolder.name}
+                      {attention && (
+                        <span
+                          className="ml-1.5 inline-flex size-1.5 shrink-0 rounded-full bg-destructive"
+                          data-folder-attention=""
+                        >
+                          <span className="sr-only">Needs attention</span>
+                        </span>
+                      )}
                       <ChevronsUpDown aria-hidden="true" className="ml-auto size-3.5 shrink-0" />
                     </SidebarMenuButton>
                   }

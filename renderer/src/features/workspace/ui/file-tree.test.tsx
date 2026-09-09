@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
@@ -55,7 +55,11 @@ const listing: WorkspaceListing = {
 
 const runtimes: WorkspaceRuntime[] = [];
 
-function renderTree(api: FilesApi, onOpenSource?: ComponentProps<typeof FileTree>['onOpenSource']) {
+function renderTree(
+  api: FilesApi,
+  onOpenSource?: ComponentProps<typeof FileTree>['onOpenSource'],
+  extra: Partial<Pick<ComponentProps<typeof FileTree>, 'onReprocess' | 'rowMarkers'>> = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -71,6 +75,7 @@ function renderTree(api: FilesApi, onOpenSource?: ComponentProps<typeof FileTree
   return render(
     <QueryClientProvider client={queryClient}>
       <FileTree
+        {...extra}
         api={api}
         onOpenSource={onOpenSource}
         revealLabel="Show in file manager"
@@ -199,6 +204,64 @@ describe('file tree', () => {
       'linked-file',
       expect.any(AbortSignal),
     );
+  });
+
+  it('marks rows that need attention and offers Reprocess from the context menu', async () => {
+    const api = filesApi({
+      ...listing,
+      files: [
+        ...listing.files,
+        {
+          availability: 'available',
+          format: 'pdf',
+          heading: '',
+          importedAt: '',
+          kind: 'regular',
+          path: 'paper.pdf',
+          size: 9,
+          snippet: '',
+        },
+        {
+          availability: 'available',
+          format: 'audio',
+          heading: '',
+          importedAt: '',
+          kind: 'regular',
+          path: 'talk.mp3',
+          size: 9,
+          snippet: '',
+        },
+      ],
+    });
+    const onReprocess = vi.fn();
+    renderTree(api, undefined, {
+      onReprocess,
+      rowMarkers: {
+        'paper.pdf': { kind: 'failed', title: 'File preparation failed.' },
+        'talk.mp3': { kind: 'blocked', title: 'Transcription setup is required.' },
+      },
+    });
+
+    const failed = await screen.findByRole('treeitem', {
+      name: 'paper.pdf, File preparation failed.',
+    });
+    expect(failed.getAttribute('title')).toBe('File preparation failed.');
+    expect(failed.querySelector('svg.lucide-triangle-alert')).not.toBeNull();
+    const blocked = screen.getByRole('treeitem', {
+      name: 'talk.mp3, Transcription setup is required.',
+    });
+    expect(blocked.querySelector('svg.lucide-circle-alert')).not.toBeNull();
+    expect(screen.getByRole('treeitem', { name: 'docs' }).getAttribute('title')).toBe('docs');
+
+    fireEvent.contextMenu(failed, { clientX: 12, clientY: 12 });
+    await userEvent.setup().click(await screen.findByRole('menuitem', { name: 'Reprocess' }));
+    expect(onReprocess).toHaveBeenCalledWith({
+      folderPath: '/library/research',
+      path: 'paper.pdf',
+    });
+
+    fireEvent.contextMenu(blocked, { clientX: 12, clientY: 12 });
+    expect(screen.queryByRole('menuitem', { name: 'Reprocess' })).toBeNull();
   });
 
   it('keeps initial rendering bounded and progressively reveals more rows', async () => {

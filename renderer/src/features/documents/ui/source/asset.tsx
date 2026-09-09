@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
@@ -85,6 +85,8 @@ export function AssetDocument({
   navigation,
   onNavigate,
   onOpenExternal,
+  onOpenPrepared,
+  renderPreparation,
   runtime,
 }: {
   active: boolean;
@@ -96,16 +98,33 @@ export function AssetDocument({
   navigation: DocumentNavigationRuntime;
   onNavigate(target: { anchor?: string; source: SourceReference }): void;
   onOpenExternal(href: string): Promise<boolean>;
+  onOpenPrepared?(source: SourceReference, format: 'docx' | 'media'): void;
+  renderPreparation?(source: SourceReference, format: 'docx' | 'image' | 'pdf'): ReactNode;
   runtime: DocumentRuntime;
 }) {
   const asset = useQuery({ ...documentAssetQuery(api, runtime.scope), enabled: active });
+  const source = runtime.scope.source;
+
+  // Opening is the explicit gesture that promotes DOCX and media preparation.
+  // Fire once per mounted document, independent of the asset load.
+  const openedRef = useRef(false);
+  useEffect(() => {
+    if (openedRef.current || (format !== 'docx' && format !== 'media')) return;
+    openedRef.current = true;
+    onOpenPrepared?.(source, format);
+  }, [format, onOpenPrepared, source]);
 
   if (asset.isPending) return <AssetStatus name={name} />;
   if (!asset.data || asset.isError) {
     return <AssetStatus failed name={name} retry={() => void asset.refetch()} />;
   }
+  const preparation =
+    format === 'pdf' || format === 'image' || format === 'docx'
+      ? renderPreparation?.(source, format)
+      : null;
   return (
     <Suspense fallback={<AssetStatus name={name} />}>
+      {preparation}
       {format === 'image' ? (
         <ImageDocument key={asset.data.version} name={name} resource={asset.data} />
       ) : format === 'media' && asset.data.kind === 'media' ? (

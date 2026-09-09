@@ -1,0 +1,52 @@
+import { describe, expect, it, vi } from 'vite-plus/test';
+
+import type { HttpClient } from '@/platform/http/client';
+
+import { createPreparationControlApi } from './control-api';
+
+const source = { folderPath: '/library/research', path: 'talks/keynote.mp3' };
+const signal = new AbortController().signal;
+
+describe('preparation control API', () => {
+  it('posts folder-explicit bodies and maps the reprocess mode', async () => {
+    const request = vi.fn(async () => ({ body: { mode: 'conversion', ok: true }, status: 200 }));
+    const mode = await createPreparationControlApi({ request }).reprocess(
+      source,
+      { language: 'en' },
+      signal,
+    );
+    expect(mode).toBe('conversion');
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: { folder: '/library/research', language: 'en', path: 'talks/keynote.mp3' },
+        method: 'POST',
+        path: '/api/files/reprocess',
+      }),
+    );
+  });
+
+  it('surfaces a blocked transcription runtime with the server reason', async () => {
+    const client: HttpClient = {
+      request: vi.fn(async () => ({
+        body: { code: 'TRANSCRIPTION_NOT_READY', error: 'Download the model first.' },
+        status: 409,
+      })),
+    };
+    await expect(
+      createPreparationControlApi(client).reprocess(source, {}, signal),
+    ).rejects.toMatchObject({ kind: 'blocked', message: 'Download the model first.' });
+  });
+
+  it('classifies unsupported prepare formats and returns the cancel outcome', async () => {
+    const unsupported: HttpClient = {
+      request: vi.fn(async () => ({ body: { error: 'only DOCX and media' }, status: 415 })),
+    };
+    await expect(
+      createPreparationControlApi(unsupported).prepare(source, signal),
+    ).rejects.toMatchObject({ kind: 'unsupported' });
+    const cancel: HttpClient = {
+      request: vi.fn(async () => ({ body: { cancelled: true, ok: true }, status: 200 })),
+    };
+    await expect(createPreparationControlApi(cancel).cancel(source, signal)).resolves.toBe(true);
+  });
+});

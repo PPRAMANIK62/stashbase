@@ -91,6 +91,24 @@ describe('library sidebar', () => {
     ).toBe('page');
   });
 
+  it('adds a non-color attention cue to the active folder when asked', async () => {
+    const activeLibrary: LibrarySnapshot = {
+      ...emptyLibrary,
+      activeFolder: { name: 'Research', path: '/library/research' },
+      members: [
+        { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/library/research' },
+      ],
+    };
+    renderLibrary({
+      attention: true,
+      folderPicker: { chooseFolder: vi.fn() },
+      api: { load: vi.fn(async () => activeLibrary), openFolder: vi.fn() },
+    });
+
+    const button = await screen.findByRole('button', { name: 'Research Needs attention' });
+    expect(button.querySelector('[data-folder-attention]')).not.toBeNull();
+  });
+
   it('exposes local retry after membership failure', async () => {
     const load = vi
       .fn<() => Promise<LibrarySnapshot>>()
