@@ -1,0 +1,10 @@
+{
+  "minTokens": 40,
+  "minLines": 8,
+  "threshold": 1,
+  "format": ["typescript", "tsx"],
+  "ignore": ["**/*.test.*", "**/*.stories.*", "**/node_modules/**"],
+  "reporters": ["console"],
+  "gitignore": true,
+  "exitCode": 1
+}

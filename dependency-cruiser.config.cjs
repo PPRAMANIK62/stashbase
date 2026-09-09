@@ -44,7 +44,18 @@ module.exports = {
       severity: 'error',
       comment: 'Code outside a feature may consume only that feature public.ts entry.',
       from: { pathNot: '^renderer/src/features/' },
-      to: { path: '^renderer/src/features/[^/]+/(?!public[.]ts$)' },
+      to: {
+        path: '^renderer/src/features/[^/]+/(?!public[.]ts$)',
+        pathNot: '^renderer/src/features/[^/]+/test-support[.]ts$',
+      },
+    },
+    {
+      name: 'test-support-is-test-only',
+      severity: 'error',
+      comment:
+        'A feature test-support module builds runtimes for tests; only a test file imports it.',
+      from: { pathNot: '[.]test[.]tsx?$' },
+      to: { path: '^renderer/src/features/[^/]+/test-support[.]ts$' },
     },
     {
       name: 'feature-public-only-from-app',
@@ -161,6 +172,49 @@ module.exports = {
           ...reactRuntimePaths,
         ],
       },
+    },
+    {
+      name: 'kit-does-not-reach-application-plumbing',
+      severity: 'error',
+      comment:
+        'lib/ is the kit infrastructure a primitive is built from; lib/runtime/ is application plumbing. The dependency runs one way, which is what keeps the kit installable without the application.',
+      from: { path: '^renderer/src/(?:components/|lib/(?!runtime/))' },
+      to: { path: '^renderer/src/lib/runtime/' },
+    },
+    {
+      name: 'contracts-are-mapped-at-the-boundary',
+      severity: 'error',
+      comment:
+        'Repository contract modules (@/contracts/*) are mapped where the renderer meets the host: a feature Adapter, the platform client, or dependency wiring.',
+      from: {
+        path: '^renderer/src/',
+        pathNot: [
+          '^renderer/src/features/[^/]+/infrastructure/',
+          '^renderer/src/platform/',
+          '^renderer/src/app/dependencies[.]ts$',
+        ],
+      },
+      to: {
+        path: '^shared/',
+        pathNot: ['^shared/protocols/', '^shared/file-formats[.]ts$'],
+      },
+    },
+    {
+      name: 'file-format-vocabulary-scope',
+      severity: 'error',
+      comment:
+        'shared/file-formats is the one registered contract vocabulary the shared kernel may restate; every other layer reaches it through the boundary.',
+      from: {
+        path: '^renderer/src/',
+        pathNot: [
+          '^renderer/src/features/[^/]+/infrastructure/',
+          '^renderer/src/platform/',
+          '^renderer/src/app/dependencies[.]ts$',
+          '^renderer/src/shared/',
+          '^renderer/src/features/[^/]+/domain/',
+        ],
+      },
+      to: { path: '^shared/file-formats[.]ts$' },
     },
     {
       name: 'renderer-does-not-import-implementation-trees',

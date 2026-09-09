@@ -2,7 +2,9 @@
 
 The migration proves approved behavior and architecture; it does not infer
 correctness from legacy parity, a successful build, or a visually similar
-screen.
+screen. The architecture gates that this evidence sits on top of — the layer
+model and every rule a command enforces — are specified in
+[Renderer Architecture](renderer-architecture.md).
 
 ## Evidence Layers
 

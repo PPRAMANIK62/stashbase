@@ -28,6 +28,7 @@ const architectureDeclaration = {
     { name: 'settings', productArea: 'Workspace / Agent Panel' },
     { name: 'workspace', productArea: 'Workspace' },
   ],
+  contractModules: [],
   wireSchemaModules: [],
 };
 
@@ -48,7 +49,17 @@ function fixture(context) {
   write(
     root,
     'renderer/tsconfig.json',
-    `${JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@/protocols/*': ['../shared/protocols/*'], '@/*': ['./src/*'] } } })}\n`,
+    `${JSON.stringify({
+      compilerOptions: {
+        baseUrl: '.',
+        paths: {
+          '@/protocols/*': ['../shared/protocols/*'],
+          '@/contracts/account': ['../shared/account.ts'],
+          '@/contracts/file-formats': ['../shared/file-formats.ts'],
+          '@/*': ['./src/*'],
+        },
+      },
+    })}\n`,
   );
   return root;
 }
@@ -92,6 +103,51 @@ test('the repository checker rejects legacy access and undeclared feature struct
   ]);
 });
 
+test('the declaration file is the only feature allowlist', (context) => {
+  const root = fixture(context);
+  write(
+    root,
+    'renderer/renderer-architecture.json',
+    `${JSON.stringify({ features: [{ name: 'timeline', productArea: 'Workspace' }], contractModules: [], wireSchemaModules: [] }, null, 2)}\n`,
+  );
+  write(root, 'renderer/src/features/timeline/public.ts', 'export const timeline = true;\n');
+
+  // A feature the checker has never heard of is approved by the declaration
+  // alone, and every feature the declaration drops is undeclared again.
+  assert.deepEqual(findRendererArchitectureViolations(root), []);
+
+  write(root, 'renderer/renderer-architecture.json', `${JSON.stringify({ features: [], contractModules: [], wireSchemaModules: [] }, null, 2)}\n`);
+  assert.deepEqual(findRendererArchitectureViolations(root), [
+    'renderer/src/features/timeline has no feature ownership declaration',
+  ]);
+});
+
+test('a duplicated or untyped feature declaration is rejected', (context) => {
+  const root = fixture(context);
+  write(
+    root,
+    'renderer/renderer-architecture.json',
+    `${JSON.stringify(
+      {
+        features: [
+          { name: 'workspace', productArea: 'Workspace' },
+          { name: 'workspace', productArea: 'Workspace' },
+          { name: 'documents' },
+        ],
+        contractModules: [],
+        wireSchemaModules: [],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  assert.deepEqual(findRendererArchitectureViolations(root), [
+    'renderer feature declarations require string name and productArea fields',
+    'renderer feature workspace is declared more than once',
+  ]);
+});
+
 test('repository wire imports must use a registered executable-schema module', (context) => {
   const root = fixture(context);
   write(root, 'shared/protocols/workspace.ts', 'export const schema = {};\n');
@@ -102,13 +158,176 @@ test('repository wire imports must use a registered executable-schema module', (
   );
 
   assert.deepEqual(findRendererArchitectureViolations(root), [
-    'renderer/src/app.ts imports an unregistered repository wire module @/protocols/workspace',
+    'renderer/src/app.ts imports an unregistered repository wire schema module @/protocols/workspace',
   ]);
 
   const registered = structuredClone(architectureDeclaration);
   registered.wireSchemaModules = ['shared/protocols/workspace.ts'];
   write(root, 'renderer/renderer-architecture.json', `${JSON.stringify(registered, null, 2)}\n`);
   assert.deepEqual(findRendererArchitectureViolations(root), []);
+});
+
+test('repository contract imports must use a registered contract module', (context) => {
+  const root = fixture(context);
+  write(root, 'shared/account.ts', 'export type Allowance = { seats: number };\n');
+  write(
+    root,
+    'renderer/src/features/workspace/infrastructure/api.ts',
+    "import type { Allowance } from '@/contracts/account';\nexport type { Allowance };\n",
+  );
+
+  assert.deepEqual(findRendererArchitectureViolations(root), [
+    'renderer/src/features/workspace/infrastructure/api.ts imports an unregistered repository contract module @/contracts/account',
+    'renderer/src/features/workspace/public.ts is required for an implemented feature',
+  ]);
+
+  const registered = structuredClone(architectureDeclaration);
+  registered.contractModules = ['shared/account.ts'];
+  write(root, 'renderer/renderer-architecture.json', `${JSON.stringify(registered, null, 2)}\n`);
+  write(root, 'renderer/src/features/workspace/public.ts', 'export const workspace = true;\n');
+  assert.deepEqual(findRendererArchitectureViolations(root), []);
+});
+
+test('a registered contract is imported only at the host boundary', (context) => {
+  const root = fixture(context);
+  write(root, 'shared/account.ts', 'export type Allowance = { seats: number };\n');
+  write(root, 'shared/file-formats.ts', "export const VIEWER = ['md'];\n");
+  const registered = structuredClone(architectureDeclaration);
+  registered.contractModules = ['shared/account.ts', 'shared/file-formats.ts'];
+  write(root, 'renderer/renderer-architecture.json', `${JSON.stringify(registered, null, 2)}\n`);
+  write(root, 'renderer/src/features/workspace/public.ts', 'export const workspace = true;\n');
+  // The boundary layers map a contract; the shared kernel restates the one
+  // registered vocabulary.
+  write(
+    root,
+    'renderer/src/features/workspace/infrastructure/api.ts',
+    "import type { Allowance } from '@/contracts/account';\nexport type { Allowance };\n",
+  );
+  write(root, 'renderer/src/platform/api/client.ts', "import '@/contracts/account';\n");
+  write(root, 'renderer/src/app/dependencies.ts', "import '@/contracts/account';\n");
+  write(root, 'renderer/src/shared/domain/formats.ts', "import '@/contracts/file-formats';\n");
+  // Every inner layer reaches it through the boundary instead, and a type-only
+  // import is the same import.
+  write(
+    root,
+    'renderer/src/features/workspace/application/ports.ts',
+    "import type { Allowance } from '@/contracts/account';\nexport type { Allowance };\n",
+  );
+  write(root, 'renderer/src/shared/domain/account.ts', "import '@/contracts/account';\n");
+
+  assert.deepEqual(findRendererArchitectureViolations(root), [
+    'renderer/src/features/workspace/application/ports.ts imports contract module @/contracts/account outside the host boundary; map it in features/*/infrastructure, platform, or app/dependencies.ts',
+    'renderer/src/shared/domain/account.ts imports contract module @/contracts/account outside the host boundary; map it in features/*/infrastructure, platform, or app/dependencies.ts',
+  ]);
+});
+
+test('a registered module is reached through the alias that matches its registry', (context) => {
+  const root = fixture(context);
+  write(root, 'shared/protocols/workspace.ts', 'export const schema = {};\n');
+  const registered = structuredClone(architectureDeclaration);
+  registered.wireSchemaModules = ['shared/protocols/workspace.ts'];
+  write(root, 'renderer/renderer-architecture.json', `${JSON.stringify(registered, null, 2)}\n`);
+  write(
+    root,
+    'renderer/src/app.ts',
+    "import { schema } from '@/contracts/protocols/workspace';\nexport { schema };\n",
+  );
+
+  assert.deepEqual(findRendererArchitectureViolations(root), [
+    'renderer/src/app.ts reaches a registered wire schema module through @/contracts/protocols/workspace; use the wire schema alias',
+  ]);
+});
+
+test('the declaration must carry both repository module registries', (context) => {
+  const root = fixture(context);
+  write(root, 'renderer/renderer-architecture.json', `${JSON.stringify({ features: [] }, null, 2)}\n`);
+
+  assert.deepEqual(findRendererArchitectureViolations(root), [
+    'renderer/renderer-architecture.json must declare a contractModules array',
+    'renderer/renderer-architecture.json must declare a wireSchemaModules array',
+  ]);
+});
+
+test('a feature may keep a test-support file beside its public entry', (context) => {
+  const root = fixture(context);
+  write(root, 'renderer/src/features/workspace/public.ts', 'export const workspace = true;\n');
+  write(root, 'renderer/src/features/workspace/test-support.ts', 'export const build = () => true;\n');
+
+  assert.deepEqual(findRendererArchitectureViolations(root), []);
+
+  fs.rmSync(path.join(root, 'renderer/src/features/workspace/test-support.ts'));
+  fs.mkdirSync(path.join(root, 'renderer/src/features/workspace/test-support.ts'));
+  assert.deepEqual(findRendererArchitectureViolations(root), [
+    'renderer/src/features/workspace/test-support.ts must be a file',
+  ]);
+});
+
+test('dependency-cruiser confines repository contracts to the host boundary', (context) => {
+  const root = fixture(context);
+  write(root, 'shared/account.ts', 'export const SEATS = 1;\n');
+  write(root, 'shared/file-formats.ts', "export const VIEWER = ['md'];\n");
+  // The cruiser reads the transpiled graph, so only value imports reach it;
+  // architecture.mjs is what holds the same boundary for `import type`.
+  write(
+    root,
+    'renderer/src/features/workspace/infrastructure/api.ts',
+    "import { SEATS } from '@/contracts/account';\nexport { SEATS };\n",
+  );
+  // The shared kernel may restate the one registered vocabulary.
+  write(
+    root,
+    'renderer/src/shared/domain/formats.ts',
+    "import { VIEWER } from '@/contracts/file-formats';\nexport { VIEWER };\n",
+  );
+  // An inner layer may not.
+  write(
+    root,
+    'renderer/src/features/workspace/domain/model.ts',
+    "import { SEATS } from '@/contracts/account';\nexport { SEATS };\n",
+  );
+  write(
+    root,
+    'renderer/src/features/workspace/ui/view.ts',
+    "import { VIEWER } from '@/contracts/file-formats';\nexport { VIEWER };\n",
+  );
+  write(root, 'renderer/src/features/workspace/public.ts', 'export const workspace = true;\n');
+
+  const result = runNodeTool(
+    dependencyCruiserBin,
+    ['--config', dependencyCruiserConfig, 'renderer/src'],
+    root,
+  );
+  assert.notEqual(result.status, 0, result.output);
+  assert.match(result.output, /contracts-are-mapped-at-the-boundary/);
+  assert.match(result.output, /file-format-vocabulary-scope/);
+  assert.doesNotMatch(result.output, /shared\/domain\/formats\.ts/);
+  assert.doesNotMatch(result.output, /infrastructure\/api\.ts/);
+});
+
+test('dependency-cruiser keeps a feature test-support module test-only', (context) => {
+  const root = fixture(context);
+  write(root, 'renderer/src/features/workspace/public.ts', 'export const workspace = true;\n');
+  write(root, 'renderer/src/features/workspace/test-support.ts', 'export const build = () => true;\n');
+  write(
+    root,
+    'renderer/src/features/workspace/ui/view.test.ts',
+    "import { build } from '@/features/workspace/test-support';\nexport { build };\n",
+  );
+  write(
+    root,
+    'renderer/src/app/boot.ts',
+    "import { build } from '@/features/workspace/test-support';\nexport { build };\n",
+  );
+
+  const result = runNodeTool(
+    dependencyCruiserBin,
+    ['--config', dependencyCruiserConfig, 'renderer/src'],
+    root,
+  );
+  assert.notEqual(result.status, 0, result.output);
+  assert.match(result.output, /test-support-is-test-only/);
+  assert.match(result.output, /app\/boot\.ts/);
+  assert.doesNotMatch(result.output, /feature-public-entry-only/);
 });
 
 test('dependency-cruiser accepts inward dependencies inside one feature', (context) => {

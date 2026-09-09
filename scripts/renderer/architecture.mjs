@@ -8,21 +8,36 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const sourceExtensions = new Set(['.css', '.html', '.js', '.jsx', '.json', '.mjs', '.ts', '.tsx']);
 const moduleExtensions = ['.js', '.jsx', '.mjs', '.ts', '.tsx'];
 const skippedDirectories = new Set(['dist', 'node_modules']);
+// A feature is exactly these entries. `public.ts` is the one entry other code
+// may import; `test-support.ts` is the optional test-only runtime builder,
+// reachable only from a `*.test.*` file.
+const featureFileEntries = new Set(['public.ts', 'test-support.ts']);
 const featureEntries = new Set([
   'application',
   'domain',
   'hooks',
   'infrastructure',
   'public.ts',
+  'test-support.ts',
   'ui',
 ]);
-const approvedFeatures = new Map([
-  ['agent', 'Agent Panel'],
-  ['documents', 'Documents'],
-  ['preparation', 'Preparation'],
-  ['retrieval', 'Search and Retrieval'],
-  ['settings', 'Workspace / Agent Panel'],
-  ['workspace', 'Workspace'],
+// Where a registered contract module may be imported. A contract crosses the
+// process boundary, so it is mapped where the renderer meets the host: a
+// feature Adapter, the platform client, or dependency wiring. dependency-cruiser
+// states the same rule, but it reads the transpiled graph where `import type`
+// has been erased, and a contract is imported for its types more often than
+// for its values — so the boundary is enforced here, over the source text.
+const contractBoundaries = [
+  /^renderer\/src\/features\/[^/]+\/infrastructure\//,
+  /^renderer\/src\/platform\//,
+  /^renderer\/src\/app\/dependencies\.ts$/,
+];
+// shared/file-formats is a vocabulary rather than a transport shape: the
+// renderer's shared kernel and feature domains name formats with it, so it
+// has two extra homes. Views and hooks reach it through their feature's
+// domain re-export.
+const contractVocabularies = new Map([
+  ['shared/file-formats.ts', /^renderer\/src\/(?:shared|features\/[^/]+\/domain)\//],
 ]);
 
 function slash(relativePath) {
@@ -44,7 +59,7 @@ function readDeclaration(root, violations) {
   const absolutePath = path.join(root, relativePath);
   if (!fs.existsSync(absolutePath)) {
     violations.push(`${relativePath} is required`);
-    return { features: [], wireSchemaModules: [] };
+    return { contractModules: [], features: [], wireSchemaModules: [] };
   }
 
   let declaration;
@@ -52,7 +67,7 @@ function readDeclaration(root, violations) {
     declaration = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
   } catch (error) {
     violations.push(`${relativePath} is not valid JSON: ${error.message}`);
-    return { features: [], wireSchemaModules: [] };
+    return { contractModules: [], features: [], wireSchemaModules: [] };
   }
 
   if (!Array.isArray(declaration.features)) {
@@ -61,8 +76,14 @@ function readDeclaration(root, violations) {
   if (!Array.isArray(declaration.wireSchemaModules)) {
     violations.push(`${relativePath} must declare a wireSchemaModules array`);
   }
+  if (!Array.isArray(declaration.contractModules)) {
+    violations.push(`${relativePath} must declare a contractModules array`);
+  }
 
   return {
+    contractModules: Array.isArray(declaration.contractModules)
+      ? declaration.contractModules
+      : [],
     features: Array.isArray(declaration.features) ? declaration.features : [],
     wireSchemaModules: Array.isArray(declaration.wireSchemaModules)
       ? declaration.wireSchemaModules
@@ -70,6 +91,9 @@ function readDeclaration(root, violations) {
   };
 }
 
+// renderer/renderer-architecture.json is the only allowlist. A feature exists
+// because it is declared there with an owning product area; this checker holds
+// no second copy of that list to drift from it.
 function checkFeatureDeclaration(root, features, violations) {
   const declared = new Map();
   for (const feature of features) {
@@ -86,17 +110,6 @@ function checkFeatureDeclaration(root, features, violations) {
       continue;
     }
     declared.set(feature.name, feature.productArea);
-  }
-
-  for (const [name, productArea] of approvedFeatures) {
-    if (declared.get(name) !== productArea) {
-      violations.push(`renderer feature ${name} must be owned by ${productArea}`);
-    }
-  }
-  for (const name of declared.keys()) {
-    if (!approvedFeatures.has(name)) {
-      violations.push(`renderer feature ${name} has no approved architecture owner`);
-    }
   }
 
   const featuresRoot = path.join(root, 'renderer', 'src', 'features');
@@ -119,9 +132,9 @@ function checkFeatureDeclaration(root, features, violations) {
     for (const entry of entries) {
       if (!featureEntries.has(entry.name)) {
         violations.push(`${relativeFeature}/${entry.name} is not an approved feature layer`);
-      } else if (entry.name === 'public.ts' && !entry.isFile()) {
-        violations.push(`${relativeFeature}/public.ts must be a file`);
-      } else if (entry.name !== 'public.ts' && !entry.isDirectory()) {
+      } else if (featureFileEntries.has(entry.name) && !entry.isFile()) {
+        violations.push(`${relativeFeature}/${entry.name} must be a file`);
+      } else if (!featureFileEntries.has(entry.name) && !entry.isDirectory()) {
         violations.push(`${relativeFeature}/${entry.name} must be a directory`);
       }
     }
@@ -131,22 +144,52 @@ function checkFeatureDeclaration(root, features, violations) {
   }
 }
 
-function checkWireSchemaDeclaration(root, wireSchemaModules, violations) {
-  const registered = new Set();
-  for (const modulePath of wireSchemaModules) {
+// Two registries, one allowlist. Executable wire schemas are reached through
+// `@/protocols/*`; the repository contract vocabularies the renderer shares
+// with the host — file formats, sanitization, agent runtime, agent protocol,
+// account — are reached through `@/contracts/*`. Both live under `shared/` at
+// the repository root, so both are registered in
+// renderer/renderer-architecture.json and neither is reachable by accident.
+function registerRepositoryModules(root, modules, kind, registered, violations) {
+  for (const modulePath of modules) {
     if (typeof modulePath !== 'string' || !/^shared\/.+\.(?:js|mjs|ts)$/.test(modulePath)) {
-      violations.push(`wire schema module ${String(modulePath)} must be a file under shared/`);
+      violations.push(`${kind} module ${String(modulePath)} must be a file under shared/`);
       continue;
     }
     if (registered.has(modulePath)) {
-      violations.push(`wire schema module ${modulePath} is registered more than once`);
+      violations.push(`${kind} module ${modulePath} is registered more than once`);
       continue;
     }
-    registered.add(modulePath);
+    registered.set(modulePath, kind);
     if (!fs.existsSync(path.join(root, modulePath))) {
-      violations.push(`registered wire schema module ${modulePath} does not exist`);
+      violations.push(`registered ${kind} module ${modulePath} does not exist`);
     }
   }
+}
+
+function resolveRepositoryImport(specifier, sharedRoot, absolute) {
+  if (specifier.startsWith('@/protocols/')) {
+    return {
+      kind: 'wire schema',
+      target: path.join(sharedRoot, 'protocols', specifier.slice('@/protocols/'.length)),
+    };
+  }
+  if (specifier.startsWith('@/contracts/')) {
+    return {
+      kind: 'contract',
+      target: path.join(sharedRoot, specifier.slice('@/contracts/'.length)),
+    };
+  }
+  if (specifier.startsWith('.')) {
+    return { kind: null, target: path.resolve(path.dirname(absolute), specifier) };
+  }
+  return null;
+}
+
+function checkRepositoryModuleDeclaration(root, declaration, violations) {
+  const registered = new Map();
+  registerRepositoryModules(root, declaration.wireSchemaModules, 'wire schema', registered, violations);
+  registerRepositoryModules(root, declaration.contractModules, 'contract', registered, violations);
 
   const rendererRoot = path.join(root, 'renderer');
   const sharedRoot = path.join(root, 'shared');
@@ -157,28 +200,42 @@ function checkWireSchemaDeclaration(root, wireSchemaModules, violations) {
     for (const match of source.matchAll(importPattern)) {
       const specifier = match.groups?.specifier;
       if (!specifier) continue;
-      const resolved = specifier.startsWith('@/protocols/')
-        ? path.join(sharedRoot, 'protocols', specifier.slice('@/protocols/'.length))
-        : specifier.startsWith('.')
-          ? path.resolve(path.dirname(absolute), specifier)
-          : null;
-      if (!resolved) continue;
-      const isSharedImport =
-        resolved === sharedRoot || resolved.startsWith(`${sharedRoot}${path.sep}`);
+      const resolution = resolveRepositoryImport(specifier, sharedRoot, absolute);
+      if (!resolution) continue;
+      const { target } = resolution;
+      const isSharedImport = target === sharedRoot || target.startsWith(`${sharedRoot}${path.sep}`);
       if (!isSharedImport) continue;
 
       const candidates = [
-        resolved,
-        ...moduleExtensions.map((extension) => `${resolved}${extension}`),
-        ...moduleExtensions.map((extension) => path.join(resolved, `index${extension}`)),
+        target,
+        ...moduleExtensions.map((extension) => `${target}${extension}`),
+        ...moduleExtensions.map((extension) => path.join(target, `index${extension}`)),
       ];
-      const registeredPath = candidates
-        .map((candidate) => slash(path.relative(root, candidate)))
-        .find((candidate) => registered.has(candidate));
-      if (!registeredPath) {
+      const registeredKind = candidates
+        .map((candidate) => registered.get(slash(path.relative(root, candidate))))
+        .find((kind) => kind !== undefined);
+      const relative = slash(path.relative(root, absolute));
+      if (registeredKind === undefined) {
         violations.push(
-          `${slash(path.relative(root, absolute))} imports an unregistered repository wire module ${specifier}`,
+          `${relative} imports an unregistered repository ${resolution.kind ?? 'wire schema'} module ${specifier}`,
         );
+      } else if (resolution.kind !== null && registeredKind !== resolution.kind) {
+        violations.push(
+          `${relative} reaches a registered ${registeredKind} module through ${specifier}; use the ${registeredKind} alias`,
+        );
+      } else if (registeredKind === 'contract') {
+        const registeredPath = candidates
+          .map((candidate) => slash(path.relative(root, candidate)))
+          .find((candidate) => registered.has(candidate));
+        const vocabularyHome = contractVocabularies.get(registeredPath);
+        const allowed =
+          contractBoundaries.some((boundary) => boundary.test(relative)) ||
+          (vocabularyHome !== undefined && vocabularyHome.test(relative));
+        if (!allowed) {
+          violations.push(
+            `${relative} imports contract module ${specifier} outside the host boundary; map it in features/*/infrastructure, platform, or app/dependencies.ts`,
+          );
+        }
       }
     }
   }
@@ -188,7 +245,7 @@ export function findRendererArchitectureViolations(root = repositoryRoot) {
   const violations = [];
   const declaration = readDeclaration(root, violations);
   checkFeatureDeclaration(root, declaration.features, violations);
-  checkWireSchemaDeclaration(root, declaration.wireSchemaModules, violations);
+  checkRepositoryModuleDeclaration(root, declaration, violations);
 
   const sharedTypes = path.join(root, 'renderer', 'src', 'shared', 'types');
   if (fs.existsSync(sharedTypes)) {

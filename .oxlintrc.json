@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "react", "import", "jsx-a11y"],
+  "plugins": ["typescript", "unicorn", "oxc", "react", "import", "jsx-a11y", "vitest"],
   "categories": {
     "correctness": "error",
     "suspicious": "warn",
@@ -8,25 +8,33 @@
   },
   "rules": {
     "react/react-in-jsx-scope": "off",
-    "react/exhaustive-deps": "warn",
+    "react/exhaustive-deps": "error",
+    "react/rules-of-hooks": "error",
     "import/no-unassigned-import": "off",
     "import/default": "off",
     "eslint/no-await-in-loop": "off",
     "unicorn/filename-case": "error",
+    "typescript/no-non-null-assertion": "error",
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/expect-expect": [
+      "error",
+      { "assertFunctionNames": ["expect*", "assert", "assertType"] }
+    ],
+    "vitest/valid-expect": "off",
 
     "jsx-a11y/prefer-tag-over-role": "off",
-    "jsx-a11y/aria-activedescendant-has-tabindex": "warn",
-    "jsx-a11y/click-events-have-key-events": "warn",
-    "jsx-a11y/control-has-associated-label": "warn",
-    "jsx-a11y/img-redundant-alt": "warn",
-    "jsx-a11y/interactive-supports-focus": "warn",
-    "jsx-a11y/label-has-associated-control": "warn",
-    "jsx-a11y/media-has-caption": "warn",
-    "jsx-a11y/no-autofocus": "warn",
-    "jsx-a11y/no-noninteractive-element-interactions": "warn",
-    "jsx-a11y/no-noninteractive-element-to-interactive-role": "warn",
-    "jsx-a11y/no-static-element-interactions": "warn",
-    "jsx-a11y/role-has-required-aria-props": "warn"
+    "jsx-a11y/aria-activedescendant-has-tabindex": "error",
+    "jsx-a11y/click-events-have-key-events": "error",
+    "jsx-a11y/control-has-associated-label": "error",
+    "jsx-a11y/img-redundant-alt": "error",
+    "jsx-a11y/interactive-supports-focus": "error",
+    "jsx-a11y/label-has-associated-control": "error",
+    "jsx-a11y/media-has-caption": "error",
+    "jsx-a11y/no-autofocus": "error",
+    "jsx-a11y/no-noninteractive-element-interactions": "error",
+    "jsx-a11y/no-noninteractive-element-to-interactive-role": "error",
+    "jsx-a11y/no-static-element-interactions": "error",
+    "jsx-a11y/role-has-required-aria-props": "error"
   },
   "overrides": [
     {
@@ -42,12 +50,21 @@
           { "name": "window", "message": "Domain code cannot access browser or preload APIs." },
           { "name": "navigator", "message": "Domain code cannot access browser APIs." },
           { "name": "fetch", "message": "External access belongs behind an application port." },
-          { "name": "XMLHttpRequest", "message": "External access belongs behind an application port." },
+          {
+            "name": "XMLHttpRequest",
+            "message": "External access belongs behind an application port."
+          },
           { "name": "WebSocket", "message": "External access belongs behind an application port." },
-          { "name": "EventSource", "message": "External access belongs behind an application port." },
+          {
+            "name": "EventSource",
+            "message": "External access belongs behind an application port."
+          },
           { "name": "Worker", "message": "Worker access belongs behind an application port." },
           { "name": "localStorage", "message": "Persistence belongs behind an application port." },
-          { "name": "sessionStorage", "message": "Persistence belongs behind an application port." },
+          {
+            "name": "sessionStorage",
+            "message": "Persistence belongs behind an application port."
+          },
           { "name": "indexedDB", "message": "Persistence belongs behind an application port." }
         ],
         "no-restricted-imports": [
@@ -57,6 +74,10 @@
               {
                 "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:application|hooks|infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:application|hooks|infrastructure|styling|ui)(?:/|$))",
                 "message": "Domain modules are pure and may depend only on domain values and pure shared leaves."
+              },
+              {
+                "regex": "^@/protocols/",
+                "message": "Wire types are mapped in infrastructure; inner layers own feature-shaped types."
               }
             ]
           }
@@ -69,15 +90,42 @@
         "no-restricted-globals": [
           "error",
           { "name": "document", "message": "Application code cannot access the DOM." },
-          { "name": "window", "message": "Application code consumes injected ports, not browser globals." },
-          { "name": "navigator", "message": "Application code consumes injected ports, not browser globals." },
-          { "name": "fetch", "message": "Application code consumes injected ports, not transports." },
-          { "name": "XMLHttpRequest", "message": "Application code consumes injected ports, not transports." },
-          { "name": "WebSocket", "message": "Application code consumes injected ports, not transports." },
-          { "name": "EventSource", "message": "Application code consumes injected ports, not transports." },
-          { "name": "localStorage", "message": "Application code consumes injected ports, not storage." },
-          { "name": "sessionStorage", "message": "Application code consumes injected ports, not storage." },
-          { "name": "indexedDB", "message": "Application code consumes injected ports, not storage." }
+          {
+            "name": "window",
+            "message": "Application code consumes injected ports, not browser globals."
+          },
+          {
+            "name": "navigator",
+            "message": "Application code consumes injected ports, not browser globals."
+          },
+          {
+            "name": "fetch",
+            "message": "Application code consumes injected ports, not transports."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "Application code consumes injected ports, not transports."
+          },
+          {
+            "name": "WebSocket",
+            "message": "Application code consumes injected ports, not transports."
+          },
+          {
+            "name": "EventSource",
+            "message": "Application code consumes injected ports, not transports."
+          },
+          {
+            "name": "localStorage",
+            "message": "Application code consumes injected ports, not storage."
+          },
+          {
+            "name": "sessionStorage",
+            "message": "Application code consumes injected ports, not storage."
+          },
+          {
+            "name": "indexedDB",
+            "message": "Application code consumes injected ports, not storage."
+          }
         ],
         "no-restricted-imports": [
           "error",
@@ -86,6 +134,10 @@
               {
                 "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:hooks|infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:hooks|infrastructure|styling|ui)(?:/|$))",
                 "message": "Application modules own abstract ports and cannot select adapters or UI."
+              },
+              {
+                "regex": "^@/protocols/",
+                "message": "Wire types are mapped in infrastructure; inner layers own feature-shaped types."
               }
             ]
           }
@@ -109,13 +161,34 @@
             "name": "navigator",
             "message": "Feature hooks coordinate application capabilities, not browser APIs."
           },
-          { "name": "fetch", "message": "Feature hooks invoke application capabilities, not transports." },
-          { "name": "XMLHttpRequest", "message": "Feature hooks invoke application capabilities, not transports." },
-          { "name": "WebSocket", "message": "Feature hooks invoke application capabilities, not transports." },
-          { "name": "EventSource", "message": "Feature hooks invoke application capabilities, not transports." },
-          { "name": "localStorage", "message": "Feature hooks invoke application capabilities, not storage." },
-          { "name": "sessionStorage", "message": "Feature hooks invoke application capabilities, not storage." },
-          { "name": "indexedDB", "message": "Feature hooks invoke application capabilities, not storage." }
+          {
+            "name": "fetch",
+            "message": "Feature hooks invoke application capabilities, not transports."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "Feature hooks invoke application capabilities, not transports."
+          },
+          {
+            "name": "WebSocket",
+            "message": "Feature hooks invoke application capabilities, not transports."
+          },
+          {
+            "name": "EventSource",
+            "message": "Feature hooks invoke application capabilities, not transports."
+          },
+          {
+            "name": "localStorage",
+            "message": "Feature hooks invoke application capabilities, not storage."
+          },
+          {
+            "name": "sessionStorage",
+            "message": "Feature hooks invoke application capabilities, not storage."
+          },
+          {
+            "name": "indexedDB",
+            "message": "Feature hooks invoke application capabilities, not storage."
+          }
         ],
         "no-restricted-imports": [
           "error",
@@ -124,6 +197,10 @@
               {
                 "regex": "^(?:node:|electron(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/features/[^/]+/(?:infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:infrastructure|ui)(?:/|$))",
                 "message": "Feature hooks coordinate application capabilities and cannot import platform adapters or view implementations."
+              },
+              {
+                "regex": "^@/protocols/",
+                "message": "Wire types are mapped in infrastructure; inner layers own feature-shaped types."
               }
             ]
           }
@@ -159,16 +236,60 @@
               {
                 "regex": "^(?:node:|electron(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/features/[^/]+/infrastructure(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?infrastructure(?:/|$))",
                 "message": "UI invokes application capabilities and cannot import platform adapters."
+              },
+              {
+                "regex": "^@/protocols/",
+                "message": "Wire types are mapped in infrastructure; inner layers own feature-shaped types."
               }
             ]
           }
         ],
         "no-restricted-properties": [
           "error",
-          { "object": "window", "property": "stashbase", "message": "Use an injected platform adapter." },
-          { "object": "window", "property": "electron", "message": "Use an injected platform adapter." },
-          { "object": "window", "property": "ipcRenderer", "message": "Raw IPC is forbidden in renderer UI." }
+          {
+            "object": "window",
+            "property": "stashbase",
+            "message": "Use an injected platform adapter."
+          },
+          {
+            "object": "window",
+            "property": "electron",
+            "message": "Use an injected platform adapter."
+          },
+          {
+            "object": "window",
+            "property": "ipcRenderer",
+            "message": "Raw IPC is forbidden in renderer UI."
+          }
         ]
+      }
+    },
+    {
+      "files": ["**/renderer/src/**/*.test.{ts,tsx}"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "setTimeout",
+            "message": "Await a condition or use fake timers; a wall-clock delay makes the suite slow and flaky."
+          },
+          {
+            "name": "setInterval",
+            "message": "Await a condition or use fake timers; a wall-clock poll makes the suite slow and flaky."
+          }
+        ],
+        "vitest/no-restricted-matchers": [
+          "error",
+          {
+            "toHaveClass": "Assert the behaviour the class encodes; class assertions belong to components/ui tests."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/renderer/src/components/ui/**/*.test.tsx"],
+      "rules": {
+        "vitest/no-restricted-matchers": "off"
       }
     }
   ]

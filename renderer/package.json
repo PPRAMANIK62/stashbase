@@ -8,10 +8,13 @@
     "build": "vp build",
     "storybook": "storybook dev --port 6006 --no-open",
     "build:storybook": "storybook build --output-dir ../dist/storybook",
-    "format": "vp fmt . --check",
-    "lint": "vp lint --config ../.oxlintrc.json src .storybook vite.config.ts",
+    "format": "vp fmt src .storybook vite.config.ts --check",
+    "lint": "vp lint --deny-warnings --config ../.oxlintrc.json src .storybook vite.config.ts",
     "test": "vp test run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:coverage": "vp test run --coverage",
+    "check:unused": "knip --no-progress",
+    "check:dupes": "jscpd --config .jscpd.json src"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -41,7 +44,6 @@
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "sanitize-html": "^2.17.6",
     "tailwind-merge": "3.6.0",
     "yaml": "^2.9.0",
     "zustand": "5.0.15"
@@ -55,9 +57,12 @@
     "@testing-library/user-event": "14.6.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@types/sanitize-html": "^2.16.1",
     "@vitejs/plugin-react": "6.0.1",
+    "@vitest/coverage-v8": "^4.1.11",
+    "axe-core": "^4.13.0",
     "happy-dom": "20.11.2",
+    "jscpd": "^5.2.0",
+    "knip": "^6.34.0",
     "shadcn": "4.19.0",
     "storybook": "10.5.10",
     "tailwindcss": "4.3.3",

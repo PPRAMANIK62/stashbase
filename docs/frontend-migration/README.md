@@ -37,7 +37,8 @@ task as one focused change and leave later tasks out of its implementation.
 Before code:
 
 1. Read the task, this README, [Target Architecture](architecture.md),
-   [Engineering Standards](standards/engineering.md), and
+   [Engineering Standards](standards/engineering.md),
+   [Renderer Architecture](standards/renderer-architecture.md), and
    [Testing and Evidence](standards/testing-and-evidence.md).
 2. Assess the affected [Capability Ledger](plans/capability-ledger.md) row and
    classify discovered Shipping behavior as Retain, Change, Remove, or
@@ -79,6 +80,9 @@ and no Required behavior is hidden behind a passing broad command.
   model, runtime boundaries, state ownership, and composition rules.
 - [Engineering Standards](standards/engineering.md) defines the rules new
   frontend code must satisfy.
+- [Renderer Architecture](standards/renderer-architecture.md) is the
+  renderer's owning engineering contract during the migration: the layer
+  model, the vocabulary, and every enforced rule with the tool that runs it.
 - [Testing and Evidence](standards/testing-and-evidence.md) defines behavioral
   discovery, replacement proof, and validation expectations.
 - [Migration Strategy](plans/migration-strategy.md) defines inert legacy
@@ -134,6 +138,9 @@ and no Required behavior is hidden behind a passing broad command.
   complete Fluid Functionalism adoption, the Base UI-only flavor rule,
   registry inventory, removal of the local visual system, and the Fluid-only
   Storybook catalog.
+- [Decision 0016](decisions/0016-renderer-quality-gates.md) keeps only
+  Fluid primitives with a product caller and records the renderer quality
+  gates that `pnpm check:web` enforces.
 
 ## Authority
 

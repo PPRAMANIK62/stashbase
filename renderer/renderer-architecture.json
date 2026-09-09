@@ -25,6 +25,13 @@
       "productArea": "Workspace"
     }
   ],
+  "contractModules": [
+    "shared/account.ts",
+    "shared/agent-protocol.ts",
+    "shared/agent-runtime.ts",
+    "shared/file-formats.ts",
+    "shared/html-sanitization.ts"
+  ],
   "wireSchemaModules": [
     "shared/protocols/electron/capture.ts",
     "shared/protocols/electron/external-navigation.ts",

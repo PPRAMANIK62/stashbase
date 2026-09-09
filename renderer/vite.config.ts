@@ -13,23 +13,23 @@ export default defineConfig({
         replacement: fileURLToPath(new URL('../shared/protocols/', import.meta.url)),
       },
       {
-        find: '@/shared/file-formats',
+        find: '@/contracts/file-formats',
         replacement: fileURLToPath(new URL('../shared/file-formats.ts', import.meta.url)),
       },
       {
-        find: '@/shared/html-sanitization',
+        find: '@/contracts/html-sanitization',
         replacement: fileURLToPath(new URL('../shared/html-sanitization.ts', import.meta.url)),
       },
       {
-        find: '@/shared/agent-runtime',
+        find: '@/contracts/agent-runtime',
         replacement: fileURLToPath(new URL('../shared/agent-runtime.ts', import.meta.url)),
       },
       {
-        find: '@/shared/agent-protocol',
+        find: '@/contracts/agent-protocol',
         replacement: fileURLToPath(new URL('../shared/agent-protocol.ts', import.meta.url)),
       },
       {
-        find: '@/shared/account',
+        find: '@/contracts/account',
         replacement: fileURLToPath(new URL('../shared/account.ts', import.meta.url)),
       },
       { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
@@ -68,6 +68,53 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    setupFiles: ['src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      // Every include names the authored TypeScript, because these layers keep
+      // CSS and documentation beside their modules.
+      include: [
+        'src/features/*/domain/**/*.{ts,tsx}',
+        'src/features/*/application/**/*.{ts,tsx}',
+        'src/features/*/infrastructure/**/*.{ts,tsx}',
+        'src/features/*/hooks/**/*.{ts,tsx}',
+        'src/features/*/ui/**/*.{ts,tsx}',
+        'src/lib/**/*.{ts,tsx}',
+        'src/app/**/*.{ts,tsx}',
+        'src/platform/**/*.{ts,tsx}',
+        'src/shared/**/*.{ts,tsx}',
+      ],
+      // Wiring records and worker entries carry no branches a line count
+      // can prove: adapters.ts only assembles ports, and a worker cannot
+      // run under happy-dom.
+      exclude: [
+        '**/*.test.*',
+        '**/*.stories.*',
+        '**/ports.ts',
+        '**/*-port.ts',
+        '**/infrastructure/adapters.ts',
+        '**/*.worker.ts',
+      ],
+      reporter: ['text-summary'],
+      // Floors guard the two pure layers only, where a line is a decision
+      // and a unit test is the right proof. Everything else is measured for
+      // the report and proven by behaviour, journey, and accessibility
+      // evidence rather than by a line count.
+      thresholds: {
+        'src/features/*/domain/**': {
+          lines: 85,
+          functions: 85,
+          branches: 75,
+          statements: 85,
+        },
+        'src/features/*/application/**': {
+          lines: 85,
+          functions: 85,
+          branches: 75,
+          statements: 85,
+        },
+      },
+    },
     clearMocks: true,
     restoreMocks: true,
     unstubEnvs: true,

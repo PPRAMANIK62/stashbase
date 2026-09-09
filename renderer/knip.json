@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/**/*.test.{ts,tsx}", "src/**/*.stories.tsx", ".storybook/**/*.{ts,tsx}"],
+  "project": ["src/**/*.{ts,tsx,css}", ".storybook/**/*.{ts,tsx}"],
+  "ignoreDependencies": ["@storybook/addon-a11y", "@storybook/addon-docs", "shadcn"],
+  "vite": true,
+  "vitest": false,
+  "storybook": false
+}

@@ -63,11 +63,13 @@ jobs:
       - name: Verify Vite+ inventory
         run: pnpm test:toolchain
 
+      # One step, eleven gates: scripts/renderer/check-web.mjs runs
+      # architecture, size, conventions, unused, duplication, format, lint,
+      # coverage, typecheck, build, and the production-equivalent Storybook
+      # build — each to completion — so lint, the renderer coverage gate, and
+      # Storybook are already covered here and need no separate step.
       - name: Check supported renderer
-        run: pnpm test:renderer-architecture && pnpm format:web && pnpm lint:web && pnpm test:renderer && pnpm typecheck:web && pnpm build:web
-
-      - name: Build production-equivalent Storybook
-        run: pnpm build:storybook
+        run: pnpm check:web
 
       - name: Test renderer packaging input
         run: pnpm test:package-inputs
