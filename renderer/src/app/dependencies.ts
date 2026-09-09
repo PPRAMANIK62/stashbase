@@ -13,18 +13,43 @@ import {
   type GenericFilePreviewApi,
   type MediaApi,
 } from '@/features/documents/public';
-import { createExactSearchApi, type ExactSearchApi } from '@/features/retrieval/public';
-import { createAgentRuntimeApi, type AgentRuntimePort } from '@/features/settings/public';
+import {
+  createPreparationControlApi,
+  createPreparationStatusApi,
+  type PreparationControlApi,
+  type PreparationStatusApi,
+} from '@/features/preparation/public';
+import {
+  createExactSearchApi,
+  createIndexDecisionApi,
+  createSemanticSearchApi,
+  type ExactSearchApi,
+  type IndexDecisionApi,
+  type SemanticSearchApi,
+} from '@/features/retrieval/public';
+import {
+  createAgentRuntimeApi,
+  createCaptureApi,
+  createEmbedderApi,
+  createTranscriptionApi,
+  type AgentRuntimePort,
+  type CapturePort,
+  type EmbedderPort,
+  type TranscriptionPort,
+} from '@/features/settings/public';
 import {
   createFilesApi,
   createLibraryApi,
   createLibraryLifecycle,
+  createUploadApi,
   createWorkspaceSessionPersistence,
   type FileTreeProps,
   type LibrarySidebarProps,
   type LibraryWelcomeProps,
+  type UploadApi,
 } from '@/features/workspace/public';
 import { readBridge } from '@/platform/electron/bridge';
+import type { CaptureBridge } from '@/platform/electron/capture';
 import { createExternalNavigation } from '@/platform/electron/external-navigation';
 import { fileManagerLabel } from '@/platform/electron/file-manager';
 import { createFolderPicker } from '@/platform/electron/folder-picker';
@@ -34,6 +59,8 @@ export interface AppDependencies {
   agent: {
     session: AgentSessionPort;
   };
+  /** Desktop clipboard capture; null outside Electron or when the capability is absent. */
+  capture: CaptureBridge | null;
   documents: {
     assetApi: DocumentAssetApi;
     docxPreviewApi: DocxPreviewApi;
@@ -45,14 +72,28 @@ export interface AppDependencies {
     openExternal(href: string): Promise<boolean>;
   };
   library: LibrarySidebarProps & LibraryWelcomeProps;
+  preparation: {
+    controlApi: PreparationControlApi;
+    statusApi: PreparationStatusApi;
+  };
   retrieval: {
+    decisionApi: IndexDecisionApi;
     exactSearchApi: ExactSearchApi;
+    semanticSearchApi: SemanticSearchApi;
   };
   session: ReturnType<typeof createWorkspaceSessionPersistence>;
   settings: {
     agentRuntimeApi: AgentRuntimePort;
+    captureApi: CapturePort;
+    embedderApi: EmbedderPort;
+    transcriptionApi: TranscriptionPort;
   };
-  workspace: Omit<FileTreeProps, 'runtime'>;
+  workspace: Omit<
+    FileTreeProps,
+    'runtime' | 'onOpenSource' | 'onReprocess' | 'onScopeLost' | 'rowMarkers'
+  > & {
+    uploadApi: UploadApi;
+  };
 }
 
 export function createDependencies(): AppDependencies {
@@ -63,6 +104,7 @@ export function createDependencies(): AppDependencies {
     agent: {
       session: createAgentSessionApi(http, bridge.runtime.serverOrigin),
     },
+    capture: bridge.capture ?? null,
     documents: {
       assetApi: createDocumentAssetApi(http, bridge.runtime.serverOrigin),
       docxPreviewApi: createDocxPreviewApi(),
@@ -78,16 +120,26 @@ export function createDependencies(): AppDependencies {
       folderPicker: createFolderPicker(bridge.library),
       lifecycle: createLibraryLifecycle(bridge.library),
     },
+    preparation: {
+      controlApi: createPreparationControlApi(http),
+      statusApi: createPreparationStatusApi(http),
+    },
     retrieval: {
+      decisionApi: createIndexDecisionApi(http),
       exactSearchApi: createExactSearchApi(http),
+      semanticSearchApi: createSemanticSearchApi(http),
     },
     session: createWorkspaceSessionPersistence(bridge.workspaceSession),
     settings: {
       agentRuntimeApi: createAgentRuntimeApi(http),
+      captureApi: createCaptureApi(http),
+      embedderApi: createEmbedderApi(http),
+      transcriptionApi: createTranscriptionApi(http),
     },
     workspace: {
       api: createFilesApi(http),
       revealLabel: fileManagerLabel(),
+      uploadApi: createUploadApi(bridge.runtime.serverOrigin),
     },
   };
 }

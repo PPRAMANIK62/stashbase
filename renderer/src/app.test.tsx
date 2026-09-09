@@ -56,8 +56,15 @@ describe('workspace shell', () => {
         setActiveFolder: vi.fn(async () => undefined),
       },
     },
+    capture: null,
+    preparation: {
+      controlApi: { cancel: vi.fn(), prepare: vi.fn(), reprocess: vi.fn() },
+      statusApi: { load: vi.fn(() => new Promise<never>(() => undefined)) },
+    },
     retrieval: {
+      decisionApi: { decide: vi.fn(), dismissWarning: vi.fn(), resync: vi.fn() },
       exactSearchApi: { search: vi.fn() },
+      semanticSearchApi: { search: vi.fn() },
     },
     session: {
       load: vi.fn(async () => null),
@@ -71,10 +78,29 @@ describe('workspace shell', () => {
         resetManagedAgent: vi.fn(),
         updateDebug: vi.fn(),
       },
+      captureApi: { load: vi.fn(), update: vi.fn() },
+      embedderApi: {
+        load: vi.fn(() => new Promise<never>(() => undefined)),
+        refreshAccount: vi.fn(),
+        removeKey: vi.fn(),
+        saveKey: vi.fn(),
+        selectProvider: vi.fn(),
+        signInStatus: vi.fn(),
+        signOut: vi.fn(),
+        startSignIn: vi.fn(),
+        useAccount: vi.fn(),
+      },
+      transcriptionApi: {
+        downloadModel: vi.fn(),
+        load: vi.fn(() => new Promise<never>(() => undefined)),
+        removeModel: vi.fn(),
+        updatePreferences: vi.fn(),
+      },
     },
     workspace: {
       api: { load: vi.fn(), reveal: vi.fn() },
       revealLabel: 'Show in file manager',
+      uploadApi: { upload: vi.fn() },
     },
   };
 

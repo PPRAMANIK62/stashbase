@@ -4,10 +4,14 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { createDocumentTabsRuntime, type DocumentTabsRuntime } from '@/features/documents/public';
-import type { ExactSearchApi } from '@/features/retrieval/public';
+import type {
+  ExactSearchApi,
+  IndexDecisionApi,
+  SemanticSearchApi,
+} from '@/features/retrieval/public';
 import { createWorkspaceRuntime, type WorkspaceRuntime } from '@/features/workspace/public';
 
-import { WorkspaceExactSearch } from './workspace-exact-search';
+import { WorkspaceSearch } from './workspace-search';
 
 let documents: DocumentTabsRuntime;
 let workspace: WorkspaceRuntime;
@@ -32,7 +36,16 @@ afterEach(() => {
   }
 });
 
-describe('workspace Exact Search composition', () => {
+const semanticApi: SemanticSearchApi = {
+  search: vi.fn(async () => ({ hits: [], truncated: false })),
+};
+const decisionApi: IndexDecisionApi = {
+  decide: vi.fn(async () => undefined),
+  dismissWarning: vi.fn(async () => undefined),
+  resync: vi.fn(async () => undefined),
+};
+
+describe('workspace search composition', () => {
   it('opens a selected-workspace result under its editable source identity', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const api: ExactSearchApi = {
@@ -80,12 +93,17 @@ describe('workspace Exact Search composition', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <WorkspaceExactSearch
+        <WorkspaceSearch
           active
           activeFolderPath="/library/research"
-          api={api}
+          decisionApi={decisionApi}
           documents={documents}
+          exactApi={api}
           focusRevision={0}
+          onOpenSettings={vi.fn()}
+          preparation={{ blocked: 0, cancelled: 0, failed: 0, pending: 0 }}
+          semanticApi={semanticApi}
+          status={null}
           workspace={workspace}
         />
       </QueryClientProvider>,
