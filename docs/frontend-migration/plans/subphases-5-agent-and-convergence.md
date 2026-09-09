@@ -135,8 +135,40 @@ is deferred.
 
 **Blocked by:** 35, 45, 48.
 
-Bind attachments and mentions to explicit source identity/version, expose
-Preparation needs, and reject stale context safely.
+**Status:** Complete.
+
+Research: [Source context and mentions research](../research/agent-context-task-50.md).
+
+Bound context is one ordered list of items on the session: a library source
+carries its folder-qualified identity, listing format, and the conversion
+version seen when it was bound; a transient upload carries the temp path the
+server wrote outside every folder. The composer's text field is a CodeMirror
+document behind an editor slot on the shared composer: typing `@` opens a
+listbox ranked over the selected folder's listing, and accepting a file
+replaces the query with one atomic chip that sits in the sentence, moves with
+the text, deletes as one character, carries its Preparation state as a dot,
+and serializes as `@path`. Dropping a file-tree row inserts the same chip for
+a non-visual source; an image or PDF drop and every upload land in the
+composer's preview row as square tiles with the thumbnails' own spring and
+hover remove badge, and Reprocess is offered on a failed tile. Sent turns
+show the chips inline in the bubble and the tiles above it the way the chat
+message component shows files. A send re-validates every item against the shell's
+published listing and readiness and again through the context-file route: a
+removed or retired source refuses the send with the draft intact and one
+alert; a preparing or failed source is explained and sent. Queued follow-ups
+keep their own snapshot and validate at dispatch. The wire prompt keeps the
+text-only contract with the `Attached files:` suffix both runtimes and history
+replay already read, and a retry resends exactly what went out. Replayed
+history shows the same tiles from the server's preview route.
+
+Known gap: the shared composer offers Send only with text, so a prompt of
+tiles alone cannot be submitted. Mentions are offered only for the selected
+folder's chat; a Library or cross-folder chat validates dropped sources as
+stale until the server resolves them.
+
+Evidence: focused context domain, session and workspace runtime, context
+adapter, protocol, composer, transcript, file-tree drag, shell composition,
+architecture, typecheck, lint, and web build checks.
 
 ## 51 — Apply Agent document writes and Diffs
 
