@@ -1,8 +1,37 @@
+/** The size ladder: two steps, and every measurement that steps with them.
+ *
+ *  Density is not one number. A control's height, its type size, its padding,
+ *  the gap between it and its label, the glyph inside it and the keycap beside
+ *  it all move together, and when a component keeps its own two-entry map of
+ *  any of those, the ladder has two definitions and they drift. So the whole
+ *  step lives here as one object, and a component reads the fields it needs
+ *  rather than re-deriving them from `variant`.
+ *
+ *  `useSize(override)` resolves explicit prop > provider > default, which is
+ *  what lets one control be pinned compact inside an otherwise default
+ *  surface without the surface knowing. */
+
 'use client';
 
-import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
+
+import { useIsoLayoutEffect } from '@/lib/use-iso-layout-effect';
 
 type SizeVariant = 'default' | 'compact';
+
+/** The switch's track and thumb, in px. Geometry rather than classes because
+ *  the thumb is animated by a motion value: a spring retargets a number, not
+ *  a class name. */
+interface SwitchGeometry {
+  trackWidth: number;
+  trackHeight: number;
+  thumbSize: number;
+  /** How far the thumb stretches into a pill on hover. */
+  pillExtend: number;
+  /** How far it stretches, and how far it squashes, while pressed. */
+  pressExtend: number;
+  pressShrink: number;
+}
 
 interface SizeClasses {
   /** The variant these classes belong to — handy for conditionals. */
@@ -20,8 +49,21 @@ interface SizeClasses {
   segmentItem: string;
   /** Padding of the segmented list around its tabs. */
   segmentPad: string;
-  /** Body text inside controls. */
+  /** Body text inside controls. Mirrors `--fs-body` in globals.css, which
+   *  `lib/tokens.test.ts` holds to this value. */
   text: string;
+  /** The query field of a command palette: taller than `control` and a step
+   *  above `text`, because the palette's input is the one control on its own
+   *  surface and reads as the thing being typed into rather than as a field in
+   *  a form. It is on the ladder rather than a literal in the palette so a
+   *  compact palette is actually denser instead of only its rows being. */
+  prompt: string;
+  promptText: string;
+  /** The step below `text`: secondary copy, section labels, tooltip text, a
+   *  field's error line, the badge label. A component that spelled this out
+   *  as its own `compact ? 11 : 12` pair had a second copy of the ladder.
+   *  Mirrors `--fs-caption` in globals.css. */
+  caption: string;
   /** Horizontal padding of bounded controls (select trigger, inputs). */
   px: string;
   /** Horizontal padding of list/menu rows, which sit inside a padded popup
@@ -35,6 +77,36 @@ interface SizeClasses {
   /** Glyph size in px: leading/trailing icons inside controls, and the
    *  checkbox square / radio circle. */
   icon: number;
+  /** The keycap chip (`⌘K`, `Tab`): its own height and type step. Far below
+   *  the control height — a chip that tall would read as a button — but still
+   *  a step of this ladder, so it is written here with the rest of it rather
+   *  than as a second variant map inside the component. */
+  keycap: string;
+  /** A button's horizontal padding and icon-to-label gap. A button is wider
+   *  around its label than a bounded input is around its value, so it does
+   *  not reuse `px`/`gap`; the height and type step it DOES share come from
+   *  `control` and `text`. */
+  buttonPx: string;
+  buttonGap: string;
+  /** A square control's box — an icon-only button, the loading spinner that
+   *  has to fill the same box. Written out rather than derived from `control`
+   *  so the class names stay literal and Tailwind can see them. */
+  square: string;
+  /** The glyph inside a square control, as a descendant rule so it reaches an
+   *  icon the caller passed as a child. */
+  squareGlyph: string;
+  /** Descendant controls pulled one notch BELOW this step, for a row whose
+   *  content is consumer-authored and already sized (a composer's action
+   *  footer). The `w-7` it corrects is `square` at the compact step, which is
+   *  why the correction belongs beside it rather than in the row. */
+  nestedControl: string;
+  /** The badge's box. Its label takes `caption`, like every other small
+   *  label on the ladder. */
+  badge: string;
+  /** The badge's leading dot, in px. */
+  badgeDot: number;
+  /** The toggle switch's track and thumb. */
+  switchGeometry: SwitchGeometry;
 }
 
 const sizeMap: Record<SizeVariant, SizeClasses> = {
@@ -47,10 +119,29 @@ const sizeMap: Record<SizeVariant, SizeClasses> = {
     segmentItem: 'h-7',
     segmentPad: 'p-1',
     text: 'text-[13px]',
+    prompt: 'h-12',
+    promptText: 'text-[15px]',
+    caption: 'text-[12px]',
     px: 'px-3',
     itemPx: 'px-2',
     gap: 'gap-2',
     icon: 16,
+    keycap: 'h-[18px] px-1 text-[11px]',
+    buttonPx: 'px-4',
+    buttonGap: 'gap-1.5',
+    square: 'h-9 w-9',
+    squareGlyph: '[&_svg]:h-4 [&_svg]:w-4',
+    nestedControl: '',
+    badge: 'h-6 gap-1.5 px-2.5',
+    badgeDot: 7,
+    switchGeometry: {
+      trackWidth: 34,
+      trackHeight: 20,
+      thumbSize: 16,
+      pillExtend: 2,
+      pressExtend: 4,
+      pressShrink: 4,
+    },
   },
   // 28px — the compact height for dense surfaces: filter bars, toolbars,
   // table headers, sidebars. One step down in text (12px) and icon (14px)
@@ -62,70 +153,48 @@ const sizeMap: Record<SizeVariant, SizeClasses> = {
     segmentItem: 'h-6',
     segmentPad: 'p-0.5',
     text: 'text-[12px]',
+    prompt: 'h-10',
+    promptText: 'text-[14px]',
+    caption: 'text-[11px]',
     px: 'px-2.5',
     itemPx: 'px-1.5',
     gap: 'gap-1',
     icon: 14,
+    keycap: 'h-4 px-1 text-[10px]',
+    buttonPx: 'px-3',
+    buttonGap: 'gap-1',
+    square: 'h-7 w-7',
+    squareGlyph: '[&_svg]:h-3.5 [&_svg]:w-3.5',
+    nestedControl: '[&_button]:h-6 [&_button]:text-[11px] [&_button.w-7]:w-6',
+    badge: 'h-5 gap-1 px-2',
+    badgeDot: 6,
+    switchGeometry: {
+      trackWidth: 28,
+      trackHeight: 16,
+      thumbSize: 12,
+      pillExtend: 2,
+      pressExtend: 3,
+      pressShrink: 3,
+    },
   },
 };
 
-/** One role of the type scale: px per ladder step. */
-interface TypeScaleStep {
-  default: number;
-  compact: number;
-}
+/** Just the step. The provider used to publish a `setSize` alongside it and a
+ *  piece of internal state for it to write, but the context is not exported
+ *  and no hook hands the setter back, so nothing outside this module could
+ *  ever call it — which also made the uncontrolled `defaultSize` a value
+ *  nothing could change. A region's step is set by the caller that pins it. */
+const SizeContext = createContext<SizeVariant | null>(null);
 
-/**
- * Role-based type scale, per ladder step (px values).
+/** Resolve the active size variant: explicit prop > provider > "default".
  *
- * The default column is the system as shipped; the compact column steps each
- * role down one notch so dense regions read as a smaller sibling of the same
- * hierarchy, not a squeezed copy. `body`, `caption`, and `subtitle` are what
- * the sized components already render through `SizeClasses.text` and their
- * compact conditionals; `display` and `title` are the page-level roles
- * for consumers composing their own screens.
- */
-const typeScale = {
-  /** Page titles. */
-  display: { default: 28, compact: 24 },
-  /** Section headings, dialog titles. */
-  title: { default: 16, compact: 15 },
-  /** Card titles, chat bubbles, emphasized rows. */
-  subtitle: { default: 14, compact: 13 },
-  /** Control labels and body copy — `SizeClasses.text`. */
-  body: { default: 13, compact: 12 },
-  /** Secondary text: descriptions, meta rows, errors, eyebrows and group
-   *  labels (the former overline role — an uppercase or muted caption). */
-  caption: { default: 12, compact: 11 },
-} as const satisfies Record<string, TypeScaleStep>;
-
-type TypeScaleRole = keyof typeof typeScale;
-
-/** The type scale resolved for the active ladder step (px per role):
- *  explicit override > surrounding SizeProvider > "default". */
-function useTypeScale(override?: SizeVariant | null): Record<TypeScaleRole, number> {
-  const variant = useSizeVariant(override);
-  return {
-    display: typeScale.display[variant],
-    title: typeScale.title[variant],
-    subtitle: typeScale.subtitle[variant],
-    body: typeScale.body[variant],
-    caption: typeScale.caption[variant],
-  };
-}
-
-interface SizeContextValue {
-  size: SizeVariant;
-  setSize: (size: SizeVariant) => void;
-  classes: SizeClasses;
-}
-
-const SizeContext = createContext<SizeContextValue | null>(null);
-
-/** Resolve the active size variant: explicit prop > provider > "default". */
+ *  The context is read unconditionally. Resolving it inside the `??` chain
+ *  made `useContext` run only when `override` was nullish, so a control that
+ *  gained or lost an explicit `size` between renders changed the number of
+ *  hooks it called and React threw on the next commit. */
 function useSizeVariant(override?: SizeVariant | null): SizeVariant {
-  const ctx = useContext(SizeContext);
-  return override ?? ctx?.size ?? 'default';
+  const inherited = useContext(SizeContext);
+  return override ?? inherited ?? 'default';
 }
 
 /** Resolve size classes: explicit prop > provider > "default". */
@@ -133,45 +202,42 @@ function useSize(override?: SizeVariant | null): SizeClasses {
   return sizeMap[useSizeVariant(override)];
 }
 
-function useSizeContext() {
-  const ctx = useContext(SizeContext);
-  if (!ctx) throw new Error('useSizeContext must be used within a SizeProvider');
-  return ctx;
+/** Publishes the document's step to plain CSS as `html[data-size]`, which is
+ *  where the `--fs-*` type-scale roles in globals.css (`text-body`,
+ *  `text-caption`, …) read it from. Only the OUTERMOST provider stamps: a
+ *  region pinned compact inside a default surface is exactly the case the
+ *  ladder exists for, and letting it rewrite the root would drag the whole
+ *  document's chrome down with it. So the root provider decides the document
+ *  step and a nested one decides only its own subtree — chrome utilities
+ *  follow the former, ladder-aware components the latter.
+ *
+ *  Layout effect rather than an effect: the attribute lands before paint, so
+ *  the first frame is never drawn one step off. */
+function useDocumentSize(size: SizeVariant, isRoot: boolean): void {
+  useIsoLayoutEffect(() => {
+    if (!isRoot) return;
+    const root = document.documentElement;
+    const previous = root.dataset.size;
+    root.dataset.size = size;
+    return () => {
+      if (previous === undefined) delete root.dataset.size;
+      else root.dataset.size = previous;
+    };
+  }, [isRoot, size]);
 }
 
 function SizeProvider({
   children,
   size,
-  defaultSize = 'default',
 }: {
   children: ReactNode;
-  /** Controlled variant — pin a whole region to one size (e.g. a compact
-   *  filter bar). Overrides internal state. */
-  size?: SizeVariant;
-  defaultSize?: SizeVariant;
+  /** Pins a whole region to one step (e.g. a compact filter bar). Every
+   *  ladder-aware control inside follows it unless it pins itself. */
+  size: SizeVariant;
 }) {
-  const [internalSize, setInternalSize] = useState<SizeVariant>(defaultSize);
-  const isControlled = size !== undefined;
-  const resolved = size ?? internalSize;
-
-  // Controlled providers ignore setSize entirely — a background write to the
-  // shadowed internal state would pop back out if the size prop were later
-  // removed.
-  const setSize = useCallback(
-    (next: SizeVariant) => {
-      if (isControlled) return;
-      setInternalSize(next);
-    },
-    [isControlled],
-  );
-
-  const value = useMemo(
-    () => ({ size: resolved, setSize, classes: sizeMap[resolved] }),
-    [resolved, setSize],
-  );
-
-  return <SizeContext.Provider value={value}>{children}</SizeContext.Provider>;
+  useDocumentSize(size, useContext(SizeContext) === null);
+  return <SizeContext.Provider value={size}>{children}</SizeContext.Provider>;
 }
 
-export { SizeProvider, useSize, useSizeVariant, useSizeContext, useTypeScale, sizeMap, typeScale };
-export type { SizeVariant, SizeClasses, TypeScaleRole, TypeScaleStep };
+export { SizeProvider, sizeMap, useSize, useSizeVariant };
+export type { SizeVariant };

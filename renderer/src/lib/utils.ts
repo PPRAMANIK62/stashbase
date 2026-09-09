@@ -12,10 +12,18 @@ import { extendTailwindMerge } from 'tailwind-merge';
 // their own `font-size` group entries keeps them deduplicating against each
 // other and against stock sizes (text-sm, text-lg, ...) while no longer
 // colliding with color utilities.
+// The motion steps (`duration-fast/base/slow` and `delay-fast/base/slow`,
+// defined via `@utility` in globals.css) need the same treatment for the
+// opposite reason: tailwind-merge recognises `duration-*` and `delay-*` only
+// when the suffix is a number or an arbitrary value, so without this it treats
+// the named steps as unknown classes and `cn('duration-fast', 'duration-<n>')`
+// would emit both.
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
       'font-size': [{ text: ['display', 'title', 'subtitle', 'body', 'caption'] }],
+      duration: [{ duration: ['fast', 'base', 'slow'] }],
+      delay: [{ delay: ['fast', 'base', 'slow'] }],
     },
   },
 });

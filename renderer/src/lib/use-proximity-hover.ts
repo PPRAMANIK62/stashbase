@@ -1,3 +1,12 @@
+/** The magnetic pointer-hover system every list, menu, tab strip and card
+ *  grid in this library shares: a registry of item elements, one coalesced
+ *  measurement pass over them, and a rAF-throttled pointer handler that
+ *  publishes the nearest item as `activeIndex`.
+ *
+ *  This module owns registration, scheduling and state only — the rect math
+ *  it runs on lives in `./proximity-geometry`. Its public surface is frozen:
+ *  a dozen primitives import `useProximityHover` and `ItemRect` from here. */
+
 'use client';
 
 import {
@@ -10,22 +19,22 @@ import {
   type SetStateAction,
 } from 'react';
 
-export interface ItemRect {
-  top: number;
-  height: number;
-  left: number;
-  width: number;
-}
+import {
+  measureItemRect,
+  readContainerProjection,
+  rectsMatch,
+  resolveNearestIndex,
+  type ItemRect,
+  type ProximityAxis,
+} from './proximity-geometry';
+
+export type { ItemRect } from './proximity-geometry';
 
 interface UseProximityHoverOptions {
   /**
-   * Which direction to resolve the nearest item along.
-   *   "y"  — vertical lists (default): closest by top/height
-   *   "x"  — horizontal strips: closest by left/width
-   *   "xy" — 2-D grids: closest card across both rows AND columns,
-   *          measured by Euclidean distance to each item's center
+   * Which direction to resolve the nearest item along. See `ProximityAxis`.
    */
-  axis?: 'x' | 'y' | 'xy';
+  axis?: ProximityAxis;
   /**
    * Makes an item invisible to hit-testing without unregistering it — for
    * rows that stay mounted while clipped away (a collapsed sub-tree).
@@ -99,59 +108,17 @@ export function useProximityHover<T extends HTMLElement>(
     const rects: ItemRect[] = [];
     let everyItemHasLayout = true;
     itemsRef.current.forEach((element, index) => {
-      // An element inside a display:none / not-yet-laid-out popup has no
-      // offsetParent and reports every offset as 0. Publishing that would pin
-      // overlays to the top of the list, so treat the whole pass as
-      // incomplete. A boxless element is the only case: `position: fixed`
-      // items also have no offsetParent but do have a size.
-      const hasLayoutBox =
-        element.offsetParent !== null || element.offsetWidth > 0 || element.offsetHeight > 0;
-      if (!hasLayoutBox) {
+      const rect = measureItemRect(element, container);
+      if (!rect) {
         everyItemHasLayout = false;
         return;
       }
-      // Use offset* instead of getBoundingClientRect so measurements are
-      // unaffected by CSS transforms (e.g. scaleY animation on the parent
-      // motion.div). offsetTop/offsetLeft are layout values relative to the
-      // offsetParent (the scroll container), matching the coordinate space
-      // used by `position: absolute` children. Items nested inside positioned
-      // descendants of the container (a sidebar sub-menu's rows live inside a
-      // positioned row) accumulate those ancestors' offsets, so every rect
-      // lands in the container's own coordinate space; for a flat list the
-      // loop never runs and this is exactly the plain offsetTop/offsetLeft.
-      let top = element.offsetTop;
-      let left = element.offsetLeft;
-      let ancestor = element.offsetParent as HTMLElement | null;
-      while (ancestor && ancestor !== container && container.contains(ancestor)) {
-        top += ancestor.offsetTop + ancestor.clientTop;
-        left += ancestor.offsetLeft + ancestor.clientLeft;
-        ancestor = ancestor.offsetParent as HTMLElement | null;
-      }
-      rects[index] = {
-        top,
-        height: element.offsetHeight,
-        left,
-        width: element.offsetWidth,
-      };
+      rects[index] = rect;
     });
     if (!everyItemHasLayout) return false;
-    // Skip the state update when nothing moved (a cheap top/left/width/height
-    // compare) so redundant remeasures don't churn re-renders.
-    const prev = itemRectsRef.current;
-    let changed = prev.length !== rects.length;
-    for (let i = 0; !changed && i < rects.length; i++) {
-      const p = prev[i];
-      const r = rects[i];
-      if (p === r) continue; // both undefined (sparse slot)
-      changed =
-        !p ||
-        !r ||
-        p.top !== r.top ||
-        p.left !== r.left ||
-        p.width !== r.width ||
-        p.height !== r.height;
-    }
-    if (changed) {
+    // Skip the state update when nothing moved, so redundant remeasures don't
+    // churn re-renders through every consumer of the published rects.
+    if (!rectsMatch(itemRectsRef.current, rects)) {
       itemRectsRef.current = rects;
       setItemRects(rects);
     }
@@ -227,8 +194,8 @@ export function useProximityHover<T extends HTMLElement>(
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      const mouseX = e.clientX;
-      const mouseY = e.clientY;
+      const pointerX = e.clientX;
+      const pointerY = e.clientY;
 
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
@@ -239,109 +206,19 @@ export function useProximityHover<T extends HTMLElement>(
         const container = containerRef.current;
         if (!container) return;
 
-        const containerRect = container.getBoundingClientRect();
-
-        // ── 2-D grid path ──────────────────────────────────────────
-        // When items wrap into rows and columns, a single-axis nearest
-        // pick can't tell which card the cursor is closest to. Resolve
-        // by Euclidean distance to each item's center, and prefer any
-        // item the cursor is actually inside (point-in-rect).
-        if (axis === 'xy') {
-          let closestIndex: number | null = null;
-          let closestDistance = Infinity;
-          let containingIndex: number | null = null;
-
-          const rects = itemRectsRef.current;
-          const scrollX = container.scrollLeft;
-          const scrollY = container.scrollTop;
-          const borderX = container.clientLeft;
-          const borderY = container.clientTop;
-          // Map layout coords into visual/viewport space, accounting for any
-          // cumulative ancestor transform: scale (see the single-axis note
-          // below). X and Y scale independently.
-          const scaleX =
-            container.offsetWidth > 0 ? containerRect.width / container.offsetWidth : 1;
-          const scaleY =
-            container.offsetHeight > 0 ? containerRect.height / container.offsetHeight : 1;
-
-          for (let index = 0; index < rects.length; index++) {
-            const r = rects[index];
-            if (!r) continue;
-            const el = itemsRef.current.get(index);
-            if (el && isItemDisabled?.(el)) continue;
-
-            const left = containerRect.left + (borderX + r.left - scrollX) * scaleX;
-            const top = containerRect.top + (borderY + r.top - scrollY) * scaleY;
-            const width = r.width * scaleX;
-            const height = r.height * scaleY;
-
-            if (
-              mouseX >= left &&
-              mouseX <= left + width &&
-              mouseY >= top &&
-              mouseY <= top + height
-            ) {
-              containingIndex = index;
-            }
-
-            const dx = mouseX - (left + width / 2);
-            const dy = mouseY - (top + height / 2);
-            const distance = Math.hypot(dx, dy);
-
-            if (distance < closestDistance) {
-              closestDistance = distance;
-              closestIndex = index;
-            }
-          }
-
-          setActiveIndex(containingIndex ?? closestIndex);
-          return;
-        }
-
-        const mousePos = axis === 'x' ? mouseX : mouseY;
-
-        let closestIndex: number | null = null;
-        let closestDistance = Infinity;
-        let containingIndex: number | null = null;
-
-        const rects = itemRectsRef.current;
-        // Convert content-relative rects to viewport coords using live scroll
-        const scrollOffset = axis === 'x' ? container.scrollLeft : container.scrollTop;
-        const borderOffset = axis === 'x' ? container.clientLeft : container.clientTop;
-        const containerEdge = axis === 'x' ? containerRect.left : containerRect.top;
-        // Item rects are layout values (offset*); the container's bounding rect
-        // reflects any cumulative ancestor transform: scale. Compute the scale
-        // factor so we can map layout coords into the same visual viewport
-        // space the mouse cursor lives in.
-        const layoutSize = axis === 'x' ? container.offsetWidth : container.offsetHeight;
-        const visualSize = axis === 'x' ? containerRect.width : containerRect.height;
-        const scale = layoutSize > 0 ? visualSize / layoutSize : 1;
-
-        for (let index = 0; index < rects.length; index++) {
-          const r = rects[index];
-          if (!r) continue;
-          const el = itemsRef.current.get(index);
-          if (el && isItemDisabled?.(el)) continue;
-
-          const contentPos = axis === 'x' ? r.left : r.top;
-          const itemStart = containerEdge + (borderOffset + contentPos - scrollOffset) * scale;
-          const itemSize = (axis === 'x' ? r.width : r.height) * scale;
-          const itemEnd = itemStart + itemSize;
-
-          if (mousePos >= itemStart && mousePos <= itemEnd) {
-            containingIndex = index;
-          }
-
-          const itemCenter = itemStart + itemSize / 2;
-          const distance = Math.abs(mousePos - itemCenter);
-
-          if (distance < closestDistance) {
-            closestDistance = distance;
-            closestIndex = index;
-          }
-        }
-
-        setActiveIndex(containingIndex ?? closestIndex);
+        setActiveIndex(
+          resolveNearestIndex({
+            axis,
+            rects: itemRectsRef.current,
+            pointerX,
+            pointerY,
+            projection: readContainerProjection(container),
+            isSkipped: (index) => {
+              const element = itemsRef.current.get(index);
+              return element !== undefined && isItemDisabled?.(element) === true;
+            },
+          }),
+        );
       });
     },
     [axis, containerRef, isItemDisabled],
@@ -404,16 +281,24 @@ export function useProximityHover<T extends HTMLElement>(
 }
 
 /**
- * Hook for child items to register themselves with the proximity hover system.
- * Call in useEffect with the item's ref and index.
+ * Publishes one item's element to a proximity container under the index the
+ * DOM-order registry derived for it, and withdraws it on the way out.
+ *
+ * Every measured item in the kit — menu rows, select options, both kinds of
+ * tab, cards — does exactly this, and each had written the same effect with
+ * the same two-line teardown. The negative-index guard is the point of having
+ * it in one place: an item's index is -1 for the one commit before
+ * registration lands, and publishing that would put the item in slot -1 and
+ * leave it there.
  */
-export function useRegisterProximityItem(
-  registerItem: (index: number, element: HTMLElement | null) => void,
+export function useProximityRegistration(
+  elementRef: RefObject<HTMLElement | null>,
   index: number,
-  ref: RefObject<HTMLElement | null>,
-) {
+  registerItem: ((index: number, element: HTMLElement | null) => void) | undefined,
+): void {
   useEffect(() => {
-    registerItem(index, ref.current);
+    if (index < 0 || !registerItem) return;
+    registerItem(index, elementRef.current);
     return () => registerItem(index, null);
-  }, [index, registerItem, ref]);
+  }, [elementRef, index, registerItem]);
 }

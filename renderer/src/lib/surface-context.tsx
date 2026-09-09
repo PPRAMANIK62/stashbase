@@ -1,6 +1,8 @@
 'use client';
 
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+
+import { clamp } from '@/shared/utils/clamp';
 
 const SurfaceContext = createContext<number>(1);
 
@@ -9,9 +11,6 @@ export function useSurface(): number {
 }
 
 export function SurfaceProvider({ value, children }: { value: number; children: ReactNode }) {
-  return (
-    <SurfaceContext.Provider value={Math.max(1, Math.min(8, value))}>
-      {children}
-    </SurfaceContext.Provider>
-  );
+  const surface = useMemo(() => clamp(value, 1, 8), [value]);
+  return <SurfaceContext.Provider value={surface}>{children}</SurfaceContext.Provider>;
 }

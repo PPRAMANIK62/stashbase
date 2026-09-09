@@ -1,64 +1,28 @@
+/** The renderer's icon indirection. Every primitive asks for an icon by role
+ *  (`chevron-right`, `x`, `check`) instead of importing a lucide component
+ *  directly, and `IconProvider` lets a host swap the whole set — or one entry.
+ *
+ *  `IconName` is the closed vocabulary, and it is closed to what is actually
+ *  asked for. It used to list 59 roles with a lucide import each; eleven were
+ *  ever requested, and the other forty-eight were a catalogue this renderer
+ *  paid for in bundle weight and in the impression that a role existed because
+ *  something drew it. Adding a role means adding it here, giving it a default,
+ *  and having a caller — in that order. */
+
 'use client';
 
 import {
-  ChevronRight,
-  ChevronDown,
-  X,
-  Copy,
-  Menu,
-  Dot,
-  Monitor,
-  Sun,
-  Moon,
-  RectangleHorizontal,
-  Circle,
-  SquareLibrary,
-  Clock,
-  Star,
-  Settings,
-  Plus,
-  ArrowLeft,
-  ArrowRight,
   ArrowUp,
-  ArrowDown,
-  Search,
-  Loader,
-  Users,
-  Lock,
-  Mail,
-  Bell,
-  Shield,
-  Palette,
-  Lightbulb,
-  Rocket,
-  Heart,
-  Paintbrush,
   Brain,
-  Globe,
-  User,
-  ImageIcon,
-  Link,
   Check,
-  RotateCcw,
-  Play,
-  Pause,
-  Pipette,
-  Home,
-  MessageCircle,
-  Inbox,
-  Pencil,
-  Scaling,
-  SkipForward,
-  CornerDownRight,
-  CornerDownLeft,
+  ChevronDown,
+  ChevronRight,
+  Dot,
+  ImageIcon,
   PanelLeft,
   PanelRight,
-  ChevronsUpDown,
-  Ellipsis,
-  EllipsisVertical,
-  Calendar,
-  Folder,
-  SlidersHorizontal,
+  Search,
+  X,
 } from 'lucide-react';
 import { createContext, useContext, useMemo, type ComponentType, type ReactNode } from 'react';
 
@@ -71,124 +35,30 @@ export interface IconComponentProps {
 export type IconComponent = ComponentType<IconComponentProps>;
 
 export type IconName =
-  | 'chevron-right'
-  | 'chevron-down'
-  | 'x'
-  | 'copy'
-  | 'menu'
-  | 'dot'
-  | 'monitor'
-  | 'sun'
-  | 'moon'
-  | 'rectangle-horizontal'
-  | 'circle'
-  | 'square-library'
-  | 'clock'
-  | 'star'
-  | 'settings'
-  | 'plus'
-  | 'arrow-left'
-  | 'arrow-right'
   | 'arrow-up'
-  | 'arrow-down'
-  | 'search'
-  | 'loader'
-  | 'users'
-  | 'lock'
-  | 'mail'
-  | 'bell'
-  | 'shield'
-  | 'palette'
-  | 'lightbulb'
-  | 'rocket'
-  | 'heart'
-  | 'paintbrush'
   | 'brain'
-  | 'globe'
-  | 'user'
-  | 'image'
-  | 'link'
   | 'check'
-  | 'rotate-ccw'
-  | 'play'
-  | 'pause'
-  | 'pipette'
-  | 'home'
-  | 'message-circle'
-  | 'inbox'
-  | 'pencil'
-  | 'scaling'
-  | 'skip-forward'
-  | 'corner-down-right'
-  | 'corner-down-left'
+  | 'chevron-down'
+  | 'chevron-right'
+  | 'dot'
+  | 'image'
   | 'panel-left'
   | 'panel-right'
-  | 'chevrons-up-down'
-  | 'more-horizontal'
-  | 'more-vertical'
-  | 'calendar'
-  | 'folder'
-  | 'sliders-horizontal';
+  | 'search'
+  | 'x';
 
-export const defaultIcons: Record<IconName, IconComponent> = {
-  'chevron-right': ChevronRight,
-  'chevron-down': ChevronDown,
-  pipette: Pipette,
-  x: X,
-  copy: Copy,
-  menu: Menu,
-  dot: Dot,
-  monitor: Monitor,
-  sun: Sun,
-  moon: Moon,
-  'rectangle-horizontal': RectangleHorizontal,
-  circle: Circle,
-  'square-library': SquareLibrary,
-  clock: Clock,
-  star: Star,
-  settings: Settings,
-  plus: Plus,
-  'arrow-left': ArrowLeft,
-  'arrow-right': ArrowRight,
+const defaultIcons: Record<IconName, IconComponent> = {
   'arrow-up': ArrowUp,
-  'arrow-down': ArrowDown,
-  search: Search,
-  loader: Loader,
-  users: Users,
-  lock: Lock,
-  mail: Mail,
-  bell: Bell,
-  shield: Shield,
-  palette: Palette,
-  lightbulb: Lightbulb,
-  rocket: Rocket,
-  heart: Heart,
-  paintbrush: Paintbrush,
   brain: Brain,
-  globe: Globe,
-  user: User,
-  image: ImageIcon,
-  link: Link,
   check: Check,
-  'rotate-ccw': RotateCcw,
-  play: Play,
-  pause: Pause,
-  home: Home,
-  'message-circle': MessageCircle,
-  inbox: Inbox,
-  pencil: Pencil,
-  scaling: Scaling,
-  'skip-forward': SkipForward,
-  'corner-down-right': CornerDownRight,
-  'corner-down-left': CornerDownLeft,
+  'chevron-down': ChevronDown,
+  'chevron-right': ChevronRight,
+  dot: Dot,
+  image: ImageIcon,
   'panel-left': PanelLeft,
   'panel-right': PanelRight,
-  'chevrons-up-down': ChevronsUpDown,
-  'more-horizontal': Ellipsis,
-  'more-vertical': EllipsisVertical,
-  calendar: Calendar,
-  folder: Folder,
-  'sliders-horizontal': SlidersHorizontal,
+  search: Search,
+  x: X,
 };
 
 const IconContext = createContext<Record<IconName, IconComponent> | null>(null);
@@ -200,15 +70,6 @@ const IconContext = createContext<Record<IconName, IconComponent> | null>(null);
 function useIcon(name: IconName): IconComponent {
   const icons = useContext(IconContext);
   return (icons ?? defaultIcons)[name];
-}
-
-/**
- * Returns the full icon map.
- * Falls back to the default (Lucide) set if no provider is present.
- */
-function useIcons(): Record<IconName, IconComponent> {
-  const icons = useContext(IconContext);
-  return icons ?? defaultIcons;
 }
 
 /**
@@ -226,4 +87,4 @@ function IconProvider({
   return <IconContext.Provider value={value}>{children}</IconContext.Provider>;
 }
 
-export { IconProvider, useIcon, useIcons };
+export { IconProvider, useIcon };
