@@ -12,6 +12,10 @@ import { cn } from '@/lib/utils';
 
 interface InlineInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   caretOffset?: number;
+  /** Characters selected on mount, when the caller wants a run of the value
+   *  ready to replace: a file's stem ahead of its extension. Wins over
+   *  `caretOffset`. */
+  selection?: { end: number; start: number };
   commitOnBlur?: boolean;
   focusOnMount?: boolean;
   onCancel(): void;
@@ -44,22 +48,31 @@ const InlineInput = forwardRef<HTMLInputElement, InlineInputProps>(
       className,
       commitOnBlur = true,
       focusOnMount = true,
+      onBlur,
       onCancel,
       onChange,
       onCommit,
+      selection,
       ...props
     },
     forwardedRef,
   ) => {
     const ref = useRef<HTMLInputElement | null>(null);
+    const selectionStart = selection?.start;
+    const selectionEnd = selection?.end;
 
     useEffect(() => {
       const input = ref.current;
       if (!input || !focusOnMount) return;
       input.focus();
-      const offset = Math.min(Math.max(caretOffset ?? input.value.length, 0), input.value.length);
+      const clamp = (offset: number) => Math.min(Math.max(offset, 0), input.value.length);
+      if (selectionStart !== undefined && selectionEnd !== undefined) {
+        input.setSelectionRange(clamp(selectionStart), clamp(selectionEnd));
+        return;
+      }
+      const offset = clamp(caretOffset ?? input.value.length);
       input.setSelectionRange(offset, offset);
-    }, [caretOffset, focusOnMount]);
+    }, [caretOffset, focusOnMount, selectionEnd, selectionStart]);
 
     return (
       <input
@@ -68,7 +81,10 @@ const InlineInput = forwardRef<HTMLInputElement, InlineInputProps>(
           'block w-full rounded-none bg-transparent p-0 text-foreground outline-none',
           className,
         )}
-        onBlur={commitOnBlur ? onCommit : undefined}
+        onBlur={(event) => {
+          onBlur?.(event);
+          if (commitOnBlur && !event.defaultPrevented) onCommit();
+        }}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
           event.stopPropagation();
