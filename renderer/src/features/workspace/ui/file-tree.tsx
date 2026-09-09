@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useIsPresent, useReducedMotion } from 'framer-motion';
 import {
   ChevronDown,
   ChevronRight,
@@ -19,6 +19,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import {
+  Fragment,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -136,6 +138,58 @@ function Rails({ depth }: { depth: number }) {
   );
 }
 
+/** A folder's visible rows in the flat model, nested for rendering so the
+ *  whole group can open and close as one motion. */
+interface RenderNode {
+  children: RenderNode[];
+  item: TreeItem;
+}
+
+/**
+ * The children of an expanded folder. The group springs open from the
+ * folder row and closes back into it; while it is leaving, its rows are
+ * inert and skipped by the proximity layer so nothing stale can be reached.
+ * Clipping applies only while the height moves, so a row's focus ring is
+ * never shaved once the group has settled.
+ */
+function TreeGroup({
+  children,
+  onSettle,
+  reduceMotion,
+}: {
+  children: ReactNode;
+  onSettle(): void;
+  reduceMotion: boolean;
+}) {
+  const present = useIsPresent();
+  const [moving, setMoving] = useState(false);
+  return (
+    <motion.div
+      animate={{ height: 'auto', opacity: 1 }}
+      aria-hidden={present ? undefined : true}
+      className={moving || !present ? 'overflow-hidden' : undefined}
+      data-tree-exiting={present ? undefined : ''}
+      exit={{
+        height: 0,
+        opacity: 0,
+        transition: reduceMotion ? { duration: 0 } : spring.moderate.exit,
+      }}
+      inert={!present}
+      initial={{ height: 0, opacity: 0 }}
+      onAnimationComplete={() => {
+        setMoving(false);
+        onSettle();
+      }}
+      onAnimationStart={() => setMoving(true)}
+      transition={
+        reduceMotion ? { duration: 0 } : { ...spring.moderate, opacity: { duration: 0.1 } }
+      }
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 function entryOf(row: TreeRow): WorkspaceEntry {
   return { kind: row.node.type, path: row.node.path };
 }
@@ -221,6 +275,22 @@ export function FileTree({
     list.splice(naming.parentPath === '' ? 0 : parentAt + 1, 0, draft);
     return list;
   }, [naming, renderedRows]);
+  const nodes = useMemo<RenderNode[]>(() => {
+    const roots: RenderNode[] = [];
+    const folders = new Map<string, RenderNode>();
+    for (const item of items) {
+      const node: RenderNode = { children: [], item };
+      const parent = item.kind === 'row' ? item.row.parentPath : item.parentPath || null;
+      (parent === null ? roots : (folders.get(parent)?.children ?? roots)).push(node);
+      if (item.kind === 'row' && item.row.node.type === 'folder') {
+        folders.set(item.row.node.path, node);
+      }
+    }
+    return roots;
+  }, [items]);
+  /** Bumped when a group finishes moving, so the proximity layer re-measures rows. */
+  const [layoutRevision, setLayoutRevision] = useState(0);
+  const bumpLayout = useCallback(() => setLayoutRevision((revision) => revision + 1), []);
   const tabStop =
     renderedRows.find((row) => row.node.path === rovingPath)?.node.path ??
     renderedRows.find((row) => row.node.path === tree.selectedPath)?.node.path ??
@@ -238,11 +308,11 @@ export function FileTree({
   useLayoutEffect(() => {
     const rows = Array.from(
       treeElement.current?.querySelectorAll<HTMLElement>('[data-proximity-index]') ?? [],
-    );
+    ).filter((row) => row.closest('[data-tree-exiting]') === null);
     const indexOf = (row: HTMLElement) => Number(row.dataset.proximityIndex);
     rows.forEach((row) => registerItem(indexOf(row), row));
     return () => rows.forEach((row) => registerItem(indexOf(row), null));
-  }, [naming, registerItem, renderedPathKey]);
+  }, [layoutRevision, naming, registerItem, renderedPathKey]);
 
   // The section ends with its last row, but the empty sidebar space below
   // it, down to the footer, still reads as the file tree. A right click there
@@ -567,6 +637,32 @@ export function FileTree({
     );
   };
 
+  const renderNodes = (list: RenderNode[]): ReactNode =>
+    list.map((node) => {
+      const folder =
+        node.item.kind === 'row' && node.item.row.node.type === 'folder'
+          ? node.item.row.node.path
+          : null;
+      const key =
+        node.item.kind === 'row'
+          ? node.item.row.node.path
+          : `draft:${node.item.entryKind}:${node.item.parentPath}`;
+      return (
+        <Fragment key={key}>
+          {renderItem(node.item)}
+          {folder !== null && (
+            <AnimatePresence initial={false}>
+              {node.children.length > 0 && (
+                <TreeGroup key={folder} onSettle={bumpLayout} reduceMotion={reduceMotion}>
+                  {renderNodes(node.children)}
+                </TreeGroup>
+              )}
+            </AnimatePresence>
+          )}
+        </Fragment>
+      );
+    });
+
   return (
     <FileTreeMenu
       actions={{
@@ -635,7 +731,7 @@ export function FileTree({
             )}
           </AnimatePresence>
 
-          {items.map(renderItem)}
+          {renderNodes(nodes)}
         </div>
       )}
 
