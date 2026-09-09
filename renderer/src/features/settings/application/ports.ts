@@ -1,49 +1,45 @@
 import type {
-  TranscriptionModelOperationWire,
-  TranscriptionPreferencesRequestWire,
-  TranscriptionSettingsWire,
-} from '@/protocols/http/transcription';
-import type { HostedAgentAllowance } from '@/shared/account';
-import type { AgentId } from '@/shared/agent-protocol';
-import type { AgentRuntimeDebugState, AgentsResponse } from '@/shared/agent-runtime';
+  AgentAllowance,
+  AgentCatalog,
+  AgentDebugPatch,
+} from '@/features/settings/domain/agent-catalog';
+import type {
+  TranscriptionModelOperation,
+  TranscriptionPreferences,
+  TranscriptionPreferencesPatch,
+  TranscriptionSettings,
+} from '@/features/settings/domain/transcription';
+import type { AgentId } from '@/shared/domain/agent-id';
+import {
+  featureErrorClass,
+  type FeatureError,
+  type FeatureFailureKind,
+  type TransportFailureKind,
+} from '@/shared/domain/feature-error';
 
 export interface AgentRuntimePort {
-  listAgents(signal: AbortSignal): Promise<AgentsResponse>;
+  listAgents(signal: AbortSignal): Promise<AgentCatalog>;
   prepareAgent(
     id: AgentId,
     action: 'check' | 'bootstrap' | 'login',
     signal: AbortSignal,
-  ): Promise<AgentsResponse>;
-  updateDebug(
-    patch: Partial<Omit<AgentRuntimeDebugState, 'enabled'>>,
-    signal: AbortSignal,
-  ): Promise<AgentsResponse>;
-  resetManagedAgent(id: AgentId, signal: AbortSignal): Promise<AgentsResponse>;
-  getAllowance(signal: AbortSignal): Promise<HostedAgentAllowance>;
+  ): Promise<AgentCatalog>;
+  updateDebug(patch: AgentDebugPatch, signal: AbortSignal): Promise<AgentCatalog>;
+  resetManagedAgent(id: AgentId, signal: AbortSignal): Promise<AgentCatalog>;
+  getAllowance(signal: AbortSignal): Promise<AgentAllowance>;
 }
 
-export type AgentRuntimeFailureKind = 'invalid-response' | 'unavailable';
+export type AgentRuntimeFailureKind = TransportFailureKind;
 
-export class AgentRuntimeError extends Error {
-  readonly kind: AgentRuntimeFailureKind;
-
-  constructor(kind: AgentRuntimeFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'AgentRuntimeError';
-    this.kind = kind;
-  }
-}
-
-export type TranscriptionSettings = TranscriptionSettingsWire;
-export type TranscriptionPreferencesPatch = TranscriptionPreferencesRequestWire;
-export type TranscriptionModelOperation = TranscriptionModelOperationWire;
+export type AgentRuntimeError = FeatureError;
+export const AgentRuntimeError = featureErrorClass('AgentRuntimeError');
 
 export interface TranscriptionPort {
   load(signal: AbortSignal): Promise<TranscriptionSettings>;
   updatePreferences(
     patch: TranscriptionPreferencesPatch,
     signal: AbortSignal,
-  ): Promise<{ language: string; modelId: string; providerId: string }>;
+  ): Promise<TranscriptionPreferences>;
   downloadModel(id: string, signal: AbortSignal): Promise<TranscriptionModelOperation>;
   removeModel(id: string, signal: AbortSignal): Promise<void>;
 }
@@ -57,14 +53,7 @@ export interface CapturePort {
   update(preferences: CapturePreferences, signal: AbortSignal): Promise<CapturePreferences>;
 }
 
-export type SettingsFailureKind = 'invalid-request' | 'invalid-response' | 'unavailable';
+export type SettingsFailureKind = FeatureFailureKind<'invalid-request'>;
 
-export class SettingsError extends Error {
-  readonly kind: SettingsFailureKind;
-
-  constructor(kind: SettingsFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'SettingsError';
-    this.kind = kind;
-  }
-}
+export type SettingsError = FeatureError<'invalid-request'>;
+export const SettingsError = featureErrorClass<'invalid-request'>('SettingsError');

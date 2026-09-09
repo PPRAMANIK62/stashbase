@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import type { CapturePort } from '@/features/settings/application/ports';
-import { useCapture } from '@/features/settings/hooks/use-capture';
 
 import { GeneralPanel } from './general-panel';
 
@@ -18,8 +17,7 @@ const capturePort: CapturePort = {
 };
 
 function GeneralHarness() {
-  const capture = useCapture(capturePort, async () => true);
-  return <GeneralPanel capture={capture} />;
+  return <GeneralPanel applyCaptureWatch={async () => true} captureApi={capturePort} />;
 }
 
 const meta = {

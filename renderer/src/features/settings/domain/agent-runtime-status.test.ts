@@ -1,19 +1,21 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { Agent } from '@/shared/agent-runtime';
+import { AGENT_RUNTIME_STAGES, type AgentRuntime } from '@/features/settings/domain/agent-catalog';
+import { agentRuntime } from '@/test/fakes/settings';
 
-import { describeRuntime } from './agent-runtime-status';
+import { agentRuntimeStageIndex, describeRuntime } from './agent-runtime-status';
 
-function agent(overrides: Partial<Agent>): Agent {
-  return {
+/** A runtime nothing has run for yet: discovered, not installed, no ownership
+ *  reported. Every case below names only the part it is about. */
+function codex(overrides: Partial<AgentRuntime> = {}): AgentRuntime {
+  return agentRuntime({
     id: 'codex',
-    label: 'Codex',
-    vendor: 'OpenAI',
-    installHint: 'npm install -g codex',
     installed: false,
-    launchCommand: 'codex',
+    label: 'Codex',
+    ownership: null,
+    preparation: { kind: 'idle' },
     ...overrides,
-  };
+  });
 }
 
 describe('describeRuntime', () => {
@@ -22,60 +24,59 @@ describe('describeRuntime', () => {
       description: 'Checking…',
       failed: false,
       stage: null,
-      stageIndex: 0,
       action: null,
     });
   });
 
   it('offers Install for a not-yet-installed idle runtime, and withholds it while busy', () => {
-    expect(describeRuntime(agent({ installed: false }), false)).toEqual({
+    expect(describeRuntime(codex({ installed: false }), false)).toEqual({
       description: 'Not installed',
       failed: false,
       stage: 'discover',
-      stageIndex: 0,
       action: { kind: 'install', label: 'Install' },
     });
-    expect(describeRuntime(agent({ installed: false }), true)).toEqual({
+    expect(describeRuntime(codex({ installed: false }), true)).toEqual({
       description: 'Not installed',
       failed: false,
       stage: 'discover',
-      stageIndex: 0,
       action: null,
     });
   });
 
   it.each([
-    ['installing', 'install', 1],
-    ['authenticating', 'authenticate', 2],
-    ['configuring', 'configure', 3],
+    ['install', 1],
+    ['authenticate', 2],
+    ['configure', 3],
   ] as const)(
-    'maps bootstrap phase %s onto stage %s at index %d with no action',
-    (phase, stage, stageIndex) => {
+    'reads a running %s preparation at track position %d with no action',
+    (stage, position) => {
       const display = describeRuntime(
-        agent({ installed: true, bootstrap: { phase, message: 'Setting things up…' } }),
+        codex({
+          installed: true,
+          preparation: { kind: 'running', note: 'Setting things up…', stage },
+        }),
         false,
       );
       expect(display).toEqual({
         description: 'Setting things up…',
         failed: false,
         stage,
-        stageIndex,
         action: null,
       });
+      expect(agentRuntimeStageIndex(stage)).toBe(position);
     },
   );
 
   it('routes an account-required failure to sign-in regardless of failure stage', () => {
     const display = describeRuntime(
-      agent({
+      codex({
         installed: true,
-        bootstrap: {
-          phase: 'failed',
+        preparation: {
+          kind: 'failed',
           failure: {
-            stage: 'installation',
-            code: 'account-required',
-            message: 'An account is required to use Built-in.',
-            retryable: true,
+            note: 'An account is required to use Built-in.',
+            refusal: 'account-required',
+            stage: 'install',
           },
         },
       }),
@@ -85,22 +86,20 @@ describe('describeRuntime', () => {
       description: 'An account is required to use Built-in.',
       failed: true,
       stage: 'install',
-      stageIndex: 1,
       action: { kind: 'account', label: 'Sign in' },
     });
   });
 
-  it('offers sign-in for an authentication-stage failure without an account-required code', () => {
+  it('offers sign-in for an authenticate-stage failure without an account-required refusal', () => {
     const display = describeRuntime(
-      agent({
+      codex({
         installed: true,
-        bootstrap: {
-          phase: 'failed',
+        preparation: {
+          kind: 'failed',
           failure: {
-            stage: 'authentication',
-            code: 'authentication-required',
-            message: 'Codex needs you to sign in.',
-            retryable: true,
+            note: 'Codex needs you to sign in.',
+            refusal: 'authentication-required',
+            stage: 'authenticate',
           },
         },
       }),
@@ -108,63 +107,45 @@ describe('describeRuntime', () => {
     );
     expect(display.action).toEqual({ kind: 'login', label: 'Sign in' });
     expect(display.stage).toBe('authenticate');
-    expect(display.stageIndex).toBe(2);
   });
 
-  it('labels an mcp-stage failure as a connection retry', () => {
+  it('labels a configure-stage failure as a connection retry', () => {
     const display = describeRuntime(
-      agent({
+      codex({
         installed: true,
-        bootstrap: {
-          phase: 'failed',
-          failure: {
-            stage: 'mcp',
-            code: 'operation-failed',
-            message: 'MCP failed.',
-            retryable: true,
-          },
+        preparation: {
+          kind: 'failed',
+          failure: { note: 'MCP failed.', refusal: 'operation-failed', stage: 'configure' },
         },
       }),
       false,
     );
     expect(display.action).toEqual({ kind: 'retry', label: 'Retry connection' });
     expect(display.stage).toBe('configure');
-    expect(display.stageIndex).toBe(3);
   });
 
-  it('labels an installation-stage failure as a plain retry', () => {
+  it('labels an install-stage failure as a plain retry', () => {
     const display = describeRuntime(
-      agent({
+      codex({
         installed: false,
-        bootstrap: {
-          phase: 'failed',
-          failure: {
-            stage: 'installation',
-            code: 'operation-failed',
-            message: 'Install failed.',
-            retryable: true,
-          },
+        preparation: {
+          kind: 'failed',
+          failure: { note: 'Install failed.', refusal: 'operation-failed', stage: 'install' },
         },
       }),
       false,
     );
     expect(display.action).toEqual({ kind: 'retry', label: 'Retry' });
     expect(display.stage).toBe('install');
-    expect(display.stageIndex).toBe(1);
   });
 
   it('withholds the failure action while a retry is already in flight', () => {
     const display = describeRuntime(
-      agent({
+      codex({
         installed: true,
-        bootstrap: {
-          phase: 'failed',
-          failure: {
-            stage: 'mcp',
-            code: 'operation-failed',
-            message: 'MCP failed.',
-            retryable: true,
-          },
+        preparation: {
+          kind: 'failed',
+          failure: { note: 'MCP failed.', refusal: 'operation-failed', stage: 'configure' },
         },
       }),
       true,
@@ -173,13 +154,15 @@ describe('describeRuntime', () => {
     expect(display.failed).toBe(true);
   });
 
-  it('treats an installed runtime with no bootstrap report as already ready, without the "Ready for Chat" prefix', () => {
-    const display = describeRuntime(agent({ installed: true, source: 'system' }), false);
+  it('treats an installed runtime with an idle preparation as already ready, without the "Ready for Chat" prefix', () => {
+    const display = describeRuntime(
+      codex({ installed: true, ownership: 'system', preparation: { kind: 'idle' } }),
+      false,
+    );
     expect(display).toEqual({
       description: 'System runtime',
       failed: false,
       stage: 'ready',
-      stageIndex: 4,
       action: null,
     });
   });
@@ -189,19 +172,22 @@ describe('describeRuntime', () => {
     ['managed', 'StashBase-managed runtime'],
     ['system', 'System runtime'],
   ] as const)(
-    'describes a ready %s runtime with the "Ready for Chat" prefix and matching source text',
-    (source, label) => {
+    'describes a ready %s runtime with the "Ready for Chat" prefix and matching ownership text',
+    (ownership, label) => {
       const display = describeRuntime(
-        agent({ installed: true, source, bootstrap: { phase: 'ready' } }),
+        codex({ installed: true, ownership, preparation: { kind: 'ready' } }),
         false,
       );
       expect(display).toEqual({
         description: `Ready for Chat · ${label}`,
         failed: false,
         stage: 'ready',
-        stageIndex: 4,
         action: null,
       });
     },
   );
+
+  it('derives every stage position from the declared track order', () => {
+    expect(AGENT_RUNTIME_STAGES.map(agentRuntimeStageIndex)).toEqual([0, 1, 2, 3, 4]);
+  });
 });

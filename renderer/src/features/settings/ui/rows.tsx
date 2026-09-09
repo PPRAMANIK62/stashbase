@@ -1,13 +1,3 @@
-import {
-  useId,
-  type HTMLAttributes,
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactNode,
-} from 'react';
-
-import { cn } from '@/lib/utils';
-
 /**
  * The one row grammar every Settings section is built from: a pane title,
  * titled groups, hairline lists, and rows of `lead · title and detail ·
@@ -17,6 +7,17 @@ import { cn } from '@/lib/utils';
  * the option. Nothing here has a surface fill; the only tint is the one
  * pressable controls share.
  */
+
+import {
+  useId,
+  type HTMLAttributes,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
+
+import { focusRing } from '@/lib/focus-ring';
+import { cn } from '@/lib/utils';
 
 export function SettingsPane({
   children,
@@ -86,7 +87,7 @@ export interface SettingsRowProps extends Omit<HTMLAttributes<HTMLElement>, 'tit
   /** Content under the title and detail: a bar, an inline editor, a notice. */
   children?: ReactNode;
   detail?: ReactNode;
-  detailTone?: 'muted' | 'error';
+  detailTone?: 'muted' | 'error' | undefined;
   /** Leading slot: a runtime icon, a status glyph, or a choice indicator. */
   lead?: ReactNode;
   title: ReactNode;
@@ -186,6 +187,7 @@ export function ChoiceList({
           ? rows.length - 1
           : (current + (event.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length;
     const row = rows[next];
+    if (!row) return;
     row.focus();
     const nextValue = row.dataset.value;
     if (nextValue !== undefined && nextValue !== value) onValueChange(nextValue);
@@ -248,8 +250,8 @@ export function ChoiceRow({
       aria-checked={checked}
       aria-label={label}
       className={cn(
-        'cursor-pointer transition-colors duration-80 outline-none hover:bg-hover',
-        'focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)] focus-visible:ring-inset',
+        'cursor-pointer transition-colors duration-fast outline-none hover:bg-hover',
+        focusRing('focus-visible:ring-inset'),
         className,
       )}
       data-value={value}
@@ -274,13 +276,13 @@ function ChoiceIndicator({ checked }: { checked: boolean }) {
     <span
       aria-hidden="true"
       className={cn(
-        'flex size-4 items-center justify-center rounded-full border-[1.5px] transition-colors duration-80',
+        'flex size-4 items-center justify-center rounded-full border-[1.5px] transition-colors duration-fast',
         checked ? 'border-transparent' : 'border-border',
       )}
     >
       <span
         className={cn(
-          'size-2 rounded-full bg-foreground transition-transform duration-80',
+          'size-2 rounded-full bg-foreground transition-transform duration-fast',
           checked ? 'scale-100' : 'scale-0',
         )}
       />
@@ -334,8 +336,8 @@ export function ProgressBar({
     <div className={cn('h-1.5 overflow-hidden rounded-full bg-active', className)}>
       <div
         className={cn(
-          'h-full rounded-full transition-[width] duration-300 ease-out',
-          live ? 'bg-[color:var(--focus-ring,#6B97FF)]' : 'bg-foreground/70',
+          'h-full rounded-full transition-[width] duration-slow ease-out',
+          live ? 'bg-[color:var(--focus-ring)]' : 'bg-foreground/70',
         )}
         style={{ width: `${percent}%` }}
       />
@@ -356,10 +358,10 @@ export function Disclosure({
 }) {
   return (
     <details className="group/disclosure">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-0.5 py-1.5 text-caption font-semibold text-muted-foreground transition-colors duration-80 hover:text-foreground [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-0.5 py-1.5 text-caption font-semibold text-muted-foreground transition-colors duration-fast hover:text-foreground [&::-webkit-details-marker]:hidden">
         <span
           aria-hidden="true"
-          className="size-1.5 -rotate-45 border-r-[1.5px] border-b-[1.5px] border-current transition-transform duration-80 group-open/disclosure:rotate-45"
+          className="size-1.5 -rotate-45 border-r-[1.5px] border-b-[1.5px] border-current transition-transform duration-fast group-open/disclosure:rotate-45"
         />
         {summary}
         {badge}

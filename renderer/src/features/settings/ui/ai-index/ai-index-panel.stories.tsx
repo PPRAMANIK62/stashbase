@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-import type { EmbedderPort, EmbedderState } from '@/features/settings/application/embedder-port';
-import { useEmbedder } from '@/features/settings/hooks/use-embedder';
+import type { EmbedderPort } from '@/features/settings/application/embedder-port';
+import type { EmbedderState } from '@/features/settings/domain/embedder';
 
 import { AiIndexPanel } from './ai-index-panel';
 
@@ -26,6 +26,7 @@ const signedIn: EmbedderState = {
       reservedTokens: 0,
       usedTokens: 1_027_236,
     },
+    quotaUnavailable: false,
     signedIn: true,
   },
   authorized: true,
@@ -39,28 +40,16 @@ const embedderPort: EmbedderPort = {
   load: async () => signedIn,
   refreshAccount: async () => signedIn.account,
   removeKey: async () => signedIn,
-  saveKey: async () => ({
-    authorized: true,
-    hasKey: true,
-    model: 'text-embedding-3-small',
-    provider: 'openai',
-    source: 'openai',
-  }),
+  saveKey: async () => ({ warning: null }),
   selectProvider: async () => signedIn,
   signInStatus: async () => ({ state: 'pending' }),
   signOut: async () => undefined,
-  startSignIn: async () => ({
-    flowId: 'flow',
-    provider: 'google',
-    purpose: 'embedding',
-    url: 'https://accounts.example/sign-in',
-  }),
+  startSignIn: async () => ({ flowId: 'flow', url: 'https://accounts.example/sign-in' }),
   useAccount: async () => signedIn.account,
 };
 
 function AiIndexHarness() {
-  const embedder = useEmbedder(embedderPort, true);
-  return <AiIndexPanel embedder={embedder} onOpenExternal={() => undefined} />;
+  return <AiIndexPanel embedderApi={embedderPort} onOpenExternal={() => undefined} />;
 }
 
 const meta = {

@@ -5,6 +5,20 @@ import type {
   TranscriptionPort,
 } from '@/features/settings/application/ports';
 
+/** Every section the Settings shell registers, in nav order. A section id
+ *  that is not one of these cannot be registered — the mistake fails to
+ *  typecheck instead of quietly rendering an empty pane. */
+const SETTINGS_SECTION_IDS = [
+  'general',
+  'appearance',
+  'agents',
+  'ai-index',
+  'transcription',
+  'mcp',
+] as const;
+
+export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
+
 export interface SettingsProps {
   agentRuntimeApi: AgentRuntimePort;
   /** Resolves true when the desktop watch matches the saved opt-in; absent outside Electron. */
@@ -13,8 +27,9 @@ export interface SettingsProps {
   embedderApi?: EmbedderPort;
   onClose: () => void;
   onOpenExternal?: (href: string) => void;
-  onSectionChange: (id: string) => void;
+  onSectionChange: (id: SettingsSectionId) => void;
   open: boolean;
-  section: string;
+  /** The section the app asked for. */
+  section: SettingsSectionId;
   transcriptionApi?: TranscriptionPort;
 }

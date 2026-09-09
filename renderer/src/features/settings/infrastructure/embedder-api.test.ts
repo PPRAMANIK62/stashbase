@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { HttpClient } from '@/platform/http/client';
+import type { HttpClient, HttpRequest } from '@/platform/http/client';
 
-import { createEmbedderApi } from './embedder-api';
+import { createEmbedderAdapter } from './embedder-api';
 
 const signal = new AbortController().signal;
 const state = {
@@ -16,7 +16,7 @@ const state = {
 
 describe('embedder API', () => {
   it('loads the embedder state and saves a key with its provider', async () => {
-    const request = vi.fn(async (input: { path: string }) =>
+    const request = vi.fn(async (input: HttpRequest) =>
       input.path === '/api/embedder'
         ? { body: state, status: 200 }
         : {
@@ -31,7 +31,7 @@ describe('embedder API', () => {
             status: 200,
           },
     );
-    const api = createEmbedderApi({ request } as HttpClient);
+    const api = createEmbedderAdapter({ request });
     expect((await api.load(signal)).authorized).toBe(false);
     const saved = await api.saveKey('openai', 'sk-test', signal);
     expect(saved.warning).toBe('offline');
@@ -47,14 +47,16 @@ describe('embedder API', () => {
     const client: HttpClient = {
       request: vi.fn(async () => ({ body: { error: 'Invalid API key.' }, status: 401 })),
     };
-    await expect(createEmbedderApi(client).saveKey('openai', 'bad', signal)).rejects.toMatchObject({
+    await expect(
+      createEmbedderAdapter(client).saveKey('openai', 'bad', signal),
+    ).rejects.toMatchObject({
       kind: 'rejected',
       message: 'Invalid API key.',
     });
   });
 
   it('starts an embedding-purpose sign-in and reads its status', async () => {
-    const request = vi.fn(async (input: { path: string }) =>
+    const request = vi.fn(async (input: HttpRequest) =>
       input.path === '/api/account/oauth/start'
         ? {
             body: {
@@ -67,7 +69,7 @@ describe('embedder API', () => {
           }
         : { body: { state: 'complete' }, status: 200 },
     );
-    const api = createEmbedderApi({ request } as HttpClient);
+    const api = createEmbedderAdapter({ request });
     const started = await api.startSignIn(signal);
     expect(started.url).toBe('https://accounts.example/x');
     expect(request).toHaveBeenCalledWith({

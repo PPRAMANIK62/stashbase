@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { HttpClient } from '@/platform/http/client';
+import type { HttpClient, HttpRequest } from '@/platform/http/client';
 
-import { createTranscriptionApi } from './transcription-api';
+import { createTranscriptionAdapter } from './transcription-api';
 
 const signal = new AbortController().signal;
 
 describe('transcription API', () => {
   it('loads validated settings and maps the download operation', async () => {
-    const request = vi.fn(async ({ path }: { path: string }) =>
+    const request = vi.fn(async ({ path }: HttpRequest) =>
       path.endsWith('/download')
         ? { body: { download: { status: 'verifying' }, id: 'base' }, status: 202 }
         : {
@@ -16,7 +16,7 @@ describe('transcription API', () => {
             status: 200,
           },
     );
-    const api = createTranscriptionApi({ request } as unknown as HttpClient);
+    const api = createTranscriptionAdapter({ request });
     await expect(api.load(signal)).resolves.toMatchObject({ modelId: 'base' });
     await expect(api.downloadModel('base', signal)).resolves.toEqual({ status: 'verifying' });
     expect(request).toHaveBeenLastCalledWith(
@@ -32,7 +32,7 @@ describe('transcription API', () => {
       })),
     };
     await expect(
-      createTranscriptionApi(client).updatePreferences({ providerId: 'remote' }, signal),
+      createTranscriptionAdapter(client).updatePreferences({ providerId: 'remote' }, signal),
     ).rejects.toMatchObject({
       kind: 'invalid-request',
       message: 'transcription model id is required when changing provider',

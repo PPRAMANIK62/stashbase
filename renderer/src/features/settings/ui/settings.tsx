@@ -1,15 +1,9 @@
-import { lazy, Suspense } from 'react';
+import { lazySurface } from '@/lib/runtime/lazy-surface';
 
 import type { SettingsProps } from './settings-types';
 
-const ManagedSettings = lazy(() => import('./managed-settings'));
-
-export function Settings(props: SettingsProps) {
-  if (!props.open) return null;
-
-  return (
-    <Suspense fallback={null}>
-      <ManagedSettings {...props} />
-    </Suspense>
-  );
-}
+/** Settings is a modal a session may never open, so its panels stay out of the
+ *  first paint until one is asked for. */
+export const Settings = lazySurface<SettingsProps>(() => import('./managed-settings'), {
+  when: (props) => props.open,
+});

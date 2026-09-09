@@ -2,57 +2,45 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import type { AgentRuntimePort } from '@/features/settings/application/ports';
-import { useAgentRuntimes } from '@/features/settings/hooks/use-agent-runtimes';
-import type { Agent, AgentsResponse } from '@/shared/agent-runtime';
+import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
 
 import { AgentRuntimesPanel } from './agents-panel';
 
-function catalog(clis: Agent[]): AgentsResponse {
-  return { clis };
+function catalog(runtimes: AgentRuntime[]): AgentCatalog {
+  return { runtimes, debug: null };
 }
 
-const codex: Agent = {
+const codex: AgentRuntime = {
   id: 'codex',
   label: 'Codex',
-  vendor: 'OpenAI',
-  installHint: '',
   installed: true,
-  source: 'system',
-  bootstrap: { phase: 'ready' },
-  launchCommand: 'codex',
+  ownership: 'system',
+  preparation: { kind: 'ready' },
 };
 
-const claude: Agent = {
+const claude: AgentRuntime = {
   id: 'claude',
   label: 'Claude Code',
-  vendor: 'Anthropic',
-  installHint: '',
   installed: true,
-  source: 'system',
-  bootstrap: { phase: 'ready' },
-  launchCommand: 'claude',
+  ownership: 'system',
+  preparation: { kind: 'ready' },
 };
 
-const stashbase: Agent = {
+const stashbase: AgentRuntime = {
   id: 'stashbase',
   label: 'Built-in',
-  vendor: 'StashBase',
-  installHint: '',
   installed: true,
-  source: 'bundled',
-  bootstrap: { phase: 'ready' },
-  launchCommand: 'stashbase',
+  ownership: 'bundled',
+  preparation: { kind: 'ready' },
 };
 
 function fakePort(): AgentRuntimePort {
   return {
     getAllowance: async () => ({
-      profile: 'stashbase-agent-default',
       remainingPercent: 62,
       inputTokens: 0,
       outputTokens: 0,
       cacheReadTokens: 0,
-      windowStartedAt: null,
       windowEndsAt: null,
     }),
     listAgents: async () => catalog([codex, claude, stashbase]),
@@ -64,17 +52,11 @@ function fakePort(): AgentRuntimePort {
 
 function Harness() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const port = fakePort();
   return (
     <QueryClientProvider client={queryClient}>
-      <Inner port={port} />
+      <AgentRuntimesPanel agentRuntimeApi={fakePort()} />
     </QueryClientProvider>
   );
-}
-
-function Inner({ port }: { port: AgentRuntimePort }) {
-  const runtimes = useAgentRuntimes(port);
-  return <AgentRuntimesPanel runtimes={runtimes} />;
 }
 
 const meta = {

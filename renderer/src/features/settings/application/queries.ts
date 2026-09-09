@@ -4,26 +4,17 @@ import type {
   TranscriptionPort,
 } from '@/features/settings/application/ports';
 
-export const agentCatalogQueryKeys = {
-  all: ['settings', 'agent-catalog'] as const,
-};
-
-export const agentAllowanceQueryKeys = {
-  all: ['settings', 'agent-allowance'] as const,
-};
-
-export const transcriptionQueryKeys = {
-  all: ['settings', 'transcription'] as const,
-};
-
-export const captureQueryKeys = {
-  all: ['settings', 'capture'] as const,
+export const settingsQueryKeys = {
+  agentAllowance: ['settings', 'agent-allowance'] as const,
+  agentCatalog: ['settings', 'agent-catalog'] as const,
+  capture: ['settings', 'capture'] as const,
+  transcription: ['settings', 'transcription'] as const,
 };
 
 export function agentCatalogQuery(port: AgentRuntimePort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.listAgents(signal),
-    queryKey: agentCatalogQueryKeys.all,
+    queryKey: settingsQueryKeys.agentCatalog,
     retry: false,
   } as const;
 }
@@ -31,7 +22,7 @@ export function agentCatalogQuery(port: AgentRuntimePort) {
 export function agentAllowanceQuery(port: AgentRuntimePort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.getAllowance(signal),
-    queryKey: agentAllowanceQueryKeys.all,
+    queryKey: settingsQueryKeys.agentAllowance,
     retry: false,
   } as const;
 }
@@ -39,7 +30,7 @@ export function agentAllowanceQuery(port: AgentRuntimePort) {
 export function transcriptionQuery(port: TranscriptionPort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.load(signal),
-    queryKey: transcriptionQueryKeys.all,
+    queryKey: settingsQueryKeys.transcription,
     retry: false,
   } as const;
 }
@@ -47,7 +38,7 @@ export function transcriptionQuery(port: TranscriptionPort) {
 export function captureQuery(port: CapturePort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.load(signal),
-    queryKey: captureQueryKeys.all,
+    queryKey: settingsQueryKeys.capture,
     retry: false,
   } as const;
 }

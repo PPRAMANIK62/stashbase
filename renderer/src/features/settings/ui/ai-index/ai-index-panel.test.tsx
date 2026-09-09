@@ -1,110 +1,34 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createElement, type PropsWithChildren } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { EmbedderPort, EmbedderState } from '@/features/settings/application/embedder-port';
-import { useEmbedder } from '@/features/settings/hooks/use-embedder';
+import { EmbedderError, type EmbedderPort } from '@/features/settings/application/embedder-port';
+import { failureMessage } from '@/features/settings/application/failure-messages';
+import type { EmbedderState } from '@/features/settings/domain/embedder';
+import { embedderPort, embedderState, SIGNED_IN_ACCOUNT } from '@/test/fakes/settings';
+import { withQueryClient } from '@/test/query';
 
 import { AiIndexPanel } from './ai-index-panel';
 
-const signedOut: EmbedderState = {
-  account: { active: false, signedIn: false },
-  authorized: false,
-  hasKey: false,
-  model: 'text-embedding-3-small',
-  provider: 'openai',
-  source: 'openai',
-};
+const signedOut = embedderState();
 
-const signedIn: EmbedderState = {
-  account: {
-    active: true,
-    displayName: 'Ada Lovelace',
-    email: 'ada@example.com',
-    quota: {
-      grantedTokens: 1000,
-      periodEndsAt: '2026-10-01T00:00:00.000Z',
-      periodStartedAt: '2026-09-01T00:00:00.000Z',
-      plan: 'free',
-      remainingTokens: 250,
-      reservedTokens: 0,
-      usedTokens: 750,
-    },
-    signedIn: true,
-  },
+const signedIn = embedderState({
+  account: SIGNED_IN_ACCOUNT,
   authorized: true,
-  hasKey: false,
   model: 'hosted',
-  provider: 'openai',
   source: 'stashbase-account',
-};
-
-function fakePort(state: EmbedderState, overrides: Partial<EmbedderPort> = {}): EmbedderPort {
-  return {
-    load: vi.fn(async () => state),
-    refreshAccount: vi.fn(async () => state.account),
-    removeKey: vi.fn(async () => signedOut),
-    saveKey: vi.fn(async () => ({
-      authorized: true as const,
-      hasKey: true as const,
-      model: 'm',
-      provider: 'openai' as const,
-      source: 'openai' as const,
-    })),
-    selectProvider: vi.fn(async () => state),
-    signInStatus: vi.fn(async () => ({ state: 'pending' as const })),
-    signOut: vi.fn(async () => undefined),
-    startSignIn: vi.fn(async () => ({
-      flowId: 'flow-1',
-      provider: 'google' as const,
-      purpose: 'embedding' as const,
-      url: 'https://accounts.example/sign-in',
-    })),
-    useAccount: vi.fn(async () => state.account),
-    ...overrides,
-  };
-}
+});
 
 function renderPanel(port: EmbedderPort, onOpenExternal = vi.fn()) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  function Wrapper() {
-    const embedder = useEmbedder(port, true);
-    return createElement(AiIndexPanel, { embedder, onOpenExternal });
-  }
-  render(
-    createElement(
-      QueryClientProvider,
-      { client: queryClient } as PropsWithChildren<{ client: QueryClient }>,
-      createElement(Wrapper),
-    ),
-  );
+  withQueryClient(<AiIndexPanel embedderApi={port} onOpenExternal={onOpenExternal} />);
   return { onOpenExternal };
 }
 
-let getAnimationsDescriptor: PropertyDescriptor | undefined;
-
-beforeEach(() => {
-  getAnimationsDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
-  Object.defineProperty(Element.prototype, 'getAnimations', {
-    configurable: true,
-    value: vi.fn(() => []),
-  });
-});
-
-afterEach(() => {
-  cleanup();
-  if (getAnimationsDescriptor) {
-    Object.defineProperty(Element.prototype, 'getAnimations', getAnimationsDescriptor);
-  } else {
-    Reflect.deleteProperty(Element.prototype, 'getAnimations');
-  }
-});
+afterEach(cleanup);
 
 describe('AI Index panel', () => {
   it('shows the hosted account with its remaining allowance and reset date', async () => {
-    renderPanel(fakePort(signedIn));
+    renderPanel(embedderPort(signedIn));
 
     expect(await screen.findByText('Ada Lovelace')).not.toBeNull();
     expect(screen.getByText('ada@example.com')).not.toBeNull();
@@ -119,7 +43,7 @@ describe('AI Index panel', () => {
   });
 
   it('starts a sign-in in the browser and saves a key without keeping it', async () => {
-    const port = fakePort(signedOut);
+    const port = embedderPort(signedOut);
     const rendered = renderPanel(port);
     const user = userEvent.setup();
 
@@ -139,12 +63,12 @@ describe('AI Index panel', () => {
     );
   });
 
-  it('reports usage as temporarily unavailable and a rejected key inline', async () => {
-    const port = fakePort(
-      { ...signedIn, account: { ...signedIn.account, quota: undefined, quotaUnavailable: true } },
+  it('reports usage as temporarily unavailable and a rejected key as the reader’s to fix', async () => {
+    const port = embedderPort(
+      { ...signedIn, account: { ...SIGNED_IN_ACCOUNT, quota: null, quotaUnavailable: true } },
       {
         saveKey: vi.fn(async () => {
-          throw new Error('Invalid API key.');
+          throw new EmbedderError('rejected', 'HTTP 401 from the provider');
         }),
       },
     );
@@ -156,7 +80,22 @@ describe('AI Index panel', () => {
     await user.click(screen.getByRole('button', { name: 'Add key' }));
     await user.type(screen.getByPlaceholderText('Paste the key'), 'bad');
     await user.click(screen.getByRole('button', { name: 'Save key' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('Invalid API key.');
+    expect((await screen.findByRole('alert')).textContent).toBe(failureMessage('rejected'));
+  });
+
+  it('reports an unreachable embedder quietly rather than as something to correct', async () => {
+    const port = embedderPort(embedderState({ hasKey: true }), {
+      removeKey: vi.fn(async () => {
+        throw new EmbedderError('unavailable', 'HTTP 503 from /api/embedder');
+      }),
+    });
+    renderPanel(port);
+
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Remove key' }));
+
+    const notice = await screen.findByText(failureMessage('unavailable'));
+    expect(notice.getAttribute('role')).toBe('status');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('switches the active source to a stored key by selecting its row', async () => {
@@ -165,7 +104,7 @@ describe('AI Index panel', () => {
       hasKey: true,
       provider: 'openrouter',
     };
-    const port = fakePort(withKey, {
+    const port = embedderPort(withKey, {
       selectProvider: vi.fn(async () => ({ ...withKey, source: 'openrouter' as const })),
     });
     renderPanel(port);
@@ -184,7 +123,7 @@ describe('AI Index panel', () => {
 
   it('marks the key row active when the stored key is the source', async () => {
     renderPanel(
-      fakePort({
+      embedderPort({
         ...signedIn,
         hasKey: true,
         model: 'text-embedding-3-small',

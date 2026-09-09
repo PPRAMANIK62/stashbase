@@ -1,15 +1,30 @@
+/**
+ * Where the AI Index gets its embeddings: the hosted StashBase account, or a
+ * key the reader brings themselves. The two are one radio group because only
+ * one can be authorized at a time, and each row carries the controls that
+ * belong to its own source so no dialog is needed to change either.
+ */
+
 import { KeyRound, LogIn, LogOut, RefreshCw, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { InputField, InputGroup } from '@/components/ui/input-group';
 import { TabsSubtle, TabsSubtleItem } from '@/components/ui/tabs-subtle';
-import type {
-  EmbedderProvider,
-  EmbedderState,
-  HostedAccount,
-} from '@/features/settings/application/embedder-port';
-import type { useEmbedder } from '@/features/settings/hooks/use-embedder';
+import type { EmbedderPort } from '@/features/settings/application/embedder-port';
+import {
+  ACCOUNT_SOURCE,
+  activeEmbeddingSource,
+  describeEmbedderSource,
+  describeQuota,
+  EMBEDDER_PROVIDER_LABELS,
+  EMBEDDER_PROVIDERS,
+  quotaRemainingPercent,
+  type EmbedderProvider,
+  type EmbedderState,
+} from '@/features/settings/domain/embedder';
+import { useEmbedder, type EmbedderViewModel } from '@/features/settings/hooks/use-embedder';
+import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import {
   ChoiceList,
   ChoiceRow,
@@ -19,94 +34,20 @@ import {
   StatusChip,
 } from '@/features/settings/ui/rows';
 
-type Embedder = ReturnType<typeof useEmbedder>;
-
 export interface AiIndexPanelProps {
-  embedder: Embedder;
+  embedderApi: EmbedderPort;
   onOpenExternal(href: string): void;
 }
 
-const PROVIDERS: ReadonlyArray<EmbedderProvider> = ['openai', 'openrouter'];
-
-const PROVIDER_LABELS: Record<EmbedderProvider, string> = {
-  openai: 'OpenAI',
-  openrouter: 'OpenRouter',
-};
-
-const ACCOUNT_SOURCE = 'stashbase-account';
-
-function remainingPercent(account: HostedAccount): number {
-  const quota = account.quota;
-  if (!quota || quota.grantedTokens <= 0) return 0;
-  return Math.max(
-    0,
-    Math.min(100, Math.round((quota.remainingTokens / quota.grantedTokens) * 100)),
-  );
-}
-
-function quotaSummary(account: HostedAccount): string {
-  if (account.quotaUnavailable) return 'Usage is temporarily unavailable.';
-  const quota = account.quota;
-  if (!quota) return 'Usage not reported yet.';
-  const reset = quota.periodEndsAt
-    ? new Date(quota.periodEndsAt).toLocaleDateString([], { dateStyle: 'medium' })
-    : null;
-  return `${remainingPercent(account)}% remaining · ${quota.remainingTokens.toLocaleString()} tokens left${reset ? ` · Resets ${reset}` : ''}`;
-}
-
-function mutationFailure(
-  ...mutations: Array<{ error: Error | null; isError: boolean }>
-): string | null {
-  const failed = mutations.find((mutation) => mutation.isError);
-  return failed ? (failed.error?.message ?? 'The request failed.') : null;
-}
-
-function activeSource(state: EmbedderState): string | null {
-  return state.authorized ? state.source : null;
-}
-
-function sourceHint(state: EmbedderState): string {
-  const active = activeSource(state);
-  if (active === ACCOUNT_SOURCE) {
-    return 'Meaning-based search and indexing use your StashBase account.';
-  }
-  if (active !== null) {
-    return `Meaning-based search and indexing use your ${PROVIDER_LABELS[state.provider]} key.`;
-  }
-  return 'AI Index is not set up. Sign in or add a key. Exact search keeps working.';
-}
-
-function AccountRow({
-  embedder,
-  onOpenExternal,
-  state,
-}: AiIndexPanelProps & { state: EmbedderState }) {
+function AccountRow({ embedder, state }: { embedder: EmbedderViewModel; state: EmbedderState }) {
   const account = state.account;
-  const active = activeSource(state) === ACCOUNT_SOURCE;
-  const busy =
-    embedder.startSignIn.isPending ||
-    embedder.signInPending ||
-    embedder.signOut.isPending ||
-    embedder.useAccount.isPending ||
-    embedder.refreshAccount.isPending;
-  const failure =
-    embedder.signInError ??
-    mutationFailure(
-      embedder.startSignIn,
-      embedder.signOut,
-      embedder.useAccount,
-      embedder.refreshAccount,
-    );
-
-  const signIn = () =>
-    embedder.startSignIn.mutate(undefined, {
-      onSuccess: (started) => onOpenExternal(started.url),
-    });
+  const active = activeEmbeddingSource(state) === ACCOUNT_SOURCE;
+  const busy = embedder.accountBusy;
 
   const select = () => {
     if (busy) return;
-    if (!account.signedIn) signIn();
-    else if (!active) embedder.useAccount.mutate();
+    if (!account.signedIn) embedder.signIn();
+    else if (!active) embedder.useAccount();
   };
 
   return (
@@ -141,7 +82,7 @@ function AccountRow({
           <Button
             disabled={busy}
             leadingIcon={LogOut}
-            onClick={() => embedder.signOut.mutate()}
+            onClick={() => embedder.signOut()}
             size="compact"
             variant="ghost"
           >
@@ -151,8 +92,8 @@ function AccountRow({
           <Button
             disabled={busy}
             leadingIcon={LogIn}
-            loading={embedder.startSignIn.isPending || embedder.signInPending}
-            onClick={signIn}
+            loading={embedder.signInPending}
+            onClick={() => embedder.signIn()}
             size="compact"
             variant="secondary"
           >
@@ -164,15 +105,15 @@ function AccountRow({
     >
       {account.signedIn && (
         <>
-          <ProgressBar value={remainingPercent(account)} />
+          <ProgressBar value={quotaRemainingPercent(account)} />
           <div className="mt-1.5 flex items-center justify-between gap-3">
             <p className="text-caption text-muted-foreground" role="status">
-              {quotaSummary(account)}
+              {describeQuota(account)}
             </p>
             <Button
               disabled={busy}
               leadingIcon={RefreshCw}
-              onClick={() => embedder.refreshAccount.mutate()}
+              onClick={() => embedder.refreshAccount()}
               size="compact"
               variant="ghost"
             >
@@ -181,25 +122,20 @@ function AccountRow({
           </div>
         </>
       )}
-      {failure && (
-        <p className="mt-1.5 text-caption text-destructive" role="alert">
-          {failure}
-        </p>
+      {embedder.accountFailure && (
+        <FailureNotice className="mt-1.5" failure={embedder.accountFailure} />
       )}
     </ChoiceRow>
   );
 }
 
-function KeyRow({ embedder, state }: { embedder: Embedder; state: EmbedderState }) {
+function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: EmbedderState }) {
   const [provider, setProvider] = useState<EmbedderProvider>(state.provider);
   const [key, setKey] = useState('');
   const [editing, setEditing] = useState(!state.hasKey && !state.account.signedIn);
-  const active = activeSource(state) === state.provider;
-  const busy =
-    embedder.saveKey.isPending || embedder.removeKey.isPending || embedder.selectProvider.isPending;
-  const failure = mutationFailure(embedder.saveKey, embedder.removeKey, embedder.selectProvider);
-  const warning = embedder.saveKey.data?.warning ?? null;
-  const label = PROVIDER_LABELS[state.provider];
+  const active = activeEmbeddingSource(state) === state.provider;
+  const busy = embedder.keyBusy;
+  const label = EMBEDDER_PROVIDER_LABELS[state.provider];
 
   const openEditor = () => {
     setKey('');
@@ -210,21 +146,16 @@ function KeyRow({ embedder, state }: { embedder: Embedder; state: EmbedderState 
     event.preventDefault();
     const trimmed = key.trim();
     if (!trimmed) return;
-    embedder.saveKey.mutate(
-      { key: trimmed, provider },
-      {
-        onSuccess: () => {
-          setKey('');
-          setEditing(false);
-        },
-      },
-    );
+    embedder.saveKey({ key: trimmed, provider }, () => {
+      setKey('');
+      setEditing(false);
+    });
   };
 
   const select = () => {
     if (busy) return;
     if (!state.hasKey) openEditor();
-    else if (!active) embedder.selectProvider.mutate(state.provider);
+    else if (!active) embedder.selectProvider(state.provider);
   };
 
   return (
@@ -252,7 +183,7 @@ function KeyRow({ embedder, state }: { embedder: Embedder; state: EmbedderState 
             <Button
               disabled={busy}
               leadingIcon={Trash2}
-              onClick={() => embedder.removeKey.mutate()}
+              onClick={() => embedder.removeKey()}
               size="compact"
               variant="ghost"
             >
@@ -277,20 +208,19 @@ function KeyRow({ embedder, state }: { embedder: Embedder; state: EmbedderState 
         <form className="flex max-w-[440px] flex-col items-start gap-2.5" onSubmit={submit}>
           <TabsSubtle
             aria-label="Key provider"
-            onSelect={(index) => setProvider(PROVIDERS[index] ?? 'openai')}
-            selectedIndex={Math.max(0, PROVIDERS.indexOf(provider))}
+            onSelect={(index) => setProvider(EMBEDDER_PROVIDERS[index] ?? 'openai')}
+            selectedIndex={Math.max(0, EMBEDDER_PROVIDERS.indexOf(provider))}
             size="compact"
           >
-            {PROVIDERS.map((candidate, index) => (
-              <TabsSubtleItem index={index} key={candidate} label={PROVIDER_LABELS[candidate]} />
+            {EMBEDDER_PROVIDERS.map((candidate) => (
+              <TabsSubtleItem key={candidate} label={EMBEDDER_PROVIDER_LABELS[candidate]} />
             ))}
           </TabsSubtle>
           <InputGroup className="w-full" size="compact">
             <InputField
               autoComplete="off"
               filled
-              index={0}
-              label={`${PROVIDER_LABELS[provider]} API key`}
+              label={`${EMBEDDER_PROVIDER_LABELS[provider]} API key`}
               onChange={setKey}
               placeholder="Paste the key"
               spellCheck={false}
@@ -301,7 +231,7 @@ function KeyRow({ embedder, state }: { embedder: Embedder; state: EmbedderState 
           <div className="flex items-center gap-1">
             <Button
               disabled={busy || key.trim().length === 0}
-              loading={embedder.saveKey.isPending}
+              loading={embedder.savingKey}
               size="compact"
               type="submit"
               variant="secondary"
@@ -319,23 +249,21 @@ function KeyRow({ embedder, state }: { embedder: Embedder; state: EmbedderState 
           </div>
         </form>
       )}
-      {warning && (
+      {embedder.keyWarning && (
         <p className="mt-1.5 text-caption text-muted-foreground" role="status">
-          Saved, but the key could not be verified yet: {warning}
+          Saved, but the key could not be verified yet: {embedder.keyWarning}
         </p>
       )}
-      {failure && (
-        <p className="mt-1.5 text-caption text-destructive" role="alert">
-          {failure}
-        </p>
-      )}
+      {embedder.keyFailure && <FailureNotice className="mt-1.5" failure={embedder.keyFailure} />}
     </ChoiceRow>
   );
 }
 
-export function AiIndexPanel({ embedder, onOpenExternal }: AiIndexPanelProps) {
-  const state = embedder.state.data;
-  if (embedder.state.isPending) {
+export function AiIndexPanel({ embedderApi, onOpenExternal }: AiIndexPanelProps) {
+  const embedder = useEmbedder(embedderApi, onOpenExternal);
+  const state = embedder.state;
+
+  if (embedder.loading) {
     return (
       <p className="text-caption text-muted-foreground" role="status">
         Loading AI Index settings…
@@ -348,32 +276,32 @@ export function AiIndexPanel({ embedder, onOpenExternal }: AiIndexPanelProps) {
         <p className="text-caption text-destructive" role="alert">
           AI Index settings are unavailable.
         </p>
-        <Button onClick={() => void embedder.state.refetch()} size="compact" variant="tertiary">
+        <Button onClick={() => embedder.reload()} size="compact" variant="tertiary">
           Retry
         </Button>
       </div>
     );
   }
-  const busy = embedder.useAccount.isPending || embedder.selectProvider.isPending;
+
   return (
     <SettingsPane
       lede="Similar search and Agent context use the AI Index. Exact search and every local workflow work without it."
       title="AI Index"
     >
-      <SettingsGroup hint={sourceHint(state)} title="Source">
+      <SettingsGroup hint={describeEmbedderSource(state)} title="Source">
         <ChoiceList
           aria-label="AI Index source"
           onValueChange={(value) => {
-            if (busy || value === activeSource(state)) return;
+            if (embedder.selecting || value === activeEmbeddingSource(state)) return;
             if (value === ACCOUNT_SOURCE) {
-              if (state.account.signedIn) embedder.useAccount.mutate();
+              if (state.account.signedIn) embedder.useAccount();
             } else if (state.hasKey) {
-              embedder.selectProvider.mutate(value === 'openrouter' ? 'openrouter' : 'openai');
+              embedder.selectProvider(value === 'openrouter' ? 'openrouter' : 'openai');
             }
           }}
-          value={activeSource(state)}
+          value={activeEmbeddingSource(state)}
         >
-          <AccountRow embedder={embedder} onOpenExternal={onOpenExternal} state={state} />
+          <AccountRow embedder={embedder} state={state} />
           <KeyRow embedder={embedder} state={state} />
         </ChoiceList>
       </SettingsGroup>

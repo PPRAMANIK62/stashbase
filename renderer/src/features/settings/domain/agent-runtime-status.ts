@@ -1,51 +1,45 @@
-import type { Agent, AgentBootstrapFailureStage } from '@/shared/agent-runtime';
+/**
+ * One runtime row's staged-preparation state.
+ *
+ * The stage order is the single source of both the copy and the track: the
+ * position a segment fills is read back out of `AGENT_RUNTIME_STAGES`, so a
+ * status can no longer carry a stage and an index that disagree.
+ */
+import {
+  AGENT_RUNTIME_STAGES,
+  type AgentRuntime,
+  type AgentRuntimeStage,
+} from '@/features/settings/domain/agent-catalog';
 
-/** The four staged-preparation segments the track renders, in order — plus
- *  the two boundary states (not yet started, fully ready) that own no
- *  segment of their own. */
-export type AgentRuntimeStage = 'discover' | 'install' | 'authenticate' | 'configure' | 'ready';
+/** What a row says when the daemon sent no note of its own. The daemon's note
+ *  names the exact step, so it is preferred wherever there is one — the same
+ *  rule a server-authored refusal sentence follows. */
+const PREPARATION_FAILED = 'Setup failed';
+const PREPARING = 'Preparing…';
 
-export type AgentRuntimeActionKind = 'install' | 'login' | 'account' | 'retry';
+/** Where a stage sits on the track. Derived, never stored beside the stage. */
+export function agentRuntimeStageIndex(stage: AgentRuntimeStage): number {
+  return AGENT_RUNTIME_STAGES.indexOf(stage);
+}
+
+type AgentRuntimeActionKind = 'install' | 'login' | 'account' | 'retry';
 
 export interface AgentRuntimeAction {
-  kind: AgentRuntimeActionKind;
-  label: string;
+  readonly kind: AgentRuntimeActionKind;
+  readonly label: string;
 }
 
 export interface AgentRuntimeStatus {
-  description: string;
-  failed: boolean;
+  readonly description: string;
+  readonly failed: boolean;
   /** `null` only while the catalog hasn't loaded this agent row at all. */
-  stage: AgentRuntimeStage | null;
-  stageIndex: 0 | 1 | 2 | 3 | 4;
-  action: AgentRuntimeAction | null;
+  readonly stage: AgentRuntimeStage | null;
+  readonly action: AgentRuntimeAction | null;
 }
 
-const STAGE_INDEX: Record<AgentRuntimeStage, 0 | 1 | 2 | 3 | 4> = {
-  discover: 0,
-  install: 1,
-  authenticate: 2,
-  configure: 3,
-  ready: 4,
-};
-
-function failureStage(stage: AgentBootstrapFailureStage | undefined): AgentRuntimeStage {
-  switch (stage) {
-    case 'installation':
-      return 'install';
-    case 'authentication':
-      return 'authenticate';
-    case 'mcp':
-      return 'configure';
-    case 'discovery':
-    default:
-      return 'discover';
-  }
-}
-
-function sourceLabel(source: Agent['source']): string {
-  if (source === 'bundled') return 'Included with StashBase';
-  if (source === 'managed') return 'StashBase-managed runtime';
+function ownershipLabel(ownership: AgentRuntime['ownership']): string {
+  if (ownership === 'bundled') return 'Included with StashBase';
+  if (ownership === 'managed') return 'StashBase-managed runtime';
   return 'System runtime';
 }
 
@@ -54,64 +48,55 @@ function sourceLabel(source: Agent['source']): string {
  * derivation, so a runtime's description, failure flag, staged-progress
  * position, and single applicable action can never disagree with each other.
  */
-export function describeRuntime(agent: Agent | undefined, busy: boolean): AgentRuntimeStatus {
-  if (!agent) {
-    return { description: 'Checking…', failed: false, stage: null, stageIndex: 0, action: null };
+export function describeRuntime(
+  runtime: AgentRuntime | undefined,
+  busy: boolean,
+): AgentRuntimeStatus {
+  if (!runtime) {
+    return { description: 'Checking…', failed: false, stage: null, action: null };
   }
 
-  if (agent.bootstrap?.phase === 'failed') {
-    const failure = agent.bootstrap.failure;
-    const stage = failureStage(failure?.stage);
+  const preparation = runtime.preparation;
+  if (preparation.kind === 'failed') {
+    const failure = preparation.failure;
     const action: AgentRuntimeAction | null = busy
       ? null
-      : failure?.code === 'account-required'
+      : failure.refusal === 'account-required'
         ? { kind: 'account', label: 'Sign in' }
-        : failure?.stage === 'authentication'
+        : failure.stage === 'authenticate'
           ? { kind: 'login', label: 'Sign in' }
-          : { kind: 'retry', label: failure?.stage === 'mcp' ? 'Retry connection' : 'Retry' };
+          : { kind: 'retry', label: failure.stage === 'configure' ? 'Retry connection' : 'Retry' };
     return {
-      description: failure?.message ?? 'Setup failed',
+      description: failure.note ?? PREPARATION_FAILED,
       failed: true,
-      stage,
-      stageIndex: STAGE_INDEX[stage],
+      stage: failure.stage,
       action,
     };
   }
 
-  const preparingStage: AgentRuntimeStage | undefined =
-    agent.bootstrap?.phase === 'installing'
-      ? 'install'
-      : agent.bootstrap?.phase === 'authenticating'
-        ? 'authenticate'
-        : agent.bootstrap?.phase === 'configuring'
-          ? 'configure'
-          : undefined;
-  if (preparingStage) {
+  if (preparation.kind === 'running') {
     return {
-      description: agent.bootstrap?.message ?? 'Preparing…',
+      description: preparation.note ?? PREPARING,
       failed: false,
-      stage: preparingStage,
-      stageIndex: STAGE_INDEX[preparingStage],
+      stage: preparation.stage,
       action: null,
     };
   }
 
-  if (!agent.installed) {
+  if (!runtime.installed) {
     return {
       description: 'Not installed',
       failed: false,
       stage: 'discover',
-      stageIndex: 0,
       action: busy ? null : { kind: 'install', label: 'Install' },
     };
   }
 
-  const label = sourceLabel(agent.source);
+  const label = ownershipLabel(runtime.ownership);
   return {
-    description: agent.bootstrap?.phase === 'ready' ? `Ready for Chat · ${label}` : label,
+    description: preparation.kind === 'ready' ? `Ready for Chat · ${label}` : label,
     failed: false,
     stage: 'ready',
-    stageIndex: 4,
     action: null,
   };
 }

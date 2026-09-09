@@ -1,168 +1,184 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
-import { createElement, type PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { AgentRuntimePort } from '@/features/settings/application/ports';
-import { agentCatalogQueryKeys } from '@/features/settings/application/queries';
-import type { HostedAgentAllowance } from '@/shared/account';
-import type { Agent, AgentsResponse } from '@/shared/agent-runtime';
+import { failureMessage } from '@/features/settings/application/failure-messages';
+import { AgentRuntimeError, type AgentRuntimePort } from '@/features/settings/application/ports';
+import { settingsQueryKeys } from '@/features/settings/application/queries';
+import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
+import type { AgentId } from '@/shared/domain/agent-id';
+import { agentRuntime, agentRuntimePort, IDLE_ALLOWANCE } from '@/test/fakes/settings';
+import { createTestQueryClient, queryWrapper } from '@/test/query';
 
 import { useAgentRuntimes } from './use-agent-runtimes';
 
-function queryWrapper(queryClient: QueryClient) {
-  return function QueryWrapper({ children }: PropsWithChildren) {
-    return createElement(QueryClientProvider, { client: queryClient }, children);
-  };
-}
-
-function agent(overrides: Partial<Agent>): Agent {
-  return {
+function codex(overrides: Partial<AgentRuntime> = {}): AgentRuntime {
+  return agentRuntime({
     id: 'codex',
     label: 'Codex',
-    vendor: 'OpenAI',
-    installHint: '',
-    installed: true,
-    launchCommand: 'codex',
+    ownership: null,
+    preparation: { kind: 'idle' },
     ...overrides,
-  };
+  });
 }
 
-function catalog(clis: Agent[]): AgentsResponse {
-  return { clis };
+function catalog(runtimes: AgentRuntime[]): AgentCatalog {
+  return { debug: null, runtimes };
 }
 
-const allowanceFixture: HostedAgentAllowance = {
-  profile: 'stashbase-agent-default',
-  remainingPercent: 80,
-  inputTokens: 100,
-  outputTokens: 50,
-  cacheReadTokens: 10,
-  windowStartedAt: '2026-09-01T00:00:00.000Z',
-  windowEndsAt: '2026-09-08T00:00:00.000Z',
-};
+/** Every mutation below asserts the exact response it wrote into the shared
+ *  catalog cache, so the ambient catalog stays empty and cannot race the
+ *  mutation for the same cache entry. */
+function emptyCatalog() {
+  return vi.fn(async () => catalog([]));
+}
 
-function fakePort(overrides: Partial<AgentRuntimePort> = {}): AgentRuntimePort {
-  return {
-    getAllowance: vi.fn(async () => allowanceFixture),
-    listAgents: vi.fn(async () => catalog([])),
-    prepareAgent: vi.fn(async () => catalog([])),
-    resetManagedAgent: vi.fn(async () => catalog([])),
-    updateDebug: vi.fn(async () => catalog([])),
-    ...overrides,
-  };
+/**
+ * A hook bound to one port and one client, with the client the test inspects.
+ *
+ * The first catalog fetch is awaited here: a command's response is written
+ * straight into the shared cache, so a test that dispatched before the ambient
+ * fetch landed would be asserting against whichever of the two happened to
+ * resolve last.
+ */
+async function mount(port: AgentRuntimePort) {
+  const queryClient = createTestQueryClient();
+  const view = renderHook(() => useAgentRuntimes(port), { wrapper: queryWrapper(queryClient) });
+  await waitFor(() => expect(view.result.current.catalog.loading).toBe(false));
+  return { queryClient, view };
 }
 
 afterEach(cleanup);
 
 describe('useAgentRuntimes', () => {
   it('polls every 500ms while a runtime is actively preparing, and stops once none are', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const installing = catalog([agent({ bootstrap: { phase: 'installing' } })]);
-    const settled = catalog([agent({ bootstrap: { phase: 'ready' } })]);
+    const installing = catalog([
+      codex({ preparation: { kind: 'running', note: null, stage: 'install' } }),
+    ]);
+    const settled = catalog([codex({ preparation: { kind: 'ready' } })]);
     let calls = 0;
     const listAgents = vi.fn(async () => (calls++ === 0 ? installing : settled));
-    const port = fakePort({ listAgents });
-    renderHook(() => useAgentRuntimes(port), { wrapper: queryWrapper(queryClient) });
+    const { view } = await mount(agentRuntimePort({ listAgents }));
 
     await waitFor(() => expect(listAgents).toHaveBeenCalledTimes(2), { timeout: 2000 });
-    // The second response has no agent mid-preparation, so the interval
-    // should stop rescheduling: no third call should land.
-    await new Promise((resolve) => setTimeout(resolve, 700));
+    // The settled catalog reaching the hook is what turns the interval off,
+    // so wait for that rather than for a wall-clock guess.
+    await waitFor(() =>
+      expect(view.result.current.catalog.runtimes[0]?.preparation.kind).toBe('ready'),
+    );
     expect(listAgents).toHaveBeenCalledTimes(2);
   });
 
   it('leaves the allowance query disabled until a stashbase agent reports ready, then fires it', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const notReady = catalog([agent({ id: 'stashbase', bootstrap: { phase: 'installing' } })]);
-    const ready = catalog([agent({ id: 'stashbase', bootstrap: { phase: 'ready' } })]);
+    const notReady = catalog([
+      agentRuntime({ preparation: { kind: 'running', note: null, stage: 'install' } }),
+    ]);
+    const ready = catalog([agentRuntime({ preparation: { kind: 'ready' } })]);
     let calls = 0;
     const listAgents = vi.fn(async () => (calls++ === 0 ? notReady : ready));
-    const getAllowance = vi.fn(async () => allowanceFixture);
-    const port = fakePort({ listAgents, getAllowance });
-    const view = renderHook(() => useAgentRuntimes(port), { wrapper: queryWrapper(queryClient) });
+    const getAllowance = vi.fn(async () => IDLE_ALLOWANCE);
+    const { view } = await mount(agentRuntimePort({ listAgents, getAllowance }));
 
-    await waitFor(() => expect(view.result.current.catalog.isSuccess).toBe(true));
+    await waitFor(() => expect(view.result.current.catalog.runtimes).toHaveLength(1));
     expect(getAllowance).not.toHaveBeenCalled();
 
     await waitFor(() => expect(listAgents).toHaveBeenCalledTimes(2), { timeout: 2000 });
     await waitFor(() => expect(getAllowance).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(view.result.current.allowance.allowance).toEqual(IDLE_ALLOWANCE));
   });
 
   it('installs an agent and writes the response into the shared catalog cache', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const installed = catalog([agent({ bootstrap: { phase: 'ready' } })]);
+    const installed = catalog([codex({ preparation: { kind: 'ready' } })]);
     const prepareAgent = vi.fn(async () => installed);
-    const port = fakePort({ prepareAgent });
-    const view = renderHook(() => useAgentRuntimes(port), { wrapper: queryWrapper(queryClient) });
+    const { queryClient, view } = await mount(
+      agentRuntimePort({ listAgents: emptyCatalog(), prepareAgent }),
+    );
 
-    act(() => view.result.current.install.mutate('codex'));
+    act(() => view.result.current.install('codex'));
 
     await waitFor(() =>
       expect(prepareAgent).toHaveBeenCalledWith('codex', 'bootstrap', expect.anything()),
     );
     await waitFor(() =>
-      expect(queryClient.getQueryData(agentCatalogQueryKeys.all)).toEqual(installed),
+      expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(installed),
     );
   });
 
   it('logs in an agent and writes the response into the shared catalog cache', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const signedIn = catalog([agent({ bootstrap: { phase: 'ready' } })]);
+    const signedIn = catalog([codex({ preparation: { kind: 'ready' } })]);
     const prepareAgent = vi.fn(async () => signedIn);
-    const port = fakePort({ prepareAgent });
-    const view = renderHook(() => useAgentRuntimes(port), { wrapper: queryWrapper(queryClient) });
+    const { queryClient, view } = await mount(
+      agentRuntimePort({ listAgents: emptyCatalog(), prepareAgent }),
+    );
 
-    act(() => view.result.current.login.mutate('claude'));
+    act(() => view.result.current.login('claude'));
 
     await waitFor(() =>
       expect(prepareAgent).toHaveBeenCalledWith('claude', 'login', expect.anything()),
     );
     await waitFor(() =>
-      expect(queryClient.getQueryData(agentCatalogQueryKeys.all)).toEqual(signedIn),
+      expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(signedIn),
     );
   });
 
-  it('uninstalls an agent and writes the response into the shared catalog cache', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  it('uninstalls an agent, reports the removal, and writes it into the catalog cache', async () => {
     const removed = catalog([]);
     const resetManagedAgent = vi.fn(async () => removed);
-    const port = fakePort({ resetManagedAgent });
-    const view = renderHook(() => useAgentRuntimes(port), { wrapper: queryWrapper(queryClient) });
+    const { queryClient, view } = await mount(
+      agentRuntimePort({ listAgents: emptyCatalog(), resetManagedAgent }),
+    );
+    const done = vi.fn();
 
-    act(() => view.result.current.uninstall.mutate('codex'));
+    act(() => view.result.current.uninstall('codex', done));
 
     await waitFor(() => expect(resetManagedAgent).toHaveBeenCalledWith('codex', expect.anything()));
-    await waitFor(() =>
-      expect(queryClient.getQueryData(agentCatalogQueryKeys.all)).toEqual(removed),
+    await waitFor(() => expect(done).toHaveBeenCalled());
+    expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(removed);
+  });
+
+  it('reports a failed install against the agent it was asked for, and no other', async () => {
+    const { view } = await mount(
+      agentRuntimePort({
+        listAgents: emptyCatalog(),
+        prepareAgent: vi.fn(async () => {
+          throw new Error('Installer exited with status 1.');
+        }),
+      }),
     );
+
+    act(() => view.result.current.install('codex'));
+
+    await waitFor(() =>
+      expect(view.result.current.failure('codex')?.message).toBe(failureMessage('unavailable')),
+    );
+    expect(view.result.current.failure('claude')).toBeNull();
+    expect(view.result.current.busy('codex')).toBe(false);
   });
 
   it('updates debug settings and writes the response into the shared catalog cache', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const patched = catalog([]);
     const updateDebug = vi.fn(async () => patched);
-    const port = fakePort({ updateDebug });
-    const view = renderHook(() => useAgentRuntimes(port), { wrapper: queryWrapper(queryClient) });
+    const { queryClient, view } = await mount(
+      agentRuntimePort({ listAgents: emptyCatalog(), updateDebug }),
+    );
 
-    act(() => view.result.current.updateDebug.mutate({ discoveryPolicy: 'managed-only' }));
+    act(() => view.result.current.updateDebug({ discoverySource: 'managed-only' }));
 
     await waitFor(() =>
       expect(updateDebug).toHaveBeenCalledWith(
-        { discoveryPolicy: 'managed-only' },
+        { discoverySource: 'managed-only' },
         expect.anything(),
       ),
     );
     await waitFor(() =>
-      expect(queryClient.getQueryData(agentCatalogQueryKeys.all)).toEqual(patched),
+      expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(patched),
     );
   });
 
   it('resets first run by pinning managed-only discovery before removing the managed install', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const calls: string[] = [];
     const removed = catalog([]);
-    const port = fakePort({
+    const port = agentRuntimePort({
+      listAgents: emptyCatalog(),
       updateDebug: vi.fn(async () => {
         calls.push('updateDebug');
         return catalog([]);
@@ -172,18 +188,98 @@ describe('useAgentRuntimes', () => {
         return removed;
       }),
     });
-    const view = renderHook(() => useAgentRuntimes(port), { wrapper: queryWrapper(queryClient) });
+    const { queryClient, view } = await mount(port);
 
-    act(() => view.result.current.resetFirstRun.mutate('codex'));
+    act(() => view.result.current.resetFirstRun('codex'));
 
-    await waitFor(() => expect(view.result.current.resetFirstRun.isSuccess).toBe(true));
+    await waitFor(() => expect(calls).toEqual(['updateDebug', 'resetManagedAgent']));
     expect(port.updateDebug).toHaveBeenCalledWith(
-      { discoveryPolicy: 'managed-only' },
+      { discoverySource: 'managed-only' },
       expect.anything(),
     );
-    expect(calls).toEqual(['updateDebug', 'resetManagedAgent']);
     await waitFor(() =>
-      expect(queryClient.getQueryData(agentCatalogQueryKeys.all)).toEqual(removed),
+      expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(removed),
     );
+  });
+
+  it('installs one runtime without aborting an install already open on another', async () => {
+    const signals = new Map<AgentId, AbortSignal>();
+    const settle = new Map<AgentId, () => void>();
+    const installed = catalog([codex({ preparation: { kind: 'ready' } })]);
+    const prepareAgent = vi.fn<AgentRuntimePort['prepareAgent']>(async (id, _action, signal) => {
+      signals.set(id, signal);
+      await new Promise<void>((resolve) => settle.set(id, resolve));
+      return installed;
+    });
+    const { queryClient, view } = await mount(
+      agentRuntimePort({ listAgents: emptyCatalog(), prepareAgent }),
+    );
+
+    act(() => view.result.current.install('codex'));
+    await waitFor(() => expect(signals.get('codex')).toBeDefined());
+
+    act(() => view.result.current.install('claude'));
+    await waitFor(() => expect(signals.get('claude')).toBeDefined());
+
+    // Codex owns its own lane: Claude opening one of its own leaves it alone.
+    expect(signals.get('codex')?.aborted).toBe(false);
+    expect(view.result.current.busy('codex')).toBe(true);
+
+    act(() => settle.get('codex')?.());
+
+    await waitFor(() => expect(view.result.current.busy('codex')).toBe(false));
+    expect(view.result.current.failure('codex')).toBeNull();
+    expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(installed);
+  });
+
+  it('carries a separate failure on each row that refused, at the same time', async () => {
+    const { view } = await mount(
+      agentRuntimePort({
+        listAgents: emptyCatalog(),
+        prepareAgent: vi.fn(async (id) => {
+          throw id === 'codex'
+            ? new AgentRuntimeError('unavailable', 'codex install refused')
+            : new AgentRuntimeError('scope-lost', 'claude sign-in refused');
+        }),
+      }),
+    );
+
+    act(() => view.result.current.install('codex'));
+    await waitFor(() =>
+      expect(view.result.current.failure('codex')?.message).toBe(failureMessage('unavailable')),
+    );
+
+    act(() => view.result.current.login('claude'));
+    await waitFor(() =>
+      expect(view.result.current.failure('claude')?.message).toBe(failureMessage('scope-lost')),
+    );
+
+    // Each row still reads the refusal its own command produced.
+    expect(view.result.current.failure('codex')?.message).toBe(failureMessage('unavailable'));
+    expect(view.result.current.failure('claude')?.message).toBe(failureMessage('scope-lost'));
+  });
+
+  it('leaves one row a failure while a command runs on another', async () => {
+    const settle = new Map<AgentId, () => void>();
+    const prepareAgent = vi.fn<AgentRuntimePort['prepareAgent']>(async (id) => {
+      if (id === 'codex') throw new AgentRuntimeError('unavailable', 'codex install refused');
+      await new Promise<void>((resolve) => settle.set(id, resolve));
+      return catalog([]);
+    });
+    const { view } = await mount(agentRuntimePort({ listAgents: emptyCatalog(), prepareAgent }));
+
+    act(() => view.result.current.install('codex'));
+    await waitFor(() =>
+      expect(view.result.current.failure('codex')?.message).toBe(failureMessage('unavailable')),
+    );
+
+    act(() => view.result.current.install('claude'));
+    await waitFor(() => expect(view.result.current.busy('claude')).toBe(true));
+
+    expect(view.result.current.failure('codex')?.message).toBe(failureMessage('unavailable'));
+
+    act(() => settle.get('claude')?.());
+    await waitFor(() => expect(view.result.current.busy('claude')).toBe(false));
+    expect(view.result.current.failure('codex')?.message).toBe(failureMessage('unavailable'));
   });
 });

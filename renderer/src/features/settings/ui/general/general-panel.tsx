@@ -1,5 +1,7 @@
 import { Switch } from '@/components/ui/switch';
-import type { useCapture } from '@/features/settings/hooks/use-capture';
+import type { CapturePort } from '@/features/settings/application/ports';
+import { useCapture, type CaptureWatchApplier } from '@/features/settings/hooks/use-capture';
+import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import {
   SettingsGroup,
   SettingsList,
@@ -8,26 +10,20 @@ import {
 } from '@/features/settings/ui/rows';
 
 export interface GeneralPanelProps {
-  capture: ReturnType<typeof useCapture>;
+  applyCaptureWatch: CaptureWatchApplier;
+  captureApi: CapturePort;
 }
 
-export function GeneralPanel({ capture }: GeneralPanelProps) {
-  const enabled = capture.preferences.data?.clipboardImageImport ?? false;
-  const disabled = capture.preferences.isPending || capture.update.isPending;
-  const failure = capture.preferences.isError
-    ? 'Capture settings are unavailable.'
-    : capture.update.isError
-      ? (capture.update.error?.message ?? 'Capture settings could not be saved.')
-      : null;
+export function GeneralPanel({ applyCaptureWatch, captureApi }: GeneralPanelProps) {
+  const capture = useCapture(captureApi, applyCaptureWatch);
+  const enabled = capture.clipboardImageImport;
 
   return (
     <SettingsPane lede="Choices that apply to every folder in your library." title="General">
       <SettingsGroup
         hint={
-          failure ? (
-            <span className="text-destructive" role="alert">
-              {failure}
-            </span>
+          capture.failure ? (
+            <FailureNotice failure={capture.failure} />
           ) : capture.warning ? (
             <span role="status">{capture.warning}</span>
           ) : undefined
@@ -41,10 +37,10 @@ export function GeneralPanel({ capture }: GeneralPanelProps) {
             trail={
               <Switch
                 checked={enabled}
-                disabled={disabled}
+                disabled={capture.disabled}
                 label="Offer to add clipboard screenshots"
                 labelHidden
-                onToggle={() => capture.update.mutate({ clipboardImageImport: !enabled })}
+                onToggle={() => capture.setClipboardImageImport(!enabled)}
               />
             }
           />

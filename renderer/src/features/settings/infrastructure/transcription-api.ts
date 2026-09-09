@@ -1,5 +1,26 @@
+/**
+ * The one place the transcription wire shapes are spoken. The transport omits
+ * a model's operation when nothing is running and omits every optional trait;
+ * `domain/transcription.ts` says a model is always in exactly one operation
+ * state and spells the rest as `null`, so the mappers below close that gap
+ * and keep protocol imports out of everything above this adapter.
+ */
+
 import { SettingsError, type TranscriptionPort } from '@/features/settings/application/ports';
-import type { HttpClient, HttpRequest, HttpResponse } from '@/platform/http/client';
+import type {
+  TranscriptionModel,
+  TranscriptionModelOperation,
+  TranscriptionPreferences,
+  TranscriptionProvider,
+  TranscriptionSettings,
+} from '@/features/settings/domain/transcription';
+import {
+  request,
+  requestOptions,
+  type TransportFailure,
+  type TransportRequest,
+} from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import {
   transcriptionAcknowledgementSchema,
   transcriptionFailureSchema,
@@ -7,95 +28,151 @@ import {
   transcriptionPreferencesRequestSchema,
   transcriptionPreferencesResponseSchema,
   transcriptionSettingsSchema,
+  type TranscriptionModelOperationWire,
+  type TranscriptionModelWire,
+  type TranscriptionProviderWire,
+  type TranscriptionSettingsWire,
 } from '@/protocols/http/transcription';
 
-const unavailableMessage = 'Transcription settings are unavailable.';
+const UNAVAILABLE = 'Transcription settings are unavailable.';
 
-function failure(response: HttpResponse, fallback: string): SettingsError {
-  const parsed = transcriptionFailureSchema.safeParse(response.body);
-  const message = parsed.success ? parsed.data.error : fallback;
-  return new SettingsError(response.status === 400 ? 'invalid-request' : 'unavailable', message, {
-    cause: parsed.success ? new Error(parsed.data.error) : undefined,
-  });
+function toOperation(
+  wire: TranscriptionModelOperationWire | undefined,
+): TranscriptionModelOperation {
+  if (wire === undefined) return { status: 'idle' };
+  switch (wire.status) {
+    case 'downloading':
+      return {
+        status: 'downloading',
+        receivedBytes: wire.receivedBytes,
+        totalBytes: wire.totalBytes,
+      };
+    case 'verifying':
+      return { status: 'verifying' };
+    case 'failed':
+      return { status: 'failed', error: wire.error };
+    case 'idle':
+      return { status: 'idle' };
+  }
 }
 
-async function send(
-  client: HttpClient,
-  request: HttpRequest,
-  fallback: string,
-): Promise<HttpResponse> {
-  let response: HttpResponse;
-  try {
-    response = await client.request(request);
-  } catch (error) {
-    if (request.signal?.aborted) throw error;
-    throw new SettingsError('unavailable', fallback, { cause: error });
-  }
-  if (response.status < 200 || response.status >= 300) throw failure(response, fallback);
-  return response;
+function toModel(wire: TranscriptionModelWire): TranscriptionModel {
+  return {
+    accuracy: wire.accuracy ?? null,
+    available: wire.available,
+    id: wire.id,
+    label: wire.label,
+    management: wire.management,
+    operation: toOperation(wire.operation),
+    resourceUse: wire.resourceUse ?? null,
+    sizeBytes: wire.sizeBytes ?? null,
+    speed: wire.speed ?? null,
+  };
+}
+
+function toProvider(wire: TranscriptionProviderWire): TranscriptionProvider {
+  return {
+    description: wire.description,
+    id: wire.id,
+    kind: wire.kind,
+    label: wire.label,
+    models: wire.models.map(toModel),
+    runtimeError: wire.runtimeError ?? null,
+  };
+}
+
+function toSettings(wire: TranscriptionSettingsWire): TranscriptionSettings {
+  return {
+    language: wire.language,
+    modelId: wire.modelId,
+    providerId: wire.providerId,
+    providers: wire.providers.map(toProvider),
+  };
+}
+
+function toPreferences(wire: TranscriptionPreferences): TranscriptionPreferences {
+  return { language: wire.language, modelId: wire.modelId, providerId: wire.providerId };
+}
+
+/** A refused preference is the user's own request coming back, not a lost
+ *  capability, so it reads as an invalid request. */
+function invalidRequest(fallback: string) {
+  return ({ response, serverMessage }: TransportFailure): SettingsError | null =>
+    response.status === 400
+      ? new SettingsError(
+          'invalid-request',
+          serverMessage ?? fallback,
+          serverMessage === null ? undefined : { cause: new Error(serverMessage) },
+        )
+      : null;
+}
+
+function transcription(
+  path: string,
+  signal: AbortSignal,
+  messages: { invalid: string; unavailable: string },
+): TransportRequest<'invalid-request'> {
+  return requestOptions({
+    error: SettingsError,
+    failure: invalidRequest(messages.unavailable),
+    failureSchema: transcriptionFailureSchema,
+    messages: { 'invalid-response': messages.invalid, unavailable: messages.unavailable },
+    path,
+    serverMessage: true,
+    signal,
+  });
 }
 
 function modelPath(id: string): string {
   return `/api/transcription/models/${encodeURIComponent(id)}`;
 }
 
-export function createTranscriptionApi(client: HttpClient): TranscriptionPort {
+export function createTranscriptionAdapter(client: HttpClient): TranscriptionPort {
   return {
     async load(signal) {
-      const response = await send(
-        client,
-        { path: '/api/transcription/settings', signal },
-        unavailableMessage,
+      return toSettings(
+        await request(client, {
+          ...transcription('/api/transcription/settings', signal, {
+            invalid: 'Transcription settings returned an invalid response.',
+            unavailable: UNAVAILABLE,
+          }),
+          schema: transcriptionSettingsSchema,
+        }),
       );
-      const parsed = transcriptionSettingsSchema.safeParse(response.body);
-      if (!parsed.success) {
-        throw new SettingsError(
-          'invalid-response',
-          'Transcription settings returned an invalid response.',
-        );
-      }
-      return parsed.data;
     },
     async updatePreferences(patch, signal) {
-      const body = transcriptionPreferencesRequestSchema.parse(patch);
-      const response = await send(
-        client,
-        { body, method: 'PUT', path: '/api/transcription/preferences', signal },
-        'Transcription preferences could not be saved.',
+      return toPreferences(
+        await request(client, {
+          ...transcription('/api/transcription/preferences', signal, {
+            invalid: 'Transcription preferences returned an invalid response.',
+            unavailable: 'Transcription preferences could not be saved.',
+          }),
+          body: transcriptionPreferencesRequestSchema.parse(patch),
+          method: 'PUT',
+          schema: transcriptionPreferencesResponseSchema,
+        }),
       );
-      const parsed = transcriptionPreferencesResponseSchema.safeParse(response.body);
-      if (!parsed.success) {
-        throw new SettingsError(
-          'invalid-response',
-          'Transcription preferences returned an invalid response.',
-        );
-      }
-      return parsed.data;
     },
     async downloadModel(id, signal) {
-      const response = await send(
-        client,
-        { method: 'POST', path: `${modelPath(id)}/download`, signal },
-        'The model download could not start.',
-      );
-      const parsed = transcriptionModelDownloadResponseSchema.safeParse(response.body);
-      if (!parsed.success) {
-        throw new SettingsError(
-          'invalid-response',
-          'The model download returned an invalid response.',
-        );
-      }
-      return parsed.data.download;
+      const parsed = await request(client, {
+        ...transcription(`${modelPath(id)}/download`, signal, {
+          invalid: 'The model download returned an invalid response.',
+          unavailable: 'The model download could not start.',
+        }),
+        method: 'POST',
+        schema: transcriptionModelDownloadResponseSchema,
+      });
+      return toOperation(parsed.download);
     },
     async removeModel(id, signal) {
-      const response = await send(
-        client,
-        { method: 'DELETE', path: modelPath(id), signal },
-        'The model could not be removed.',
-      );
-      if (!transcriptionAcknowledgementSchema.safeParse(response.body).success) {
-        throw new SettingsError('invalid-response', 'Model removal returned an invalid response.');
-      }
+      await request(client, {
+        ...transcription(modelPath(id), signal, {
+          invalid: 'Model removal returned an invalid response.',
+          unavailable: 'The model could not be removed.',
+        }),
+        method: 'DELETE',
+        schema: transcriptionAcknowledgementSchema,
+      });
     },
   };
 }

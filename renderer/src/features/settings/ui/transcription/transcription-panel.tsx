@@ -1,13 +1,24 @@
+/**
+ * The transcription engine, its spoken language, and the models on disk.
+ *
+ * A model row's control is read off one discriminated state rather than a set
+ * of flags, so "installed" and "download failed" cannot both light up on the
+ * same row, and only a running download draws a bar.
+ */
+
 import { CircleAlert } from 'lucide-react';
-import { useId } from 'react';
+import { useId, useMemo, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
+import type { TranscriptionPort } from '@/features/settings/application/ports';
+import type { TranscriptionModel } from '@/features/settings/domain/transcription';
 import {
   describeTranscriptionModel,
-  transcriptionBusy,
+  type TranscriptionModelDisplay,
 } from '@/features/settings/domain/transcription-status';
-import type { useTranscription } from '@/features/settings/hooks/use-transcription';
+import { useTranscription } from '@/features/settings/hooks/use-transcription';
+import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import {
   ChoiceList,
   ChoiceRow,
@@ -18,10 +29,6 @@ import {
   SettingsRow,
   StatusChip,
 } from '@/features/settings/ui/rows';
-import type {
-  TranscriptionModelWire,
-  TranscriptionProviderWire,
-} from '@/protocols/http/transcription';
 
 const LANGUAGES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'auto', label: 'Auto-detect' },
@@ -35,7 +42,46 @@ const LANGUAGES: ReadonlyArray<{ value: string; label: string }> = [
 ];
 
 export interface TranscriptionPanelProps {
-  transcription: ReturnType<typeof useTranscription>;
+  transcriptionApi: TranscriptionPort;
+}
+
+/** The one control a model row offers, chosen by its state. */
+function modelControl(
+  display: TranscriptionModelDisplay,
+  busy: boolean,
+  onDownload: () => void,
+  onRemove: () => void,
+): ReactNode {
+  switch (display.state) {
+    case 'downloading':
+    case 'verifying':
+      return (
+        <Button disabled loading size="compact" variant="tertiary">
+          Working…
+        </Button>
+      );
+    case 'missing':
+      return (
+        <Button disabled={busy} onClick={onDownload} size="compact" variant="tertiary">
+          Download
+        </Button>
+      );
+    case 'failed':
+      return (
+        <Button disabled={busy} onClick={onDownload} size="compact" variant="tertiary">
+          Retry download
+        </Button>
+      );
+    case 'installed':
+      return (
+        <Button disabled={busy} onClick={onRemove} size="compact" variant="ghost">
+          Remove
+        </Button>
+      );
+    case 'included':
+    case 'unavailable':
+      return null;
+  }
 }
 
 function ModelRow({
@@ -49,68 +95,50 @@ function ModelRow({
 }: {
   busy: boolean;
   firstTabStop: boolean;
-  model: TranscriptionModelWire;
+  model: TranscriptionModel;
   onDownload: () => void;
   onRemove: () => void;
   onSelect: () => void;
   selected: boolean;
 }) {
   const display = describeTranscriptionModel(model);
+  const onDisk = display.state === 'installed' || display.state === 'included';
   return (
     <ChoiceRow
       checked={selected}
       detail={display.detail}
-      detailTone={display.failed ? 'error' : 'muted'}
+      detailTone={display.state === 'failed' ? 'error' : 'muted'}
       firstTabStop={firstTabStop}
       label={model.label}
       onSelect={onSelect}
       title={
         <>
           {model.label}
-          {display.installed && <StatusChip>Installed</StatusChip>}
+          {onDisk && <StatusChip>Installed</StatusChip>}
         </>
       }
-      trail={
-        <>
-          {display.busy && (
-            <Button disabled loading size="compact" variant="tertiary">
-              Working…
-            </Button>
-          )}
-          {display.action === 'download' && (
-            <Button disabled={busy} onClick={onDownload} size="compact" variant="tertiary">
-              Download
-            </Button>
-          )}
-          {display.action === 'retry' && (
-            <Button disabled={busy} onClick={onDownload} size="compact" variant="tertiary">
-              Retry download
-            </Button>
-          )}
-          {display.action === 'remove' && (
-            <Button disabled={busy} onClick={onRemove} size="compact" variant="ghost">
-              Remove
-            </Button>
-          )}
-        </>
-      }
+      trail={modelControl(display, busy, onDownload, onRemove)}
       value={model.id}
     >
-      {display.progressPercent !== null && <ProgressBar live value={display.progressPercent} />}
+      {display.state === 'downloading' && <ProgressBar live value={display.progressPercent} />}
     </ChoiceRow>
   );
 }
 
-export function TranscriptionPanel({ transcription }: TranscriptionPanelProps) {
+export function TranscriptionPanel({ transcriptionApi }: TranscriptionPanelProps) {
+  const transcription = useTranscription(transcriptionApi);
   const providerId = useId();
   const languageId = useId();
-  const settings = transcription.settings.data;
-  const mutating =
-    transcription.updatePreferences.isPending ||
-    transcription.download.isPending ||
-    transcription.remove.isPending;
+  const settings = transcription.settings;
+  // The provider rows below map the same list; deriving the trigger's options
+  // from it keeps the two in step. Hooks run before the early returns, so this
+  // tolerates settings that have not loaded.
+  const providerItems = useMemo(
+    () => (settings?.providers ?? []).map(({ id, label }) => ({ value: id, label })),
+    [settings],
+  );
 
-  if (transcription.settings.isPending) {
+  if (transcription.loading) {
     return (
       <p className="text-caption text-muted-foreground" role="status">
         Loading transcription settings…
@@ -123,41 +151,15 @@ export function TranscriptionPanel({ transcription }: TranscriptionPanelProps) {
         <p className="text-caption text-destructive" role="alert">
           Transcription settings are unavailable.
         </p>
-        <Button
-          onClick={() => void transcription.settings.refetch()}
-          size="compact"
-          variant="tertiary"
-        >
+        <Button onClick={() => transcription.reload()} size="compact" variant="tertiary">
           Retry
         </Button>
       </div>
     );
   }
 
-  const provider: TranscriptionProviderWire | undefined =
-    settings.providers.find((candidate) => candidate.id === settings.providerId) ??
-    settings.providers[0];
-  const models = provider?.models ?? [];
-  const installed = models.filter((model) => model.available).length;
-  const busy = mutating || transcriptionBusy(models);
-  const actionFailure =
-    transcription.updatePreferences.error?.message ??
-    transcription.download.error?.message ??
-    transcription.remove.error?.message ??
-    null;
-
-  const selectProvider = (nextProviderId: string) => {
-    const next = settings.providers.find((candidate) => candidate.id === nextProviderId);
-    if (!next || next.id === settings.providerId) return;
-    const model = next.models.find((candidate) => candidate.available) ?? next.models[0];
-    if (!model) return;
-    transcription.updatePreferences.mutate({ modelId: model.id, providerId: next.id });
-  };
-
-  const selectModel = (modelId: string) => {
-    if (busy || modelId === settings.modelId) return;
-    transcription.updatePreferences.mutate({ modelId, providerId: settings.providerId });
-  };
+  const { busy, models, provider } = transcription;
+  const selectedIsListed = models.some((model) => model.id === settings.modelId);
 
   return (
     <SettingsPane
@@ -170,11 +172,17 @@ export function TranscriptionPanel({ transcription }: TranscriptionPanelProps) {
             detail={provider?.description}
             title={<label htmlFor={providerId}>Provider</label>}
             trail={
-              <Select disabled={busy} onValueChange={selectProvider} value={settings.providerId}>
-                <SelectTrigger className="min-w-44" id={providerId} size="compact" />
+              <Select
+                disabled={busy}
+                items={providerItems}
+                onValueChange={transcription.selectProvider}
+                size="compact"
+                value={settings.providerId}
+              >
+                <SelectTrigger className="min-w-44" id={providerId} />
                 <SelectContent>
-                  {settings.providers.map((candidate, index) => (
-                    <SelectItem index={index} key={candidate.id} value={candidate.id}>
+                  {settings.providers.map((candidate) => (
+                    <SelectItem key={candidate.id} value={candidate.id}>
                       {candidate.label}
                     </SelectItem>
                   ))}
@@ -197,13 +205,15 @@ export function TranscriptionPanel({ transcription }: TranscriptionPanelProps) {
             trail={
               <Select
                 disabled={busy}
-                onValueChange={(language) => transcription.updatePreferences.mutate({ language })}
+                items={LANGUAGES}
+                onValueChange={transcription.selectLanguage}
+                size="compact"
                 value={settings.language}
               >
-                <SelectTrigger className="min-w-36" id={languageId} size="compact" />
+                <SelectTrigger className="min-w-36" id={languageId} />
                 <SelectContent>
-                  {LANGUAGES.map((language, index) => (
-                    <SelectItem index={index} key={language.value} value={language.value}>
+                  {LANGUAGES.map((language) => (
+                    <SelectItem key={language.value} value={language.value}>
                       {language.label}
                     </SelectItem>
                   ))}
@@ -215,35 +225,31 @@ export function TranscriptionPanel({ transcription }: TranscriptionPanelProps) {
       </SettingsGroup>
 
       <SettingsGroup
-        count={`${installed} of ${models.length} installed`}
+        count={`${transcription.installedCount} of ${models.length} installed`}
         hint="The selected model transcribes new files. Installed models stay on disk until you remove them."
         title="Model"
       >
         <ChoiceList
           aria-label="Transcription model"
-          onValueChange={selectModel}
+          onValueChange={transcription.selectModel}
           value={settings.modelId}
         >
           {models.map((model, index) => (
             <ModelRow
               busy={busy}
-              firstTabStop={index === 0 && !models.some((m) => m.id === settings.modelId)}
+              firstTabStop={index === 0 && !selectedIsListed}
               key={model.id}
               model={model}
-              onDownload={() => transcription.download.mutate(model.id)}
-              onRemove={() => transcription.remove.mutate(model.id)}
-              onSelect={() => selectModel(model.id)}
+              onDownload={() => transcription.download(model.id)}
+              onRemove={() => transcription.removeModel(model.id)}
+              onSelect={() => transcription.selectModel(model.id)}
               selected={model.id === settings.modelId}
             />
           ))}
         </ChoiceList>
       </SettingsGroup>
 
-      {actionFailure && (
-        <p className="text-caption text-destructive" role="alert">
-          {actionFailure}
-        </p>
-      )}
+      {transcription.actionFailure && <FailureNotice failure={transcription.actionFailure} />}
     </SettingsPane>
   );
 }

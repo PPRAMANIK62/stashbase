@@ -1,57 +1,62 @@
 import { SettingsError, type CapturePort } from '@/features/settings/application/ports';
-import type { HttpClient, HttpRequest, HttpResponse } from '@/platform/http/client';
+import {
+  request,
+  requestOptions,
+  type TransportFailure,
+  type TransportRequest,
+} from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import {
   captureFailureSchema,
   capturePreferencesRequestSchema,
   capturePreferencesSchema,
 } from '@/protocols/http/capture';
 
-async function send(
-  client: HttpClient,
-  request: HttpRequest,
+/** A refused preference is the user's own request coming back, not a lost
+ *  capability, so it reads as an invalid request. */
+function invalidRequest(fallback: string) {
+  return ({ response, serverMessage }: TransportFailure): SettingsError | null =>
+    response.status === 400
+      ? new SettingsError('invalid-request', serverMessage ?? fallback)
+      : null;
+}
+
+function preferences(
+  path: string,
+  signal: AbortSignal,
   fallback: string,
-): Promise<HttpResponse> {
-  let response: HttpResponse;
-  try {
-    response = await client.request(request);
-  } catch (error) {
-    if (request.signal?.aborted) throw error;
-    throw new SettingsError('unavailable', fallback, { cause: error });
-  }
-  if (response.status < 200 || response.status >= 300) {
-    const parsed = captureFailureSchema.safeParse(response.body);
-    throw new SettingsError(
-      response.status === 400 ? 'invalid-request' : 'unavailable',
-      parsed.success ? parsed.data.error : fallback,
-    );
-  }
-  return response;
+): TransportRequest<'invalid-request'> {
+  return requestOptions({
+    error: SettingsError,
+    failure: invalidRequest(fallback),
+    failureSchema: captureFailureSchema,
+    messages: {
+      'invalid-response': 'Capture settings returned an invalid response.',
+      unavailable: fallback,
+    },
+    path,
+    serverMessage: true,
+    signal,
+  });
 }
 
-function mapPreferences(response: HttpResponse) {
-  const parsed = capturePreferencesSchema.safeParse(response.body);
-  if (!parsed.success) {
-    throw new SettingsError('invalid-response', 'Capture settings returned an invalid response.');
-  }
-  return { clipboardImageImport: parsed.data.clipboardImageImport };
-}
-
-export function createCaptureApi(client: HttpClient): CapturePort {
+export function createCaptureAdapter(client: HttpClient): CapturePort {
   return {
     async load(signal) {
-      return mapPreferences(
-        await send(client, { path: '/api/capture', signal }, 'Capture settings are unavailable.'),
-      );
+      const parsed = await request(client, {
+        ...preferences('/api/capture', signal, 'Capture settings are unavailable.'),
+        schema: capturePreferencesSchema,
+      });
+      return { clipboardImageImport: parsed.clipboardImageImport };
     },
-    async update(preferences, signal) {
-      const body = capturePreferencesRequestSchema.parse(preferences);
-      return mapPreferences(
-        await send(
-          client,
-          { body, method: 'PUT', path: '/api/capture', signal },
-          'Capture settings could not be saved.',
-        ),
-      );
+    async update(input, signal) {
+      const parsed = await request(client, {
+        ...preferences('/api/capture', signal, 'Capture settings could not be saved.'),
+        body: capturePreferencesRequestSchema.parse(input),
+        method: 'PUT',
+        schema: capturePreferencesSchema,
+      });
+      return { clipboardImageImport: parsed.clipboardImageImport };
     },
   };
 }

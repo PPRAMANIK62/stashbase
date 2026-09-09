@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { MobileDrawer } from '@/components/ui/mobile-drawer';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
-import { useCompactWindow } from '@/hooks/use-compact-window';
 import type { IconComponent } from '@/lib/icon-context';
 import { SizeProvider } from '@/lib/size-context';
+import { useCompactWindow } from '@/lib/use-compact-window';
 import { cn } from '@/lib/utils';
+
+import type { SettingsSectionId } from './settings-types';
 
 /** Below this window width the nav rail collapses into a MobileDrawer,
  *  matching the compact-window behavior in the task-46 mockup. Nothing
@@ -20,14 +22,14 @@ const COMPACT_WINDOW_BREAKPOINT_PX = 640;
 
 export type SettingsSectionDef =
   | {
-      id: string;
+      id: SettingsSectionId;
       label: string;
       icon: IconComponent;
       available: true;
       render(): ReactNode;
     }
   | {
-      id: string;
+      id: SettingsSectionId;
       label: string;
       icon: IconComponent;
       available: false;
@@ -36,8 +38,8 @@ export type SettingsSectionDef =
 export interface SettingsShellProps {
   open: boolean;
   onClose: () => void;
-  section: string;
-  onSectionChange: (id: string) => void;
+  section: SettingsSectionId;
+  onSectionChange: (id: SettingsSectionId) => void;
   sections: SettingsSectionDef[];
 }
 
@@ -46,8 +48,8 @@ function SectionsNav({
   onSelect,
   sections,
 }: {
-  activeId: string;
-  onSelect: (id: string) => void;
+  activeId: SettingsSectionId;
+  onSelect: (id: SettingsSectionId) => void;
   sections: SettingsSectionDef[];
 }) {
   return (
@@ -59,9 +61,9 @@ function SectionsNav({
             icon={section.icon}
             isActive={section.available && section.id === activeId}
             onClick={() => section.available && onSelect(section.id)}
+            label={section.label}
             tabIndex={section.available ? undefined : -1}
           >
-            {section.label}
             {!section.available && (
               <span className="ml-auto shrink-0 text-[9.5px] font-semibold tracking-wide text-muted-foreground uppercase">
                 Soon
@@ -90,7 +92,7 @@ export function SettingsShell({
     if (!compact) setDrawerOpen(false);
   }, [compact]);
 
-  const selectSection = (id: string) => {
+  const selectSection = (id: SettingsSectionId) => {
     onSectionChange(id);
     setDrawerOpen(false);
   };

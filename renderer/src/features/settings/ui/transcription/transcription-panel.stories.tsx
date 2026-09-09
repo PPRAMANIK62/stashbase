@@ -2,11 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-import type {
-  TranscriptionPort,
-  TranscriptionSettings,
-} from '@/features/settings/application/ports';
-import { useTranscription } from '@/features/settings/hooks/use-transcription';
+import type { TranscriptionPort } from '@/features/settings/application/ports';
+import type { TranscriptionSettings } from '@/features/settings/domain/transcription';
 
 import { TranscriptionPanel } from './transcription-panel';
 
@@ -32,6 +29,7 @@ const transcriptionSettings: TranscriptionSettings = {
           id: 'tiny',
           label: 'Tiny',
           management: 'local-download',
+          operation: { status: 'idle' },
           resourceUse: 'Lowest CPU and memory use',
           sizeBytes: 74 * 1024 * 1024,
           speed: 'Fastest',
@@ -53,6 +51,7 @@ const transcriptionSettings: TranscriptionSettings = {
           id: 'small',
           label: 'Small',
           management: 'local-download',
+          operation: { status: 'idle' },
           resourceUse: 'Higher CPU and memory use',
           sizeBytes: 465 * 1024 * 1024,
           speed: 'Slower',
@@ -75,8 +74,7 @@ const transcriptionPort: TranscriptionPort = {
 };
 
 function TranscriptionHarness() {
-  const transcription = useTranscription(transcriptionPort);
-  return <TranscriptionPanel transcription={transcription} />;
+  return <TranscriptionPanel transcriptionApi={transcriptionPort} />;
 }
 
 const meta = {
