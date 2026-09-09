@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { HttpClient } from '@/platform/http/client';
 
-import { createPreparationControlApi } from './control-api';
+import { createPreparationControlAdapter } from './control-api';
 
 const source = { folderPath: '/library/research', path: 'talks/keynote.mp3' };
 const signal = new AbortController().signal;
@@ -10,7 +10,7 @@ const signal = new AbortController().signal;
 describe('preparation control API', () => {
   it('posts folder-explicit bodies and maps the reprocess mode', async () => {
     const request = vi.fn(async () => ({ body: { mode: 'conversion', ok: true }, status: 200 }));
-    const mode = await createPreparationControlApi({ request }).reprocess(
+    const mode = await createPreparationControlAdapter({ request }).reprocess(
       source,
       { language: 'en' },
       signal,
@@ -33,7 +33,7 @@ describe('preparation control API', () => {
       })),
     };
     await expect(
-      createPreparationControlApi(client).reprocess(source, {}, signal),
+      createPreparationControlAdapter(client).reprocess(source, {}, signal),
     ).rejects.toMatchObject({ kind: 'blocked', message: 'Download the model first.' });
   });
 
@@ -42,12 +42,14 @@ describe('preparation control API', () => {
       request: vi.fn(async () => ({ body: { error: 'only DOCX and media' }, status: 415 })),
     };
     await expect(
-      createPreparationControlApi(unsupported).prepare(source, signal),
+      createPreparationControlAdapter(unsupported).prepare(source, signal),
     ).rejects.toMatchObject({ kind: 'unsupported' });
     const cancel: HttpClient = {
       request: vi.fn(async () => ({ body: { cancelled: true, ok: true }, status: 200 })),
     };
-    await expect(createPreparationControlApi(cancel).cancel(source, signal)).resolves.toBe(true);
+    await expect(createPreparationControlAdapter(cancel).cancel(source, signal)).resolves.toBe(
+      true,
+    );
   });
 
   it('syncs one explicit folder and reports a cut-short sync', async () => {
@@ -56,14 +58,14 @@ describe('preparation control API', () => {
       status: 200,
     }));
     await expect(
-      createPreparationControlApi({ request }).sync('/library/research', signal),
+      createPreparationControlAdapter({ request }).sync('/library/research', signal),
     ).resolves.toBe(true);
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({ method: 'POST', path: '/api/sync?folder=%2Flibrary%2Fresearch' }),
     );
     const cancelled = vi.fn(async () => ({ body: { cancelled: true }, status: 200 }));
     await expect(
-      createPreparationControlApi({ request: cancelled }).sync('/library/research', signal),
+      createPreparationControlAdapter({ request: cancelled }).sync('/library/research', signal),
     ).resolves.toBe(false);
   });
 });

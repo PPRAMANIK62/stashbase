@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import { PreparationError } from '@/features/preparation/application/ports';
 import type { HttpClient } from '@/platform/http/client';
 
-import { createPreparationStatusApi } from './status-api';
+import { createPreparationStatusAdapter } from './status-api';
 
 const wire = {
   blockedConversions: [],
@@ -32,7 +32,7 @@ const wire = {
 describe('preparation status API', () => {
   it('requests the explicit folder and maps the semantic block', async () => {
     const request = vi.fn(async () => ({ body: wire, status: 200 }));
-    const status = await createPreparationStatusApi({ request }).load(
+    const status = await createPreparationStatusAdapter({ request }).load(
       '/library/research',
       new AbortController().signal,
     );
@@ -40,13 +40,32 @@ describe('preparation status API', () => {
       expect.objectContaining({ path: '/api/index-status?folder=%2Flibrary%2Fresearch' }),
     );
     expect(status.conversionProgress['a.pdf']?.phase).toBe('queued');
-    expect(status.semantic).toMatchObject({
-      estimatedBytes: 2048,
-      pending: ['notes.md'],
-      sourceCount: 4,
+    expect(status.semantic).toEqual({
       state: 'awaiting-decision',
-      warning: { message: 'daemon restarted' },
+      workload: { estimatedBytes: 2048, files: 4 },
     });
+    expect(status.indexSettled).toBe(true);
+    expect(status.indexWarning).toEqual({
+      at: '2026-09-09T00:00:00.000Z',
+      sentence: 'daemon restarted',
+    });
+  });
+
+  it('folds a partial daemon state into the variant that carries what it means', async () => {
+    const partial = {
+      ...wire,
+      semanticIndexing: { state: 'partial-indexing' },
+      visibleIndexingSettled: false,
+    };
+    const request = vi.fn(async () => ({ body: partial, status: 200 }));
+
+    const status = await createPreparationStatusAdapter({ request }).load(
+      '/library/research',
+      new AbortController().signal,
+    );
+
+    expect(status.semantic).toEqual({ partial: true, remaining: 1, state: 'indexing' });
+    expect(status.indexSettled).toBe(false);
   });
 
   it('classifies a lost folder scope and an invalid body', async () => {
@@ -57,13 +76,13 @@ describe('preparation status API', () => {
       })),
     };
     await expect(
-      createPreparationStatusApi(lost).load('/library/x', new AbortController().signal),
+      createPreparationStatusAdapter(lost).load('/library/x', new AbortController().signal),
     ).rejects.toMatchObject({ kind: 'scope-lost' });
     const invalid: HttpClient = {
       request: vi.fn(async () => ({ body: { nope: true }, status: 200 })),
     };
     await expect(
-      createPreparationStatusApi(invalid).load('/library/x', new AbortController().signal),
+      createPreparationStatusAdapter(invalid).load('/library/x', new AbortController().signal),
     ).rejects.toBeInstanceOf(PreparationError);
   });
 });

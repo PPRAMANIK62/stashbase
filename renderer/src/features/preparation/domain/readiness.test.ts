@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { FolderIndexStatus } from '@/shared/domain/folder-index-status';
+import { folderIndexStatus as status } from '@/test/fakes/preparation';
 
 import {
   availableActions,
@@ -10,35 +10,19 @@ import {
   sourcePathForRecord,
   sourceReadiness,
   treeMarker,
+  type SourceReadiness,
+  type SourceReadinessKind,
 } from './readiness';
 
-function status(overrides: Partial<FolderIndexStatus> = {}): FolderIndexStatus {
-  return {
-    blockedConversions: [],
-    conversionProgress: {},
-    conversionRevision: 0,
-    conversionVersions: {},
-    folderPath: '/library/research',
-    indexed: 0,
-    pendingConversions: [],
-    preparationFailures: [],
-    semantic: {
-      available: false,
-      disabledReason: 'Embedding source required',
-      enabled: false,
-      estimatedBytes: null,
-      indexReady: true,
-      pending: [],
-      settled: true,
-      sourceCount: null,
-      state: 'disabled',
-      warning: null,
-    },
-    total: 0,
-    treeVersion: 0,
-    ...overrides,
-  };
-}
+/** One sample per readiness kind. The map is total over the union, so a new
+ *  kind cannot be added without a sample the projections below must answer. */
+const SAMPLES: Record<SourceReadinessKind, SourceReadiness> = {
+  blocked: { kind: 'blocked' },
+  cancelled: { kind: 'cancelled' },
+  current: { kind: 'current' },
+  failed: { attempts: 1, detail: 'boom', kind: 'failed' },
+  pending: { kind: 'pending', progress: null },
+};
 
 describe('source readiness', () => {
   it('maps a legacy derived note record back to its visible source', () => {
@@ -57,7 +41,7 @@ describe('source readiness', () => {
     });
     expect(sourceReadiness(snapshot, 'papers/a.pdf')).toEqual({
       attempts: 1,
-      error: 'boom',
+      detail: 'boom',
       kind: 'failed',
     });
     expect(sourceReadiness(snapshot, 'a.pdf')).toEqual({
@@ -73,7 +57,7 @@ describe('source readiness', () => {
     expect(treeMarker({ kind: 'pending', progress: null })).toBeNull();
     expect(treeMarker({ kind: 'blocked' })?.kind).toBe('blocked');
     expect(treeMarker({ kind: 'cancelled' })?.kind).toBe('cancelled');
-    expect(treeMarker({ attempts: 1, error: '', kind: 'failed' })?.kind).toBe('failed');
+    expect(treeMarker({ attempts: 1, detail: '', kind: 'failed' })?.kind).toBe('failed');
   });
 
   it('phrases progress by format', () => {
@@ -93,7 +77,7 @@ describe('source readiness', () => {
       ),
     ).toBe('Waiting for other file preparation to finish…');
     expect(readinessStatusLine({ kind: 'current' }, 'pdf')).toBeNull();
-    expect(readinessStatusLine({ attempts: 1, error: '', kind: 'failed' }, 'image')).toContain(
+    expect(readinessStatusLine({ attempts: 1, detail: '', kind: 'failed' }, 'image')).toContain(
       'still opens normally',
     );
   });
@@ -113,11 +97,24 @@ describe('source readiness', () => {
   });
 
   it('offers cancel while pending and reprocess after failure or cancellation', () => {
-    expect(availableActions({ kind: 'pending', progress: null })).toEqual({
-      cancel: true,
-      reprocess: false,
-    });
-    expect(availableActions({ kind: 'cancelled' })).toEqual({ cancel: false, reprocess: true });
-    expect(availableActions({ kind: 'current' })).toEqual({ cancel: false, reprocess: false });
+    expect([...availableActions(SAMPLES.pending)]).toEqual(['cancel']);
+    expect([...availableActions(SAMPLES.cancelled)]).toEqual(['reprocess']);
+    expect([...availableActions(SAMPLES.failed)]).toEqual(['reprocess']);
+    expect([...availableActions(SAMPLES.current)]).toEqual([]);
+    expect([...availableActions(SAMPLES.blocked)]).toEqual([]);
+  });
+
+  it('answers every readiness kind in each projection', () => {
+    const kinds = Object.keys(SAMPLES) as SourceReadinessKind[];
+    expect(kinds).toHaveLength(5);
+    for (const kind of kinds) {
+      const readiness = SAMPLES[kind];
+      // A marker is optional, but the decision must be a deliberate null
+      // rather than a value that fell off the end of a switch.
+      expect(treeMarker(readiness)).not.toBeUndefined();
+      expect(availableActions(readiness)).toBeInstanceOf(Set);
+      // Only a current source is silent; every other kind explains itself.
+      expect(readinessStatusLine(readiness, 'pdf') === null).toBe(kind === 'current');
+    }
   });
 });

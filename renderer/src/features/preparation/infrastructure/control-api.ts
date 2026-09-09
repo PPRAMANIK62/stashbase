@@ -1,8 +1,14 @@
 import {
   PreparationError,
-  type PreparationControlApi,
+  type PreparationControlPort,
 } from '@/features/preparation/application/ports';
-import type { HttpClient, HttpResponse } from '@/platform/http/client';
+import {
+  request,
+  requestOptions,
+  type TransportFailure,
+  type TransportRequest,
+} from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import { folderSyncResponseSchema } from '@/protocols/http/index-status';
 import {
   preparationAcknowledgementSchema,
@@ -14,60 +20,69 @@ import {
 } from '@/protocols/http/preparation';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-function controlError(response: HttpResponse, fallback: string): PreparationError {
-  const failure = preparationFailureResponseSchema.safeParse(response.body);
-  const message = failure.success ? failure.data.error : fallback;
-  const cause = failure.success ? { cause: new Error(failure.data.error) } : undefined;
-  if (response.status === 409 && failure.data?.code === 'TRANSCRIPTION_NOT_READY') {
-    return new PreparationError('blocked', message, cause);
-  }
-  if (response.status === 415) return new PreparationError('unsupported', message, cause);
-  if (
-    response.status === 404 ||
-    response.status === 412 ||
-    failure.data?.code === 'FOLDER_NOT_FOUND' ||
-    failure.data?.code === 'NO_FOLDER'
-  ) {
-    return new PreparationError('scope-lost', 'This file is no longer available.', cause);
-  }
-  return new PreparationError('unavailable', fallback, cause);
+const SCOPE_LOST = 'This file is no longer available.';
+
+interface ControlMessages {
+  readonly invalid: string;
+  readonly unavailable: string;
 }
 
-async function post(
-  client: HttpClient,
+/** Control refusals the shared ladder cannot see: a transcript the user has
+ *  not set up yet, a format preparation does not handle, and a folder the
+ *  daemon names in the body instead of in the status. Each carries the
+ *  server's own sentence, because it names what to do next. */
+function controlFailure(fallback: string) {
+  return ({ response, serverMessage }: TransportFailure): PreparationError | null => {
+    const failure = preparationFailureResponseSchema.safeParse(response.body);
+    const cause = serverMessage === null ? undefined : { cause: new Error(serverMessage) };
+    const message = serverMessage ?? fallback;
+    if (response.status === 409 && failure.data?.code === 'TRANSCRIPTION_NOT_READY') {
+      return new PreparationError('blocked', message, cause);
+    }
+    if (response.status === 415) return new PreparationError('unsupported', message, cause);
+    if (failure.data?.code === 'FOLDER_NOT_FOUND' || failure.data?.code === 'NO_FOLDER') {
+      return new PreparationError('scope-lost', SCOPE_LOST, cause);
+    }
+    return null;
+  };
+}
+
+function control(
   path: string,
   body: unknown,
   signal: AbortSignal,
-  fallback: string,
-): Promise<HttpResponse> {
-  let response: HttpResponse;
-  try {
-    response = await client.request({ body, method: 'POST', path, signal });
-  } catch (error) {
-    if (signal.aborted) throw error;
-    throw new PreparationError('unavailable', fallback, { cause: error });
-  }
-  if (response.status < 200 || response.status >= 300) throw controlError(response, fallback);
-  return response;
+  messages: ControlMessages,
+): TransportRequest<'blocked' | 'unsupported'> {
+  return requestOptions({
+    ...(body === undefined ? {} : { body }),
+    error: PreparationError,
+    failure: controlFailure(messages.unavailable),
+    failureSchema: preparationFailureResponseSchema,
+    messages: {
+      'invalid-response': messages.invalid,
+      'scope-lost': SCOPE_LOST,
+      unavailable: messages.unavailable,
+    },
+    method: 'POST',
+    path,
+    signal,
+  });
 }
 
 function sourceBody(source: SourceReference) {
   return preparationSourceRequestSchema.parse({ folder: source.folderPath, path: source.path });
 }
 
-export function createPreparationControlApi(client: HttpClient): PreparationControlApi {
+export function createPreparationControlAdapter(client: HttpClient): PreparationControlPort {
   return {
     async prepare(source, signal) {
-      const response = await post(
-        client,
-        '/api/files/prepare',
-        sourceBody(source),
-        signal,
-        'Preparation could not start.',
-      );
-      if (!preparationAcknowledgementSchema.safeParse(response.body).success) {
-        throw new PreparationError('invalid-response', 'Preparation returned an invalid response.');
-      }
+      await request(client, {
+        ...control('/api/files/prepare', sourceBody(source), signal, {
+          invalid: 'Preparation returned an invalid response.',
+          unavailable: 'Preparation could not start.',
+        }),
+        schema: preparationAcknowledgementSchema,
+      });
     },
     async reprocess(source, options, signal) {
       const body = preparationReprocessRequestSchema.parse({
@@ -75,50 +90,35 @@ export function createPreparationControlApi(client: HttpClient): PreparationCont
         ...(options.language ? { language: options.language } : {}),
         path: source.path,
       });
-      const response = await post(
-        client,
-        '/api/files/reprocess',
-        body,
-        signal,
-        'Reprocess could not start. Try again.',
-      );
-      const parsed = preparationReprocessResponseSchema.safeParse(response.body);
-      if (!parsed.success) {
-        throw new PreparationError('invalid-response', 'Reprocess returned an invalid response.');
-      }
-      return parsed.data.mode;
+      const parsed = await request(client, {
+        ...control('/api/files/reprocess', body, signal, {
+          invalid: 'Reprocess returned an invalid response.',
+          unavailable: 'Reprocess could not start. Try again.',
+        }),
+        schema: preparationReprocessResponseSchema,
+      });
+      return parsed.mode;
     },
     async cancel(source, signal) {
-      const response = await post(
-        client,
-        '/api/files/cancel-preparation',
-        sourceBody(source),
-        signal,
-        'Preparation could not be cancelled.',
-      );
-      const parsed = preparationCancelResponseSchema.safeParse(response.body);
-      if (!parsed.success) {
-        throw new PreparationError(
-          'invalid-response',
-          'Cancellation returned an invalid response.',
-        );
-      }
-      return parsed.data.cancelled;
+      const parsed = await request(client, {
+        ...control('/api/files/cancel-preparation', sourceBody(source), signal, {
+          invalid: 'Cancellation returned an invalid response.',
+          unavailable: 'Preparation could not be cancelled.',
+        }),
+        schema: preparationCancelResponseSchema,
+      });
+      return parsed.cancelled;
     },
     async sync(folderPath, signal) {
       const query = new URLSearchParams({ folder: folderPath });
-      const response = await post(
-        client,
-        `/api/sync?${query}`,
-        undefined,
-        signal,
-        'The folder could not be refreshed.',
-      );
-      const parsed = folderSyncResponseSchema.safeParse(response.body);
-      if (!parsed.success) {
-        throw new PreparationError('invalid-response', 'Sync returned an invalid response.');
-      }
-      return parsed.data.cancelled !== true;
+      const parsed = await request(client, {
+        ...control(`/api/sync?${query}`, undefined, signal, {
+          invalid: 'Sync returned an invalid response.',
+          unavailable: 'The folder could not be refreshed.',
+        }),
+        schema: folderSyncResponseSchema,
+      });
+      return parsed.cancelled !== true;
     },
   };
 }

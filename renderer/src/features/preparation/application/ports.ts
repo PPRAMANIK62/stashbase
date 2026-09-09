@@ -1,7 +1,12 @@
+import {
+  featureErrorClass,
+  type FeatureError,
+  type FeatureFailureKind,
+} from '@/shared/domain/feature-error';
 import type { FolderIndexStatus } from '@/shared/domain/folder-index-status';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-export interface PreparationStatusApi {
+export interface PreparationStatusPort {
   load(folderPath: string, signal: AbortSignal): Promise<FolderIndexStatus>;
 }
 
@@ -9,7 +14,7 @@ export interface PreparationReprocessOptions {
   readonly language?: string;
 }
 
-export interface PreparationControlApi {
+export interface PreparationControlPort {
   /** Queue or promote DOCX and media preparation on open. Never destructive. */
   prepare(source: SourceReference, signal: AbortSignal): Promise<void>;
   reprocess(
@@ -23,19 +28,9 @@ export interface PreparationControlApi {
   sync(folderPath: string, signal: AbortSignal): Promise<boolean>;
 }
 
-export type PreparationFailureKind =
-  | 'blocked'
-  | 'invalid-response'
-  | 'scope-lost'
-  | 'unavailable'
-  | 'unsupported';
+type PreparationExtra = 'blocked' | 'unsupported';
 
-export class PreparationError extends Error {
-  readonly kind: PreparationFailureKind;
+export type PreparationFailureKind = FeatureFailureKind<PreparationExtra>;
 
-  constructor(kind: PreparationFailureKind, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'PreparationError';
-    this.kind = kind;
-  }
-}
+export type PreparationError = FeatureError<PreparationExtra>;
+export const PreparationError = featureErrorClass<PreparationExtra>('PreparationError');

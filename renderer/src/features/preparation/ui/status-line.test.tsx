@@ -35,7 +35,7 @@ describe('preparation status line', () => {
       <PreparationStatusLine
         format="image"
         onReprocess={vi.fn()}
-        readiness={{ attempts: 2, error: 'ocr crashed', kind: 'failed' }}
+        readiness={{ attempts: 2, detail: 'ocr crashed', kind: 'failed' }}
       />,
     );
     expect(screen.getByRole('alert').textContent).toContain('still opens normally');
@@ -47,7 +47,7 @@ describe('preparation status line', () => {
         format="image"
         onReprocess={vi.fn()}
         pending="reprocess"
-        readiness={{ attempts: 2, error: 'ocr crashed', kind: 'failed' }}
+        readiness={{ attempts: 2, detail: 'ocr crashed', kind: 'failed' }}
       />,
     );
     expect(screen.getByRole('button', { name: 'Reprocessing…' }).hasAttribute('disabled')).toBe(

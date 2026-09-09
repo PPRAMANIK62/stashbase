@@ -2,10 +2,11 @@ import { Button } from '@/components/ui/button';
 import {
   availableActions,
   readinessStatusLine,
+  readinessTone,
+  type PreparationAction,
   type PreparedFormat,
   type SourceReadiness,
 } from '@/features/preparation/domain/readiness';
-import type { PreparationAction } from '@/features/preparation/hooks/use-preparation-actions';
 import { cn } from '@/lib/utils';
 
 export interface PreparationStatusLineProps {
@@ -29,7 +30,7 @@ export function PreparationStatusLine({
 }: PreparationStatusLineProps) {
   const line = readinessStatusLine(readiness, format);
   if (line === null) return null;
-  const attention = readiness.kind === 'failed' || readiness.kind === 'blocked';
+  const attention = readinessTone(readiness) === 'attention';
   const actions = availableActions(readiness);
   const busy = pending !== null;
 
@@ -53,12 +54,12 @@ export function PreparationStatusLine({
           </>
         )}
       </p>
-      {actions.reprocess && onReprocess && (
+      {actions.has('reprocess') && onReprocess && (
         <Button disabled={busy} onClick={onReprocess} size="compact" variant="tertiary">
           {pending === 'reprocess' ? 'Reprocessing…' : 'Reprocess'}
         </Button>
       )}
-      {actions.cancel && onCancel && (
+      {actions.has('cancel') && onCancel && (
         <Button disabled={busy} onClick={onCancel} size="compact" variant="tertiary">
           {pending === 'cancel' ? 'Cancelling…' : 'Cancel'}
         </Button>

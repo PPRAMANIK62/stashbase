@@ -1,3 +1,11 @@
+/**
+ * What preparation has done to one source, and what the user may do about it.
+ *
+ * `SourceReadiness` is the only vocabulary the Preparation views speak, and
+ * every projection off it — the status line, the tree marker, the offered
+ * actions — is total over its kinds. A new kind therefore fails the build
+ * here instead of silently rendering nothing.
+ */
 import type {
   FolderIndexStatus,
   PreparationFailure,
@@ -8,10 +16,19 @@ export type SourceReadiness =
   | { readonly kind: 'current' }
   | { readonly kind: 'pending'; readonly progress: PreparationProgress | null }
   | { readonly kind: 'blocked' }
-  | { readonly kind: 'failed'; readonly attempts: number; readonly error: string }
+  /** `detail` is the daemon's own sentence about this file. It names the step
+   *  that stopped, which no fixed line here could, so it is carried as a
+   *  sentence rather than read off a thrown error. */
+  | { readonly kind: 'failed'; readonly attempts: number; readonly detail: string }
   | { readonly kind: 'cancelled' };
 
+export type SourceReadinessKind = SourceReadiness['kind'];
+
 export type PreparedFormat = 'pdf' | 'image' | 'docx' | 'media';
+
+/** The explicit controls a source's state can offer. The server stays the
+ *  authority: offering an action is not a promise that it will succeed. */
+export type PreparationAction = 'cancel' | 'reprocess';
 
 export interface FolderPreparationSummary {
   readonly blocked: number;
@@ -39,7 +56,7 @@ export function sourcePathForRecord(recordPath: string): string {
   return derived ? `${directory}${derived[1]}` : recordPath;
 }
 
-export function preparationFailureFor(
+function preparationFailureFor(
   status: FolderIndexStatus,
   sourcePath: string,
 ): PreparationFailure | null {
@@ -59,7 +76,7 @@ export function sourceReadiness(
   if (failure) {
     return failure.status === 'cancelled'
       ? CANCELLED
-      : { attempts: failure.attempts, error: failure.lastError, kind: 'failed' };
+      : { attempts: failure.attempts, detail: failure.lastError, kind: 'failed' };
   }
   if (status.blockedConversions.includes(sourcePath)) return BLOCKED;
   const progress = status.conversionProgress[sourcePath];
@@ -68,23 +85,42 @@ export function sourceReadiness(
   return CURRENT;
 }
 
+/** Every visible source the status says something about. A path can appear in
+ *  more than one list — a conversion that failed and was queued again — and it
+ *  is still one source, so the readiness it resolves to buckets it once. */
+function reportedPaths(status: FolderIndexStatus): Set<string> {
+  return new Set([
+    ...status.preparationFailures.map((failure) => sourcePathForRecord(failure.path)),
+    ...status.blockedConversions,
+    ...status.pendingConversions,
+  ]);
+}
+
+/** One counter per readiness kind. Written as a total record so a new kind has
+ *  to be answered here rather than silently counting as nothing. */
+function readinessCounts(status: FolderIndexStatus): Record<SourceReadinessKind, number> {
+  const counts: Record<SourceReadinessKind, number> = {
+    blocked: 0,
+    cancelled: 0,
+    current: 0,
+    failed: 0,
+    pending: 0,
+  };
+  for (const path of reportedPaths(status)) counts[sourceReadiness(status, path).kind] += 1;
+  return counts;
+}
+
 export function folderPreparationSummary(
   status: FolderIndexStatus | null | undefined,
 ): FolderPreparationSummary {
   if (!status) return { blocked: 0, cancelled: 0, failed: 0, needsAttention: false, pending: 0 };
-  let failed = 0;
-  let cancelled = 0;
-  for (const failure of status.preparationFailures) {
-    if (failure.status === 'cancelled') cancelled += 1;
-    else failed += 1;
-  }
-  const blocked = status.blockedConversions.length;
+  const counts = readinessCounts(status);
   return {
-    blocked,
-    cancelled,
-    failed,
-    needsAttention: failed > 0 || blocked > 0 || status.semantic.warning !== null,
-    pending: status.pendingConversions.length,
+    blocked: counts.blocked,
+    cancelled: counts.cancelled,
+    failed: counts.failed,
+    needsAttention: counts.failed > 0 || counts.blocked > 0 || status.indexWarning !== null,
+    pending: counts.pending,
   };
 }
 
@@ -94,7 +130,7 @@ export function preparationPollInterval(status: FolderIndexStatus | null | undef
   const busy =
     status.pendingConversions.length > 0 ||
     status.blockedConversions.length > 0 ||
-    !status.semantic.settled;
+    !status.indexSettled;
   return busy ? POLL_BUSY_MS : POLL_IDLE_MS;
 }
 
@@ -149,10 +185,14 @@ export function readinessStatusLine(
         case 'docx':
           return 'The document is visible, but its searchable text is unavailable.';
         case 'media':
-          return readiness.error
-            ? `Transcription failed: ${readiness.error}`
+          return readiness.detail
+            ? `Transcription failed: ${readiness.detail}`
             : 'Transcription failed. Reprocess it to try again.';
+        default:
+          return exhausted(format);
       }
+    default:
+      return exhausted(readiness);
   }
 }
 
@@ -161,7 +201,8 @@ export interface TreeMarker {
   readonly title: string;
 }
 
-/** Tree rows mark only states that need the user; pending stays quiet. */
+/** Tree rows mark only states that need the user; pending and current stay
+ *  quiet, but they say so here rather than falling through a default. */
 export function treeMarker(readiness: SourceReadiness): TreeMarker | null {
   switch (readiness.kind) {
     case 'failed':
@@ -176,18 +217,50 @@ export function treeMarker(readiness: SourceReadiness): TreeMarker | null {
         kind: 'blocked',
         title: 'Transcription setup is required to make this file searchable.',
       };
-    default:
+    case 'current':
+    case 'pending':
       return null;
+    default:
+      return exhausted(readiness);
   }
 }
 
-/** Which actions a source's state offers; the server stays the authority. */
-export function availableActions(readiness: SourceReadiness): {
-  readonly cancel: boolean;
-  readonly reprocess: boolean;
-} {
-  return {
-    cancel: readiness.kind === 'pending',
-    reprocess: readiness.kind === 'failed' || readiness.kind === 'cancelled',
-  };
+const NO_ACTIONS: ReadonlySet<PreparationAction> = new Set();
+const CANCEL_ONLY: ReadonlySet<PreparationAction> = new Set(['cancel']);
+const REPROCESS_ONLY: ReadonlySet<PreparationAction> = new Set(['reprocess']);
+
+/** One action set per readiness kind. Written as a total map so a new kind
+ *  cannot inherit an empty set by accident: it has to be answered here. */
+const ACTIONS: Record<SourceReadinessKind, ReadonlySet<PreparationAction>> = {
+  blocked: NO_ACTIONS,
+  cancelled: REPROCESS_ONLY,
+  current: NO_ACTIONS,
+  failed: REPROCESS_ONLY,
+  pending: CANCEL_ONLY,
+};
+
+/** Which explicit controls a source's state offers. */
+export function availableActions(readiness: SourceReadiness): ReadonlySet<PreparationAction> {
+  return ACTIONS[readiness.kind];
+}
+
+/** How loudly a state is said: `attention` is something the reader can act on,
+ *  `quiet` is progress. Written as a total map for the same reason the action
+ *  sets are — a new kind is answered here, not defaulted. */
+const TONES: Record<SourceReadinessKind, 'attention' | 'quiet'> = {
+  blocked: 'attention',
+  cancelled: 'quiet',
+  current: 'quiet',
+  failed: 'attention',
+  pending: 'quiet',
+};
+
+export function readinessTone(readiness: SourceReadiness): 'attention' | 'quiet' {
+  return TONES[readiness.kind];
+}
+
+/** The compiler proves this call cannot happen: a new variant fails to compile
+ *  at the call site instead of falling through to a blank. */
+function exhausted(value: never): never {
+  return value;
 }

@@ -1,81 +1,131 @@
 import {
   PreparationError,
-  type PreparationStatusApi,
+  type PreparationStatusPort,
 } from '@/features/preparation/application/ports';
-import type { HttpClient, HttpResponse } from '@/platform/http/client';
+import { request, type TransportFailure } from '@/platform/http/classify';
+import type { HttpClient } from '@/platform/http/client';
 import {
   indexStatusFailureSchema,
   indexStatusResponseSchema,
   type IndexStatusResponseWire,
 } from '@/protocols/http/index-status';
-import type { FolderIndexStatus } from '@/shared/domain/folder-index-status';
+import type {
+  FolderIndexStatus,
+  PreparationProgress,
+  SemanticIndexStatus,
+} from '@/shared/domain/folder-index-status';
 
-export function mapIndexStatus(wire: IndexStatusResponseWire): FolderIndexStatus {
+/** Drops absent extraction counters instead of carrying explicit `undefined`
+ *  keys across the wire-to-domain boundary. */
+function mapConversionProgress(
+  wire: IndexStatusResponseWire['conversionProgress'],
+): Readonly<Record<string, PreparationProgress>> {
+  const mapped: Record<string, PreparationProgress> = {};
+  for (const [path, progress] of Object.entries(wire)) {
+    mapped[path] =
+      progress.phase === 'extracting'
+        ? {
+            phase: 'extracting',
+            ...(progress.completedUnits === undefined
+              ? {}
+              : { completedUnits: progress.completedUnits }),
+            ...(progress.currentPage === undefined ? {} : { currentPage: progress.currentPage }),
+            ...(progress.totalUnits === undefined ? {} : { totalUnits: progress.totalUnits }),
+          }
+        : progress;
+  }
+  return mapped;
+}
+
+/** Folds the daemon's ten index states into the variants the renderer models,
+ *  so a flag can never be read beside the state it belongs to. The partial
+ *  spellings differ from their whole counterparts only in whether the index
+ *  already answers, which is what `partial` carries. */
+function mapSemanticStatus(wire: IndexStatusResponseWire): SemanticIndexStatus {
+  const indexing = wire.semanticIndexing;
+  const workload = {
+    estimatedBytes: indexing.estimatedBytes ?? null,
+    files: indexing.sourceCount ?? wire.pending.length,
+  };
+  switch (indexing.state) {
+    case 'disabled':
+      return { state: 'not-set-up' };
+    case 'quota-exhausted':
+    case 'partial-quota-exhausted':
+      return { state: 'quota-exhausted' };
+    case 'awaiting-decision':
+      return { state: 'awaiting-decision', workload };
+    case 'paused':
+    case 'partial-paused':
+      return { partial: indexing.state === 'partial-paused', state: 'paused', workload };
+    case 'indexing':
+    case 'partial-indexing':
+      return {
+        partial: indexing.state === 'partial-indexing',
+        remaining: wire.pending.length,
+        state: 'indexing',
+      };
+    case 'failed':
+      return { state: 'failed' };
+    case 'ready':
+      return { state: 'ready' };
+  }
+}
+
+function mapIndexStatus(wire: IndexStatusResponseWire): FolderIndexStatus {
   return {
     blockedConversions: wire.blockedConversions,
-    conversionProgress: wire.conversionProgress,
+    conversionProgress: mapConversionProgress(wire.conversionProgress),
     conversionRevision: wire.conversionRevision,
     conversionVersions: wire.conversionVersions,
     folderPath: wire.folder,
+    indexSettled: wire.visibleIndexingSettled,
+    indexWarning: wire.indexWarning && {
+      at: wire.indexWarning.at,
+      sentence: wire.indexWarning.message,
+    },
     indexed: wire.indexed,
     pendingConversions: wire.pendingConversions,
     preparationFailures: wire.preparationFailures,
-    semantic: {
-      available: wire.semanticAvailable,
-      disabledReason: wire.semanticDisabledReason ?? null,
-      enabled: wire.semanticEnabled,
-      estimatedBytes: wire.semanticIndexing.estimatedBytes ?? null,
-      indexReady: wire.indexReady,
-      pending: wire.pending,
-      settled: wire.visibleIndexingSettled,
-      sourceCount: wire.semanticIndexing.sourceCount ?? null,
-      state: wire.semanticIndexing.state,
-      warning: wire.indexWarning,
-    },
+    semantic: mapSemanticStatus(wire),
     total: wire.total,
     treeVersion: wire.treeVersion,
   };
 }
 
-function statusError(response: HttpResponse): PreparationError {
+const SCOPE_LOST = 'This folder is no longer available in this window.';
+
+/** The daemon also names a vanished folder in the failure body, ahead of any
+ *  status the shared ladder could read. */
+function scopeFailure({ response, serverMessage }: TransportFailure): PreparationError | null {
   const failure = indexStatusFailureSchema.safeParse(response.body);
-  const scopeLost =
-    response.status === 404 ||
-    response.status === 410 ||
-    response.status === 412 ||
-    failure.data?.code === 'FOLDER_NOT_FOUND' ||
-    failure.data?.code === 'NO_FOLDER';
+  if (failure.data?.code !== 'FOLDER_NOT_FOUND' && failure.data?.code !== 'NO_FOLDER') return null;
   return new PreparationError(
-    scopeLost ? 'scope-lost' : 'unavailable',
-    scopeLost
-      ? 'This folder is no longer available in this window.'
-      : 'Preparation status is unavailable.',
-    failure.success ? { cause: new Error(failure.data.error) } : undefined,
+    'scope-lost',
+    SCOPE_LOST,
+    serverMessage === null ? undefined : { cause: new Error(serverMessage) },
   );
 }
 
-export function createPreparationStatusApi(client: HttpClient): PreparationStatusApi {
+export function createPreparationStatusAdapter(client: HttpClient): PreparationStatusPort {
   return {
     async load(folderPath, signal) {
       const query = new URLSearchParams({ folder: folderPath });
-      let response: HttpResponse;
-      try {
-        response = await client.request({ path: `/api/index-status?${query}`, signal });
-      } catch (error) {
-        if (signal.aborted) throw error;
-        throw new PreparationError('unavailable', 'Preparation status is unavailable.', {
-          cause: error,
-        });
-      }
-      if (response.status < 200 || response.status >= 300) throw statusError(response);
-      const parsed = indexStatusResponseSchema.safeParse(response.body);
-      if (!parsed.success) {
-        throw new PreparationError(
-          'invalid-response',
-          'Preparation status returned an invalid response.',
-        );
-      }
-      return mapIndexStatus(parsed.data);
+      return mapIndexStatus(
+        await request(client, {
+          error: PreparationError,
+          failure: scopeFailure,
+          failureSchema: indexStatusFailureSchema,
+          messages: {
+            'invalid-response': 'Preparation status returned an invalid response.',
+            'scope-lost': SCOPE_LOST,
+            unavailable: 'Preparation status is unavailable.',
+          },
+          path: `/api/index-status?${query}`,
+          schema: indexStatusResponseSchema,
+          signal,
+        }),
+      );
     },
   };
 }
