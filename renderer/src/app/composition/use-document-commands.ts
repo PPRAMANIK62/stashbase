@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
 
-import type { DocumentNavigationRuntime } from '@/features/documents/public';
+import type { DocumentNavigationRuntime, DocumentTabsRuntime } from '@/features/documents/public';
 
 /** Bind window-level document commands at the application composition boundary. */
-export function useDocumentCommands(runtime: DocumentNavigationRuntime | null): void {
+export function useDocumentCommands(
+  runtime: DocumentNavigationRuntime | null,
+  tabs: DocumentTabsRuntime | null = null,
+): void {
   useEffect(() => {
     if (!runtime) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -15,7 +18,14 @@ export function useDocumentCommands(runtime: DocumentNavigationRuntime | null): 
       }
       if ((!event.metaKey && !event.ctrlKey) || event.altKey) return;
       const key = event.key.toLowerCase();
-      if (key === 'f' && !event.shiftKey) {
+      if (key === 'w' && !event.shiftKey) {
+        // Cmd/Ctrl+W closes the active document tab. The chord is always
+        // taken, so with nothing open it can never fall through to a
+        // window close.
+        event.preventDefault();
+        const activeTabId = tabs?.store.getState().activeTabId;
+        if (tabs && activeTabId) void tabs.close(activeTabId);
+      } else if (key === 'f' && !event.shiftKey) {
         if (!runtime.openFind()) return;
         event.preventDefault();
       } else if (key === 'g' && find.open) {
@@ -26,5 +36,5 @@ export function useDocumentCommands(runtime: DocumentNavigationRuntime | null): 
     };
     globalThis.document.addEventListener('keydown', onKeyDown);
     return () => globalThis.document.removeEventListener('keydown', onKeyDown);
-  }, [runtime]);
+  }, [runtime, tabs]);
 }

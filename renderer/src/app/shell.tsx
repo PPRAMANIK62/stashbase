@@ -130,7 +130,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
     setSearchFocusRevision((revision) => revision + 1);
   }, [session.runtime]);
   useSidebarSearchCommand((library.data?.members.length ?? 0) > 0, openSearch);
-  useDocumentCommands(documents?.navigation ?? null);
+  useDocumentCommands(documents?.navigation ?? null, documents);
   useDocumentSaveBarrier(documents, dependencies.documents.lifecycle);
   const saveDocumentsForFolder = useCallback(
     (folderPath: string) =>

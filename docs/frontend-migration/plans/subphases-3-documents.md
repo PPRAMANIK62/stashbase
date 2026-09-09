@@ -16,6 +16,12 @@ projection; restricted entries remain reveal-only. The Fluid titlebar tab
 surface supports keyboard activation and close while Task 30 retains source
 loading.
 
+Follow-up (2026-09-09): Cmd/Ctrl+W closes the active document tab from the
+composition boundary and is always taken, so with nothing open it never falls
+through to a window close. The Electron Window menu is built by hand so the
+stock role's hidden Close item no longer binds the same chord, which on Linux
+and Windows had closed the only window and quit the app.
+
 Evidence: focused Documents, app-composition, file-tree, session, and shell
 tests; `pnpm test:renderer`, `pnpm test:renderer-architecture`,
 `pnpm typecheck`, `pnpm format:web`, `pnpm lint:web`, `pnpm build:web`, and the
