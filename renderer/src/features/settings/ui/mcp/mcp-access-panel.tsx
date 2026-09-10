@@ -24,7 +24,6 @@ import {
   type McpDockerState,
 } from '@/features/settings/domain/mcp-access';
 import { useMcpAccess } from '@/features/settings/hooks/use-mcp-access';
-import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import {
   Disclosure,
   SettingsGroup,
@@ -33,6 +32,7 @@ import {
   SettingsRow,
   StatusChip,
 } from '@/features/settings/ui/rows';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 export interface McpAccessPanelProps {
   mcpAccessApi: McpAccessPort;

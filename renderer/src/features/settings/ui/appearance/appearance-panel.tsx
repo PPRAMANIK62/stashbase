@@ -2,13 +2,13 @@ import type { AppearancePort } from '@/features/settings/application/ports';
 import { APPEARANCE_ROWS } from '@/features/settings/domain/appearance';
 import { useAppearance } from '@/features/settings/hooks/use-appearance';
 import { PresetChoice } from '@/features/settings/ui/appearance/preset-choice';
-import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import {
   SettingsGroup,
   SettingsList,
   SettingsPane,
   SettingsRow,
 } from '@/features/settings/ui/rows';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 export interface AppearancePanelProps {
   appearanceApi: AppearancePort;

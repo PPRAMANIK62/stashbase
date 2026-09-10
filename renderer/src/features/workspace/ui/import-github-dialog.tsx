@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { InputField, InputGroup } from '@/components/ui/input-group';
 import type { GitHubImportView } from '@/features/workspace/hooks/use-github-import';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 export interface ImportGitHubDialogProps {
   /** Where the copy would land, so the destination is a fact on screen rather
@@ -39,9 +40,7 @@ export function ImportGitHubDialog({
   };
 
   const destination =
-    request.folderName && !request.nameIssue
-      ? `${folderHome}/${request.folderName}`
-      : null;
+    request.folderName && !request.nameIssue ? `${folderHome}/${request.folderName}` : null;
 
   return (
     <Dialog onOpenChange={(next) => !next && close()} open={open}>
@@ -53,7 +52,7 @@ export function ImportGitHubDialog({
           </DialogDescription>
         </DialogHeader>
         {/* One group, not two: the group is a proximity row, and a lone field
-          * in its own group loses the reveal and reads as static text. */}
+         * in its own group loses the reveal and reads as static text. */}
         <InputGroup className="w-full" size="compact">
           <InputField
             autoComplete="off"
@@ -77,24 +76,16 @@ export function ImportGitHubDialog({
           />
         </InputGroup>
         {/* The destination is a fact, so it is only stated once there is one.
-          * Aligned to the field text rather than the dialog edge. */}
+         * Aligned to the field text rather than the dialog edge. */}
         {destination && (
           <p className="m-0 pl-2 text-caption text-muted-foreground">{destination}</p>
         )}
-        {request.failure && (
-          <p className="m-0 pl-2 text-caption text-destructive" role="alert">
-            {request.failure.message}
-          </p>
-        )}
+        {request.failure && <FailureNotice className="m-0 pl-2" failure={request.failure} />}
         <DialogFooter>
           <Button onClick={close} variant="ghost">
             Cancel
           </Button>
-          <Button
-            disabled={!request.canSubmit}
-            loading={request.pending}
-            onClick={request.submit}
-          >
+          <Button disabled={!request.canSubmit} loading={request.pending} onClick={request.submit}>
             Import
           </Button>
         </DialogFooter>

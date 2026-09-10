@@ -9,8 +9,8 @@ import type {
   AgentTurnSimulation,
 } from '@/features/settings/domain/agent-catalog';
 import type { AgentRuntimesViewModel } from '@/features/settings/hooks/use-agent-runtimes';
-import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import { Disclosure } from '@/features/settings/ui/rows';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 /**
  * Development-only preparation controls.

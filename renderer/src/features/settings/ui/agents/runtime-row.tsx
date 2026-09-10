@@ -6,10 +6,10 @@ import {
   describeRuntime,
   type AgentRuntimeAction,
 } from '@/features/settings/domain/agent-runtime-status';
-import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import { SettingsRow } from '@/features/settings/ui/rows';
 import type { AgentId } from '@/shared/domain/agent-id';
 import type { FailureView } from '@/shared/domain/feature-error';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 import { StageTrack } from './stage-track';
 

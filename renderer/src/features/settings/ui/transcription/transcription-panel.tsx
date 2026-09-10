@@ -18,7 +18,6 @@ import {
   type TranscriptionModelDisplay,
 } from '@/features/settings/domain/transcription-status';
 import { useTranscription } from '@/features/settings/hooks/use-transcription';
-import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import {
   ChoiceList,
   ChoiceRow,
@@ -29,6 +28,7 @@ import {
   SettingsRow,
   StatusChip,
 } from '@/features/settings/ui/rows';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 const LANGUAGES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'auto', label: 'Auto-detect' },

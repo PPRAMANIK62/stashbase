@@ -2,7 +2,6 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import type { CapturePort } from '@/features/settings/application/ports';
 import { useCapture, type CaptureWatchApplier } from '@/features/settings/hooks/use-capture';
-import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import {
   SettingsGroup,
   SettingsList,
@@ -10,6 +9,7 @@ import {
   SettingsRow,
 } from '@/features/settings/ui/rows';
 import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 export interface GeneralPanelProps {
   applyCaptureWatch: CaptureWatchApplier;
@@ -18,11 +18,7 @@ export interface GeneralPanelProps {
   softwareUpdate: SoftwareUpdateRow | null;
 }
 
-export function GeneralPanel({
-  applyCaptureWatch,
-  captureApi,
-  softwareUpdate,
-}: GeneralPanelProps) {
+export function GeneralPanel({ applyCaptureWatch, captureApi, softwareUpdate }: GeneralPanelProps) {
   const capture = useCapture(captureApi, applyCaptureWatch);
   const enabled = capture.clipboardImageImport;
 

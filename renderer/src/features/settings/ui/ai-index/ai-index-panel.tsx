@@ -24,7 +24,6 @@ import {
   type EmbedderState,
 } from '@/features/settings/domain/embedder';
 import { useEmbedder, type EmbedderViewModel } from '@/features/settings/hooks/use-embedder';
-import { FailureNotice } from '@/features/settings/ui/failure-notice';
 import {
   ChoiceList,
   ChoiceRow,
@@ -33,6 +32,7 @@ import {
   SettingsPane,
   StatusChip,
 } from '@/features/settings/ui/rows';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 export interface AiIndexPanelProps {
   embedderApi: EmbedderPort;

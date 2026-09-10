@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import type { AgentInstructionsEditor } from '@/features/agent/hooks/use-agent-instructions';
 import { focusRing } from '@/lib/focus-ring';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 /* The field sits one step above the dialog rather than on `background`, which
  * on a light panel reads as a hole punched through it. No `resize`: the panel
@@ -66,11 +67,7 @@ export function AgentInstructionsDialog({
           spellCheck={false}
           value={editor.draft}
         />
-        {editor.failure && (
-          <p className="m-0 text-caption text-destructive" role="alert">
-            {editor.failure.message}
-          </p>
-        )}
+        {editor.failure && <FailureNotice className="m-0" failure={editor.failure} />}
         <DialogFooter>
           {editor.customized && (
             <Button
@@ -85,7 +82,11 @@ export function AgentInstructionsDialog({
           <Button onClick={onClose} variant="ghost">
             Cancel
           </Button>
-          <Button disabled={!editor.dirty || editor.saving} loading={editor.saving} onClick={editor.save}>
+          <Button
+            disabled={!editor.dirty || editor.saving}
+            loading={editor.saving}
+            onClick={editor.save}
+          >
             Save
           </Button>
         </DialogFooter>

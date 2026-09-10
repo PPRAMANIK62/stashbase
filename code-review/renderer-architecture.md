@@ -61,7 +61,8 @@ one.
   lazily mounted surfaces, command-surface registration, runtime scoping and
   retention, scroll anchoring, text-entry focus, and the provider stack the
   application mounts); `shared/ui` and `shared/styling` for browser-facing
-  shared code such as the clipboard helper and code highlighting; and
+  shared code such as the clipboard helper, the failure notice every surface
+  says a `FailureView` through, and code highlighting; and
   `shared/brand`, which is artwork. Nothing in `shared` may reach `app`,
   `features`, or `platform`.
 - **`platform`** owns mechanism at the host boundary, the typed preload bridge
@@ -410,7 +411,7 @@ reason removes the entry.
 | Port binding | `renderer/src/app/dependencies.ts`, the one place Adapters are selected for the whole application |
 | Cross-feature ordering | `renderer/src/app/workflows/` |
 | Window-scoped server cache | `renderer/src/app/providers.tsx` |
-| Failure base and kinds | `renderer/src/shared/domain/feature-error.ts` |
+| Failure base and kinds | `renderer/src/shared/domain/feature-error.ts`, presented by `renderer/src/shared/ui/failure-notice.tsx` |
 | Host boundary | `renderer/src/platform/electron/bridge.ts` and `renderer/src/platform/http/client.ts` |
 | Wire schemas | `shared/protocols/electron/`, `shared/protocols/http/`, `shared/protocols/websocket/` |
 | Format dispatch | `renderer/src/features/documents/ui/source/registry.tsx` |
