@@ -26,6 +26,7 @@ export default function ManagedSettings({
   onSectionChange,
   open,
   section,
+  softwareUpdate = null,
   transcriptionApi,
 }: SettingsProps) {
   const sections: SettingsSectionDef[] = [
@@ -36,7 +37,11 @@ export default function ManagedSettings({
           id: 'general',
           label: 'General',
           render: () => (
-            <GeneralPanel applyCaptureWatch={applyCaptureWatch} captureApi={captureApi} />
+            <GeneralPanel
+              applyCaptureWatch={applyCaptureWatch}
+              captureApi={captureApi}
+              softwareUpdate={softwareUpdate}
+            />
           ),
         }
       : { available: false, icon: SettingsIcon, id: 'general', label: 'General' },

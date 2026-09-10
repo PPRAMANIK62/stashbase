@@ -143,5 +143,17 @@ export function registerWindowLifecycle(
       });
       window.on('closed', () => settle(webContentsId, false));
     },
+    hasLoadedRenderer(window: LifecycleWindow) {
+      return loaded.has(window);
+    },
+    requestContextRelease(window: LifecycleWindow, reason: WindowContextReleaseReason) {
+      return request(window, reason);
+    },
+    approveClose(window: LifecycleWindow) {
+      approvedClose.add(window);
+    },
+    revokeCloseApproval(window: LifecycleWindow) {
+      approvedClose.delete(window);
+    },
   };
 }

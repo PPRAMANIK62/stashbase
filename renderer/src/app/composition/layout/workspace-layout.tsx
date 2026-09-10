@@ -34,6 +34,11 @@ export interface WorkspaceComposition {
   /** True once the window has a library and the Agent may be shown. */
   started: boolean;
   titlebar: ReactNode;
+  /** The offer to take a new version, already bound, which is why it arrives
+   *  as a node rather than as a notice. It sits last in the strip: a refusal of
+   *  something the reader tried is more urgent than an offer of something they
+   *  did not ask for, and a waiting update is the latter. */
+  updateNotice: ReactNode;
   /** The empty-library invitation, shown while no folder is open. */
   welcome: ReactNode;
 }
@@ -48,6 +53,7 @@ export function WorkspaceLayout({
   sidebar,
   started,
   titlebar,
+  updateNotice,
   welcome,
 }: WorkspaceComposition) {
   return (
@@ -68,6 +74,7 @@ export function WorkspaceLayout({
       <SidebarInset className="min-h-0 overflow-hidden">
         {titlebar}
         <WorkspaceNotices notices={notices} />
+        {updateNotice}
         {hasActiveFolder && recovery}
 
         <section aria-label="Agent workspace" className="min-h-0 flex-1" {...agentSurfaceProps}>

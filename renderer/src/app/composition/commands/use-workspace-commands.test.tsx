@@ -2,7 +2,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { useWorkspaceSession } from '@/features/workspace/public';
-import { libraryApi, sessionPersistence } from '@/test/fakes/workspace';
+import { libraryApi, libraryLifecycle, sessionPersistence } from '@/test/fakes/workspace';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
 
 import { useWorkspaceCommands } from './use-workspace-commands';
@@ -18,7 +18,11 @@ function mountCommands() {
   const spies: Array<ReturnType<typeof vi.spyOn>> = [];
   const view = renderHook(
     () => {
-      const session = useWorkspaceSession(libraryApi(), sessionPersistence());
+      const session = useWorkspaceSession(
+        libraryApi(),
+        sessionPersistence(),
+        libraryLifecycle(),
+      );
       if (spies.length === 0) spies.push(vi.spyOn(session.runtime, 'setSidebarOpen'));
       return useWorkspaceCommands({
         documents: null,

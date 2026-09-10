@@ -89,4 +89,36 @@ describe('Electron bridge', () => {
     };
     expect(readBridge().bugReport).toBeUndefined();
   });
+
+  it('passes the updates capability through only when it is complete', () => {
+    const updates = {
+      check: async () => undefined,
+      onSnapshot: () => () => undefined,
+      openReleasePage: async () => undefined,
+      primaryAction: async () => undefined,
+      read: async () => undefined,
+      setAutoCheck: async () => undefined,
+    };
+    window.stashbase = {
+      externalNavigation,
+      library,
+      runtime,
+      updates,
+      workspaceSession,
+      windowLifecycle,
+    };
+    expect(readBridge().updates).toBe(updates);
+
+    // The renderer does not trust preload's shape, so a half-installed
+    // capability is no capability at all rather than one that throws later.
+    window.stashbase = {
+      externalNavigation,
+      library,
+      runtime,
+      updates: { read: async () => undefined },
+      workspaceSession,
+      windowLifecycle,
+    };
+    expect(readBridge().updates).toBeUndefined();
+  });
 });

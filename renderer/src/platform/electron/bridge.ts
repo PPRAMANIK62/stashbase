@@ -8,6 +8,7 @@ import { isCaptureBridge, type CaptureBridge } from './capture';
 import type { ExternalNavigationBridge } from './external-navigation';
 import type { LibraryBridge } from './folder-picker';
 import type { LibraryLifecycleBridge } from './library-lifecycle';
+import { isUpdatesBridge, type UpdatesBridge } from './updates';
 import type { WindowLifecycleBridge } from './window-lifecycle';
 
 interface DesktopWorkspaceSessionBridge {
@@ -25,6 +26,8 @@ interface DesktopBridge {
   externalNavigation: ExternalNavigationBridge;
   library: DesktopLibraryBridge;
   runtime: RendererRuntimeConfig;
+  /** Optional: keeping this build current exists only in the desktop shell. */
+  updates?: UpdatesBridge;
   workspaceSession: DesktopWorkspaceSessionBridge;
   windowLifecycle: WindowLifecycleBridge;
 }
@@ -38,6 +41,7 @@ declare global {
       externalNavigation?: ExternalNavigationBridge;
       library?: DesktopLibraryBridge;
       runtime?: unknown;
+      updates?: unknown;
       workspaceSession?: DesktopWorkspaceSessionBridge;
       windowLifecycle?: WindowLifecycleBridge;
     };
@@ -60,11 +64,11 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
     typeof library.onFolderRemoved !== 'function' ||
     typeof library.onPrepareFolderRemoval !== 'function' ||
     typeof library.prepareFolderRemoval !== 'function' ||
+    typeof library.claimInitialFolder !== 'function' ||
     typeof library.setActiveFolder !== 'function'
   ) {
     throw new Error('The library folder picker is unavailable.');
   }
-    typeof library.claimInitialFolder !== 'function' ||
   if (
     !workspaceSession ||
     typeof workspaceSession.read !== 'function' ||
@@ -81,9 +85,11 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   }
   const bugReport = globalWindow.stashbase?.bugReport;
   const capture = globalWindow.stashbase?.capture;
+  const updates = globalWindow.stashbase?.updates;
   return {
     ...(isBugReportBridge(bugReport) ? { bugReport } : {}),
     ...(isCaptureBridge(capture) ? { capture } : {}),
+    ...(isUpdatesBridge(updates) ? { updates } : {}),
     externalNavigation,
     library,
     runtime,

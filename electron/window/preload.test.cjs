@@ -59,3 +59,25 @@ test('window preload flushes every registered barrier and validates reload respo
   const malformed = createWindowLifecyclePreload(ipcFixture({ ok: true, reloaded: 'yes' }));
   assert.deepEqual(await malformed.reload(), { ok: true, reloaded: false });
 });
+
+test('window preload carries an update install release across the boundary', async () => {
+  const ipc = ipcFixture();
+  const preload = createWindowLifecyclePreload(ipc);
+  const reasons = [];
+  preload.onPrepareContextRelease(async (reason) => {
+    reasons.push(reason);
+    return true;
+  });
+
+  ipc.emit('window:prepare-context-release', {
+    reason: 'update-install',
+    requestId: 'install-7',
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(reasons, ['update-install']);
+  assert.deepEqual(ipc.invocations.at(-1), [
+    'window:context-release-ready',
+    { ready: true, reason: 'update-install', requestId: 'install-7' },
+  ]);
+});

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import type { CapturePort } from '@/features/settings/application/ports';
+import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 
 import { GeneralPanel } from './general-panel';
 
@@ -16,8 +17,24 @@ const capturePort: CapturePort = {
   update: async (next) => next,
 };
 
-function GeneralHarness() {
-  return <GeneralPanel applyCaptureWatch={async () => true} captureApi={capturePort} />;
+const softwareUpdate: SoftwareUpdateRow = {
+  autoCheckEnabled: true,
+  busy: false,
+  check: () => undefined,
+  failure: null,
+  setAutoCheck: () => undefined,
+  status: 'StashBase is up to date.',
+  version: '2.0.0',
+};
+
+function GeneralHarness({ updates = null }: { updates?: SoftwareUpdateRow | null }) {
+  return (
+    <GeneralPanel
+      applyCaptureWatch={async () => true}
+      captureApi={capturePort}
+      softwareUpdate={updates}
+    />
+  );
 }
 
 const meta = {
@@ -35,4 +52,11 @@ const meta = {
 export default meta;
 type Story = StoryObj;
 
+/** A build with no updater behind it: General says nothing about updates. */
 export const Default: Story = { render: () => <GeneralHarness /> };
+
+/** A packaged build, where the running version and the auto-check choice both
+ *  have a home. */
+export const WithSoftwareUpdates: Story = {
+  render: () => <GeneralHarness updates={softwareUpdate} />,
+};

@@ -60,7 +60,7 @@
     "test:renderer-architecture": "node --test scripts/electron/dev.test.mjs scripts/renderer/architecture.test.mjs scripts/renderer/check-web.test.mjs scripts/renderer/conventions.test.mjs scripts/renderer/size.test.mjs && pnpm check:renderer-architecture",
     "test:renderer": "vp run @stashbase/renderer#test && pnpm test:renderer-architecture",
     "test:protocols": "node --import tsx --test 'shared/protocols/**/*.test.ts'",
-    "test:electron-boundary": "pnpm build:electron-boundary && node --test --test-reporter=spec 'electron/{app-protocol,window-security}.test.cjs' 'electron/{bug-report,capture,external-navigation,library,renderer,window,workspace}/*.test.cjs'",
+    "test:electron-boundary": "pnpm build:electron-boundary && node --test --test-reporter=spec 'electron/{app-protocol,window-security}.test.cjs' 'electron/{bug-report,capture,external-navigation,library,renderer,updates,window,workspace}/*.test.cjs'",
     "test:electron-boundary:smoke": "pnpm build:web && pnpm build:electron-boundary && node electron/renderer/smoke-runner.cjs",
     "test:electron": "pnpm test:protocols && pnpm test:electron-boundary && node --test --test-reporter=spec 'electron/{multi-window,clipboard-watch-policy,recovery-key,bug-report-*}.test.cjs'",
     "test:electron:smoke": "pnpm test:electron-boundary:smoke",

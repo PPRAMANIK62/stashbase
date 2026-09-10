@@ -35,6 +35,7 @@ const { createBugReportHandoff } = require('./bug-report-handoff.cjs');
 const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs');
 const { createUpdateInstaller } = require('./update-install-strategy.cjs');
 const { createUpdateManager } = require('./update-manager.cjs');
+const { createWindowLifecycleUpdateBarrier } = require('./update-window-barrier.cjs');
 const {
   APP_ORIGIN,
   APP_URL,
@@ -165,8 +166,10 @@ let windowLifecycleCapability = null;
 let externalNavigationCapability = null;
 let captureCapability = null;
 let bugReportCapability = null;
+let updatesCapability = null;
 let captureMonitor = null;
 let replacementWindowLifecycle = null;
+let replacementUpdates = null;
 let workspaceSessionRestoreWindow = null;
 let replacementBoundaryInstalled = false;
 
@@ -246,6 +249,13 @@ function installReplacementBoundary() {
     'bug-report',
     'review-ipc.cjs',
   ));
+  const updates = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'updates',
+    'ipc.cjs',
+  ));
   libraryFolderDialogCapability = boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY;
   libraryLifecycleCapability = lifecycle.LIBRARY_LIFECYCLE_CAPABILITY;
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
@@ -253,6 +263,7 @@ function installReplacementBoundary() {
   externalNavigationCapability = externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY;
   captureCapability = capture.CAPTURE_CAPABILITY;
   bugReportCapability = bugReportOpen.BUG_REPORT_CAPABILITY;
+  updatesCapability = updates.UPDATES_CAPABILITY;
   bugReportOpen.registerBugReportOpen({
     BrowserWindow,
     ipcMain,
@@ -368,6 +379,21 @@ function installReplacementBoundary() {
       replacementWindowCapabilities.get(win)?.has(capability) === true
     ),
   });
+  replacementUpdates = updates.registerUpdatesIpc({
+    BrowserWindow,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
+    // The simulation channel is registered only here, so a packaged build has
+    // no handler for it to reach at all.
+    debugEnabled: !app.isPackaged,
+    manager: desktopUpdates,
+    windows: () => mainWindows,
+    setAutoCheck: writeAutoUpdatePreference,
+  });
   replacementBoundaryInstalled = true;
 }
 let lastMainWindow = null;
@@ -379,6 +405,18 @@ async function readAutoUpdatePreference() {
   return preferences?.autoCheck === true;
 }
 
+// Main owns this write because it already owns the read, which keeps the
+// renderer on one transport and makes turning the preference on an atomic
+// write-then-refresh rather than two independent round trips.
+async function writeAutoUpdatePreference(enabled) {
+  const response = await fetch(`${SERVER_URL}/api/updates/preferences`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ autoCheck: enabled === true }),
+  });
+  if (!response.ok) throw new Error(`Update preferences returned HTTP ${response.status}`);
+}
+
 const installDesktopUpdate = createUpdateInstaller({
   updater: autoUpdater,
   app,
@@ -387,18 +425,26 @@ const installDesktopUpdate = createUpdateInstaller({
   fileExists: fs.existsSync,
 });
 
+const desktopUpdateWindows = createWindowLifecycleUpdateBarrier({
+  lifecycle: () => replacementWindowLifecycle,
+  getWindows: () => mainWindows,
+  isLiveWindow: (win) => isLiveMainWindow(win),
+  onBlocked: () => showUpdateInstallBlocked(),
+});
+
 const desktopUpdates = createUpdateManager({
   updater: autoUpdater,
   currentVersion: app.getVersion(),
   platform: process.platform,
   isPackaged: app.isPackaged,
   readAutoCheck: readAutoUpdatePreference,
-  // The current replacement workspace has no editable documents. The
-  // document slice will reconnect update installation to a typed save
-  // capability when unsaved state exists again.
-  beforeInstall: async () => true,
+  // Every live window releases its unsaved work before an update closes it;
+  // one refusal cancels the install and leaves the download ready for retry.
+  beforeInstall: desktopUpdateWindows.prepare,
+  afterInstallFailure: desktopUpdateWindows.revoke,
   installUpdate: installDesktopUpdate,
   openReleasePage: (url) => openHttpExternal(url, 'update release URL'),
+  onStateChange: (state) => replacementUpdates?.publish(state),
   debugEnabled: !app.isPackaged,
 });
 const bugReports = createBugReportService({
@@ -892,18 +938,27 @@ function bugReportSourceForWindow(win) {
   return { windowId, webContentsId };
 }
 
-async function showBugReportError(win, message) {
-  const options = {
-    type: 'error',
-    title: 'Report a Bug',
-    message,
-  };
+async function showMainProcessMessage(win, options) {
   try {
     if (isLiveMainWindow(win)) await dialog.showMessageBox(win, options);
     else await dialog.showMessageBox(options);
   } catch {
-    // A native error dialog is best effort and must not affect cleanup.
+    // A native dialog is best effort and must not affect the caller's cleanup.
   }
+}
+
+async function showBugReportError(win, message) {
+  await showMainProcessMessage(win, { type: 'error', title: 'Report a Bug', message });
+}
+
+async function showUpdateInstallBlocked() {
+  await showMainProcessMessage(preferredMainWindow(), {
+    type: 'info',
+    title: 'Update Not Installed',
+    message:
+      'StashBase kept the downloaded update because a window still has unsaved work. '
+      + 'Save or discard those changes, then install the update again.',
+  });
 }
 
 async function openBugReportReview(win) {
@@ -1019,7 +1074,8 @@ async function createWindow(initialFolder) {
     windowLifecycleCapability &&
     externalNavigationCapability &&
     captureCapability &&
-    bugReportCapability
+    bugReportCapability &&
+    updatesCapability
   ) {
     replacementWindowCapabilities.set(
       win,
@@ -1031,6 +1087,7 @@ async function createWindow(initialFolder) {
         externalNavigationCapability,
         captureCapability,
         bugReportCapability,
+        updatesCapability,
       ]),
     );
   }
@@ -1075,11 +1132,11 @@ async function createWindow(initialFolder) {
     if (windowAction === 'block-reload') event.preventDefault();
   });
 
-  const serverRendererUrl = initialFolder
-    ? `${SERVER_URL}/?folder=${encodeURIComponent(initialFolder)}`
-    : SERVER_URL;
-  const url = USE_DEV_VITE ? serverRendererUrl : APP_URL;
-  win.loadURL(url);
+  // The initial folder is not in this URL. A window learns which folder it was
+  // created for by claiming it over the library bridge, so dev and packaged
+  // windows load the same document and there is one answer to "how does a
+  // window learn its folder" rather than two.
+  win.loadURL(USE_DEV_VITE ? SERVER_URL : APP_URL);
   return win;
 }
 
@@ -1097,13 +1154,15 @@ function releaseWindowContext(windowId) {
   });
 }
 
-function focusLastMainWindow() {
+function preferredMainWindow() {
   const focused = BrowserWindow.getFocusedWindow();
-  const win = isLiveMainWindow(focused)
-    ? focused
-    : isLiveMainWindow(lastMainWindow)
-      ? lastMainWindow
-      : [...mainWindows].find((candidate) => isLiveMainWindow(candidate));
+  if (isLiveMainWindow(focused)) return focused;
+  if (isLiveMainWindow(lastMainWindow)) return lastMainWindow;
+  return [...mainWindows].find((candidate) => isLiveMainWindow(candidate));
+}
+
+function focusLastMainWindow() {
+  const win = preferredMainWindow();
   if (!focusWindow(win)) return false;
   lastMainWindow = win;
   return true;

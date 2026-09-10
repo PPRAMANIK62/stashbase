@@ -23,6 +23,8 @@ await build({
     'library/preload': 'electron/library/preload.ts',
     'renderer/preload': 'electron/renderer/preload.ts',
     'renderer/runtime': 'electron/renderer/runtime.ts',
+    'updates/ipc': 'electron/updates/ipc.ts',
+    'updates/preload': 'electron/updates/preload.ts',
     'workspace/preload': 'electron/workspace/preload.ts',
     'workspace/session': 'electron/workspace/session.ts',
     'window/lifecycle': 'electron/window/lifecycle.ts',

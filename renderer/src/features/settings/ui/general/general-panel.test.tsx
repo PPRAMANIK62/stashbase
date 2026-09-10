@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { failureMessage } from '@/features/settings/application/failure-messages';
 import type { CapturePort } from '@/features/settings/application/ports';
 import { CAPTURE_APPLY_WARNING } from '@/features/settings/hooks/use-capture';
+import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 import { capturePort } from '@/test/fakes/settings';
 import { withQueryClient } from '@/test/query';
 
@@ -12,8 +13,31 @@ import { GeneralPanel } from './general-panel';
 
 afterEach(cleanup);
 
-function renderPanel(port: CapturePort, applyWatch: (expected: boolean) => Promise<boolean>) {
-  return withQueryClient(<GeneralPanel applyCaptureWatch={applyWatch} captureApi={port} />);
+function renderPanel(
+  port: CapturePort,
+  applyWatch: (expected: boolean) => Promise<boolean>,
+  softwareUpdate: SoftwareUpdateRow | null = null,
+) {
+  return withQueryClient(
+    <GeneralPanel
+      applyCaptureWatch={applyWatch}
+      captureApi={port}
+      softwareUpdate={softwareUpdate}
+    />,
+  );
+}
+
+function updateRow(overrides: Partial<SoftwareUpdateRow> = {}): SoftwareUpdateRow {
+  return {
+    autoCheckEnabled: false,
+    busy: false,
+    check: vi.fn(),
+    failure: null,
+    setAutoCheck: vi.fn(),
+    status: 'StashBase is up to date.',
+    version: '2.0.0',
+    ...overrides,
+  };
 }
 
 describe('GeneralPanel', () => {
@@ -53,5 +77,39 @@ describe('GeneralPanel', () => {
       'textContent',
       failureMessage('unavailable'),
     );
+  });
+
+  it('says nothing about updates in a build with no updater', async () => {
+    renderPanel(capturePort(), async () => true);
+    await screen.findByRole('switch', { name: 'Offer to add clipboard screenshots' });
+    expect(screen.queryByText('Software updates')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Check for updates' })).toBeNull();
+  });
+
+  it('names the running build, where it stands, and both update controls', async () => {
+    const row = updateRow({ autoCheckEnabled: true });
+    renderPanel(capturePort(), async () => true, row);
+
+    expect(screen.getByText('StashBase 2.0.0')).not.toBeNull();
+    expect(screen.getByText('StashBase is up to date.')).not.toBeNull();
+    const auto = screen.getByRole('switch', { name: 'Check for updates automatically' });
+    expect(auto.getAttribute('aria-checked')).toBe('true');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Check for updates' }));
+    expect(row.check).toHaveBeenCalledOnce();
+    await user.click(auto);
+    expect(row.setAutoCheck).toHaveBeenCalledWith(false);
+  });
+
+  it('locks both controls while the updater is already working', async () => {
+    const row = updateRow({ busy: true, status: 'Looking for a new version…' });
+    renderPanel(capturePort(), async () => true, row);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Check for updates' }));
+    await user.click(screen.getByRole('switch', { name: 'Check for updates automatically' }));
+    expect(row.check).not.toHaveBeenCalled();
+    expect(row.setAutoCheck).not.toHaveBeenCalled();
   });
 });

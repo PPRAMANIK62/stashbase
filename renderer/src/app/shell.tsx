@@ -15,6 +15,7 @@ import {
 } from '@/features/documents/public';
 import { useFolderStatus } from '@/features/preparation/public';
 import { useSearchSetupInvitation } from '@/features/settings/public';
+import { UpdateNotice, useUpdateNotice } from '@/features/updates/public';
 import {
   LibraryWelcome,
   useFiles,
@@ -138,6 +139,7 @@ function WorkspaceWindow() {
   });
 
   const gallery = useGalleryShop(dependencies.gallery);
+  const updateNotice = useUpdateNotice(dependencies.updates);
 
   return (
     <WorkspaceLayout
@@ -191,6 +193,7 @@ function WorkspaceWindow() {
       }
       started={chrome.started}
       titlebar={<WorkspaceTitlebar agent={runtime} documents={documents} />}
+      updateNotice={<UpdateNotice notice={updateNotice} />}
       welcome={
         <LibraryWelcome
           {...dependencies.library}

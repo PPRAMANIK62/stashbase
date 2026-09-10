@@ -5,7 +5,11 @@ export const WINDOW_PREPARE_CONTEXT_RELEASE_CHANNEL = 'window:prepare-context-re
 export const WINDOW_CONTEXT_RELEASE_READY_CHANNEL = 'window:context-release-ready';
 export const WINDOW_SAFE_RELOAD_CHANNEL = 'window:safe-reload';
 
-export const windowContextReleaseReasonSchema = z.enum(['window-close', 'window-reload']);
+export const windowContextReleaseReasonSchema = z.enum([
+  'window-close',
+  'window-reload',
+  'update-install',
+]);
 
 export const windowContextReleaseRequestSchema = z
   .object({

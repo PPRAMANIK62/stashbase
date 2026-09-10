@@ -6,6 +6,7 @@ import type {
   McpAccessPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
+import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 
 /** Every section the Settings shell registers, in nav order. A section id
  *  that is not one of these cannot be registered — the mistake fails to
@@ -25,8 +26,8 @@ export interface SettingsProps {
   agentRuntimeApi: AgentRuntimePort;
   /** Resolves true when the desktop watch matches the saved opt-in; absent outside Electron. */
   applyCaptureWatch?: (expected: boolean) => Promise<boolean>;
-  captureApi?: CapturePort;
   appearanceApi?: AppearancePort;
+  captureApi?: CapturePort;
   embedderApi?: EmbedderPort;
   mcpAccessApi?: McpAccessPort;
   onClose: () => void;
@@ -35,5 +36,9 @@ export interface SettingsProps {
   open: boolean;
   /** The section the app asked for. */
   section: SettingsSectionId;
+  /** How this build keeps itself current, filled in by whoever owns updating.
+   *  Null or absent where the build has no updater, and then General says
+   *  nothing about updates at all. */
+  softwareUpdate?: SoftwareUpdateRow | null;
   transcriptionApi?: TranscriptionPort;
 }

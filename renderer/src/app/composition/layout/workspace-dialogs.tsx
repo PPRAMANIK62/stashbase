@@ -2,6 +2,7 @@ import type { SettingsCommand } from '@/app/composition/commands/use-workspace-c
 import { useDependencies } from '@/app/composition/dependency-context';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
 import { Settings } from '@/features/settings/public';
+import { useSoftwareUpdate } from '@/features/updates/public';
 import { ClipboardOffer, type WorkspaceRuntime } from '@/features/workspace/public';
 import { applyCaptureWatch } from '@/platform/electron/capture';
 
@@ -26,6 +27,7 @@ export function WorkspaceDialogs({
   workspace: WorkspaceRuntime | null;
 }) {
   const dependencies = useDependencies();
+  const softwareUpdate = useSoftwareUpdate(dependencies.updates);
   return (
     <>
       {workspace && documents && (
@@ -39,15 +41,16 @@ export function WorkspaceDialogs({
       <Settings
         agentRuntimeApi={dependencies.settings.agentRuntimeApi}
         applyCaptureWatch={(expected) => applyCaptureWatch(dependencies.capture, expected)}
+        appearanceApi={dependencies.settings.appearanceApi}
         captureApi={dependencies.settings.captureApi}
         embedderApi={dependencies.settings.embedderApi}
-        appearanceApi={dependencies.settings.appearanceApi}
         mcpAccessApi={dependencies.settings.mcpAccessApi}
         onClose={settings.close}
         onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
         onSectionChange={settings.onSectionChange}
         open={settings.open}
         section={settings.section}
+        softwareUpdate={dependencies.updates ? softwareUpdate : null}
         transcriptionApi={dependencies.settings.transcriptionApi}
       />
       <ClipboardOffer

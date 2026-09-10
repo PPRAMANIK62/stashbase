@@ -2,7 +2,10 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createUpdateWindowBarrier } = require('./update-window-barrier.cjs');
+const {
+  createUpdateWindowBarrier,
+  createWindowLifecycleUpdateBarrier,
+} = require('./update-window-barrier.cjs');
 
 function harness(overrides = {}) {
   const windows = [
@@ -78,4 +81,18 @@ test('installation failure revokes exactly the closes approved by the update', a
   setup.barrier.revoke();
   setup.barrier.revoke();
   assert.deepEqual(setup.revoked, [1, 2, 3]);
+});
+
+test('an update before the window boundary exists asks and approves nothing', async () => {
+  let blocked = 0;
+  const barrier = createWindowLifecycleUpdateBarrier({
+    lifecycle: () => null,
+    getWindows: () => [{ id: 1 }],
+    isLiveWindow: () => true,
+    onBlocked: () => { blocked += 1; },
+  });
+
+  assert.equal(await barrier.prepare(), true);
+  barrier.revoke();
+  assert.equal(blocked, 0);
 });

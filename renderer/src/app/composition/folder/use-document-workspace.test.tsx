@@ -7,6 +7,7 @@ import { pendingSourceApi, recoveryApi } from '@/test/fakes/documents';
 import {
   folderSession,
   libraryApi,
+  libraryLifecycle,
   RESEARCH_FOLDER,
   sessionPersistence,
   workspaceRuntimeOptions,
@@ -44,7 +45,7 @@ describe('document workspace composition', () => {
     // hook records land in the same snapshot the running window would save.
     const { result, rerender } = renderHook(
       ({ currentWorkspace }) => {
-        const session = useWorkspaceSession(library, persistence);
+        const session = useWorkspaceSession(library, persistence, libraryLifecycle());
         // The shell only mounts a workspace once the session has settled;
         // the tabs runtime is built from whatever it restored.
         const live = session.status.kind === 'ready' ? currentWorkspace : null;

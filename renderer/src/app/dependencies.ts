@@ -56,6 +56,7 @@ import {
   type OnboardingPort,
   type TranscriptionPort,
 } from '@/features/settings/public';
+import { createUpdatesAdapter, type UpdatesPort } from '@/features/updates/public';
 import {
   createWorkspaceAdapters,
   FileTree,
@@ -110,13 +111,15 @@ export interface AppDependencies {
   };
   settings: {
     agentRuntimeApi: AgentRuntimePort;
-    captureApi: CapturePort;
     appearanceApi: AppearancePort;
+    captureApi: CapturePort;
     embedderApi: EmbedderPort;
     mcpAccessApi: McpAccessPort;
     onboardingApi: OnboardingPort;
     transcriptionApi: TranscriptionPort;
   };
+  /** Keeping this build current; null outside Electron or when the build has no updater. */
+  updates: UpdatesPort | null;
   workspace: {
     adapters: WorkspaceAdapters;
     /** What this platform calls the app that reveals a file. */
@@ -190,13 +193,14 @@ export function createDependencies(): AppDependencies {
     },
     settings: {
       agentRuntimeApi: createAgentRuntimeAdapter(http),
+      appearanceApi: createAppearanceAdapter(http),
       captureApi: createCaptureAdapter(http),
       embedderApi: createEmbedderAdapter(http),
       mcpAccessApi: createMcpAccessAdapter(http),
-      appearanceApi: createAppearanceAdapter(http),
       onboardingApi: createOnboardingAdapter(http),
       transcriptionApi: createTranscriptionAdapter(http),
     },
+    updates: bridge.updates ? createUpdatesAdapter(bridge.updates) : null,
     workspace: { adapters: workspace, revealLabel: fileManagerLabel() },
   };
 }

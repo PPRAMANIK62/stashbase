@@ -29,6 +29,10 @@
       "productArea": "Workspace / Agent Panel"
     },
     {
+      "name": "updates",
+      "productArea": "Workspace"
+    },
+    {
       "name": "workspace",
       "productArea": "Workspace"
     }
@@ -49,18 +53,19 @@
     "shared/protocols/electron/external-navigation.ts",
     "shared/protocols/electron/library.ts",
     "shared/protocols/electron/runtime.ts",
+    "shared/protocols/electron/updates.ts",
     "shared/protocols/electron/window-lifecycle.ts",
     "shared/protocols/electron/workspace-session.ts",
     "shared/protocols/http/agent-context.ts",
     "shared/protocols/http/agent-instructions.ts",
     "shared/protocols/http/agent-runtime.ts",
     "shared/protocols/http/agent-sessions.ts",
+    "shared/protocols/http/appearance.ts",
     "shared/protocols/http/capture.ts",
     "shared/protocols/http/embedder.ts",
     "shared/protocols/http/files.ts",
     "shared/protocols/http/gallery.ts",
     "shared/protocols/http/github-import.ts",
-    "shared/protocols/http/appearance.ts",
     "shared/protocols/http/index-status.ts",
     "shared/protocols/http/library.ts",
     "shared/protocols/http/mcp.ts",

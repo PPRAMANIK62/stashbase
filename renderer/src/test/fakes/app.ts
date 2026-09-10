@@ -80,6 +80,8 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       onboardingApi: onboardingPort(),
       transcriptionApi: transcriptionPort(),
     },
+    // Outside Electron, so there is no updater to reach.
+    updates: null,
     workspace: { adapters, revealLabel: 'Show in file manager' },
     ...overrides,
   };

@@ -31,4 +31,19 @@ test('window lifecycle protocol accepts only correlated save-barrier messages', 
     }).success,
     false,
   );
+  assert.equal(
+    windowContextReleaseRequestSchema.safeParse({
+      reason: 'update-install',
+      requestId: 'request-2',
+    }).success,
+    true,
+  );
+  assert.deepEqual(
+    windowContextReleaseReadySchema.parse({
+      ready: false,
+      reason: 'update-install',
+      requestId: 'request-2',
+    }),
+    { ready: false, reason: 'update-install', requestId: 'request-2' },
+  );
 });

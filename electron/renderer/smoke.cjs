@@ -85,6 +85,9 @@ app
     const bugReportReview = require(
       path.join(repositoryRoot, 'dist', 'electron', 'bug-report', 'review-ipc.cjs'),
     );
+    const updates = require(
+      path.join(repositoryRoot, 'dist', 'electron', 'updates', 'ipc.cjs'),
+    );
     const authorizedWindows = new Set();
     const openedExternalUrls = [];
     const activeFolders = new WeakMap();
@@ -97,6 +100,7 @@ app
         capability === lifecycle.LIBRARY_LIFECYCLE_CAPABILITY ||
         capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY ||
         capability === bugReportOpen.BUG_REPORT_CAPABILITY ||
+        capability === updates.UPDATES_CAPABILITY ||
         capability === capture.CAPTURE_CAPABILITY);
     const openedBugReviews = [];
     bugReportOpen.registerBugReportOpen({
@@ -173,6 +177,37 @@ app
       readPreference: async () => false,
       shouldOffer: ({ enabled, focused, composerFocused }) =>
         enabled === true && focused === true && composerFocused !== true,
+    });
+    // The state below carries four fields no window may ever see, so the
+    // asserted snapshot is also the proof that the projection strips them.
+    const updateManagerState = {
+      phase: 'idle',
+      currentVersion: '0.0.0-test',
+      autoCheckEnabled: true,
+      platform: 'test',
+      releaseUrl: 'https://example.com/releases',
+      message: 'never shown',
+      simulation: { enabled: false, value: 'off' },
+    };
+    updates.registerUpdatesIpc({
+      BrowserWindow,
+      ipcMain,
+      expectedOrigins: new Set([APP_ORIGIN]),
+      isLiveWindow,
+      hasCapability,
+      // Packaged is what this smoke represents, so the simulation channel is
+      // never registered here.
+      debugEnabled: false,
+      manager: {
+        check: async () => updateManagerState,
+        getState: () => updateManagerState,
+        openDownloadPage: async () => true,
+        primaryAction: async () => updateManagerState,
+        refreshPreference: async () => updateManagerState,
+        setUpdateSimulation: () => updateManagerState,
+      },
+      setAutoCheck: async () => {},
+      windows: () => authorizedWindows,
     });
     let persistedWorkspaceSession = null;
     workspaceSession.registerWorkspaceSession({
@@ -272,6 +307,9 @@ app
         workspaceSessionFrozen: Object.isFrozen(window.stashbase.workspaceSession),
         windowLifecycleFrozen: Object.isFrozen(window.stashbase.windowLifecycle),
         windowLifecycleKeys: Object.keys(window.stashbase.windowLifecycle).sort(),
+        updatesFrozen: Object.isFrozen(window.stashbase.updates),
+        updatesKeys: Object.keys(window.stashbase.updates).sort(),
+        updatesRead: await window.stashbase.updates.read(),
       };
     })()
   `);
@@ -299,6 +337,7 @@ app
         'library',
         'workspaceSession',
         'windowLifecycle',
+        'updates',
       ],
       nodeGlobal: 'undefined',
       popupDenied: true,
@@ -325,6 +364,20 @@ app
       workspaceSessionFrozen: true,
       windowLifecycleFrozen: true,
       windowLifecycleKeys: ['onPrepareContextRelease', 'reload'],
+      updatesFrozen: true,
+      updatesKeys: [
+        'check',
+        'onSnapshot',
+        'openReleasePage',
+        'primaryAction',
+        'read',
+        'setAutoCheck',
+        'setSimulation',
+      ],
+      updatesRead: {
+        ok: true,
+        snapshot: { autoCheckEnabled: true, currentVersion: '0.0.0-test', phase: 'idle' },
+      },
     });
     assert.deepEqual(openedExternalUrls, ['https://example.com/docs']);
     assert.deepEqual(openedBugReviews, [window]);

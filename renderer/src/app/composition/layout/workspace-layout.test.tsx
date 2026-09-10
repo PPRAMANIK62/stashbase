@@ -37,6 +37,7 @@ function mount(overrides: Partial<WorkspaceComposition> = {}) {
     sidebar: <div data-testid="sidebar" />,
     started: true,
     titlebar: <div data-testid="titlebar" />,
+    updateNotice: <div data-testid="update-notice" />,
     // Bound the way the shell binds it, so the layout is exercised with the
     // welcome it is actually handed.
     welcome: (
@@ -62,7 +63,7 @@ describe('workspace layout', () => {
   it('puts every bound region on screen once', () => {
     mount();
 
-    for (const region of ['dialogs', 'sidebar', 'titlebar', 'panes']) {
+    for (const region of ['dialogs', 'sidebar', 'titlebar', 'panes', 'update-notice']) {
       expect(screen.getByTestId(region)).not.toBeNull();
     }
   });
