@@ -1,11 +1,7 @@
-import { SettingsError, type McpAccessPort } from '@/features/settings/application/ports';
+import type { McpAccessPort } from '@/features/settings/application/ports';
 import { formatMcpConfig, type McpHttpAccess } from '@/features/settings/domain/mcp-access';
-import {
-  request,
-  requestOptions,
-  type TransportFailure,
-  type TransportRequest,
-} from '@/platform/http/classify';
+import { settingsRequest } from '@/features/settings/infrastructure/settings-request';
+import { request } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
   mcpDockerAccessRequestSchema,
@@ -32,28 +28,17 @@ function toHttpAccess(wire: McpHttpStatusWire): McpHttpAccess {
   };
 }
 
-/** A refused write is the user's own request coming back, not a lost
- *  capability, so it reads as an invalid request. */
-function invalidRequest(fallback: string) {
-  return ({ response, serverMessage }: TransportFailure): SettingsError | null =>
-    response.status === 400
-      ? new SettingsError('invalid-request', serverMessage ?? fallback)
-      : null;
-}
-
 function mcpAccess(
   path: string,
   signal: AbortSignal,
   messages: { invalid: string; unavailable: string },
-): TransportRequest<'invalid-request'> {
-  return requestOptions({
-    error: SettingsError,
-    failure: invalidRequest(messages.unavailable),
+) {
+  return settingsRequest({
     failureSchema: mcpFailureSchema,
-    messages: { 'invalid-response': messages.invalid, unavailable: messages.unavailable },
+    invalidResponse: messages.invalid,
     path,
-    serverMessage: true,
     signal,
+    unavailable: messages.unavailable,
   });
 }
 

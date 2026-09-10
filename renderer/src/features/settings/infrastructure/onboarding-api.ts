@@ -1,14 +1,6 @@
-import {
-  SettingsError,
-  type OnboardingAnswers,
-  type OnboardingPort,
-} from '@/features/settings/application/ports';
-import {
-  request,
-  requestOptions,
-  type TransportFailure,
-  type TransportRequest,
-} from '@/platform/http/classify';
+import type { OnboardingAnswers, OnboardingPort } from '@/features/settings/application/ports';
+import { settingsRequest } from '@/features/settings/infrastructure/settings-request';
+import { request } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
   onboardingPreferencesRequestSchema,
@@ -16,26 +8,12 @@ import {
   type OnboardingPreferencesWire,
 } from '@/protocols/http/onboarding';
 
-/** A refused notice is this renderer sending something the server does not
- *  own, not a lost capability. */
-function invalidRequest(fallback: string) {
-  return ({ response, serverMessage }: TransportFailure): SettingsError | null =>
-    response.status === 400
-      ? new SettingsError('invalid-request', serverMessage ?? fallback)
-      : null;
-}
-
-function notices(signal: AbortSignal, fallback: string): TransportRequest<'invalid-request'> {
-  return requestOptions({
-    error: SettingsError,
-    failure: invalidRequest(fallback),
-    messages: {
-      'invalid-response': 'Onboarding preferences returned an invalid response.',
-      unavailable: fallback,
-    },
+function notices(signal: AbortSignal, unavailable: string) {
+  return settingsRequest({
+    invalidResponse: 'Onboarding preferences returned an invalid response.',
     path: '/api/onboarding',
-    serverMessage: true,
     signal,
+    unavailable,
   });
 }
 

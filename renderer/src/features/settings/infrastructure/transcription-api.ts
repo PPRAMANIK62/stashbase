@@ -6,7 +6,7 @@
  * and keep protocol imports out of everything above this adapter.
  */
 
-import { SettingsError, type TranscriptionPort } from '@/features/settings/application/ports';
+import type { TranscriptionPort } from '@/features/settings/application/ports';
 import type {
   TranscriptionModel,
   TranscriptionModelOperation,
@@ -14,12 +14,8 @@ import type {
   TranscriptionProvider,
   TranscriptionSettings,
 } from '@/features/settings/domain/transcription';
-import {
-  request,
-  requestOptions,
-  type TransportFailure,
-  type TransportRequest,
-} from '@/platform/http/classify';
+import { settingsRequest } from '@/features/settings/infrastructure/settings-request';
+import { request } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
   transcriptionAcknowledgementSchema,
@@ -94,32 +90,17 @@ function toPreferences(wire: TranscriptionPreferences): TranscriptionPreferences
   return { language: wire.language, modelId: wire.modelId, providerId: wire.providerId };
 }
 
-/** A refused preference is the user's own request coming back, not a lost
- *  capability, so it reads as an invalid request. */
-function invalidRequest(fallback: string) {
-  return ({ response, serverMessage }: TransportFailure): SettingsError | null =>
-    response.status === 400
-      ? new SettingsError(
-          'invalid-request',
-          serverMessage ?? fallback,
-          serverMessage === null ? undefined : { cause: new Error(serverMessage) },
-        )
-      : null;
-}
-
 function transcription(
   path: string,
   signal: AbortSignal,
   messages: { invalid: string; unavailable: string },
-): TransportRequest<'invalid-request'> {
-  return requestOptions({
-    error: SettingsError,
-    failure: invalidRequest(messages.unavailable),
+) {
+  return settingsRequest({
     failureSchema: transcriptionFailureSchema,
-    messages: { 'invalid-response': messages.invalid, unavailable: messages.unavailable },
+    invalidResponse: messages.invalid,
     path,
-    serverMessage: true,
     signal,
+    unavailable: messages.unavailable,
   });
 }
 
