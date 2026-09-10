@@ -455,6 +455,10 @@ test('Oxlint rejects platform APIs in protected feature layers', (context) => {
   const result = runNodeTool(
     oxlintBin,
     [
+      // Pin the reporter: oxlint switches to GitHub annotations when it sees
+      // GITHUB_ACTIONS, and that format carries only the primary message, so the
+      // custom text these assertions read would vanish in CI.
+      '--format=default',
       '--config',
       oxlintConfig,
       'renderer/src/features/workspace/domain/unsafe-domain.ts',
