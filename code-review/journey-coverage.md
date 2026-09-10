@@ -473,3 +473,35 @@ links above are therefore the current traceability authority, and documentation
 validation checks that the files and reciprocal routes exist but cannot yet
 verify intent from test metadata. Add a stable Journey tag when an affected E2E
 is next changed; do not rename unrelated tests solely for documentation churn.
+
+### Next: a replayable journey instrument
+
+The Evidence Model above leaves a driven pass hand-produced "until a
+replacement instrument is decided". That instrument is already in the tree and
+wired to nothing. `electron/multi-window-smoke-runner.cjs` reserves a port,
+builds an isolated temporary home, and launches real Electron once per script
+against the real server; `electron/multi-window-smoke.cjs` and
+`electron/markdown-tab-lifecycle-smoke.cjs` are the two journeys it drives. No
+command reaches them, because the frontend migration repointed the smoke script
+at the renderer boundary smoke in `electron/renderer/smoke.cjs`, which proves
+the preload surface rather than a journey.
+
+Neither runs against the replacement renderer as written. Both were built on a
+`window.electron` bridge that is now `window.stashbase`, and both navigate to a
+folder query string the renderer no longer reads; a folder is reached through
+the library capability instead. A revival was driven to a green run locally and
+covered part of J02 and part of J03, so the cost is known and bounded. It is
+deliberately not part of this change.
+
+After that, by proof value over cost: J05, then J01, then J06. J06 is the
+largest uncovered surface and the only one needing new transport, a WebSocket
+stub and synthesized input events, because its composer is not a plain field.
+Three journeys do not belong on this instrument. J08 needs a real third-party
+client and stays release evidence, J10 is a composite of journeys proven
+piecewise, and the outcome J12 is named for is Agent-side.
+
+Two failures cost the most to diagnose, so they are recorded rather than
+rediscovered. A window whose library read does not answer never settles its
+boot and sits on the welcome screen forever. An opened folder must appear both
+as the current folder and as a member, or the workspace paints blank with no
+error to explain it.
