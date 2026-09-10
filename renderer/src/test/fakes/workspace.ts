@@ -18,7 +18,6 @@ import type {
   WorkspaceQueryScope,
   WorkspaceSessionPort,
 } from '@/features/workspace/application/ports';
-import type { WorkspaceAdapters } from '@/features/workspace/infrastructure/adapters';
 import type { WorkspaceRuntimeOptions } from '@/features/workspace/application/runtime';
 import type { ActiveLibraryFolder, LibrarySnapshot } from '@/features/workspace/domain/library';
 import type {
@@ -30,6 +29,7 @@ import type {
   WorkspaceFolder,
   WorkspaceListing,
 } from '@/features/workspace/domain/tree';
+import type { WorkspaceAdapters } from '@/features/workspace/infrastructure/adapters';
 
 export const RESEARCH_FOLDER: ActiveLibraryFolder = { name: 'Research', path: '/Library/Research' };
 
@@ -72,7 +72,9 @@ export function librarySnapshot(overrides: Partial<LibrarySnapshot> = {}): Libra
   return {
     activeFolder: RESEARCH_FOLDER,
     homeDirectory: '/home/person',
-    members: [{ favorite: false, openedAt: '2026-09-02T00:00:00.000Z', path: RESEARCH_FOLDER.path }],
+    members: [
+      { favorite: false, openedAt: '2026-09-02T00:00:00.000Z', path: RESEARCH_FOLDER.path },
+    ],
     ...overrides,
   };
 }
@@ -103,7 +105,9 @@ export function pendingLibraryApi(): LibraryPort {
   return libraryApi({ load: vi.fn(() => new Promise<never>(() => undefined)) });
 }
 
-export function libraryLifecycle(overrides: Partial<LibraryLifecyclePort> = {}): LibraryLifecyclePort {
+export function libraryLifecycle(
+  overrides: Partial<LibraryLifecyclePort> = {},
+): LibraryLifecyclePort {
   return {
     notifyFolderRemoved: vi.fn(async () => undefined),
     onFolderRemoved: vi.fn(() => () => undefined),
@@ -114,7 +118,9 @@ export function libraryLifecycle(overrides: Partial<LibraryLifecyclePort> = {}):
   };
 }
 
-export function folderPicker(overrides: Partial<LibraryFolderPickerPort> = {}): LibraryFolderPickerPort {
+export function folderPicker(
+  overrides: Partial<LibraryFolderPickerPort> = {},
+): LibraryFolderPickerPort {
   return { chooseFolder: vi.fn(async () => ({ status: 'cancelled' as const })), ...overrides };
 }
 
@@ -165,9 +171,7 @@ export function sessionPersistence(
   };
 }
 
-export function workspaceQueryScope(
-  overrides: Partial<WorkspaceQueryScope> = {},
-): WorkspaceQueryScope {
+function workspaceQueryScope(overrides: Partial<WorkspaceQueryScope> = {}): WorkspaceQueryScope {
   return { cancel: vi.fn(async () => undefined), remove: vi.fn(), ...overrides };
 }
 

@@ -6,12 +6,12 @@ import type {
   AgentContextPort,
   AgentSessionPort,
 } from '@/features/agent/application/ports';
-import type { AgentSessionCommand } from '@/features/agent/domain/session-command';
 import type { Agent, AgentAbilities } from '@/features/agent/domain/agent-catalog';
+import type { AgentSessionCommand } from '@/features/agent/domain/session-command';
 
 /** Every capability a native Agent can advertise, all on. A test that needs
  *  one missing spreads this and turns that one off. */
-export const nativeAbilities: AgentAbilities = {
+const nativeAbilities: AgentAbilities = {
   attachments: true,
   effort: true,
   models: true,

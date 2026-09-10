@@ -291,6 +291,12 @@
       "rules": {
         "vitest/no-restricted-matchers": "off"
       }
+    },
+    {
+      "files": ["**/renderer/src/test/setup.ts"],
+      "rules": {
+        "no-extend-native": "off"
+      }
     }
   ]
 }
