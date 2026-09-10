@@ -157,7 +157,7 @@ test('library routes return authoritative membership and open the selected folde
   };
   assert.deepEqual(currentPayload.current, {
     name: 'Research',
-    path: selectedFolder,
+    path: selectedFolderPath,
   });
 
   const removed = await fetch(`${baseUrl}/api/library/folders/remove`, {
