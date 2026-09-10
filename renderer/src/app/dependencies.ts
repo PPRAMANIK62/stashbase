@@ -42,12 +42,14 @@ import {
 } from '@/features/retrieval/public';
 import {
   createAgentRuntimeAdapter,
+  createAppearanceAdapter,
   createCaptureAdapter,
   createEmbedderAdapter,
   createMcpAccessAdapter,
   createOnboardingAdapter,
   createTranscriptionAdapter,
   type AgentRuntimePort,
+  type AppearancePort,
   type CapturePort,
   type EmbedderPort,
   type McpAccessPort,
@@ -109,6 +111,7 @@ export interface AppDependencies {
   settings: {
     agentRuntimeApi: AgentRuntimePort;
     captureApi: CapturePort;
+    appearanceApi: AppearancePort;
     embedderApi: EmbedderPort;
     mcpAccessApi: McpAccessPort;
     onboardingApi: OnboardingPort;
@@ -190,6 +193,7 @@ export function createDependencies(): AppDependencies {
       captureApi: createCaptureAdapter(http),
       embedderApi: createEmbedderAdapter(http),
       mcpAccessApi: createMcpAccessAdapter(http),
+      appearanceApi: createAppearanceAdapter(http),
       onboardingApi: createOnboardingAdapter(http),
       transcriptionApi: createTranscriptionAdapter(http),
     },

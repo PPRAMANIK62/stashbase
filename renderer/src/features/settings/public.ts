@@ -1,5 +1,6 @@
 export {
   type AgentRuntimePort,
+  type AppearancePort,
   type CapturePort,
   type OnboardingAnswers,
   type OnboardingPort,
@@ -10,9 +11,11 @@ export { type EmbedderPort } from './application/embedder-port';
 export { createAgentRuntimeAdapter } from './infrastructure/agent-runtime-api';
 export { createMcpAccessAdapter } from './infrastructure/mcp-access-api';
 export { createEmbedderAdapter } from './infrastructure/embedder-api';
+export { createAppearanceAdapter } from './infrastructure/appearance-api';
 export { createCaptureAdapter } from './infrastructure/capture-api';
 export { createOnboardingAdapter } from './infrastructure/onboarding-api';
 export { createTranscriptionAdapter } from './infrastructure/transcription-api';
+export { appearanceSurface } from './domain/appearance';
 export {
   searchSetupInvitation,
   type SearchSetupInvitation,

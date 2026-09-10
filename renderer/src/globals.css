@@ -398,31 +398,58 @@ body {
    `display` keeps its responsive pair (mobile / ≥sm) from the old
    text-[22px] sm:text-[28px] titles. */
 :root {
-  --fs-display: 22px;
-  --fs-title: 16px;
-  --fs-subtitle: 14px;
-  --fs-body: 13px;
-  --fs-caption: 12px;
+  /* The interface-size preference multiplies each step where the step is
+     declared, not in a scope of its own: `data-size='compact'` picks the base
+     number and the preference scales it, so the two compose without a
+     compact × small / compact × large matrix. */
+  --ui-scale: 1;
+  --fs-display: calc(22px * var(--ui-scale));
+  --fs-title: calc(16px * var(--ui-scale));
+  --fs-subtitle: calc(14px * var(--ui-scale));
+  --fs-body: calc(13px * var(--ui-scale));
+  --fs-caption: calc(12px * var(--ui-scale));
+
+  /* The markdown reading surface's base, deliberately outside `--ui-scale`:
+     interface size moves chrome type only, so a reader who enlarged the page
+     furniture keeps the prose size they chose. 15px is what the reading
+     surface already computed from `--fs-body` + 2px. */
+  --reading-font-size: 15px;
 }
 
 @media (min-width: 640px) {
   :root {
-    --fs-display: 28px;
+    --fs-display: calc(28px * var(--ui-scale));
   }
 }
 
 html[data-size='compact'] {
-  --fs-display: 20px;
-  --fs-title: 15px;
-  --fs-subtitle: 13px;
-  --fs-body: 12px;
-  --fs-caption: 11px;
+  --fs-display: calc(20px * var(--ui-scale));
+  --fs-title: calc(15px * var(--ui-scale));
+  --fs-subtitle: calc(13px * var(--ui-scale));
+  --fs-body: calc(12px * var(--ui-scale));
+  --fs-caption: calc(11px * var(--ui-scale));
 }
 
 @media (min-width: 640px) {
   html[data-size='compact'] {
-    --fs-display: 24px;
+    --fs-display: calc(24px * var(--ui-scale));
   }
+}
+
+html[data-ui-scale='small'] {
+  --ui-scale: 0.9;
+}
+
+html[data-ui-scale='large'] {
+  --ui-scale: 1.15;
+}
+
+html[data-reading-text-size='small'] {
+  --reading-font-size: 14px;
+}
+
+html[data-reading-text-size='large'] {
+  --reading-font-size: 18px;
 }
 
 @utility text-display {

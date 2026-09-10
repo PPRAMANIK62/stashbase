@@ -1,5 +1,6 @@
 import type {
   AgentRuntimePort,
+  AppearancePort,
   CapturePort,
   McpAccessPort,
   OnboardingPort,
@@ -9,6 +10,7 @@ import type {
 export const settingsQueryKeys = {
   agentAllowance: ['settings', 'agent-allowance'] as const,
   agentCatalog: ['settings', 'agent-catalog'] as const,
+  appearance: ['settings', 'appearance'] as const,
   capture: ['settings', 'capture'] as const,
   mcpAccess: ['settings', 'mcp-access'] as const,
   onboarding: ['settings', 'onboarding'] as const,
@@ -59,6 +61,14 @@ export function captureQuery(port: CapturePort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.load(signal),
     queryKey: settingsQueryKeys.capture,
+    retry: false,
+  } as const;
+}
+
+export function appearanceQuery(port: AppearancePort) {
+  return {
+    queryFn: ({ signal }: { signal: AbortSignal }) => port.load(signal),
+    queryKey: settingsQueryKeys.appearance,
     retry: false,
   } as const;
 }

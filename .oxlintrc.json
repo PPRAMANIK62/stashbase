@@ -297,6 +297,22 @@
       "rules": {
         "no-extend-native": "off"
       }
+    },
+    {
+      // A `BroadcastChannel` post takes no target origin — the parameter does
+      // not exist on it — so the rule is a false positive wherever one is
+      // tested, and its suggested fix would not typecheck. It still guards the
+      // real subject, `contentWindow.postMessage` in the sandboxed HTML
+      // viewer, so it stays on everywhere else rather than being suppressed
+      // line by line. `shared/runtime/appearance-surface.ts` needs no entry:
+      // it posts through an optional chain, which the rule already skips.
+      "files": [
+        "**/renderer/src/shared/runtime/appearance-surface.test.ts",
+        "**/renderer/src/app/composition/use-appearance-surface.test.ts"
+      ],
+      "rules": {
+        "unicorn/require-post-message-target-origin": "off"
+      }
     }
   ]
 }

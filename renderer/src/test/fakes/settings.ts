@@ -11,12 +11,14 @@ import { vi } from 'vite-plus/test';
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import type {
   AgentRuntimePort,
+  AppearancePort,
   CapturePort,
   McpAccessPort,
   OnboardingPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
 import type { AgentAllowance, AgentRuntime } from '@/features/settings/domain/agent-catalog';
+import type { AppearancePreferences } from '@/features/settings/domain/appearance';
 import type { EmbedderState, HostedAccount } from '@/features/settings/domain/embedder';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
 import type {
@@ -221,6 +223,21 @@ export function onboardingPort(overrides: Partial<OnboardingPort> = {}): Onboard
     load: vi.fn(async () => ({
       searchSetupInvitationVersion: ANSWERED_SEARCH_SETUP_VERSION,
     })),
+    ...overrides,
+  };
+}
+
+/** The server's own defaults, and a write that answers with the whole triple
+ *  the way the route does. */
+export function appearancePort(overrides: Partial<AppearancePort> = {}): AppearancePort {
+  const saved: AppearancePreferences = {
+    readingTextSize: 'default',
+    theme: 'system',
+    uiScale: 'default',
+  };
+  return {
+    load: vi.fn(async () => saved),
+    update: vi.fn(async (change) => ({ ...saved, ...change })),
     ...overrides,
   };
 }

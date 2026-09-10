@@ -17,7 +17,13 @@
  *  The focus ring is the fourth pair and the odd one: the TypeScript side is
  *  a literal colour rather than a step, kept as the fallback a copied
  *  primitive draws with. A fallback that stopped matching the token would be
- *  invisible until someone removed the token. */
+ *  invisible until someone removed the token.
+ *
+ *  The Appearance preferences are the fifth: `--ui-scale` and
+ *  `--reading-font-size` have no TypeScript ladder, so what is held here is
+ *  the shape of the CSS — the multiplier on every type step, its absence from
+ *  the reading step, and the two scopes keyed on the attributes
+ *  shared/runtime/appearance-surface.ts stamps. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,11 +71,25 @@ function blockContaining(marker: string): string {
   throw new Error(`unterminated block around ${marker}`);
 }
 
-/** A custom property's value, in the numeric unit it is declared with. */
+/** The base number of a type step, which is declared as
+ *  `calc(<base>px * var(--ui-scale))` so the interface-size preference
+ *  multiplies each step where the step is written. Anchored to that one shape
+ *  and nothing wider: `calc(13px + 2px)` has to read as malformed rather than
+ *  answer 13, or the reader would launder any arithmetic into a parity pass. */
+function scaledPx(block: string, name: string): number | null {
+  const scaled = `${name}:\\s*calc\\(\\s*(-?[\\d.]+)px\\s*\\*\\s*var\\(--ui-scale\\)\\s*\\)\\s*;`;
+  const match = new RegExp(scaled).exec(block);
+  return match ? Number(match[1]) : null;
+}
+
+/** A custom property's value, in the numeric unit it is declared with, whether
+ *  it is written bare or scaled by `--ui-scale`. */
 function customProperty(block: string, name: string): number {
-  const match = new RegExp(`${name}:\\s*(-?[\\d.]+)(ms|px)\\s*;`).exec(block);
-  expect(match, `${name} is declared as a numeric ms/px value`).not.toBeNull();
-  return Number(match?.[1]);
+  const bare = new RegExp(`${name}:\\s*(-?[\\d.]+)(ms|px)\\s*;`).exec(block);
+  if (bare) return Number(bare[1]);
+  const scaled = scaledPx(block, name);
+  expect(scaled, `${name} is declared as a bare ms/px value or a scaled px`).not.toBeNull();
+  return Number(scaled);
 }
 
 /** The pixel size a `text-[13px]` ladder class stands for. */
@@ -121,8 +141,8 @@ describe('focus ring', () => {
 
 describe('type steps', () => {
   const scopes: Record<SizeVariant, string> = {
-    default: blockContaining('--fs-body: 13px'),
-    compact: blockContaining('--fs-body: 12px'),
+    default: blockContaining('--fs-body: calc(13px'),
+    compact: blockContaining('--fs-body: calc(12px'),
   };
 
   it('keys the compact scope on the attribute SizeProvider stamps', () => {
@@ -155,5 +175,48 @@ describe('type steps', () => {
       expect(ladderPx(sizeMap[variant].text)).toBeGreaterThan(ladderPx(sizeMap[variant].caption));
     }
     expect(ladderPx(sizeMap.default.text)).toBeGreaterThan(ladderPx(sizeMap.compact.text));
+  });
+
+  it('scales every declared step by the interface-size preference', () => {
+    // A step declared bare would render at the same size whatever the reader
+    // picked in Appearance, and every parity row above would still pass
+    // because the base number is the only part they read.
+    const declared = [...stylesheet.matchAll(/^[ \t]*--fs-[a-z-]+:[^;]*;/gm)].map((one) => one[0]);
+    expect(declared.length, 'globals.css declares the whole ladder').toBeGreaterThanOrEqual(9);
+    for (const declaration of declared) expect(declaration).toContain('* var(--ui-scale)');
+  });
+});
+
+describe('appearance preferences', () => {
+  it('keeps the reading step out of the interface-size multiplier', () => {
+    // Interface size moves chrome type only. A reading declaration that
+    // picked up `--ui-scale` would enlarge prose along with the furniture,
+    // and the two preferences would stop being separable at all.
+    const declared = [...stylesheet.matchAll(/^[ \t]*--reading-font-size:[^;]*;/gm)];
+    expect(declared, 'globals.css declares a default and both steps').toHaveLength(3);
+    for (const [declaration] of declared) {
+      expect(declaration).not.toContain('--ui-scale');
+      expect(declaration.trim()).toMatch(/^--reading-font-size: \d+px;$/);
+    }
+  });
+
+  it('keys both scopes on the attributes the applier stamps', () => {
+    // The same pairing the compact scope needs: these blocks are reachable
+    // only through what shared/runtime/appearance-surface.ts writes on <html>,
+    // and a rename on either side leaves both halves valid CSS and valid
+    // TypeScript with the preference silently inert.
+    expect(stylesheet).toContain("html[data-ui-scale='small']");
+    expect(stylesheet).toContain("html[data-ui-scale='large']");
+    expect(stylesheet).toContain("html[data-reading-text-size='small']");
+    expect(stylesheet).toContain("html[data-reading-text-size='large']");
+    const applier = fs.readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../shared/runtime/appearance-surface.ts',
+      ),
+      'utf8',
+    );
+    expect(applier).toContain('root.dataset.uiScale = surface.uiScale');
+    expect(applier).toContain('root.dataset.readingTextSize = surface.readingTextSize');
   });
 });

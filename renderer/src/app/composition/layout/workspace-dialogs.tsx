@@ -41,6 +41,7 @@ export function WorkspaceDialogs({
         applyCaptureWatch={(expected) => applyCaptureWatch(dependencies.capture, expected)}
         captureApi={dependencies.settings.captureApi}
         embedderApi={dependencies.settings.embedderApi}
+        appearanceApi={dependencies.settings.appearanceApi}
         mcpAccessApi={dependencies.settings.mcpAccessApi}
         onClose={settings.close}
         onOpenExternal={(href) => void dependencies.documents.openExternal(href)}

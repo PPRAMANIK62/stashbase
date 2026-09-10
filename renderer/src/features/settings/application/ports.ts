@@ -3,6 +3,10 @@ import type {
   AgentCatalog,
   AgentDebugPatch,
 } from '@/features/settings/domain/agent-catalog';
+import type {
+  AppearanceChange,
+  AppearancePreferences,
+} from '@/features/settings/domain/appearance';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
 import type {
   TranscriptionModelOperation,
@@ -43,6 +47,13 @@ export interface TranscriptionPort {
   ): Promise<TranscriptionPreferences>;
   downloadModel(id: string, signal: AbortSignal): Promise<TranscriptionModelOperation>;
   removeModel(id: string, signal: AbortSignal): Promise<void>;
+}
+
+/** Both calls resolve the full triple, because the server's answer is what the
+ *  window applies. */
+export interface AppearancePort {
+  load(signal: AbortSignal): Promise<AppearancePreferences>;
+  update(change: AppearanceChange, signal: AbortSignal): Promise<AppearancePreferences>;
 }
 
 export interface CapturePreferences {

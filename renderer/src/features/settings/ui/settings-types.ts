@@ -1,6 +1,7 @@
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import type {
   AgentRuntimePort,
+  AppearancePort,
   CapturePort,
   McpAccessPort,
   TranscriptionPort,
@@ -25,6 +26,7 @@ export interface SettingsProps {
   /** Resolves true when the desktop watch matches the saved opt-in; absent outside Electron. */
   applyCaptureWatch?: (expected: boolean) => Promise<boolean>;
   captureApi?: CapturePort;
+  appearanceApi?: AppearancePort;
   embedderApi?: EmbedderPort;
   mcpAccessApi?: McpAccessPort;
   onClose: () => void;

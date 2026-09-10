@@ -112,7 +112,7 @@
   padding: 32px clamp(28px, 6cqi, 52px) 96px;
   color: var(--foreground);
   font-family: var(--font-sans);
-  font-size: calc(var(--fs-body, 13px) + 2px);
+  font-size: var(--reading-font-size, 15px);
   line-height: 1.68;
   outline: none;
 }
@@ -243,6 +243,6 @@
 @container (max-width: 520px) {
   .markdown-crepe .milkdown .ProseMirror {
     padding: 72px 20px;
-    font-size: calc(var(--fs-body, 13px) + 1px);
+    font-size: calc(var(--reading-font-size, 15px) - 1px);
   }
 }

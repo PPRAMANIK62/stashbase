@@ -15,6 +15,7 @@ import { preparationControlApi, preparationStatusApi } from './preparation';
 import { exactSearchApi, indexDecisionApi, semanticSearchApi } from './retrieval';
 import {
   agentRuntimePort,
+  appearancePort,
   capturePort,
   embedderPort,
   mcpAccessPort,
@@ -72,6 +73,7 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
     },
     settings: {
       agentRuntimeApi: agentRuntimePort(),
+      appearanceApi: appearancePort(),
       captureApi: capturePort(),
       embedderApi: embedderPort(),
       mcpAccessApi: mcpAccessPort(),

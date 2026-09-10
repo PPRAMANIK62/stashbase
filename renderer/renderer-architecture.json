@@ -60,6 +60,7 @@
     "shared/protocols/http/files.ts",
     "shared/protocols/http/gallery.ts",
     "shared/protocols/http/github-import.ts",
+    "shared/protocols/http/appearance.ts",
     "shared/protocols/http/index-status.ts",
     "shared/protocols/http/library.ts",
     "shared/protocols/http/mcp.ts",

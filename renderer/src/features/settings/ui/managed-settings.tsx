@@ -2,6 +2,7 @@ import { Bot, Mic, Plug, Search, Settings as SettingsIcon, SunMoon } from 'lucid
 
 import { AgentRuntimesPanel } from './agents/agents-panel';
 import { AiIndexPanel } from './ai-index/ai-index-panel';
+import { AppearancePanel } from './appearance/appearance-panel';
 import { GeneralPanel } from './general/general-panel';
 import { McpAccessPanel } from './mcp/mcp-access-panel';
 import type { SettingsProps } from './settings-types';
@@ -16,6 +17,7 @@ const ignoreExternal = () => undefined;
 export default function ManagedSettings({
   agentRuntimeApi,
   applyCaptureWatch = alwaysApplied,
+  appearanceApi,
   captureApi,
   embedderApi,
   mcpAccessApi,
@@ -38,7 +40,15 @@ export default function ManagedSettings({
           ),
         }
       : { available: false, icon: SettingsIcon, id: 'general', label: 'General' },
-    { available: false, icon: SunMoon, id: 'appearance', label: 'Appearance' },
+    appearanceApi
+      ? {
+          available: true,
+          icon: SunMoon,
+          id: 'appearance',
+          label: 'Appearance',
+          render: () => <AppearancePanel appearanceApi={appearanceApi} />,
+        }
+      : { available: false, icon: SunMoon, id: 'appearance', label: 'Appearance' },
     {
       available: true,
       icon: Bot,

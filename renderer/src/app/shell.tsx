@@ -40,10 +40,11 @@ import { useGalleryShop } from './composition/gallery/use-gallery-shop';
 import { WorkspacePanes } from './composition/layout/workspace-panes';
 import { WorkspaceSidebar } from './composition/layout/workspace-sidebar';
 import { WorkspaceTitlebar } from './composition/layout/workspace-titlebar';
+import { useAppearanceSurface } from './composition/use-appearance-surface';
 import type { AppDependencies } from './dependencies';
+import { ShellBoundary } from './shell-boundary';
 
 /** The window's root: it publishes the adapter record and nothing else. Every
-import { ShellBoundary } from './shell-boundary';
  *  binder below reads what it needs from that one mechanism, so no component
  *  is handed a port it only passes on. The boundary between them contains a
  *  failure in the window's composition, leaving the dependency record and the
@@ -65,6 +66,7 @@ function WorkspaceWindow() {
   const dependencies = useDependencies();
   // Two adapter records this function hands on more than once.
   const { documents: docs, workspace: workspaceDeps } = dependencies;
+  useAppearanceSurface(dependencies.settings.appearanceApi);
   const session = useWorkspaceSession(
     workspaceDeps.adapters.library,
     workspaceDeps.adapters.session,
