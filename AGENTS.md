@@ -63,6 +63,8 @@ Start with [`design-docs/README.md`](design-docs/README.md).
 - `product-scenarios.md` — high-level reasons people use StashBase.
 - `user-journeys.md` — observable Shipping flows with stable `Jxx` IDs.
 - `glossary.md` — shared product language.
+- `visual-style.md` — visual intent, with tokens and CSS mechanics owned by
+  the renderer-styling contract.
 - `architecture.md` — product-level ownership, flows, and trust boundaries.
 - `design/*.md` — Workspace, Documents, Preparation, Search and Retrieval,
   Agent Panel, and Bug Reporting outcomes, current experience, contracts, and
@@ -82,6 +84,8 @@ Start engineering review with
 - `document-viewers.md` and `markdown-rendering.md` — preview behavior and trust;
 - `settings-config.md` — durable preferences, credentials, reconfiguration;
 - `mcp-access.md` — MCP transports, credentials, and authorized scope;
+- `gallery.md` — published index, copying an entry into a folder, and the
+  bound on its outbound reach;
 - `agent-runtime.md` and `agent-panel.md` — native Agent and renderer behavior;
 - `renderer-styling.md` — styling mechanics;
 - `journey-coverage.md` — product journey to automated/release evidence;
