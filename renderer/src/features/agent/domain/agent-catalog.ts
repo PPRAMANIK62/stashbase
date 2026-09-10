@@ -90,3 +90,32 @@ export function preferredAgent<Entry extends { readonly id: AgentId }>(
   );
   return byRegistryOrder.find((entry) => entry.id === DEFAULT_AGENT_ID) ?? byRegistryOrder[0];
 }
+
+/**
+ * What stands between this window and a sendable conversation.
+ *
+ * `checking` holds the offer back until the catalog has answered: treating an
+ * unanswered catalog as "nothing ready" shows the setup offer for a moment and
+ * then withdraws it from a reader who is already set up.
+ */
+export type AgentGate =
+  | { readonly kind: 'ready'; readonly agent: Agent }
+  | { readonly kind: 'checking' }
+  | { readonly kind: 'setup'; readonly pending: readonly Agent[] };
+
+/**
+ * Which of the three the window is in. The selected runtime decides it — a
+ * conversation is bound to one, and another runtime being ready does not make
+ * this conversation sendable.
+ */
+export function agentGate(input: {
+  agents: readonly Agent[];
+  /** The catalog has not answered yet. */
+  loading: boolean;
+  selected: AgentId;
+}): AgentGate {
+  const ready = input.agents.find((agent) => agent.id === input.selected && agent.ready);
+  if (ready) return { agent: ready, kind: 'ready' };
+  if (input.loading) return { kind: 'checking' };
+  return { kind: 'setup', pending: input.agents.filter((agent) => !agent.ready) };
+}

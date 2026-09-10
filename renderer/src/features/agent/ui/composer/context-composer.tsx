@@ -63,6 +63,9 @@ export interface AgentContextComposerProps {
   placeholder: string;
   queue: QueuedMessage[];
   rightSlot?: ReactNode;
+  /** When false the composer still takes and keeps a draft but cannot send
+   *  it, which is what a window with no ready runtime offers. */
+  sendable?: boolean;
   session: AgentSessionRuntime;
   /** The runtime advertises that it can run `/` skills. */
   skills: boolean;
@@ -125,6 +128,7 @@ export function AgentContextComposer({
   placeholder,
   queue,
   rightSlot,
+  sendable = true,
   session,
   skills,
   status,
@@ -354,6 +358,7 @@ export function AgentContextComposer({
         }
         queue={queue}
         rightSlot={rightSlot}
+        sendable={sendable}
         // A skill or a bound tile is a sendable prompt on its own.
         sendableWithoutText={armedSkill !== null || context.length > 0}
         status={status}

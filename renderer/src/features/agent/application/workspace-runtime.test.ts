@@ -198,6 +198,49 @@ describe('AgentWorkspaceRuntime', () => {
     });
   });
 
+  it('moves an unstarted chat onto a runtime set up after the window opened', () => {
+    let nextId = 0;
+    const runtime = createAgentWorkspaceRuntime({
+      createId: () => `chat-${++nextId}`,
+      folderPath: '/library/Research',
+      port: idleAgentSessionPort(),
+    });
+    // Nothing is ready, so the first start leaves the chat on the default and
+    // the reader writes the request anyway.
+    runtime.start([]);
+    runtime.activeSession().setDraft('Build wiki pages for this folder');
+    runtime.activeSession().addContext({
+      boundVersion: null,
+      format: 'md',
+      kind: 'source',
+      source: { folderPath: '/library/Research', path: 'MISSION.md' },
+    });
+
+    runtime.start(['codex']);
+
+    const state = runtime.activeSession().store.getState();
+    expect(state.agent).toBe('codex');
+    expect(state.draft).toBe('Build wiki pages for this folder');
+    expect(state.context).toMatchObject([{ source: { path: 'MISSION.md' } }]);
+    expect(runtime.store.getState().tabs).toHaveLength(1);
+  });
+
+  it('leaves a chat that has already spoken on the runtime it spoke to', () => {
+    const runtime = createAgentWorkspaceRuntime({
+      createId: () => 'chat-1',
+      folderPath: '/library/Research',
+      port: idleAgentSessionPort(),
+    });
+    runtime.start([]);
+    // A native session is work the reader can see; rebinding it would silently
+    // move a conversation to a runtime that never held it.
+    runtime.activeSession().store.setState({ nativeSessionId: 'native-1' });
+
+    runtime.start(['codex']);
+
+    expect(runtime.activeSession().store.getState().agent).toBe('stashbase');
+  });
+
   it('routes history mutations through the native agent and scope and reconciles open tabs', async () => {
     const sessionPort = idleAgentSessionPort();
     vi.mocked(sessionPort.rename).mockResolvedValue({

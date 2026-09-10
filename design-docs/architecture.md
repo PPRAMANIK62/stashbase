@@ -102,10 +102,12 @@ visible, user-owned content and follows ordinary file transactions.
   Wiki Agent session. Bring-your-own readiness is demand-driven: opening
   the app or a folder does not install an Agent runtime; explicit Chat actions
   own preparation and recovery.
-- Build Wiki pins one blank Chat to its folder while selected-Agent setup
-  or reconnect completes. The pending intent is renderer-local, independent
-  of setup for search by meaning, and sends at most once; it is not durable
-  application state and cannot widen to Library implicitly.
+- A Build Wiki request written before its Agent is ready waits in the composer
+  of the Chat pinned to that folder, and a Chat no turn has left follows the
+  first runtime that becomes ready so setup never strands it. The waiting
+  request is renderer-local and independent of setup for search by meaning; it
+  is never sent on the user's behalf, is not durable application state, and
+  cannot widen to Library implicitly.
 - Closing a window releases only its UI and folder context. Shared application
   resources remain alive until the application session quits, and a window is
   retired only after its current edit is durable.

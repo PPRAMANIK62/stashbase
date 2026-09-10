@@ -352,14 +352,28 @@ aliases, and a driven runtime pass owns representative composition.
 
 **Status:** Partial and release-dependent.
 
-- **Contract Test:** renderer tests cover the one-time first-folder setup
-  offer and durable **Not now**, manual setup reopening, and the send
-  path's independence from embedding authorization. Agent,
-  file-transaction, and data-lifecycle suites cover approval, source
-  confinement, write reconciliation, and index admission.
-- **Driven Runtime Pass:** none recorded. Journey automation retired with
-  the Playwright suites; this journey has no end-to-end proof until one is
-  driven and recorded.
+- **Contract Test:** renderer domain tests cover the three runtime-gate states
+  and the starter row, including that a folder with existing pages is offered
+  the same wording. Workspace tests cover the gated composer holding a request
+  with Send unavailable and no runtime ability advertised, the stage-specific
+  offer, the request surviving onto the runtime the reader sets up, and the
+  starter filling the composer without sending. Runtime tests cover a Chat no
+  turn has left following an arriving runtime with its draft and bound sources,
+  and a Chat that has spoken staying where it is. A composition test covers a
+  request sending while the whole folder is still being prepared; the Agent
+  surface takes no retrieval or embedding input at all, which the cross-feature
+  import rule enforces. Story accessibility covers both the working
+  conversation and the gate. Agent, file-transaction, and data-lifecycle suites
+  cover approval, source confinement, write reconciliation, and index
+  admission.
+- **Driven Runtime Pass:** the renderer responsibilities are driven through the
+  real application: with every runtime reported unable to carry a turn, the
+  composer stays on screen with Send unavailable and each pending runtime named
+  by its own stage; the Build Wiki request is typed into the gated composer and
+  held; setting a runtime up clears the offer, restores the runtime controls,
+  enables Send, and leaves the request intact. The Agent turn that produces the
+  pages is not part of this pass — it writes real files and needs a real
+  account — and stays release and Eval evidence below.
 - **AI Eval:** Gap. The deterministic Agent proves orchestration and safety,
   not whether a real model produces useful, complete, well-linked Wiki Pages
   over representative mixed-format folders.

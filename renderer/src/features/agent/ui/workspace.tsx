@@ -9,13 +9,14 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
 import type { QueuedMessage } from '@/components/ui/input-message';
-import type { Agent } from '@/features/agent/domain/agent-catalog';
+import { agentGate, type Agent } from '@/features/agent/domain/agent-catalog';
 import { changedSource } from '@/features/agent/domain/file-change';
 import {
   agentSkills,
   agentTurnIsActive,
   scopeLabel,
   type AgentConnection,
+  type AgentId,
 } from '@/features/agent/domain/session';
 import { suggestStarters } from '@/features/agent/domain/starters';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
@@ -29,13 +30,24 @@ import { useAgentInstructions } from '@/features/agent/hooks/use-agent-instructi
 
 import { AgentComposerSettings } from './composer/settings';
 import { AgentInstructionsControl } from './instructions/agent-instructions-control';
-import { AgentSetup } from './setup';
+import { AgentSetupNotice } from './setup';
 import { AgentTranscript } from './transcript/transcript';
 import type { AgentWorkspaceProps } from './workspace-lazy';
 
 /** What the status strip under the transcript says, or null when a working
  *  connection needs no explanation. `settled` marks a connection that has
  *  stopped for good rather than one still moving. */
+/** What the conversation needs to know about the runtimes this window can
+ *  reach: which exist, which can carry a turn, and how to prepare one. */
+interface WorkspaceCatalog {
+  agents: Agent[];
+  error: boolean;
+  loading: boolean;
+  prepare(id: AgentId, action: 'bootstrap' | 'login'): void;
+  preparingAgentId: AgentId | undefined;
+  readyAgents: Agent[];
+}
+
 function connectionNotice(connection: AgentConnection): { settled: boolean; text: string } | null {
   switch (connection.kind) {
     case 'draft':
@@ -59,19 +71,20 @@ function connectionNotice(connection: AgentConnection): { settled: boolean; text
   }
 }
 
-function ReadyWorkspace({
-  agents,
+/** The conversation surface, whether or not a runtime can carry a turn yet.
+ *  A gated window is the same canvas with the agent-specific controls absent,
+ *  an unsendable composer, and the setup notice where the starters sit — not
+ *  a second screen that replaces the draft. */
+function ChatWorkspace({
+  catalog,
   instructions: instructionsApi,
-  readyAgent,
+  onOpenAgentSettings,
   onOpenExternal,
   onOpenSource,
   onReprocess,
   runtime,
   scopeOutline,
-}: Omit<AgentWorkspaceProps, 'catalog' | 'onOpenAgentSettings'> & {
-  agents: Agent[];
-  readyAgent: Agent;
-}) {
+}: Omit<AgentWorkspaceProps, 'catalog'> & { catalog: WorkspaceCatalog }) {
   const activeId = useStore(runtime.store, (state) => state.activeId);
   const scopeEnvironment = useStore(runtime.store, (state) => state.scopeEnvironment);
   const active = runtime.session(activeId) ?? runtime.activeSession();
@@ -93,10 +106,18 @@ function ReadyWorkspace({
       transcript: session.transcript,
     })),
   );
-  // The session store is the live authority on the agent (a provider switch
-  // remounts the session under the same tab); the parent's match is the
-  // fallback for the render in which the two have not met yet.
-  const activeAgent = agents.find((agent) => agent.id === state.agent) ?? readyAgent;
+  // The gate is decided from this component's own store read. A provider
+  // switch remounts the session under the same tab, which leaves the id — and
+  // so a parent that only watches the id — unchanged; deciding here is what
+  // keeps the gate and the session's runtime from disagreeing.
+  const gate = agentGate({
+    agents: catalog.agents,
+    loading: catalog.loading,
+    selected: state.agent,
+  });
+  // Null is a window with nothing ready: the composer still takes a draft, and
+  // advertises no ability it cannot currently deliver.
+  const readyAgent = gate.kind === 'ready' ? gate.agent : null;
   const activeTurn = agentTurnIsActive(state.connection);
   const notice = connectionNotice(state.connection);
   const armedSkill = agentSkills(state.skillCatalog).find((skill) => skill.id === state.skill);
@@ -135,8 +156,12 @@ function ReadyWorkspace({
           )}
         >
           {empty ? (
+            // The one line that says what this space is for. `design-docs`
+            // calls it durable, so it is not a generic chat prompt to be
+            // reworded: it is the first-time reader's only hint that a folder
+            // can gain a wiki at all.
             <h2 className="text-[28px] leading-none font-semibold tracking-[-0.03em] text-foreground max-sm:text-[24px]">
-              What should we work on?
+              Your Wiki is here.
             </h2>
           ) : (
             <AgentTranscript
@@ -182,7 +207,7 @@ function ReadyWorkspace({
           <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-surface-2 to-transparent" />
           <div className="@container relative mx-auto w-full max-w-[46rem]" ref={composerRef}>
             <AgentContextComposer
-              attachments={activeAgent.abilities.attachments}
+              attachments={readyAgent?.abilities.attachments ?? false}
               environment={scopeEnvironment}
               maxRows={6}
               minRows={3}
@@ -205,48 +230,65 @@ function ReadyWorkspace({
               }))}
               leftSlot={
                 <>
-                <AgentComposerSettings
-                  activeAgent={activeAgent}
-                  agents={agents}
-                  onAgentChange={(agent) => {
-                    if (agent !== state.agent) runtime.newChat(agent, state.scope);
-                  }}
-                  onEffortChange={active.setEffort}
-                  onModelChange={active.setModel}
-                  onRequestCatalog={active.start}
-                  state={{ ...state, activeTurn }}
-                />
+                {readyAgent && (
+                  <AgentComposerSettings
+                    activeAgent={readyAgent}
+                    agents={catalog.readyAgents}
+                    onAgentChange={(agent) => {
+                      if (agent !== state.agent) runtime.newChat(agent, state.scope);
+                    }}
+                    onEffortChange={active.setEffort}
+                    onModelChange={active.setModel}
+                    onRequestCatalog={active.start}
+                    state={{ ...state, activeTurn }}
+                  />
+                )}
                 <AgentInstructionsControl editor={instructions} scopeName={scopeName} />
                 </>
               }
               rightSlot={
-                activeAgent.abilities.modes ? (
+                readyAgent?.abilities.modes ? (
                   <AgentPermissionMode mode={state.accessMode} onChange={active.setAccessMode} />
                 ) : null
               }
+              sendable={readyAgent !== null}
               session={active}
-              skills={activeAgent.abilities.skills}
+              skills={readyAgent?.abilities.skills ?? false}
               status={activeTurn ? 'streaming' : 'idle'}
             />
           </div>
         </div>
       )}
-      {empty && starters.length > 0 && (
-        <div className="mx-auto flex w-full max-w-[46rem] shrink-0 flex-wrap gap-2 px-4 pb-3 max-sm:px-3">
-          {starters.map((starter) => (
-            <button
-              className={cn(
-                'h-7 cursor-pointer rounded-full border border-border px-3 text-[13px] text-muted-foreground transition-colors duration-fast outline-none hover:bg-surface-3 hover:text-foreground',
-                focusRing(),
-              )}
-              key={starter.id}
-              onClick={() => prefill(starter.prompt)}
-              type="button"
-            >
-              {starter.label}
-            </button>
-          ))}
-        </div>
+      {gate.kind === 'ready' ? (
+        empty &&
+        starters.length > 0 && (
+          <div className="mx-auto flex w-full max-w-[46rem] shrink-0 flex-wrap gap-2 px-4 pb-3 max-sm:px-3">
+            {starters.map((starter) => (
+              <button
+                className={cn(
+                  'h-7 cursor-pointer rounded-full border border-border px-3 text-[13px] text-muted-foreground transition-colors duration-fast outline-none hover:bg-surface-3 hover:text-foreground',
+                  focusRing(),
+                )}
+                key={starter.id}
+                onClick={() => prefill(starter.prompt)}
+                type="button"
+              >
+                {starter.label}
+              </button>
+            ))}
+          </div>
+        )
+      ) : (
+        // One call to action at a time: a starter prefills a draft that cannot
+        // be sent yet, so the gate takes the row until it lifts.
+        <AgentSetupNotice
+          checking={gate.kind === 'checking'}
+          error={catalog.error}
+          onOpenSettings={onOpenAgentSettings}
+          onPrepare={catalog.prepare}
+          pending={gate.kind === 'setup' ? gate.pending : []}
+          preparingAgentId={catalog.preparingAgentId}
+        />
       )}
       {empty && <div aria-hidden className="min-h-0 grow-[1.3] basis-0" />}
     </div>
@@ -255,29 +297,22 @@ function ReadyWorkspace({
 
 export default function ManagedAgentWorkspace(props: AgentWorkspaceProps) {
   const catalog = useAgentCatalog(props.catalog);
-  const activeId = useStore(props.runtime.store, (state) => state.activeId);
-  const active = props.runtime.session(activeId) ?? props.runtime.activeSession();
-  const activeAgentId = useStore(active.store, (state) => state.agent);
 
   useEffect(() => {
     props.runtime.start(catalog.readyAgents.map((agent) => agent.id));
   }, [catalog.readyAgents, props.runtime]);
 
-  const activeAgent = catalog.readyAgents.find((agent) => agent.id === activeAgentId);
-  if (activeAgent) {
-    return <ReadyWorkspace {...props} agents={catalog.readyAgents} readyAgent={activeAgent} />;
-  }
-
   return (
-    <AgentSetup
-      agents={catalog.agents.filter(
-        (agent) => !catalog.readyAgents.some((ready) => ready.id === agent.id),
-      )}
-      error={catalog.error}
-      loading={catalog.loading}
-      onOpenSettings={props.onOpenAgentSettings}
-      onPrepare={(id, action) => catalog.prepare({ action, id })}
-      preparingAgentId={catalog.preparingAgentId}
+    <ChatWorkspace
+      {...props}
+      catalog={{
+        agents: catalog.agents,
+        error: catalog.error,
+        loading: catalog.loading,
+        prepare: (id, action) => catalog.prepare({ action, id }),
+        preparingAgentId: catalog.preparingAgentId,
+        readyAgents: catalog.readyAgents,
+      }}
     />
   );
 }

@@ -1,4 +1,5 @@
-import { vi } from 'vite-plus/test';
+import { screen, waitFor } from '@testing-library/react';
+import { expect, vi } from 'vite-plus/test';
 
 import type {
   AgentCatalogPort,
@@ -146,4 +147,12 @@ export function pendingAgentContextPort(): AgentContextPort {
     resolve: vi.fn(() => new Promise<never>(() => undefined)),
     upload: vi.fn(async () => []),
   });
+}
+
+
+/** The Agent canvas paints before the catalog answers, so a test that assumes
+ *  a runtime waits for the setup gate to lift rather than for the heading:
+ *  the heading is drawn either way now. */
+export async function agentGateLifted(): Promise<void> {
+  await waitFor(() => expect(screen.queryByText('Checking runtimes…')).toBeNull());
 }

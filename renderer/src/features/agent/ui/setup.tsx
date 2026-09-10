@@ -1,61 +1,61 @@
-import { Layers } from 'lucide-react';
-
+/** What stands between this window and a sendable conversation, said beneath
+ *  the composer rather than in place of it. A reader may write the request
+ *  first and set a runtime up second, so the gate never takes the draft off
+ *  the screen to ask for setup. */
 import { Button } from '@/components/ui/button';
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import type { AgentId } from '@/features/agent/domain/session';
-import { cn } from '@/lib/utils';
 
-export function AgentSetup({
-  agents,
+export function AgentSetupNotice({
+  checking,
   error,
-  loading,
   onOpenSettings,
   onPrepare,
+  pending,
   preparingAgentId,
 }: {
-  agents: Agent[];
+  /** The catalog has not answered yet, so nothing is offered: an unanswered
+   *  catalog is not the same as nothing being ready. */
+  checking: boolean;
   error: boolean;
-  loading: boolean;
   onOpenSettings(): void;
   onPrepare(id: AgentId, action: 'bootstrap' | 'login'): void;
+  pending: readonly Agent[];
   preparingAgentId?: AgentId | undefined;
 }) {
   return (
-    <div
-      className={cn('flex h-full min-h-0 items-center justify-center bg-surface-2 p-8', 'w-full')}
-    >
-      <div className="max-w-md text-center">
-        <Layers aria-hidden="true" className="mx-auto size-7 text-muted-foreground" />
-        <h2 className="mt-3 text-title font-semibold text-foreground">Get an Agent ready</h2>
-        <p className="mt-1 text-caption text-muted-foreground">
-          Agent setup is explicit. Choose a runtime here or manage all runtimes in Settings.
-        </p>
-        <div className="mt-4 flex flex-wrap justify-center gap-2">
-          {agents.map((agent) => {
-            const needsLogin = agent.needsSignIn;
-            return (
+    <div className="mx-auto w-full max-w-[46rem] shrink-0 px-4 pb-3 max-sm:px-3">
+      {checking ? (
+        <p className="text-caption text-muted-foreground">Checking runtimes…</p>
+      ) : (
+        <>
+          <p className="text-caption text-muted-foreground">
+            <span className="text-foreground">No Agent is ready yet.</span> Set one up to send
+            this.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {pending.map((agent) => (
               <Button
                 key={agent.id}
                 loading={preparingAgentId === agent.id}
-                onClick={() => onPrepare(agent.id, needsLogin ? 'login' : 'bootstrap')}
+                onClick={() => onPrepare(agent.id, agent.needsSignIn ? 'login' : 'bootstrap')}
                 size="compact"
                 variant="secondary"
               >
-                {needsLogin ? `Sign in to ${agent.label}` : `Set up ${agent.label}`}
+                {agent.needsSignIn ? `Sign in to ${agent.label}` : `Set up ${agent.label}`}
               </Button>
-            );
-          })}
-          <Button onClick={onOpenSettings} size="compact" variant="ghost">
-            Agent settings
-          </Button>
-        </div>
-        {loading && <p className="mt-3 text-caption text-muted-foreground">Checking runtimes…</p>}
-        {error && (
-          <p className="mt-3 text-caption text-destructive" role="alert">
-            Agent runtime status is unavailable.
-          </p>
-        )}
-      </div>
+            ))}
+            <Button onClick={onOpenSettings} size="compact" variant="ghost">
+              Agent settings
+            </Button>
+          </div>
+        </>
+      )}
+      {error && (
+        <p className="mt-2 text-caption text-destructive" role="alert">
+          Agent runtime status is unavailable.
+        </p>
+      )}
     </div>
   );
 }

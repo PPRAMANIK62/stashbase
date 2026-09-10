@@ -319,15 +319,27 @@ function retiredTranscript(state: AgentSessionState) {
 
 // Session selectors
 
-export function agentSessionIsBlank(state: AgentSessionState): boolean {
+/** A conversation no turn has left yet: nothing was sent, nothing came back,
+ *  and no native session backs it. Its bound runtime is still free to change,
+ *  which is what lets a chat follow a runtime the reader sets up after the
+ *  window opened. A waiting draft does not start a conversation. */
+export function agentSessionIsUnstarted(state: AgentSessionState): boolean {
   return (
     state.nativeSessionId === null &&
     state.transcript.length === 0 &&
+    !agentTurnIsActive(state.connection)
+  );
+}
+
+/** Unstarted and holding nothing the reader typed, dropped, or armed, so a new
+ *  chat would be indistinguishable from it. */
+export function agentSessionIsBlank(state: AgentSessionState): boolean {
+  return (
+    agentSessionIsUnstarted(state) &&
     state.draft.length === 0 &&
     state.skill === null &&
     state.context.length === 0 &&
-    state.queuedPrompts.length === 0 &&
-    !agentTurnIsActive(state.connection)
+    state.queuedPrompts.length === 0
   );
 }
 

@@ -23,6 +23,7 @@ import type { AgentScopeEnvironment } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import {
   agentScopesEqual,
+  agentSessionIsUnstarted,
   agentSessionPhase,
   scopeForWindowFolder,
   type AgentId,
@@ -327,22 +328,31 @@ export function createAgentWorkspaceRuntime({
     start(availableAgents) {
       if (disposed) return;
       if (availableAgents) readyAgentIds = new Set(availableAgents);
-      if (!started) {
-        const active = runtime.activeSession();
-        const state = active.store.getState();
-        const firstAvailable = preferredAgent(
-          AGENT_RUNTIMES.filter((entry) => readyAgentIds.has(entry.id)),
-        )?.id;
-        if (active.isBlank() && firstAvailable && !readyAgentIds.has(state.agent)) {
-          mountSession(
-            active.id,
-            firstAvailable,
-            state.scope,
-            sessions.get(active.id)?.followsWindow ?? false,
-          );
+      const active = runtime.activeSession();
+      const state = active.store.getState();
+      const firstAvailable = preferredAgent(
+        AGENT_RUNTIMES.filter((entry) => readyAgentIds.has(entry.id)),
+      )?.id;
+      // A chat no turn has left is not bound to its runtime in any way the
+      // reader can see, so it follows whatever the catalog can actually run.
+      // This is not only the window's first start: a reader who writes a
+      // request and then sets a runtime up must find the same request waiting,
+      // so the draft and its bound sources move to the remounted session.
+      if (firstAvailable && !readyAgentIds.has(state.agent) && agentSessionIsUnstarted(state)) {
+        const remounted = mountSession(
+          active.id,
+          firstAvailable,
+          state.scope,
+          sessions.get(active.id)?.followsWindow ?? false,
+        );
+        if (state.draft) remounted.runtime.setDraft(state.draft);
+        // Transient uploads live as bytes the old session held; a source is a
+        // path any runtime can read back, so only those carry.
+        for (const item of state.context) {
+          if (item.kind === 'source') remounted.runtime.addContext(item);
         }
-        started = true;
       }
+      started = true;
       for (const { runtime: session } of sessions.values()) {
         if (!session.isBlank() && readyAgentIds.has(session.store.getState().agent))
           session.start();

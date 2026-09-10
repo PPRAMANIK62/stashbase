@@ -139,7 +139,10 @@ describe('mention editor', () => {
     pressKey(field, 'Enter');
     expect(onAccept).toHaveBeenCalledTimes(1);
     expect(submit).toHaveBeenCalledTimes(1);
-    expect(field.getAttribute('aria-expanded')).toBe('true');
+    // The open popup is announced through the controlled listbox and the
+    // active option; `aria-expanded` is not allowed on a textbox and axe
+    // scores the composer's story for exactly that.
+    expect(field.getAttribute('aria-expanded')).toBeNull();
     expect(field.getAttribute('aria-controls')).toBe('box');
   });
 

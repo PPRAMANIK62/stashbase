@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
+import { expect, screen, waitFor } from 'storybook/test';
 
 import type { AgentInstructionsPort } from '@/features/agent/application/ports';
 import { createAgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
@@ -29,6 +30,14 @@ const agents: Agent[] = [
   { abilities, id: 'stashbase', label: 'Wiki Agent', needsSignIn: false, ready: true },
 ];
 
+/** The same runtimes before any of them can carry a turn: one waiting on
+ *  sign-in, the rest on installation. */
+const pendingAgents: Agent[] = agents.map((agent) => ({
+  ...agent,
+  needsSignIn: agent.id === 'codex',
+  ready: false,
+}));
+
 const STORY_IMAGE =
   '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><rect width="160" height="160" fill="#6B97FF"/><path d="M24 124 65 74l26 31 19-18 26 37Z" fill="#fff"/></svg>';
 
@@ -37,15 +46,26 @@ const SKILLS = [
   { id: 'summarize', label: 'summarize', description: 'Summarize a folder' },
 ];
 
+/** The catalog answers asynchronously, so a story that means to show a working
+ *  conversation has to wait for the setup gate to lift. Without it the canvas
+ *  is scored mid-check, and the composer's controls are never looked at. */
+const readyWorkspace = async () => {
+  await waitFor(() => expect(screen.queryByText('Checking runtimes…')).toBeNull());
+  await screen.findByRole('button', { name: /^Provider: / });
+};
+
 function WorkspacePreview({
   context = false,
   docked = false,
   empty = false,
+  ready = true,
   skills = false,
 }: {
   context?: boolean;
   docked?: boolean;
   empty?: boolean;
+  /** False draws the window a reader meets before any runtime is set up. */
+  ready?: boolean;
   skills?: boolean;
 }) {
   const queryClient = useMemo(
@@ -209,7 +229,7 @@ function WorkspacePreview({
         <div className="h-[calc(100%-2.75rem)]">
           <ManagedAgentWorkspace
             catalog={{
-              listAgents: async () => ({ agents }),
+              listAgents: async () => ({ agents: ready ? agents : pendingAgents }),
               prepareAgent: async () => ({ agents }),
             }}
             instructions={storyInstructions}
@@ -239,21 +259,34 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const FullWorkspace: Story = {};
+export const FullWorkspace: Story = { play: readyWorkspace };
 
 export const EmptyWorkspace: Story = {
   args: { empty: true },
+  play: readyWorkspace,
 };
 
 export const BoundContext: Story = {
   args: { context: true, empty: true },
+  play: readyWorkspace,
 };
 
 export const ArmedSkill: Story = {
   args: { empty: true, skills: true },
+  play: readyWorkspace,
 };
 
 export const Docked: Story = {
   args: { docked: true },
   parameters: { fluidCanvas: { minHeight: '50rem', width: '40rem' } },
+  play: readyWorkspace,
+};
+
+/** Before any runtime is set up: the request can still be written, and the
+ *  offer sits under the composer rather than in place of it. */
+export const SetupOffer: Story = {
+  args: { empty: true, ready: false },
+  play: async () => {
+    await screen.findByText('No Agent is ready yet.');
+  },
 };

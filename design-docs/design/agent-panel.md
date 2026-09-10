@@ -29,17 +29,22 @@ and uses a hosted service only as its metered model provider.
   and open (see [Workspace](workspace.md) for the shop's two forms and the
   no-folder contract). The first sent turn replaces the band with the
   transcript, a folder window never shows the band, and a runtime gate
-  keeps it reachable beneath its card. A gated contentless Chat also keeps
-  its composer bar visible with the agent pill live: switching a chat that
-  has not started to another Agent never requires resolving the gated
-  one's install or sign-in first. Starting a wiki over the user's own
-  files is a plain conversation: the user asks in the composer (an entry's
-  detail page offers its exact request through **Copy prompt**), and the
+  keeps it reachable beneath its card. A gated Chat keeps its composer, holds
+  whatever is written into it, and carries that request onto the runtime that
+  arrives; the gate is a notice beneath the composer naming each runtime that
+  cannot carry a turn by its own stage, never a screen in place of the
+  request. Nothing is sent for the user: the gate lifting leaves the request
+  in the composer to read and send.
+  Starting a wiki over the user's own
+  files is a plain conversation: the user asks in the composer, and the
   durable Wiki behavior lives in Agent Instructions, so the visible
-  request is exactly what the Agent receives.
+  request is exactly what the Agent receives. A folder-scoped blank Chat
+  offers **Build my wiki** as the first of at most three starters below the
+  composer, and an entry's Gallery detail page offers its exact request
+  through **Copy prompt**; both fill the composer and neither sends.
   The greeting and composer remain one vertically centered action group. A
   Library-scoped blank Chat stays focused on the greeting and composer without
-  a bottom suggestion carousel.
+  starters or a bottom suggestion carousel.
 - The Chat's **Search by meaning** control is a single switch inside the
   session scope picker, below the folder list and outside the Agent's Mode
   and model settings. It sits with scope because scope decides what a lookup

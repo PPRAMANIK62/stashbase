@@ -93,8 +93,7 @@ manager, or a primary graph-navigation tool.
   independent active folders, tabs, search presentation, and Chat tabs.
 - Folder switches reset folder-scoped documents but preserve library search
   state and scope-pinned chats. A blank welcome chat may follow the new folder;
-  started work, unsent drafts, and a pending Build Wiki intent never silently
-  rebind.
+  started work and unsent requests never silently rebind to another folder.
 - Removing a member preserves Chat tabs. A completely blank Chat returns to
   Library without interruption; a Chat containing user work stays readable in
   its retired folder scope and offers a separate **New Library Chat**.

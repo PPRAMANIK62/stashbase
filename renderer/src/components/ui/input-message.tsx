@@ -76,6 +76,10 @@ interface InputMessageProps
   onSend?: (value: string, files: File[], meta?: { queuedId?: string }) => void;
   /** Disables the field, send button, and drag-and-drop. */
   disabled?: boolean;
+  /** When false the field still takes and keeps a draft, but no submit
+   *  dispatches it. For a composer whose runtime cannot carry a turn yet:
+   *  disabling the whole control would take the draft away with it. */
+  sendable?: boolean;
   /** When false, clicking the surrounding container won't refocus the field. */
   clickToFocus?: boolean;
 }
@@ -108,6 +112,7 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
       queue,
       onQueueChange,
       showQueue = true,
+      sendable = true,
       sendableWithoutText = false,
       className,
       style,
@@ -150,7 +155,9 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
 
     const trimmed = value.trim();
     const canSend =
-      !disabled && (trimmed.length > 0 || composerFiles.items.length > 0 || sendableWithoutText);
+      !disabled &&
+      sendable &&
+      (trimmed.length > 0 || composerFiles.items.length > 0 || sendableWithoutText);
     const dropHint = composerFiles.dragOver && composerFiles.supported;
 
     const handleSend = useCallback(() => {

@@ -146,10 +146,9 @@ semantic readiness.
   navigation. A published-path open failure remains in the dialog with a
   retry-open action that never starts a second clone.
 - The blank-chat lifecycle follows [Agent Panel](agent-panel.md); the workspace
-  may reveal or dock it but does not redefine Agent session scope. A pending
-  Build Wiki intent is started and pinned by the Agent Panel; window-folder
-  transitions must neither redirect it nor count that tab as reusable blank
-  state.
+  may reveal or dock it but does not redefine Agent session scope. A Chat
+  holding an unsent request is not reusable blank state, so window-folder
+  transitions must neither redirect it nor claim its tab.
 
 ## Shell Performance Contract
 

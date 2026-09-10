@@ -13,6 +13,7 @@ import {
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { draftOf, pressKey, typeInto } from '@/test/dom';
 import {
+  agentGateLifted,
   agentCatalogPort,
   agentContextPort,
   agentSessionPort,
@@ -80,7 +81,8 @@ describe('AgentWorkspace composer skills', () => {
   async function skillWorkspace() {
     const test = agentSessionPort();
     const { runtime } = renderWorkspace(test.port, undefined, agentContextPort());
-    await screen.findByText('What should we work on?');
+    await screen.findByText('Your Wiki is here.');
+    await agentGateLifted();
     await userEvent.click(screen.getByRole('button', { name: 'Provider: Wiki Agent' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     act(() => runtime.activeSession().start());
@@ -124,7 +126,8 @@ describe('AgentWorkspace composer skills', () => {
   it('leaves / as plain text for a runtime that runs no skills', async () => {
     const test = agentSessionPort();
     const { runtime } = renderWorkspace(test.port, undefined, agentContextPort());
-    await screen.findByText('What should we work on?');
+    await screen.findByText('Your Wiki is here.');
+    await agentGateLifted();
     act(() => runtime.activeSession().start());
 
     const composer = screen.getByRole('textbox', { name: 'Message' });

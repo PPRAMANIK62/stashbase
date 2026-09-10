@@ -709,14 +709,17 @@ independently; selected Agent readiness may be absent.
 ### Primary Flow
 
 1. In the blank folder-scoped Chat, write the Build Wiki request — typed
-   directly, or reused from a Gallery entry's **How it's built** tab via
-   **Copy prompt** (the Gallery never places or sends composer text).
+   directly, filled from the **Build my wiki** starter below the composer, or
+   reused from a Gallery entry's **How it's built** tab via **Copy prompt**.
+   Neither the starter nor the Gallery sends what it places.
 2. Send it. The visible request is exactly what the Agent receives; the
    durable Wiki Pages contract (write scope, linking, maintenance) comes
    from Agent Instructions. Setup for search by meaning neither opens nor
    blocks the send.
 3. If the selected Agent still needs installation or sign-in, complete that
-   stage first; the composer keeps the draft while the gate stands.
+   stage first; the composer keeps the request while the gate stands, and a
+   Chat no turn has left follows the first runtime that becomes ready. The
+   request is never sent on the user's behalf when the gate lifts.
 4. The Agent inspects the folder and creates or improves `wiki/index.md`,
    adding focused pages under `wiki/` only when a single map would be
    unwieldy. Wiki Pages use relative links to visible Sources.
@@ -737,8 +740,9 @@ independently; selected Agent readiness may be absent.
   keyword search, semantic indexing, and future Agent work. Machine-derived
   text, chunks, and vectors remain invisible AppData.
 - The first release does not claim persistent built, ready, or stale Wiki
-  state, does not change the button to Update Wiki Pages, and does not schedule
-  background Wiki Page rewriting.
+  state. A folder that already has pages under `wiki/` offers the same starter
+  with the same wording — it never becomes Update Wiki Pages — and nothing
+  schedules background Wiki Page rewriting.
 
 ### Degradation and Recovery
 

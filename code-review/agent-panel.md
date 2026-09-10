@@ -46,10 +46,15 @@
 - Tab activation and history resume only select renderer state. A missing
   runtime remains on the setup gate until **Install and continue**; activation
   code must not call the preparation endpoint speculatively.
-- A runtime-gated contentless chat still renders its composer bar under the
-  gate card with the agent pill ENABLED (rebinding an unclaimed tab is
-  renderer-local and sends nothing): the pill is the gated agent's way out,
-  and hiding or disabling it would strand the chat on install/sign-in.
+- A runtime-gated chat still renders its composer, holds whatever is typed
+  into it, and carries that draft onto the runtime that arrives; the gate is a
+  notice beneath the composer, never a screen in place of it. The chat must
+  never be stranded on install or sign-in: the gate names every runtime that
+  cannot carry a turn with its own stage, and a chat no turn has left follows
+  the first runtime that becomes ready. While the gate stands the composer
+  advertises no runtime ability — no attachments, skills, model, effort, or
+  permission mode — and no submit dispatches, because none of those is knowable
+  or deliverable before a runtime is bound.
 - A validated `scope-changed` event may migrate only the same live
   Library-scoped Chat that created a project. Update the tab binding before the
   owning window enters the new member so the conversation stays selected;

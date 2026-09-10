@@ -323,11 +323,15 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
       viewRef.current?.dispatch({
         effects: attributes.current.reconfigure(
           EditorView.contentAttributes.of({
+            // No `aria-expanded`: it belongs to `combobox`, and this stays a
+            // multiline `textbox` whose popup comes and goes mid-sentence —
+            // swapping the role under a screen reader as `@` is typed reads
+            // worse than the attribute buys. The controlled listbox and the
+            // active option carry the popup instead, and both are allowed here.
             'aria-activedescendant': listbox.open ? (listbox.activeOptionId ?? '') : '',
             'aria-autocomplete': 'list',
             'aria-controls': listbox.open ? (listbox.controls ?? '') : '',
             'aria-describedby': ctx.ariaDescribedBy ?? '',
-            'aria-expanded': listbox.open ? 'true' : 'false',
             'aria-label': ctx.ariaLabel,
             'aria-multiline': 'true',
             role: 'textbox',

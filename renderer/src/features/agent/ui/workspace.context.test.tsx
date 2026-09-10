@@ -14,6 +14,7 @@ import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { SOURCE_DRAG_MIME } from '@/shared/utils/source-drag';
 import { draftOf, pressKey, typeInto } from '@/test/dom';
 import {
+  agentGateLifted,
   agentCatalogPort,
   agentContextPort,
   BUILT_IN_AGENT,
@@ -104,7 +105,8 @@ describe('AgentWorkspace composer context', () => {
   it('suggests scope files for @ and binds the accepted one as an inline chip', async () => {
     const { runtime } = renderWorkspace(idleAgentSessionPort(), undefined, agentContextPort());
     act(() => runtime.setScopeEnvironment(researchEnvironment));
-    await screen.findByText('What should we work on?');
+    await screen.findByText('Your Wiki is here.');
+    await agentGateLifted();
     const composer = screen.getByRole('textbox', { name: 'Message' });
 
     typeInto(composer, 'Read @no');
@@ -113,7 +115,9 @@ describe('AgentWorkspace composer context', () => {
     expect(screen.getByRole('option', { name: 'notes.md' }).getAttribute('aria-selected')).toBe(
       'true',
     );
-    expect(composer.getAttribute('aria-expanded')).toBe('true');
+    // The open popup is announced through the controlled listbox, not
+    // `aria-expanded`, which a textbox may not carry.
+    expect(composer.getAttribute('aria-controls')).toBe(listbox.id);
 
     pressKey(composer, 'Enter');
     expect(draftOf(runtime)).toBe('Read @notes.md ');
@@ -146,7 +150,8 @@ describe('AgentWorkspace composer context', () => {
     const port = idleAgentSessionPort();
     const { runtime } = renderWorkspace(port, undefined, agentContextPort());
     act(() => runtime.setScopeEnvironment(researchEnvironment));
-    await screen.findByText('What should we work on?');
+    await screen.findByText('Your Wiki is here.');
+    await agentGateLifted();
     const composer = screen.getByRole('textbox', { name: 'Message' });
     typeInto(composer, '@less');
     expect(await screen.findByRole('option', { name: 'lessons' })).not.toBeNull();
@@ -160,11 +165,37 @@ describe('AgentWorkspace composer context', () => {
     await waitFor(() => expect(port.connect).toHaveBeenCalled());
   });
 
+  it('sends a plain request while the whole folder is still being prepared', async () => {
+    const port = idleAgentSessionPort();
+    const { runtime } = renderWorkspace(port);
+    await screen.findByText('Your Wiki is here.');
+    await agentGateLifted();
+    act(() => {
+      runtime.setScopeEnvironment({
+        ...researchEnvironment,
+        readiness: { 'notes.md': 'pending', 'papers/report.pdf': 'pending' },
+      });
+    });
+
+    const composer = screen.getByRole('textbox', { name: 'Message' });
+    typeInto(composer, 'Build wiki pages for this folder');
+    pressKey(composer, 'Enter');
+
+    // Preparation state is the only folder readiness the composer reads, and
+    // it gates a bound source rather than the request. Nothing about setting
+    // up search reaches this path at all: the Agent surface takes no retrieval
+    // or embedding input, and a feature may not read another feature's state.
+    await waitFor(() => expect(port.connect).toHaveBeenCalled());
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(runtime.activeSession().store.getState().contextIssue).toBeNull();
+  });
+
   it('shows visual sources as tiles, reads preparation state, and refuses to send stale context', async () => {
     const port = idleAgentSessionPort();
     const onReprocess = vi.fn();
     const { runtime } = renderWorkspace(port, undefined, agentContextPort(), onReprocess);
-    await screen.findByText('What should we work on?');
+    await screen.findByText('Your Wiki is here.');
+    await agentGateLifted();
     act(() => {
       runtime.setScopeEnvironment({
         ...researchEnvironment,
@@ -240,7 +271,8 @@ describe('AgentWorkspace composer context', () => {
     const context = agentContextPort();
     const { runtime } = renderWorkspace(idleAgentSessionPort(), undefined, context);
     act(() => runtime.setScopeEnvironment(researchEnvironment));
-    await screen.findByText('What should we work on?');
+    await screen.findByText('Your Wiki is here.');
+    await agentGateLifted();
     expect(screen.queryByRole('button', { name: 'Attach files' })).toBeNull();
 
     const composer = screen.getByRole('textbox', { name: 'Message' });

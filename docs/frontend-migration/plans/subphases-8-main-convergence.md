@@ -409,7 +409,7 @@ refused; plus `pnpm test:renderer`, `pnpm test:agent`, `pnpm test:config`,
 
 **Blocked by:** 64, 69.
 
-**Status:** Not started.
+**Status:** Complete.
 
 Complete the J12 renderer responsibilities. Building a wiki is an ordinary
 visible Agent request against the active folder, with Agent Instructions
@@ -417,12 +417,73 @@ carrying the durable contract and the resulting pages landing as ordinary
 local source files. Progress, refusal, and recovery read through the existing
 Agent surfaces rather than a private staged-intent machine.
 
-Register J12 in the journey document and Journey Coverage in the same change.
+Most of the journey was already standing: the composer, the runtime, the
+instruction injection from task 69, and the tree refresh that surfaces the
+written pages. Four things were missing, and each was a way the journey could
+not be reached rather than a feature it lacked.
 
-Evidence: focused request, progress, and result tests; agent server suite;
-J12 and Journey Coverage updates; a driven runtime pass through the real app
-from folder to built pages; `pnpm typecheck`, `pnpm lint:web`,
-`pnpm build:web`.
+The runtime gate replaced the whole canvas. A window with nothing ready drew a
+setup screen instead of the conversation, so the request could not be written
+until setup was finished — the opposite of what J12 asks. The gate is now a
+notice beneath a composer that stays, holds what is written into it, and
+advertises no runtime ability it cannot deliver: no attachments, skills, model,
+effort, or permission mode, and no submit dispatches. `agentGate` in the agent
+domain decides between `ready`, `checking`, and `setup` from the runtime the
+Chat is bound to, and holds the offer back until the catalog answers, because
+treating an unanswered catalog as nothing-ready shows the offer for a moment
+and then withdraws it from a reader who is already set up. The gate is decided
+where the session store is read: a provider switch remounts the session under
+the same tab, so a parent watching only the tab id would keep a stale answer.
+
+A gated Chat could then be stranded. The workspace runtime rebound a blank chat
+to an available runtime only on the window's first start, and rebinding
+discarded the session — which would have thrown away the request this task
+exists to keep. A Chat no turn has left now follows the first runtime that
+becomes ready whenever one arrives, and its draft and bound sources move with
+it; a Chat with a transcript or a native session stays where it is, because
+that is work the reader can see. `agentSessionIsUnstarted` names that condition
+in the domain, and `agentSessionIsBlank` is now expressed in terms of it.
+Nothing is sent on the reader's behalf when the gate lifts, which is where this
+parts company with `main`'s pending intent.
+
+Nothing told a reader the journey existed. `design-docs` calls **Your Wiki is
+here.** the blank Chat's durable greeting and `web-src` shipped it; the
+replacement had drifted to a generic chat prompt that names no wiki, and the
+change was never recorded. It is restored. The starter row under the composer
+offered three read-only questions and no way to ask for a wiki, and the
+Gallery — which `product-direction` names as what teaches this by example —
+only appears in a bare window. **Build my wiki** now leads the row, which is
+capped at three so a suggestion does not become a menu. A starter fills and
+focuses the composer rather than sending, so the visible request stays the
+reader's to edit and is still exactly what the Agent receives. The label never
+becomes Update: the first release claims no built, ready, or stale Wiki state,
+and one label is how that promise is kept.
+
+One accessibility defect surfaced. The composer carried `aria-expanded`, which
+`textbox` may not have; the open popup is announced through the controlled
+listbox and the active option instead. It had never been scored because the
+workspace stories rendered before the catalog answered and were therefore
+scoring the old setup screen, not the composer. The stories now wait for the
+gate to lift, so they score what their names claim, and a new story covers the
+gated state.
+
+The Agent turn that writes the pages is not driven here. It writes real files
+under a real account, so it stays release and Eval evidence, which is what
+Journey Coverage already recorded for J12.
+
+Evidence: domain tests for the three gate states, the held offer, and the
+starter row including a folder that already has pages; workspace tests for the
+gated composer keeping its request with Send unavailable and no ability
+advertised, the stage-specific offer, the request surviving onto the runtime
+the reader sets up, and the starter filling without sending; runtime tests for
+the rebind carrying draft and sources and for a Chat that has spoken staying
+put; a composition test for a request sending while the whole folder is
+preparing; story accessibility over both the working conversation and the gate;
+plus `pnpm test:renderer`, `pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`,
+and `pnpm test:docs`. A driven runtime pass through the real application over
+the debugging protocol proved the gated composer, the typed request held
+through setup, and the request intact with Send enabled once a runtime was
+ready.
 
 ## 73 — Browse and copy from the Gallery
 
