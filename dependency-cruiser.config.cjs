@@ -219,9 +219,9 @@ module.exports = {
     {
       name: 'renderer-does-not-import-implementation-trees',
       severity: 'error',
-      comment: 'The renderer consumes reviewed protocols, never server, Electron, or legacy implementation.',
+      comment: 'The renderer consumes reviewed protocols, never server or Electron implementation.',
       from: { path: '^renderer/' },
-      to: { path: '^(?:server|electron|web-src)/' },
+      to: { path: '^(?:server|electron)/' },
     },
     {
       name: 'renderer-does-not-import-electron-runtime',

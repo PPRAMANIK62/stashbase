@@ -43,17 +43,14 @@ test('the supported renderer build is the only packaged renderer input', () => {
     'typecheck:web',
   ]) {
     assert.match(pkg.scripts?.[scriptName] ?? '', /@stashbase\/renderer/);
-    assert.doesNotMatch(pkg.scripts?.[scriptName] ?? '', /web-src/);
   }
 
   assert.match(rendererConfig, /outDir:\s*['"]\.\.\/dist\/renderer['"]/);
   assert.ok(packagedFiles.includes('dist/renderer/**/*'));
   assert.ok(packagedFiles.includes('dist/electron/**/*'));
-  assert.ok(packagedFiles.includes('!electron/preload.cjs'));
   assert.ok(
     !packagedFiles.some((entry) => typeof entry === 'string' && entry.includes('dist/storybook')),
   );
-  assert.ok(!packagedFiles.some((entry) => typeof entry === 'string' && entry.includes('web-src')));
   assert.ok(
     !packagedFiles.some((entry) => typeof entry === 'string' && entry.includes('web/dist-app')),
   );

@@ -85,9 +85,9 @@ test('the approved empty renderer architecture passes the repository checker', (
   assert.deepEqual(findRendererArchitectureViolations(root), []);
 });
 
-test('the repository checker rejects legacy access and undeclared feature structure', (context) => {
+test('the repository checker rejects implementation access and undeclared feature structure', (context) => {
   const root = fixture(context);
-  write(root, 'renderer/src/main.ts', "import '../../web-src/src/app';\n");
+  write(root, 'renderer/src/main.ts', "import '../../server/index';\n");
   write(root, 'renderer/src/dynamic.ts', "export const load = () => import('../outside');\n");
   write(root, 'renderer/src/required.ts', "export const load = () => require('../outside');\n");
   write(root, 'renderer/src/features/unknown/helpers.ts', 'export const value = true;\n');
@@ -97,8 +97,8 @@ test('the repository checker rejects legacy access and undeclared feature struct
     'renderer/src/features/unknown has no feature ownership declaration',
     'renderer/src/features/unknown/helpers.ts is not an approved feature layer',
     'renderer/src/features/unknown/public.ts is required for an implemented feature',
-    'renderer/src/main.ts references forbidden implementation path web-src',
-    'renderer/src/main.ts uses parent-relative import ../../web-src/src/app; use ./ or @/',
+    'renderer/src/main.ts references forbidden implementation path ../server/',
+    'renderer/src/main.ts uses parent-relative import ../../server/index; use ./ or @/',
     'renderer/src/required.ts uses parent-relative import ../outside; use ./ or @/',
   ]);
 });

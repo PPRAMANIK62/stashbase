@@ -255,7 +255,7 @@ export function findRendererArchitectureViolations(root = repositoryRoot) {
   for (const absolute of sourceFiles(path.join(root, 'renderer'))) {
     const source = fs.readFileSync(absolute, 'utf8');
     const relative = slash(path.relative(root, absolute));
-    for (const forbidden of ['web-src', '../server/', '../electron/']) {
+    for (const forbidden of ['../server/', '../electron/']) {
       if (source.includes(forbidden)) {
         violations.push(`${relative} references forbidden implementation path ${forbidden}`);
       }

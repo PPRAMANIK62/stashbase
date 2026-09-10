@@ -7,8 +7,7 @@
 // when some script names it verbatim or matches it through a glob token.
 // A recursive glob wires everything beneath it, which is the point of using
 // one — the renderer's tests live beside the feature that owns them, so
-// enumerating them here would go stale on every move. The inert `web-src`
-// reference tree is intentionally outside the supported test inventory.
+// enumerating them here would go stale on every move.
 // Python tests run by unittest discovery, so they do not need this check.
 
 import fs from 'node:fs';

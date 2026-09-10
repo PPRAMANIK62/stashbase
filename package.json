@@ -133,7 +133,6 @@
     "files": [
       "package.json",
       "electron/**/*",
-      "!electron/preload.cjs",
       "shared/**/*",
       "dist/server/**",
       "dist/mcp/**",
