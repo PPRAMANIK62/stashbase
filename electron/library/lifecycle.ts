@@ -7,12 +7,14 @@ import {
   LIBRARY_FOLDER_REMOVED_CHANNEL,
   LIBRARY_LIFECYCLE_CAPABILITY,
   LIBRARY_NOTIFY_FOLDER_REMOVED_CHANNEL,
+  LIBRARY_OPEN_FOLDER_WINDOW_CHANNEL,
   LIBRARY_PREPARE_FOLDER_REMOVAL_CHANNEL,
   LIBRARY_SET_ACTIVE_FOLDER_CHANNEL,
   type LibraryFolderDialogFailure,
   libraryFolderPathRequestSchema,
   libraryFolderRemovalReadySchema,
   libraryLifecycleResponseSchema,
+  libraryOpenFolderWindowResponseSchema,
   libraryPrepareFolderRemovalResponseSchema,
   librarySetActiveFolderRequestSchema,
 } from '../../shared/protocols/electron/library.ts';
@@ -31,6 +33,14 @@ type LifecycleWindow = BrowserWindow & { webContents: WindowWebContents };
 export interface LifecycleDependencies extends SenderAuthorization {
   ipcMain: Pick<IpcMain, 'handle'>;
   liveWindows(): LifecycleWindow[];
+  /** Shows a member in a window of its own, or focuses the one already
+   *  showing it. Main owns which of the two happens; null means neither
+   *  could. The sender is passed so main can exclude it from the match — a
+   *  window asking for a folder means a second window, not itself. */
+  openFolderWindow(
+    window: BrowserWindow,
+    folderPath: string,
+  ): Promise<'opened' | 'focused' | null>;
   setActiveFolder(window: BrowserWindow, folderPath: string | null): boolean;
   windowsForFolder(folderPath: string): LifecycleWindow[];
 }
@@ -124,6 +134,23 @@ export function registerLifecycle(dependencies: LifecycleDependencies): void {
       return failure('unavailable', 'The window folder lifecycle is unavailable.');
     }
     return libraryLifecycleResponseSchema.parse({ ok: true });
+  });
+
+  dependencies.ipcMain.handle(LIBRARY_OPEN_FOLDER_WINDOW_CHANNEL, async (event, rawRequest) => {
+    const senderWindow = authorizeSender(event, dependencies, LIBRARY_LIFECYCLE_CAPABILITY);
+    if (!senderWindow) {
+      return failure('unauthorized', 'This window cannot open another window.');
+    }
+    const request = libraryFolderPathRequestSchema.safeParse(rawRequest);
+    if (!request.success) {
+      return failure('invalid-response', 'The folder window request was invalid.');
+    }
+    // The path is a folder path the schema accepted, not a membership claim.
+    // Main decides whether it can be shown, exactly as it does for every other
+    // way a folder reaches a window.
+    const action = await dependencies.openFolderWindow(senderWindow, request.data.folderPath);
+    if (!action) return failure('unavailable', 'That folder could not be opened in a window.');
+    return libraryOpenFolderWindowResponseSchema.parse({ action, ok: true });
   });
 
   dependencies.ipcMain.handle(LIBRARY_PREPARE_FOLDER_REMOVAL_CHANNEL, async (event, rawRequest) => {

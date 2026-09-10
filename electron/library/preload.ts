@@ -4,12 +4,14 @@ import {
   LIBRARY_FOLDER_REMOVAL_REQUESTED_CHANNEL,
   LIBRARY_FOLDER_REMOVED_CHANNEL,
   LIBRARY_NOTIFY_FOLDER_REMOVED_CHANNEL,
+  LIBRARY_OPEN_FOLDER_WINDOW_CHANNEL,
   LIBRARY_PREPARE_FOLDER_REMOVAL_CHANNEL,
   LIBRARY_SET_ACTIVE_FOLDER_CHANNEL,
   type LibraryFolderDialogFailure,
   type LibraryFolderDialogRequest,
   type LibraryFolderDialogResponse,
   type LibraryLifecycleResponse,
+  type LibraryOpenFolderWindowResponse,
   type LibraryPrepareFolderRemovalResponse,
   libraryFolderPathRequestSchema,
   libraryFolderDialogRequestSchema,
@@ -17,6 +19,7 @@ import {
   libraryFolderRemovalReadySchema,
   libraryFolderRemovalRequestedSchema,
   libraryLifecycleResponseSchema,
+  libraryOpenFolderWindowResponseSchema,
   libraryPrepareFolderRemovalResponseSchema,
   librarySetActiveFolderRequestSchema,
 } from '../../shared/protocols/electron/library.ts';
@@ -31,6 +34,7 @@ export interface LibraryPreload {
     request?: Partial<LibraryFolderDialogRequest>,
   ): Promise<LibraryFolderDialogResponse>;
   notifyFolderRemoved(folderPath: string): Promise<LibraryLifecycleResponse>;
+  openFolderWindow(folderPath: string): Promise<LibraryOpenFolderWindowResponse>;
   onFolderRemoved(handler: (folderPath: string) => void): () => void;
   onPrepareFolderRemoval(
     handler: (folderPath: string) => boolean | Promise<boolean>,
@@ -134,6 +138,16 @@ export function createLibraryPreload(ipcRenderer: IpcRenderer): LibraryPreload {
         LIBRARY_NOTIFY_FOLDER_REMOVED_CHANNEL,
         libraryFolderPathRequestSchema.parse({ folderPath }),
       );
+    },
+    async openFolderWindow(folderPath: string) {
+      const request = libraryFolderPathRequestSchema.parse({ folderPath });
+      try {
+        const response = await ipcRenderer.invoke(LIBRARY_OPEN_FOLDER_WINDOW_CHANNEL, request);
+        const parsed = libraryOpenFolderWindowResponseSchema.safeParse(response);
+        return parsed.success ? parsed.data : invalidLifecycleResponse();
+      } catch {
+        return lifecycleUnavailable();
+      }
     },
     onFolderRemoved(handler: (folderPath: string) => void) {
       folderRemovedHandlers.add(handler);

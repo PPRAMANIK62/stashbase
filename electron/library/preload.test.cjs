@@ -88,3 +88,31 @@ test('library preload validates lifecycle calls and owns subscription cleanup', 
     { folderPath: '/workspace/notes', ready: true, requestId: 'request-1' },
   ]);
 });
+
+test('library preload validates the folder-window call and its answer', async () => {
+  const ipc = createIpc({ action: 'focused', ok: true });
+  const api = createLibraryPreload(ipc);
+
+  assert.deepEqual(await api.openFolderWindow('/workspace/notes'), {
+    action: 'focused',
+    ok: true,
+  });
+  assert.deepEqual(ipc.invocations.at(-1), [
+    'library:open-folder-window',
+    { folderPath: '/workspace/notes' },
+  ]);
+
+  // A shape this build does not understand and a bridge that threw both read
+  // as a refusal rather than reaching the renderer as a success. The answer is
+  // strict: main and this preload ship together, so an unknown action or an
+  // unknown field is a bug rather than a newer peer.
+  const wrong = createLibraryPreload(createIpc({ action: 'teleported', ok: true }));
+  assert.equal((await wrong.openFolderWindow('/workspace/notes')).ok, false);
+  const extra = createLibraryPreload(createIpc({ action: 'opened', ok: true, surprise: 1 }));
+  assert.equal((await extra.openFolderWindow('/workspace/notes')).ok, false);
+  const broken = createLibraryPreload(createIpc(new Error('no bridge')));
+  assert.deepEqual(await broken.openFolderWindow('/workspace/notes'), {
+    failure: { kind: 'unavailable', message: 'The folder lifecycle is unavailable.' },
+    ok: false,
+  });
+});

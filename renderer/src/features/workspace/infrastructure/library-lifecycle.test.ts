@@ -10,6 +10,7 @@ function bridge(overrides: Partial<LibraryLifecycleBridge> = {}): LibraryLifecyc
     notifyFolderRemoved: vi.fn(async () => ({ ok: true as const })),
     onFolderRemoved: vi.fn(() => () => undefined),
     onPrepareFolderRemoval: vi.fn(() => () => undefined),
+    openFolderWindow: vi.fn(async () => ({ action: 'opened' as const, ok: true as const })),
     prepareFolderRemoval: vi.fn(async () => ({ ok: true as const, ready: true })),
     setActiveFolder: vi.fn(async () => ({ ok: true as const })),
     ...overrides,

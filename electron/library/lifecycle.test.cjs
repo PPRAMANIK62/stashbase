@@ -28,6 +28,7 @@ function windowFixture(id, url = 'app://renderer/') {
 
 function harness() {
   const handlers = new Map();
+  const opened = [];
   const first = windowFixture(11);
   const second = windowFixture(12);
   const windows = [first, second];
@@ -43,6 +44,10 @@ function harness() {
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
     isLiveWindow: () => true,
     liveWindows: () => windows.map((candidate) => candidate.window),
+    openFolderWindow: async (window, folderPath) => {
+      opened.push([window, folderPath]);
+      return folderPath === '/workspace/missing' ? null : 'opened';
+    },
     setActiveFolder: (window, folderPath) => {
       folders.set(window, folderPath);
       return true;
@@ -56,7 +61,7 @@ function harness() {
     senderFrame: fixture.frame,
   });
   registerLifecycle(dependencies);
-  return { eventFor, first, folders, handlers, second };
+  return { eventFor, first, folders, handlers, opened, second };
 }
 
 test('folder removal coordinator rejects stale acknowledgements and settles current work', async () => {
@@ -139,4 +144,47 @@ test('lifecycle handlers deny untrusted senders before changing window state', a
     },
   );
   assert.equal(setup.folders.get(setup.first.window), '/workspace/notes');
+});
+
+test('opening a member in a window authorizes the sender and answers what main did', async () => {
+  const setup = harness();
+  const handler = setup.handlers.get('library:open-folder-window');
+
+  assert.deepEqual(
+    await handler(setup.eventFor(setup.first), { folderPath: '/workspace/writing' }),
+    { action: 'opened', ok: true },
+  );
+  // The sender crosses so main can exclude it from the match: a window asking
+  // for a folder means a second window, not itself.
+  assert.deepEqual(setup.opened, [[setup.first.window, '/workspace/writing']]);
+
+  // A folder main could not show is a refusal, not a silent success.
+  assert.deepEqual(
+    await handler(setup.eventFor(setup.first), { folderPath: '/workspace/missing' }),
+    {
+      failure: { kind: 'unavailable', message: 'That folder could not be opened in a window.' },
+      ok: false,
+    },
+  );
+});
+
+test('opening a window refuses an untrusted sender and a malformed request', async () => {
+  const setup = harness();
+  const handler = setup.handlers.get('library:open-folder-window');
+
+  setup.first.frame.url = 'https://example.com/';
+  assert.deepEqual(
+    await handler(setup.eventFor(setup.first), { folderPath: '/workspace/writing' }),
+    {
+      failure: { kind: 'unauthorized', message: 'This window cannot open another window.' },
+      ok: false,
+    },
+  );
+
+  assert.deepEqual(await handler(setup.eventFor(setup.second), { folderPath: '' }), {
+    failure: { kind: 'invalid-response', message: 'The folder window request was invalid.' },
+    ok: false,
+  });
+  // Neither reached main.
+  assert.deepEqual(setup.opened, []);
 });

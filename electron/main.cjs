@@ -56,6 +56,7 @@ const {
   focusWindow,
   isOAuthReturnUrl,
   isStashBaseProtocolUrl,
+  openOrFocusFolder,
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
   windowLifecycleShortcutAction,
@@ -322,6 +323,17 @@ function installReplacementBoundary() {
       replacementWindowCapabilities.get(win)?.has(capability) === true
     ),
     liveWindows: () => [...mainWindows].filter((win) => isLiveMainWindow(win)),
+    // A folder already showing somewhere is focused rather than opened twice,
+    // which is the same rule the File menu and the protocol launch follow.
+    openFolderWindow: async (win, folder) => {
+      const result = await openOrFocusFolder({
+        createWindow,
+        folder,
+        registry: windowRegistry,
+        senderWindow: win,
+      });
+      return result.ok ? result.action : null;
+    },
     setActiveFolder: (win, folder) => {
       const windowId = windowRegistry.idForWindow(win);
       return windowId ? windowRegistry.setFolder(windowId, folder) : false;

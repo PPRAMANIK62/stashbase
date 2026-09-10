@@ -21,6 +21,7 @@ import {
   type AgentSessionPort,
 } from '@/features/agent/public';
 import { createDocumentAdapters, type DocumentAdapters } from '@/features/documents/public';
+import { createGalleryIndexAdapter, type GalleryPort } from '@/features/gallery/public';
 import {
   createPreparationControlAdapter,
   createPreparationStatusAdapter,
@@ -62,6 +63,7 @@ import type { CaptureBridge } from '@/platform/electron/capture';
 import { createExternalNavigation } from '@/platform/electron/external-navigation';
 import { fileManagerLabel } from '@/platform/electron/file-manager';
 import { createFolderPicker } from '@/platform/electron/folder-picker';
+import { openedFolderWindow } from '@/platform/electron/library-lifecycle';
 import { createHttpClient } from '@/platform/http/client';
 
 /** The folder chrome's dependencies, as the two components declare them. */
@@ -88,6 +90,8 @@ export interface AppDependencies {
     createId: () => string;
     openExternal(href: string): Promise<boolean>;
   };
+  /** The shop, and the whole take-this-copy action it does not own itself. */
+  gallery: GalleryPort;
   library: LibraryChrome;
   preparation: {
     controlApi: PreparationControlPort;
@@ -141,6 +145,28 @@ export function createDependencies(): AppDependencies {
       }),
       createId: () => globalThis.crypto.randomUUID(),
       openExternal: externalNavigation.open,
+    },
+    gallery: {
+      // Taking a copy is the Library's ordinary public import into folder
+      // home, then a window of its own. Neither is the shop's to own: the
+      // destination and the name rules belong to the Library, and the window
+      // belongs to the desktop. A copy the Library made but no window could
+      // show is still a folder in the switcher, so it says exactly that
+      // rather than implying nothing happened.
+      async copy(request, signal) {
+        // The entry's own name when the Library's rule accepts it, since that
+        // is what the reader just read on the card; the repository's derived
+        // name otherwise.
+        const derived = workspace.githubImport.readUrl(request.repo);
+        const folderName = workspace.githubImport.readFolderName(request.name)
+          ?? (derived.ok ? derived.folderName : request.name);
+        const path = await workspace.githubImport.run(request.repo, folderName, signal);
+        if (!(await openedFolderWindow(bridge.library, path))) {
+          throw new Error('the copy was made but no window could open it');
+        }
+        return path;
+      },
+      ...createGalleryIndexAdapter(http),
     },
     library: {
       api: workspace.library,

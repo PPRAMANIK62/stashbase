@@ -4,6 +4,7 @@ export const LIBRARY_FOLDER_DIALOG_CAPABILITY = 'library.choose-folder';
 export const LIBRARY_FOLDER_DIALOG_CHANNEL = 'library:choose-folder';
 export const LIBRARY_LIFECYCLE_CAPABILITY = 'library.lifecycle';
 export const LIBRARY_SET_ACTIVE_FOLDER_CHANNEL = 'library:set-active-folder';
+export const LIBRARY_OPEN_FOLDER_WINDOW_CHANNEL = 'library:open-folder-window';
 export const LIBRARY_PREPARE_FOLDER_REMOVAL_CHANNEL = 'library:prepare-folder-removal';
 export const LIBRARY_FOLDER_REMOVAL_REQUESTED_CHANNEL = 'library:folder-removal-requested';
 export const LIBRARY_FOLDER_REMOVAL_READY_CHANNEL = 'library:folder-removal-ready';
@@ -62,6 +63,13 @@ export const libraryPrepareFolderRemovalSuccessSchema = z
   .object({ ok: z.literal(true), ready: z.boolean() })
   .strict();
 
+/** Opening a member in a window answers which of the two things happened, so
+ *  a caller can say "opened it" without claiming a second window that main
+ *  deliberately did not make: a folder already on screen is focused instead. */
+export const libraryOpenFolderWindowSuccessSchema = z
+  .object({ ok: z.literal(true), action: z.enum(['opened', 'focused']) })
+  .strict();
+
 export const libraryLifecycleResponseSchema = z.union([
   libraryLifecycleSuccessSchema,
   libraryFolderDialogFailureSchema,
@@ -69,6 +77,11 @@ export const libraryLifecycleResponseSchema = z.union([
 
 export const libraryPrepareFolderRemovalResponseSchema = z.union([
   libraryPrepareFolderRemovalSuccessSchema,
+  libraryFolderDialogFailureSchema,
+]);
+
+export const libraryOpenFolderWindowResponseSchema = z.union([
+  libraryOpenFolderWindowSuccessSchema,
   libraryFolderDialogFailureSchema,
 ]);
 
@@ -85,4 +98,7 @@ export type LibraryFolderRemovalReady = z.infer<typeof libraryFolderRemovalReady
 export type LibraryLifecycleResponse = z.infer<typeof libraryLifecycleResponseSchema>;
 export type LibraryPrepareFolderRemovalResponse = z.infer<
   typeof libraryPrepareFolderRemovalResponseSchema
+>;
+export type LibraryOpenFolderWindowResponse = z.infer<
+  typeof libraryOpenFolderWindowResponseSchema
 >;

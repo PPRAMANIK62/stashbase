@@ -489,25 +489,89 @@ ready.
 
 **Blocked by:** 68, 72.
 
-**Status:** Not started.
+**Status:** Complete.
 
-Complete the J13 renderer responsibilities. A bare window derives the Gallery
-band below its blank Chat composer, and a folder window reaches the same shop
-as a near-fullscreen overlay from an entry in the existing replacement
-sidebar. The entry
-detail is a product-page dialog carrying the file tree, the producing request
-as copy-only text, curated screenshots, and Make a copy, which reuses the
-task 68 import into folder home and opens the result in a new window.
+Complete the J13 renderer responsibilities. The Gallery is a shelf of
+ready-made Wikis, each one a real folder with a wiki already built from it, and
+Make a copy reuses the task 68 public-repository import into folder home and
+opens the result in a window of its own. Reading the shelf costs a reader no
+folder, no account, and no Agent runtime.
 
-The index and screenshots travel only through the daemon's pinned-host proxy,
-which suits the replacement's strict `app://` policy. Total index failure
-answers with a success envelope carrying an unsupported schema, and the
-client falls back to the bundled snapshot without console noise offline.
+Almost all of it was already standing: the daemon's pinned-host index and image
+proxy, the fallback to the bundled snapshot when a total index failure answers
+with a success envelope carrying an unsupported schema, the near-fullscreen
+overlay, the entry page carrying the file tree and the producing request as
+copy-only text alongside the curated screenshots and Make a copy, and the
+sidebar entry that opens the shop over a folder window. One thing was missing,
+and it was a way the journey could not be reached rather than a feature it
+lacked.
 
-Register J13 in the journey document and Journey Coverage in the same change.
+A bare window did not derive the band. It offered a **Browse the Gallery**
+button onto the same overlay, so the shelf existed only behind a modal a reader
+had to already want to open. That is the one thing a band cannot be. The band's
+whole product job is to teach the journey by example, and it can only do that
+by being on the screen before anyone clicks; `product-direction` names the
+Gallery as what teaches this, and task 72 leaned on that when it capped the
+starter row at three. The button is gone and the entries are on the screen.
 
-Evidence: focused proxy protocol, adapter, fallback, band, overlay, and
-detail-dialog tests; the gallery server suite; story accessibility; J13 and
-Journey Coverage updates; a driven runtime pass from the band through Make a
-copy; `pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`.
+The band's host is the welcome screen, not a Chat pane. This task was written
+against `web-src`, whose bare window is a blank Chat, which is why the original
+text placed the band below a blank Chat composer. The replacement has no Chat
+on a bare window at all: `workspace-layout` hides the panes and shows the
+welcome screen whenever no folder is open, so the bare window *is* the welcome
+screen. Mounting the band there is a deliberate adaptation to the
+replacement's own composition rather than a shortcut around the requirement.
 
+The band is a third frame over the state the shop already had, not a third
+shop. `useGalleryShop` holds a whole visit as one open flag and one selected
+entry, and a band card sets both at once, so a card on the welcome screen lands
+straight on that entry's page where the sidebar row still opens the shelf. Back
+clears the entry and leaves the reader on the overlay's shelf, which is the
+only home a reader who arrived through a card has. There is still one index and
+one copy in flight.
+
+The welcome screen learned nothing about the Gallery. The renderer's
+`no-sibling-feature-imports` rule forbids `features/workspace` from importing
+`features/gallery`, its `public.ts` included, so the band arrives as a
+`ReactNode` slot composed in `app/` exactly the way the old callback did. The
+screen renders the slot it is handed and stands without one.
+
+The screen itself became a page. It was one centered column at a single narrow
+measure, which a shelf cannot live inside. The hero keeps that measure and its
+vertical centering when there is no band; with one, the column scrolls and the
+band sits below the hero at a wider measure, because the shop's grid is
+container-driven and a narrow column would hold one card per row. The band's
+own heading and line keep the hero's center axis: the shelf is wider than the
+hero, but two competing alignments on one screen read as two screens.
+
+The action row above it wrapped its labels. Three icon buttons want about
+482px and the hero measure was 448px, so flex squeezed them and `Button` had no
+`whitespace-nowrap` to stop a squeezed label breaking in half. The primitive
+holds that rule now, because a button label wrapping is never what anyone
+wants; the hero measure widened one step so the row fits at rest, and the row
+wraps whole buttons when a window really is too narrow. The defect predates
+this task and was reached through it.
+
+Registering J13 in `design-docs/user-journeys.md` and in Journey Coverage,
+named in this task's original evidence line, is deferred under
+[`docs/frontend-migration/AGENTS.md`](../AGENTS.md) rather than done here.
+Migration scaffolding does not update the permanent Shipping record, and
+Journey Coverage waits for the maintainer's finalization. The full driven pass
+from the band through Make a copy belongs with that deferred evidence, so the
+ledger row is Building rather than Proven.
+
+The band itself was driven in the real application over the debugging
+protocol. A window opened against a clean profile derived the shelf on its
+welcome screen with no folder open and no click, and a card opened that
+entry's page carrying its tree, its producing request, and Make a copy. Make a
+copy was not pressed: it downloads a public repository and registers a real
+folder, which is why it stays with the deferred evidence. Composition was
+reviewed by eye from that pass.
+
+Evidence: a composition test proving the published entry is on the welcome
+screen with no folder open and no click at all, and that a band card opens that
+entry's page rather than the shelf; the existing composition test for the
+sidebar entrance and the copy, unchanged; a workspace test for the welcome
+screen rendering the slot it is handed and standing without one; plus
+`pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`, `pnpm test:renderer`,
+`pnpm test:protocols`, `pnpm test:library-files`, and `pnpm test:docs`.

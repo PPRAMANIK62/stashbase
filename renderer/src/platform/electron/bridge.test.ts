@@ -12,6 +12,7 @@ const library = {
   chooseFolder: async () => ({ ok: true as const, folderPath: null }),
   notifyFolderRemoved: async () => ({ ok: true as const }),
   onFolderRemoved: () => () => undefined,
+  openFolderWindow: async () => ({ action: 'opened' as const, ok: true as const }),
   onPrepareFolderRemoval: () => () => undefined,
   prepareFolderRemoval: async () => ({ ok: true as const, ready: true }),
   setActiveFolder: async () => ({ ok: true as const }),

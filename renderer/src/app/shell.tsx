@@ -36,6 +36,7 @@ import { useFolderRefresh } from './composition/folder/use-folder-refresh';
 import { useRecoveryDrafts } from './composition/folder/use-recovery-drafts';
 import { WorkspaceDialogs } from './composition/layout/workspace-dialogs';
 import { WorkspaceLayout } from './composition/layout/workspace-layout';
+import { useGalleryShop } from './composition/gallery/use-gallery-shop';
 import { WorkspacePanes } from './composition/layout/workspace-panes';
 import { WorkspaceSidebar } from './composition/layout/workspace-sidebar';
 import { WorkspaceTitlebar } from './composition/layout/workspace-titlebar';
@@ -128,9 +129,13 @@ function WorkspaceWindow() {
     workspace,
   });
 
+  const gallery = useGalleryShop(dependencies.gallery);
+
   return (
     <WorkspaceLayout
       dialogs={
+        <>
+        {gallery.surfaces}
         <WorkspaceDialogs
           activeFolderPath={selectedPath}
           documents={documents}
@@ -139,6 +144,7 @@ function WorkspaceWindow() {
           settings={chrome.settings}
           workspace={workspace}
         />
+        </>
       }
       hasActiveFolder={activeFolder !== null}
       notices={chrome.notices}
@@ -168,6 +174,7 @@ function WorkspaceWindow() {
               : null,
           }}
           navigator={chrome.navigator}
+          onBrowseGallery={gallery.browse}
           onReprocess={refresh.reprocess}
           settings={chrome.settings}
           sources={sources}
@@ -179,6 +186,7 @@ function WorkspaceWindow() {
       welcome={
         <LibraryWelcome
           {...dependencies.library}
+          gallery={gallery.band}
           githubImport={workspaceDeps.adapters.githubImport}
           isRestoringSession={session.status.kind === 'restoring'}
         />

@@ -13,6 +13,10 @@
       "productArea": "Documents"
     },
     {
+      "name": "gallery",
+      "productArea": "Workspace / Agent Panel"
+    },
+    {
       "name": "preparation",
       "productArea": "Preparation"
     },
@@ -54,6 +58,7 @@
     "shared/protocols/http/capture.ts",
     "shared/protocols/http/embedder.ts",
     "shared/protocols/http/files.ts",
+    "shared/protocols/http/gallery.ts",
     "shared/protocols/http/github-import.ts",
     "shared/protocols/http/index-status.ts",
     "shared/protocols/http/library.ts",

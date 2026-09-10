@@ -148,4 +148,21 @@ describe('library welcome', () => {
     expect(screen.queryByRole('heading', { name: 'StashBase' })).toBeNull();
     expect(openFolder).toHaveBeenCalledTimes(2);
   });
+
+  it('renders the Gallery band it is handed and stands without one', async () => {
+    const withBand = renderWelcome({
+      api: { load: vi.fn(async () => emptyLibrary) },
+      gallery: <p>Widget Handbook</p>,
+    });
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Or start from a ready-made Wiki' }),
+    ).not.toBeNull();
+    expect(screen.getByText('Widget Handbook')).not.toBeNull();
+    withBand.unmount();
+
+    renderWelcome({ api: { load: vi.fn(async () => emptyLibrary) } });
+    expect(await screen.findByRole('heading', { level: 1, name: 'StashBase' })).not.toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Or start from a ready-made Wiki' })).toBeNull();
+  });
 });

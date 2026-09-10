@@ -6,7 +6,7 @@
  * chats list to the agent catalog, search to its retrieval ports — so the
  * navigator itself only decides which of them is on screen.
  */
-import { Bug, Settings as SettingsIcon } from 'lucide-react';
+import { Bug, Settings as SettingsIcon, Store } from 'lucide-react';
 
 import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
 import type { SidebarNavigatorState } from '@/app/composition/commands/use-workspace-commands';
@@ -43,6 +43,8 @@ export interface WorkspaceSidebarProps {
     search: FolderSearchReadiness;
   };
   navigator: SidebarNavigatorState;
+  /** Opens the Gallery over this window. The folder stays where it is. */
+  onBrowseGallery(): void;
   onReprocess(source: SourceReference): void;
   settings: SettingsCommand;
   sources: DocumentSources;
@@ -55,6 +57,7 @@ export function WorkspaceSidebar({
   documents,
   folder,
   navigator: sidebar,
+  onBrowseGallery,
   onReprocess,
   settings,
   sources,
@@ -127,6 +130,11 @@ export function WorkspaceSidebar({
       )}
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton icon={Store} onClick={onBrowseGallery}>
+              Gallery
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton icon={SettingsIcon} onClick={() => settings.openSettings()}>
               Settings
