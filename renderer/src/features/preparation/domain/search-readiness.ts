@@ -1,5 +1,5 @@
 /**
- * What a folder's preparation and AI Index snapshot means for searching it.
+ * What a folder's preparation and search-by-meaning snapshot means for searching it.
  *
  * Preparation owns this projection because it owns the snapshot. Search reads
  * the projection and never the snapshot, so the retrieval surfaces cannot
@@ -11,7 +11,7 @@ import type { FolderIndexStatus, SemanticIndexStatus } from '@/shared/domain/fol
 
 import { folderPreparationSummary, type FolderPreparationSummary } from './readiness';
 
-/** The AI Index answer a search surface asks for: whether it can serve a
+/** The search-by-meaning answer a search surface asks for: whether it can serve a
  *  query, and what it should say if it cannot. It is the daemon's own set of
  *  states with two differences — a failed index carries the warning that
  *  explains it, and `unknown` names the folder whose status has not arrived,

@@ -43,6 +43,6 @@ describe('index decision API', () => {
     };
     await expect(
       createIndexDecisionAdapter(client).decide('/library/research', 'defer', signal),
-    ).rejects.toMatchObject({ kind: 'unavailable', message: 'AI Index could not be deferred.' });
+    ).rejects.toMatchObject({ kind: 'unavailable', message: 'Preparation could not be deferred.' });
   });
 });

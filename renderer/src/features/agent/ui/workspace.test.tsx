@@ -99,14 +99,14 @@ describe('Agent workspace', () => {
     expect(port.connect).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Chat scope: Research')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Close conversation' })).toBeNull();
-    expect(screen.getAllByRole('button', { name: 'Provider: Built-in' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Provider: Wiki Agent' })).toHaveLength(1);
 
     const newChat = screen.getByRole('button', { name: 'Start new chat' });
     await userEvent.click(newChat);
     expect(port.connect).not.toHaveBeenCalled();
     expect(runtime.activeSession().store.getState().agent).toBe('stashbase');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: Built-in' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Wiki Agent' }));
     const codexOption = await screen.findByRole('menuitemradio', { name: 'Codex' });
     const claudeOption = screen.getByRole('menuitemradio', { name: 'Claude Code' });
     // The provider marks are aria-hidden, injected third-party SVG markup (`@lobehub/icons-static-svg`);
@@ -128,7 +128,7 @@ describe('Agent workspace', () => {
     const requests = () => vi.mocked(port.connect).mock.calls.map(([request]) => request);
     renderWorkspace(port);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Provider: Built-in' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Provider: Wiki Agent' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     await userEvent.click(screen.getByRole('button', { name: 'Model: Default' }));
     expect(requests()).toHaveLength(1);
@@ -172,7 +172,7 @@ describe('Agent workspace', () => {
     const { listeners, port, sent } = agentSessionPort();
     const { runtime } = renderWorkspace(port);
     await screen.findByText('What should we work on?');
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: Built-in' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Wiki Agent' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
 
     const composer = screen.getByRole('textbox', { name: 'Message' });

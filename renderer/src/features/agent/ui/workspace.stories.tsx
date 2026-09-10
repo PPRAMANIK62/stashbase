@@ -20,7 +20,7 @@ const abilities: Agent['abilities'] = {
 const agents: Agent[] = [
   { abilities, id: 'codex', label: 'Codex', needsSignIn: false, ready: true },
   { abilities, id: 'claude', label: 'Claude Code', needsSignIn: false, ready: true },
-  { abilities, id: 'stashbase', label: 'Built-in', needsSignIn: false, ready: true },
+  { abilities, id: 'stashbase', label: 'Wiki Agent', needsSignIn: false, ready: true },
 ];
 
 const STORY_IMAGE =

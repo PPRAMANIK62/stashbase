@@ -136,7 +136,7 @@ describe('search surface registry', () => {
   it('sends nothing for a backend its readiness gate refuses', async () => {
     const fetch = vi.fn(async () => rowsOf(['unreachable']));
     const gated = fakeBackend('notes', {
-      indexGate: { ready: () => false, unavailableTitle: 'Match notes — needs AI Index' },
+      indexGate: { ready: () => false, unavailableTitle: 'Match notes — needs setup' },
       lane: () => ({ fetch, key: ['test', 'notes'] }),
     });
     renderSurface([gated]);

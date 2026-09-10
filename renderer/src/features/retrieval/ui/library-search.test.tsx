@@ -247,13 +247,13 @@ describe('Library Search', () => {
     await waitFor(() => expect(firstSignal?.aborted).toBe(true));
   });
 
-  it('switches to Similar mode within the selected folder and navigates by chunk anchor', async () => {
+  it('switches to search by meaning within the selected folder and navigates by chunk anchor', async () => {
     const semanticApi = semanticSearchApi({ search: vi.fn(async () => semanticResult) });
     const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(exactApi, { semanticApi });
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('tab', { name: 'Similar' }));
+    await user.click(screen.getByRole('tab', { name: 'By meaning' }));
     expect(screen.queryByRole('combobox', { name: 'Search scope' })).toBeNull();
     await user.type(screen.getByRole('combobox', { name: 'Search current workspace' }), 'answers');
 
@@ -282,7 +282,7 @@ describe('Library Search', () => {
     );
   });
 
-  it('explains a missing AI Index without sending a Similar request and keeps Exact usable', async () => {
+  it('explains missing search-by-meaning setup without sending a request and keeps keyword search usable', async () => {
     const semanticApi = semanticSearchApi({ search: vi.fn(async () => semanticResult) });
     const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(exactApi, {
@@ -291,22 +291,22 @@ describe('Library Search', () => {
     });
     const user = userEvent.setup();
 
-    const similarTab = screen.getByRole('tab', { name: 'Similar' });
-    expect(similarTab.getAttribute('title')).toBe('Match by meaning — needs AI Index');
+    const similarTab = screen.getByRole('tab', { name: 'By meaning' });
+    expect(similarTab.getAttribute('title')).toBe('Find matches even when the wording differs — needs setup');
     await user.click(similarTab);
     await user.type(screen.getByRole('combobox', { name: 'Search current workspace' }), 'answers');
 
-    expect(screen.getByText('Set up AI Index to search by meaning.')).not.toBeNull();
-    expect(screen.getByText('Exact text search works without AI Index.')).not.toBeNull();
+    expect(screen.getByText('To search by meaning, set it up in StashBase Settings.')).not.toBeNull();
+    expect(screen.getByText('Keyword search keeps working without it.')).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'Open Settings' }));
     expect(rendered.onOpenSettings).toHaveBeenCalledWith('ai-index');
     expect(semanticApi.search).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('tab', { name: 'Exact' }));
+    await user.click(screen.getByRole('tab', { name: 'By keyword' }));
     expect(await screen.findByRole('option', { name: /answer\.md/u })).not.toBeNull();
   });
 
-  it('offers the AI Index workload decision in both modes and forwards it folder-explicitly', async () => {
+  it('offers the search-by-meaning workload decision in both modes and forwards it folder-explicitly', async () => {
     const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(exactApi, {
       readiness: {
@@ -315,8 +315,8 @@ describe('Library Search', () => {
       },
     });
 
-    expect(screen.getByText('Large AI Index workload')).not.toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Build AI Index' }));
+    expect(screen.getByText('Many files need preparation for search by meaning')).not.toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Prepare files' }));
     await waitFor(() =>
       expect(rendered.decisions.decide).toHaveBeenCalledWith(
         '/library/research',

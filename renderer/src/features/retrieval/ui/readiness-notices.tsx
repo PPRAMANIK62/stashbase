@@ -8,11 +8,11 @@ import type { IndexDecisionAction } from '@/features/retrieval/hooks/use-index-d
 import { cn } from '@/lib/utils';
 
 const ACTION_LABELS: Record<SemanticReadinessAction, string> = {
-  build: 'Build AI Index',
+  build: 'Prepare files',
   'dismiss-warning': 'Dismiss',
   'not-now': 'Not now',
   'open-settings': 'Open Settings',
-  resume: 'Resume AI Index',
+  resume: 'Resume preparation',
   'retry-index': 'Retry',
 };
 
@@ -34,7 +34,7 @@ export interface SemanticReadinessNoticeProps {
   pendingAction: IndexDecisionAction | null;
 }
 
-/** What the AI Index needs from the reader. The notice already decided it
+/** What search by meaning needs from the reader. The notice already decided it
  *  has something to say, so this view only renders it. */
 export function SemanticReadinessNotice({
   error,

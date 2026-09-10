@@ -36,7 +36,7 @@ import { RemoveFolderDialog } from './remove-folder-dialog';
 
 export interface LibrarySidebarProps {
   api: LibraryPort;
-  /** True when preparation or the AI Index in the active folder needs the user. */
+  /** True when preparation or search by meaning in the active folder needs the user. */
   attention?: boolean;
   beforeFolderChange?: () => Promise<boolean>;
   folderPicker: LibraryFolderPickerPort;

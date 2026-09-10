@@ -25,7 +25,7 @@ export const SemanticSearchError = featureErrorClass<SemanticFailureExtra>('Sema
 
 type IndexDecision = 'start' | 'defer';
 
-/** Folder-explicit AI Index decisions and index-warning recovery. */
+/** Folder-explicit search-by-meaning decisions and index-warning recovery. */
 export interface IndexDecisionPort {
   decide(folderPath: string, decision: IndexDecision, signal: AbortSignal): Promise<void>;
   dismissWarning(folderPath: string, signal: AbortSignal): Promise<void>;

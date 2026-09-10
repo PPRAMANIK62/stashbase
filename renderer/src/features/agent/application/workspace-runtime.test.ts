@@ -7,7 +7,7 @@ import { createAgentWorkspaceRuntime } from './workspace-runtime';
 const noop = (): void => undefined;
 
 describe('AgentWorkspaceRuntime', () => {
-  it('starts with one Built-in chat and reuses only a completely blank tab', () => {
+  it('starts with one Wiki Agent chat and reuses only a completely blank tab', () => {
     let nextId = 0;
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,

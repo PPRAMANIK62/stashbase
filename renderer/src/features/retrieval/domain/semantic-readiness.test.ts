@@ -7,18 +7,18 @@ import {
 } from './semantic-readiness';
 
 describe('semantic readiness', () => {
-  it('explains a missing source and an exhausted allowance without blocking exact search', () => {
+  it('explains a missing source and used-up credits without blocking keyword search', () => {
     const missing = { state: 'not-set-up' } as const;
     expect(canSemanticSearch(missing)).toBe(false);
     expect(semanticIndexNotice(missing)).toMatchObject({
       actions: ['open-settings'],
-      detail: 'Exact text search works without AI Index.',
-      title: 'Set up AI Index to search by meaning.',
+      detail: 'Keyword search keeps working without it.',
+      title: 'To search by meaning, set it up in StashBase Settings.',
     });
 
     const quota = { state: 'quota-exhausted' } as const;
     expect(canSemanticSearch(quota)).toBe(false);
-    expect(semanticIndexNotice(quota)?.title).toContain('allowance is exhausted');
+    expect(semanticIndexNotice(quota)?.title).toContain('credits for search by meaning are used up');
     expect(semanticIndexNotice(quota)?.tone).toBe('attention');
   });
 
@@ -31,9 +31,9 @@ describe('semantic readiness', () => {
     ).toMatchObject({
       actions: ['build', 'not-now'],
       detail:
-        'About 12 files waiting · about 3.0 MiB. Building AI Index may take a while and use provider quota. Exact text search remains available.',
+        'About 12 files waiting · about 3.0 MiB. Preparing them may take a while and use provider quota. Keyword search keeps working.',
       prominent: true,
-      title: 'Large AI Index workload',
+      title: 'Many files need preparation for search by meaning',
     });
 
     const workload = { estimatedBytes: null, files: 1 };
@@ -42,8 +42,8 @@ describe('semantic readiness', () => {
     expect(semanticIndexNotice(partiallyPaused)).toMatchObject({
       actions: ['resume', 'not-now'],
       detail:
-        'About 1 file waiting. Building AI Index may take a while and use provider quota. Exact text search remains available.',
-      title: 'AI Index paused',
+        'About 1 file waiting. Preparing them may take a while and use provider quota. Keyword search keeps working.',
+      title: 'Preparation for search by meaning is paused',
     });
     expect(canSemanticSearch({ partial: false, state: 'paused', workload })).toBe(false);
   });

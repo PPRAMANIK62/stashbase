@@ -52,10 +52,10 @@ describe('semantic search API', () => {
     });
   });
 
-  it('classifies a missing embedding source and an exhausted allowance', async () => {
+  it('classifies a missing embedding source and used-up credits', async () => {
     const keyless: HttpClient = {
       request: vi.fn(async () => ({
-        body: { code: 'EMBEDDER_KEY_REQUIRED', error: 'AI Index is disabled' },
+        body: { code: 'EMBEDDER_KEY_REQUIRED', error: 'search by meaning is not set up' },
         status: 412,
       })),
     };

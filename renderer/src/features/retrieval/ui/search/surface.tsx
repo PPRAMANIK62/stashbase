@@ -1,7 +1,7 @@
 /**
  * The workspace search surface.
  *
- * It owns one query field, one tab per registered backend, the AI Index and
+ * It owns one query field, one tab per registered backend, the search-by-meaning and
  * preparation notices, and the selected backend's rows. Everything a backend
  * differs by — its request, its rows, its copy, its readiness gate — comes
  * from the registry entry, so this module has no per-backend branch.

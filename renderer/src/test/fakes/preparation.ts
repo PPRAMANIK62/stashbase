@@ -8,7 +8,7 @@ import type { FolderIndexStatus } from '@/shared/domain/folder-index-status';
 
 import { RESEARCH_FOLDER } from './workspace';
 
-/** A settled folder: nothing queued, nothing failed, AI Index unavailable
+/** A settled folder: nothing queued, nothing failed, search by meaning unavailable
  *  until a test turns it on. */
 export function folderIndexStatus(overrides: Partial<FolderIndexStatus> = {}): FolderIndexStatus {
   return {

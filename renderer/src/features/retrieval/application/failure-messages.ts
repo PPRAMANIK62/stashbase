@@ -1,7 +1,7 @@
 /**
  * One reader-facing sentence per retrieval refusal.
  *
- * Exact search, Similar search, and the AI Index decisions all report on one
+ * Keyword search, search by meaning, and the setup decisions all report on one
  * ladder, so a surface selects by kind instead of repeating whatever sentence
  * a transport attached. Every backend used to carry an identical fallback of
  * its own; there is one.
@@ -12,8 +12,8 @@ import {
   type FeatureFailureKind,
 } from '@/shared/domain/feature-error';
 
-/** Refusals only the AI Index side of retrieval can meet: the folder has no
- *  configured embedder, or the hosted allowance ran out. */
+/** Refusals only the search-by-meaning side of retrieval can meet: the folder has no
+ *  configured embedder, or the hosted credits ran out. */
 export type SemanticFailureExtra = 'not-set-up' | 'quota-exhausted';
 
 /** Every way a retrieval capability can refuse. */
@@ -21,14 +21,14 @@ export type RetrievalFailureKind = FeatureFailureKind<SemanticFailureExtra>;
 
 const MESSAGES: Readonly<Record<RetrievalFailureKind, string>> = {
   'invalid-response': 'StashBase answered unexpectedly.',
-  'not-set-up': 'Set up AI Index to search by meaning.',
-  'quota-exhausted': 'Your hosted AI Index allowance is exhausted.',
+  'not-set-up': 'To search by meaning, set it up in StashBase Settings.',
+  'quota-exhausted': 'Your hosted credits for search by meaning are used up.',
   'scope-lost': 'That folder is no longer available in this window.',
   unauthorized: 'This window can no longer run that request.',
   unavailable: 'StashBase is unavailable.',
 };
 
-/** Setting up AI Index is the reader's own to complete; every other refusal
+/** Setting up search by meaning is the reader's own to complete; every other refusal
  *  is a capability that could not answer. */
 const INPUT_KINDS: readonly RetrievalFailureKind[] = ['not-set-up'];
 

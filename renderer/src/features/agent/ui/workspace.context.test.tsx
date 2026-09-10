@@ -269,7 +269,7 @@ describe('AgentWorkspace composer context', () => {
       expect.objectContaining({ format: 'pdf', kind: 'source' }),
     ]);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: Built-in' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Wiki Agent' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     expect(await screen.findByRole('button', { name: 'Attach files' })).not.toBeNull();
     const file = new File(['png'], 'shot.png', { type: 'image/png' });

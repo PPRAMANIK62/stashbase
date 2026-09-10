@@ -6,8 +6,8 @@ import { failureMessage, retrievalFailure } from './failure-messages';
 
 describe('retrieval failure messages', () => {
   it('names every kind the retrieval ladder can report', () => {
-    expect(failureMessage('not-set-up')).toBe('Set up AI Index to search by meaning.');
-    expect(failureMessage('quota-exhausted')).toContain('allowance is exhausted');
+    expect(failureMessage('not-set-up')).toBe('To search by meaning, set it up in StashBase Settings.');
+    expect(failureMessage('quota-exhausted')).toContain('credits for search by meaning are used up');
     expect(failureMessage('scope-lost')).toContain('no longer available');
     expect(failureMessage('unauthorized')).toContain('no longer');
     expect(failureMessage('unavailable')).toBe('StashBase is unavailable.');

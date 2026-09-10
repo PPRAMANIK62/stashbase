@@ -1,5 +1,5 @@
 /**
- * AI Index readiness for the search surface.
+ * Search-by-meaning readiness for the search surface.
  *
  * The states arrive already reduced: the shell hands search one variant per
  * observable state, each carrying exactly the facts its notice needs.
@@ -16,7 +16,7 @@ export type SemanticReadinessAction =
   | 'resume'
   | 'retry-index';
 
-/** What an unresolved AI Index build would cost the reader deciding on it. */
+/** What an unresolved search-by-meaning build would cost the reader deciding on it. */
 interface SemanticWorkload {
   readonly estimatedBytes: number | null;
   readonly files: number;
@@ -33,7 +33,7 @@ export type SemanticReadiness =
   | { readonly state: 'ready' }
   | { readonly state: 'unknown' };
 
-const EXACT_STILL_WORKS = 'Exact text search works without AI Index.';
+const EXACT_STILL_WORKS = 'Keyword search keeps working without it.';
 
 function mebibytes(bytes: number): string {
   const value = bytes / (1024 * 1024);
@@ -44,10 +44,10 @@ function workloadDetail(workload: SemanticWorkload): string {
   const files = workload.files;
   const size =
     workload.estimatedBytes === null ? '' : ` · about ${mebibytes(workload.estimatedBytes)} MiB`;
-  return `About ${files} ${files === 1 ? 'file' : 'files'} waiting${size}. Building AI Index may take a while and use provider quota. Exact text search remains available.`;
+  return `About ${files} ${files === 1 ? 'file' : 'files'} waiting${size}. Preparing them may take a while and use provider quota. Keyword search keeps working.`;
 }
 
-/** Whether a Similar search may run now. Exact search never depends on it. */
+/** Whether search by meaning may run now. Keyword search never depends on it. */
 export function canSemanticSearch(readiness: SemanticReadiness): boolean {
   switch (readiness.state) {
     case 'awaiting-decision':
@@ -76,7 +76,7 @@ export interface SemanticIndexNotice {
   readonly tone: 'attention' | 'neutral';
 }
 
-/** What the reader should be told about the AI Index, or null when the state
+/** What the reader should be told about search by meaning, or null when the state
  *  has nothing to say. */
 export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndexNotice | null {
   switch (readiness.state) {
@@ -86,7 +86,7 @@ export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndex
         detail: workloadDetail(readiness.workload),
         persistent: true,
         prominent: true,
-        title: 'Large AI Index workload',
+        title: 'Many files need preparation for search by meaning',
         tone: 'neutral',
       };
     case 'failed':
@@ -107,7 +107,7 @@ export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndex
             : null,
         persistent: false,
         prominent: false,
-        title: 'Building AI Index…',
+        title: 'Preparing files for search by meaning…',
         tone: 'neutral',
       };
     case 'not-set-up':
@@ -116,7 +116,7 @@ export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndex
         detail: EXACT_STILL_WORKS,
         persistent: false,
         prominent: false,
-        title: 'Set up AI Index to search by meaning.',
+        title: 'To search by meaning, set it up in StashBase Settings.',
         tone: 'neutral',
       };
     case 'paused':
@@ -125,16 +125,16 @@ export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndex
         detail: workloadDetail(readiness.workload),
         persistent: true,
         prominent: true,
-        title: 'AI Index paused',
+        title: 'Preparation for search by meaning is paused',
         tone: 'neutral',
       };
     case 'quota-exhausted':
       return {
         actions: ['open-settings'],
-        detail: 'Exact search is still available.',
+        detail: 'Keyword search is still available.',
         persistent: false,
         prominent: false,
-        title: 'Your hosted AI Index allowance is exhausted.',
+        title: 'Your hosted credits for search by meaning are used up.',
         tone: 'attention',
       };
     case 'ready':
@@ -161,7 +161,7 @@ function plural(count: number, noun: string): string {
   return `${count} ${count === 1 ? noun : `${noun}s`}`;
 }
 
-/** The Task 43 search line: only preparation, never AI Index. */
+/** The Task 43 search line: only preparation, never search by meaning. */
 export function preparationReadinessLine(
   counts: PreparationCounts,
   readyCount: number,

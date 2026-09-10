@@ -1,5 +1,5 @@
 /**
- * Reads and changes the AI Index source.
+ * Reads and changes the search-by-meaning source.
  *
  * Every command gets its own abort lane, so removing a key cannot cancel an
  * account refresh that is already running, and leaving the panel cancels them
@@ -31,7 +31,7 @@ function embedderQuery(port: EmbedderPort) {
   } as const;
 }
 
-/** What the AI Index panel renders and can do. */
+/** What the search-by-meaning panel renders and can do. */
 export interface EmbedderViewModel {
   /** Any account-side command is open, including the browser round trip. */
   readonly accountBusy: boolean;

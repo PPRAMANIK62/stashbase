@@ -12,7 +12,7 @@ import {
   type FeatureFailureKind,
 } from '@/shared/domain/feature-error';
 
-/** AI Index source configuration. Credentials pass straight through to the
+/** Search-by-meaning source configuration. Credentials pass straight through to the
  *  server and are never retained here. */
 export interface EmbedderPort {
   load(signal: AbortSignal): Promise<EmbedderState>;

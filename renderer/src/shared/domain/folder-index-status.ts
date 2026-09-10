@@ -1,4 +1,4 @@
-/** The renderer's model of one folder's preparation and AI Index snapshot.
+/** The renderer's model of one folder's preparation and search-by-meaning snapshot.
  *  It is explanatory state: derived artifacts and the daemon remain the
  *  completion truth. Paths are folder-relative visible source paths. */
 
@@ -32,7 +32,7 @@ interface SemanticIndexWarning {
   readonly sentence: string;
 }
 
-/** What an unresolved AI Index build would cost, for the two states that ask
+/** What an unresolved search-by-meaning build would cost, for the two states that ask
  *  the reader to decide about it. */
 interface SemanticIndexWorkload {
   readonly estimatedBytes: number | null;
@@ -40,7 +40,7 @@ interface SemanticIndexWorkload {
   readonly files: number;
 }
 
-/** One folder's AI Index state, as one variant per observable state carrying
+/** One folder's search-by-meaning state, as one variant per observable state carrying
  *  exactly the facts that state has. A state with nothing to say carries
  *  nothing, so no reader can consult a flag beside the state it came from. */
 export type SemanticIndexStatus =

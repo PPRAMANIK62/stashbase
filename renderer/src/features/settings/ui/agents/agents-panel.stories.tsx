@@ -28,7 +28,7 @@ const claude: AgentRuntime = {
 
 const stashbase: AgentRuntime = {
   id: 'stashbase',
-  label: 'Built-in',
+  label: 'Wiki Agent',
   installed: true,
   ownership: 'bundled',
   preparation: { kind: 'ready' },

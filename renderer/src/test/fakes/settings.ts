@@ -98,7 +98,7 @@ export function agentRuntime(overrides: Partial<AgentRuntime> = {}): AgentRuntim
   return {
     id: 'stashbase',
     installed: true,
-    label: 'Built-in',
+    label: 'Wiki Agent',
     ownership: 'bundled',
     preparation: { kind: 'ready' },
     ...overrides,

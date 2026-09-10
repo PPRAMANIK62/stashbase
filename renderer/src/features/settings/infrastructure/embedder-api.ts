@@ -135,7 +135,7 @@ export function createEmbedderAdapter(client: HttpClient): EmbedderPort {
     async load(signal) {
       return toEmbedderState(
         await request(client, {
-          ...call('/api/embedder', signal, 'AI Index settings are unavailable.'),
+          ...call('/api/embedder', signal, 'Settings for search by meaning are unavailable.'),
           schema: embedderStateSchema,
         }),
       );

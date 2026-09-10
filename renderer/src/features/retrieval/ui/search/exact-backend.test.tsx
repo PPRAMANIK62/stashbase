@@ -55,7 +55,7 @@ function renderRows(rows: SearchRows, activeIndex = 0) {
   render(
     <CommandList
       activeIndex={activeIndex}
-      aria-label="Exact search results"
+      aria-label="Keyword search results"
       onActiveIndexChange={vi.fn()}
     >
       {rows.render({ activeIndex, onOpen, rowId: (index) => `row-${index}` })}
@@ -67,15 +67,15 @@ function renderRows(rows: SearchRows, activeIndex = 0) {
 afterEach(cleanup);
 
 describe('exact search backend', () => {
-  it('answers whatever the AI Index is doing, because it never consults it', () => {
+  it('answers whatever search by meaning is doing, because it never consults it', () => {
     const backend = exactSearchBackend(exactSearchApi());
 
     expect(backend.id).toBe('exact');
-    expect(backend.label).toBe('Exact');
+    expect(backend.label).toBe('By keyword');
     expect(backend.indexGate).toBeUndefined();
     expect(backendReady(backend, { state: 'not-set-up' })).toBe(true);
     expect(backendReady(backend, { state: 'failed', warning: 'index broken' })).toBe(true);
-    expect(backendTabTitle(backend, READY)).toBe('Match exact text');
+    expect(backendTabTitle(backend, READY)).toBe('Match the exact text you type');
     expect(backend.emptyMessage).toBe('No exact matches.');
     expect(backend.idleMessage).toBe('Type to search exact text.');
   });

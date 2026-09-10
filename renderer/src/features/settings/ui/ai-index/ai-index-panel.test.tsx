@@ -26,8 +26,8 @@ function renderPanel(port: EmbedderPort, onOpenExternal = vi.fn()) {
 
 afterEach(cleanup);
 
-describe('AI Index panel', () => {
-  it('shows the hosted account with its remaining allowance and reset date', async () => {
+describe('search by meaning settings panel', () => {
+  it('shows the hosted account with its remaining credits and reset date', async () => {
     renderPanel(embedderPort(signedIn));
 
     expect(await screen.findByText('Ada Lovelace')).not.toBeNull();
@@ -53,7 +53,7 @@ describe('AI Index panel', () => {
     );
     expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
     expect(
-      screen.getByText('AI Index is not set up. Sign in or add a key. Exact search keeps working.'),
+      screen.getByText('Searching by meaning isn’t set up. Sign in or add a key. Keyword search keeps working.'),
     ).not.toBeNull();
 
     await user.type(screen.getByPlaceholderText('Paste the key'), 'sk-secret');

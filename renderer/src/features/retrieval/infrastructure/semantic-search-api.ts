@@ -37,7 +37,7 @@ function mapResult(result: SemanticSearchResponseWire): SemanticSearchResult {
   };
 }
 
-/** AI Index refusals the shared ladder cannot see: the hosted allowance ran
+/** Search-by-meaning refusals the shared ladder cannot see: the hosted credits ran
  *  out, and the folder has no configured source yet. */
 function readinessFailure({
   response,
@@ -48,12 +48,12 @@ function readinessFailure({
   if (response.status === 402 || failure.data?.code === 'HOSTED_QUOTA_EXHAUSTED') {
     return new SemanticSearchError(
       'quota-exhausted',
-      'Your hosted AI Index allowance is exhausted. Exact search is still available.',
+      'Your hosted credits for search by meaning are used up. Keyword search is still available.',
       cause,
     );
   }
   if (response.status === 412 || failure.data?.code === 'EMBEDDER_KEY_REQUIRED') {
-    return new SemanticSearchError('not-set-up', 'Set up AI Index to search by meaning.', cause);
+    return new SemanticSearchError('not-set-up', 'To search by meaning, set it up in StashBase Settings.', cause);
   }
   return null;
 }

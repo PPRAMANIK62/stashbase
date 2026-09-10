@@ -30,7 +30,7 @@ describe('embedder domain', () => {
 
   it('names the source that answers embeddings, or says the index is not set up', () => {
     expect(describeEmbedderSource(embedderState())).toBe(
-      'AI Index is not set up. Sign in or add a key. Exact search keeps working.',
+      'Searching by meaning isn’t set up. Sign in or add a key. Keyword search keeps working.',
     );
     expect(
       describeEmbedderSource(embedderState({ authorized: true, source: 'stashbase-account' })),

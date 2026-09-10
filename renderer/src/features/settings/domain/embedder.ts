@@ -1,7 +1,7 @@
 /**
- * The AI Index source as the renderer reasons about it: which provider or
+ * The search-by-meaning source as the renderer reasons about it: which provider or
  * account currently answers embeddings, what the reader is told about the
- * hosted allowance, and how a sign-in flow ends.
+ * hosted credits, and how a sign-in flow ends.
  *
  * These are the feature's own types, not the wire's. Absence is a `null`
  * field rather than a missing key, so a view never has to tell "the server
@@ -90,7 +90,7 @@ export function quotaRemainingPercent(account: HostedAccount): number {
 }
 
 /** One sentence of standing usage. A missing quota reads as not-yet-reported
- *  rather than as zero, so an empty allowance never looks like a spent one. */
+ *  rather than as zero, so empty credits never look like spent ones. */
 export function describeQuota(account: HostedAccount): string {
   if (account.quotaUnavailable) return 'Usage is temporarily unavailable.';
   const quota = account.quota;
@@ -113,5 +113,5 @@ export function describeEmbedderSource(state: EmbedderState): string {
   if (active !== null) {
     return `Meaning-based search and indexing use your ${EMBEDDER_PROVIDER_LABELS[state.provider]} key.`;
   }
-  return 'AI Index is not set up. Sign in or add a key. Exact search keeps working.';
+  return 'Searching by meaning isn’t set up. Sign in or add a key. Keyword search keeps working.';
 }

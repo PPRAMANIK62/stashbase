@@ -11,7 +11,7 @@ export type IndexDecisionAction =
   | 'resume'
   | 'retry-index';
 
-/** Runs one AI Index decision at a time for the folder; the status poll
+/** Runs one search-by-meaning decision at a time for the folder; the status poll
  *  owned elsewhere reports the outcome, so nothing here is optimistic. The
  *  decision lane aborts its own previous call and every call on unmount. */
 export function useIndexDecisions(api: IndexDecisionPort, folderPath: string) {

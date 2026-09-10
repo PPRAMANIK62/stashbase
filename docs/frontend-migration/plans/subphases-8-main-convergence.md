@@ -152,7 +152,7 @@ and a reason for each arrived capability.
 
 **Blocked by:** 64.
 
-**Status:** Not started.
+**Status:** Complete.
 
 `main` renamed AI Index to search by meaning, renamed Source file to Source,
 and separated search credits from the Wiki Agent's seven-day allowance. The
@@ -160,13 +160,29 @@ replacement still ships the retired term in user-facing copy, including
 retrieval failure messages, readiness titles, and the Similar mode's
 unavailable title.
 
-Sweep renderer copy, stories, and tests. Server field names stay as the merge
-left them; this task owns renderer-visible language only, so a rename that
-would cross the wire belongs to a decision instead.
+Four renames landed. AI Index becomes search by meaning throughout retrieval
+and Settings copy. Exact text search becomes Keyword search, and the two search
+modes take `main`'s labels, By keyword and By meaning, since the mode names and
+the prose describing them have to agree. The hosted embedding quota becomes
+credits while the Agent's fixed seven-day quota stays an allowance, which is
+the distinction `main` drew. The `stashbase` runtime is labelled Wiki Agent
+rather than Built-in.
 
-Evidence: focused retrieval domain and UI tests, story accessibility,
-`pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`, and a search proving no
-renderer-visible occurrence of the retired vocabulary remains.
+Source file needs no sweep: the glossary keeps it for explanatory prose and
+reserves Source for headings and controls.
+
+Identifiers are out of scope and unchanged. The Settings section keeps the
+`ai-index` id and its module path, because the id is navigation state rather
+than language; renaming it is a refactor, not a vocabulary change.
+
+Server copy is unchanged, and one inconsistency is left standing for its
+owner: the library search route still refuses with a hosted *allowance*
+message where the renderer and the rest of `main` now say credits.
+
+Evidence: focused retrieval domain and UI tests, Settings domain and panel
+tests, story accessibility, `pnpm test:renderer`, `pnpm typecheck`,
+`pnpm lint:web`, `pnpm build:web`, and a search proving no renderer-visible
+occurrence of the retired vocabulary remains.
 
 ## 66 — Rebuild the one-time setup invitation for search by meaning
 

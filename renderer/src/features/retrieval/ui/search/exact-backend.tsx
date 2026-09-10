@@ -148,7 +148,7 @@ function exactRows(
   };
 }
 
-/** Exact text search: always available, because it never consults the AI
+/** Keyword search: always available, because it never consults the AI
  *  Index. A capital letter in the query makes the match case-sensitive. */
 export function exactSearchBackend(api: ExactSearchPort): SearchBackend {
   return {
@@ -157,7 +157,7 @@ export function exactSearchBackend(api: ExactSearchPort): SearchBackend {
     icon: TextSearch,
     id: 'exact',
     idleMessage: 'Type to search exact text.',
-    label: 'Exact',
+    label: 'By keyword',
     lane: ({ folderPath, query }) => {
       const request: ExactSearchRequest = {
         caseSensitive: /[A-Z]/u.test(query),
@@ -171,8 +171,8 @@ export function exactSearchBackend(api: ExactSearchPort): SearchBackend {
       };
     },
     placeholder: 'Search files',
-    resultsLabel: 'Exact search results',
+    resultsLabel: 'Keyword search results',
     surfaceLabel: 'Exact workspace search',
-    tabTitle: 'Match exact text',
+    tabTitle: 'Match the exact text you type',
   };
 }

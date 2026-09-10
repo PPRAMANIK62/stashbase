@@ -38,7 +38,7 @@ export interface SearchRows {
  *  backend. */
 export type SearchLane = DebouncedLane<SearchRows>;
 
-/** How the AI Index gates a backend that depends on it. Only such a backend
+/** How search by meaning gates a backend that depends on it. Only such a backend
  *  declares one; a backend that answers from the folder itself has no gate to
  *  stub out, and is therefore always ready. */
 interface SearchIndexGate {
@@ -62,7 +62,7 @@ export interface SearchBackend {
   readonly id: string;
   /** Shown while the backend is ready and the reader has typed nothing. */
   readonly idleMessage: string;
-  /** Present only on a backend the AI Index gates. Its absence is the whole
+  /** Present only on a backend that search by meaning gates. Its absence is the whole
    *  statement that this backend is never held back by the index — and it is
    *  what tells the surface whose reader needs the index notice. */
   readonly indexGate?: SearchIndexGate;

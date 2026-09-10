@@ -1,7 +1,7 @@
 /**
  * The Similar (meaning) search backend.
  *
- * It answers only while the folder's AI Index can serve a query, and its
+ * It answers only while the folder's search-by-meaning index can serve a query, and its
  * readiness gate is the one place that decision is made: the surface asks
  * the backend, never the index status.
  */
@@ -75,7 +75,7 @@ function similarRows(result: SemanticSearchResult): SearchRows {
   };
 }
 
-/** Similar search: folder-explicit, and gated on an AI Index that can answer
+/** Similar search: folder-explicit, and gated on a search-by-meaning index that can answer
  *  now. A paused or building index that already serves part of the folder
  *  still answers; one that cannot serve anything does not send a request. */
 export function similarSearchBackend(api: SemanticSearchPort): SearchBackend {
@@ -87,9 +87,9 @@ export function similarSearchBackend(api: SemanticSearchPort): SearchBackend {
     idleMessage: 'Type to search by meaning.',
     indexGate: {
       ready: canSemanticSearch,
-      unavailableTitle: 'Match by meaning — needs AI Index',
+      unavailableTitle: 'Find matches even when the wording differs — needs setup',
     },
-    label: 'Similar',
+    label: 'By meaning',
     lane: ({ folderPath, query }) => {
       const request = { folderPath, query, topK: SEMANTIC_SEARCH_CANDIDATES };
       return {
@@ -98,8 +98,8 @@ export function similarSearchBackend(api: SemanticSearchPort): SearchBackend {
       };
     },
     placeholder: 'Describe what you are looking for',
-    resultsLabel: 'Similar results',
+    resultsLabel: 'Search by meaning results',
     surfaceLabel: 'Similar search',
-    tabTitle: 'Match by meaning',
+    tabTitle: 'Find matches even when the wording differs',
   };
 }

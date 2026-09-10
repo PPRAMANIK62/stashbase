@@ -51,10 +51,10 @@ export default function ManagedSettings({
           available: true,
           icon: Search,
           id: 'ai-index',
-          label: 'AI Index',
+          label: 'Search by Meaning',
           render: () => <AiIndexPanel embedderApi={embedderApi} onOpenExternal={onOpenExternal} />,
         }
-      : { available: false, icon: Search, id: 'ai-index', label: 'AI Index' },
+      : { available: false, icon: Search, id: 'ai-index', label: 'Search by Meaning' },
     transcriptionApi
       ? {
           available: true,

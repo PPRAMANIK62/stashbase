@@ -1,5 +1,5 @@
 /**
- * Where the AI Index gets its embeddings: the hosted StashBase account, or a
+ * Where search by meaning gets its embeddings: the hosted StashBase account, or a
  * key the reader brings themselves. The two are one radio group because only
  * one can be authorized at a time, and each row carries the controls that
  * belong to its own source so no dialog is needed to change either.
@@ -65,7 +65,7 @@ function AccountRow({ embedder, state }: { embedder: EmbedderViewModel; state: E
             )}
           </>
         ) : (
-          'Hosted AI Index with a monthly token allowance.'
+          'Hosted search by meaning with monthly included credits.'
         )
       }
       firstTabStop
@@ -164,7 +164,7 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
       detail={
         state.hasKey
           ? `${label} key stored`
-          : 'OpenAI or OpenRouter, billed to you instead of the hosted allowance.'
+          : 'OpenAI or OpenRouter, billed to you instead of the hosted credits.'
       }
       label="Your own API key"
       onSelect={select}
@@ -266,7 +266,7 @@ export function AiIndexPanel({ embedderApi, onOpenExternal }: AiIndexPanelProps)
   if (embedder.loading) {
     return (
       <p className="text-caption text-muted-foreground" role="status">
-        Loading AI Index settings…
+        Loading settings for search by meaning…
       </p>
     );
   }
@@ -274,7 +274,7 @@ export function AiIndexPanel({ embedderApi, onOpenExternal }: AiIndexPanelProps)
     return (
       <div className="flex items-center justify-between gap-2">
         <p className="text-caption text-destructive" role="alert">
-          AI Index settings are unavailable.
+          Settings for search by meaning are unavailable.
         </p>
         <Button onClick={() => embedder.reload()} size="compact" variant="tertiary">
           Retry
@@ -285,12 +285,12 @@ export function AiIndexPanel({ embedderApi, onOpenExternal }: AiIndexPanelProps)
 
   return (
     <SettingsPane
-      lede="Similar search and Agent context use the AI Index. Exact search and every local workflow work without it."
-      title="AI Index"
+      lede="Search by meaning and Agent context use it. Keyword search and every local workflow work without it."
+      title="Search by Meaning"
     >
       <SettingsGroup hint={describeEmbedderSource(state)} title="Source">
         <ChoiceList
-          aria-label="AI Index source"
+          aria-label="Provider for search by meaning"
           onValueChange={(value) => {
             if (embedder.selecting || value === activeEmbeddingSource(state)) return;
             if (value === ACCOUNT_SOURCE) {

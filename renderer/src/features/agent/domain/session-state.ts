@@ -162,7 +162,7 @@ type AgentSessionStateEvent =
   | { kind: 'tool-finished'; id: string; content: string; isError: boolean }
   | {
       /** A whole-file change the runtime reports on its own, beside any
-       *  tool call: the Built-in agent's native diffs. */
+       *  tool call: the Wiki Agent's native diffs. */
       kind: 'file-changed';
       id: string;
       path: string;

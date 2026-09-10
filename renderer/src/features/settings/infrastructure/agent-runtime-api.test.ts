@@ -8,7 +8,7 @@ const catalogBody = {
   clis: [
     {
       id: 'stashbase',
-      label: 'Built-in',
+      label: 'Wiki Agent',
       vendor: 'StashBase',
       installHint: '',
       installed: true,
@@ -30,7 +30,7 @@ describe('agent runtime API', () => {
         {
           id: 'stashbase',
           installed: true,
-          label: 'Built-in',
+          label: 'Wiki Agent',
           ownership: 'bundled',
           preparation: { kind: 'ready' },
         },
