@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react';
 
+import { SURFACE_FAILED } from '@/features/agent/application/failure-messages';
 import type { AgentCatalogPort, AgentInstructionsPort } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
 import type { AgentScopeOutline } from '@/features/agent/domain/starters';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { lazySurface } from '@/shared/runtime/lazy-surface';
-
-import { AgentSurfaceBoundary } from './surface-boundary';
+import { SurfaceBoundary } from '@/shared/runtime/surface-boundary';
 
 export interface AgentWorkspaceProps {
   catalog: AgentCatalogPort;
@@ -34,9 +34,17 @@ export interface AgentChatsProps {
 }
 
 /** Both Agent surfaces load behind the same boundary, so a chunk that fails
- *  offers a retry instead of taking the shell down with it. */
+ *  offers a retry instead of taking the shell down with it. One factory, so
+ *  the panel and the sidebar's chats cannot drift into two recoveries; the
+ *  wording is the feature's, and only the placement is this file's. */
 const agentBoundary = (retry: () => void, children: ReactNode) => (
-  <AgentSurfaceBoundary onRetry={retry}>{children}</AgentSurfaceBoundary>
+  <SurfaceBoundary
+    placement="pane"
+    recovery={{ actions: [{ label: 'Retry', perform: retry }], message: SURFACE_FAILED }}
+    surface="Agent"
+  >
+    {children}
+  </SurfaceBoundary>
 );
 
 export const AgentWorkspace = lazySurface<AgentWorkspaceProps>(() => import('./workspace'), {

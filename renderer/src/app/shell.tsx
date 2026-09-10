@@ -43,12 +43,17 @@ import { WorkspaceTitlebar } from './composition/layout/workspace-titlebar';
 import type { AppDependencies } from './dependencies';
 
 /** The window's root: it publishes the adapter record and nothing else. Every
+import { ShellBoundary } from './shell-boundary';
  *  binder below reads what it needs from that one mechanism, so no component
- *  is handed a port it only passes on. */
+ *  is handed a port it only passes on. The boundary between them contains a
+ *  failure in the window's composition, leaving the dependency record and the
+ *  providers above it mounted. */
 export function App({ dependencies }: { dependencies: AppDependencies }) {
   return (
     <DependencyProvider dependencies={dependencies}>
-      <WorkspaceWindow />
+      <ShellBoundary>
+        <WorkspaceWindow />
+      </ShellBoundary>
     </DependencyProvider>
   );
 }

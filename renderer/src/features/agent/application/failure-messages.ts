@@ -50,6 +50,10 @@ export function failureKind(error: unknown): AgentContextErrorKind {
  *  malformed is the one outcome none of those kinds names. */
 export const RESTORE_FAILED = 'That conversation could not be restored.';
 
+/** What the Agent panel shows in its own region when its chunk never arrives
+ *  or its render throws, neither of which is a refusal on the ladder above. */
+export const SURFACE_FAILED = 'The Agent view could not load.';
+
 /** The sentence and tone a refusal shows, without repeating what it was thrown
  *  with. */
 export function agentFailure(error: unknown): FailureView {

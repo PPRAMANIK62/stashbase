@@ -38,6 +38,10 @@ export function failureMessage(kind: RetrievalFailureKind): string {
   return MESSAGES[kind];
 }
 
+/** What Quick Open shows when its chunk never arrives or its render throws.
+ *  Neither is a refusal on the ladder above: no search ran to report one. */
+export const QUICK_OPEN_FAILED = 'Quick Open could not load.';
+
 /** The sentence and tone for a refusal that reached a retrieval surface.
  *  Anything that is not a retrieval failure — a bug, or an error from outside
  *  the ladder — reads as the unavailable line rather than leaking its own. */
