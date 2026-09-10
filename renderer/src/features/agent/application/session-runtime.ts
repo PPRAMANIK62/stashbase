@@ -41,8 +41,8 @@ import {
   transitionAgentSession,
   type AgentSessionState,
 } from '@/features/agent/domain/session';
-import { createScopeGuard } from '@/lib/runtime/scope-guard';
 import { isFeatureError } from '@/shared/domain/feature-error';
+import { createScopeGuard } from '@/shared/runtime/scope-guard';
 
 export type { AgentFilesChanged };
 export type { AgentSessionRuntime, AgentSessionRuntimeOptions } from './session/runtime-contract';

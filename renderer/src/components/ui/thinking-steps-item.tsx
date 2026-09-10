@@ -21,7 +21,7 @@ import { Badge, type BadgeColor } from '@/components/ui/badge';
 import { CollapsePanel, TriggerRow } from '@/components/ui/thinking-steps-collapsible';
 import { fontWeights } from '@/lib/font-weight';
 import { useIcon, type IconName } from '@/lib/icon-context';
-import { keyedByContent } from '@/lib/keyed-by-content';
+import { keyedByContent } from '@/lib/local/keyed-by-content';
 import { useShape } from '@/lib/shape-context';
 import { useSize } from '@/lib/size-context';
 import { exitTween, spring, stepSeconds, tween } from '@/lib/springs';

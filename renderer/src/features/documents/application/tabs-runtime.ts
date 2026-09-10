@@ -19,8 +19,8 @@ import {
   type DocumentTabsState,
   type RestoredDocumentTabs,
 } from '@/features/documents/domain/tabs';
-import { createScopeGuard, type CapturedScope } from '@/lib/runtime/scope-guard';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { createScopeGuard, type CapturedScope } from '@/shared/runtime/scope-guard';
 
 import {
   createDocumentNavigationRuntime,

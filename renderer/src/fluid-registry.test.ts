@@ -149,6 +149,25 @@ describe('Fluid Functionalism registry installation', () => {
     expect(sources).not.toContain('cdn.jsdelivr.net');
   });
 
+  it('keeps the lib root exactly the registry manifest', () => {
+    // A reinstall overwrites this directory, so anything local sitting in it
+    // is either lost or has to be reconciled against upstream by hand. The
+    // manifest is the whole contract: kit extensions live one level down in
+    // lib/local, product code lives under shared/.
+    const installed = fs
+      .readdirSync(path.join(rendererRoot, 'src/lib'), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name) && !isAuxiliary(entry.name))
+      .map((entry) => `lib/${entry.name}`);
+
+    const manifest = new Set<string>(supportFiles);
+    const strays = installed.filter((relativePath) => !manifest.has(relativePath));
+    expect(
+      strays,
+      `src/lib is the installed Fluid registry and a reinstall overwrites it: ${strays.join(', ')}. Move product code under src/shared/ and kit extensions under src/lib/local/.`,
+    ).toEqual([]);
+    expect(new Set(installed)).toEqual(manifest);
+  });
+
   it('provides Storybook coverage for every public Fluid component', () => {
     const storyFiles = fs
       .readdirSync(path.join(rendererRoot, 'src/components/ui'))

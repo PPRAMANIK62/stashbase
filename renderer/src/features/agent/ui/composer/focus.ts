@@ -1,4 +1,4 @@
-import { useTextEntryFocused } from '@/lib/runtime/use-text-entry-focused';
+import { useTextEntryFocused } from '@/shared/runtime/use-text-entry-focused';
 
 /** Spread on whatever element hosts the Agent workspace. The feature owns the
  *  marker so the shell never has to name an Agent selector of its own. */

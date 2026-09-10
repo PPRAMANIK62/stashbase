@@ -37,7 +37,7 @@ import {
   type AgentTabState,
   type AgentWorkspaceState,
 } from '@/features/agent/domain/workspace';
-import { createScopeGuard } from '@/lib/runtime/scope-guard';
+import { createScopeGuard } from '@/shared/runtime/scope-guard';
 
 /** What the workspace's operations are about: the window folder its sessions
  *  were bound to when the work started. */

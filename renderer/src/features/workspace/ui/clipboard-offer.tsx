@@ -7,8 +7,8 @@ import type {
   ClipboardImageOffer,
   UploadPort,
 } from '@/features/workspace/application/ports';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 export interface ClipboardOfferProps {
   activeFolderPath: string | null;

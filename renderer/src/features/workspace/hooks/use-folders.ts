@@ -9,7 +9,7 @@ import type {
   LibraryFolderPickerPort,
 } from '@/features/workspace/application/ports';
 import { workspaceQueryKeys } from '@/features/workspace/application/queries';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 type FolderRequest =
   | { kind: 'select'; path: string }

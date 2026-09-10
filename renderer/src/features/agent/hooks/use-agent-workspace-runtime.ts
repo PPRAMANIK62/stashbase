@@ -6,7 +6,7 @@ import {
   createAgentWorkspaceRuntime,
   type AgentWorkspaceRuntime,
 } from '@/features/agent/application/workspace-runtime';
-import { useRetainedRuntime } from '@/lib/runtime/use-retained-runtime';
+import { useRetainedRuntime } from '@/shared/runtime/use-retained-runtime';
 
 export interface AgentWorkspaceRuntimeOptions {
   context: AgentContextPort;

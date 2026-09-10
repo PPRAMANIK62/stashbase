@@ -38,9 +38,9 @@ import {
   SIDEBAR_KEYBOARD_SHORTCUT_RIGHT,
   useSidebarToggleShortcut,
 } from '@/components/ui/sidebar-shortcut';
+import { useCompactWindow } from '@/lib/local/use-compact-window';
 import { mergeRefs } from '@/lib/merge-refs';
 import { delayMs } from '@/lib/springs';
-import { useCompactWindow } from '@/lib/use-compact-window';
 import { cn } from '@/lib/utils';
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';

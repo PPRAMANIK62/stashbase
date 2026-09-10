@@ -23,8 +23,8 @@ import { motion, type MotionStyle } from 'framer-motion';
 import type { HTMLAttributes, ReactNode, Ref, RefObject } from 'react';
 
 import { motionSafeProps, type MotionSafeDivProps } from '@/components/internal/sidebar-motion';
+import { motionStyle } from '@/lib/local/motion-style';
 import { mergeRefs } from '@/lib/merge-refs';
-import { motionStyle } from '@/lib/motion-style';
 import { spring, tween } from '@/lib/springs';
 import { surfaceClasses } from '@/lib/surface-classes';
 import { useSurface, SurfaceProvider } from '@/lib/surface-context';

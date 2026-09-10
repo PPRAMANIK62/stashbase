@@ -20,8 +20,8 @@ import {
 import { suggestStarters } from '@/features/agent/domain/starters';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
 import { focusRing } from '@/lib/focus-ring';
-import { useStickToBottom } from '@/lib/runtime/use-stick-to-bottom';
 import { cn } from '@/lib/utils';
+import { useStickToBottom } from '@/shared/runtime/use-stick-to-bottom';
 
 import { AgentContextComposer } from './composer/context-composer';
 import { AgentPermissionMode } from './composer/permission-mode';

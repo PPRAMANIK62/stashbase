@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 
 import { retrievalFailure } from '@/features/retrieval/application/failure-messages';
 import type { IndexDecisionPort } from '@/features/retrieval/application/ports';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 export type IndexDecisionAction =
   | 'build'

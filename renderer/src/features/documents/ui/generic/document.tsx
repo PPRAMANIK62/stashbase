@@ -21,8 +21,8 @@ import {
 import { genericFilePreviewQuery } from '@/features/documents/application/queries';
 import { CodeEditorDocument } from '@/features/documents/ui/code-editor/document';
 import type { DocumentViewerStatus } from '@/features/documents/ui/source/viewer';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 import { formatFileSize, genericPreviewCopy } from './presentation';
 

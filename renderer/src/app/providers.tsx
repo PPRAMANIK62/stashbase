@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, useState, type PropsWithChildren } from 'react';
 
-import { FluidProviders } from '@/lib/runtime/fluid-providers';
+import { FluidProviders } from '@/shared/runtime/fluid-providers';
 
 /** The app's outer concerns — StrictMode and the query client — wrapped around
  *  the same Fluid stack Storybook and the component tests mount, so a surface

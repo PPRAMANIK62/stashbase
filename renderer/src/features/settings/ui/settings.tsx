@@ -1,4 +1,4 @@
-import { lazySurface } from '@/lib/runtime/lazy-surface';
+import { lazySurface } from '@/shared/runtime/lazy-surface';
 
 import type { SettingsProps } from './settings-types';
 

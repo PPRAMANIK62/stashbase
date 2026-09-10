@@ -8,7 +8,7 @@ import {
   type DocumentTabsRuntime,
 } from '@/features/documents/public';
 import type { WorkspaceRuntime, WorkspaceSessionController } from '@/features/workspace/public';
-import { useScopedRuntime } from '@/lib/runtime/use-scoped-runtime';
+import { useScopedRuntime } from '@/shared/runtime/use-scoped-runtime';
 
 export function useDocumentWorkspace(
   workspace: WorkspaceRuntime | null,

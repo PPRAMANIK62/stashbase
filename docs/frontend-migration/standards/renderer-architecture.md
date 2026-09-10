@@ -38,21 +38,22 @@ whole design: outer layers know inner ones, never the reverse.
   - `test-support.ts` — optional, and the one exception to `public.ts`: it
     builds the feature's real runtime over fakes so a suite does not rebuild
     the wiring. Only a `*.test.*` file may import it.
-- **`lib`** holds renderer-wide mechanisms with no product policy, and it is
-  two layers. The `lib` root is **kit infrastructure** — token contexts,
-  geometry and motion primitives, the hooks `components/ui` and
-  `components/internal` are built out of. `lib/runtime` is **application
-  plumbing** — request-signal lifetimes, lazily mounted surfaces,
-  command-surface registration, runtime scoping and retention, scroll
-  anchoring, text-entry focus, and the provider stack the application mounts.
-  The dependency runs one way: `lib/runtime` may import the `lib` root, and
-  neither the `lib` root nor a component may import `lib/runtime`. That is
-  what keeps the kit installable without the application.
-- **`shared`** is a leaf. Today it holds `shared/domain` and `shared/utils`,
-  both pure, and `shared/brand`, which is artwork. The dependency rules also
-  reserve `shared/ui` and `shared/styling` as the names for presentation
-  leaves, so an inner layer may not import them the day they appear. Nothing
-  in `shared` may reach `app`, `features`, or `platform`.
+- **`lib`** is the installed Fluid registry exactly as the installer emits
+  it: token contexts, geometry and motion primitives, and the hooks
+  `components/ui` and `components/internal` are built out of. A registry
+  test keeps the `lib` root equal to the manifest, so nothing local lands
+  where a reinstall would overwrite it. Local kit extensions that only
+  components consume live under `lib/local`. The dependency runs one way:
+  `lib` and `components` may reach `shared/utils` and nothing else under
+  `shared`, which is what keeps the kit installable without the application.
+- **`shared`** is a leaf. It holds `shared/domain` and `shared/utils`, both
+  pure; `shared/runtime`, the application plumbing (request-signal
+  lifetimes, lazily mounted surfaces, command-surface registration, runtime
+  scoping and retention, scroll anchoring, text-entry focus, and the
+  provider stack the application mounts); `shared/ui` and `shared/styling`
+  for browser-facing shared code such as the clipboard helper and code
+  highlighting; and `shared/brand`, which is artwork. Nothing in `shared`
+  may reach `app`, `features`, or `platform`.
 - **`platform`** owns mechanism at the host boundary — the typed preload
   bridge and API client — with no product policy.
 - **`components/ui`** is the installed Fluid primitive layer. Product code

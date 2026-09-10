@@ -41,10 +41,12 @@ lists the rules it adds beyond Decision 0003's layering:
   boundary is checked over the source text as well as in the dependency
   graph, since a Contract is usually imported for its types and the graph
   no longer holds those.
-- `lib` is two layers: kit infrastructure at the root, application plumbing
-  under `lib/runtime`. Neither a component nor the `lib` root may import
-  `lib/runtime`, which is what keeps the kit installable without the
-  application.
+- `lib` is the installed Fluid registry as the installer emits it, with local
+  kit extensions under `lib/local`; application plumbing lives under
+  `shared/runtime`. Neither a component nor `lib` may import anything under
+  `shared` except `shared/utils`, which is what keeps the kit installable
+  without the application, and a registry test rejects any stray file at the
+  `lib` root.
 - Size: a source file is at most 400 lines and a test file 500; the
   allowlist only shrinks and is empty at the time of this record.
 - Conventions script: colors and motion come from tokens; no `dark:`

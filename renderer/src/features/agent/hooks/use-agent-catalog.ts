@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import type { AgentCatalogPort } from '@/features/agent/application/ports';
 import { AGENT_ORDER } from '@/features/agent/domain/agent-catalog';
 import type { AgentId } from '@/features/agent/domain/session';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 const AGENT_CATALOG_QUERY_KEY = ['agent', 'catalog'] as const;
 

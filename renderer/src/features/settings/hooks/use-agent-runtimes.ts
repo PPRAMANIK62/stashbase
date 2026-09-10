@@ -27,9 +27,9 @@ import type {
   AgentRuntime,
 } from '@/features/settings/domain/agent-catalog';
 import { pollWhileBusy, useSettingsCommand } from '@/features/settings/hooks/use-settings-command';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 import type { AgentId } from '@/shared/domain/agent-id';
 import type { FailureView } from '@/shared/domain/feature-error';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 /** The commands a reader can aim at one runtime. Each opens a lane of its own
  *  per agent id, so two rows never share an abort. */

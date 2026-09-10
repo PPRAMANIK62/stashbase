@@ -6,8 +6,8 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { MobileDrawer } from '@/components/ui/mobile-drawer';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
 import type { IconComponent } from '@/lib/icon-context';
+import { useCompactWindow } from '@/lib/local/use-compact-window';
 import { SizeProvider } from '@/lib/size-context';
-import { useCompactWindow } from '@/lib/use-compact-window';
 import { cn } from '@/lib/utils';
 
 import type { SettingsSectionId } from './settings-types';

@@ -18,9 +18,9 @@ import {
   fileBasename,
   type AgentFileChange,
 } from '@/features/agent/domain/file-change';
-import { codeSyntaxHighlighting } from '@/lib/code-highlight';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { codeSyntaxHighlighting } from '@/shared/styling/code-highlight';
 
 // A base theme, not a theme: only base themes may address the merge view's
 // own `&light`/`&dark` rules at equal specificity. Base themes mount in

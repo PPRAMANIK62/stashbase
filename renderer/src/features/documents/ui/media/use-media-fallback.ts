@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import type { MediaPort, MediaDocumentAsset } from '@/features/documents/application/ports';
 import { mediaPreviewStatusQuery } from '@/features/documents/application/queries';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 type PlaybackState =
   | { mode: 'direct' }

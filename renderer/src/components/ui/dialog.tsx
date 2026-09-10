@@ -12,7 +12,7 @@ import { forwardRef, type ReactNode, type HTMLAttributes } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useIcon } from '@/lib/icon-context';
-import { motionStyle } from '@/lib/motion-style';
+import { motionStyle } from '@/lib/local/motion-style';
 import { useShape } from '@/lib/shape-context';
 import { useSize, useSizeVariant } from '@/lib/size-context';
 import { spring } from '@/lib/springs';

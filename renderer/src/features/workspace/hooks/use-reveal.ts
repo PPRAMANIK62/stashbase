@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { filesFailure } from '@/features/workspace/application/failure-messages';
 import type { FilesPort } from '@/features/workspace/application/ports';
 import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 /** Revealing one entry in the desktop file manager. A second reveal replaces
  *  the one still in flight, and unmounting drops it. */

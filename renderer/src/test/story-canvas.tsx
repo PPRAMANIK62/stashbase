@@ -19,8 +19,8 @@
 
 import { type ReactNode } from 'react';
 
-import { FluidProviders } from '@/lib/runtime/fluid-providers';
 import { type SizeVariant } from '@/lib/size-context';
+import { FluidProviders } from '@/shared/runtime/fluid-providers';
 
 export type StoryTheme = 'system' | 'light' | 'dark';
 

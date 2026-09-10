@@ -4,8 +4,8 @@ import type { AgentCatalogPort } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
 import type { AgentScopeOutline } from '@/features/agent/domain/starters';
-import { lazySurface } from '@/lib/runtime/lazy-surface';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { lazySurface } from '@/shared/runtime/lazy-surface';
 
 import { AgentSurfaceBoundary } from './surface-boundary';
 

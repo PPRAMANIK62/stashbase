@@ -4,7 +4,7 @@ import { motion, type HTMLMotionProps } from 'framer-motion';
 import { forwardRef, type ReactNode } from 'react';
 
 import { FileThumbnail } from '@/components/ui/file-thumbnail';
-import { keyedByContent } from '@/lib/keyed-by-content';
+import { keyedByContent } from '@/lib/local/keyed-by-content';
 import { useShape } from '@/lib/shape-context';
 import { useSize, type SizeVariant } from '@/lib/size-context';
 import { spring } from '@/lib/springs';

@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef } from 'react';
 
 import type { DocumentTabsRuntime } from '@/features/documents/public';
 import type { WorkspaceRuntime } from '@/features/workspace/public';
-import { useCommandSurface, type CommandSurface } from '@/lib/runtime/use-command-surface';
+import { useCommandSurface, type CommandSurface } from '@/shared/runtime/use-command-surface';
 
 import { useWindowCommand } from './use-window-command';
 

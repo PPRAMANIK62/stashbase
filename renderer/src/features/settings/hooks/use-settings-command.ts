@@ -11,8 +11,8 @@
 import { useMutation } from '@tanstack/react-query';
 
 import { settingsFailure } from '@/features/settings/application/failure-messages';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 import type { FailureView } from '@/shared/domain/feature-error';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 /** What a panel sees of one command. It never holds a mutation object. */
 export interface SettingsCommand<Input, Output> {

@@ -13,7 +13,7 @@ import type { AgentAccessMode } from '@/features/agent/domain/access';
 import type { AgentContextItem } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import type { AgentId, AgentScope, AgentSessionState } from '@/features/agent/domain/session';
-import type { CapturedScope } from '@/lib/runtime/scope-guard';
+import type { CapturedScope } from '@/shared/runtime/scope-guard';
 
 import type { AgentSendResult, AgentSessionEnvironment } from './dispatch';
 import type { AgentFilesChanged } from './files-changed';

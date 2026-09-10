@@ -9,7 +9,7 @@ import {
   type WorkspaceScope,
   type WorkspaceState,
 } from '@/features/workspace/domain/workspace';
-import { createScopeGuard, type CapturedScope } from '@/lib/runtime/scope-guard';
+import { createScopeGuard, type CapturedScope } from '@/shared/runtime/scope-guard';
 
 /** What one workspace operation was started under: the folder scope, and the
  *  generation of operations live at the time. */

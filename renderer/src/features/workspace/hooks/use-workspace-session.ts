@@ -10,8 +10,8 @@ import {
   type WorkspaceSessionRuntime,
 } from '@/features/workspace/application/session-runtime';
 import { restoreFolderSession, type FolderSessionState } from '@/features/workspace/domain/session';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
-import { useRetainedRuntime } from '@/lib/runtime/use-retained-runtime';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
+import { useRetainedRuntime } from '@/shared/runtime/use-retained-runtime';
 
 /**
  * Where session restoration stands, as one value.

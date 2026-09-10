@@ -6,7 +6,7 @@ import {
   lineNumbers,
 } from '@codemirror/view';
 
-import { codeSyntaxHighlighting } from '@/lib/code-highlight';
+import { codeSyntaxHighlighting } from '@/shared/styling/code-highlight';
 
 export { codeSyntaxHighlighting };
 

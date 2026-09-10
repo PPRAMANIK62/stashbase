@@ -36,7 +36,7 @@ import {
   type MarkdownViewMode,
 } from '@/features/documents/domain/document';
 import { documentTextFormat } from '@/features/documents/domain/document-format';
-import { createScopeGuard, type CapturedScope } from '@/lib/runtime/scope-guard';
+import { createScopeGuard, type CapturedScope } from '@/shared/runtime/scope-guard';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import {

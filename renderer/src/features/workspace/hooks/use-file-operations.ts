@@ -33,9 +33,9 @@ import {
   selectTreePath,
   type WorkspaceState,
 } from '@/features/workspace/domain/workspace';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 import type { FailureView } from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 /** One lane per command and per entry path. */
 type FileOperationLane = `${'create' | 'delete' | 'rename'}:${string}`;

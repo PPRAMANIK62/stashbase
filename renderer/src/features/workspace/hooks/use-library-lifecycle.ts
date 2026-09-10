@@ -22,7 +22,7 @@ import {
 import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
 import type { LibrarySnapshot } from '@/features/workspace/domain/library';
 import type { WorkspaceScope } from '@/features/workspace/domain/workspace';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 export function useLibraryLifecycle(
   api: LibraryPort,

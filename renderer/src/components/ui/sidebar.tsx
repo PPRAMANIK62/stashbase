@@ -22,7 +22,7 @@ import {
   type SidebarCollapsible,
 } from '@/components/ui/sidebar-core';
 import { SidebarSheet } from '@/components/ui/sidebar-sheet';
-import { motionStyle } from '@/lib/motion-style';
+import { motionStyle } from '@/lib/local/motion-style';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps extends Omit<

@@ -7,7 +7,7 @@ import {
   retireWorkspaceQueries,
 } from '@/features/workspace/application/queries';
 import { removeFolder } from '@/features/workspace/application/remove-folder';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 export function useRemoveFolder(api: LibraryPort, lifecycle: LibraryLifecyclePort) {
   const queryClient = useQueryClient();

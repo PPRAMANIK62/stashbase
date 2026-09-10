@@ -7,7 +7,7 @@ import {
   createWorkspaceRuntime,
   type WorkspaceRuntime,
 } from '@/features/workspace/application/runtime';
-import { useScopedRuntime } from '@/lib/runtime/use-scoped-runtime';
+import { useScopedRuntime } from '@/shared/runtime/use-scoped-runtime';
 
 import type { WorkspaceSessionController } from './use-workspace-session';
 

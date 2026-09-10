@@ -18,7 +18,7 @@ import {
 } from 'react';
 
 import { focusRing } from '@/lib/focus-ring';
-import { motionStyle } from '@/lib/motion-style';
+import { motionStyle } from '@/lib/local/motion-style';
 import { useSize, type SizeVariant } from '@/lib/size-context';
 import { spring } from '@/lib/springs';
 import { instant, useMotionTier } from '@/lib/use-motion-tier';

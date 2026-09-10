@@ -8,8 +8,8 @@ import type {
 } from '@/features/preparation/application/ports';
 import { refreshFolderStatus } from '@/features/preparation/application/queries';
 import type { PreparationAction } from '@/features/preparation/domain/readiness';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 /** Explicit preparation controls for one source. Every action refetches the
  *  folder status afterwards; nothing is shown optimistically. The explicit

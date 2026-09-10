@@ -174,12 +174,12 @@ module.exports = {
       },
     },
     {
-      name: 'kit-does-not-reach-application-plumbing',
+      name: 'kit-does-not-reach-product-code',
       severity: 'error',
       comment:
-        'lib/ is the kit infrastructure a primitive is built from; lib/runtime/ is application plumbing. The dependency runs one way, which is what keeps the kit installable without the application.',
-      from: { path: '^renderer/src/(?:components/|lib/(?!runtime/))' },
-      to: { path: '^renderer/src/lib/runtime/' },
+        'components/ and lib/ are the installed kit; product code lives under shared/. The kit reaches shared/utils for pure helpers and nothing else — application plumbing (shared/runtime), product styling, product UI, and the product domain kernel all run the other way. That is what keeps the kit installable without the application.',
+      from: { path: '^renderer/src/(?:components|lib)/' },
+      to: { path: '^renderer/src/shared/(?!utils/)' },
     },
     {
       name: 'contracts-are-mapped-at-the-boundary',

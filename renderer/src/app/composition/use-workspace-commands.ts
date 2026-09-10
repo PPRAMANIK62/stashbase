@@ -19,7 +19,7 @@ import type {
   WorkspaceRuntime,
   WorkspaceSessionController,
 } from '@/features/workspace/public';
-import { useCommandSurface, type CommandSurface } from '@/lib/runtime/use-command-surface';
+import { useCommandSurface, type CommandSurface } from '@/shared/runtime/use-command-surface';
 
 import type { PreparationCommands } from './use-preparation-commands';
 import { useQuickOpenCommand } from './use-quick-open-command';

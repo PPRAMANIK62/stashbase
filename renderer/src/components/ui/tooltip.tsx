@@ -11,7 +11,7 @@ import { motion, useMotionValue } from 'framer-motion';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { fontWeights } from '@/lib/font-weight';
-import { motionStyle } from '@/lib/motion-style';
+import { motionStyle } from '@/lib/local/motion-style';
 import { useShape } from '@/lib/shape-context';
 import { useSize } from '@/lib/size-context';
 import { delayMs, spring } from '@/lib/springs';

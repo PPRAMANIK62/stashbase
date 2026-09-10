@@ -10,7 +10,7 @@ import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspa
 import { agentLabel, AGENT_ORDER } from '@/features/agent/domain/agent-catalog';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import type { AgentId, AgentScope } from '@/features/agent/domain/session';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 const HISTORY_QUERY_ROOT = ['agent', 'history'] as const;
 

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { preparationFailure, type PreparationControlPort } from '@/features/preparation/public';
-import { useRequestSignals } from '@/lib/runtime/use-request-signals';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 import type { FailureView } from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
