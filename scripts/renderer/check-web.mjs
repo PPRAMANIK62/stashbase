@@ -30,7 +30,14 @@ export const gates = [
 ];
 
 function spawnGate(gate, cwd) {
-  const result = spawnSync(gate.command, gate.args, { cwd, encoding: 'utf8' });
+  const result = spawnSync(gate.command, gate.args, {
+    cwd,
+    encoding: 'utf8',
+    // Windows exposes `pnpm` as a `.cmd` shim, which Node cannot spawn
+    // directly. Every argument is a literal script name from the list above,
+    // so routing through the shell there adds no injection surface.
+    shell: process.platform === 'win32',
+  });
   if (result.error) return { status: 1, output: `${result.error.message}\n` };
   return {
     status: result.status ?? 1,
