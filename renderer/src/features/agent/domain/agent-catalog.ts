@@ -13,6 +13,11 @@ import type { AgentId } from '@/features/agent/domain/session';
  *  may omit entirely; a conversation only ever asks yes or no, so absence is
  *  resolved at the adapter rather than at every read. */
 export interface AgentAbilities {
+  /** Whether this runtime can read transient uploaded bytes: an image or PDF
+   *  picked, pasted, or dragged in from outside the library. It says nothing
+   *  about referencing a library source, which is a path the agent reads back
+   *  through MCP and which every runtime can use. A text-only model reports
+   *  false here and still takes mentions and source drags. */
   readonly attachments: boolean;
   readonly effort: boolean;
   readonly models: boolean;

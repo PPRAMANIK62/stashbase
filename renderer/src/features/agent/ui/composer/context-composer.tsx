@@ -44,7 +44,10 @@ import { MentionListbox } from './mention-listbox';
 const ATTACH_ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf';
 
 export interface AgentContextComposerProps {
-  /** The runtime advertises that it can read transient uploads. */
+  /** The runtime advertises that it can read transient uploads. It gates the
+   *  attach control and the paste path only: a source dragged from the tree or
+   *  a tab is a path reference, not an upload, and stays available either
+   *  way. */
   attachments: boolean;
   environment: AgentScopeEnvironment | null;
   leftSlot?: ReactNode;
