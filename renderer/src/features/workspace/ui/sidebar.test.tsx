@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import type { LibraryPort } from '@/features/workspace/application/ports';
 import {
   folderPicker,
+  githubImportApi,
   libraryApi,
   libraryLifecycle,
   librarySnapshot,
@@ -32,18 +33,29 @@ const activeLibrary = librarySnapshot({
   members: [researchMember],
 });
 
-type SidebarTestProps = Omit<LibrarySidebarProps, 'api' | 'folderPicker' | 'lifecycle'> & {
+type SidebarTestProps = Omit<
+  LibrarySidebarProps,
+  'api' | 'folderPicker' | 'githubImport' | 'lifecycle'
+> & {
   api: Partial<LibraryPort>;
   folderPicker?: LibrarySidebarProps['folderPicker'];
+  githubImport?: LibrarySidebarProps['githubImport'];
   lifecycle?: LibrarySidebarProps['lifecycle'];
 };
 
-function renderLibrary({ api, folderPicker: picker, lifecycle, ...props }: SidebarTestProps) {
+function renderLibrary({
+  api,
+  folderPicker: picker,
+  githubImport,
+  lifecycle,
+  ...props
+}: SidebarTestProps) {
   return withQueryClient(
     <LibrarySidebar
       {...props}
       api={libraryApi(api)}
       folderPicker={picker ?? folderPicker()}
+      githubImport={githubImport ?? githubImportApi()}
       lifecycle={lifecycle ?? libraryLifecycle()}
     />,
   );

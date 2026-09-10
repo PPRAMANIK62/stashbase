@@ -73,6 +73,7 @@ export function WorkspaceSidebar({
           {...dependencies.library}
           attention={folder.search.counts.needsAttention}
           beforeFolderChange={() => sources.saveOpenFolder()}
+          githubImport={dependencies.workspace.adapters.githubImport}
         />
       </SidebarGroup>
       {activeFolder && (

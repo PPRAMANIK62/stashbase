@@ -10,6 +10,7 @@ import {
   FolderMinus,
   FolderOpen,
   FolderPlus,
+  GitFork,
   RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -23,6 +24,7 @@ import {
 import { MenuItem } from '@/components/ui/menu-item';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import type {
+  GitHubImportPort,
   LibraryPort,
   LibraryFolderPickerPort,
   LibraryLifecyclePort,
@@ -30,6 +32,9 @@ import type {
 import { libraryQuery } from '@/features/workspace/application/queries';
 import { displayFolderPath, folderName } from '@/features/workspace/domain/library';
 import { useFolders } from '@/features/workspace/hooks/use-folders';
+import { useGitHubImport } from '@/features/workspace/hooks/use-github-import';
+
+import { ImportGitHubDialog } from './import-github-dialog';
 import { useRemoveFolder } from '@/features/workspace/hooks/use-remove-folder';
 
 import { RemoveFolderDialog } from './remove-folder-dialog';
@@ -40,6 +45,7 @@ export interface LibrarySidebarProps {
   attention?: boolean;
   beforeFolderChange?: () => Promise<boolean>;
   folderPicker: LibraryFolderPickerPort;
+  githubImport: GitHubImportPort;
   lifecycle: LibraryLifecyclePort;
 }
 
@@ -48,12 +54,22 @@ export function LibrarySidebar({
   attention = false,
   beforeFolderChange,
   folderPicker,
+  githubImport,
   lifecycle,
 }: LibrarySidebarProps) {
   const library = useQuery(libraryQuery(api));
   const folders = useFolders(api, folderPicker, beforeFolderChange);
   const removal = useRemoveFolder(api, lifecycle);
   const [chooserOpen, setChooserOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const importRequest = useGitHubImport(githubImport, {
+    onImported: (path) => {
+      setImportOpen(false);
+      // The published folder is opened through the same lane every other
+      // folder change uses, so the save barrier and abandonment rules apply.
+      folders.select(path);
+    },
+  });
 
   if (library.isPending) return null;
 
@@ -141,6 +157,14 @@ export function LibrarySidebar({
                     label="Create folder"
                     onSelect={() => folders.create(library.data.homeDirectory)}
                   />
+                  <MenuItem
+                    icon={GitFork}
+                    label="Import from GitHub…"
+                    onSelect={() => {
+                      setChooserOpen(false);
+                      setImportOpen(true);
+                    }}
+                  />
                 </DropdownContent>
               </DropdownMenu>
             </SidebarMenuItem>
@@ -163,6 +187,12 @@ export function LibrarySidebar({
           pending={removal.isPending}
           onCancel={removal.cancel}
           onConfirm={removal.confirm}
+        />
+        <ImportGitHubDialog
+          folderHome={library.data.homeDirectory}
+          import={importRequest}
+          onClose={() => setImportOpen(false)}
+          open={importOpen}
         />
       </>
     );

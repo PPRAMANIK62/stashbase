@@ -1,6 +1,7 @@
 import type {
   ClipboardCapturePort,
   FilesPort,
+  GitHubImportPort,
   LibraryLifecyclePort,
   LibraryPort,
   UploadPort,
@@ -15,6 +16,7 @@ import type { HttpClient } from '@/platform/http/client';
 import { createLibraryAdapter } from './api';
 import { createClipboardCaptureAdapter } from './capture-api';
 import { createFilesAdapter } from './files-api';
+import { createGitHubImportAdapter } from './github-import-api';
 import { createWorkspacePreferencesAdapter } from './workspace-preferences-api';
 import { createLibraryLifecycleAdapter } from './library-lifecycle';
 import type { WorkspaceSessionBridge } from './session-persistence';
@@ -27,6 +29,7 @@ export interface WorkspaceAdapters {
   /** The desktop clipboard watch, or null where the host offers none. */
   clipboardCapture: ClipboardCapturePort | null;
   files: FilesPort;
+  githubImport: GitHubImportPort;
   library: LibraryPort;
   lifecycle: LibraryLifecyclePort;
   preferences: WorkspacePreferencesPort;
@@ -62,6 +65,7 @@ export function createWorkspaceAdapters({
   return {
     clipboardCapture: capture ? createClipboardCaptureAdapter(capture) : null,
     files: createFilesAdapter(http),
+    githubImport: createGitHubImportAdapter(http),
     library: createLibraryAdapter(http),
     preferences: createWorkspacePreferencesAdapter(http),
     lifecycle: createLibraryLifecycleAdapter(library),

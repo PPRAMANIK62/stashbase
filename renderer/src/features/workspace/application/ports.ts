@@ -59,6 +59,23 @@ export interface WorkspacePreferencesPort {
   setShowHiddenFiles(next: boolean, signal: AbortSignal): Promise<boolean>;
 }
 
+/** Acquire a public GitHub repository as a library folder. The server owns
+ *  cloning, isolated staging, atomic publication, registration, and the
+ *  background sync trigger; this only asks and reports. A refusal names a code
+ *  the caller turns into a sentence, so no transport prose reaches a reader,
+ *  and a cancelled request leaves no partial member behind. */
+export interface GitHubImportPort {
+  /** Why the server would refuse this destination name, or null when usable.
+   *  Carried here rather than re-derived in the feature so inline feedback is
+   *  the same rule the request will meet. */
+  readFolderName(name: string): string | null;
+  /** The destination name the server would derive from this URL, or why it
+   *  would refuse the URL. */
+  readUrl(raw: string): { folderName: string; ok: true } | { message: string; ok: false };
+  /** Resolves the published folder path. */
+  run(url: string, folderName: string, signal: AbortSignal): Promise<string>;
+}
+
 export interface FilesPort {
   load(folderPath: string, signal: AbortSignal): Promise<WorkspaceListing>;
   reveal(folderPath: string, entryPath: string, signal: AbortSignal): Promise<void>;

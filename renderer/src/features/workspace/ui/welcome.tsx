@@ -1,28 +1,45 @@
 import { useQuery } from '@tanstack/react-query';
-import { Folder, FolderOpen, FolderPlus, LoaderCircle } from 'lucide-react';
+import { Folder, FolderOpen, FolderPlus, GitFork, LoaderCircle } from 'lucide-react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import type { LibraryPort, LibraryFolderPickerPort } from '@/features/workspace/application/ports';
+import type {
+  GitHubImportPort,
+  LibraryPort,
+  LibraryFolderPickerPort,
+} from '@/features/workspace/application/ports';
 import { libraryQuery } from '@/features/workspace/application/queries';
 import { displayFolderPath, folderName } from '@/features/workspace/domain/library';
 import { useFolders } from '@/features/workspace/hooks/use-folders';
+import { useGitHubImport } from '@/features/workspace/hooks/use-github-import';
 import { focusRing } from '@/lib/focus-ring';
+
+import { ImportGitHubDialog } from './import-github-dialog';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/shared/brand/logo';
 
 export interface LibraryWelcomeProps {
   api: LibraryPort;
   folderPicker: LibraryFolderPickerPort;
+  githubImport: GitHubImportPort;
   isRestoringSession?: boolean;
 }
 
 export function LibraryWelcome({
   api,
   folderPicker,
+  githubImport,
   isRestoringSession = false,
 }: LibraryWelcomeProps) {
   const library = useQuery(libraryQuery(api));
   const folders = useFolders(api, folderPicker);
+  const [importOpen, setImportOpen] = useState(false);
+  const importRequest = useGitHubImport(githubImport, {
+    onImported: (path) => {
+      setImportOpen(false);
+      folders.select(path);
+    },
+  });
 
   if (!library.data || library.data.activeFolder || isRestoringSession) return null;
 
@@ -115,7 +132,21 @@ export function LibraryWelcome({
           >
             Create folder
           </Button>
+          <Button
+            disabled={folders.isPending}
+            leadingIcon={GitFork}
+            onClick={() => setImportOpen(true)}
+            variant="tertiary"
+          >
+            Import from GitHub
+          </Button>
         </div>
+        <ImportGitHubDialog
+          folderHome={library.data.homeDirectory}
+          import={importRequest}
+          onClose={() => setImportOpen(false)}
+          open={importOpen}
+        />
         {folders.failure && (
           <p className="mt-3 text-caption text-destructive" role="alert">
             {folders.failure}

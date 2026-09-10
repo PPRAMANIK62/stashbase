@@ -42,6 +42,7 @@ function mount(overrides: Partial<WorkspaceComposition> = {}) {
     welcome: (
       <LibraryWelcome
         {...dependencies.library}
+        githubImport={dependencies.workspace.adapters.githubImport}
         isRestoringSession={active.status.kind === 'restoring'}
       />
     ),

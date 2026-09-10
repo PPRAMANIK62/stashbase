@@ -13,6 +13,14 @@ export default defineConfig({
         replacement: fileURLToPath(new URL('../shared/protocols/', import.meta.url)),
       },
       {
+        find: '@/contracts/github-import',
+        replacement: fileURLToPath(new URL('../shared/github-import.ts', import.meta.url)),
+      },
+      {
+        find: '@/contracts/folder-name',
+        replacement: fileURLToPath(new URL('../shared/folder-name.ts', import.meta.url)),
+      },
+      {
         find: '@/contracts/file-formats',
         replacement: fileURLToPath(new URL('../shared/file-formats.ts', import.meta.url)),
       },

@@ -54,8 +54,8 @@ export function parseGitHubRepositoryUrl(rawUrl: unknown): GitHubRepositoryUrlVa
       message: 'Enter a complete https://github.com/<owner>/<repo> URL.',
     };
   }
-  const owner = match[1];
-  const rawRepository = match[2];
+  const owner = match[1] ?? '';
+  const rawRepository = match[2] ?? '';
   const repo = rawRepository.endsWith('.git') ? rawRepository.slice(0, -4) : rawRepository;
   if (!GITHUB_OWNER.test(owner) || !GITHUB_REPOSITORY.test(repo)) {
     return {

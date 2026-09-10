@@ -306,7 +306,7 @@ off, and keeps its open tab; plus `pnpm test:renderer`, `pnpm test:config`,
 
 **Blocked by:** 64.
 
-**Status:** Not started.
+**Status:** Complete.
 
 J02 gains a URL-paste route from the Library switcher and the folder-add
 menu. Canonical HTTPS owner and repository parsing, an auto-derived folder
@@ -318,9 +318,42 @@ The server owns cloning, isolated staging, atomic publication, registration,
 and the background sync trigger. The renderer owns validation feedback and
 the request lifecycle, and never learns a staging path.
 
-Evidence: focused validation, protocol, adapter, hook, and modal tests; the
-github-import server suite; J02 and Journey Coverage updates;
-`pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`.
+The URL and destination-name rules are the server's own modules, reached
+through the port rather than re-derived. The renderer's boundary rules put
+repository contracts behind a feature Adapter, and a hook may reach neither a
+contract nor infrastructure, so the two rules are read through
+`GitHubImportPort` and mapped in the adapter. That is the architecture
+answering the question correctly: inline feedback is the rule the request will
+meet, and the server still parses both again, so this is feedback rather than
+authority. No rule was weakened to fit the feature.
+
+Every refusal is chosen by its code, not by the server's prose, so a private
+repository, a taken destination, a missing Git, Git LFS, and submodules each
+read as themselves. A code this build does not know falls back to the ladder's
+own line rather than being guessed at.
+
+The published folder is opened through the same folder lane every other change
+uses, so the save barrier and the abandonment rule apply to an import exactly
+as they do to picking a folder. Closing the dialog cancels an open request;
+the server cleans its own staging and no partial member is published.
+
+Entry points are the Library switcher menu and the welcome screen. Lucide has
+retired its brand icons, so the row uses a repository glyph rather than a
+GitHub mark.
+
+Sharing the URL parser with the renderer put it under the replacement's
+stricter compiler for the first time, which found two unchecked index reads in
+the shared module; both are fixed and the server suite still passes.
+
+Evidence: protocol tests for the request, the staging-free result, and a
+refusal code this build does not know; adapter tests for the derived name, the
+URL and folder-name rules, the request shape, and every refusal's sentence;
+hook tests for submit readiness, the derived name, keeping a typed name when
+the URL is corrected, refusing an unusable name, handing the published path
+on rather than opening the folder, reporting a refusal without clearing input,
+clearing it on edit, and cancelling an open request; plus `pnpm test:renderer`,
+`pnpm test:library-files`, `pnpm test:protocols`, `pnpm test:inventory`,
+`pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`, and `pnpm test:docs`.
 
 ## 69 — Edit Agent Instructions per scope
 

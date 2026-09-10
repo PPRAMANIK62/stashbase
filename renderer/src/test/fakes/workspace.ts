@@ -11,6 +11,7 @@ import type {
   ClipboardCapturePort,
   ClipboardImageOffer,
   FilesPort,
+  GitHubImportPort,
   LibraryFolderPickerPort,
   LibraryLifecyclePort,
   LibraryPort,
@@ -190,6 +191,24 @@ export function workspaceRuntimeOptions(
   };
 }
 
+/** Acquisition that succeeds, with stand-in rules. The real mapping from the
+ *  repository contracts is the adapter's, and `github-import-api.test.ts`
+ *  proves it there; a fake reaching into infrastructure would only move that
+ *  proof somewhere it does not belong. */
+export function githubImportApi(overrides: Partial<GitHubImportPort> = {}): GitHubImportPort {
+  return {
+    readFolderName: (name: string) => (name.includes('/') ? 'name cannot contain slashes' : null),
+    readUrl: (raw: string) => {
+      const match = /^https:\/\/github\.com\/[^/]+\/([^/]+)$/.exec(raw.trim());
+      return match?.[1]
+        ? { folderName: match[1], ok: true as const }
+        : { message: 'Enter a complete https://github.com/<owner>/<repo> URL.', ok: false as const };
+    },
+    run: vi.fn(async (_url: string, folderName: string) => `/home/me/${folderName}`),
+    ...overrides,
+  };
+}
+
 /** Hidden entries off by default, matching the server's own default and its
  *  recovery for invalid stored state. */
 export function workspacePreferences(
@@ -208,6 +227,7 @@ export function workspaceAdapters(overrides: Partial<WorkspaceAdapters> = {}): W
     clipboardCapture: null,
     files: filesApi(),
     library: libraryApi(),
+    githubImport: githubImportApi(),
     lifecycle: libraryLifecycle(),
     preferences: workspacePreferences(),
     session: sessionPersistence(),

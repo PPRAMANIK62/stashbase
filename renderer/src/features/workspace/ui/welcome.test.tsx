@@ -6,6 +6,7 @@ import { libraryFailureMessage } from '@/features/workspace/application/failure-
 import { LibraryError, type LibraryPort } from '@/features/workspace/application/ports';
 import {
   folderPicker,
+  githubImportApi,
   libraryApi,
   librarySnapshot,
   pendingLibraryApi,
@@ -16,14 +17,20 @@ import { LibraryWelcome, type LibraryWelcomeProps } from './welcome';
 
 const emptyLibrary = librarySnapshot({ activeFolder: null, members: [] });
 
-type WelcomeTestProps = Omit<LibraryWelcomeProps, 'api' | 'folderPicker'> & {
+type WelcomeTestProps = Omit<LibraryWelcomeProps, 'api' | 'folderPicker' | 'githubImport'> & {
   api: Partial<LibraryPort>;
   folderPicker?: LibraryWelcomeProps['folderPicker'];
+  githubImport?: LibraryWelcomeProps['githubImport'];
 };
 
-function renderWelcome({ api, folderPicker: picker, ...props }: WelcomeTestProps) {
+function renderWelcome({ api, folderPicker: picker, githubImport, ...props }: WelcomeTestProps) {
   return withQueryClient(
-    <LibraryWelcome {...props} api={libraryApi(api)} folderPicker={picker ?? folderPicker()} />,
+    <LibraryWelcome
+      {...props}
+      api={libraryApi(api)}
+      folderPicker={picker ?? folderPicker()}
+      githubImport={githubImport ?? githubImportApi()}
+    />,
   );
 }
 

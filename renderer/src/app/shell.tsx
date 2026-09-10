@@ -179,6 +179,7 @@ function WorkspaceWindow() {
       welcome={
         <LibraryWelcome
           {...dependencies.library}
+          githubImport={workspaceDeps.adapters.githubImport}
           isRestoringSession={session.status.kind === 'restoring'}
         />
       }

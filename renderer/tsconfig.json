@@ -6,6 +6,8 @@
     "baseUrl": ".",
     "paths": {
       "@/protocols/*": ["../shared/protocols/*"],
+      "@/contracts/github-import": ["../shared/github-import.ts"],
+      "@/contracts/folder-name": ["../shared/folder-name.ts"],
       "@/contracts/file-formats": ["../shared/file-formats.ts"],
       "@/contracts/html-sanitization": ["../shared/html-sanitization.ts"],
       "@/contracts/agent-runtime": ["../shared/agent-runtime.ts"],
