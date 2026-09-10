@@ -17,10 +17,7 @@ import {
   type WorkspaceNotice,
 } from '@/app/composition/folder/use-workspace-notices';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
-import type {
-  SearchSetupInvitationView,
-  SettingsSectionId,
-} from '@/features/settings/public';
+import type { SearchSetupInvitationView, SettingsSectionId } from '@/features/settings/public';
 import type {
   LibrarySnapshot,
   WorkspaceRuntime,

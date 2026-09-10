@@ -80,21 +80,23 @@ describe('AgentRuntimesPanel', () => {
     // The button used to render and do nothing. Whether it is the right home
     // for account identity is a separate question; a dead control is not.
     const port = agentRuntimePort({
-      listAgents: vi.fn(async () => catalog([
-        agentRuntime({
-          id: 'stashbase',
-          installed: true,
-          label: 'Wiki Agent',
-          preparation: {
-            failure: {
-              note: 'An account is required to use Wiki Agent.',
-              refusal: 'account-required',
-              stage: 'install',
+      listAgents: vi.fn(async () =>
+        catalog([
+          agentRuntime({
+            id: 'stashbase',
+            installed: true,
+            label: 'Wiki Agent',
+            preparation: {
+              failure: {
+                note: 'An account is required to use Wiki Agent.',
+                refusal: 'account-required',
+                stage: 'install',
+              },
+              kind: 'failed',
             },
-            kind: 'failed',
-          },
-        }),
-      ])),
+          }),
+        ]),
+      ),
     });
     renderPanel(port);
     const user = userEvent.setup();

@@ -34,7 +34,12 @@ describe('useWorkspaceNotices', () => {
 
   it('gives a refusal no action to take up, only an acknowledgement', () => {
     const { result } = renderHook(() =>
-      useWorkspaceNotices({ message: 'Preparation was refused.', tone: 'input' }, vi.fn(), null, null),
+      useWorkspaceNotices(
+        { message: 'Preparation was refused.', tone: 'input' },
+        vi.fn(),
+        null,
+        null,
+      ),
     );
     expect(result.current[0]?.action).toBeNull();
     expect(result.current[0]?.dismissLabel).toBe('Dismiss');

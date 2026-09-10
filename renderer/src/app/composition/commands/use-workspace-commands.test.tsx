@@ -18,11 +18,7 @@ function mountCommands() {
   const spies: Array<ReturnType<typeof vi.spyOn>> = [];
   const view = renderHook(
     () => {
-      const session = useWorkspaceSession(
-        libraryApi(),
-        sessionPersistence(),
-        libraryLifecycle(),
-      );
+      const session = useWorkspaceSession(libraryApi(), sessionPersistence(), libraryLifecycle());
       if (spies.length === 0) spies.push(vi.spyOn(session.runtime, 'setSidebarOpen'));
       return useWorkspaceCommands({
         documents: null,

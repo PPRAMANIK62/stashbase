@@ -18,7 +18,9 @@ describe('semantic readiness', () => {
 
     const quota = { state: 'quota-exhausted' } as const;
     expect(canSemanticSearch(quota)).toBe(false);
-    expect(semanticIndexNotice(quota)?.title).toContain('credits for search by meaning are used up');
+    expect(semanticIndexNotice(quota)?.title).toContain(
+      'credits for search by meaning are used up',
+    );
     expect(semanticIndexNotice(quota)?.tone).toBe('attention');
   });
 

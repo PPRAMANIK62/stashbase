@@ -20,14 +20,13 @@ import {
 } from '@/features/agent/domain/session';
 import { suggestStarters } from '@/features/agent/domain/starters';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
+import { useAgentInstructions } from '@/features/agent/hooks/use-agent-instructions';
 import { focusRing } from '@/lib/focus-ring';
 import { cn } from '@/lib/utils';
 import { useStickToBottom } from '@/shared/runtime/use-stick-to-bottom';
 
 import { AgentContextComposer } from './composer/context-composer';
 import { AgentPermissionMode } from './composer/permission-mode';
-import { useAgentInstructions } from '@/features/agent/hooks/use-agent-instructions';
-
 import { AgentComposerSettings } from './composer/settings';
 import { AgentInstructionsControl } from './instructions/agent-instructions-control';
 import { AgentSetupNotice } from './setup';
@@ -230,20 +229,20 @@ function ChatWorkspace({
               }))}
               leftSlot={
                 <>
-                {readyAgent && (
-                  <AgentComposerSettings
-                    activeAgent={readyAgent}
-                    agents={catalog.readyAgents}
-                    onAgentChange={(agent) => {
-                      if (agent !== state.agent) runtime.newChat(agent, state.scope);
-                    }}
-                    onEffortChange={active.setEffort}
-                    onModelChange={active.setModel}
-                    onRequestCatalog={active.start}
-                    state={{ ...state, activeTurn }}
-                  />
-                )}
-                <AgentInstructionsControl editor={instructions} scopeName={scopeName} />
+                  {readyAgent && (
+                    <AgentComposerSettings
+                      activeAgent={readyAgent}
+                      agents={catalog.readyAgents}
+                      onAgentChange={(agent) => {
+                        if (agent !== state.agent) runtime.newChat(agent, state.scope);
+                      }}
+                      onEffortChange={active.setEffort}
+                      onModelChange={active.setModel}
+                      onRequestCatalog={active.start}
+                      state={{ ...state, activeTurn }}
+                    />
+                  )}
+                  <AgentInstructionsControl editor={instructions} scopeName={scopeName} />
                 </>
               }
               rightSlot={

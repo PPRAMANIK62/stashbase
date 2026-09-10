@@ -144,7 +144,10 @@ describe('SurfaceBoundary', () => {
       boundary: (retry, children) => (
         <SurfaceBoundary
           placement="overlay"
-          recovery={{ actions: [{ label: 'Retry', perform: retry }], message: 'Quick Open failed.' }}
+          recovery={{
+            actions: [{ label: 'Retry', perform: retry }],
+            message: 'Quick Open failed.',
+          }}
           surface="Quick Open"
         >
           {children}

@@ -38,11 +38,7 @@ describe('GitHub import adapter', () => {
 
   it('sends the pasted URL and the chosen name, and answers the published path', async () => {
     const request = vi.fn(async () => ({ body: { path: '/home/me/notes' }, status: 200 }));
-    const path = await adapter({ request }).run(
-      'https://github.com/owner/repo',
-      'notes',
-      signal(),
-    );
+    const path = await adapter({ request }).run('https://github.com/owner/repo', 'notes', signal());
 
     expect(path).toBe('/home/me/notes');
     expect(request).toHaveBeenCalledWith(

@@ -37,7 +37,9 @@ export function createIndexDecisionAdapter(client: HttpClient): IndexDecisionPor
           '/api/semantic-indexing/decision',
           semanticIndexingDecisionRequestSchema.parse({ decision: choice, folder: folderPath }),
           signal,
-          choice === 'start' ? 'Preparation could not start.' : 'Preparation could not be deferred.',
+          choice === 'start'
+            ? 'Preparation could not start.'
+            : 'Preparation could not be deferred.',
         ),
         schema: indexStatusAcknowledgementSchema,
       });

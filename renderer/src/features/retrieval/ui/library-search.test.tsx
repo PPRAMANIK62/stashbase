@@ -292,11 +292,15 @@ describe('Library Search', () => {
     const user = userEvent.setup();
 
     const similarTab = screen.getByRole('tab', { name: 'By meaning' });
-    expect(similarTab.getAttribute('title')).toBe('Find matches even when the wording differs — needs setup');
+    expect(similarTab.getAttribute('title')).toBe(
+      'Find matches even when the wording differs — needs setup',
+    );
     await user.click(similarTab);
     await user.type(screen.getByRole('combobox', { name: 'Search current workspace' }), 'answers');
 
-    expect(screen.getByText('To search by meaning, set it up in StashBase Settings.')).not.toBeNull();
+    expect(
+      screen.getByText('To search by meaning, set it up in StashBase Settings.'),
+    ).not.toBeNull();
     expect(screen.getByText('Keyword search keeps working without it.')).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'Open Settings' }));
     expect(rendered.onOpenSettings).toHaveBeenCalledWith('ai-index');

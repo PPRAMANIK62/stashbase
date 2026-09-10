@@ -8,7 +8,11 @@ import { useHiddenFiles } from './use-hidden-files';
 
 afterEach(cleanup);
 
-function mount(applied: boolean, port = workspacePreferences(), folderPath: string | null = '/library') {
+function mount(
+  applied: boolean,
+  port = workspacePreferences(),
+  folderPath: string | null = '/library',
+) {
   return renderHook(() => useHiddenFiles(port, applied, folderPath), {
     wrapper: queryWrapper(createTestQueryClient()),
   });

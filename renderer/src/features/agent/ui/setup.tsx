@@ -30,8 +30,7 @@ export function AgentSetupNotice({
       ) : (
         <>
           <p className="text-caption text-muted-foreground">
-            <span className="text-foreground">No Agent is ready yet.</span> Set one up to send
-            this.
+            <span className="text-foreground">No Agent is ready yet.</span> Set one up to send this.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {pending.map((agent) => (

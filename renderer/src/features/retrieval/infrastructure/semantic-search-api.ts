@@ -53,7 +53,11 @@ function readinessFailure({
     );
   }
   if (response.status === 412 || failure.data?.code === 'EMBEDDER_KEY_REQUIRED') {
-    return new SemanticSearchError('not-set-up', 'To search by meaning, set it up in StashBase Settings.', cause);
+    return new SemanticSearchError(
+      'not-set-up',
+      'To search by meaning, set it up in StashBase Settings.',
+      cause,
+    );
   }
   return null;
 }

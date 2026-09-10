@@ -205,7 +205,10 @@ export function githubImportApi(overrides: Partial<GitHubImportPort> = {}): GitH
       const match = /^https:\/\/github\.com\/[^/]+\/([^/]+)$/.exec(raw.trim());
       return match?.[1]
         ? { folderName: match[1], ok: true as const }
-        : { message: 'Enter a complete https://github.com/<owner>/<repo> URL.', ok: false as const };
+        : {
+            message: 'Enter a complete https://github.com/<owner>/<repo> URL.',
+            ok: false as const,
+          };
     },
     run: vi.fn(async (_url: string, folderName: string) => `/home/me/${folderName}`),
     ...overrides,

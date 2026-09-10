@@ -159,16 +159,7 @@ export function useWorkspaceSession(
       setPendingPath((current) => (current === wanted ? null : current));
     });
     return () => setPendingPath((current) => (current === wanted ? null : current));
-  }, [
-    api,
-    landing,
-    library,
-    memberPaths,
-    queryClient,
-    runtime,
-    signalFor,
-    state.restoreStatus,
-  ]);
+  }, [api, landing, library, memberPaths, queryClient, runtime, signalFor, state.restoreStatus]);
 
   // Read off the same landing the effect acts on, so the two can never
   // disagree. A folder the library already has open is not being restored,

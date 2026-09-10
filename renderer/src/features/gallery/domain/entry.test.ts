@@ -2,12 +2,7 @@
  *  yet, and how What's inside states its two shapes. */
 import { describe, expect, it } from 'vite-plus/test';
 
-import {
-  copyFolderName,
-  enrichedFromSnapshot,
-  galleryContents,
-  type GalleryEntry,
-} from './entry';
+import { copyFolderName, enrichedFromSnapshot, galleryContents, type GalleryEntry } from './entry';
 
 const published: GalleryEntry = {
   category: 'course',
@@ -68,21 +63,26 @@ describe('copyFolderName', () => {
   const request = { name: 'How to Start a Startup', repo: 'https://github.com/owner/cs183b' };
 
   it('keeps the name the reader read on the card when the Library accepts it', () => {
-    expect(copyFolderName(request, { derivedName: 'cs183b', nameIssue: null }))
-      .toBe('How to Start a Startup');
+    expect(copyFolderName(request, { derivedName: 'cs183b', nameIssue: null })).toBe(
+      'How to Start a Startup',
+    );
   });
 
   it('falls back to the repository segment when the entry name is refused', () => {
-    expect(copyFolderName(
-      { ...request, name: '.hidden' },
-      { derivedName: 'cs183b', nameIssue: 'name cannot start with "."' },
-    )).toBe('cs183b');
+    expect(
+      copyFolderName(
+        { ...request, name: '.hidden' },
+        { derivedName: 'cs183b', nameIssue: 'name cannot start with "."' },
+      ),
+    ).toBe('cs183b');
   });
 
   it('sends the entry name when neither is usable, so the server owns the refusal', () => {
-    expect(copyFolderName(
-      { ...request, name: 'a/b' },
-      { derivedName: null, nameIssue: 'name cannot contain slashes' },
-    )).toBe('a/b');
+    expect(
+      copyFolderName(
+        { ...request, name: 'a/b' },
+        { derivedName: null, nameIssue: 'name cannot contain slashes' },
+      ),
+    ).toBe('a/b');
   });
 });

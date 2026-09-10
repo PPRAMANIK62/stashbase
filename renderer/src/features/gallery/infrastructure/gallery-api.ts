@@ -24,9 +24,7 @@ const GALLERY_IMAGE_PATH = '/api/gallery/image';
  *  Anything already relative passes through: a future local asset is not a
  *  proxy's business. */
 function proxied(url: string): string {
-  return /^https?:\/\//iu.test(url)
-    ? `${GALLERY_IMAGE_PATH}?src=${encodeURIComponent(url)}`
-    : url;
+  return /^https?:\/\//iu.test(url) ? `${GALLERY_IMAGE_PATH}?src=${encodeURIComponent(url)}` : url;
 }
 
 function toEntry(wire: GalleryEntryWire): GalleryEntry {
@@ -45,9 +43,7 @@ function toEntry(wire: GalleryEntryWire): GalleryEntry {
   };
 }
 
-export function createGalleryIndexAdapter(
-  client: HttpClient,
-): Pick<GalleryPort, 'loadIndex'> {
+export function createGalleryIndexAdapter(client: HttpClient): Pick<GalleryPort, 'loadIndex'> {
   return {
     async loadIndex(signal) {
       try {

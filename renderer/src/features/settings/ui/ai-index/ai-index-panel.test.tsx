@@ -53,7 +53,9 @@ describe('search by meaning settings panel', () => {
     );
     expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
     expect(
-      screen.getByText('Searching by meaning isn’t set up. Sign in or add a key. Keyword search keeps working.'),
+      screen.getByText(
+        'Searching by meaning isn’t set up. Sign in or add a key. Keyword search keeps working.',
+      ),
     ).not.toBeNull();
 
     await user.type(screen.getByPlaceholderText('Paste the key'), 'sk-secret');

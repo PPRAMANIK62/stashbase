@@ -111,11 +111,7 @@ describe('workspace Quick Open composition', () => {
 
     // Quick Open reads the same listing the tree does, so the Workbench
     // visibility reaches it without a filter of its own.
-    const option = await screen.findByRole(
-      'option',
-      { name: /ci\.md/ },
-      { timeout: 5_000 },
-    );
+    const option = await screen.findByRole('option', { name: /ci\.md/ }, { timeout: 5_000 });
     await userEvent.setup().click(option);
     await waitFor(() =>
       expect(documents.openSources()).toEqual([

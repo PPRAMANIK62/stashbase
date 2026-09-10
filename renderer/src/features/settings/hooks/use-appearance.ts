@@ -75,9 +75,7 @@ export function useAppearance(port: AppearancePort): AppearanceViewModel {
     failure: preferences.isError ? settingsFailure(preferences.error) : update.failure,
     choose: (field, value) => {
       const change = appearanceChange(field, value);
-      const current = queryClient.getQueryData<AppearancePreferences>(
-        settingsQueryKeys.appearance,
-      );
+      const current = queryClient.getQueryData<AppearancePreferences>(settingsQueryKeys.appearance);
       if (!change || !current) return;
       const optimistic = { ...current, ...change };
       revision.current += 1;

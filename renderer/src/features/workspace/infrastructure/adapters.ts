@@ -17,11 +17,11 @@ import { createLibraryAdapter } from './api';
 import { createClipboardCaptureAdapter } from './capture-api';
 import { createFilesAdapter } from './files-api';
 import { createGitHubImportAdapter } from './github-import-api';
-import { createWorkspacePreferencesAdapter } from './workspace-preferences-api';
 import { createLibraryLifecycleAdapter } from './library-lifecycle';
 import type { WorkspaceSessionBridge } from './session-persistence';
 import { createWorkspaceSessionAdapter } from './session-persistence';
 import { createUploadAdapter } from './upload-api';
+import { createWorkspacePreferencesAdapter } from './workspace-preferences-api';
 
 /** Every port the Workspace feature needs a real implementation of, in one
  *  record so the app wires the feature rather than its five transports. */

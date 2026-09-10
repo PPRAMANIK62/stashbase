@@ -45,12 +45,12 @@ export function GalleryOverlay({
   return (
     <Dialog onOpenChange={(next) => !next && onClose()} open={open}>
       {/* A shop, not a question: it takes the window the way a page does,
-        * capped so a wide display does not stretch a shelf into a horizon.
-        * One steady frame across both views, because the reader navigates
-        * inside it and a dialog that resizes under a click reads as a jump. */}
+       * capped so a wide display does not stretch a shelf into a horizon.
+       * One steady frame across both views, because the reader navigates
+       * inside it and a dialog that resizes under a click reads as a jump. */}
       {/* A column, explicitly: the dialog primitive is a block, so without
-        * this the header and the page below it simply stack and a long entry
-        * walks out of the frame instead of scrolling inside it. */}
+       * this the header and the page below it simply stack and a long entry
+       * walks out of the frame instead of scrolling inside it. */}
       <DialogContent
         className="@container flex h-[min(86vh,46rem)] max-w-[min(94vw,80rem)] flex-col"
         width="wide"

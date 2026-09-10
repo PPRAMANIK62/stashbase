@@ -29,7 +29,11 @@ function toInstructions(wire: AgentInstructionsStateWire): AgentInstructions {
   return { customized: wire.customized, text: wire.text };
 }
 
-function instructionsRequest(path: string, signal: AbortSignal, method: 'GET' | 'PUT'): TransportRequest {
+function instructionsRequest(
+  path: string,
+  signal: AbortSignal,
+  method: 'GET' | 'PUT',
+): TransportRequest {
   return {
     error: AgentSessionError,
     failureSchema: agentRuntimeFailureSchema,

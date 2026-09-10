@@ -6,10 +6,7 @@
  * was asked for. A window therefore cannot end up showing rows one way and a
  * menu the other.
  */
-import {
-  FilesError,
-  type WorkspacePreferencesPort,
-} from '@/features/workspace/application/ports';
+import { FilesError, type WorkspacePreferencesPort } from '@/features/workspace/application/ports';
 import {
   request,
   requestOptions,
@@ -29,7 +26,10 @@ function refused(fallback: string) {
     response.status === 400 ? new FilesError('rejected', serverMessage ?? fallback) : null;
 }
 
-function preferences(signal: AbortSignal, fallback: string): TransportRequest<'conflict' | 'rejected'> {
+function preferences(
+  signal: AbortSignal,
+  fallback: string,
+): TransportRequest<'conflict' | 'rejected'> {
   return requestOptions({
     error: FilesError,
     failure: refused(fallback),

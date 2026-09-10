@@ -59,12 +59,14 @@ describe('AppearancePanel', () => {
         true,
       ),
     );
-    expect(
-      within(group('Interface size')).getByRole('radio', { name: 'Large' }),
-    ).toHaveProperty('checked', true);
-    expect(
-      within(group('Reading text size')).getByRole('radio', { name: 'Small' }),
-    ).toHaveProperty('checked', true);
+    expect(within(group('Interface size')).getByRole('radio', { name: 'Large' })).toHaveProperty(
+      'checked',
+      true,
+    );
+    expect(within(group('Reading text size')).getByRole('radio', { name: 'Small' })).toHaveProperty(
+      'checked',
+      true,
+    );
   });
 
   it('saves the one field the chosen row owns', async () => {

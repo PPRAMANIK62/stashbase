@@ -233,7 +233,7 @@ function WorkspacePreview({
               prepareAgent: async () => ({ agents }),
             }}
             instructions={storyInstructions}
-        onOpenExternal={() => undefined}
+            onOpenExternal={() => undefined}
             onOpenAgentSettings={() => undefined}
             runtime={runtime}
             scopeOutline={{

@@ -104,9 +104,7 @@ describe('Agent workspace', () => {
   });
 
   it('names sign-in rather than installation for a runtime that only needs it', async () => {
-    renderWorkspace(idleAgentSessionPort(), [
-      agentDefinition({ needsSignIn: true, ready: false }),
-    ]);
+    renderWorkspace(idleAgentSessionPort(), [agentDefinition({ needsSignIn: true, ready: false })]);
     await agentGateLifted();
 
     expect(await screen.findByRole('button', { name: 'Sign in to Wiki Agent' })).not.toBeNull();

@@ -20,7 +20,8 @@ function mount(port = onboardingPort(), input: SearchSetupInvitationInput = OFFE
   });
 }
 
-const unanswered = () => onboardingPort({ load: async () => ({ searchSetupInvitationVersion: null }) });
+const unanswered = () =>
+  onboardingPort({ load: async () => ({ searchSetupInvitationVersion: null }) });
 
 describe('useSearchSetupInvitation', () => {
   // A fake cannot import a feature's runtime value, so the two constants are

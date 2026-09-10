@@ -35,9 +35,9 @@ import { useDocumentWorkspace } from './composition/folder/use-document-workspac
 import { useFolderReadiness } from './composition/folder/use-folder-readiness';
 import { useFolderRefresh } from './composition/folder/use-folder-refresh';
 import { useRecoveryDrafts } from './composition/folder/use-recovery-drafts';
+import { useGalleryShop } from './composition/gallery/use-gallery-shop';
 import { WorkspaceDialogs } from './composition/layout/workspace-dialogs';
 import { WorkspaceLayout } from './composition/layout/workspace-layout';
-import { useGalleryShop } from './composition/gallery/use-gallery-shop';
 import { WorkspacePanes } from './composition/layout/workspace-panes';
 import { WorkspaceSidebar } from './composition/layout/workspace-sidebar';
 import { WorkspaceTitlebar } from './composition/layout/workspace-titlebar';
@@ -145,15 +145,15 @@ function WorkspaceWindow() {
     <WorkspaceLayout
       dialogs={
         <>
-        {gallery.surfaces}
-        <WorkspaceDialogs
-          activeFolderPath={selectedPath}
-          documents={documents}
-          onImported={refresh.refresh}
-          quickOpen={chrome.quickOpen}
-          settings={chrome.settings}
-          workspace={workspace}
-        />
+          {gallery.surfaces}
+          <WorkspaceDialogs
+            activeFolderPath={selectedPath}
+            documents={documents}
+            onImported={refresh.refresh}
+            quickOpen={chrome.quickOpen}
+            settings={chrome.settings}
+            workspace={workspace}
+          />
         </>
       }
       hasActiveFolder={activeFolder !== null}
@@ -180,7 +180,11 @@ function WorkspaceWindow() {
           folder={{
             ...folder,
             hiddenFiles: listing
-              ? { disabled: hiddenFiles.pending, shown: hiddenFiles.showHiddenFiles, toggle: hiddenFiles.toggle }
+              ? {
+                  disabled: hiddenFiles.pending,
+                  shown: hiddenFiles.showHiddenFiles,
+                  toggle: hiddenFiles.toggle,
+                }
               : null,
           }}
           navigator={chrome.navigator}

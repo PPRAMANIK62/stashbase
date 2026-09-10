@@ -82,7 +82,7 @@ export function GalleryScreenshots({
       {screenshots.length > 1 && (
         <div className="relative mt-2">
           <div
-            className="flex snap-x gap-2 overflow-x-auto [scrollbar-width:none]"
+            className="flex snap-x [scrollbar-width:none] gap-2 overflow-x-auto"
             onScroll={updateArrows}
             ref={stripRef}
           >
@@ -92,7 +92,7 @@ export function GalleryScreenshots({
                 aria-label={`Screenshot ${index + 1}`}
                 className={focusRing(
                   cn(
-                    'block w-24 shrink-0 snap-start cursor-pointer overflow-hidden rounded-md border bg-surface-3 p-0 transition-colors duration-fast outline-none',
+                    'block w-24 shrink-0 cursor-pointer snap-start overflow-hidden rounded-md border bg-surface-3 p-0 transition-colors duration-fast outline-none',
                     // Selected reads as ink, not accent: the accent is reserved
                     // for the page's one action, and these repeat.
                     index === shot

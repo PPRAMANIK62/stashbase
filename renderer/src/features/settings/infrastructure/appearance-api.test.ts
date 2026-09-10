@@ -16,9 +16,7 @@ describe('appearance API', () => {
       theme: 'dark',
       uiScale: 'default',
     });
-    expect(request).toHaveBeenCalledWith(
-      expect.objectContaining({ path: '/api/appearance' }),
-    );
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ path: '/api/appearance' }));
   });
 
   it('writes one row at a time and answers with the whole triple', async () => {

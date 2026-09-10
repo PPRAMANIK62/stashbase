@@ -52,8 +52,8 @@ export function GalleryCard({
           </Badge>
         </span>
         {/* Rows from nothing to content: the one way to animate a height CSS
-          * has never been told. Focus opens it too, so the description is not
-          * pointer-only. */}
+         * has never been told. Focus opens it too, so the description is not
+         * pointer-only. */}
         <span
           className={cn(
             'grid grid-rows-[0fr] transition-[grid-template-rows] duration-base',
