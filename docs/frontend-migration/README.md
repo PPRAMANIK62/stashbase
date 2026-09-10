@@ -141,6 +141,11 @@ and no Required behavior is hidden behind a passing broad command.
 - [Decision 0016](decisions/0016-renderer-quality-gates.md) keeps only
   Fluid primitives with a product caller and records the renderer quality
   gates that `pnpm check:web` enforces.
+- [Decision 0017](decisions/0017-protected-draft-journal.md) proposes the
+  crash-recovery draft journal: an Electron-provisioned, `safeStorage`-wrapped
+  key, a server-owned encrypted store outside library folders, bounded
+  retention, explicit restore or discard, and fail-closed behavior without
+  OS key protection.
 
 ## Authority
 

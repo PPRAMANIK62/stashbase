@@ -72,6 +72,9 @@ src/
   app/
     bootstrap/
     composition/
+      commands/
+      folder/
+      layout/
     errors/
     workflows/
   platform/
@@ -79,8 +82,10 @@ src/
     electron/
     persistence/
     scheduling/
+  lib/               the installed Fluid registry; local kit extensions under lib/local/
   shared/
     domain/
+    runtime/
     ui/
     styling/
     utils/
@@ -310,21 +315,23 @@ or unavailable state. Only explicitly safe, idempotent mutations may queue;
 other user intent remains recoverable for an explicit retry. Server loss never
 causes an automatic renderer reload.
 
-Durable crash recovery for unsaved documents is approved Direction, not
-Shipping behavior. Its separately reviewed design must protect recovery
-snapshots with encryption or OS-user protection, key them by source identity
-and expected version, write off the interaction path, remove them after a
-confirmed save, and offer explicit restore or discard after an unclean exit.
-It never silently overwrites source content. Until protection and key ownership
-are approved, the absence of durable recovery remains a named gap.
+Durable crash recovery for unsaved documents is designed by
+[Decision 0017](decisions/0017-protected-draft-journal.md) and implemented by
+Tasks 55 and 56; it is not Shipping behavior until cutover. Recovery
+snapshots are encrypted, keyed by source identity and expected version,
+written off the interaction path, removed after a confirmed save, and offered
+as an explicit restore or discard after an unclean exit. Restore loads a
+snapshot as an unsaved draft; it never writes source content.
 
 The server-side File Transactions module owns the recovery journal's format,
 source-version binding, retention, encryption, crash consistency, and cleanup.
-The renderer submits bounded snapshots through a dedicated application port;
-Electron may expose OS-backed key protection but owns no document semantics.
-Recovery state remains private derived data outside visible workspaces.
-Implementation stays blocked until key availability, logout behavior, backup
-interaction, and multi-window ownership are explicitly approved.
+The renderer submits bounded snapshots through a Documents application port.
+Electron provisions the journal key under OS-backed protection and owns no
+document semantics; without that protection the journal is disabled and the
+gap is visible. Recovery state remains private derived data outside visible
+workspaces. Logout leaves the journal untouched, backups and sync never see
+it, and two windows on one source share one entry. Decision 0017 remains
+proposed until the maintainer accepts it.
 
 ## Architecture Enforcement
 
