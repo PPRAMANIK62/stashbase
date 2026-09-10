@@ -126,6 +126,23 @@ Deliver:
 Exit when J08–J11 decisive Seams compose through their real Interfaces and all
 remaining renderer responsibilities in Journey Coverage are accounted for.
 
+## Phase 6b — Main Convergence
+
+Deliver:
+
+- replacement evidence restated after the Playwright journeys are retired;
+- the merge of `main` and its arrived server, Electron, and protocol surface;
+- an assessed disposition for every capability that landed after the branch
+  point, rather than a port of all of it;
+- renderer ownership of hidden-file visibility, GitHub import, and Agent
+  Instructions; and
+- the J12 Wiki Pages and J13 Gallery renderer responsibilities.
+
+Exit when every capability that arrived after the branch point carries a
+disposition and its decided outcome, J12 and J13 are registered in the journey
+document and Journey Coverage, and no renderer surface still names retired
+product vocabulary.
+
 ## Phase 7 — Production Completion
 
 Deliver:

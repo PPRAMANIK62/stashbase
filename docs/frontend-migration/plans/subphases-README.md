@@ -13,6 +13,11 @@ rows have been assessed.
 - [Subphase 5 — Agent and Convergence](subphases-5-agent-and-convergence.md)
 - [Subphase 6 — External, Reporting, and Recovery](subphases-6-external-reporting-and-recovery.md)
 - [Subphase 7 — Journey Proof and Cutover](subphases-7-journey-proof-and-cutover.md)
+- [Subphase 8 — Main Convergence](subphases-8-main-convergence.md)
+
+Subphase 8 absorbs product work that landed on `main` after the branch point.
+Its tasks block Subphase 7, so read the blocker lines rather than the file
+order.
 
 Every task delivers focused evidence and updates its owning product and review
 contracts in the same change. The task descriptions state outcomes rather than
