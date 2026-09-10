@@ -68,12 +68,6 @@ test('every platform release uploads electron-updater metadata', () => {
   assert.match(localPublisher, /if \(!dryRun\)[\s\S]+Direct publication is disabled/);
 });
 
-test('changed updater E2E carries stable J01 traceability', () => {
-  const settings = read('e2e/smoke/settings.spec.ts');
-  assert.match(settings, /test\(['"]J01: user can navigate Settings/);
-  assert.match(settings, /test\(['"]J01: an available update/);
-});
-
 test('macOS publication fails closed unless installer, payload, and metadata coexist', () => {
   assert.throws(
     () => assertMacUpdateArtifacts(['StashBase-2.0.0.dmg', 'latest-mac.yml']),

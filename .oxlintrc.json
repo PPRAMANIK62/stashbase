@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "react", "import", "jsx-a11y"],
+  "plugins": ["typescript", "unicorn", "oxc", "react", "import", "jsx-a11y", "vitest"],
   "categories": {
     "correctness": "error",
     "suspicious": "warn",
@@ -8,121 +8,310 @@
   },
   "rules": {
     "react/react-in-jsx-scope": "off",
-    "react/exhaustive-deps": "warn",
+    "react/exhaustive-deps": "error",
+    "react/rules-of-hooks": "error",
     "import/no-unassigned-import": "off",
     "import/default": "off",
     "eslint/no-await-in-loop": "off",
+    "unicorn/filename-case": "error",
+    "typescript/no-non-null-assertion": "error",
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/expect-expect": [
+      "error",
+      { "assertFunctionNames": ["expect*", "assert", "assertType"] }
+    ],
+    "vitest/valid-expect": "off",
 
     "jsx-a11y/prefer-tag-over-role": "off",
-    "jsx-a11y/aria-activedescendant-has-tabindex": "warn",
-    "jsx-a11y/click-events-have-key-events": "warn",
-    "jsx-a11y/control-has-associated-label": "warn",
-    "jsx-a11y/img-redundant-alt": "warn",
-    "jsx-a11y/interactive-supports-focus": "warn",
-    "jsx-a11y/label-has-associated-control": "warn",
-    "jsx-a11y/media-has-caption": "warn",
-    "jsx-a11y/no-autofocus": "warn",
-    "jsx-a11y/no-noninteractive-element-interactions": "warn",
-    "jsx-a11y/no-noninteractive-element-to-interactive-role": "warn",
-    "jsx-a11y/no-static-element-interactions": "warn",
-    "jsx-a11y/role-has-required-aria-props": "warn"
+    "jsx-a11y/aria-activedescendant-has-tabindex": "error",
+    "jsx-a11y/click-events-have-key-events": "error",
+    "jsx-a11y/control-has-associated-label": "error",
+    "jsx-a11y/img-redundant-alt": "error",
+    "jsx-a11y/interactive-supports-focus": "error",
+    "jsx-a11y/label-has-associated-control": "error",
+    "jsx-a11y/media-has-caption": "error",
+    "jsx-a11y/no-autofocus": "error",
+    "jsx-a11y/no-noninteractive-element-interactions": "error",
+    "jsx-a11y/no-noninteractive-element-to-interactive-role": "error",
+    "jsx-a11y/no-static-element-interactions": "error",
+    "jsx-a11y/role-has-required-aria-props": "error"
   },
   "overrides": [
     {
-      "files": ["web-src/src/common/**"],
+      "files": [
+        "**/renderer/src/features/*/domain/**",
+        "**/renderer/src/shared/domain/**",
+        "**/renderer/src/shared/utils/**"
+      ],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/", "message": "common/ is the feature-agnostic leaf layer: it must not import from features/. Promote what both need into common/, or move this module up a layer." },
-          { "regex": "^@/store/", "message": "common/ is the feature-agnostic leaf layer: it must not import from store/ (store already imports common/, so this would be a cycle). A store-connected module belongs in store/, features/, or app/." },
-          { "regex": "^@/app/", "message": "common/ must not import from app/. app/ is the composition root and sits above every other layer." }
-        ]}]
+        "no-restricted-globals": [
+          "error",
+          { "name": "document", "message": "Domain code cannot access the DOM." },
+          { "name": "window", "message": "Domain code cannot access browser or preload APIs." },
+          { "name": "navigator", "message": "Domain code cannot access browser APIs." },
+          { "name": "fetch", "message": "External access belongs behind an application port." },
+          {
+            "name": "XMLHttpRequest",
+            "message": "External access belongs behind an application port."
+          },
+          { "name": "WebSocket", "message": "External access belongs behind an application port." },
+          {
+            "name": "EventSource",
+            "message": "External access belongs behind an application port."
+          },
+          { "name": "Worker", "message": "Worker access belongs behind an application port." },
+          { "name": "localStorage", "message": "Persistence belongs behind an application port." },
+          {
+            "name": "sessionStorage",
+            "message": "Persistence belongs behind an application port."
+          },
+          { "name": "indexedDB", "message": "Persistence belongs behind an application port." }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:application|hooks|infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:application|hooks|infrastructure|styling|ui)(?:/|$))",
+                "message": "Domain modules are pure and may depend only on domain values and pure shared leaves."
+              },
+              {
+                "regex": "^@/protocols/",
+                "message": "Wire types are mapped in infrastructure; inner layers own feature-shaped types."
+              }
+            ]
+          }
+        ]
       }
     },
     {
-      "files": ["web-src/src/store/**"],
+      "files": ["**/renderer/src/features/*/application/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/", "message": "store/ may depend only on common/. Promote shared vocabulary into common/ or store/lib/ instead of reaching into a feature." },
-          { "regex": "^@/app/", "message": "store/ must not import from app/. app/ is the composition root and sits above every other layer." }
-        ]}]
+        "no-restricted-globals": [
+          "error",
+          { "name": "document", "message": "Application code cannot access the DOM." },
+          {
+            "name": "window",
+            "message": "Application code consumes injected ports, not browser globals."
+          },
+          {
+            "name": "navigator",
+            "message": "Application code consumes injected ports, not browser globals."
+          },
+          {
+            "name": "fetch",
+            "message": "Application code consumes injected ports, not transports."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "Application code consumes injected ports, not transports."
+          },
+          {
+            "name": "WebSocket",
+            "message": "Application code consumes injected ports, not transports."
+          },
+          {
+            "name": "EventSource",
+            "message": "Application code consumes injected ports, not transports."
+          },
+          {
+            "name": "localStorage",
+            "message": "Application code consumes injected ports, not storage."
+          },
+          {
+            "name": "sessionStorage",
+            "message": "Application code consumes injected ports, not storage."
+          },
+          {
+            "name": "indexedDB",
+            "message": "Application code consumes injected ports, not storage."
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:node:|electron(?:/|$)|react(?:/|$)|react-dom(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/shared/(?:styling|ui)(?:/|$)|@/features/[^/]+/(?:hooks|infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:hooks|infrastructure|styling|ui)(?:/|$))",
+                "message": "Application modules own abstract ports and cannot select adapters or UI."
+              },
+              {
+                "regex": "^@/protocols/",
+                "message": "Wire types are mapped in infrastructure; inner layers own feature-shaped types."
+              }
+            ]
+          }
+        ]
       }
     },
     {
-      "files": ["web-src/src/features/account/**"],
+      "files": ["**/renderer/src/features/*/hooks/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/(agent-panel|documents|preparation|search|settings|workspace)/", "message": "features/account must not import a sibling feature. Promote what both need into common/ (pure or presentational) or store/ (state-shaped), or let app/ compose them." },
-          { "regex": "^@/app/", "message": "A feature must not import from app/. app/ composes features, never the other way round." }
-        ]}]
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "window",
+            "message": "Feature hooks coordinate application capabilities, not browser or preload APIs."
+          },
+          {
+            "name": "document",
+            "message": "Feature hooks coordinate application capabilities, not the global DOM."
+          },
+          {
+            "name": "navigator",
+            "message": "Feature hooks coordinate application capabilities, not browser APIs."
+          },
+          {
+            "name": "fetch",
+            "message": "Feature hooks invoke application capabilities, not transports."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "Feature hooks invoke application capabilities, not transports."
+          },
+          {
+            "name": "WebSocket",
+            "message": "Feature hooks invoke application capabilities, not transports."
+          },
+          {
+            "name": "EventSource",
+            "message": "Feature hooks invoke application capabilities, not transports."
+          },
+          {
+            "name": "localStorage",
+            "message": "Feature hooks invoke application capabilities, not storage."
+          },
+          {
+            "name": "sessionStorage",
+            "message": "Feature hooks invoke application capabilities, not storage."
+          },
+          {
+            "name": "indexedDB",
+            "message": "Feature hooks invoke application capabilities, not storage."
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:node:|electron(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/features/[^/]+/(?:infrastructure|ui)(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?(?:infrastructure|ui)(?:/|$))",
+                "message": "Feature hooks coordinate application capabilities and cannot import platform adapters or view implementations."
+              },
+              {
+                "regex": "^@/protocols/",
+                "message": "Wire types are mapped in infrastructure; inner layers own feature-shaped types."
+              }
+            ]
+          }
+        ]
       }
     },
     {
-      "files": ["web-src/src/features/agent-panel/**"],
+      "files": ["**/renderer/src/features/*/ui/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/(account|documents|preparation|search|settings|workspace)/", "message": "features/agent-panel must not import a sibling feature. Promote what both need into common/ (pure or presentational) or store/ (state-shaped), or let app/ compose them." },
-          { "regex": "^@/app/", "message": "A feature must not import from app/. app/ composes features, never the other way round." }
-        ]}]
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "window",
+            "message": "UI must receive typed capabilities instead of reading the Electron bridge."
+          },
+          {
+            "name": "document",
+            "message": "UI components must use React refs instead of global DOM access."
+          },
+          {
+            "name": "localStorage",
+            "message": "Durable state belongs behind an application port."
+          },
+          {
+            "name": "fetch",
+            "message": "UI must invoke application capabilities instead of transport APIs."
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:node:|electron(?:/|$)|@/app(?:/|$)|@/platform(?:/|$)|@/features/[^/]+/infrastructure(?:/|$)|(?:\\.\\.?/)+(?:.*?/)?infrastructure(?:/|$))",
+                "message": "UI invokes application capabilities and cannot import platform adapters."
+              },
+              {
+                "regex": "^@/protocols/",
+                "message": "Wire types are mapped in infrastructure; inner layers own feature-shaped types."
+              }
+            ]
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "window",
+            "property": "stashbase",
+            "message": "Use an injected platform adapter."
+          },
+          {
+            "object": "window",
+            "property": "electron",
+            "message": "Use an injected platform adapter."
+          },
+          {
+            "object": "window",
+            "property": "ipcRenderer",
+            "message": "Raw IPC is forbidden in renderer UI."
+          }
+        ]
       }
     },
     {
-      "files": ["web-src/src/features/documents/**"],
+      "files": ["**/renderer/src/**/*.test.{ts,tsx}"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/(account|agent-panel|preparation|search|settings|workspace)/", "message": "features/documents must not import a sibling feature. Promote what both need into common/ (pure or presentational) or store/ (state-shaped), or let app/ compose them." },
-          { "regex": "^@/app/", "message": "A feature must not import from app/. app/ composes features, never the other way round." }
-        ]}]
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "setTimeout",
+            "message": "Await a condition or use fake timers; a wall-clock delay makes the suite slow and flaky."
+          },
+          {
+            "name": "setInterval",
+            "message": "Await a condition or use fake timers; a wall-clock poll makes the suite slow and flaky."
+          }
+        ],
+        "vitest/no-restricted-matchers": [
+          "error",
+          {
+            "toHaveClass": "Assert the behaviour the class encodes; class assertions belong to components/ui tests."
+          }
+        ]
       }
     },
     {
-      "files": ["web-src/src/features/preparation/**"],
+      "files": ["**/renderer/src/components/ui/**/*.test.tsx"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/(account|agent-panel|documents|search|settings|workspace)/", "message": "features/preparation must not import a sibling feature. Promote what both need into common/ (pure or presentational) or store/ (state-shaped), or let app/ compose them." },
-          { "regex": "^@/app/", "message": "A feature must not import from app/. app/ composes features, never the other way round." }
-        ]}]
+        "vitest/no-restricted-matchers": "off"
       }
     },
     {
-      "files": ["web-src/src/features/search/**"],
+      "files": ["**/renderer/src/test/setup.ts"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/(account|agent-panel|documents|preparation|settings|workspace)/", "message": "features/search must not import a sibling feature. Promote what both need into common/ (pure or presentational) or store/ (state-shaped), or let app/ compose them." },
-          { "regex": "^@/app/", "message": "A feature must not import from app/. app/ composes features, never the other way round." }
-        ]}]
+        "no-extend-native": "off"
       }
     },
     {
-      "files": ["web-src/src/features/settings/**"],
+      // A `BroadcastChannel` post takes no target origin — the parameter does
+      // not exist on it — so the rule is a false positive wherever one is
+      // tested, and its suggested fix would not typecheck. It still guards the
+      // real subject, `contentWindow.postMessage` in the sandboxed HTML
+      // viewer, so it stays on everywhere else rather than being suppressed
+      // line by line. `shared/runtime/appearance-surface.ts` needs no entry:
+      // it posts through an optional chain, which the rule already skips.
+      "files": [
+        "**/renderer/src/shared/runtime/appearance-surface.test.ts",
+        "**/renderer/src/app/composition/use-appearance-surface.test.ts"
+      ],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/(account|agent-panel|documents|preparation|search|workspace)/", "message": "features/settings must not import a sibling feature. Promote what both need into common/ (pure or presentational) or store/ (state-shaped), or let app/ compose them." },
-          { "regex": "^@/app/", "message": "A feature must not import from app/. app/ composes features, never the other way round." }
-        ]}]
-      }
-    },
-    {
-      "files": ["web-src/src/features/workspace/**"],
-      "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/(account|agent-panel|documents|preparation|search|settings)/", "message": "features/workspace must not import a sibling feature. Promote what both need into common/ (pure or presentational) or store/ (state-shaped), or let app/ compose them." },
-          { "regex": "^@/app/", "message": "A feature must not import from app/. app/ composes features, never the other way round." }
-        ]}]
-      }
-    },
-    {
-      "files": ["web-src/src/app/**"],
-      "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-          { "regex": "^@/features/[^/]+/.+", "message": "app/ may import a feature only through its barrel: use '@/features/<area>'. If what you need is not exported there, add it to that feature's index.ts (or give it a proper entry point) rather than reaching into the feature's internals." }
-        ]}]
-      }
-    },
-    {
-      "files": ["**/__tests__/**"],
-      "rules": {
-        "no-restricted-imports": "off",
-        "react/no-children-prop": "off"
+        "unicorn/require-post-message-target-origin": "off"
       }
     }
   ]

@@ -14,6 +14,7 @@
 | Preparation failures and explicit cancellation | AppData state database | Durable attention and user intent |
 | Queued, yielded, and running work | Process-wide scheduler | Disposable; reconcile must rediscover loss |
 | Semantic rows | Python daemon / Milvus Lite | Rebuildable; daemon status owns semantic readiness |
+| Unsaved draft snapshots | Server-private local data | Durable user intent; never rebuildable and never derived, owned by [File Transactions](file-transactions.md#crash-recovery-draft-journal) |
 | Renderer readiness snapshots | Renderer memory | Explanatory only; never completion truth |
 
 ## Format Completion

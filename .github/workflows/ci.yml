@@ -9,43 +9,6 @@ permissions:
   contents: read
 
 jobs:
-  renderer-quality:
-    name: Renderer quality gates (Ubuntu)
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 11.5.1
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-
-      - name: Test renderer quality gate contract
-        run: pnpm test:renderer-quality-gates
-
-      - name: Audit renderer fundamentals
-        id: shadscan
-        uses: TheOrcDev/shadscan@1d4415ac799f453fe5ef192cf7f165433aa4e82b # v0.17.0
-        with:
-          path: .
-          version: '0.17.0'
-          fail-under: '45'
-          create-issue: 'false'
-
-      - name: Upload ShadScan report
-        if: ${{ always() && steps.shadscan.outputs.report-path != '' }}
-        uses: actions/upload-artifact@v6
-        with:
-          name: shadscan-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ steps.shadscan.outputs.report-path }}
-          if-no-files-found: error
-          retention-days: 14
-
   source-build:
     name: Source build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -64,6 +27,13 @@ jobs:
         with:
           node-version: '24'
           cache: 'pnpm'
+
+      - uses: voidzero-dev/setup-vp@1b32467adbe183473499fd9d5d372c3ed9641754 # v1.18.0
+        with:
+          version: '0.3.0'
+          node-manager: false
+          run-install: false
+          cache: false
 
       - uses: actions/setup-python@v6
         with:
@@ -90,6 +60,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify Vite+ inventory
+        run: pnpm test:toolchain
+
+      # One step, eleven gates: scripts/renderer/check-web.mjs runs
+      # architecture, size, conventions, unused, duplication, format, lint,
+      # coverage, typecheck, build, and the production-equivalent Storybook
+      # build — each to completion — so lint, the renderer coverage gate, and
+      # Storybook are already covered here and need no separate step.
+      - name: Check supported renderer
+        run: pnpm check:web
+
+      - name: Test renderer packaging input
+        run: pnpm test:package-inputs
+
       - name: Check test inventory wiring
         run: pnpm test:inventory
 
@@ -113,9 +97,6 @@ jobs:
 
       - name: Test application config and hosted account
         run: pnpm test:config
-
-      - name: Test renderer
-        run: pnpm test:renderer
 
       - name: Test Electron window lifecycle
         run: npm run test:electron
@@ -174,210 +155,3 @@ jobs:
         env:
           STASHBASE_REQUIRE_EXTRACT: '1'
         run: node scripts/smoke-packaged-server.mjs --require-extract --require-transcription
-
-  ui-smoke:
-    name: UI smoke (Ubuntu)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 11.5.1
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'pnpm'
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Python sidecar dependencies
-        run: pnpm setup:python
-
-      - name: Reject focused or disabled E2E tests
-        id: focus
-        run: pnpm test:e2e:check-focus
-
-      - name: Build renderer
-        id: build
-        run: pnpm build:web
-
-      - name: List UI smoke tests
-        id: list
-        run: pnpm exec playwright test e2e/smoke --project=electron-smoke --list
-
-      - name: Run UI smoke tests
-        id: smoke
-        env:
-          STASHBASE_E2E_SUMMARY_LABEL: Smoke journeys
-        run: xvfb-run -a pnpm test:e2e:smoke
-
-      - name: Upload UI smoke diagnostics
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@v6
-        with:
-          name: ui-smoke-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            playwright-report/
-            test-results/e2e/
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Summarize UI smoke
-        if: always()
-        env:
-          FOCUS_OUTCOME: ${{ steps.focus.outcome }}
-          BUILD_OUTCOME: ${{ steps.build.outcome }}
-          LIST_OUTCOME: ${{ steps.list.outcome }}
-          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
-        run: |
-          {
-            echo '### UI smoke'
-            echo '| Gate | Result |'
-            echo '| --- | --- |'
-            echo "| Focus/skip policy | ${FOCUS_OUTCOME} |"
-            echo "| Renderer build | ${BUILD_OUTCOME} |"
-            echo "| Test inventory | ${LIST_OUTCOME} |"
-            echo "| Smoke journeys | ${SMOKE_OUTCOME} |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  ui-regression:
-    name: UI functional and visual regression (Ubuntu)
-    needs: ui-smoke
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 11.5.1
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'pnpm'
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Python sidecar dependencies
-        run: pnpm setup:python
-
-      - name: Reject focused or disabled E2E tests
-        id: focus
-        run: pnpm test:e2e:check-focus
-
-      - name: Build renderer
-        id: build
-        run: pnpm build:web
-
-      - name: List functional and visual tests
-        id: list
-        run: pnpm exec playwright test --project=electron-functional --project=electron-visual-linux --list
-
-      - name: Run functional UI journeys
-        id: functional
-        env:
-          STASHBASE_E2E_SUMMARY_LABEL: Functional journeys
-        run: xvfb-run -a pnpm test:e2e:functional
-
-      # Both suites write to the same report paths, and the visual step
-      # now runs even when this one failed, so move the functional
-      # evidence aside before it is overwritten.
-      - name: Preserve functional diagnostics
-        if: ${{ !cancelled() && steps.functional.outcome == 'failure' }}
-        run: |
-          if [[ -d playwright-report ]]; then mv playwright-report playwright-report-functional; fi
-          if [[ -d test-results/e2e ]]; then mv test-results/e2e test-results/e2e-functional; fi
-
-      # Runs even when the journeys failed. Sequencing these two suites in
-      # one job made a red or FLAKY journey silently cancel every visual
-      # assertion — and with it the candidate-baseline patch below, which
-      # is the whole recovery path for an intentional visual change. The
-      # job still fails on either suite; this only stops one failure from
-      # hiding the other.
-      - name: Run visual regression tests
-        id: visual
-        if: ${{ !cancelled() }}
-        env:
-          STASHBASE_E2E_SUMMARY_LABEL: Visual baselines
-        run: xvfb-run -a pnpm test:e2e:visual
-
-      - name: Preserve visual comparison diagnostics
-        if: ${{ !cancelled() && steps.visual.outcome == 'failure' }}
-        run: |
-          if [[ -d playwright-report ]]; then mv playwright-report playwright-report-comparison; fi
-          if [[ -d test-results/e2e ]]; then mv test-results/e2e test-results/e2e-comparison; fi
-
-      - name: Generate candidate Linux visual baselines
-        id: visual_candidates
-        if: ${{ !cancelled() && steps.visual.outcome == 'failure' }}
-        env:
-          STASHBASE_E2E_SUMMARY_LABEL: Candidate visual baselines
-        run: xvfb-run -a pnpm test:e2e:visual:update
-
-      - name: Create candidate visual baseline patch
-        id: visual_candidate_patch
-        if: always() && steps.visual_candidates.outcome == 'success'
-        run: |
-          baseline_index="${RUNNER_TEMP}/visual-baselines-index-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          rm -f "$baseline_index"
-          GIT_INDEX_FILE="$baseline_index" git read-tree HEAD
-          GIT_INDEX_FILE="$baseline_index" git add -N -- e2e/visual
-          GIT_INDEX_FILE="$baseline_index" git diff --binary -- e2e/visual > visual-baselines.patch
-          git status --short -- e2e/visual > visual-baselines-status.txt
-          rm -f "$baseline_index"
-
-      - name: Upload UI regression diagnostics
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@v6
-        with:
-          name: ui-regression-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            visual-baselines.patch
-            visual-baselines-status.txt
-            e2e/visual/**/*-snapshots/**/*.png
-            playwright-report/
-            playwright-report-comparison/
-            playwright-report-functional/
-            test-results/e2e/
-            test-results/e2e-comparison/
-            test-results/e2e-functional/
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Summarize UI regression
-        if: always()
-        env:
-          FOCUS_OUTCOME: ${{ steps.focus.outcome }}
-          BUILD_OUTCOME: ${{ steps.build.outcome }}
-          LIST_OUTCOME: ${{ steps.list.outcome }}
-          FUNCTIONAL_OUTCOME: ${{ steps.functional.outcome }}
-          VISUAL_OUTCOME: ${{ steps.visual.outcome }}
-          VISUAL_CANDIDATES_OUTCOME: ${{ steps.visual_candidates.outcome }}
-          VISUAL_CANDIDATE_PATCH_OUTCOME: ${{ steps.visual_candidate_patch.outcome }}
-        run: |
-          {
-            echo '### UI functional and visual regression'
-            echo '| Gate | Result |'
-            echo '| --- | --- |'
-            echo "| Focus/skip policy | ${FOCUS_OUTCOME} |"
-            echo "| Renderer build | ${BUILD_OUTCOME} |"
-            echo "| Test inventory | ${LIST_OUTCOME} |"
-            echo "| Functional journeys | ${FUNCTIONAL_OUTCOME} |"
-            echo "| Visual baselines | ${VISUAL_OUTCOME} |"
-            echo "| Candidate baseline generation | ${VISUAL_CANDIDATES_OUTCOME} |"
-            echo "| Candidate baseline patch | ${VISUAL_CANDIDATE_PATCH_OUTCOME} |"
-          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,208 @@
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+
+import { expectNoA11yViolations } from '@/test/axe';
+
+import { InputMessage, type InputMessageEditorContext } from './input-message';
+
+afterEach(cleanup);
+
+/** The consumer's field — the composer has none of its own — recording the
+ *  last context the composer handed it and submitting on Enter, which is what
+ *  the composer's `submit` exists for. */
+function editorSlot(seen: { context: InputMessageEditorContext | null }) {
+  return function ConsumerEditor(ctx: InputMessageEditorContext) {
+    seen.context = ctx;
+    return (
+      <div
+        aria-label={ctx.ariaLabel}
+        contentEditable="true"
+        data-testid="editor"
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' || event.shiftKey) return;
+          event.preventDefault();
+          ctx.submit();
+        }}
+        role="textbox"
+        tabIndex={0}
+      />
+    );
+  };
+}
+
+function sendButton(): HTMLElement {
+  return screen.getByRole('button', { name: 'Send' });
+}
+
+describe('InputMessage editor slot', () => {
+  it('renders the consumer editor with the step metrics and submits through it', async () => {
+    const onSend = vi.fn();
+    const seen: { context: InputMessageEditorContext | null } = { context: null };
+    const file = new File(['x'], 'shot.png', { type: 'image/png' });
+    const view = render(
+      <InputMessage
+        editor={editorSlot(seen)}
+        files={[file]}
+        onFilesChange={vi.fn()}
+        onSend={onSend}
+        onValueChange={vi.fn()}
+        placeholder="Ask"
+        value="Hello"
+      />,
+    );
+    expect(screen.getByTestId('editor')).not.toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Message' })?.tagName).toBe('DIV');
+    expect(seen.context).toMatchObject({
+      ariaLabel: 'Message',
+      disabled: false,
+      maxRows: 8,
+      minRows: 1,
+      placeholder: 'Ask',
+      value: 'Hello',
+    });
+    // The contract is that the editor is handed the composer's step
+    // typography, not any particular pixel size.
+    const metrics = seen.context?.metrics;
+    expect(metrics?.fontSize).toBeGreaterThan(0);
+    expect(metrics?.lineHeight).toBeGreaterThan(metrics?.fontSize ?? 0);
+    expect(metrics?.paddingX).toBeGreaterThan(0);
+    expect(metrics?.paddingY).toBeGreaterThan(0);
+
+    await userEvent.setup().click(sendButton());
+    expect(onSend).toHaveBeenCalledWith('Hello', [file]);
+    await expectNoA11yViolations(view.container);
+  });
+
+  it('sends an empty draft only when the consumer says it carries something', async () => {
+    const onSend = vi.fn();
+    const seen: { context: InputMessageEditorContext | null } = { context: null };
+    const user = userEvent.setup();
+    const view = render(
+      <InputMessage editor={editorSlot(seen)} onSend={onSend} onValueChange={vi.fn()} value="" />,
+    );
+    expect(sendButton().hasAttribute('disabled')).toBe(true);
+    await user.click(sendButton());
+    expect(onSend).not.toHaveBeenCalled();
+
+    view.rerender(
+      <InputMessage
+        editor={editorSlot(seen)}
+        onSend={onSend}
+        onValueChange={vi.fn()}
+        sendableWithoutText
+        value=""
+      />,
+    );
+    expect(sendButton().hasAttribute('disabled')).toBe(false);
+    await user.click(sendButton());
+    expect(onSend).toHaveBeenCalledWith('', []);
+    await expectNoA11yViolations(view.container);
+  });
+});
+
+/** Every region wired at once, so the split modules are exercised through the
+ *  one public component. */
+function fullComposer(
+  seen: { context: InputMessageEditorContext | null },
+  overrides: Partial<ComponentProps<typeof InputMessage>> = {},
+) {
+  return (
+    <InputMessage
+      editor={editorSlot(seen)}
+      files={[]}
+      onFilesChange={vi.fn()}
+      onQueueChange={vi.fn()}
+      onSend={vi.fn()}
+      onStop={vi.fn()}
+      onValueChange={vi.fn()}
+      status="idle"
+      value=""
+      {...overrides}
+    />
+  );
+}
+
+describe('InputMessage composer regions', () => {
+  it('renders the field, the attachments and the queue as one accessible surface', async () => {
+    const seen: { context: InputMessageEditorContext | null } = { context: null };
+    const file = new File(['x'], 'shot.png', { type: 'image/png' });
+    const view = render(
+      fullComposer(seen, {
+        files: [file],
+        queue: [{ files: [], id: 'q1', text: 'queued draft' }],
+        status: 'streaming',
+      }),
+    );
+
+    // Files region.
+    expect(screen.getByRole('button', { name: 'Remove shot.png' })).not.toBeNull();
+    // Queue region.
+    expect(screen.getByLabelText('Queued message 1 of 1: queued draft')).not.toBeNull();
+    // The field is the consumer's, named by the composer.
+    expect(screen.getByRole('textbox', { name: 'Message' })).not.toBeNull();
+
+    await expectNoA11yViolations(view.container);
+  });
+
+  it('names the field from the caller and swaps the placeholder for the drop hint', () => {
+    const seen: { context: InputMessageEditorContext | null } = { context: null };
+    render(
+      fullComposer(seen, {
+        fieldProps: { 'aria-describedby': 'hint', 'aria-label': 'Ask the agent' },
+        placeholder: 'Ask',
+      }),
+    );
+    expect(seen.context).toMatchObject({
+      ariaDescribedBy: 'hint',
+      ariaLabel: 'Ask the agent',
+      placeholder: 'Ask',
+    });
+  });
+
+  it('queues a draft while streaming and dispatches it when the response ends', async () => {
+    const seen: { context: InputMessageEditorContext | null } = { context: null };
+    const onQueueChange = vi.fn();
+    const onSend = vi.fn();
+    const user = userEvent.setup();
+    const view = render(
+      fullComposer(seen, { onQueueChange, onSend, status: 'streaming', value: 'hello' }),
+    );
+
+    await user.click(screen.getByRole('textbox', { name: 'Message' }));
+    await user.keyboard('{Enter}');
+    expect(onQueueChange).toHaveBeenCalledWith([
+      { files: [], id: expect.any(String), text: 'hello' },
+    ]);
+
+    const queued = { files: [], id: 'q1', text: 'hello' };
+    view.rerender(
+      fullComposer(seen, {
+        onQueueChange,
+        onSend,
+        queue: [queued],
+        status: 'streaming',
+        value: '',
+      }),
+    );
+    onQueueChange.mockClear();
+    view.rerender(
+      fullComposer(seen, { onQueueChange, onSend, queue: [queued], status: 'idle', value: '' }),
+    );
+    expect(onQueueChange).toHaveBeenCalledWith([]);
+    expect(onSend).toHaveBeenCalledWith('hello', [], { queuedId: 'q1' });
+    expect(screen.getByRole('status').textContent).toBe('Message sent.');
+  });
+
+  it('removes an attachment from the preview row', async () => {
+    const seen: { context: InputMessageEditorContext | null } = { context: null };
+    const onFilesChange = vi.fn();
+    const file = new File(['x'], 'shot.png', { type: 'image/png' });
+    const user = userEvent.setup();
+    render(fullComposer(seen, { files: [file], onFilesChange }));
+
+    await user.click(screen.getByRole('button', { name: 'Remove shot.png' }));
+    expect(onFilesChange).toHaveBeenCalledWith([]);
+  });
+});

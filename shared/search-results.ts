@@ -14,6 +14,11 @@ export interface SearchHit {
    *  remaps it to a folder-relative display path before responding, so the
    *  renderer never sees the absolute spelling. */
   fileName: string;
+  /** Owning member folder root (absolute) and folder-relative visible path.
+   *  Present on library-wide semantic responses so a renderer opens a hit in
+   *  its own folder identity without splitting `fileName` against roots. */
+  folder?: string;
+  path?: string;
   chunkIndex: number;
   /** Indexed chunk body — already heading-prefixed for markdown / html. */
   content: string;

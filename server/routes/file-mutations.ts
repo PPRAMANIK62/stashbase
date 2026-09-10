@@ -5,7 +5,7 @@ import {
 } from '../files.ts';
 import { toSourcePath } from '../folder.ts';
 import { detectViewerFormat } from '../format.ts';
-import { sendError } from '../http.ts';
+import { guardExplicitFolder, sendError } from '../http.ts';
 import { planRenameLinksAsync, type RenameEntry } from '../links.ts';
 import { bundleRenameEntryAsync } from '../rename-helpers.ts';
 import { deleteLibraryFile, moveLibraryFile } from '../library-file-mutations.ts';
@@ -15,6 +15,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
   // owns disk changes, link cascades, derived cleanup, file order, and index
   // completion for both UI and MCP callers.
   app.patch('/api/files/*', async (req, res) => {
+    if (!(await guardExplicitFolder(req, res))) return;
     const oldName = (req.params as any)[0] as string;
     const requested = typeof req.body?.new_name === 'string' ? req.body.new_name.trim() : '';
     if (!requested) return res.status(400).json({ error: 'new_name required' });
@@ -46,6 +47,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
   });
 
   app.delete('/api/files/*', async (req, res) => {
+    if (!(await guardExplicitFolder(req, res))) return;
     const name = (req.params as any)[0] as string;
     try {
       const result = await deleteLibraryFile(toSourcePath(name), { allowOpaque: true });

@@ -1,0 +1,36 @@
+import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+/** The strip above the workspace where something the reader did not ask about
+ *  is reported. A notice they can clear carries its own dismissal, an offer
+ *  also carries the thing to take up, and the tone decides whether it
+ *  interrupts: something to correct is an alert, everything else is a status. */
+export function WorkspaceNotices({ notices }: { notices: readonly WorkspaceNotice[] }) {
+  return notices.map((notice) => (
+    <div
+      className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2"
+      key={notice.message}
+      role={notice.tone === 'input' ? 'alert' : 'status'}
+    >
+      <p
+        className={cn(
+          'min-w-0 flex-1 text-caption',
+          notice.tone === 'input' ? 'text-destructive' : 'text-muted-foreground',
+        )}
+      >
+        {notice.message}
+      </p>
+      {notice.onDismiss && (
+        <Button onClick={notice.onDismiss} size="compact" variant="tertiary">
+          {notice.dismissLabel}
+        </Button>
+      )}
+      {notice.action && (
+        <Button onClick={notice.action.onAct} size="compact" variant="secondary">
+          {notice.action.label}
+        </Button>
+      )}
+    </div>
+  ));
+}

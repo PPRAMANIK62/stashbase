@@ -16,15 +16,36 @@ import {
 } from '../files.ts';
 import { detectViewerFormat, isNoteName } from '../format.ts';
 import { getWorkspacePreferences } from '../app-config.ts';
-import { exactMemberFolderRootAsync, getCurrentFolderLabel, runWithFolderRoot } from '../folder.ts';
+import {
+  exactMemberFolderRootAsync,
+  getCurrentFolder,
+  getCurrentFolderLabel,
+  runWithFolderRoot,
+} from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
-import { sendError, revealInOsFileManager } from '../http.ts';
+import { guardExplicitFolder, sendError, revealInOsFileManager } from '../http.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { saveFileContent, upsertSavedFile } from '../file-save.ts';
 import { readGenericFilePreview } from '../generic-file-preview.ts';
 import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
 import { mountFileOrderRoutes } from './file-order.ts';
+import {
+  documentTextOverwriteRequestSchema,
+  documentTextSaveRequestSchema,
+  documentTextSaveResponseSchema,
+  documentTextSourceResponseSchema,
+  workspaceFilesSchema,
+  workspaceRevealRequestSchema,
+} from '../../shared/protocols/http/files.ts';
+
+export interface FileRouteAdapters {
+  revealInFileManager(absolutePath: string): void;
+}
+
+const defaultFileRouteAdapters: FileRouteAdapters = {
+  revealInFileManager: revealInOsFileManager,
+};
 
 export { prepareFileOperation } from '../file-operation-guard.ts';
 export { saveFileContent, validateEditableFileWrite } from '../file-save.ts';
@@ -42,9 +63,28 @@ export async function fileHeadStatusAsync(name: string): Promise<number> {
   return (await pathExistsAsync(name)) ? 204 : 404;
 }
 
-/** Run a READ handler against an explicit `?folder=` member folder when the
- *  request carries one; otherwise against the window's own folder. Same
- *  membership rule as the `/api/files?folder=` listing above. */
+async function sendUnavailableExplicitFolder(
+  res: express.Response,
+  rawFolder: string,
+): Promise<void> {
+  const current = getCurrentFolder();
+  if (
+    current
+    && filesystemPath.isAbsolute(rawFolder)
+    && await filesystemPath.equalAsync(current, rawFolder)
+  ) {
+    res.status(410).json({
+      code: 'FOLDER_UNAVAILABLE',
+      error: 'the active folder is no longer available',
+    });
+    return;
+  }
+  res.status(400).json({ error: 'folder is not a registered library folder' });
+}
+
+/** Run a non-mutating handler against an explicit `?folder=` member folder
+ *  when the request carries one; otherwise against the window's own folder.
+ *  Same membership rule as the `/api/files?folder=` listing above. */
 async function runWithExplicitReadFolder(
   req: express.Request,
   res: express.Response,
@@ -57,22 +97,78 @@ async function runWithExplicitReadFolder(
   }
   const member = filesystemPath.isAbsolute(rawFolder) ? await exactMemberFolderRootAsync(rawFolder) : null;
   if (!member) {
-    res.status(400).json({ error: 'folder is not a registered library folder' });
+    await sendUnavailableExplicitFolder(res, rawFolder);
     return;
   }
   await runWithFolderRoot(member, fn).catch((err: unknown) => sendError(res, err));
 }
 
 async function handleWriteFile(req: express.Request, res: express.Response): Promise<void> {
+  const name = (req.params as any)[0] as string;
   const content = (req.body ?? {}).content;
+  const baseVersion = typeof (req.body ?? {}).baseVersion === 'string'
+    ? (req.body ?? {}).baseVersion
+    : undefined;
+  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+
+  if (rawFolder) {
+    const overwrite = (req.body ?? {}).overwrite === true;
+    const request = overwrite
+      ? documentTextOverwriteRequestSchema.safeParse({
+          content,
+          folderPath: rawFolder,
+          overwrite,
+          path: name,
+        })
+      : documentTextSaveRequestSchema.safeParse({
+          baseVersion,
+          content,
+          folderPath: rawFolder,
+          path: name,
+        });
+    if (!request.success) {
+      res.status(400).json({ error: 'invalid versioned text save request' });
+      return;
+    }
+    const format = detectFormat(request.data.path);
+    if (format !== 'json' && format !== 'md' && format !== 'txt') {
+      res.status(415).json({ code: 'UNSUPPORTED_FORMAT', error: 'unsupported editable format' });
+      return;
+    }
+    if (!(await guardExplicitFolder(req, res))) return;
+    const current = getCurrentFolder();
+    if (!current) {
+      res.status(409).json({
+        code: 'FOLDER_CHANGED',
+        error: 'the document folder is no longer active in this window',
+      });
+      return;
+    }
+    try {
+      const saved = await runWithFolderRoot(current, () =>
+        saveFileContent(request.data.path, request.data.content, {
+          ...('baseVersion' in request.data
+            ? { baseVersion: request.data.baseVersion }
+            : {}),
+        }),
+      );
+      res.json(
+        documentTextSaveResponseSchema.parse({
+          ...saved,
+          format,
+          name: request.data.path,
+        }),
+      );
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+    return;
+  }
+
   if (typeof content !== 'string') {
     res.status(400).json({ error: 'content (string) required' });
     return;
   }
-  const name = (req.params as any)[0] as string;
-  const baseVersion = typeof (req.body ?? {}).baseVersion === 'string'
-    ? (req.body ?? {}).baseVersion
-    : undefined;
   try {
     res.json(await saveFileContent(name, content, { baseVersion }));
   } catch (err: unknown) {
@@ -80,7 +176,10 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
   }
 }
 
-export function mount(app: express.Express): void {
+export function mount(
+  app: express.Express,
+  adapters: FileRouteAdapters = defaultFileRouteAdapters,
+): void {
   // ----- list -----
   // Optional `?folder=` lists an explicit library-member folder for Agent
   // mention/attachment validation. It intentionally keeps the default-safe
@@ -97,27 +196,28 @@ export function mount(app: express.Express): void {
           ? await exactMemberFolderRootAsync(rawFolder)
           : null;
         if (!member) {
-          return res.status(400).json({ error: 'folder is not a registered library folder' });
+          await sendUnavailableExplicitFolder(res, rawFolder);
+          return;
         }
         const result = await runWithFolderRoot(member, async () => ({
           folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
           files: await listFilesAndFoldersAsync(),
         }));
-        res.json({
+        res.json(workspaceFilesSchema.parse({
           folder: result.folder,
           files: result.files.files,
           folders: result.files.folders,
           showHiddenFiles: false,
-        });
+        }));
         return;
       }
       const listing = await listFilesAndFoldersAsync({ showHidden });
-      res.json({
+      res.json(workspaceFilesSchema.parse({
         folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
         files: listing.files,
         folders: listing.folders,
         showHiddenFiles: showHidden,
-      });
+      }));
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -131,6 +231,7 @@ export function mount(app: express.Express): void {
   // New Note is intentionally Markdown even though existing JSON and TXT
   // sources have their own editing surfaces (HTML remains preview-only here).
   app.post('/api/files', async (req, res) => {
+    if (!(await guardExplicitFolder(req, res))) return;
     const requestedName = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     const content = typeof req.body?.content === 'string' ? req.body.content : '';
     const dir = typeof req.body?.dir === 'string' ? req.body.dir.trim() : '';
@@ -174,8 +275,9 @@ export function mount(app: express.Express): void {
 
   // HEAD and GET accept an optional `?folder=` (validated member folder) so
   // an out-of-folder tab — a search result viewed without switching the
-  // window's folder — can read by explicit folder. Reads only: every write
-  // route below stays bound to the window's own folder.
+  // window's folder — can read by explicit folder. Versioned replacement
+  // writes also carry the expected folder, but must still match the window's
+  // own active folder.
   app.head('/api/files/*', (req, res) => {
     const name = (req.params as any)[0] as string;
     void runWithExplicitReadFolder(req, res, async () => {
@@ -241,20 +343,32 @@ export function mount(app: express.Express): void {
           content = await readTextAsync(name);
         } catch (err: unknown) {
           if ((err as { code?: unknown })?.code !== 'UNSUPPORTED_ENCODING') throw err;
-          return res.json({
-            name,
-            format,
-            content: '',
-            version: (await fileVersionAsync(name)) ?? undefined,
-            error: { code: 'UNSUPPORTED_ENCODING', message: err instanceof Error ? err.message : String(err) },
-          });
+          return res.json(
+            documentTextSourceResponseSchema.parse({
+              name,
+              format,
+              content: '',
+              version: (await fileVersionAsync(name)) ?? undefined,
+              error: {
+                code: 'UNSUPPORTED_ENCODING',
+                message: err instanceof Error ? err.message : String(err),
+              },
+            }),
+          );
         }
         if (content == null) return res.status(404).json({ error: 'not found' });
         // Raw HTML in `content` (what the editor needs); the preview iframe
         // loads its prepared version via `/asset/*` — keeping injected ids +
         // bootstrap script out of the bytes that round-trip through the
         // editor (otherwise autosave would rewrite the file to include them).
-        res.json({ name, format, content, version: (await fileVersionAsync(name)) ?? undefined });
+        res.json(
+          documentTextSourceResponseSchema.parse({
+            name,
+            format,
+            content,
+            version: (await fileVersionAsync(name)) ?? undefined,
+          }),
+        );
       } catch (err: unknown) {
         sendError(res, err);
       }
@@ -286,14 +400,24 @@ export function mount(app: express.Express): void {
   // before launching.
   app.post('/api/reveal/*', async (req, res) => {
     const name = (req.params as any)[0] as string;
-    try {
-      const abs = await resolveExistingAsync(name);
-      if (!abs) return res.status(404).json({ error: 'not found' });
-      revealInOsFileManager(abs);
-      res.json({});
-    } catch (err: unknown) {
-      sendError(res, err);
+    const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+    if (rawFolder) {
+      const request = workspaceRevealRequestSchema.safeParse({ folderPath: rawFolder, path: name });
+      if (!request.success) {
+        res.status(400).json({ error: 'invalid reveal request' });
+        return;
+      }
     }
+    void runWithExplicitReadFolder(req, res, async () => {
+      try {
+        const abs = await resolveExistingAsync(name);
+        if (!abs) return res.status(404).json({ error: 'not found' });
+        adapters.revealInFileManager(abs);
+        res.json({});
+      } catch (err: unknown) {
+        sendError(res, err);
+      }
+    });
   });
 
   mountFileOrderRoutes(app);

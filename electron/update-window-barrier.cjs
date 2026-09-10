@@ -54,4 +54,20 @@ function createUpdateWindowBarrier(options) {
   return { prepare, revoke };
 }
 
-module.exports = { createUpdateWindowBarrier };
+/**
+ * Main installs the replacement window boundary after the update manager
+ * already exists, so `lifecycle` is a thunk resolved per call.
+ */
+function createWindowLifecycleUpdateBarrier({ lifecycle, getWindows, isLiveWindow, onBlocked }) {
+  return createUpdateWindowBarrier({
+    getWindows,
+    isLiveWindow,
+    shouldRequestFlush: (win) => lifecycle()?.hasLoadedRenderer(win) === true,
+    requestFlush: (win) => lifecycle().requestContextRelease(win, 'update-install'),
+    approveClose: (win) => lifecycle()?.approveClose(win),
+    revokeCloseApproval: (win) => lifecycle()?.revokeCloseApproval(win),
+    onBlocked,
+  });
+}
+
+module.exports = { createUpdateWindowBarrier, createWindowLifecycleUpdateBarrier };

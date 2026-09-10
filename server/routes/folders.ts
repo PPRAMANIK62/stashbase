@@ -19,7 +19,7 @@ import { toSourcePath } from '../folder.ts';
 import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
-import { sendError } from '../http.ts';
+import { guardExplicitFolder, sendError } from '../http.ts';
 import { renameWithRollback } from '../rename-helpers.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { remapFileOrderPath, removeFileOrderPath } from '../file-order.ts';
@@ -44,6 +44,7 @@ function scheduleConversionRediscovery(sourcePrefix: string, displayPath: string
 
 export function mount(app: express.Express): void {
   app.post('/api/folders', async (req, res) => {
+    if (!(await guardExplicitFolder(req, res))) return;
     const requested = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
     if (!requested) return res.status(400).json({ error: 'path required' });
     try {
@@ -57,6 +58,7 @@ export function mount(app: express.Express): void {
   });
 
   app.delete('/api/folders/*', async (req, res) => {
+    if (!(await guardExplicitFolder(req, res))) return;
     const p = (req.params as any)[0] as string;
     try {
       const sourcePrefix = toSourcePath(p);
@@ -88,6 +90,7 @@ export function mount(app: express.Express): void {
   // under the old prefix at its new path (slow — see mfs.md §B3).
   // If the index step fails, roll back the disk rename.
   app.patch('/api/folders/*', async (req, res) => {
+    if (!(await guardExplicitFolder(req, res))) return;
     const oldPath = (req.params as any)[0] as string;
     const requested = typeof req.body?.new_name === 'string' ? req.body.new_name.trim() : '';
     if (!requested) return res.status(400).json({ error: 'new_name required' });

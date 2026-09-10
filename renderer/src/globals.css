@@ -1,0 +1,864 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource-variable/inter';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================================
+   1. DESIGN TOKENS
+   ----------------------------------------------------------------------------
+   Every color token is written ONCE, as light-dark(light, dark). Which side
+   renders is driven by `color-scheme`: the root follows the OS, and a `.light`
+   or `.dark` class (on <html> via ThemeProvider, or on any subtree for a
+   forced-theme preview) pins it.
+
+   The selector is `:root, .light, .dark` — not just `:root` — because
+   light-dark() inside a custom property resolves against the color-scheme of
+   the element the property is *declared on*, not the element that uses it.
+   Re-declaring the same block on forced-scope elements makes each scope its
+   own resolution point, so a `.dark` preview nested in a light page (see
+   /docs/surfaces) gets dark tokens.
+
+   Two exceptions can't ride light-dark() and keep a small per-theme switch in
+   section 2: the --overlay RGB triplet (consumed as rgb(var(--overlay) / α)
+   by components, so the format is a public contract) and the shadow ladder
+   (light and dark use structurally different recipes, not just different
+   colors).
+============================================================================ */
+
+:root {
+  color-scheme: light dark;
+}
+
+:root,
+.light,
+.dark {
+  /* ── Surfaces (8-level ladder) ──
+     Light: 2 color steps (floor, sunken) then flat #FFFFFF; shadow does the
+     work. Dark: additive white-opacity ladder over #171717. Each surface
+     pairs 1:1 with a shadow recipe (--shadow-1 .. --shadow-8). */
+  --surface-1: light-dark(#fafafa, #171717);
+  --surface-2: light-dark(#fcfcfc, #1e1e1e);
+  --surface-3: light-dark(#ffffff, #252525);
+  --surface-4: light-dark(#ffffff, #2c2c2c);
+  --surface-5: light-dark(#ffffff, #333333);
+  --surface-6: light-dark(#ffffff, #3a3a3a);
+  --surface-7: light-dark(#ffffff, #414141);
+  --surface-8: light-dark(#ffffff, #484848);
+
+  /* ── Semantic tokens ── */
+  --background: var(--surface-1);
+  --foreground: light-dark(#171717, #f5f5f5);
+  --card: var(--surface-3);
+  /* Light `muted` decouples from surface-2: the light surface ladder is so
+     compressed (#FAFAFA → #FCFCFC → #FFFFFF) that bg-muted would read as
+     near-white, making anything sitting on it (Tabs track, etc.) blend
+     together. A slightly more grey value gives muted real semantic presence.
+     Dark keeps the ladder value (#1E1E1E = surface-2). */
+  --muted: light-dark(#f4f4f5, #1e1e1e);
+  --muted-foreground: light-dark(#737373, #a3a3a3);
+
+  /* ── Interactive states ── */
+  --accent: light-dark(#e5e5e5, #525252);
+  --accent-foreground: light-dark(#171717, #f5f5f5);
+  --selected: light-dark(#d4d4d4, #525252);
+
+  /* ── Borders ──
+     --border mixes from --foreground, so it tracks the theme automatically —
+     including inside nested forced scopes, where light-dark() re-resolves
+     --foreground before the mix happens. */
+  --border: color-mix(in oklab, var(--foreground) 12%, transparent);
+
+  /* ── Error / Destructive ── */
+  --destructive: light-dark(#ef4444, #f87171);
+  --destructive-light: light-dark(#fef2f2, #450a0a);
+
+  /* Agent work provenance and decisions. These implement the cyan/amber
+     visual voices already defined by the product style contract. */
+  --working: light-dark(#0e7490, #67e8f9);
+  --decision: light-dark(#b45309, #fbbf24);
+  --decision-soft: light-dark(#fffbeb, #451a03);
+
+  /* Diff evidence: added lines read green, removed lines read red. */
+  --diff-add: light-dark(#15803d, #4ade80);
+  --diff-remove: light-dark(#dc2626, #f87171);
+
+  /* ── Focus indicator ──
+     Every component focus ring reads var(--focus-ring, #6B97FF), so this is
+     the single theming point. The literal fallback is written only inside
+     lib/focus-ring.ts, which keeps registry components self-contained when
+     installed into projects without the variable. */
+  --focus-ring: #6b97ff;
+
+  /* Filled interactive control — the switch track while on. The same blue as
+     the focus ring, with a darker hover step. */
+  --control-on: var(--focus-ring);
+  --control-on-hover: #5c89f2;
+
+  /* ── Scrim ──
+     The wash behind a modal surface (dialog, mobile drawer, mobile sidebar).
+     Heavier in dark mode, where a 40% black over a near-black page reads as
+     nothing. light-dark() rather than a `dark:` variant so system-dark users
+     get the dark value without an explicit .dark class on <html>. */
+  --scrim: light-dark(rgb(0 0 0 / 0.4), rgb(0 0 0 / 0.8));
+
+  /* ── Motion ──
+     Three steps, the CSS spelling of the same numbers lib/springs.ts hands
+     framer, so a class transition and a spring meeting on the same element
+     land together. lib/tokens.test.ts reads both and fails on a drift.
+       fast — a state the eye should not have to follow (hover, colour swap)
+       base — a step the eye follows (a thumb fading in, a label crossfading)
+       slow — a whole region arriving or leaving */
+  --motion-fast: 80ms;
+  --motion-base: 160ms;
+  --motion-slow: 240ms;
+
+  /* ── Shape ──
+     One radius, because rounded is the only geometry this product ships (see
+     lib/shape-context). Plain CSS that cannot read the class map — the
+     focus-ring fallback below, the Markdown viewer's stylesheet — reads it
+     here; lib/tokens.test.ts holds it equal to `bgRadius` there. */
+  --shape-input-radius: 8px;
+
+  /* ── Brand ──
+     The mark's own two colours. Fixed, theme-independent, and used nowhere
+     but the logo: a brand mark is an identity, not a surface, so it does not
+     follow the colour scheme the rest of the tokens do. */
+  --brand-ground: #f8fafc;
+  --brand-frame: #6b7280;
+  --brand-accent: #0891b2;
+
+  /* ── Badge palette ──
+     Fixed hues, theme-independent by design: a badge's colour is a label
+     ("green means passing"), not a surface, and it is always composited onto
+     the background (solid) or drawn as a dot (outline) rather than used as
+     text. */
+  --badge-gray: #a3a3a3;
+  --badge-red: #ef4444;
+  --badge-amber: #f59e0b;
+  --badge-green: #22c55e;
+  --badge-blue: #3b82f6;
+
+  /* ── Surface-relative interactive overlays (work on any elevation) ──
+     --overlay is the *tint direction* triplet — black for light surfaces,
+     white for dark. Components consume it as rgb(var(--overlay) / α), so it
+     stays an RGB triplet and switches per theme in section 2. --hover and
+     --active are the pre-mixed conveniences. */
+  --overlay: 0 0 0;
+  --hover: light-dark(rgb(0 0 0 / 0.04), rgb(255 255 255 / 0.06));
+  --active: light-dark(rgb(0 0 0 / 0.07), rgb(255 255 255 / 0.1));
+
+  /* ── Shadow recipes ──
+     Light: additive stacked drops, halving offsets (1/3/6/12/24/48/96 px).
+     Dark: inset highlight + inset ring + stacked drops (per CodePen).
+     Structurally different, so each ladder is written out once here and the
+     active --shadow-N is selected per theme in section 2.
+     --shadow-color is intentionally static: it is also consumed directly by
+     components (input-message edge drop) and has never varied by theme. */
+  --shadow-color: rgb(0 0 0 / 0.06);
+  --shadow-light-1: 0 0 0 1px var(--shadow-color);
+  --shadow-light-2: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color);
+  --shadow-light-3:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color);
+  --shadow-light-4:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color);
+  --shadow-light-5:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color);
+  --shadow-light-6:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color);
+  --shadow-light-7:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color),
+    0 48px 48px -24px var(--shadow-color);
+  --shadow-light-8:
+    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color),
+    0 48px 48px -24px var(--shadow-color), 0 96px 96px -48px var(--shadow-color);
+
+  --dm-hi-base: rgba(255, 255, 255, 0.01);
+  --dm-hi-mid: rgba(255, 255, 255, 0.02);
+  --dm-hi-high: rgba(255, 255, 255, 0.04);
+  --dm-hi-peak: rgba(255, 255, 255, 0.06);
+  --dm-ring-base: rgba(255, 255, 255, 0.02);
+  --dm-ring-mid: rgba(255, 255, 255, 0.04);
+  --dm-ring-high: rgba(255, 255, 255, 0.06);
+  --dm-drop: rgba(0, 0, 0, 0.18);
+  --shadow-dark-1: inset 0 0 0 1px var(--dm-ring-base);
+  --shadow-dark-2:
+    inset 0 1px 0 0 var(--dm-hi-base), inset 0 0 0 1px var(--dm-ring-base),
+    0 1px 1px -0.5px var(--dm-drop);
+  --shadow-dark-3:
+    inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 1px var(--dm-ring-base),
+    0 0 0 1px rgba(0, 0, 0, 0.12), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop);
+  --shadow-dark-4:
+    inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 1px var(--dm-ring-mid),
+    0 0 0 1px rgba(0, 0, 0, 0.14), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop);
+  --shadow-dark-5:
+    inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 1px var(--dm-ring-mid),
+    0 0 0 1px rgba(0, 0, 0, 0.16), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop);
+  --shadow-dark-6:
+    inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 1px var(--dm-ring-high),
+    0 0 0 1px rgba(0, 0, 0, 0.18), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop), 0 24px 24px -12px var(--dm-drop);
+  --shadow-dark-7:
+    inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 1px var(--dm-ring-high),
+    0 0 0 1px rgba(0, 0, 0, 0.2), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop),
+    0 24px 24px -12px var(--dm-drop), 0 48px 48px -24px var(--dm-drop);
+  --shadow-dark-8:
+    inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 1px var(--dm-ring-high),
+    0 0 0 1px rgba(0, 0, 0, 0.22), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
+    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop),
+    0 24px 24px -12px var(--dm-drop), 0 48px 48px -24px var(--dm-drop),
+    0 96px 96px -48px var(--dm-drop);
+
+  --shadow-1: var(--shadow-light-1);
+  --shadow-2: var(--shadow-light-2);
+  --shadow-3: var(--shadow-light-3);
+  --shadow-4: var(--shadow-light-4);
+  --shadow-5: var(--shadow-light-5);
+  --shadow-6: var(--shadow-light-6);
+  --shadow-7: var(--shadow-light-7);
+  --shadow-8: var(--shadow-light-8);
+}
+
+/* ============================================================================
+   2. THEME SWITCHING
+   ----------------------------------------------------------------------------
+   `color-scheme` is what flips every light-dark() token above; the classes
+   work on <html> (ThemeProvider) and on any subtree (forced-theme previews).
+   The only values that need manual switching are the --overlay triplet and
+   the shadow recipe selection — see the section-1 note.
+============================================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --overlay: 255 255 255;
+    --shadow-1: var(--shadow-dark-1);
+    --shadow-2: var(--shadow-dark-2);
+    --shadow-3: var(--shadow-dark-3);
+    --shadow-4: var(--shadow-dark-4);
+    --shadow-5: var(--shadow-dark-5);
+    --shadow-6: var(--shadow-dark-6);
+    --shadow-7: var(--shadow-dark-7);
+    --shadow-8: var(--shadow-dark-8);
+  }
+}
+
+.light {
+  color-scheme: light;
+  --overlay: 0 0 0;
+  --shadow-1: var(--shadow-light-1);
+  --shadow-2: var(--shadow-light-2);
+  --shadow-3: var(--shadow-light-3);
+  --shadow-4: var(--shadow-light-4);
+  --shadow-5: var(--shadow-light-5);
+  --shadow-6: var(--shadow-light-6);
+  --shadow-7: var(--shadow-light-7);
+  --shadow-8: var(--shadow-light-8);
+}
+
+.dark {
+  color-scheme: dark;
+  --overlay: 255 255 255;
+  --shadow-1: var(--shadow-dark-1);
+  --shadow-2: var(--shadow-dark-2);
+  --shadow-3: var(--shadow-dark-3);
+  --shadow-4: var(--shadow-dark-4);
+  --shadow-5: var(--shadow-dark-5);
+  --shadow-6: var(--shadow-dark-6);
+  --shadow-7: var(--shadow-dark-7);
+  --shadow-8: var(--shadow-dark-8);
+}
+
+/* ============================================================================
+   3. TAILWIND THEME MAPPING
+============================================================================ */
+
+@theme inline {
+  --font-mono:
+    'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-light: var(--destructive-light);
+  --color-working: var(--working);
+  --color-decision: var(--decision);
+  --color-decision-soft: var(--decision-soft);
+  --color-diff-add: var(--diff-add);
+  --color-diff-remove: var(--diff-remove);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+  --color-scrim: var(--scrim);
+
+  /* Surface ladder — bg-surface-1..8 utilities */
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-surface-5: var(--surface-5);
+  --color-surface-6: var(--surface-6);
+  --color-surface-7: var(--surface-7);
+  --color-surface-8: var(--surface-8);
+
+  /* Shadow ladder — shadow-surface-1..8 utilities. Monotonic with surfaces. */
+  --shadow-surface-1: var(--shadow-1);
+  --shadow-surface-2: var(--shadow-2);
+  --shadow-surface-3: var(--shadow-3);
+  --shadow-surface-4: var(--shadow-4);
+  --shadow-surface-5: var(--shadow-5);
+  --shadow-surface-6: var(--shadow-6);
+  --shadow-surface-7: var(--shadow-7);
+  --shadow-surface-8: var(--shadow-8);
+}
+
+/* ============================================================================
+   4. BASE STYLES
+============================================================================ */
+
+/* No explicit overflow here: scrollbar-gutter applies to the viewport when
+   set on the root, and an explicit `overflow-y: auto` would stop dialog
+   scroll locks (`body { overflow: hidden }`) from propagating to the
+   viewport — body would become a clip container instead, which breaks
+   position: sticky for the sidebar and right panel (they snap to the
+   document top the moment a dialog opens). */
+html {
+  scrollbar-gutter: stable;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100vh;
+  overscroll-behavior-y: none;
+  background-color: var(--background);
+  /* Explicit text color so unstyled text follows the theme (and so the UA's
+     color-scheme-driven canvastext default never shows through). */
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  /* Inherited by everything (portals included) — a `subpixel-antialiased`
+     utility on a subtree is the only way to opt back out. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* @layer base so a utility can still win: unlayered, these outrank
+   `truncate` on the text-wrap-mode longhand (white-space is a shorthand for
+   white-space-collapse + text-wrap-mode), which silently un-truncates every
+   <p> that asks for it — CardDescription among them. */
+@layer base {
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Inline code chips: bare <code> in prose gets its own ground (the same
+     recipe the motion/scrollbars pages hand-rolled). Excludes code inside
+     <pre> — shiki blocks style themselves. Base layer, so a page can still
+     override with utilities. */
+  code:not(pre code) {
+    background: light-dark(#ebebed, #2c2c2c);
+    border-radius: 4px;
+    padding: 1px 4px;
+    font-size: var(--fs-caption, 12px);
+    color: var(--color-foreground, inherit);
+  }
+}
+
+/* ── Type-scale roles ─────────────────────────────────────────────────────
+   Site-chrome font sizes ride these variables instead of fixed px so the
+   whole site follows the size ladder. `data-size` on <html> is written by the
+   outermost SizeProvider (lib/size-context.tsx) — the document's step, not a
+   pinned region's, so a compact filter bar inside a default page does not
+   restyle the page's chrome around it. The two steps a component also reads
+   through lib/size-context — `--fs-body` and `--fs-caption` — are held equal
+   to that ladder by lib/tokens.test.ts, attribute selector included.
+   `display` keeps its responsive pair (mobile / ≥sm) from the old
+   text-[22px] sm:text-[28px] titles. */
+:root {
+  /* The interface-size preference multiplies each step where the step is
+     declared, not in a scope of its own: `data-size='compact'` picks the base
+     number and the preference scales it, so the two compose without a
+     compact × small / compact × large matrix. */
+  --ui-scale: 1;
+  --fs-display: calc(22px * var(--ui-scale));
+  --fs-title: calc(16px * var(--ui-scale));
+  --fs-subtitle: calc(14px * var(--ui-scale));
+  --fs-body: calc(13px * var(--ui-scale));
+  --fs-caption: calc(12px * var(--ui-scale));
+
+  /* The markdown reading surface's base, deliberately outside `--ui-scale`:
+     interface size moves chrome type only, so a reader who enlarged the page
+     furniture keeps the prose size they chose. 15px is what the reading
+     surface already computed from `--fs-body` + 2px. */
+  --reading-font-size: 15px;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --fs-display: calc(28px * var(--ui-scale));
+  }
+}
+
+html[data-size='compact'] {
+  --fs-display: calc(20px * var(--ui-scale));
+  --fs-title: calc(15px * var(--ui-scale));
+  --fs-subtitle: calc(13px * var(--ui-scale));
+  --fs-body: calc(12px * var(--ui-scale));
+  --fs-caption: calc(11px * var(--ui-scale));
+}
+
+@media (min-width: 640px) {
+  html[data-size='compact'] {
+    --fs-display: calc(24px * var(--ui-scale));
+  }
+}
+
+html[data-ui-scale='small'] {
+  --ui-scale: 0.9;
+}
+
+html[data-ui-scale='large'] {
+  --ui-scale: 1.15;
+}
+
+html[data-reading-text-size='small'] {
+  --reading-font-size: 14px;
+}
+
+html[data-reading-text-size='large'] {
+  --reading-font-size: 18px;
+}
+
+@utility text-display {
+  font-size: var(--fs-display, 28px);
+}
+@utility text-title {
+  font-size: var(--fs-title, 16px);
+}
+@utility text-subtitle {
+  font-size: var(--fs-subtitle, 14px);
+}
+@utility text-body {
+  font-size: var(--fs-body, 13px);
+}
+@utility text-caption {
+  font-size: var(--fs-caption, 12px);
+}
+
+/* Motion steps as duration utilities — the class-side spelling of the
+   `--motion-*` tokens above (and of `tween` in lib/springs.ts). Registered
+   with tailwind-merge in lib/utils.ts so they still deduplicate against the
+   stock numeric `duration-*` utilities. */
+@utility duration-fast {
+  transition-duration: var(--motion-fast);
+}
+@utility duration-base {
+  transition-duration: var(--motion-base);
+}
+@utility duration-slow {
+  transition-duration: var(--motion-slow);
+}
+
+/* The same steps as transition DELAYS, for a transition that has to wait out
+   a neighbour before it starts (the scrollbar's fade waits out the thumb's
+   shrink). A numeric `delay-<n>` would be the one motion literal left in the
+   kit; registered with tailwind-merge in lib/utils.ts alongside the durations
+   so the two spellings still deduplicate. */
+@utility delay-fast {
+  transition-delay: var(--motion-fast);
+}
+@utility delay-base {
+  transition-delay: var(--motion-base);
+}
+@utility delay-slow {
+  transition-delay: var(--motion-slow);
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────
+   The one place the preference is honoured for class-driven motion. Zeroing
+   the three step tokens settles every `duration-fast/base/slow` transition
+   instantly — including the ones inside components, since they all read the
+   tokens rather than a literal. The catch-all below covers what predates the
+   tokens: a transition or animation declared with its own duration still
+   lands on its final value rather than travelling there, and a scroll still
+   jumps rather than smoothing.
+
+   JS-driven motion is honoured separately, by `useMotionTier` in
+   lib/use-motion-tier.ts — framer animations do not read CSS durations.
+   `1ms` rather than `0s`: a zero-duration transition never fires
+   `transitionend`, and code waiting on one would hang. */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  .light,
+  .dark {
+    --motion-fast: 1ms;
+    --motion-base: 1ms;
+    --motion-slow: 1ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Focus fallback — natively focusable elements no component styles (scroll
+   containers Chrome makes tabbable, prose links, demo boxes) get the same
+   token ring as the components instead of the UA default, which follows the
+   OS accent color. Lives in @layer base so `outline-none` (utilities layer)
+   still wins — components that draw their own ring aren't double-ringed,
+   and elements with their own radius utility keep it. The radius rides the
+   --shape-input-radius token above so the ring corners match the borderless
+   select. Enforced by the focus-ring lint rule in eslint.config.mjs. */
+@layer base {
+  :focus-visible {
+    outline: 1px solid var(--focus-ring, #6b97ff);
+    outline-offset: 2px;
+    border-radius: var(--shape-input-radius, 8px);
+  }
+
+  /* Prose links are inline text boxes — the shape-system radius reads
+     pill-ish at text height, so their ring takes a tight 2px corner
+     instead. Component links (NavItem, Button asChild) carry their own
+     radius utilities, which win over this base-layer rule. */
+  a:focus-visible {
+    border-radius: 2px;
+  }
+}
+
+/* ============================================================================
+   5. NATIVE SCROLLBAR THEME
+   ----------------------------------------------------------------------------
+   Matches the ScrollArea thumb language (narrow, low-contrast, darkens on
+   hover) so surfaces that fall back to native scrollbars (the root page,
+   touch-device viewports) stay consistent with the custom scrollbar. Rides
+   the same fixed surface-relative overlay ramp as the ScrollArea thumb
+   (rest 8%, hover 12%, drag 16%) — adapts to dark mode through --overlay.
+   Only on fine pointers; touch devices keep their overlay momentum bars.
+   `.scrollbar-hide` still wins (higher specificity). Chromium 121+ renders
+   scrollbar-color and ignores the ::-webkit-* block, so both ramps must
+   stay in sync.
+============================================================================ */
+
+@media (pointer: fine) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--overlay) / 0.08) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    /* Transparent borders + content-box clip leave a ~4px visible thumb
+       inside the 10px hit area, mirroring the custom thumb's resting width.
+       The asymmetric edge-side border (5px outer / 1px inner, set per
+       orientation below) slides the visible thumb 2px away from the edge,
+       matching the ScrollArea thumb's -translate nudge. */
+    background-color: rgb(var(--overlay) / 0.08);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:vertical {
+    border-left-width: 1px;
+    border-right-width: 5px;
+  }
+
+  ::-webkit-scrollbar-thumb:horizontal {
+    border-top-width: 1px;
+    border-bottom-width: 5px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--overlay) / 0.12);
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background-color: rgb(var(--overlay) / 0.16);
+  }
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================================
+   6. UTILITIES
+============================================================================ */
+
+/* ── shimmer-text (thinking-indicator, thinking-steps) ── */
+
+@keyframes shimmer {
+  0% {
+    background-position: 0% 0;
+  }
+  100% {
+    background-position: 100% 0;
+  }
+}
+
+.shimmer-text {
+  color: transparent;
+  background: linear-gradient(
+    90deg,
+    light-dark(#a3a3a3, #525252) 0%,
+    light-dark(#a3a3a3, #525252) 35%,
+    light-dark(#525252, #a3a3a3) 50%,
+    light-dark(#a3a3a3, #525252) 65%,
+    light-dark(#a3a3a3, #525252) 100%
+  );
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ── Spinner keyframes ── */
+
+@keyframes spinner-move {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes spinner-dash {
+  0%,
+  100% {
+    stroke-dasharray: 15 85;
+  }
+  50% {
+    stroke-dasharray: 40 60;
+  }
+}
+
+/* ── scroll-fade — vendored equivalent of shadcn's scroll-fade utility ──
+   (https://ui.shadcn.com/docs/utils/scroll-fade). A mask-image dissolves the
+   content toward the edges that have more to scroll. CSS scroll-driven
+   animations make it scroll-aware: the true start/end edge stays crisp until
+   you scroll past it. Browsers without scroll-driven animations fall back to a
+   static fade on both edges. Apply to a scroll container, or to a ScrollArea
+   via `viewportClassName`. */
+
+@property --sf-start {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+@property --sf-end {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
+@keyframes sf-reveal-start {
+  from {
+    --sf-start: 1;
+  }
+  to {
+    --sf-start: 0;
+  }
+}
+@keyframes sf-reveal-end {
+  from {
+    --sf-end: 0;
+  }
+  to {
+    --sf-end: 1;
+  }
+}
+
+.scroll-fade,
+.scroll-fade-x {
+  --scroll-fade-size: 48px;
+}
+
+/* Static fallback: fade both edges. */
+.scroll-fade {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--scroll-fade-size),
+    #000 calc(100% - var(--scroll-fade-size)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--scroll-fade-size),
+    #000 calc(100% - var(--scroll-fade-size)),
+    transparent 100%
+  );
+}
+.scroll-fade-x {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--scroll-fade-size),
+    #000 calc(100% - var(--scroll-fade-size)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--scroll-fade-size),
+    #000 calc(100% - var(--scroll-fade-size)),
+    transparent 100%
+  );
+}
+
+/* ── scroll-divider — a hairline marking a scroll edge ──────────────────────
+   Pairs with .scroll-fade on a descendant viewport: where the fade dissolves
+   content, this draws the line that says "the region continues". The line
+   can't live inside the scroller — the fade's own mask would erase it at
+   exactly the edge it belongs on — so it rides the parent's pseudo-elements
+   and borrows the scroller's timeline by name. Browsers without scroll-driven
+   timelines simply get the fade, as before. */
+@keyframes sf-divider-start {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sf-divider-end {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@supports (timeline-scope: --sf) {
+  .scroll-divider {
+    position: relative;
+    timeline-scope: --sf-scroller;
+    --scroll-divider-size: 48px;
+  }
+  .scroll-divider .scroll-fade {
+    scroll-timeline-name: --sf-scroller;
+  }
+  .scroll-divider::before,
+  .scroll-divider::after {
+    content: '';
+    position: absolute;
+    /* Inset so the line can hug the content's own gutter rather than the
+       panel edge — the sidebar's inset variant sets this to 8px. */
+    left: var(--scroll-divider-inset, 0px);
+    right: var(--scroll-divider-inset, 0px);
+    height: 1px;
+    background-color: var(--border);
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+  }
+  /* Top edge: absent at rest, fading in as content passes above. */
+  .scroll-divider::before {
+    top: 0;
+    animation: sf-divider-start both linear;
+    animation-timeline: --sf-scroller;
+    animation-range: 0 var(--scroll-divider-size);
+  }
+  /* A region flush with the panel's own top edge has nothing above for
+     content to pass under, so the start line would read as a stray border. */
+  .scroll-divider:first-child::before {
+    content: none;
+  }
+  /* Bottom edge: present while content continues below, gone at the end. */
+  .scroll-divider::after {
+    bottom: 0;
+    animation: sf-divider-end both linear;
+    animation-timeline: --sf-scroller;
+    animation-range: calc(100% - var(--scroll-divider-size)) 100%;
+  }
+}
+
+/* Scroll-aware: the start/end edge stays solid until there's content past it. */
+@supports (animation-timeline: scroll()) {
+  .scroll-fade {
+    mask-image: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, var(--sf-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgba(0, 0, 0, var(--sf-end)) 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, var(--sf-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgba(0, 0, 0, var(--sf-end)) 100%
+    );
+    animation:
+      sf-reveal-start both linear,
+      sf-reveal-end both linear;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%;
+  }
+  .scroll-fade-x {
+    mask-image: linear-gradient(
+      to right,
+      rgba(0, 0, 0, var(--sf-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgba(0, 0, 0, var(--sf-end)) 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      rgba(0, 0, 0, var(--sf-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgba(0, 0, 0, var(--sf-end)) 100%
+    );
+    animation:
+      sf-reveal-start both linear,
+      sf-reveal-end both linear;
+    animation-timeline: scroll(self inline), scroll(self inline);
+    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%;
+  }
+}

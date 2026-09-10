@@ -31,14 +31,58 @@ before its metadata and payloads coexist.
   release/update/signing contracts, config/account, scheduler, cancellation,
   retrieval, renderer, server, MCP, Python, and real Electron lifecycle
   behavior.
-- A read-only Ubuntu renderer-quality job pins both the ShadScan Action
-  revision and CLI version, publishes the complete JSON report, and fails an
-  unassessed audit or a score below the reviewed baseline. It never launches an
-  Agent, creates an issue, or mutates repository state.
-- Ubuntu Playwright adds smoke, deterministic functional journeys, and reviewed
-  visual baselines without replacing the three-platform source matrix.
+- `pnpm check:web` is the release-blocking renderer gate. It is one CI step, and
+  `scripts/renderer/check-web.mjs` runs the whole renderer gate set behind it:
+  layer boundaries, file size, conventions, unused exports, duplication,
+  formatting, lint, the coverage floor, typecheck, the production build, and the
+  catalog build. Every gate runs to completion in its own process, so one run
+  reports every failure instead of stopping at the first. Do not add a second
+  per-gate CI step; deepen that runner instead.
 - Linux source Electron may use `--no-sandbox` under hosted Xvfb. Packaged apps
   and non-Linux launches must not inherit that flag.
+
+## Frontend Toolchain
+
+The renderer is built by an exact pinned Vite+ release. The version is declared
+in the root and `renderer` manifests, held by a workspace override so no
+transitive resolution can drift, and recorded again in the source block of
+`toolchain/vite-plus.json`.
+
+- Vite+ supplies the bundler and the checkers. Vite and Rolldown are bundled
+  into the pinned release; Vitest, Oxlint, and the formatter come with it as
+  aligned dependencies. `toolchain/vite-plus.json` is the committed inventory
+  of exactly which tool versions that release resolves to.
+- `pnpm-lock.yaml` remains the package-management authority. Vite+ installs
+  nothing, and the workflows give its setup action no installation or Node
+  ownership.
+- Stable repository scripts delegate to pinned `renderer` tasks rather than
+  invoking a tool directly, so the pinned release is the only path to the
+  renderer's build, test, lint, and format behavior.
+- Vite+ task-result caching is disabled repository-wide in the root
+  `vite.config.ts` and again through the setup action's inputs. A green run
+  must come from work that actually ran.
+- CI retains only pnpm's content-addressed dependency store cache. No workflow
+  adds a second cache for frontend artifacts.
+- The setup action is pinned by commit, requests the exact Vite+ version, and
+  declines Node management and dependency installation. The Node and package
+  manager runtimes are provisioned by their own earlier steps.
+- CI verifies the resolved-tool inventory before the renderer gate runs.
+  `scripts/check-vite-plus-toolchain.mjs` asks the pinned release for its
+  resolved toolchain and requires a deep match against
+  `toolchain/vite-plus.json`, so a silent tool substitution fails the build.
+
+**Known gap — the toolchain contract test contradicts the workflow.**
+`scripts/vite-plus-ci.test.mjs` still asserts that `ci.yml` runs each renderer
+gate as its own step and carries a separate catalog-build step. The workflow
+collapsed those into `pnpm check:web`, so `pnpm test:toolchain` fails today and
+the CI step that runs it fails before the renderer gate executes. Repair the
+test against the current workflow shape; do not weaken the inventory check to
+get past it.
+
+**Known gap — a second Oxlint.** The root manifest pins an Oxlint older than
+the one the pinned Vite+ release delivers, and both resolve in the lockfile.
+The renderer lints with the release's copy, so the root pin is an unused second
+toolchain rather than the linter any gate runs.
 
 ## Native Packaging
 
@@ -150,12 +194,15 @@ credential-free and does not run this probabilistic check.
 | Role | Stable entry points |
 |---|---|
 | Source CI | `.github/workflows/ci.yml` |
+| Renderer gate runner | `scripts/renderer/check-web.mjs` behind `pnpm check:web` |
+| Frontend toolchain Interface | the pinned Vite+ version in `package.json`, `renderer/package.json`, and `pnpm-workspace.yaml`, against the resolved inventory in `toolchain/vite-plus.json` |
+| Toolchain verifier | `scripts/check-vite-plus-toolchain.mjs`, with the workflow contract in `scripts/vite-plus-ci.test.mjs` |
 | Tag gate Interface | `.github/workflows/release-ci-gate.yml` and `scripts/require-green-ci.mjs` |
 | Publication coordinator | `.github/workflows/release.yml` |
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
 | Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs` (including the explicit OpenCode resource version probe) and platform release verifiers |
-| Focused evidence | `scripts/renderer-quality-gates.test.mjs`, `scripts/package-inputs.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
+| Focused evidence | `scripts/packaging/inputs.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
 
 ## Release Runbook
 
@@ -230,6 +277,7 @@ Run:
 
 ```bash
 pnpm test:release-gate
+pnpm test:toolchain
 pnpm test:package-inputs
 pnpm test:macos-signing
 pnpm test:windows-signing
@@ -240,6 +288,8 @@ pnpm typecheck
 Exercise the reusable tag/CI gate against matching, missing, active, failed,
 and annotated-tag cases. Exercise missing, partial, conflicting, and complete
 macOS credentials plus absent, partial, and complete optional Windows signing
-credentials through focused contract tests. Any native
-manifest or packaging change must pass the platform verifier and
-`pnpm smoke:packaged-server` before publication.
+credentials through focused contract tests. Any native manifest or packaging
+change must pass the platform verifier and `pnpm smoke:packaged-server` before
+publication. A change to the pinned frontend toolchain, the setup action, or the
+renderer gate set regenerates `toolchain/vite-plus.json` from the release itself
+rather than by hand.

@@ -49,6 +49,22 @@ editor, a media editor, or a proprietary document format.
   shows their differences, and waits for the user to reload, overwrite, or
   merge. An unresolved comparison blocks leaving; a merge returns as an
   unsaved draft.
+- Unsaved text in a content-editable source is journaled while the person
+  works, shortly after typing pauses and again during continuous editing. The
+  entry is dropped as soon as that document is clean again, whether a save,
+  a revert, or a reload made it clean.
+- Opening a folder offers whatever unsaved text a previous session left for
+  it. A strip above the workspace names each file, when its text was captured,
+  and whether the file has since changed or gone. Each draft is restored or
+  discarded on its own, and one action discards them all.
+- Restoring writes nothing. It opens the document when it is not already open
+  and returns the text as an unsaved draft carrying the version it was typed
+  over, so the ordinary save and conflict decisions still choose what reaches
+  disk. Drafts are application state held outside every library folder, so
+  folder sync, backups, indexing, and Search never see them. Signing out of an
+  account leaves them alone, because they belong to local files rather than to
+  the account. Without operating-system key protection the journal is off and
+  nothing falls back to unprotected storage.
 - HTML is viewed as source content; the current compatibility preview executes
   local document scripts in a same-origin iframe. PDF uses its source document
   in the preview surface with selectable page text. DOCX uses a sanitized
@@ -88,9 +104,10 @@ assertions.
 | Video container | `.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv`, `.avi` | Media playback when compatible, otherwise a local audio preview | Preview-only | Audio track prepared as timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
 | Generic workspace file | Any other regular file, plus restricted filesystem entries | Strict UTF-8 text is read-only; otherwise an explicit binary, oversized, unavailable, symlink, special-entry, or cloud-placeholder state | No content editing | None; the muted tree state means Search and automatic Chat context exclude it | Not listed, read, written, moved, or deleted through Agent/MCP file tools |
 
-Rename, move, and delete are file-mutation capabilities over regular files in
-the active Workbench, including generic regular files; they do not make a
-preview-only format content-editable or widen Agent access. Restricted
+Rename and delete are file-mutation capabilities over regular files in the
+active Workbench, including generic regular files, and moving a file is
+reachable through Agent and MCP file tools rather than the Workbench. None of
+them makes a preview-only format content-editable or widens Agent access. Restricted
 filesystem entries are reveal-only. Generic bytes are never decoded lossily.
 
 `read_file` returns the whole readable text by default and, on request, one
@@ -112,6 +129,14 @@ and never silently substituted for a whole read.
   content.
 - Reading and editing mode changes preserve selection, history, navigation,
   and unsaved content.
+- Restoring recovered text is never a write. It produces an unsaved draft
+  carrying the version its text was typed over, so a draft older than the file
+  on disk enters the ordinary conflict decision instead of overwriting newer
+  bytes.
+- A recovered draft is application state for the whole life of the journal
+  entry. It never joins a library folder, Search, Preparation, indexing, or
+  Agent access, and it does not outlive a confirmed save or an explicit
+  discard.
 - Parsing or preview failure keeps the source identity visible and offers a
   truthful recovery path.
 - Direct-text saves preserve supported UTF-8 BOM, line-ending, and trailing-
@@ -133,6 +158,19 @@ and never silently substituted for a whole read.
   boundary than the experience contract. The compatibility tradeoff and
   required confinement work are owned by
   [Document Viewers](../../code-review/document-viewers.md#trust-boundary).
+- Crash recovery of unsaved drafts ships, but the trust decision behind its
+  protected journal was written up as a proposal and never accepted. Key
+  ownership and the storage boundary therefore have no settled contract to
+  hold the implementation to.
+- The journal's absence is not visible. With no operating-system key
+  protection it is disabled and only logs record that, so a person keeps
+  typing while nothing is protected. The same silence covers a draft too large
+  to capture, an entry evicted once the journal is full, and a key that had to
+  be regenerated and left earlier drafts unreadable.
+- Nothing distinguishes a draft an interrupted session left from one a clean
+  exit left behind, so a normal quit can still offer a draft whose text
+  already matches the file. Drafts belonging to a folder that has left the
+  library are never offered at all and wait for the retention window.
 
 ## Cross-area Seams
 

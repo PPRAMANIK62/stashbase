@@ -1,0 +1,248 @@
+/* Milkdown is the migration's sole component-specific CSS exception. Every
+   value below maps third-party anatomy onto the app's semantic design system. */
+.markdown-surface {
+  position: relative;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.markdown-surface > * {
+  grid-area: 1 / 1;
+}
+
+.markdown-mode-control {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  right: 20px;
+}
+
+.markdown-link-failure {
+  position: absolute;
+  z-index: 3;
+  bottom: 16px;
+  left: 50%;
+  max-width: calc(100% - 32px);
+  padding: 6px 10px;
+  color: var(--destructive);
+  font-size: var(--fs-caption, 12px);
+  background: color-mix(in oklab, var(--surface-3) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--shape-input-radius, 8px);
+  box-shadow: var(--shadow-4);
+  transform: translateX(-50%);
+}
+
+::highlight(stashbase-document-find) {
+  color: inherit;
+  background: color-mix(in oklab, var(--accent) 72%, transparent);
+}
+
+::highlight(stashbase-document-find-current) {
+  color: inherit;
+  background: color-mix(in oklab, var(--focus-ring) 46%, transparent);
+}
+
+.markdown-surface:not([data-markdown-state='ready']) .markdown-crepe {
+  visibility: hidden;
+}
+
+.markdown-status {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  text-align: center;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.markdown-crepe {
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+/* Crepe's frame theme declares these variables directly on `.milkdown`.
+   The scoped bridge must therefore outrank that package selector. */
+.markdown-crepe .milkdown {
+  --crepe-color-background: var(--surface-2);
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--surface-2);
+  --crepe-color-surface-low: var(--surface-3);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-outline: var(--border);
+  --crepe-color-primary: var(--foreground);
+  --crepe-color-secondary: var(--accent);
+  --crepe-color-on-secondary: var(--accent-foreground);
+  --crepe-color-inverse: var(--foreground);
+  --crepe-color-on-inverse: var(--background);
+  --crepe-color-inline-code: var(--foreground);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: var(--hover);
+  --crepe-color-selected: var(--selected);
+  --crepe-color-inline-area: var(--border);
+  --crepe-font-title: var(--font-sans);
+  --crepe-font-default: var(--font-sans);
+  --crepe-font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --crepe-shadow-1: var(--shadow-4);
+  --crepe-shadow-2: var(--shadow-6);
+
+  height: 100%;
+  min-width: 0;
+  min-height: 100%;
+  overflow: auto;
+  color: var(--foreground);
+  background: transparent;
+}
+
+/* Three classes intentionally outrank Crepe's later-loaded frame padding. */
+.markdown-crepe .milkdown .ProseMirror {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 820px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 32px clamp(28px, 6cqi, 52px) 96px;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--reading-font-size, 15px);
+  line-height: 1.68;
+  outline: none;
+}
+
+.markdown-crepe .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--foreground);
+  letter-spacing: -0.015em;
+}
+
+.markdown-crepe .ProseMirror a {
+  color: var(--foreground);
+  text-decoration-color: color-mix(in oklab, var(--foreground) 38%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.markdown-crepe .ProseMirror :is(pre, table) {
+  border-color: var(--border);
+}
+
+.markdown-crepe .ProseMirror table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown-crepe .ProseMirror pre {
+  border-radius: var(--shape-input-radius, 8px);
+}
+
+.markdown-crepe .ProseMirror hr {
+  height: 1px;
+  margin: 2em 0;
+  border: 0;
+  background: var(--border);
+}
+
+.markdown-crepe .milkdown-code-block,
+.markdown-crepe .milkdown-code-block .cm-editor,
+.markdown-crepe .milkdown-code-block .cm-gutters {
+  color: var(--foreground);
+  background: var(--surface-2);
+}
+
+.markdown-crepe .milkdown-code-block .cm-gutters {
+  color: var(--muted-foreground);
+  border-right: 1px solid var(--border);
+}
+
+.markdown-crepe .milkdown-code-block :is(.cm-activeLine, .cm-activeLineGutter) {
+  background: var(--hover) !important;
+}
+
+.markdown-crepe .milkdown-code-block :is(.cm-selectionBackground, .cm-content ::selection) {
+  background: var(--selected) !important;
+}
+
+.markdown-crepe .milkdown-code-block .cm-cursor {
+  border-left-color: var(--focus-ring);
+}
+
+.markdown-crepe .milkdown-toolbar,
+.markdown-crepe .milkdown-slash-menu,
+.markdown-crepe .milkdown-link-edit > .link-edit,
+.markdown-crepe .milkdown-link-preview > .link-preview {
+  color: var(--foreground);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--shape-input-radius, 8px);
+  box-shadow: var(--shadow-5);
+}
+
+.markdown-crepe .milkdown :is(.toolbar-item, .milkdown-slash-menu li):hover {
+  background: var(--hover);
+}
+
+.markdown-crepe .milkdown :is(.toolbar-item.active, .milkdown-slash-menu li.active) {
+  background: var(--active);
+}
+
+/* Crepe also uses its outline token for menu glyphs. Borders should remain
+   subtle, but controls need the app's normal foreground state ladder. */
+.markdown-crepe .milkdown :is(.milkdown-toolbar .toolbar-item, .milkdown-slash-menu li) svg {
+  color: color-mix(in oklab, var(--foreground) 76%, var(--background));
+  fill: currentColor;
+}
+
+.markdown-crepe
+  .milkdown
+  :is(.milkdown-toolbar .toolbar-item:hover, .milkdown-slash-menu li:hover)
+  svg,
+.markdown-crepe
+  .milkdown
+  :is(.milkdown-toolbar .toolbar-item.active, .milkdown-slash-menu li.active)
+  svg {
+  color: var(--foreground);
+}
+
+.markdown-crepe .milkdown-toolbar .divider {
+  background: var(--border);
+}
+
+.markdown-crepe .milkdown-link-edit > .link-edit,
+.markdown-crepe .milkdown-link-preview > .link-preview {
+  box-sizing: border-box;
+  width: min(400px, calc(100vw - 64px));
+}
+
+.markdown-crepe-readonly
+  .milkdown
+  :is(
+    .crepe-slash-menu,
+    .crepe-toolbar,
+    .crepe-link-tooltip,
+    .milkdown-block-handle,
+    .milkdown-slash-menu,
+    .milkdown-toolbar
+  ) {
+  display: none !important;
+}
+
+@container (max-width: 1120px) {
+  .markdown-crepe .milkdown .ProseMirror {
+    padding-top: 72px;
+  }
+}
+
+@container (max-width: 520px) {
+  .markdown-crepe .milkdown .ProseMirror {
+    padding: 72px 20px;
+    font-size: calc(var(--reading-font-size, 15px) - 1px);
+  }
+}

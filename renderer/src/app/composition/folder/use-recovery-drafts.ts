@@ -1,0 +1,52 @@
+import { useCallback, useEffect } from 'react';
+
+import { openDocument } from '@/app/workflows/open-document';
+import {
+  createRecoveryRuntime,
+  type DocumentAdapters,
+  type DocumentTabsRuntime,
+  type RecoveryRuntime,
+} from '@/features/documents/public';
+import type { WorkspaceRuntime } from '@/features/workspace/public';
+import { useScopedRuntime } from '@/shared/runtime/use-scoped-runtime';
+
+/**
+ * The folder's crash-recovery decisions, bound to the tabs that are live for
+ * it. Restore goes through the same open-document workflow a click in the
+ * file tree does, then hands the draft to that document as unsaved text, so
+ * the ordinary save and conflict lifecycle decides what reaches disk. The
+ * list is taken fresh for every folder scope.
+ */
+export function useRecoveryDrafts(
+  workspace: WorkspaceRuntime | null,
+  documents: DocumentTabsRuntime | null,
+  api: DocumentAdapters['recovery'],
+): RecoveryRuntime | null {
+  const folderPath = workspace?.scope.folder.path ?? null;
+  const generation = workspace?.scope.generation ?? null;
+  const bound = workspace && documents && documents.scope.folderPath === folderPath;
+
+  const create = useCallback(() => {
+    if (!workspace || !documents) throw new Error('Recovery needs a live workspace.');
+    return createRecoveryRuntime({
+      api,
+      folderPath: workspace.scope.folder.path,
+      restoreInto: async (source, draft) => {
+        const opened = await openDocument(workspace, documents, source);
+        return opened ? opened.restoreDraft(draft) : 'refused';
+      },
+    });
+  }, [api, documents, workspace]);
+
+  const runtime = useScopedRuntime(
+    bound && folderPath && generation ? `${folderPath}\u0000${generation}` : null,
+    create,
+    (recovery) => recovery.dispose(),
+  );
+
+  useEffect(() => {
+    if (runtime) void runtime.refresh();
+  }, [runtime]);
+
+  return runtime;
+}

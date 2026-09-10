@@ -18,11 +18,12 @@ import {
   clearCurrentFolder,
   currentWindowId,
   ensureFolderHome,
+  exactConfiguredMemberFolderRootAsync,
   getCurrentFolder,
   getCurrentFolderLabel,
   getFolderHome,
   getRecentFolders,
-  exactMemberFolderRootAsync,
+  getRecentFoldersAsync,
   notifyFolderSwitch,
   removeRecentAsync,
   setCurrentFolder,
@@ -38,9 +39,39 @@ import { noteTreeChanged } from '../watcher.ts';
 import { deleteDerivedForSource, deleteDerivedUnderFolder, type DerivedCleanupStats } from '../derived-store.ts';
 import { deleteFileOrderForRoot } from '../file-order.ts';
 import { stopAgentRuntimeForFolder } from '../agent-contract.ts';
+import {
+  libraryOpenFolderRequestSchema,
+  libraryRemoveFolderRequestSchema,
+  librarySnapshotSchema,
+} from '../../shared/protocols/http/library.ts';
 import { GitHubImportError, importPublicGitHubRepository } from '../github-import.ts';
 
 const log = logger('routes/folder');
+
+async function librarySnapshot() {
+  let current = getCurrentFolder();
+  if (current) {
+    try {
+      if (!(await fs.promises.stat(current)).isDirectory()) {
+        clearCurrentFolder();
+        current = null;
+      }
+    } catch {
+      clearCurrentFolder();
+      current = null;
+    }
+  }
+  return librarySnapshotSchema.parse({
+    current: current
+      ? {
+          path: filesystemPath.absolute(current),
+          name: getCurrentFolderLabel() ?? path.basename(current),
+        }
+      : null,
+    homeDir: os.homedir(),
+    recent: await getRecentFoldersAsync(),
+  });
+}
 
 function addDerivedCleanupStats(a: DerivedCleanupStats, b: DerivedCleanupStats): DerivedCleanupStats {
   return { sources: a.sources + b.sources, artifacts: a.artifacts + b.artifacts };
@@ -87,7 +118,77 @@ async function cleanupRemovedLibraryFolder(abs: string): Promise<void> {
   catch (err: unknown) { log.warn(`runtime-state cleanup failed for ${abs}: ${errorMessage(err)}`); }
 }
 
+async function removeLibraryFolder(rawPath: string): Promise<void> {
+  const requested = filesystemPath.absolute(rawPath);
+  const abs = await exactConfiguredMemberFolderRootAsync(requested);
+  if (!abs) {
+    const err = new Error('folder is not in your folders');
+    (err as { code?: string }).code = 'FOLDER_NOT_FOUND';
+    (err as { status?: number }).status = 404;
+    throw err;
+  }
+  const finishRemoval = await beginLibraryFolderRemovalAsync(abs);
+  try {
+    // Wiki Agent sessions are folder-pinned and survive window folder
+    // switches, so removal must also end the sessions BOUND to this folder —
+    // including ones in windows currently showing another folder. Do this
+    // BEFORE releasing window folder contexts so the structured retirement
+    // reason reaches the session first.
+    stopAgentRuntimeForFolder('claude', abs);
+    stopAgentRuntimeForFolder('codex', abs);
+    await clearFolderPathAsync(abs);
+    // Membership is the commit record. Keep it until every cleanup owner has
+    // acknowledged completion; partial cleanup remains recoverable.
+    await cleanupRemovedLibraryFolder(abs);
+    await removeRecentAsync(abs);
+    noteTreeChanged();
+  } finally {
+    finishRemoval();
+  }
+}
+
 export function mount(app: express.Express): void {
+  app.get('/api/library', async (_req, res) => {
+    res.json(await librarySnapshot());
+  });
+
+  app.post('/api/library/folders/open', async (req, res) => {
+    const request = libraryOpenFolderRequestSchema.safeParse(req.body);
+    if (!request.success) {
+      res.status(400).json({ error: 'path required', code: 'INVALID_FOLDER' });
+      return;
+    }
+    try {
+      const changed = setCurrentFolder(request.data.path);
+      const folderRoot = getCurrentFolder()!;
+      const windowId = currentWindowId();
+      if (changed) {
+        res.once('finish', () => notifyFolderSwitch(folderRoot, windowId));
+      }
+      res.json(await librarySnapshot());
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code === 'WINDOW_CLOSED') {
+        res.status(410).json({ error: 'window is closed', code: 'WINDOW_CLOSED' });
+        return;
+      }
+      sendFolderOperationError(res, err);
+    }
+  });
+
+  app.post('/api/library/folders/remove', async (req, res) => {
+    const request = libraryRemoveFolderRequestSchema.safeParse(req.body);
+    if (!request.success) {
+      res.status(400).json({ error: 'path required', code: 'INVALID_FOLDER' });
+      return;
+    }
+    try {
+      await removeLibraryFolder(request.data.path);
+      res.json(await librarySnapshot());
+    } catch (err: unknown) {
+      sendFolderOperationError(res, err);
+    }
+  });
+
   // List the open + recent folders. Powers the Welcome screen. Includes
   // homeDir so the renderer can shorten `/Users/<name>/foo` to `~/foo`
   // (less personal info in screenshots).
@@ -218,34 +319,8 @@ export function mount(app: express.Express): void {
     try {
       const raw = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
       if (!raw) return res.status(400).json({ error: 'path required' });
-      const requested = filesystemPath.absolute(raw);
-      const abs = await exactMemberFolderRootAsync(requested);
-      if (!abs) {
-        return res.status(404).json({ error: 'folder is not in your folders' });
-      }
-      const finishRemoval = await beginLibraryFolderRemovalAsync(abs);
-      try {
-        // Wiki Agent sessions are folder-pinned and survive window folder
-        // switches, so removal must also end the sessions BOUND to this folder
-        // — including ones in windows currently showing another folder. Do
-        // this BEFORE releasing window folder contexts: that release invokes
-        // the generic window-close teardown, whose raw socket close would
-        // otherwise erase the structured scope-retirement reason.
-        stopAgentRuntimeForFolder('claude', abs);
-        stopAgentRuntimeForFolder('codex', abs);
-        // Tear down every live window bound to the member after its affected
-        // Agent sessions have received the precise retirement event.
-        await clearFolderPathAsync(abs);
-        // Membership is the commit record. Keep it until every cleanup owner
-        // has acknowledged completion; a failure leaves the member recoverable
-        // and the next reconcile can rebuild any partially-cleared cache.
-        await cleanupRemovedLibraryFolder(abs);
-        await removeRecentAsync(abs);
-        noteTreeChanged();
-        res.json({});
-      } finally {
-        finishRemoval();
-      }
+      await removeLibraryFolder(raw);
+      res.json({});
     } catch (err: unknown) {
       sendFolderOperationError(res, err);
     }

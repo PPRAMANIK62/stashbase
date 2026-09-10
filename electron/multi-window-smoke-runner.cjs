@@ -8,7 +8,6 @@ const { spawn } = require('node:child_process');
 const { buildElectronSmokeArgs } = require('./multi-window.cjs');
 const { waitForChildExit } = require('./smoke-process.cjs');
 
-const LAYOUT_SMOKE_TIMEOUT_MS = 30_000;
 const MARKDOWN_LIFECYCLE_SMOKE_TIMEOUT_MS = 100_000;
 const WINDOW_SMOKE_TIMEOUT_MS = 75_000;
 
@@ -57,19 +56,10 @@ function runElectron({ electronPath, script, port, smokeRoot, launch, timeoutMs 
 async function main() {
   const electronPath = require('electron');
   const script = path.join(__dirname, 'multi-window-smoke.cjs');
-  const layoutScript = path.join(__dirname, 'tab-strip-layout-smoke.cjs');
   const markdownLifecycleScript = path.join(__dirname, 'markdown-tab-lifecycle-smoke.cjs');
   const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-real-window-smoke-'));
   try {
     const port = await reservePort();
-    await runElectron({
-      electronPath,
-      script: layoutScript,
-      port,
-      smokeRoot,
-      launch: 'layout',
-      timeoutMs: LAYOUT_SMOKE_TIMEOUT_MS,
-    });
     await runElectron({
       electronPath,
       script: markdownLifecycleScript,

@@ -24,6 +24,7 @@ export interface CodexSessionRow {
   id: string;
   title: string;
   lastModified: number;
+  hasContent: boolean;
   cwd?: string;
   gitBranch?: string;
 }
@@ -75,7 +76,12 @@ export async function renameCodexSession(threadId: string, title: string, folder
   const cwd = folder ?? process.cwd();
   await withTemporaryCodexAppServer(cwd, (request) => request('thread/name/set', { threadId, name: title }));
   const rows = await listCodexSessions(folder);
-  return rows.find((row) => row.id === threadId) ?? { id: threadId, title, lastModified: Date.now() };
+  return rows.find((row) => row.id === threadId) ?? {
+    id: threadId,
+    title,
+    lastModified: Date.now(),
+    hasContent: true,
+  };
 }
 
 export async function deleteCodexSession(threadId: string, folder: string | null): Promise<void> {
@@ -236,6 +242,10 @@ function isCodexHistoryTransportError(err: unknown): boolean {
   return /Codex app-server|not running|timed out|history client closed/i.test(errorMessage(err));
 }
 
+export function codexThreadHasContent(thread: unknown): boolean {
+  return Boolean(stringValue(objectValue(thread).preview).trim());
+}
+
 function codexThreadToRow(thread: unknown): CodexSessionRow | null {
   const obj = objectValue(thread);
   const id = stringValue(obj.id);
@@ -246,6 +256,7 @@ function codexThreadToRow(thread: unknown): CodexSessionRow | null {
     id,
     title: stringValue(obj.name) || stringValue(obj.preview) || id,
     lastModified: secondsToMillis(obj.updatedAt),
+    hasContent: codexThreadHasContent(obj),
     ...(cwd ? { cwd } : {}),
     ...(stringValue(git.branch) ? { gitBranch: stringValue(git.branch) } : {}),
   };

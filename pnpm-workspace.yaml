@@ -1,3 +1,6 @@
+packages:
+  - renderer
+
 allowBuilds:
   better-sqlite3: true
   electron: true
@@ -7,6 +10,9 @@ allowBuilds:
   # Copies the matching optional platform binary into opencode-ai/bin.
   # The exact package versions are pinned below and verified by package tests.
   opencode-ai: true
+overrides:
+  vite@*: npm:@voidzero-dev/vite-plus-core@0.3.0
+  vitest@*: 4.1.11
 minimumReleaseAgeExclude:
   - '@opencode-ai/sdk@1.18.19'
   - opencode-ai@1.18.19

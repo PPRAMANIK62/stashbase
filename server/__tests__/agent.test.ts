@@ -510,6 +510,61 @@ test('Claude model selection recovers visibly when the SDK rejects a discovered 
   assert.match(result.fallback ?? '', /could not be selected/);
 });
 
+test('Claude applies a fresh idle model choice before the first prompt', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-model-'));
+  runWithWindowId('claude-model-window', () => setCurrentFolder(folder));
+  let finish!: () => void;
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const selected: Array<string | undefined> = [];
+  const native = {
+    async *[Symbol.asyncIterator]() {
+      await finished;
+    },
+    supportedModels: async () => [{ value: 'native-model', displayName: 'Native model' }],
+    supportedCommands: async () => [],
+    setModel: async (model?: string) => {
+      selected.push(model);
+    },
+    setPermissionMode: async () => {},
+    interrupt: async () => {},
+  } as unknown as Query;
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-model-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => native) as never,
+    () => '/fake/claude',
+  );
+  t.after(() => {
+    finish();
+    session.dispose();
+    runWithWindowId('claude-model-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'set-model', model: 'native-model' }));
+  await settle();
+
+  assert.deepEqual(selected, [undefined, 'native-model']);
+  assert.deepEqual(
+    ws.sent.map((value) => JSON.parse(value)).filter((event) => event.t === 'models').at(-1),
+    {
+      activeModel: 'native-model',
+      models: [{ id: 'native-model', label: 'Native model' }],
+      t: 'models',
+    },
+  );
+});
+
 test('Claude resume preserves the native model and waits for its init event', async () => {
   let called = false;
   const result = await selectClaudeModel('old-tab-model', [{ id: 'old-tab-model', label: 'Old tab model' }], async () => { called = true; }, true);

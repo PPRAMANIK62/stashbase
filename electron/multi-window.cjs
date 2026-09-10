@@ -2,9 +2,8 @@
 
 const path = require('node:path');
 const crypto = require('node:crypto');
-// Shared with the renderer (web-src/src/lib/externalLink.ts) so the Help
-// menu and the sidebar's Discord button can never point at different
-// invites. JSON, because this file runs unbuilt and cannot require a .ts.
+// Shared JSON keeps native and renderer surfaces on one external-link source;
+// this file runs unbuilt and cannot require a .ts module.
 const LINKS = require('../shared/links.json');
 
 const WINDOW_ID_ARG_PREFIX = '--stashbase-window-id=';
@@ -23,6 +22,17 @@ function windowIdFromArgv(argv) {
     : undefined;
   const id = typeof arg === 'string' ? arg.slice(WINDOW_ID_ARG_PREFIX.length).trim() : '';
   return id ? id.slice(0, 128) : null;
+}
+
+function applicationWindowChromeOptions(platform = process.platform) {
+  return {
+    // Linux otherwise reserves a permanent native menu strip above the
+    // renderer. Keep the application menu installed for accelerators and let
+    // the platform reveal it temporarily with Alt when it is needed.
+    autoHideMenuBar: platform === 'linux',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 12 },
+  };
 }
 
 function createApplicationMenuTemplate({
@@ -73,7 +83,19 @@ function createApplicationMenuTemplate({
         { role: 'togglefullscreen' },
       ],
     },
-    { role: 'windowMenu' },
+    // Not `role: 'windowMenu'`: on Windows and Linux that stock menu quietly
+    // adds a Close item bound to Ctrl+W, which would take the renderer's
+    // close-tab chord and, with one window open, quit the app. The window
+    // menu keeps only what the platform expects from it.
+    {
+      label: 'Window',
+      role: 'window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [{ type: 'separator' }, { role: 'front' }] : []),
+      ],
+    },
     // Help is where both platforms train people to look when they are
     // stuck, and it is the only route out of the app that survives a
     // renderer that has failed to paint. `role: 'help'` matters on macOS:
@@ -165,7 +187,26 @@ function createWindowRegistry({ platform = process.platform } = {}) {
 
   return {
     add(windowId, win, folder = null) {
-      records.set(windowId, { win, folderKey: folderKey(folder, platform) });
+      const raw = typeof folder === 'string' ? folder.trim() : '';
+      records.set(windowId, {
+        win,
+        folderKey: folderKey(folder, platform),
+        // The spelling this window was created for, kept exactly as the caller
+        // wrote it. `folderKey` is for matching and lowercases on Windows;
+        // handing that to the renderer would reopen the folder under a rewritten
+        // name, which is the one thing an equivalent spelling may never do.
+        initialFolder: raw || null,
+      });
+    },
+    /** The folder this window was created for, answered at most once. The
+     *  registry forgets it as it answers: a window that reloads keeps its
+     *  identity and the server still holds its current folder, so a value that
+     *  lingered here would fight a folder the reader has since moved to. */
+    claimInitialFolder(windowId) {
+      const record = records.get(windowId);
+      const folder = record?.initialFolder ?? null;
+      if (record) record.initialFolder = null;
+      return folder;
     },
     remove(windowId) {
       records.delete(windowId);
@@ -173,6 +214,14 @@ function createWindowRegistry({ platform = process.platform } = {}) {
     idForWindow(win) {
       for (const [windowId, record] of records) {
         if (record.win === win) return windowId;
+      }
+      return null;
+    },
+    registrationForWebContentsId(webContentsId) {
+      for (const [windowId, record] of records) {
+        if (record.win?.webContents?.id === webContentsId) {
+          return { windowId, window: record.win };
+        }
       }
       return null;
     },
@@ -444,6 +493,7 @@ function createRendererFlushReadiness() {
 
 module.exports = {
   WINDOW_ID_ARG_PREFIX,
+  applicationWindowChromeOptions,
   buildElectronSmokeArgs,
   classifyProtocolLaunch,
   createApplicationMenuTemplate,

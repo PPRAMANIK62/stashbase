@@ -118,6 +118,31 @@ test('TXT saves preserve UTF-8 BOM, line endings, and trailing-newline state', a
   }
 });
 
+test('byte-identical and already-reconciled saves retain the authoritative version', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-no-op-save-'));
+  try {
+    fs.writeFileSync(path.join(root, 'notes.txt'), 'one\r\n', 'utf8');
+    await runWithFolderRoot(root, async () => {
+      const firstVersion = await fileVersionAsync('notes.txt');
+      const unchanged = await saveFileContent('notes.txt', 'one\n', {
+        baseVersion: firstVersion ?? undefined,
+      });
+      assert.equal(unchanged.version, firstVersion);
+      assert.equal(await readTextAsync('notes.txt'), 'one\r\n');
+
+      fs.writeFileSync(path.join(root, 'notes.txt'), 'external\r\n', 'utf8');
+      const externalVersion = await fileVersionAsync('notes.txt');
+      const reconciled = await saveFileContent('notes.txt', 'external\n', {
+        baseVersion: firstVersion ?? undefined,
+      });
+      assert.equal(reconciled.version, externalVersion);
+      assert.equal(await readTextAsync('notes.txt'), 'external\r\n');
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('text reads reject files above the bounded response limit', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-bounded-read-'));
   try {

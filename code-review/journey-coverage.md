@@ -15,9 +15,11 @@ outcome, but user-visible behavior without a journey is a traceability gap.
 
 - **Contract Test** proves a deterministic Interface, invariant, failure mode,
   or recovery rule at the lowest useful layer.
-- **Journey E2E** proves that the decisive observable flow crosses its real
-  product Seams. A Journey ID in a test name or tag identifies intent; it does
-  not imply every Required Observable Result is covered.
+- **Driven Runtime Pass** proves that the decisive observable flow crosses its
+  real product Seams by driving the built application. Journey automation
+  retired with the Playwright suites, so this evidence is currently produced by
+  hand and recorded in the owning task entry rather than replayed by a
+  command.
 - **AI Eval** measures probabilistic quality such as semantic relevance,
   source grounding, context use, or task completion on representative inputs.
 - **Release Check** covers behavior that requires a packaged application,
@@ -44,7 +46,7 @@ text, direct preview-only text, binary preview with prepared text, OCR image,
 and transcript media. The
 [Documents matrix](../design-docs/design/documents.md#format-capability-matrix)
 owns the Shipping capability claim; shared format-detection tests own extension
-aliases, and Journey E2E owns representative composition.
+aliases, and a driven runtime pass owns representative composition.
 
 ## Traceability Map
 
@@ -62,7 +64,7 @@ aliases, and Journey E2E owns representative composition.
 | [J10 Core loop](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work) | [Workspace](../design-docs/design/workspace.md), [Documents](../design-docs/design/documents.md), [Preparation](../design-docs/design/preparation.md), [Search](../design-docs/design/search.md), [Agent Panel](../design-docs/design/agent-panel.md) | [Renderer Workspace](renderer-workspace.md), [Data Lifecycle](data-lifecycle.md), [Agent Runtime](agent-runtime.md), [Agent Panel](agent-panel.md), [MCP Access](mcp-access.md), [File Transactions](file-transactions.md), [Markdown Rendering](markdown-rendering.md) |
 | [J11 Conversation to project](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project) | [Workspace](../design-docs/design/workspace.md), [Agent Panel](../design-docs/design/agent-panel.md) | [Renderer Workspace](renderer-workspace.md), [Settings and Config](settings-config.md), [MCP Access](mcp-access.md), [Agent Runtime](agent-runtime.md), [Agent Panel](agent-panel.md), [File Transactions](file-transactions.md), [Data Lifecycle](data-lifecycle.md) |
 | [J12 Build Wiki Pages](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder) | [Agent Panel](../design-docs/design/agent-panel.md), [Search](../design-docs/design/search.md), [Workspace](../design-docs/design/workspace.md) | [Agent Panel](agent-panel.md), [Settings and Config](settings-config.md), [Renderer Workspace](renderer-workspace.md), [File Transactions](file-transactions.md), [Data Lifecycle](data-lifecycle.md) |
-| [J13 Gallery download](../design-docs/user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery) | [Agent Panel](../design-docs/design/agent-panel.md), [Workspace](../design-docs/design/workspace.md) | [Agent Panel](agent-panel.md) |
+| [J13 Gallery download](../design-docs/user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery) | [Agent Panel](../design-docs/design/agent-panel.md), [Workspace](../design-docs/design/workspace.md) | [Gallery](gallery.md), [Agent Panel](agent-panel.md) |
 
 ## J01: Onboarding
 
@@ -81,25 +83,23 @@ aliases, and Journey E2E owns representative composition.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
   library membership, so a failed or pending membership load cannot claim the
   library is empty.
-  The Settings smoke drives the development-only update simulator through the
-  production update-state bridge to verify available and ready update-banner
-  behavior without claiming a packaged installation; the Linux workspace
-  visual suite owns the floating banner's composition above persistent account
-  utilities.
-- **Journey E2E:** [launch smoke](../e2e/smoke/launch.spec.ts) and
-  [library navigation](../e2e/journeys/library-navigation.spec.ts) exercise
-  blank-workspace entry, the quiet state of search by meaning, explicit
-  setup/skip behavior, folder selection, and local availability.
-  [Navigation layout](../e2e/journeys/navigation-layout.spec.ts)
-  verifies that Appearance Settings remains usable with the operating system's
-  reduced-motion preference while transform movement is removed and quiet
-  state feedback remains, that a folder name too long for a narrowed
-  sidebar truncates inside the column instead of crossing onto the tab strip,
-  and that the three pane separators (sidebar, Agent chat, and the Document
-  Outline dock) update their ARIA values by keyboard, with the outline
-  growing only into room the file tree can spare above its floor.
-  These checks do not yet prove the full orientation,
-  first-value, and return sequence as one onboarding outcome.
+  The setup invitation for search by meaning is proven at three layers: a pure
+  decision covering never-offered, answered, already-configured, bare-window,
+  and raised-revision states; a hook covering the offer, the single durable
+  answer however many times the reader clicks, and the refusal to offer before
+  the stored answer has loaded; and a route test proving an unknown or
+  malformed preference is refused rather than written into durable config.
+  The update surface is proven at three layers: a wire contract that refuses a
+  snapshot carrying a field its phase does not allow; an Electron boundary
+  suite covering an authorized call, a foreign sender, a window without the
+  capability, a state the projection cannot describe, and the
+  development-only simulator having no handler in a packaged build; and
+  renderer suites over the phase table, the adapter's validation, both view
+  models, and the notice by role and label. The boundary smoke asserts the
+  preload's frozen updates key list.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** onboarding mechanics are deterministic. If first value uses
   semantic retrieval or a real Agent, its quality evidence comes from J05 or
   J10 rather than being duplicated here.
@@ -107,11 +107,14 @@ aliases, and Journey E2E owns representative composition.
   notarized macOS artifact, packaged first launch, native folder selection,
   offline startup, one first-session-to-returning-session pass, and real
   N→N+1 desktop updates on supported platforms remain release evidence.
-- **Gap:** no single Journey E2E currently proves that a first-time user sees
+- **Gap:** no single driven runtime pass currently proves that a first-time user sees
   the source/derived/hosted distinction, authorizes useful content, reaches a
   concrete first result, and returns without unnecessary onboarding replay.
   The first local-model download and selection path is also lower-layer and
-  packaged-release evidence rather than a complete Journey E2E.
+  packaged-release evidence rather than a complete driven runtime pass. No driven
+  pass reaches any update phase beyond `unsupported`, because an unpackaged
+  build reports exactly that; the phases a reader would act on are proven by
+  the simulator through the real bridge or by a packaged release.
 
 ## J02: Folder
 
@@ -119,13 +122,13 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** workspace transitions, library mutation, cleanup, GitHub
   repository import (`server/__tests__/github-import.test.ts`,
-  `web-src/src/features/workspace/__tests__/import-github-modal.test.ts`), and
+  `renderer/src/features/workspace/infrastructure/github-import-api.test.ts`,
+  `renderer/src/features/workspace/hooks/use-github-import.test.ts`), and
   window retirement run through `pnpm test:renderer`,
   `pnpm test:library-files`, and `pnpm test:electron`.
-- **Journey E2E:** [library navigation](../e2e/journeys/library-navigation.spec.ts)
-  and [library mutations](../e2e/journeys/library-mutations.spec.ts) exercise
-  entry, switching, and removal without source deletion; navigation also proves
-  folder entry creates no `AGENTS.md` or `CLAUDE.md`.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** not required.
 - **Release Check:** real operating-system folder picking, Git cloning of public
   repositories, and file drop remain release evidence.
@@ -146,28 +149,24 @@ aliases, and Journey E2E owns representative composition.
   default and show-hidden listings, protected VCS/derived paths, bounded
   hidden excluded rows, sync/async parity, and large-scan yielding;
   `pnpm test:config` locks default-off recovery, strict failure, and durable
-  hidden-files persistence; renderer `hidden-entries.test.ts`,
-  `hidden-files-menu.test.ts`, `hidden-visibility-actions.test.ts`, and
-  `file-listing-generation.test.ts` lock row marking, checked semantics,
-  rapid/failing writes, and stale continuation ownership.
-- **Journey E2E:** [document editing smoke](../e2e/smoke/document-editing.spec.ts),
-  [workspace navigation depth](../e2e/journeys/navigation-depth.spec.ts),
-  [Markdown, JSON, and TXT](../e2e/journeys/markdown-json.spec.ts), focused
-  `plain-text-document.test.ts`,
-  [outline and Find](../e2e/journeys/markdown-outline-find.spec.ts),
-  [library mutations](../e2e/journeys/library-mutations.spec.ts), and
-  [format and media](../e2e/journeys/formats-media.spec.ts) cover representative
-  format classes and document work, including preview-only affordances,
-  truthful generic-file and excluded-folder visibility, Quick Open parity,
-  the Show Hidden Files menu flow and cross-window convergence, protected
-  `.stashbase*` state, retained hidden document tabs, and Agent-safe explicit listings,
-  strict read-only text versus binary fallback, `.txt` authoring capability,
-  explicit PDF/DOCX preview-failure identity, external-write conflict recovery,
-  and a live edit flushed through recovery reload.
+  hidden-files persistence. On the renderer side
+  `renderer/src/features/workspace/hooks/use-hidden-files.test.ts` locks the
+  echoed state through rapid and failing writes,
+  `renderer/src/features/workspace/ui/file-tree-menu.test.tsx` locks the
+  toggle's checked semantics in the tree's own context menu, and
+  `renderer/src/features/workspace/infrastructure/files-api.test.ts` locks row
+  marking and stale continuation ownership.
+- **Driven Runtime Pass:** crash recovery is driven through the real
+  application with a stand-in keyring, covering a crash, the relaunch, the
+  offer of the surviving draft, the restore into a dirty editor, its autosave
+  through the ordinary versioned save, and the journal clearing afterward. The
+  rest of the journey has no driven pass: reading, editing, saving, navigating
+  under the save barrier, and external-write conflict resolution are proven by
+  the contract tests above and not yet by driving the built application.
 - **AI Eval:** not required.
 - **Release Check:** complex packaged PDF, DOCX, and media behavior remains
   release evidence.
-- **Gap:** none in the deterministic save/conflict path. The Journey E2E proves
+- **Gap:** none in the deterministic save/conflict path. The retired journey suite proved
   external-write recovery; separate save and mutation tests prove that renderer,
   Agent, and MCP writes share the same version authority. See
   [File Transactions](file-transactions.md#renderer-conflict-recovery).
@@ -185,11 +184,9 @@ aliases, and Journey E2E owns representative composition.
   Windows extractor bootloader argument wiring without discarding stderr.
   `pnpm test:electron` locks the focused-window and unclaimed-composer offer
   policy.
-- **Journey E2E:** [preparation capture](../e2e/journeys/preparation-capture.spec.ts)
-  proves default-off opt-in, explicit screenshot acceptance, opt-out stopping
-  later offers, visible source publication, deterministic OCR through the real
-  preparation path, keyword search, and navigation back to the image source.
-  Viewer journeys separately cover source continuity and failure identity.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** extraction correctness is format-specific deterministic or
   dataset evidence; no shared product-level quality Eval is currently claimed.
 - **Release Check:** operating-system screenshot capture and representative
@@ -207,8 +204,9 @@ aliases, and Journey E2E owns representative composition.
   Python daemon tests additionally lock the fixed ONNX model identity,
   provider/dimension collection separation, and cross-collection cleanup for
   renamed or deleted sources; keyword search remains provider-independent.
-- **Journey E2E:** [semantic search UI](../e2e/journeys/semantic-search-ui.spec.ts)
-  covers mode, scope, readiness, result presentation, and source navigation.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** `pnpm eval:semantic-retrieval` runs the versioned, synthetic
   [semantic retrieval dataset](../evals/semantic-retrieval/README.md) through
   the production index and Retrieval interfaces. It reports provider, model,
@@ -232,7 +230,7 @@ aliases, and Journey E2E owns representative composition.
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:agent`, `pnpm test:e2e:agent-protocol`, and
+- **Contract Test:** `pnpm test:agent` and
   renderer tests cover consent, normalized protocol, scope, lifecycle,
   permissions, failed-install external recheck without another download,
   managed Codex PowerShell path ownership and missing-output diagnostics,
@@ -257,14 +255,9 @@ aliases, and Journey E2E owns representative composition.
   attribution across retries, stable model profile routing, and allowance
   classification. Config tests also prove that ambient credentials and process
   injection flags do not enter the bundled runtime.
-- **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
-  the Wiki Agent account gate and bring-your-own choices, then
-  exercises the built-in panel against the deterministic fake Codex runtime,
-  including the session-scope **Search by meaning** switch before and after
-  scope binding plus folder-scoped Agent Instructions persistence, no
-  source-file creation, and exact native developer-instructions injection, and
-  retaining a started cross-folder Chat through Library removal and opening a
-  fresh explicitly Library-scoped Chat.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
 - **Release Check:** packaged OpenCode version/executability plus a fake-gateway
@@ -278,10 +271,9 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** Agent, MCP, file transaction, and Markdown suites prove
   the decisive Seams independently.
-- **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
-  proves a deterministic Agent request through visible approval and the real
-  MCP/file transaction boundary, workspace refresh without focus theft, user
-  review/edit/save, close, and durable reopen.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** deterministic fake-Agent evidence can prove the write/review
   workflow; whether a real Agent selects and writes the requested accepted
   content belongs to J10 task-quality Eval.
@@ -295,8 +287,9 @@ aliases, and Journey E2E owns representative composition.
   `pnpm test:retrieval` cover operation parity, transport, authorization,
   path confinement, direct and prepared text reads, text-format mutation
   boundaries, and reconcile.
-- **Journey E2E:** in-repository transport and operation tests cover the
-  StashBase side; third-party client UI is intentionally outside product E2E.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** retrieval quality is shared with J05; client generation quality
   is outside StashBase ownership.
 - **Release Check:** packaged launcher, copied configuration, URL access, and
@@ -316,8 +309,10 @@ aliases, and Journey E2E owns representative composition.
   [redaction](../electron/bug-report-redaction.test.cjs), and
   [handoff](../electron/bug-report-handoff.test.cjs) prove the app-owned draft,
   privacy, approval, and artifact boundaries.
-- **Journey E2E:** native-window integration is exercised below packaged UI,
-  but no full packaged review-window flow is claimed.
+- **Driven Runtime Pass:** the review window is driven through the real
+  application, opened from the shell and taken through prepare, back, and
+  cancel. Capture, the Downloads copy, and the browser handoff are not driven;
+  they remain the release evidence below.
 - **AI Eval:** not required.
 - **Release Check:** packaged capture, review, Downloads copy, and browser
   handoff remain release evidence.
@@ -328,11 +323,9 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** J02 and J04–J07 prove their owner Interfaces and recovery
   rules independently.
-- **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
-  proves one Golden Path from a visible image through deterministic OCR,
-  derived-text UI retrieval, scoped Agent retrieval, approved real MCP
-  writeback, user review/save, Chat close, and later keyword search. Native
-  extractor packaging and hosted providers remain release or focused evidence.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** Gap. No first-class representative dataset currently measures
   whether an Agent receives the relevant project evidence and produces a
   source-grounded result suitable for explicit writeback.
@@ -350,16 +343,15 @@ aliases, and Journey E2E owns representative composition.
   attribution, history override ordering, and rebind-race rollback.
   [MCP transport tests](../server/__tests__/mcp-http-transport.test.ts) prove
   attributed built-in calls and unattributed external calls remain distinct.
-  [renderer scope tests](../web-src/src/features/agent-panel/__tests__/agent-folder-pill.test.ts)
-  prove the Library-to-folder scope presentation.
-- **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
-  rejects one visible `create_project` approval and proves no directory or
-  membership appears, then approves the same real MCP action and proves folder
-  creation without `AGENTS.md`, registration, same-Chat rebind, originating-window
-  entry, transcript continuity, and a post-rebind real MCP write inside the
-  new project. Adapter contract tests additionally prove Codex keeps its thread
-  and Claude keeps its native session id while subsequent execution moves to
-  the project cwd.
+  [agent socket schema tests](../shared/protocols/websocket/agent-session.test.ts)
+  prove the `scope-changed` event's shape and the refusal of a contradictory
+  scope, and
+  [session context tests](../renderer/src/features/agent/application/session-runtime.context.test.ts)
+  prove the renderer applies a folder move to the live conversation and drops a
+  send whose context resolved after it.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** Gap. No representative real-Agent Eval proves that the Agent
   chooses `create_project` after an explicit project decision, avoids bare
   filesystem creation, and does not create a project merely because exploratory
@@ -367,6 +359,14 @@ aliases, and Journey E2E owns representative composition.
 - **Release Check:** one packaged real-runtime conversation-to-project flow on
   each supported path family remains release evidence after deterministic E2E
   exists.
+- **Gap:** the journey's entry state cannot be reached from the product. Library
+  scope is implemented end to end, down to its own packaged instructions, but no
+  window shows a Library-scoped Chat: a window with no folder open renders the
+  welcome screen rather than a Chat, and a folder window's Chats panel filters
+  to that folder. So the conversation this journey starts from can be neither
+  started nor returned to, and no evidence below can stand in for that. The
+  owning gap is in
+  [Agent Panel](../design-docs/design/agent-panel.md#no-surface-for-a-library-scoped-chat).
 - **Gap:** real-Agent intent/tool choice still needs an Eval. Codex
   configuration leaves `create_project` on the default prompt path, but no
   focused test locks that tool allowlist; Claude requires equivalent focused
@@ -379,20 +379,28 @@ aliases, and Journey E2E owns representative composition.
 
 **Status:** Partial and release-dependent.
 
-- **Contract Test:** renderer tests cover the one-time first-folder setup
-  offer and durable **Not now**, manual setup reopening, and the send
-  path's independence from embedding authorization. Agent,
-  file-transaction, and data-lifecycle suites cover approval, source
-  confinement, write reconciliation, and index admission.
-- **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
-  handles the first-folder setup offer for search by meaning, sends a
-  typed Build Wiki request through the deterministic fake Codex runtime,
-  approves a real MCP **wiki/index.md** write, observes the directory in
-  the tree, and
-  proves an original source stayed byte-identical. [Library navigation](../e2e/journeys/library-navigation.spec.ts)
-  separately proves the bare Library remains quiet, the first active folder
-  offers setup, later folder switches stay quiet after **Not now**, and the
-  persistent **Set up** route can reopen setup.
+- **Contract Test:** renderer domain tests cover the three runtime-gate states
+  and the starter row, including that a folder with existing pages is offered
+  the same wording. Workspace tests cover the gated composer holding a request
+  with Send unavailable and no runtime ability advertised, the stage-specific
+  offer, the request surviving onto the runtime the reader sets up, and the
+  starter filling the composer without sending. Runtime tests cover a Chat no
+  turn has left following an arriving runtime with its draft and bound sources,
+  and a Chat that has spoken staying where it is. A composition test covers a
+  request sending while the whole folder is still being prepared; the Agent
+  surface takes no retrieval or embedding input at all, which the cross-feature
+  import rule enforces. Story accessibility covers both the working
+  conversation and the gate. Agent, file-transaction, and data-lifecycle suites
+  cover approval, source confinement, write reconciliation, and index
+  admission.
+- **Driven Runtime Pass:** the renderer responsibilities are driven through the
+  real application: with every runtime reported unable to carry a turn, the
+  composer stays on screen with Send unavailable and each pending runtime named
+  by its own stage; the Build Wiki request is typed into the gated composer and
+  held; setting a runtime up clears the offer, restores the runtime controls,
+  enables Send, and leaves the request intact. The Agent turn that produces the
+  pages is not part of this pass — it writes real files and needs a real
+  account — and stays release and Eval evidence below.
 - **AI Eval:** Gap. The deterministic Agent proves orchestration and safety,
   not whether a real model produces useful, complete, well-linked Wiki Pages
   over representative mixed-format folders.
@@ -409,21 +417,31 @@ aliases, and Journey E2E owns representative composition.
 
 **Status:** Partial.
 
-- **Contract Test:** renderer tests
-  ([gallery.test.ts](../web-src/src/features/templates/__tests__/gallery.test.ts))
-  cover the index contract: whole-parse-or-whole-fallback, session
-  caching, fallback-not-cached, and snapshot enrichment of unpublished
-  fields. [server/routes/gallery.test.ts](../server/routes/gallery.test.ts)
+- **Contract Test:** the index contract is proven at the wire
+  ([gallery.test.ts](../shared/protocols/http/gallery.test.ts)):
+  whole-parse-or-whole-fallback, additive stripping, refusal of an entry
+  missing a required field, and refusal of an index past its bound. Renderer
+  tests cover the adapter's fallback and screenshot proxying
+  ([gallery-api.test.ts](../renderer/src/features/gallery/infrastructure/gallery-api.test.ts)),
+  snapshot enrichment of unpublished fields
+  ([entry.test.ts](../renderer/src/features/gallery/domain/entry.test.ts)), the
+  session-lived index and the one-at-a-time copy latch
+  ([use-gallery.test.tsx](../renderer/src/features/gallery/hooks/use-gallery.test.tsx),
+  [use-gallery-copy.test.ts](../renderer/src/features/gallery/hooks/use-gallery-copy.test.ts)),
+  and that both entrances write one shop
+  ([gallery-shop.test.tsx](../renderer/src/app/composition/gallery/gallery-shop.test.tsx)). [server/routes/gallery.test.ts](../server/routes/gallery.test.ts)
   covers the daemon proxy: upstream proxying with cache, the offline
   unsupported-schema envelope, and the image route refusing non-gallery
   hosts. [github-import tests](../server/__tests__/github-import.test.ts)
   cover the shared acquisition path.
-- **Journey E2E:** [Gallery](../e2e/journeys/gallery.spec.ts) proves the
-  bare window's inline band renders the snapshot offline, a card opens the
-  entry detail with **Make a copy**, the file tree, and the copy-only
-  prompt, and a folder window reaches the same Gallery as an overlay from
-  its sidebar row. The fixture pins the index upstream unreachable, so
-  E2E never follows the published index.
+- **Driven Runtime Pass:** the browse and inspect halves are driven through the
+  real application on a clean profile. With no folder open and no click, the
+  shelf derives on the welcome screen a bare window shows, from the bundled
+  snapshot, with no account and no Agent runtime present. Clicking a card opens
+  that entry's page carrying its file tree and the request that produced the
+  wiki. **Make a copy** is not pressed in this pass: it downloads a real public
+  repository and registers a real Library folder, so it stays release evidence
+  below.
 - **AI Eval:** none needed — the journey is deterministic acquisition and
   presentation; no model produces its content.
 - **Release Check:** a packaged build should download one real entry
@@ -437,21 +455,53 @@ aliases, and Journey E2E owns representative composition.
 
 Update a journey when its observable flow or Required Observable Results
 change. Update this file when Area or Contract ownership, evidence type,
-coverage status, or a residual check changes. A Journey E2E should carry its
+coverage status, or a residual check changes. A driven runtime pass should carry its
 `Jxx` intent in a stable test name or tag; lower-level tests normally map to
 their owning contract instead.
 
 Do not add per-assertion rows, copied test counts, or broad commands as proof.
-The test suite owns exact setup and assertions, while
-`pnpm test:e2e:functional --list` remains the functional inventory. E2E
-fixture isolation, selectors, readiness, visual baselines, and flake policy
-live in [UI Regression Testing](ui-regression-testing.md). Packaged checks live
-in [UI Release Sanity](../release-checklists/ui-sanity.md).
+The test suite owns exact setup and assertions. Journey automation retired
+with the Playwright suites, so a journey's end-to-end proof is a driven
+runtime pass recorded in its owning task entry until a replacement instrument
+is decided. Packaged checks live in
+[UI Release Sanity](../release-checklists/ui-sanity.md).
 
 ### Known traceability gap
 
-Most existing Journey E2E titles predate the stable `Jxx` convention. The file
+Journey titles predated the stable `Jxx` convention. The file
 links above are therefore the current traceability authority, and documentation
 validation checks that the files and reciprocal routes exist but cannot yet
 verify intent from test metadata. Add a stable Journey tag when an affected E2E
 is next changed; do not rename unrelated tests solely for documentation churn.
+
+### Next: a replayable journey instrument
+
+The Evidence Model above leaves a driven pass hand-produced "until a
+replacement instrument is decided". That instrument is already in the tree and
+wired to nothing. `electron/multi-window-smoke-runner.cjs` reserves a port,
+builds an isolated temporary home, and launches real Electron once per script
+against the real server; `electron/multi-window-smoke.cjs` and
+`electron/markdown-tab-lifecycle-smoke.cjs` are the two journeys it drives. No
+command reaches them, because the frontend migration repointed the smoke script
+at the renderer boundary smoke in `electron/renderer/smoke.cjs`, which proves
+the preload surface rather than a journey.
+
+Neither runs against the replacement renderer as written. Both were built on a
+`window.electron` bridge that is now `window.stashbase`, and both navigate to a
+folder query string the renderer no longer reads; a folder is reached through
+the library capability instead. A revival was driven to a green run locally and
+covered part of J02 and part of J03, so the cost is known and bounded. It is
+deliberately not part of this change.
+
+After that, by proof value over cost: J05, then J01, then J06. J06 is the
+largest uncovered surface and the only one needing new transport, a WebSocket
+stub and synthesized input events, because its composer is not a plain field.
+Three journeys do not belong on this instrument. J08 needs a real third-party
+client and stays release evidence, J10 is a composite of journeys proven
+piecewise, and the outcome J12 is named for is Agent-side.
+
+Two failures cost the most to diagnose, so they are recorded rather than
+rediscovered. A window whose library read does not answer never settles its
+boot and sits on the welcome screen forever. An opened folder must appear both
+as the current folder and as a member, or the workspace paints blank with no
+error to explain it.

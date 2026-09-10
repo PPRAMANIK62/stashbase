@@ -834,6 +834,31 @@ export class AgentSession implements AttributedAgentSession {
         }
         break;
       }
+      case 'set-model': {
+        // Claude can change the model only before a fresh conversation has
+        // content. Resumed/populated sessions keep their native model.
+        if (this.turnActive || this.resume || !this.q) break;
+        const requested = typeof msg.model === 'string' && msg.model ? msg.model : undefined;
+        void selectClaudeModel(requested, this.models, (model) => this.q!.setModel(model), false)
+          .then(({ fallback }) => {
+            if (this.closed) return;
+            if (fallback) {
+              this.send({
+                t: 'models',
+                models: this.models,
+                fallback,
+              });
+              return;
+            }
+            this.model = requested;
+            this.send({
+              t: 'models',
+              models: this.models,
+              ...(requested ? { activeModel: requested } : {}),
+            });
+          });
+        break;
+      }
       case 'set-similarity-search': {
         if (typeof msg.enabled === 'boolean') this.similaritySearch = msg.enabled;
         break;

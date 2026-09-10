@@ -15,6 +15,7 @@ const {
 } = require('./main-probe.cjs');
 const {
   WINDOW_ID_ARG_PREFIX,
+  applicationWindowChromeOptions,
   buildElectronSmokeArgs,
   classifyProtocolLaunch,
   createApplicationMenuTemplate,
@@ -32,6 +33,15 @@ const {
   windowLifecycleShortcutAction,
   windowIdFromArgv,
 } = require('./multi-window.cjs');
+const { registerWindowLifecycle } = require('../dist/electron/window/lifecycle.cjs');
+const { createWindowLifecycleUpdateBarrier } = require('./update-window-barrier.cjs');
+const { createUpdateManager } = require('./update-manager.cjs');
+
+test('Linux main windows auto-hide the native application menu bar', () => {
+  assert.equal(applicationWindowChromeOptions('linux').autoHideMenuBar, true);
+  assert.equal(applicationWindowChromeOptions('win32').autoHideMenuBar, false);
+  assert.equal(applicationWindowChromeOptions('darwin').autoHideMenuBar, false);
+});
 
 test('smoke runner terminates and rejects a hung Electron child', async () => {
   const child = new EventEmitter();
@@ -107,6 +117,7 @@ test('Electron-owned source server does not enable the Vite proxy without an inh
     packagedEnv: { STASHBASE_APP_ROOT: '/repo' },
     shutdownToken: 'shutdown-token',
     oauthReturnToken: 'oauth-token',
+    recoveryJournalKey: 'journal-key',
   });
 
   assert.equal(environment.STASHBASE_DEV_RUNTIME, '1');
@@ -114,6 +125,23 @@ test('Electron-owned source server does not enable the Vite proxy without an inh
   assert.equal(environment.STASHBASE_APP_ROOT, '/repo');
   assert.equal(environment.STASHBASE_SHUTDOWN_TOKEN, 'shutdown-token');
   assert.equal(environment.STASHBASE_OAUTH_RETURN_TOKEN, 'oauth-token');
+  assert.equal(environment.STASHBASE_RECOVERY_JOURNAL_KEY, 'journal-key');
+});
+
+test('the recovery journal key reaches the server only from the Electron provider', () => {
+  const shared = {
+    baseEnv: { STASHBASE_RECOVERY_JOURNAL_KEY: 'inherited-from-shell' },
+    packaged: true,
+    packagedEnv: {},
+    shutdownToken: 'shutdown-token',
+    oauthReturnToken: 'oauth-token',
+  };
+  const provided = createServerChildEnvironment({ ...shared, recoveryJournalKey: 'provided-key' });
+  assert.equal(provided.STASHBASE_RECOVERY_JOURNAL_KEY, 'provided-key');
+  const withoutKey = createServerChildEnvironment({ ...shared, recoveryJournalKey: null });
+  assert.equal(withoutKey.STASHBASE_RECOVERY_JOURNAL_KEY, undefined);
+  const omitted = createServerChildEnvironment(shared);
+  assert.equal(omitted.STASHBASE_RECOVERY_JOURNAL_KEY, undefined);
 });
 
 test('Electron-owned source server preserves an explicit Vite proxy marker', () => {
@@ -267,6 +295,17 @@ test('application menu exposes VS Code window commands on Windows and Linux', ()
     onNewWindow: () => {},
     onCloseWindow: () => {},
   });
+  // Cmd/Ctrl+W belongs to the renderer's close-tab command on every platform.
+  const items = (menu) => menu.flatMap((item) => [item, ...(item.submenu ? items(item.submenu) : [])]);
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    const all = items(createApplicationMenuTemplate({
+      platform,
+      onNewWindow: () => {},
+      onCloseWindow: () => {},
+    }));
+    assert.equal(all.some((item) => item.role === 'close' || item.role === 'windowMenu'), false, platform);
+    assert.equal(all.some((item) => /^(Command|Control|CommandOrControl)\+W$/.test(item.accelerator ?? '')), false, platform);
+  }
   const linuxCloseWindow = linuxTemplate
     .find((item) => item.label === 'File')
     .submenu.find((item) => item.label === 'Close Window');
@@ -491,6 +530,44 @@ test('folder registry finds an existing context, excludes the sender, and retire
 
   registry.remove('window-1');
   assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes'), null);
+});
+
+test('window registry answers the initial folder spelling once, then forgets it', () => {
+  const registry = createWindowRegistry({ platform: 'win32' });
+  const created = { name: 'created-for-notes' };
+  const bare = { name: 'bare' };
+  registry.add('window-1', created, 'C:\\Users\\Ada\\Notes');
+  registry.add('window-2', bare);
+
+  // The match key lowercases on Windows and the claim does not: a window
+  // created for a folder must reopen it under its reader's own spelling.
+  assert.equal(registry.findByFolder('c:/users/ada/notes'), created);
+  assert.equal(registry.claimInitialFolder('window-1'), 'C:\\Users\\Ada\\Notes');
+
+  // One shot. The claim is spent, while the window stays matchable, so a
+  // reload cannot land again on a folder its reader has since left.
+  assert.equal(registry.claimInitialFolder('window-1'), null);
+  assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes'), created);
+
+  // A window nobody named a folder for, and a window that is already gone,
+  // both answer the same ordinary "no folder".
+  assert.equal(registry.claimInitialFolder('window-2'), null);
+  assert.equal(registry.claimInitialFolder('missing'), null);
+});
+
+test('window registry resolves main-owned request authorization records', () => {
+  const registry = createWindowRegistry({ platform: 'linux' });
+  const window = { webContents: { id: 41 } };
+  registry.add('window-41', window);
+
+  assert.deepEqual(registry.registrationForWebContentsId(41), {
+    windowId: 'window-41',
+    window,
+  });
+  assert.equal(registry.registrationForWebContentsId(99), null);
+
+  registry.remove('window-41');
+  assert.equal(registry.registrationForWebContentsId(41), null);
 });
 
 test('focusing an existing folder window restores it before bringing it forward', () => {
@@ -721,4 +798,163 @@ test('preload reads and bounds the main-process window identity', () => {
     windowIdFromArgv([`${WINDOW_ID_ARG_PREFIX}${'x'.repeat(200)}`]).length,
     128,
   );
+});
+
+function updateBarrierFixture({ installUpdate = () => {} } = {}) {
+  const sent = [];
+  const handlers = new Map();
+  const windowHandlers = new Map();
+  const webContentsHandlers = new Map();
+  const windows = new Set();
+  let blocked = 0;
+  let installs = 0;
+  let requests = 0;
+
+  function createWindow(id) {
+    const frame = { url: 'app://renderer/' };
+    const webContents = {
+      id,
+      isDestroyed: () => false,
+      mainFrame: frame,
+      on: (event, handler) => webContentsHandlers.set(`${id}:${event}`, handler),
+      send: (channel, payload) => sent.push({ id, channel, payload }),
+    };
+    const win = {
+      close: () => {},
+      isDestroyed: () => false,
+      on: (event, handler) => windowHandlers.set(`${id}:${event}`, handler),
+      webContents,
+    };
+    return { win, webContents, event: { sender: webContents, senderFrame: frame } };
+  }
+
+  const first = createWindow(71);
+  const second = createWindow(72);
+  const lifecycle = registerWindowLifecycle(
+    {
+      BrowserWindow: {
+        fromWebContents: (candidate) => (
+          [first, second].find((entry) => entry.webContents === candidate)?.win ?? null
+        ),
+      },
+      expectedOrigins: new Set(['app://renderer']),
+      hasCapability: () => true,
+      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+      isLiveWindow: (candidate) => windows.has(candidate),
+    },
+    { createRequestId: () => `release-${(requests += 1)}`, timeoutMs: 1_000 },
+  );
+
+  for (const entry of [first, second]) {
+    windows.add(entry.win);
+    lifecycle.attach(entry.win);
+    webContentsHandlers.get(`${entry.webContents.id}:did-finish-load`)();
+  }
+
+  const barrier = createWindowLifecycleUpdateBarrier({
+    lifecycle: () => lifecycle,
+    getWindows: () => windows,
+    isLiveWindow: (win) => windows.has(win) && !win.isDestroyed(),
+    onBlocked: () => {
+      blocked += 1;
+    },
+  });
+
+  const updater = new EventEmitter();
+  updater.downloadUpdate = async () => {
+    updater.emit('update-downloaded', { version: '2.1.0' });
+  };
+  updater.checkForUpdates = async () => {};
+  const manager = createUpdateManager({
+    updater,
+    currentVersion: '2.0.0',
+    isPackaged: true,
+    readAutoCheck: async () => true,
+    beforeInstall: barrier.prepare,
+    afterInstallFailure: barrier.revoke,
+    installUpdate: () => {
+      installs += 1;
+      installUpdate();
+    },
+    openReleasePage: async () => {},
+    setTimer: (fn, delay) => ({ fn, delay, unref() {} }),
+    clearTimer: () => {},
+  });
+
+  return {
+    answer: async (entry, ready) => {
+      const request = sent.find((message) => message.id === entry.webContents.id)?.payload;
+      await handlers.get('window:context-release-ready')(entry.event, { ...request, ready });
+    },
+    blocked: () => blocked,
+    close: (entry, closeEvent) => windowHandlers.get(`${entry.webContents.id}:close`)(closeEvent),
+    first,
+    installs: () => installs,
+    manager,
+    second,
+    sent,
+    updater,
+  };
+}
+
+test('one refused save cancels the update install and leaves every window unapproved', async () => {
+  const setup = updateBarrierFixture();
+  await setup.manager.start();
+  setup.updater.emit('update-available', { version: '2.1.0' });
+
+  const acting = setup.manager.primaryAction();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(setup.sent.map((message) => message.payload.reason), [
+    'update-install',
+    'update-install',
+  ]);
+
+  await setup.answer(setup.first, false);
+  await setup.answer(setup.second, true);
+  await acting;
+
+  assert.equal(setup.installs(), 0);
+  assert.equal(setup.manager.getState().phase, 'ready');
+  assert.equal(setup.blocked(), 1);
+
+  let prevented = 0;
+  setup.close(setup.second, {
+    preventDefault: () => {
+      prevented += 1;
+    },
+  });
+  assert.equal(prevented, 1);
+  assert.equal(setup.sent.length, 3);
+  assert.equal(setup.sent.at(-1).payload.reason, 'window-close');
+});
+
+test('an install that fails after every window approved stops pre-approving their closes', async () => {
+  const setup = updateBarrierFixture({
+    installUpdate: () => {
+      throw new Error('installer rejected');
+    },
+  });
+  await setup.manager.start();
+  setup.updater.emit('update-available', { version: '2.1.0' });
+
+  const acting = setup.manager.primaryAction();
+  await new Promise((resolve) => setImmediate(resolve));
+  await setup.answer(setup.first, true);
+  await setup.answer(setup.second, true);
+  await acting;
+
+  assert.equal(setup.installs(), 1);
+  assert.equal(setup.blocked(), 0);
+  assert.equal(setup.manager.getState().phase, 'error');
+  assert.match(setup.manager.getState().message, /installer rejected/);
+
+  let prevented = 0;
+  setup.close(setup.second, {
+    preventDefault: () => {
+      prevented += 1;
+    },
+  });
+  assert.equal(prevented, 1);
+  assert.equal(setup.sent.length, 3);
+  assert.equal(setup.sent.at(-1).payload.reason, 'window-close');
 });

@@ -69,7 +69,7 @@ for (const [source, markdown] of contents) {
     const exists = fs.existsSync(exact)
       || repoFiles.some((candidate) => candidate === referencedPath || candidate.endsWith(suffix));
     const isReviewReference = path.relative(repoRoot, source).startsWith('code-review/');
-    const hasRepoPrefix = /^(?:\.github|code-review|design-docs|docs|e2e|electron|mcp|native|python|release-checklists|scripts|server|shared|web-src)\//.test(referencedPath);
+    const hasRepoPrefix = /^(?:\.github|code-review|design-docs|docs|electron|mcp|native|python|release-checklists|scripts|server|shared|renderer)\//.test(referencedPath);
     if (!exists && (isReviewReference || hasRepoPrefix)) {
       failures.push(`${path.relative(repoRoot, source)}: missing referenced path ${referencedPath}`);
     }
@@ -81,6 +81,7 @@ const forbidden = [
   'design-docs/design/library.md',
   'design-docs/design/markdown.md',
   'code-review/data-layer.md',
+  'code-review/ui-regression-testing.md',
 ];
 for (const [file, markdown] of contents) {
   for (const legacy of forbidden) {
@@ -186,7 +187,7 @@ for (const [index, id] of uniqueJourneyIds.entries()) {
       coverageHeading.index,
       nextCoverageHeading?.index ?? coverageDoc.indexOf('\n## Maintenance Rule', coverageHeading.index),
     );
-    for (const label of ['Status', 'Contract Test', 'Journey E2E', 'AI Eval', 'Release Check']) {
+    for (const label of ['Status', 'Contract Test', 'Driven Runtime Pass', 'AI Eval', 'Release Check']) {
       if (!coverageSection.includes(`**${label}:**`)) {
         failures.push(`code-review/journey-coverage.md: ${id} missing ${label}`);
       }

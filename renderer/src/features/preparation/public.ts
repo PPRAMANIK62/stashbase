@@ -1,0 +1,10 @@
+export type { PreparationControlPort, PreparationStatusPort } from './application/ports';
+export { preparationFailure } from './application/failure-messages';
+export { refreshFolderStatus } from './application/queries';
+export { sourceReadiness, treeMarker } from './domain/readiness';
+export { folderSearchReadiness, type FolderSearchReadiness } from './domain/search-readiness';
+export type { FolderIndexStatus } from '@/shared/domain/folder-index-status';
+export { createPreparationControlAdapter } from './infrastructure/control-api';
+export { createPreparationStatusAdapter } from './infrastructure/status-api';
+export { useFolderStatus } from './hooks/use-folder-status';
+export { SourcePreparationStatus } from './ui/managed-status-line';

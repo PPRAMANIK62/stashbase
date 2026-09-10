@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/protocols/*": ["../shared/protocols/*"],
+      "@/contracts/github-import": ["../shared/github-import.ts"],
+      "@/contracts/folder-name": ["../shared/folder-name.ts"],
+      "@/contracts/file-formats": ["../shared/file-formats.ts"],
+      "@/contracts/html-sanitization": ["../shared/html-sanitization.ts"],
+      "@/contracts/agent-runtime": ["../shared/agent-runtime.ts"],
+      "@/contracts/agent-protocol": ["../shared/agent-protocol.ts"],
+      "@/contracts/account": ["../shared/account.ts"],
+      "@/*": ["./src/*"]
+    },
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "useDefineForClassFields": true,
+    "types": ["vite/client", "node"],
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src", ".storybook", "vite.config.ts"]
+}

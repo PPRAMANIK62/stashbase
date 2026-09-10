@@ -1,0 +1,82 @@
+{
+  "features": [
+    {
+      "name": "agent",
+      "productArea": "Agent Panel"
+    },
+    {
+      "name": "bug-report",
+      "productArea": "Bug Reporting"
+    },
+    {
+      "name": "documents",
+      "productArea": "Documents"
+    },
+    {
+      "name": "gallery",
+      "productArea": "Workspace / Agent Panel"
+    },
+    {
+      "name": "preparation",
+      "productArea": "Preparation"
+    },
+    {
+      "name": "retrieval",
+      "productArea": "Search and Retrieval"
+    },
+    {
+      "name": "settings",
+      "productArea": "Workspace / Agent Panel"
+    },
+    {
+      "name": "updates",
+      "productArea": "Workspace"
+    },
+    {
+      "name": "workspace",
+      "productArea": "Workspace"
+    }
+  ],
+  "contractModules": [
+    "shared/account.ts",
+    "shared/agent-protocol.ts",
+    "shared/agent-runtime.ts",
+    "shared/file-formats.ts",
+    "shared/folder-name.ts",
+    "shared/github-import.ts",
+    "shared/html-sanitization.ts"
+  ],
+  "wireSchemaModules": [
+    "shared/protocols/electron/bug-report-review.ts",
+    "shared/protocols/electron/bug-report.ts",
+    "shared/protocols/electron/capture.ts",
+    "shared/protocols/electron/external-navigation.ts",
+    "shared/protocols/electron/library.ts",
+    "shared/protocols/electron/runtime.ts",
+    "shared/protocols/electron/updates.ts",
+    "shared/protocols/electron/window-lifecycle.ts",
+    "shared/protocols/electron/workspace-session.ts",
+    "shared/protocols/http/agent-context.ts",
+    "shared/protocols/http/agent-instructions.ts",
+    "shared/protocols/http/agent-runtime.ts",
+    "shared/protocols/http/agent-sessions.ts",
+    "shared/protocols/http/appearance.ts",
+    "shared/protocols/http/capture.ts",
+    "shared/protocols/http/embedder.ts",
+    "shared/protocols/http/files.ts",
+    "shared/protocols/http/gallery.ts",
+    "shared/protocols/http/github-import.ts",
+    "shared/protocols/http/index-status.ts",
+    "shared/protocols/http/library.ts",
+    "shared/protocols/http/mcp.ts",
+    "shared/protocols/http/media.ts",
+    "shared/protocols/http/onboarding.ts",
+    "shared/protocols/http/preparation.ts",
+    "shared/protocols/http/recovery-drafts.ts",
+    "shared/protocols/http/search.ts",
+    "shared/protocols/http/semantic-search.ts",
+    "shared/protocols/http/transcription.ts",
+    "shared/protocols/http/workspace-preferences.ts",
+    "shared/protocols/websocket/agent-session.ts"
+  ]
+}

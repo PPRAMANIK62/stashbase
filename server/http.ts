@@ -10,6 +10,7 @@ import express from 'express';
 import childProcess from 'node:child_process';
 import path from 'node:path';
 import { logger, errorMessage, errorCode } from './log.ts';
+import { filesystemPath } from './filesystem-path.ts';
 import { getCurrentFolder, runWithWindowId, WINDOW_ID_HEADER } from './folder.ts';
 
 const log = logger('http');
@@ -44,6 +45,35 @@ export function sendError(res: express.Response, err: unknown): void {
   res.status(500).json({ error: errorMessage(err) });
 }
 
+/** Mutating active-folder routes accept an optional explicit `?folder=`.
+ *  Present, it must name the window's active folder: a mismatch is a lost
+ *  renderer scope and answers `409 FOLDER_CHANGED`, never permission to act
+ *  on the window's newer folder. Absent, the window's folder applies for
+ *  callers that predate explicit scope. Returns false after responding. */
+export async function guardExplicitFolder(
+  req: express.Request,
+  res: express.Response,
+): Promise<boolean> {
+  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+  if (!rawFolder) return true;
+  const current = getCurrentFolder();
+  let matchesActiveFolder = false;
+  if (current && filesystemPath.isAbsolute(rawFolder)) {
+    try {
+      matchesActiveFolder = await filesystemPath.equalAsync(current, rawFolder);
+    } catch {
+      // A missing or malformed expected folder is a lost renderer scope,
+      // never permission to fall through to the window's newer folder.
+    }
+  }
+  if (matchesActiveFolder) return true;
+  res.status(409).json({
+    code: 'FOLDER_CHANGED',
+    error: 'the requested folder is no longer active in this window',
+  });
+  return false;
+}
+
 /** Express middleware: 412 when no folder is currently open. Mounted on
  *  the path prefixes (/api/files, /api/folders, /api/search, …) that
  *  rely on `getCurrentFolder()` returning a value. Routes that work
@@ -54,11 +84,24 @@ const FOLDER_EXPLICIT_ROUTES = new Set([
   'POST /api/files/cancel-preparation',
 ]);
 
+function hasFolderScopedAssetPath(req: express.Request): boolean {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  const routePath = `${req.baseUrl}${req.path}`;
+  return /^\/asset(?:-audio-preview|-derived)?\/(?:__window\/[^/]+\/)?__folder\/[^/]+\//u.test(
+    routePath,
+  );
+}
+
 export const requireFolder: express.RequestHandler = (req, res, next) => {
   if (!getCurrentFolder()) {
     const route = `${req.method.toUpperCase()} ${req.baseUrl}${req.path}`;
     const explicitFolder = req.body?.folder;
-    if (FOLDER_EXPLICIT_ROUTES.has(route) && typeof explicitFolder === 'string' && explicitFolder.trim()) {
+    if (
+      hasFolderScopedAssetPath(req) ||
+      (FOLDER_EXPLICIT_ROUTES.has(route) &&
+        typeof explicitFolder === 'string' &&
+        explicitFolder.trim())
+    ) {
       return next();
     }
     return res.status(412).json({ error: 'no folder open', code: 'NO_FOLDER' });

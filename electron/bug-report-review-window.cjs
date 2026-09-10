@@ -2,8 +2,23 @@
 
 const { pathToFileURL } = require('node:url');
 
-function createBugReportReviewWindow({ BrowserWindow, preloadPath, htmlPath, sourceWindow = null }) {
-  if (typeof BrowserWindow !== 'function' || typeof preloadPath !== 'string' || typeof htmlPath !== 'string') {
+const { applicationWindowWebPreferences, isAllowedApplicationUrl } = require('./window-security.cjs');
+
+const APP_ORIGIN = 'app://renderer';
+
+function createBugReportReviewWindow({
+  BrowserWindow,
+  preloadPath,
+  htmlPath,
+  appUrl = null,
+  sourceWindow = null,
+}) {
+  const usesAppUrl = typeof appUrl === 'string';
+  if (
+    typeof BrowserWindow !== 'function'
+    || typeof preloadPath !== 'string'
+    || (typeof htmlPath !== 'string' && !usesAppUrl)
+  ) {
     throw new TypeError('Review window dependencies are required.');
   }
   const win = new BrowserWindow({
@@ -16,14 +31,16 @@ function createBugReportReviewWindow({ BrowserWindow, preloadPath, htmlPath, sou
     backgroundColor: '#f5f6f8',
     autoHideMenuBar: true,
     fullscreenable: false,
-    webPreferences: {
-      preload: preloadPath,
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-      webSecurity: true,
-      spellcheck: true,
-    },
+    webPreferences: usesAppUrl
+      ? { ...applicationWindowWebPreferences({ preloadPath }), spellcheck: true }
+      : {
+        preload: preloadPath,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+        webSecurity: true,
+        spellcheck: true,
+      },
   });
   if (typeof win.setMenuBarVisibility === 'function') win.setMenuBarVisibility(false);
   // Not a child or modal of the source: an open review must survive the
@@ -42,15 +59,24 @@ function createBugReportReviewWindow({ BrowserWindow, preloadPath, htmlPath, sou
     }
   }
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  const allowedUrl = pathToFileURL(htmlPath).toString();
-  win.webContents.on('will-navigate', (event, url) => {
-    if (url === allowedUrl || url.startsWith(`${allowedUrl}#`)) return;
-    event.preventDefault();
-  });
+  if (usesAppUrl) {
+    const denyUnexpectedNavigation = (event, url) => {
+      if (!isAllowedApplicationUrl(url, APP_ORIGIN)) event.preventDefault();
+    };
+    win.webContents.on('will-navigate', denyUnexpectedNavigation);
+    win.webContents.on('will-redirect', denyUnexpectedNavigation);
+    win.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  } else {
+    const allowedUrl = pathToFileURL(htmlPath).toString();
+    win.webContents.on('will-navigate', (event, url) => {
+      if (url === allowedUrl || url.startsWith(`${allowedUrl}#`)) return;
+      event.preventDefault();
+    });
+  }
   win.once('ready-to-show', () => {
     if (!win.isDestroyed()) win.show();
   });
-  const loaded = Promise.resolve(win.loadFile(htmlPath));
+  const loaded = Promise.resolve(usesAppUrl ? win.loadURL(appUrl) : win.loadFile(htmlPath));
   return { window: win, loaded };
 }
 

@@ -9,8 +9,9 @@
  * 3. `pip install -r python/requirements.txt` into it.
  *
  * Optional PDF/OCR extraction dependencies are intentionally split into
- * `python/requirements-extract.txt`; install them only when developing or
- * building the local extractor.
+ * `python/requirements-extract.txt`; pass `--with-extract` (the
+ * `setup:python-extract` script) to install them too, for developing the
+ * local extractor or running OCR from a source checkout.
  *
  * Fails loudly with an actionable message rather than letting the
  * embedding daemon crash later with "No module named 'mfs'".
@@ -24,6 +25,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const VENV = path.join(ROOT, 'python', '.venv.nosync');
 const REQS = path.join(ROOT, 'python', 'requirements.txt');
+const EXTRACT_REQS = path.join(ROOT, 'python', 'requirements-extract.txt');
+const WITH_EXTRACT = process.argv.includes('--with-extract');
 const VENV_PYTHON = process.platform === 'win32'
   ? path.join(VENV, 'Scripts', 'python.exe')
   : path.join(VENV, 'bin', 'python');
@@ -80,6 +83,10 @@ if (!existsSync(VENV)) {
 console.log(`[setup:python] installing deps from ${REQS}`);
 execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip'], { stdio: 'inherit' });
 execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-r', REQS], { stdio: 'inherit' });
+if (WITH_EXTRACT) {
+  console.log(`[setup:python] installing extraction deps from ${EXTRACT_REQS}`);
+  execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-r', EXTRACT_REQS], { stdio: 'inherit' });
+}
 
 // Smoke-test the imports the daemon needs, so a corrupt venv reports
 // failure here instead of at first daemon spawn.
@@ -93,3 +100,16 @@ except Exception as e:
     sys.exit(1)
 `;
 execFileSync(VENV_PYTHON, ['-c', probeImports], { stdio: 'inherit' });
+
+if (WITH_EXTRACT) {
+  const probeExtract = `
+import sys
+try:
+    import pymupdf4llm, rapidocr_onnxruntime
+    print('[setup:python] ok: pymupdf4llm, rapidocr_onnxruntime')
+except Exception as e:
+    print(f'[setup:python] extraction import probe failed: {e}', file=sys.stderr)
+    sys.exit(1)
+`;
+  execFileSync(VENV_PYTHON, ['-c', probeExtract], { stdio: 'inherit' });
+}

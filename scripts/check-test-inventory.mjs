@@ -4,14 +4,11 @@
 // Server-side suites enumerate their files explicitly, so a new *.test.*
 // file that is not added to a script silently never runs anywhere — six
 // files drifted that way before this check existed. A file counts as wired
-// when some script names it verbatim or matches it through a glob token
-// (e.g. `web-src/src/__tests__/*.test.ts`, or the recursive
-// `'web-src/src/**/*.test.ts'` the renderer suite passes through to Node's
-// own discovery). A recursive glob wires everything beneath it, which is
-// the point of using one — the renderer's tests live beside the feature
-// that owns them, so enumerating them here would go stale on every move.
-// Playwright specs (*.spec.ts) are collected by playwright.config.ts and
-// Python tests by unittest discovery, so neither needs this check.
+// when some script names it verbatim or matches it through a glob token.
+// A recursive glob wires everything beneath it, which is the point of using
+// one — the renderer's tests live beside the feature that owns them, so
+// enumerating them here would go stale on every move.
+// Python tests run by unittest discovery, so they do not need this check.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,8 +17,12 @@ import process from 'node:process';
 const repoRoot = process.cwd();
 const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const commands = Object.values(pkg.scripts ?? {});
+const replacementViteConfig = fs.readFileSync(
+  path.join(repoRoot, 'renderer', 'vite.config.ts'),
+  'utf8',
+);
 
-const SCAN_ROOTS = ['server', 'electron', 'shared', 'mcp', 'scripts', 'web-src', 'e2e'];
+const SCAN_ROOTS = ['server', 'electron', 'shared', 'mcp', 'scripts', 'renderer'];
 const TEST_FILE = /\.test\.(ts|tsx|cjs|mjs)$/;
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-app', 'runtime']);
 
@@ -40,9 +41,18 @@ for (const root of SCAN_ROOTS) {
 }
 
 // A glob reaching Node's runner is quoted so the shell forwards it intact.
+function expandBraces(token) {
+  const match = token.match(/^(?<before>[^{}]*)\{(?<choices>[^{}]+)\}(?<after>.*)$/);
+  if (!match?.groups) return [token];
+  return match.groups.choices
+    .split(',')
+    .flatMap((choice) => expandBraces(`${match.groups.before}${choice}${match.groups.after}`));
+}
+
 const tokens = commands
   .flatMap((command) => command.split(/\s+/))
-  .map((token) => token.replace(/^['"]|['"]$/g, ''));
+  .map((token) => token.replace(/^['"]|['"]$/g, ''))
+  .flatMap(expandBraces);
 const verbatim = new Set(tokens.filter((token) => TEST_FILE.test(token)));
 const globMatchers = tokens
   .filter((token) => token.includes('*'))
@@ -54,6 +64,19 @@ const globMatchers = tokens
       .replace(/\*/g, '[^/]*')
       .replace(/\u0000/g, '(?:[^/]+/)*')}$`,
   ));
+
+// Workspace-local Vitest includes are relative to renderer rather than the
+// repository root, so normalize them before matching the shared inventory.
+for (const match of replacementViteConfig.matchAll(/['"](src\/[^'"]*\*[^'"]*\.test\.(?:ts|tsx))['"]/g)) {
+  const token = `renderer/${match[1]}`;
+  globMatchers.push(new RegExp(
+    `^${token
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*\//g, '\u0000')
+      .replace(/\*/g, '[^/]*')
+      .replace(/\u0000/g, '(?:[^/]+/)*')}$`,
+  ));
+}
 
 const missing = testFiles
   .filter((file) => !verbatim.has(file) && !globMatchers.some((matcher) => matcher.test(file)))

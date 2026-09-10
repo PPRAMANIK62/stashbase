@@ -54,7 +54,7 @@ def extract_text(image_path: Path) -> str:
         if err.name == "rapidocr_onnxruntime":
             raise RuntimeError(
                 "OCR dependency rapidocr_onnxruntime is missing. "
-                "Run `pnpm setup:python` from the StashBase project, then restart the app."
+                "Run `pnpm setup:python-extract` from the StashBase project, then restart the app."
             ) from err
         raise
 

@@ -30,7 +30,7 @@ operate as one local library per installation.
 |---|---|---|
 | Local files and folders | User | They remain the source of truth. |
 | Wiki Pages under `wiki/` | User | They are ordinary visible files created or edited through an explicit Agent action. `wiki/index.md` is the entry page. |
-| Agent Instructions | StashBase product and settings | One packaged default plus an optional working-folder customization resolves to the user-visible guidance. Library-wide Chats use the default. It is never a source-folder write. |
+| Agent Instructions | StashBase product and settings | Each scope, a member folder or the Library, has its own packaged default plus an optional customization. Exactly one scope resolves to the user-visible guidance. It is never a source-folder write. |
 | Agent runtime policy | StashBase Agent Adapters | Non-user-visible product guidance routes library orientation and prepared document reads through StashBase MCP. It is composed only at native session startup and is never exposed as Agent Instructions. |
 | `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never created, migrated, or overwritten by StashBase. |
 | Extracted text, previews, indexes, preparation records | StashBase | They are rebuildable derived state. |
@@ -85,9 +85,10 @@ visible, user-owned content and follows ordinary file transactions.
   search by meaning.
   Mode-specific scope rules live in [Search and Retrieval](design/search.md)
   and [MCP Access](../code-review/mcp-access.md).
-- Agent Instructions resolve from one packaged plain-language default plus an
-  optional member-folder customization in application config. Library-wide
-  Chats use the packaged default because they have no concrete working folder.
+- Agent Instructions resolve from the scope's own packaged plain-language
+  default plus an optional customization in application config. A Chat
+  resolves exactly one scope, its member folder or the Library, and scopes
+  never combine.
   Each runtime Adapter preserves the resolved text while composing the separate
   internal Agent runtime policy. Saving remounts matching folder Chats so the
   new composition applies from their next message. The editor and HTTP surface
@@ -102,10 +103,12 @@ visible, user-owned content and follows ordinary file transactions.
   Wiki Agent session. Bring-your-own readiness is demand-driven: opening
   the app or a folder does not install an Agent runtime; explicit Chat actions
   own preparation and recovery.
-- Build Wiki pins one blank Chat to its folder while selected-Agent setup
-  or reconnect completes. The pending intent is renderer-local, independent
-  of setup for search by meaning, and sends at most once; it is not durable
-  application state and cannot widen to Library implicitly.
+- A Build Wiki request written before its Agent is ready waits in the composer
+  of the Chat pinned to that folder, and a Chat no turn has left follows the
+  first runtime that becomes ready so setup never strands it. The waiting
+  request is renderer-local and independent of setup for search by meaning; it
+  is never sent on the user's behalf, is not durable application state, and
+  cannot widen to Library implicitly.
 - Closing a window releases only its UI and folder context. Shared application
   resources remain alive until the application session quits, and a window is
   retired only after its current edit is durable.

@@ -428,11 +428,19 @@ export function killOpenCodeSessionsForFolder(folderAbs: string): void {
   disposeSessionsBoundToFolder(sessions, folderAbs);
 }
 
-function sessionInfo(session: Session): SessionInfo {
+export function openCodeSessionHasContent(
+  session: Pick<Session, 'title'>,
+  messageCount: number,
+): boolean {
+  return session.title !== 'New Chat' || messageCount > 0;
+}
+
+function sessionInfo(session: Session, hasContent = session.title !== 'New Chat'): SessionInfo {
   return {
     id: session.id,
     title: session.title,
     lastModified: session.time.updated,
+    hasContent,
     cwd: session.directory,
   };
 }
@@ -520,7 +528,27 @@ export function openCodeHistoryActions(): AgentHistoryActions {
     async list(folder) {
       const { client, cwd } = await clientFor(folder);
       const list = await client.session.list(DATA_REQUEST);
-      return list.data.filter((session) => filesystemPath.equal(session.directory, cwd)).map(sessionInfo);
+      return Promise.all(
+        list.data
+          .filter((session) => filesystemPath.equal(session.directory, cwd))
+          .map(async (session) => {
+            if (session.title !== 'New Chat') return sessionInfo(session, true);
+            try {
+              const messages = await client.session.messages({
+                ...DATA_REQUEST,
+                path: { id: session.id },
+              });
+              return sessionInfo(
+                session,
+                openCodeSessionHasContent(session, messages.data.length),
+              );
+            } catch {
+              // A failed content probe must not hide a potentially valuable
+              // conversation. Keep it visible until a later listing resolves.
+              return sessionInfo(session, true);
+            }
+          }),
+      );
     },
     async messages(id, folder) {
       const { client, cwd } = await clientFor(folder);
@@ -540,7 +568,7 @@ export function openCodeHistoryActions(): AgentHistoryActions {
       const { client, cwd } = await clientFor(folder);
       await assertSessionInScope(client, id, cwd);
       const updated = await client.session.update({ ...DATA_REQUEST, path: { id }, body: { title } });
-      return sessionInfo(updated.data);
+      return sessionInfo(updated.data, true);
     },
     async remove(id, folder) {
       const { client, cwd } = await clientFor(folder);

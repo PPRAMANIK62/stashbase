@@ -116,6 +116,78 @@ blocked until that decision succeeds, fails, or is cancelled:
 - Merge opens a dirty draft with conflict markers and saves it against the disk
   snapshot through the ordinary versioned path.
 
+### Crash-recovery draft journal
+
+Unsaved editable text is journaled so a crash, a forced quit, or a power loss
+does not lose it. This contract owns the store; the viewers that produce the
+text do not.
+
+- The journal is server-owned. `server/recovery-journal.ts` seals every
+  snapshot as AES-256-GCM with a random per-entry nonce and the entry
+  identifier as additional authenticated data, writes one owner-only file per
+  entry through a temporary and a rename, and stores nothing readable without
+  the key.
+- The store lives in the server's private local-data directory
+  (`recoveryJournalDir` in `server/local-data.ts`), never inside a library
+  folder, so folder sync, backups, listing, and indexing never observe it.
+- The key is provisioned and protected by Electron and reaches the owned server
+  only over its process-private environment. The server deletes the variable as
+  it reads it, so the daemon and Agent children it later spawns cannot inherit
+  the key. Provisioning is owned by
+  [Window Lifecycle](window-lifecycle.md).
+- Without an operating-system-protected key the journal is disabled. Write
+  returns unavailable, read returns nothing, list answers `available: false`,
+  and the content and write routes answer `503`. Nothing falls back to
+  plaintext.
+- An entry is keyed by source identity alone, and it records the source version
+  the draft was typed over. Restoring adopts that recorded version, so a draft
+  typed over stale bytes enters the ordinary conflict path instead of landing
+  over newer ones.
+- The renderer submits snapshots off the interaction path through one Documents
+  Port. `RecoveryDraftPort` in
+  `renderer/src/features/documents/application/ports.ts` carries `write`,
+  `read`, `list`, and `discard`, and
+  `renderer/src/features/documents/application/recovery-journalist.ts` coalesces
+  edits behind a trailing delay with a hard ceiling. A failed snapshot is
+  counted and never surfaced as an editing error.
+- A snapshot is removed once the editor is clean again after a confirmed save,
+  and on an explicit discard. Removal is idempotent and needs no key.
+- On the next launch, and on any later folder scope mount, the renderer lists
+  the survivors and offers each one restore or discard.
+  `renderer/src/features/documents/ui/recovery/recovery-drafts.tsx` is that
+  surface.
+- A restore never writes the source. It produces an unsaved dirty draft, and
+  the existing save barrier and conflict flow decide what reaches disk.
+- Signing out does not touch the journal or its key. Drafts belong to local
+  files, not to the hosted account.
+- Bounds are review-significant. One entry per source identity, at most 64
+  entries in the journal with oldest-first eviction on write, at most `2 MiB`
+  of snapshot content, and a fourteen-day retention window enforced lazily when
+  an entry is next loaded.
+- Two windows editing one source share that single entry and the last snapshot
+  to arrive wins. Each window journals only its own changed text, so a window
+  does not re-assert stale bytes over a peer's newer entry.
+
+**Known gap — the design is not ratified.** The implementation is Shipping, but
+its design record was never accepted. Treat the storage shape above as current
+behavior rather than as a settled contract, and reopen the decision before
+widening it.
+
+**Known gap — the disabled journal is invisible.** When operating-system key
+protection is unavailable, the route response, the renderer runtime state, and
+the application log all record it, but no surface tells the person that their
+unsaved text is no longer protected. The Required behavior is a visible
+absence.
+
+**Known gap — the wire bound and the stored bound differ.** The shared schema
+in `shared/protocols/http/recovery-drafts.ts` caps snapshot content in
+characters while the server caps it in bytes, so a multi-byte draft can satisfy
+the wire schema and still be refused with `413`.
+
+**Known gap — no evidence for concurrent writers.** Nothing exercises two
+windows journaling one source identity, so last-writer-wins is the observed
+mechanism rather than a proven one.
+
 ### Clean folder entry — no instruction-file writes
 
 Folder entry is navigation-only and performs no unsolicited filesystem
@@ -142,6 +214,13 @@ active-folder HTTP routes and library/MCP operations only normalize their
 transport-specific arguments and map results. A delete acknowledgement waits
 for old source and derived index identities; rename/move removes the old
 identity before reporting any optional new-identity indexing lag.
+
+Active-folder create, rename, and delete routes accept an optional explicit
+`?folder=`. When present it must name the window's active folder
+(`guardExplicitFolder` in `server/http.ts`); a mismatch answers
+`409 FOLDER_CHANGED` and mutates nothing, the same rule the versioned text
+save applies. A request without it keeps acting on the window's folder for
+callers that predate explicit scope.
 
 The active-folder Adapter may opt regular generic files into rename/move/delete
 without granting content writes or retrieval. Generic rename/move preserves the
@@ -246,8 +325,9 @@ text reads and manifest-known derived-text reads also reject responses above
 | Link Cascade Module | `server/links.ts` (`planRenameLinksAsync`, `applyRenamePlanAsync`, plus sync background/test compatibility entry points) |
 | Library/MCP Adapter | `LibraryOperations` and MCP/HTTP transport adapters |
 | Publication Modules | `server/import-publication.ts` for file imports and `GitHubImportModule` in `server/github-import.ts` for repository acquisition |
+| Draft journal Module | `server/recovery-journal.ts`, behind the routes in `server/routes/recovery-drafts.ts`; renderer Port and Adapter in `renderer/src/features/documents/application/ports.ts` and `renderer/src/features/documents/infrastructure/recovery-draft-api.ts` |
 | Lifecycle Adapter | conversion cancellation, cleanup, and reconcile Modules in [Data Lifecycle](data-lifecycle.md) |
-| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, `library-operations/index.test.ts`, renderer persistence tests, and the J03 conflict Journey |
+| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `routes/file-mutations.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, `library-operations/index.test.ts`, `server/recovery-journal.test.ts`, `server/routes/recovery-drafts.test.ts`, and the colocated save, conflict, and recovery tests under `renderer/src/features/documents/` |
 
 ## Validation
 
@@ -260,12 +340,13 @@ pnpm test:library-files
 pnpm test:renderer
 ```
 
-Run `pnpm test:e2e:functional` for user-visible CRUD, failed-save navigation,
-or conflict UX. Cover POSIX, Windows drive/UNC, case-only rename, symlink
-escape, target collision, disconnect/crash recovery, and the
-  `V1 → V2 → conflict` sequence at the lowest deterministic layer. GitHub
-  import behavior and lifecycle run through
-  `server/__tests__/github-import.test.ts` in `pnpm test:library-files`.
+Cover POSIX, Windows drive/UNC, case-only rename, symlink escape, target
+collision, disconnect and crash recovery, and the `V1 → V2 → conflict` sequence
+at the lowest deterministic layer. User-visible CRUD, failed-save navigation,
+and conflict recovery are proven at that layer plus the evidence
+[Journey Coverage](journey-coverage.md) assigns to J03. GitHub import behavior
+and lifecycle run through `server/__tests__/github-import.test.ts` in
+`pnpm test:library-files`, which also owns the draft journal and its routes.
 
 Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folder),
 [J03](../design-docs/user-journeys.md#j03-read-and-edit-source-documents),

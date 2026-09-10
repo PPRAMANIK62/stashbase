@@ -18,9 +18,10 @@ indexing for search by meaning.
 
 ## Current Experience
 
-- Reporting normally starts from **Settings → General → Report a bug** or
-  native **Help → Report a Bug…**. The native entry remains usable when the
-  main workspace renderer is unhealthy.
+- Reporting normally starts from the sidebar's standing **Report a bug** row
+  or native **Help → Report a Bug…**. The sidebar row explains itself and
+  stays disabled when the desktop bridge is absent, and the native entry
+  remains usable when the main workspace renderer is unhealthy.
 - StashBase opens a dedicated local review window. It collects the selected
   StashBase window, a fixed environment summary, and a bounded sanitized log
   tail on a best-effort basis; one unavailable artifact does not discard the

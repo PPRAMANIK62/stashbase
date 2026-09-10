@@ -35,28 +35,24 @@ Agent runtime is assumed.
 
 ### Primary Flow
 
-1. **Orient.** Launch into the document-free workspace and understand that
-   StashBase works with ordinary local folders, prepares them as Agent context,
-   and keeps source files user-owned.
+1. **Orient.** Launch into the welcome screen and understand that StashBase
+   works with ordinary local folders, prepares them as Agent context, and keeps
+   source files user-owned.
 2. **Acquire useful context.** When the default folder home is genuinely new
-   and empty, inspect the ordinary **👋 Start Here** Welcome, ask the
-   Library-scoped Chat a question grounded in its detailed guides, or add an
-   existing folder. An existing folder home is never seeded or modified by
-   onboarding.
+   and empty, open the seeded **👋 Start Here** folder and read its Welcome,
+   add an existing folder, or take a copy from the Gallery. Once a folder is
+   open its Chat can answer from the guides that folder contains. An existing
+   folder home is never seeded or modified by onboarding.
 3. **Enter the workspace.** Select a library folder and begin browsing before
    preparation or indexing completes. A fresh window does not silently choose
    a folder on the user's behalf.
-4. **Choose whether to set up search by meaning.** The first activated folder
-   offers hosted or bring-your-own-key setup. Configure it or choose **Not
-   now** without losing local functionality or the ability to build Wiki
-   Pages. Either choice is remembered across folders and relaunches; the
-   **By meaning** search mode, the persistent setup action, and Settings
-   remain manual routes back.
-5. **Reach first value.** Open a real source and complete at least one useful
+4. **Reach first value.** Open a real source and complete at least one useful
    action: inspect the document, retrieve source evidence, or explicitly set up
    a scoped Agent Chat. The next useful action stays visible without requiring
-   every optional capability first.
-6. **Return.** Close and relaunch StashBase. The library, durable settings, and
+   every optional capability first. No setup step stands in this path; the
+   one-time offer to set up search by meaning arrives beside the workspace the
+   user has already reached.
+5. **Return.** Close and relaunch StashBase. The library, durable settings, and
    completed setup remain available; the handled onboarding choice is not
    replayed, while active-folder choice follows its documented scope. A
    packaged build may quietly check the stable release channel when the saved
@@ -80,20 +76,26 @@ Agent runtime is assumed.
   available to Agents, remains an ordinary user-owned folder, is not
   overwritten by app updates, and is never recreated after deletion.
 - A fresh window does not silently select another folder, send a prompt,
-  install an Agent runtime, or open setup for search by meaning. The first
-  folder activation may open the one-time setup invitation, but no later
-  folder or relaunch repeats it after the user completes or declines it.
-- Deliberately skipping search by meaning remains reversible through the
-  persistent action and does not prevent pending Wiki Pages from being built.
+  install an Agent runtime, or open setup for search by meaning. A window with
+  no folder open never carries the offer at all.
+- The offer to set up search by meaning is a non-blocking notice above the
+  workspace, not a dialog, and it appears only after a folder has resolved.
+  **Choose a source** opens the Settings section that owns the hosted and
+  bring-your-own-key sources; declining reads **Not now**. Either answer is
+  durable, so no later folder and no relaunch repeats it. A folder whose
+  source is already configured never shows the offer, not even briefly.
+- Deliberately declining search by meaning costs no local capability, leaves
+  the **By meaning** mode and Settings as the routes back, and does not
+  prevent pending Wiki Pages from being built.
 - Reaching first value leaves a clear route into Search, scoped Chat, or the
   J10 durable core loop without forcing one universal workflow.
 - Returning users recognize their library and completed durable setup without
   replaying first-use explanation or losing access when an optional online
   capability is unavailable.
-- When a user chooses Google sign-in for hosted search by meaning, the
-  sidebar, account menu, and Settings consistently identify the connected
-  person by optional provider profile data plus the full email, without
-  making profile loading a prerequisite for local or hosted work.
+- When a user chooses Google sign-in for hosted search by meaning, every
+  surface that names the connected account identifies the same person by
+  optional provider profile data plus the full email, without making profile
+  loading a prerequisite for local or hosted work.
 
 ### Degradation and Recovery
 
@@ -174,10 +176,12 @@ described by the
    capabilities declared for that format.
 2. For content-editable Markdown, JSON, or UTF-8 plain text, enter the appropriate editing state
    and save through the shared durability path.
-3. Navigate with tabs, Quick Open, outlines, Find, local links, or search
+3. Navigate with tabs, Quick Open, the outline, Find, local links, or search
    results.
 4. Close the tab or window, or use renderer-error recovery, after the current
    edit becomes durable.
+5. After an interrupted session, reopen the folder and restore or discard each
+   unsaved draft it left behind.
 
 ### Required Observable Results
 
@@ -196,12 +200,12 @@ described by the
   folder — exposes **Show in Finder / File Explorer** on hover/focus and by
   keyboard, so reduced StashBase capability never implies that the source is
   unreachable. Hidden derived artifacts never surface.
-- The Files panel menu's checkable **Show Hidden Files** preference is
+- The file tree menu's checkable **Show hidden files** preference is
   application-level and durable. Off (the default and the recovery for
   invalid stored state) preserves the current view, including visible
-  ordinary dotfiles. On surfaces eligible user-owned dot-directories and
-  their descendants in the tree and Quick Open with their declared
-  capability and a subtle non-disabled distinction. `.git` and other VCS
+  ordinary dotfiles, which are listed in either state. On surfaces eligible
+  user-owned dot-directories and their descendants in the tree and Quick Open
+  with their declared capability. `.git` and other VCS
   databases, `.stashbase` and `.stashbase-*` product state, StashBase-derived
   artifacts, dot-notes, and junk metadata never
   surface in either mode; hidden excluded caches stay bounded non-expandable
@@ -215,6 +219,14 @@ described by the
   and byte-unchanged; it never enters retrieval as replacement-character text.
 - Navigation, window retirement, and product-owned renderer recovery do not
   silently discard a live edit.
+- Unsaved text in a content-editable source survives an interrupted session.
+  Reopening its folder lists what was left, identifies each file and when its
+  text was captured, says when the file has since changed or gone, and
+  restores or discards each draft independently. A restore writes nothing. It
+  returns an unsaved draft carrying the version its text was typed over, so
+  the save barrier and conflict flow still decide what reaches disk. Drafts
+  never live inside a library folder, so folder sync, backups, and indexing
+  never see them, and signing out of an account does not remove them.
 - Parse, preview, decode, or availability failure keeps the source identifiable
   and recoverable.
 
@@ -224,7 +236,9 @@ A failed save blocks renderer recovery. If a root failure has already removed
 the save barrier, reloading requires an explicit warning that unsaved changes
 may be lost. A concurrent version conflict keeps the dirty buffer and newer
 disk source visible until the user reloads, overwrites, or merges. Leaving or
-reloading cannot bypass that decision.
+reloading cannot bypass that decision. Without operating-system key protection the
+draft journal is disabled rather than falling back to unprotected storage, and
+no unsaved text outlives the session.
 
 ### Evidence
 
@@ -299,16 +313,15 @@ unavailable.
 
 ### Primary Flow
 
-1. Enter one query in library search.
+1. Enter one query in the sidebar's search panel.
 2. Use keyword search without additional setup, or search by meaning with an
    explicitly selected hosted or bring-your-own-key provider.
-3. Optionally narrow the query to one member folder.
-4. Review ranked evidence and readiness guidance.
-5. Open a result in its visible source context.
+3. Review ranked evidence and readiness guidance.
+4. Open a result in its visible source context.
 
 ### Required Observable Results
 
-- Result scope never widens beyond the visible library or selected folder.
+- Result scope never widens beyond the folder the query was asked in.
 - Every result identifies a user-visible source rather than derived storage.
 - Retrieval uses direct source text or current prepared text according to the
   source format; it never treats previewability alone as searchable text.
@@ -339,14 +352,14 @@ installation, context, tools, and permissions.
 
 ### Entry State
 
-The workspace has a reusable blank Chat. **Wiki Agent** is selected by default
-and may need account sign-in; a bring-your-own runtime may be ready, missing,
-disconnected, or recoverable.
+A folder is open and its workspace has a reusable blank Chat. **Wiki Agent**
+is selected by default and may need account sign-in; a bring-your-own runtime
+may be ready, missing, disconnected, or recoverable.
 
 ### Primary Flow
 
-1. Use New Chat with Wiki Agent, or choose another Agent, and select the
-   Library or folder scope.
+1. Use New chat with Wiki Agent, or choose another Agent in the composer. A
+   Chat takes the open folder as its scope.
 2. For Wiki Agent, sign in to the StashBase account when needed; no Agent
    install, model API key, or separate recharge is required within the fixed
    seven-day included allowance.
@@ -357,12 +370,10 @@ disconnected, or recoverable.
 5. Optionally customize **Agent Instructions** for the Chat's working folder.
    The readable default already applies; StashBase stores a
    customization without writing to the source folder.
-6. Optionally turn **Search by meaning** Off to constrain Agent retrieval to
-   text matching, or leave it On to add meaning-based retrieval.
-7. Inspect streaming output, tool activity, permissions, runtime-supported
+6. Inspect streaming output, tool activity, permissions, runtime-supported
    attachments, failures, and file artifacts.
-8. Continue, edit and resend, or open a source beside the same mounted Chat.
-9. Switch workspace folders without silently rebinding started work.
+7. Continue, edit and resend, or open a source beside the same mounted Chat.
+8. Switch workspace folders without silently rebinding started work.
 
 ### Required Observable Results
 
@@ -388,16 +399,16 @@ disconnected, or recoverable.
   be deleted individually before send without interrupting that turn or
   removing another queued follow-up. Steering remains available only when the
   selected runtime supports it.
-- Agent Instructions use a concrete working folder. The packaged default
-  applies until that folder is customized, while Library-wide Chats use the
-  default without exposing a Library-wide customization. A save persists in
+- Agent Instructions resolve exactly one scope, and scopes never combine.
+  That scope's packaged default applies until the scope is customized. A save
+  persists in
   StashBase application config and reaches matching folder Chats from their
   next message without creating or changing `AGENTS.md`, `CLAUDE.md`, or
   another source file.
 - Removing that scope silently returns only a completely blank Chat to
   Library. Any Chat containing user work remains readable, cancels unfinished
-  work without presenting a transport failure, and offers **New Library Chat**
-  instead of Retry.
+  work without presenting a transport failure, and says the folder was removed
+  and the transcript is preserved instead of offering Retry.
 - Chat-primary and docked layouts preserve the same session and in-progress
   state.
 - Commands, network, deletion, and broader filesystem access remain explicit
@@ -410,11 +421,11 @@ disconnected, or recoverable.
 - Agent search defaults to the live Chat scope; a folder Chat searches across
   the Library only when explicitly requested. Search results report the
   effective folder, and invalid scope does not fall back to a broader search.
-- The **Search by meaning** control affects only the live Chat's retrieval
-  strategy. Off keeps `search_library` available across the authorized scope
-  using direct and current prepared text, while On may additionally use
-  meaning-based evidence. Neither state controls background indexing or
-  exposes derived paths.
+- Whether a Chat adds meaning-based evidence affects only that Chat's
+  retrieval strategy. Without it `search_library` stays available across the
+  authorized scope using direct and current prepared text; with it the same
+  lookup may additionally use meaning-based evidence. Neither state controls
+  background indexing or exposes derived paths.
 - A source is presented as Agent-readable only when the selected Agent surface
   can consume that format's source or current prepared representation. Wiki Agent
   attachment behavior must not be implied for an external MCP client.
@@ -528,8 +539,8 @@ shared, and remains the only party who submits it.
 
 ### Entry State
 
-The user deliberately opens Report a bug from Settings → General or the
-native Help menu. The main workspace renderer may be healthy or impaired.
+The user deliberately opens Report a bug from the sidebar's standing row or
+the native Help menu. The main workspace renderer may be healthy or impaired.
 
 ### Primary Flow
 
@@ -678,6 +689,11 @@ originating window cannot enter a successfully rebound project, the Chat keeps
 the new scope visible and reports a retryable open failure rather than
 reverting to an ambiguous Library presentation.
 
+Known Gap: no window shows a Library-scoped Chat, so this journey's entry
+state cannot be reached from the product. Project creation still works for an
+attributed MCP caller. The owning gap is
+[No surface for a Library-scoped Chat](design/agent-panel.md#no-surface-for-a-library-scoped-chat).
+
 Known Gap: a Wiki Agent chat updates its live scope and keeps using the
 attributed MCP connection, but OpenCode does not yet migrate the same native
 session record and cwd to the project. Its restored history remains under
@@ -709,14 +725,17 @@ independently; selected Agent readiness may be absent.
 ### Primary Flow
 
 1. In the blank folder-scoped Chat, write the Build Wiki request — typed
-   directly, or reused from a Gallery entry's **How it's built** tab via
-   **Copy prompt** (the Gallery never places or sends composer text).
+   directly, filled from the **Build my wiki** starter below the composer, or
+   reused from a Gallery entry's **How it's built** tab via **Copy prompt**.
+   Neither the starter nor the Gallery sends what it places.
 2. Send it. The visible request is exactly what the Agent receives; the
    durable Wiki Pages contract (write scope, linking, maintenance) comes
    from Agent Instructions. Setup for search by meaning neither opens nor
    blocks the send.
 3. If the selected Agent still needs installation or sign-in, complete that
-   stage first; the composer keeps the draft while the gate stands.
+   stage first; the composer keeps the request while the gate stands, and a
+   Chat no turn has left follows the first runtime that becomes ready. The
+   request is never sent on the user's behalf when the gate lifts.
 4. The Agent inspects the folder and creates or improves `wiki/index.md`,
    adding focused pages under `wiki/` only when a single map would be
    unwieldy. Wiki Pages use relative links to visible Sources.
@@ -737,8 +756,9 @@ independently; selected Agent readiness may be absent.
   keyword search, semantic indexing, and future Agent work. Machine-derived
   text, chunks, and vectors remain invisible AppData.
 - The first release does not claim persistent built, ready, or stale Wiki
-  state, does not change the button to Update Wiki Pages, and does not schedule
-  background Wiki Page rewriting.
+  state. A folder that already has pages under `wiki/` offers the same starter
+  with the same wording — it never becomes Update Wiki Pages — and nothing
+  schedules background Wiki Page rewriting.
 
 ### Degradation and Recovery
 
@@ -746,6 +766,11 @@ Setup state for search by meaning does not affect building Wiki Pages.
 Agent setup failure keeps the composer draft visible beside the gate's
 stage-specific recovery. A partial Agent write remains an ordinary,
 inspectable file transaction and never authorizes source reorganization.
+
+Known Gap: the write scope is guidance rather than a boundary. The packaged
+Agent Instructions ask for Wiki Pages under `wiki/` and name no entry page,
+and nothing refuses a write elsewhere in the folder, so the scope above is a
+convention the Agent is asked to keep rather than one the product enforces.
 
 ### Evidence
 
@@ -764,9 +789,10 @@ or folder being open first.
 
 ### Entry State
 
-Any window. A bare window's blank Chat already shows the Gallery band; a
-folder window reaches the same Gallery through its sidebar row as an
-overlay. Network may be unavailable.
+Any window. A window with no folder open shows the welcome screen, which
+carries the Gallery band under its folder choices; a folder window reaches
+the same Gallery through its sidebar row as an overlay. Network may be
+unavailable.
 
 ### Primary Flow
 
@@ -787,7 +813,8 @@ overlay. Network may be unavailable.
 ### Required Observable Results
 
 - Browsing and downloading need no open folder, no account, and no Agent
-  runtime; the band never blocks the Chat above it.
+  runtime. The band sits below the welcome screen's folder choices and never
+  displaces them.
 - The Gallery is read-only toward the user's data and never places or sends
   composer text; its one prompt affordance is explicit copy.
 - The renderer reaches the published index and screenshots only through the

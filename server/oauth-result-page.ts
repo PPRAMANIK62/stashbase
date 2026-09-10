@@ -41,11 +41,9 @@ export function oauthResultPage({
   <style>
     /* Standalone HTML cannot consume the renderer's CSS token layer, so
      * every value below RESTATES the light theme from
-     * web-src/src/styles/globals.css by hand — cool grays, cyan accent,
-     * the 4/6/10/20 radius tiers, the system sans stack. Change a token
-     * there and this page follows in the same change. No colors outside
-     * that palette (this page once wore template indigo + a black CTA,
-     * which read as another product). */
+     * the desktop light appearance by hand. This standalone page cannot
+     * consume renderer tokens; coordinate it explicitly when the replacement
+     * palette is approved. */
     :root { color-scheme: light; font-family: -apple-system, system-ui, "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif; }
     * { box-sizing: border-box; }
     body { margin: 0; min-width: 280px; min-height: 100vh; color: #202427; background: #f3f5f7; }

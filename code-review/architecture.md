@@ -90,8 +90,14 @@ surface.
 
 ## Cross-process Contracts
 
-- Every renderer request carries a stable window identity. Folder context is a
-  server-side binding, never a global current-folder variable.
+- Every renderer request carries a stable window identity, and Electron main
+  is the one that stamps it. `installRequestAuthorization` in
+  `electron/renderer/requests.cjs` cancels any renderer request outside `/api/`
+  and `/ws/agent`, requires the sender's `webContents` and main frame to match a
+  live window registration on an allowed renderer origin, and then overwrites
+  the window-identity header. A renderer cannot choose or forge its own
+  identity. Folder context is a server-side binding, never a global
+  current-folder variable.
 - Shared services outlive an individual window. Window retirement cannot close
   the server, daemon, settings, or MCP resources while peers remain.
 - The server is the only owner allowed to bind folders into the daemon. Callers
@@ -112,6 +118,60 @@ surface.
   the server's known-format detector remains the narrower retrieval and Agent
   admission boundary. Generic preview uses its own read-only route rather than
   widening `/api/files`, library operations, or MCP.
+
+## Renderer Trust Boundary
+
+Renderer windows are untrusted presentation. Every window runs Chromium
+sandboxed with context isolation and no Node integration, loads its built
+bundle from the privileged `app://renderer` application origin, and receives a
+strict Content Security Policy on every response from that origin's handler.
+The policy starts from `default-src 'none'`, admits script only from the
+application origin, allows framing only of the server's asset routes, and
+limits connections to the application origin plus the loopback server and its
+WebSocket origin. `electron/app-protocol.cjs` owns the origin, the policy, and
+path containment under the renderer root.
+`electron/window-security.cjs` owns the shared web preferences and denies
+navigation away from that origin, popups, `webview` attachment, and every
+permission request.
+
+Native capability crosses only through a bundled typed preload that exposes one
+narrow method group per capability and never the raw `ipcRenderer`. Main
+authorizes each call before acting on it. `authorizeSender` in
+`electron/library/dialog.ts` requires a live sender window, the sender's own
+main frame, an expected frame origin, and an explicit capability grant recorded
+for that window at creation; the handler then parses the payload against the
+shared wire schema under `shared/protocols/electron/`. Authorization identity
+belongs to main, never to the renderer that asked.
+
+The renderer keeps no browser storage. Durable window state goes to the
+workspace-session bridge or the server, and the composition root disables the
+installed sidebar primitive's cookie persistence rather than inheriting it.
+
+Window creation, preload composition, and retirement live in
+[Window Lifecycle](window-lifecycle.md).
+
+## Responsiveness Allocation
+
+Work is placed by which owner can afford to block. Electron main owns native
+orchestration and no product policy. The renderer thread owns interaction only.
+Expensive view work moves off it into a Web Worker, as the DOCX preview does in
+`renderer/src/features/documents/infrastructure/docx-preview.worker.ts`.
+Filesystem, conversion, indexing, and every other durable operation belongs to
+the Node server and its sidecars.
+
+A window paints a minimum safe shell first and lets its noncritical
+capabilities settle independently; `renderer/src/app/bootstrap/use-boot-progress.ts`
+publishes the settled state once the library has answered and no folder restore
+is still running. Loading never replaces safe content or blocks local
+interaction. Optimistic update is confined to reversible low-risk metadata;
+nothing that decides durability may be presented before its owner confirms it.
+
+**Known gap — no measured performance budget.** Bundle, startup, interaction,
+long-task, and memory budgets are intended and not established. The renderer
+gates gathered under `pnpm check:web` enforce source file size
+(`scripts/renderer/size.mjs`), layer boundaries, and coverage, none of which
+observe runtime cost, so no automated check would catch a responsiveness
+regression.
 
 ## Durable Seams
 
@@ -140,7 +200,7 @@ The main ownership seams are intentionally narrower than this map:
 
 | Role | Stable entry points |
 |---|---|
-| Renderer workspace Interface | `ActiveFolderWorkspace` in `web-src/src/store/hooks/useActiveFolderWorkspace.ts` |
+| Renderer workspace Interface | `WorkspaceRuntime` in `renderer/src/features/workspace/application/runtime.ts`, reached through the hooks in `renderer/src/features/workspace/hooks/` |
 | Window/context owners | `electron/main.cjs`, `electron/multi-window.cjs`, `server/folder.ts`, `server/routes/window-context.ts` |
 | Application server composition | `server/index.ts`, with focused behavior behind route and service Modules |
 | Data lifecycle Interfaces | `server/conversion-dispatch.ts`, `server/conversion-scheduler.ts`, `server/indexer.ts`, `server/mfs-daemon.ts` |
@@ -167,9 +227,9 @@ contract before reading an owner Module's internals.
 
 Run `pnpm typecheck` for every implementation change. Cross-process ownership
 changes also run `pnpm test:electron` and `pnpm test:electron:smoke`; renderer
-boundary changes run `pnpm build:web`. Add the exact suites from every focused
-contract crossed by the change. Use [Journey Coverage](journey-coverage.md)
-before adding broad E2E coverage.
+boundary changes run `pnpm check:web`. Add the exact suites from every focused
+contract crossed by the change. Use [Journey Coverage](journey-coverage.md) to
+choose the evidence layer a changed journey needs.
 
 Related journey: [J09](../design-docs/user-journeys.md#j09-prepare-and-hand-off-a-bug-report)
 for the bug-report review process boundary. Other architectural changes use the

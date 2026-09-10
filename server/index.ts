@@ -56,6 +56,9 @@ import { closeStateDb } from './state-db.ts';
 import { requireFolder, withWindowContext } from './http.ts';
 import { mount as mountWindowContextRoutes } from './routes/window-context.ts';
 import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
+import { createRecoveryDraftRouteDeps, mount as mountRecoveryDraftRoutes } from './routes/recovery-drafts.ts';
+import { RECOVERY_JOURNAL_KEY_BYTES, createRecoveryJournal } from './recovery-journal.ts';
+import { recoveryJournalDir } from './local-data.ts';
 import { mount as mountLibraryRoutes } from './routes/library.ts';
 import { mount as mountGalleryRoutes } from './routes/gallery.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
@@ -80,6 +83,7 @@ import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
 import { mount as mountAgentInstructionsRoutes } from './routes/agent-instructions.ts';
 import { mount as mountOnboardingRoutes } from './routes/onboarding.ts';
+import { createRendererOriginPolicy } from './middleware/renderer-origin.ts';
 import { mount as mountAccountRoutes } from './routes/account.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from './agent-adapters.ts';
 import {
@@ -161,7 +165,7 @@ const APP_ROOT = process.env.STASHBASE_APP_ROOT
 const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
   ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
   : APP_ROOT;
-const WEB_BUILD_DIR = path.resolve(APP_ROOT, 'web', 'dist-app');
+const WEB_BUILD_DIR = path.resolve(APP_ROOT, 'dist', 'renderer');
 const PDFJS_DIST_DIR = path.resolve(APP_ROOT, 'node_modules', 'pdfjs-dist');
 
 // One-time migration from the old global-provider schema. Idempotent.
@@ -200,6 +204,7 @@ app.use(withWindowContext);
 //      from a webpage.
 
 const ALLOWED_ORIGINS = new Set([
+  'app://renderer',
   `http://127.0.0.1:${PORT}`,
   `http://localhost:${PORT}`,
 ]);
@@ -248,12 +253,7 @@ app.use((_req, res, next) => {
   next();
 });
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (!origin) return next(); // Electron loadURL / MCP / curl have none.
-  if (ALLOWED_ORIGINS.has(origin)) return next();
-  res.status(403).json({ error: 'cross-origin request rejected', code: 'BAD_ORIGIN' });
-});
+app.use(createRendererOriginPolicy(ALLOWED_ORIGINS));
 
 // pdf.js fetches CMaps, fallback fonts, and WASM by URL at render time.
 // Serve the bundled package assets from the app server so dev, packaged,
@@ -285,6 +285,22 @@ mountInternalShutdownRoute(app, {
   shutdown: () => { void shutdown('Electron request'); },
 });
 
+function recoveryJournalKeyFromEnv(): Buffer | null {
+  const raw = process.env.STASHBASE_RECOVERY_JOURNAL_KEY;
+  // Daemon and Agent children spawned by this server must never inherit the key.
+  delete process.env.STASHBASE_RECOVERY_JOURNAL_KEY;
+  if (!raw) return null;
+  const key = Buffer.from(raw, 'base64');
+  if (key.length !== RECOVERY_JOURNAL_KEY_BYTES || key.toString('base64') !== raw) {
+    log.warn('recovery journal key is malformed; recovery stays disabled');
+    return null;
+  }
+  return key;
+}
+const recoveryJournalKey = recoveryJournalKeyFromEnv();
+if (!recoveryJournalKey) log.info('recovery journal disabled: no OS-protected key was provided');
+const recoveryJournal = createRecoveryJournal({ dir: recoveryJournalDir(), key: recoveryJournalKey });
+
 // Static layer is mounted before the API routes for renderer bundle
 // requests, but data routes must bypass it entirely. In packaged asar
 // builds, serve-static can still issue directory-normalisation redirects
@@ -301,6 +317,8 @@ if (!DEV_VITE) {
         req.path.startsWith('/asset/') ||
         req.path === '/asset-audio-preview' ||
         req.path.startsWith('/asset-audio-preview/') ||
+        req.path === '/asset-derived' ||
+        req.path.startsWith('/asset-derived/') ||
         req.path === '/mcp'
       ) {
         return next();
@@ -309,7 +327,7 @@ if (!DEV_VITE) {
     });
   } else {
     throw new Error(
-      `web/dist-app/index.html not found. Run \`pnpm build:web\` first.`,
+      `dist/renderer/index.html not found. Run \`pnpm build:web\` first.`,
     );
   }
 }
@@ -337,6 +355,7 @@ app.use([
   '/api/reveal',
   '/asset',
   '/asset-audio-preview',
+  '/asset-derived',
   '/api/audio',
 ], requireFolder);
 
@@ -354,6 +373,7 @@ mountTranscriptionRoutes(app);
 // before the generic file-content wildcard routes.
 mountIndexingRoutes(app);
 mountFilesRoutes(app);
+mountRecoveryDraftRoutes(app, createRecoveryDraftRouteDeps(recoveryJournal));
 mountFoldersRoutes(app);
 mountUploadRoutes(app);
 mountAttachRoutes(app);
@@ -545,12 +565,11 @@ function rawScopeOf(req: import('node:http').IncomingMessage): string | undefine
 }
 
 function windowIdOf(req: import('node:http').IncomingMessage): string {
-  try {
-    const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
-    return u.searchParams.get('windowId') || 'default';
-  } catch {
-    return 'default';
-  }
+  const value = req.headers['x-stashbase-window-id'];
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return typeof candidate === 'string' && candidate.trim()
+    ? candidate.trim().slice(0, 128)
+    : 'default';
 }
 
 /** Read the agent session's thinking effort off the WS URL. Effort is

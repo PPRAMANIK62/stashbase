@@ -13,9 +13,10 @@
   Opaque draft and artifact references identify resources but never authorize
   access.
 - The dedicated review window, its narrow preload, and its IPC handlers are
-  Adapters. Settings → General (Community and support) and the native Help
-  menu are entry Adapters; native **Help → Report a Bug…** remains the durable
-  entry when the workspace renderer is unhealthy.
+  Adapters. The review is presented by the renderer's own bug-report entry,
+  which mounts one runtime over that preload bridge for the life of the window.
+  Native **Help → Report a Bug…** is the entry Adapter, and it remains the
+  durable entry when the workspace renderer is unhealthy.
 - The handoff Module accepts only a claimed approved snapshot. It does not
   accept renderer-provided paths, artifact lists, or report objects.
 
@@ -104,8 +105,8 @@ COLLECTING → REVIEWABLE → REVIEWING
 | Collection Modules | `electron/bug-report-screenshot.cjs`, `electron/bug-report-diagnostics.cjs`, `electron/bug-report-log.cjs`, `electron/bug-report-redaction.cjs` |
 | Approval/handoff Module | `electron/bug-report-handoff.cjs` |
 | Review-window Adapters | `electron/bug-report-review-window.cjs`, `electron/bug-report-review-ipc.cjs`, `electron/bug-report-review-preload.cjs` |
-| Presentation Adapters | `electron/bug-report-review-renderer.js`, `electron/bug-report-review.html`, `electron/bug-report-review.css`, `web-src/src/features/account/components/SidebarAccountRow.tsx`, and the native menu in `electron/main.cjs` |
-| Focused evidence | `electron/bug-report-service.test.cjs`, `electron/bug-report-collection.test.cjs`, `electron/bug-report-redaction.test.cjs`, `electron/bug-report-handoff.test.cjs`, and `electron/bug-report-review.test.cjs` |
+| Presentation Adapters | `renderer/src/app/bootstrap/bug-report-startup.tsx` over `renderer/bug-report.html`, with the review surface in `renderer/src/features/bug-report/` (`ui/review-window.tsx`, `hooks/use-review-session.ts`, `application/review-runtime.ts`, `infrastructure/review-bridge-adapter.ts`), and the native menu in `electron/main.cjs`. Explicit Vite development instead loads `electron/bug-report-review.html` and the static page beside it |
+| Focused evidence | `electron/bug-report-service.test.cjs`, `electron/bug-report-collection.test.cjs`, `electron/bug-report-redaction.test.cjs`, `electron/bug-report-handoff.test.cjs`, `electron/bug-report-review.test.cjs`, and the colocated review tests under `renderer/src/features/bug-report/` |
 
 ## Validation
 
@@ -116,7 +117,8 @@ pnpm typecheck
 pnpm test:electron
 ```
 
-Add `pnpm test:renderer` and `pnpm build:web` when the workspace entry changes.
+Add `pnpm test:renderer` and `pnpm check:web` when the review surface or the
+workspace entry changes.
 Native packaged capture, review presentation, Downloads handoff, and browser
 opening remain the residual [J09 release check](../release-checklists/ui-sanity.md).
 

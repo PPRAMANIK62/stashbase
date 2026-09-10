@@ -14,6 +14,11 @@ Code remains the source of truth for the current implementation.
 Keep the affected docs current in the same change as code. This is not a later
 documentation pass. All committed docs are English-only.
 
+The renderer under `renderer/` is the frontend. Its owning engineering
+contract is [`code-review/renderer-architecture.md`](code-review/renderer-architecture.md);
+read it before changing anything under `renderer/src`, and run
+`pnpm check:web`, which is the one gate CI runs for it.
+
 ## GitHub access for this repository
 
 For GitHub write operations on `liliu-z/stashbase` (including PR/issue
@@ -25,7 +30,7 @@ probe a Connector write first. Connector reads remain available when useful.
 ## Temporary worktrees
 
 Secondary Git worktrees do not inherit ignored local dependencies. Before
-running Electron E2E journeys that exercise indexing or sync, make sure the
+running Electron journeys that exercise indexing or sync, make sure the
 worktree has `python/.venv.nosync`: reuse a working primary checkout's venv via
 an explicit symlink when appropriate, or run `pnpm setup:python`. Without it,
 `/api/index-status` and `/api/sync` return misleading 500 responses with
@@ -36,7 +41,7 @@ as a product regression. Never commit the venv or its symlink.
 
 The agent host may inherit `ELECTRON_RUN_AS_NODE=1`. Remove it from the child
 environment before any command that must launch Electron as a desktop runtime,
-including Electron smoke tests, Electron E2E, and temporary visual harnesses.
+including Electron smoke tests and temporary visual harnesses.
 On POSIX, run commands as
 `env -u ELECTRON_RUN_AS_NODE pnpm test:electron:smoke` (and apply the same
 prefix to the other Electron launch command). If `require('electron').app` is
@@ -58,6 +63,8 @@ Start with [`design-docs/README.md`](design-docs/README.md).
 - `product-scenarios.md` — high-level reasons people use StashBase.
 - `user-journeys.md` — observable Shipping flows with stable `Jxx` IDs.
 - `glossary.md` — shared product language.
+- `visual-style.md` — visual intent, with tokens and CSS mechanics owned by
+  the renderer-styling contract.
 - `architecture.md` — product-level ownership, flows, and trust boundaries.
 - `design/*.md` — Workspace, Documents, Preparation, Search and Retrieval,
   Agent Panel, and Bug Reporting outcomes, current experience, contracts, and
@@ -70,16 +77,18 @@ Start engineering review with
 - `window-lifecycle.md` — native windows, save barriers, retirement, shutdown;
 - `bug-reporting.md` — local report collection, review authorization, approval,
   artifact handoff, and privacy;
+- `renderer-architecture.md` — renderer layers, state ownership, and the gates;
 - `renderer-workspace.md` — folder/tab/search transitions and renderer liveness;
 - `data-lifecycle.md` — preparation, indexing, reconcile, queues, cleanup;
 - `file-transactions.md` — paths, import, save, conflicts, mutations;
 - `document-viewers.md` and `markdown-rendering.md` — preview behavior and trust;
 - `settings-config.md` — durable preferences, credentials, reconfiguration;
 - `mcp-access.md` — MCP transports, credentials, and authorized scope;
+- `gallery.md` — published index, copying an entry into a folder, and the
+  bound on its outbound reach;
 - `agent-runtime.md` and `agent-panel.md` — native Agent and renderer behavior;
 - `renderer-styling.md` — styling mechanics;
 - `journey-coverage.md` — product journey to automated/release evidence;
-- `ui-regression-testing.md` — E2E mechanics, fixtures, and visual baselines;
 - `release-pipeline.md` — source CI, tag gating, packaging, and release runbook.
 
 `README.md` is the short external entry. `docs/` contains user/operator guides;
@@ -113,7 +122,7 @@ When the user reports a bug or asks for a feature, run the full loop:
    daemon owns the local index; credentials live only in Settings, never env.
 3. During implementation, run the smallest focused tests that exercise the
    changed behavior. Do not run the full validation matrix after every edit;
-   reserve broad contract, E2E, and build verification for the pre-commit gate
+   reserve broad contract and build verification for the pre-commit gate
    unless a broader command is needed to diagnose the change.
 4. Update affected docs in the same change. Run `pnpm test:docs` for changes to
    the documentation structure, links, contracts, or journey mapping as part
@@ -130,12 +139,11 @@ change:
 - focused commands from every crossed review contract;
 - `pnpm test:docs` for documentation structure, links, contracts, or journey
   mapping changes;
-- `pnpm test:e2e:check-focus` for E2E changes;
-- `pnpm test:e2e:smoke` for release-blocking renderer/cross-process paths;
-- `pnpm test:e2e:functional` for affected broader journeys;
-- `pnpm test:e2e:visual` on Linux for covered composition changes. Generate
-  intentional Linux baselines through **Generate visual baselines**; never
-  approve local macOS/Windows goldens.
+- `pnpm test:electron` and `pnpm test:electron:smoke` for release-blocking
+  renderer and cross-process paths;
+- a driven runtime pass through the built application for a changed journey,
+  recorded in the change itself. Journey automation and pixel baselines
+  retired with the Playwright suites, so composition is reviewed by eye.
 
 ## Commit protocol
 

@@ -19,6 +19,7 @@ function createServerChildEnvironment({
   packagedEnv,
   shutdownToken,
   oauthReturnToken,
+  recoveryJournalKey,
 }) {
   const environment = {
     ...baseEnv,
@@ -26,6 +27,12 @@ function createServerChildEnvironment({
     STASHBASE_SHUTDOWN_TOKEN: shutdownToken,
     STASHBASE_OAUTH_RETURN_TOKEN: oauthReturnToken,
   };
+  // An inherited shell variable must never stand in for the OS-protected key.
+  if (typeof recoveryJournalKey === 'string') {
+    environment.STASHBASE_RECOVERY_JOURNAL_KEY = recoveryJournalKey;
+  } else {
+    delete environment.STASHBASE_RECOVERY_JOURNAL_KEY;
+  }
   if (packaged) {
     delete environment.STASHBASE_DEV_RUNTIME;
     delete environment.STASHBASE_DEV_VITE;
@@ -37,8 +44,8 @@ function createServerChildEnvironment({
 
 /** Keep the Electron-owned process single-layered unless the caller is an
  * explicit Vite development session. A watch wrapper can outlive or orphan
- * its actual listener during Electron shutdown, while direct source and E2E
- * launches need one child whose exit is the server lifecycle boundary. */
+ * its actual listener during Electron shutdown, while a direct source launch
+ * needs one child whose exit is the server lifecycle boundary. */
 function createServerArguments({ entry, portArgs, packaged, vite }) {
   if (packaged) return [entry, ...portArgs];
   return vite ? ['watch', entry, ...portArgs] : [entry, ...portArgs];
