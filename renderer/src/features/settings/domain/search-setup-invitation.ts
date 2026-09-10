@@ -3,9 +3,10 @@
  *
  * The invitation is one-time and application-wide, not per folder: it appears
  * at the first folder a reader activates and never again once answered, by
- * configuring a source or by declining. Decision 0019 fixes that model and its
- * durable home, the server's onboarding preferences, so a decline survives a
- * relaunch rather than depending on browser storage.
+ * configuring a source or by declining. Its durable home is the server's
+ * onboarding preferences, so a decline survives a relaunch rather than
+ * depending on browser storage. `code-review/settings-config.md` owns the
+ * contract.
  *
  * The answered revision is stored rather than a boolean, so raising
  * `currentVersion` re-offers a materially changed invitation deliberately.

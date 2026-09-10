@@ -2,7 +2,7 @@
  * Protected draft journal: bounded, encrypted snapshots of unsaved editable
  * text keyed by source identity. One file per entry under the server's
  * private local-data directory; the key comes from the Electron owner and is
- * never written here. See docs/frontend-migration/decisions/0017.
+ * never written here. `code-review/file-transactions.md` owns the contract.
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';

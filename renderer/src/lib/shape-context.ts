@@ -1,7 +1,8 @@
 /** The kit's geometry: one radius per role, written once.
  *
- *  Decision 0015 fixes rounded corners as the only geometry this product
- *  ships, so there is no shape to choose and nothing to publish — the map
+ *  Rounded corners are the only geometry this product ships, which
+ *  `code-review/renderer-styling.md` records, so there is no shape to choose
+ *  and nothing to publish — the map
  *  below IS the shape. What used to be here (a one-member variant union, a
  *  provider holding it in state, a `setShape` nobody called, a forced-reflow
  *  `.transitioning` dance that cross-faded between the one option and itself,

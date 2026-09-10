@@ -14,9 +14,10 @@ Code remains the source of truth for the current implementation.
 Keep the affected docs current in the same change as code. This is not a later
 documentation pass. All committed docs are English-only.
 
-Frontend replacement work planned under `docs/frontend-migration/` follows the
-staging rules in [`docs/frontend-migration/AGENTS.md`](docs/frontend-migration/AGENTS.md).
-Read that file before changing `renderer` or another migration-owned boundary.
+The renderer under `renderer/` is the frontend. Its owning engineering
+contract is [`code-review/renderer-architecture.md`](code-review/renderer-architecture.md);
+read it before changing anything under `renderer/src`, and run
+`pnpm check:web`, which is the one gate CI runs for it.
 
 ## GitHub access for this repository
 
@@ -74,6 +75,7 @@ Start engineering review with
 - `window-lifecycle.md` — native windows, save barriers, retirement, shutdown;
 - `bug-reporting.md` — local report collection, review authorization, approval,
   artifact handoff, and privacy;
+- `renderer-architecture.md` — renderer layers, state ownership, and the gates;
 - `renderer-workspace.md` — folder/tab/search transitions and renderer liveness;
 - `data-lifecycle.md` — preparation, indexing, reconcile, queues, cleanup;
 - `file-transactions.md` — paths, import, save, conflicts, mutations;
