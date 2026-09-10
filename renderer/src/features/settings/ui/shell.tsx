@@ -102,7 +102,7 @@ export function SettingsShell({
       <Dialog onOpenChange={(next) => !next && onClose()} open={open}>
         <DialogContent
           aria-label="Settings"
-          className="flex h-[min(78vh,640px)] flex-col bg-surface-2"
+          className="flex h-[min(78vh,640px)] flex-col"
           presentation="shell"
         >
           <div className="flex h-14 flex-none items-center gap-2 border-b border-border px-5">

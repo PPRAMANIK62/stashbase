@@ -23,6 +23,19 @@ import { cn } from '@/lib/utils';
 
 const DIALOG_OFFSET = 4;
 
+/**
+ * Every dialog paints the same panel, wherever it was opened from.
+ *
+ * The background used to climb with whatever surface was underneath, so the
+ * same dialog read as a different panel depending on the pane that opened it,
+ * and Settings kept a local override to escape that. The elevation still
+ * climbs — it is carried by the shadow, which is what elevation is for — but
+ * a dialog sits on the scrim rather than on the surface it covers, so its own
+ * colour is fixed. The Command palette keeps the derived surface: it is a
+ * floating overlay rather than a panel.
+ */
+const DIALOG_SURFACE = 2;
+
 interface DialogProps {
   open?: boolean;
   defaultOpen?: boolean;
@@ -157,7 +170,7 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                   'left-1/2 z-50 w-[calc(100%-2rem)]',
                   command ? 'top-16 max-w-[680px] overflow-hidden p-0' : 'top-1/2',
                   shell ? 'overflow-hidden p-0' : !command && 'p-6',
-                  surfaceClasses(dialogLevel),
+                  surfaceClasses(command ? dialogLevel : DIALOG_SURFACE, dialogLevel),
                   'focus:outline-none',
                   shell && (compact ? 'max-w-[min(94vw,480px)]' : 'max-w-[min(92vw,820px)]'),
                   !command &&
@@ -186,7 +199,7 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                 }}
                 transition={exiting ? leave : arrive}
               >
-                <SurfaceProvider value={dialogLevel}>
+                <SurfaceProvider value={command ? dialogLevel : DIALOG_SURFACE}>
                   {children}
                   {!command && (
                     <DialogPrimitive.Close
