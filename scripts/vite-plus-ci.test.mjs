@@ -5,6 +5,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
+import { gates } from './renderer/check-web.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const setupAction = 'voidzero-dev/setup-vp@1b32467adbe183473499fd9d5d372c3ed9641754';
 const rendererJobs = new Map([
@@ -46,7 +48,7 @@ test('source and release renderer builds use the same pinned Vite+ setup', () =>
   }
 });
 
-test('source CI runs replacement checks before the broader application matrix', () => {
+test('source CI runs the replacement gate before the broader application matrix', () => {
   const workflow = readWorkflow('.github/workflows/ci.yml');
   const steps = workflow.jobs?.['source-build']?.steps ?? [];
   const runs = steps
@@ -54,17 +56,10 @@ test('source CI runs replacement checks before the broader application matrix', 
     .filter((run) => typeof run === 'string')
     .join('\n');
 
-  for (const command of [
-    'pnpm test:toolchain',
-    'pnpm test:renderer-architecture',
-    'pnpm format:web',
-    'pnpm lint:web',
-    'pnpm test:renderer',
-    'pnpm typecheck:web',
-    'pnpm build:web',
-    'pnpm build:storybook',
-    'pnpm test:package-inputs',
-  ]) {
+  // The renderer is one CI step by design, so the local command and the
+  // workflow cannot drift. Asserting the eight commands it replaced would put
+  // that drift back; the gate list below is what proves they still run.
+  for (const command of ['pnpm test:toolchain', 'pnpm check:web', 'pnpm test:package-inputs']) {
     assert.match(runs, new RegExp(command.replaceAll(':', '\\:')), `source CI omits ${command}`);
   }
 
@@ -72,11 +67,34 @@ test('source CI runs replacement checks before the broader application matrix', 
   assert.ok(
     stepIndex('Install dependencies') < stepIndex('Verify Vite+ inventory') &&
       stepIndex('Verify Vite+ inventory') < stepIndex('Check supported renderer') &&
-      stepIndex('Check supported renderer') < stepIndex('Build production-equivalent Storybook') &&
-      stepIndex('Build production-equivalent Storybook') < stepIndex('Test renderer packaging input') &&
+      stepIndex('Check supported renderer') < stepIndex('Test renderer packaging input') &&
       stepIndex('Test renderer packaging input') < stepIndex('Install Python sidecar dependencies'),
     'source CI must fail replacement gates before entering the broader application matrix',
   );
+});
+
+test('the one renderer CI step still covers every replacement check', () => {
+  // `pnpm check:web` collapsed eight separate CI steps into one runner. This is
+  // what stops the collapse from quietly losing a gate: every command CI used
+  // to name has to still be reachable from the runner's own list.
+  const named = new Set(gates.flatMap((gate) => gate.args));
+  for (const script of [
+    'test:renderer-architecture',
+    'check:renderer-size',
+    'check:renderer-conventions',
+    'check:renderer-unused',
+    'check:renderer-dupes',
+    'format:web',
+    'lint:web',
+    // The renderer suite runs under the coverage gate rather than as
+    // `test:renderer`, which is the same suite plus its floor.
+    'test:renderer:coverage',
+    'typecheck:web',
+    'build:web',
+    'build:storybook',
+  ]) {
+    assert.ok(named.has(script), `pnpm check:web no longer runs ${script}`);
+  }
 });
 
 test('Vite+ task-result caching is disabled repository-wide', () => {
