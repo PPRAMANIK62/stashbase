@@ -74,7 +74,7 @@ test('the allowlist only shrinks: a recovered or deleted entry fails', (context)
 test('a test file is measured against its own limit', (context) => {
   const root = fixture(context);
   write(root, 'features/workspace/ui/panel.test.tsx', TEST_LIMIT + 1);
-  assert.deepStrictEqual(findRendererSizeViolations(root), [
+  assert.deepStrictEqual(findRendererSizeViolations(root, new Map()), [
     `features/workspace/ui/panel.test.tsx: ${TEST_LIMIT + 1} lines, over the ${TEST_LIMIT}-line limit`,
   ]);
 });
