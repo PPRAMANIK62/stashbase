@@ -10,6 +10,9 @@
 export { createDocumentQueryScope, refreshDocumentSources } from './application/queries';
 export { createDocumentTabsRuntime, type DocumentTabsRuntime } from './application/tabs-runtime';
 export type { DocumentRuntime } from './application/document-runtime';
+export { createRecoveryJournalist } from './application/recovery-journalist';
+export { createRecoveryRuntime, type RecoveryRuntime } from './application/recovery-runtime';
+export { RecoveryDrafts } from './ui/recovery/recovery-drafts';
 export type { DocumentSearchTarget } from './application/navigation-runtime';
 export { createDocumentAdapters, type DocumentAdapters } from './infrastructure/adapters';
 export { useDocumentCommands } from './hooks/use-document-commands';

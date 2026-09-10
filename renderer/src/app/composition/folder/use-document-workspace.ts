@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import {
   createDocumentQueryScope,
   createDocumentTabsRuntime,
+  createRecoveryJournalist,
   type DocumentAdapters,
   type DocumentTabsRuntime,
 } from '@/features/documents/public';
@@ -15,6 +16,7 @@ export function useDocumentWorkspace(
   session: Pick<WorkspaceSessionController, 'runtime' | 'status'>,
   sourceApi: DocumentAdapters['source'],
   createId: () => string,
+  recoveryApi: DocumentAdapters['recovery'],
 ): DocumentTabsRuntime | null {
   const queryClient = useQueryClient();
   // Only a settled session names a folder to restore tabs from.
@@ -31,7 +33,7 @@ export function useDocumentWorkspace(
     // present; the fallbacks keep that promise typed rather than asserted.
     const path = folderPath ?? '';
     const restoredFolder = restoredRef.current?.folderPath === path ? restoredRef.current : null;
-    return createDocumentTabsRuntime({
+    const tabs = createDocumentTabsRuntime({
       api: sourceApi,
       createId,
       createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
@@ -47,13 +49,20 @@ export function useDocumentWorkspace(
           }
         : null,
     });
-  }, [createId, folderPath, generation, queryClient, sourceApi]);
+    // The journalist lives exactly as long as the open set it watches.
+    const journalist = createRecoveryJournalist({ api: recoveryApi, tabs });
+    return { journalist, tabs };
+  }, [createId, folderPath, generation, queryClient, recoveryApi, sourceApi]);
 
-  const runtime = useScopedRuntime(
-    workspace && folderPath && generation ? `${folderPath}\u0000${generation}` : null,
-    create,
-    (tabs) => tabs.dispose(),
-  );
+  const runtime =
+    useScopedRuntime(
+      workspace && folderPath && generation ? `${folderPath}\u0000${generation}` : null,
+      create,
+      ({ journalist, tabs }) => {
+        journalist.dispose();
+        tabs.dispose();
+      },
+    )?.tabs ?? null;
 
   useEffect(() => {
     if (!workspace || !runtime) return;

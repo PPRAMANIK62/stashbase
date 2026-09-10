@@ -76,6 +76,10 @@ export type DocumentSaveState =
 
 export interface DocumentEditorState {
   baseline: string;
+  /** How many recovered drafts have replaced this text. A viewer that refuses
+   *  outside text while dirty remounts on it, so a restore is the one external
+   *  replacement that reaches the reader. */
+  restores: number;
   revision: number;
   save: DocumentSaveState;
   value: string;
@@ -205,6 +209,7 @@ export function reconcileDocumentSource(
     ...state,
     editor: {
       baseline,
+      restores: editor?.restores ?? 0,
       revision: editor?.revision ?? 0,
       save: { kind: 'clean' },
       value: baseline,

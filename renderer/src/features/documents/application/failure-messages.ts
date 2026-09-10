@@ -22,6 +22,7 @@ import type {
   DocxPreviewFailureKind,
   GenericFilePreviewFailureKind,
   MediaFailureKind,
+  RecoveryDraftFailureKind,
 } from './ports';
 
 /** A family's whole ladder, mapped to the one sentence each kind reads as. */
@@ -85,6 +86,36 @@ export const GENERIC_PREVIEW_MESSAGES: Readonly<Record<GenericFilePreviewFailure
   unauthorized: 'This window can no longer inspect that file.',
   unavailable: 'The file could not be inspected. It has not been changed.',
 };
+
+/** The journal protects unsaved text; it never saves it. Every line says what
+ *  the journal could not do, so no sentence implies the file on disk moved. */
+export const RECOVERY_DRAFT_MESSAGES: Readonly<Record<RecoveryDraftFailureKind, string>> = {
+  disabled: 'Draft recovery is unavailable on this installation.',
+  'invalid-response': 'The recovery journal returned an invalid response.',
+  'not-found': 'That draft is no longer in the recovery journal.',
+  'scope-lost': 'That folder is no longer part of the library.',
+  'too-large': 'This draft is too large for the recovery journal.',
+  unauthorized: 'This window can no longer use the recovery journal.',
+  unavailable: 'The recovery journal could not be reached.',
+};
+
+/** The same ladder for a decision about one named draft. A reader deciding
+ *  between several drafts needs to know which one refused. */
+export function recoveryDraftMessages(
+  name: string,
+): Readonly<Record<RecoveryDraftFailureKind, string>> {
+  return {
+    ...RECOVERY_DRAFT_MESSAGES,
+    'not-found': `The draft for ${name} is no longer in the recovery journal.`,
+    unavailable: `The draft for ${name} could not be reached.`,
+  };
+}
+
+/** A document that will not take a draft has not lost it: the journal keeps
+ *  the entry, so the sentence offers the one move that changes the answer. */
+export function recoveryRestoreRefusal(name: string): string {
+  return `${name} could not take the draft. Open it and try again.`;
+}
 
 /**
  * The sentence and tone one rejection shows. A failure raised on `owner`'s

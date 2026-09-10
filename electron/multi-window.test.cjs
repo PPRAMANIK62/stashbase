@@ -113,6 +113,7 @@ test('Electron-owned source server does not enable the Vite proxy without an inh
     packagedEnv: { STASHBASE_APP_ROOT: '/repo' },
     shutdownToken: 'shutdown-token',
     oauthReturnToken: 'oauth-token',
+    recoveryJournalKey: 'journal-key',
   });
 
   assert.equal(environment.STASHBASE_DEV_RUNTIME, '1');
@@ -120,6 +121,23 @@ test('Electron-owned source server does not enable the Vite proxy without an inh
   assert.equal(environment.STASHBASE_APP_ROOT, '/repo');
   assert.equal(environment.STASHBASE_SHUTDOWN_TOKEN, 'shutdown-token');
   assert.equal(environment.STASHBASE_OAUTH_RETURN_TOKEN, 'oauth-token');
+  assert.equal(environment.STASHBASE_RECOVERY_JOURNAL_KEY, 'journal-key');
+});
+
+test('the recovery journal key reaches the server only from the Electron provider', () => {
+  const shared = {
+    baseEnv: { STASHBASE_RECOVERY_JOURNAL_KEY: 'inherited-from-shell' },
+    packaged: true,
+    packagedEnv: {},
+    shutdownToken: 'shutdown-token',
+    oauthReturnToken: 'oauth-token',
+  };
+  const provided = createServerChildEnvironment({ ...shared, recoveryJournalKey: 'provided-key' });
+  assert.equal(provided.STASHBASE_RECOVERY_JOURNAL_KEY, 'provided-key');
+  const withoutKey = createServerChildEnvironment({ ...shared, recoveryJournalKey: null });
+  assert.equal(withoutKey.STASHBASE_RECOVERY_JOURNAL_KEY, undefined);
+  const omitted = createServerChildEnvironment(shared);
+  assert.equal(omitted.STASHBASE_RECOVERY_JOURNAL_KEY, undefined);
 });
 
 test('Electron-owned source server preserves an explicit Vite proxy marker', () => {

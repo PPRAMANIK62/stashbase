@@ -1,9 +1,19 @@
+/**
+ * Everything the documents feature asks of the outside world, and every way
+ * those asks are refused.
+ *
+ * A port is the call shape only: no transport, no wording, no retry. Each
+ * capability names its own failure ladder beside its port, so a hook selects
+ * recovery by `kind` and `failure-messages` owns the sentence. Adapters
+ * implement these in `../infrastructure`; nothing here knows they exist.
+ */
 import type {
   DocumentTextSaveResult,
   DocumentTextSource,
 } from '@/features/documents/domain/document';
 import type { GenericFilePreview } from '@/features/documents/domain/generic-preview';
 import type { MediaPreviewStatus, MediaTranscriptState } from '@/features/documents/domain/media';
+import type { RecoveryDraftSummary } from '@/features/documents/domain/recovery';
 import {
   featureErrorClass,
   FeatureError,
@@ -72,6 +82,33 @@ export interface MediaPort {
   reprocessTranscript(source: SourceReference, signal: AbortSignal): Promise<void>;
 }
 
+interface RecoveryDraftRecord extends RecoveryDraftSummary {
+  content: string;
+}
+
+interface RecoveryDraftSnapshot {
+  content: string;
+  expectedVersion: string;
+  source: SourceReference;
+}
+
+/** What one folder's journal holds, or why it holds nothing on this
+ *  installation. An unavailable journal is a named state, never an empty list. */
+export type { RecoveryDraftSummary };
+
+export type RecoveryDraftListing =
+  | { available: false; reason: 'no-key' }
+  | { available: true; drafts: RecoveryDraftSummary[] };
+
+/** The journal of unsaved text the server keeps outside every library folder.
+ *  Best-effort protection against an unclean exit: a write is never a save. */
+export interface RecoveryDraftPort {
+  discard(source: SourceReference, signal: AbortSignal): Promise<void>;
+  list(folderPath: string, signal: AbortSignal): Promise<RecoveryDraftListing>;
+  read(source: SourceReference, signal: AbortSignal): Promise<RecoveryDraftRecord>;
+  write(snapshot: RecoveryDraftSnapshot, signal: AbortSignal): Promise<{ savedAt: string }>;
+}
+
 export interface DocumentQueryScope {
   cancel(): Promise<void>;
   remove(): void;
@@ -106,6 +143,15 @@ export type MediaFailureKind = TransportFailureKind;
 
 export type MediaError = FeatureError;
 export const MediaError = featureErrorClass('MediaError');
+
+/** `disabled` is the installation having no OS-protected key, which no retry
+ *  changes; `unavailable` stays the shared unreachable-server kind. */
+export type RecoveryDraftFailureKind = FeatureFailureKind<'disabled' | 'not-found' | 'too-large'>;
+
+export type RecoveryDraftError = FeatureError<'disabled' | 'not-found' | 'too-large'>;
+export const RecoveryDraftError = featureErrorClass<'disabled' | 'not-found' | 'too-large'>(
+  'RecoveryDraftError',
+);
 
 export type DocumentSaveFailureKind = FeatureFailureKind<'conflict'>;
 

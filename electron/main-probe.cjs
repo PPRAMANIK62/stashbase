@@ -19,6 +19,7 @@ function createServerChildEnvironment({
   packagedEnv,
   shutdownToken,
   oauthReturnToken,
+  recoveryJournalKey,
 }) {
   const environment = {
     ...baseEnv,
@@ -26,6 +27,12 @@ function createServerChildEnvironment({
     STASHBASE_SHUTDOWN_TOKEN: shutdownToken,
     STASHBASE_OAUTH_RETURN_TOKEN: oauthReturnToken,
   };
+  // An inherited shell variable must never stand in for the OS-protected key.
+  if (typeof recoveryJournalKey === 'string') {
+    environment.STASHBASE_RECOVERY_JOURNAL_KEY = recoveryJournalKey;
+  } else {
+    delete environment.STASHBASE_RECOVERY_JOURNAL_KEY;
+  }
   if (packaged) {
     delete environment.STASHBASE_DEV_RUNTIME;
     delete environment.STASHBASE_DEV_VITE;

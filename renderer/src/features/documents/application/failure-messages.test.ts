@@ -9,6 +9,9 @@ import {
   DOCX_PREVIEW_MESSAGES,
   GENERIC_PREVIEW_MESSAGES,
   MEDIA_MESSAGES,
+  recoveryDraftMessages,
+  recoveryRestoreRefusal,
+  RECOVERY_DRAFT_MESSAGES,
 } from './failure-messages';
 import { DocumentSaveError, DocumentSourceError, MediaError } from './ports';
 
@@ -20,6 +23,8 @@ const FAMILIES = [
   DOCX_PREVIEW_MESSAGES,
   MEDIA_MESSAGES,
   GENERIC_PREVIEW_MESSAGES,
+  RECOVERY_DRAFT_MESSAGES,
+  recoveryDraftMessages('plan.md'),
 ];
 
 describe('documents failure messages', () => {
@@ -65,6 +70,22 @@ describe('documents failure messages', () => {
     expect(documentFailure('not an error', 'MediaError', MEDIA_MESSAGES).message).toBe(
       MEDIA_MESSAGES.unavailable,
     );
+  });
+
+  it('never suggests a journal refusal touched the file on disk', () => {
+    for (const sentence of Object.values(RECOVERY_DRAFT_MESSAGES)) {
+      expect(sentence).not.toContain('saved');
+    }
+    expect(RECOVERY_DRAFT_MESSAGES.disabled).toContain('installation');
+    expect(recoveryRestoreRefusal('plan.md')).toContain('plan.md');
+  });
+
+  it('names the draft a decision was about, and only where the listing cannot', () => {
+    const named = recoveryDraftMessages('plan.md');
+    expect(named['not-found']).toContain('plan.md');
+    expect(named.unavailable).toContain('plan.md');
+    expect(named.disabled).toBe(RECOVERY_DRAFT_MESSAGES.disabled);
+    expect(named['too-large']).toBe(RECOVERY_DRAFT_MESSAGES['too-large']);
   });
 
   it('refuses to read another capability’s failure as its own', () => {

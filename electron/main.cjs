@@ -9,7 +9,7 @@
  * bundled, typed preload bridge.
  */
 
-const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, safeStorage, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -25,6 +25,7 @@ const {
   serverStartupTimeoutMs,
 } = require('./main-probe.cjs');
 const { shouldOfferClipboardImage } = require('./clipboard-watch-policy.cjs');
+const { createRecoveryKeyProvider } = require('./recovery-key.cjs');
 const { createBugReportService } = require('./bug-report-service.cjs');
 const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
 const { collectRedactedApplicationLog, readApplicationLogTail } = require('./bug-report-log.cjs');
@@ -659,6 +660,13 @@ async function startOrReuseServer() {
       logFd = null;
     }
   }
+  const recoveryJournalKey = createRecoveryKeyProvider({
+    safeStorage,
+    filePath: path.join(app.getPath('userData'), 'recovery-journal.key'),
+  }).load();
+  if (recoveryJournalKey === null) {
+    console.warn('[electron] recovery journal disabled: OS-protected storage is unavailable');
+  }
   serverProc = spawn(serverBin, serverArgs, {
     cwd: serverCwd,
     // Port flows via the CLI arg above, not the env — keeps the server
@@ -669,6 +677,7 @@ async function startOrReuseServer() {
       packagedEnv,
       shutdownToken: SERVER_SHUTDOWN_TOKEN,
       oauthReturnToken: OAUTH_RETURN_TOKEN,
+      recoveryJournalKey,
     }),
     // stdin = 'ignore' is intentional: the server never reads from
     // stdin, and inheriting the parent's TTY made Node attach a real

@@ -1,7 +1,18 @@
+/**
+ * The workspace window's composition root. It owns no behaviour of its own:
+ * it publishes the adapter record, calls one binder per capability, and
+ * decides which of their results each region of the layout is handed. A rule
+ * that belongs to a feature belongs in that feature, and a rule about the
+ * window belongs in a hook under `./composition`.
+ */
 import { useEffect } from 'react';
 
 import { useAgentComposerFocused, useAgentWorkspaceRuntime } from '@/features/agent/public';
-import { useDocumentCommands, useDocumentSaveBarrier } from '@/features/documents/public';
+import {
+  RecoveryDrafts,
+  useDocumentCommands,
+  useDocumentSaveBarrier,
+} from '@/features/documents/public';
 import { useFolderStatus } from '@/features/preparation/public';
 import {
   LibraryWelcome,
@@ -11,15 +22,16 @@ import {
   useWorkspaceSession,
 } from '@/features/workspace/public';
 
+import { useComposerFocusSignal } from './composition/commands/use-capture-focus';
+import { usePreparationCommands } from './composition/commands/use-preparation-commands';
+import { useWorkspaceCommands } from './composition/commands/use-workspace-commands';
 import { DependencyProvider, useDependencies } from './composition/dependency-context';
 import { useAgentEnvironment } from './composition/folder/use-agent-environment';
-import { useComposerFocusSignal } from './composition/commands/use-capture-focus';
 import { useDocumentSources } from './composition/folder/use-document-sources';
 import { useDocumentWorkspace } from './composition/folder/use-document-workspace';
 import { useFolderReadiness } from './composition/folder/use-folder-readiness';
 import { useFolderRefresh } from './composition/folder/use-folder-refresh';
-import { usePreparationCommands } from './composition/commands/use-preparation-commands';
-import { useWorkspaceCommands } from './composition/commands/use-workspace-commands';
+import { useRecoveryDrafts } from './composition/folder/use-recovery-drafts';
 import { WorkspaceDialogs } from './composition/layout/workspace-dialogs';
 import { WorkspaceLayout } from './composition/layout/workspace-layout';
 import { WorkspacePanes } from './composition/layout/workspace-panes';
@@ -51,10 +63,17 @@ function WorkspaceWindow() {
   );
   const library = useLibrary(workspaceDeps.adapters.library).data ?? null;
   const workspace = useWorkspace(workspaceDeps.adapters.library, session);
-  const documents = useDocumentWorkspace(workspace, session, docs.adapters.source, docs.createId);
+  const documents = useDocumentWorkspace(
+    workspace,
+    session,
+    docs.adapters.source,
+    docs.createId,
+    docs.adapters.recovery,
+  );
   useDocumentCommands(documents?.navigation ?? null, documents);
   useDocumentSaveBarrier(documents, docs.adapters.windowLifecycle);
   const sources = useDocumentSources(workspaceDeps.adapters, workspace, documents);
+  const recovery = useRecoveryDrafts(workspace, documents, docs.adapters.recovery);
 
   const activeFolder = library?.activeFolder ?? null;
   const selectedPath = activeFolder?.path ?? null;
@@ -105,6 +124,7 @@ function WorkspaceWindow() {
       }
       hasActiveFolder={activeFolder !== null}
       notices={chrome.notices}
+      recovery={recovery ? <RecoveryDrafts runtime={recovery} /> : null}
       panes={
         <WorkspacePanes
           agent={{ outline: agent.outline, runtime }}

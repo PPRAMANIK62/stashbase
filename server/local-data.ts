@@ -50,6 +50,12 @@ export function fileOrderDir(): string {
   return path.join(appDataRoot(), 'file-order');
 }
 
+/** Encrypted crash-recovery drafts. Lives outside every library folder so
+ *  sync, backups, listing, and indexing never see it. */
+export function recoveryJournalDir(): string {
+  return path.join(appDataRoot(), 'recovery-journal');
+}
+
 /** The single global vector store for the whole app. The daemon holds one
  *  Milvus collection here; every opened folder is indexed into it, keyed by
  *  absolute path. `.nosync` keeps iCloud off the WAL files even though this

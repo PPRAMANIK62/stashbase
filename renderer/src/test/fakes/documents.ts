@@ -1,7 +1,6 @@
 import { vi } from 'vite-plus/test';
 
 import type { AppDependencies } from '@/app/dependencies';
-import type { DocumentAdapters } from '@/features/documents/infrastructure/adapters';
 import type {
   DocumentAssetPort,
   DocumentQueryScope,
@@ -10,9 +9,11 @@ import type {
   DocxPreviewPort,
   GenericFilePreviewPort,
   MediaPort,
+  RecoveryDraftPort,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntimeOptions } from '@/features/documents/application/tabs-runtime';
 import type { DocumentTextSource } from '@/features/documents/domain/document';
+import type { DocumentAdapters } from '@/features/documents/infrastructure/adapters';
 
 /** A loaded Markdown source; every field is overridable. */
 export function textSource(overrides: Partial<DocumentTextSource> = {}): DocumentTextSource {
@@ -69,13 +70,28 @@ export function mediaApi(overrides: Partial<MediaPort> = {}): MediaPort {
   };
 }
 
+/** A recovery journal that is available and empty; every call is overridable. */
+export function recoveryApi(overrides: Partial<RecoveryDraftPort> = {}): RecoveryDraftPort {
+  return {
+    discard: vi.fn(async () => undefined),
+    list: vi.fn(async () => ({ available: true as const, drafts: [] })),
+    read: vi.fn(async () => {
+      throw new Error('no draft');
+    }),
+    write: vi.fn(async () => ({ savedAt: '2026-09-10T08:00:00.000Z' })),
+    ...overrides,
+  };
+}
+
 export function documentWindowLifecycle(
   overrides: Partial<DocumentWindowLifecyclePort> = {},
 ): DocumentWindowLifecyclePort {
   return { onPrepareContextRelease: vi.fn(() => () => undefined), ...overrides };
 }
 
-export function documentQueryScope(overrides: Partial<DocumentQueryScope> = {}): DocumentQueryScope {
+export function documentQueryScope(
+  overrides: Partial<DocumentQueryScope> = {},
+): DocumentQueryScope {
   return {
     cancel: vi.fn(async () => undefined),
     remove: vi.fn(),
@@ -101,14 +117,13 @@ export function documentTabsRuntimeOptions(
 }
 
 /** Every Documents port, as one record. Override one entry at a time. */
-export function documentAdapters(
-  overrides: Partial<DocumentAdapters> = {},
-): DocumentAdapters {
+export function documentAdapters(overrides: Partial<DocumentAdapters> = {}): DocumentAdapters {
   return {
     asset: assetApi(),
     docxPreview: docxPreviewApi(),
     genericPreview: genericPreviewApi(),
     media: mediaApi(),
+    recovery: recoveryApi(),
     source: sourceApi(),
     windowLifecycle: documentWindowLifecycle(),
     ...overrides,

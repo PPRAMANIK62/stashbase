@@ -17,6 +17,7 @@ import {
   documentAccess,
   disposeDocumentState,
   documentConflict,
+  documentEditorText,
   enterDocumentConflict,
   failDocumentConflictResolution,
   isDocumentDirty,
@@ -36,8 +37,9 @@ import {
   type MarkdownViewMode,
 } from '@/features/documents/domain/document';
 import { documentTextFormat } from '@/features/documents/domain/document-format';
-import { createScopeGuard, type CapturedScope } from '@/shared/runtime/scope-guard';
+import { restoreDocumentDraft, type RecoveredDraft } from '@/features/documents/domain/recovery';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { createScopeGuard, type CapturedScope } from '@/shared/runtime/scope-guard';
 
 import {
   documentFailure,
@@ -51,6 +53,16 @@ import { DocumentSaveError, type DocumentQueryScope, type DocumentSourcePort } f
  *  save that raced a conflict resolution apart from one aimed at the text now
  *  on screen, which is why the generation travels beside it. */
 type DocumentOperationScope = CapturedScope<DocumentScope>;
+
+/** A restore waits for the source to land first. A load that never settles
+ *  (the folder went away, the server is gone) must not hold the reader's
+ *  decision open forever, so the wait is bounded. */
+export const DOCUMENT_RESTORE_WAIT_MS = 20_000;
+
+/** How loading a recovered draft went: it is in the editor as unsaved text,
+ *  it matched the disk text and changed nothing, or the document refused it
+ *  (disposed, read-only, mid-conflict, or a source that never loaded). */
+export type DocumentRestoreOutcome = 'refused' | 'restored' | 'unchanged';
 
 export interface DocumentRuntime {
   readonly scope: DocumentScope;
@@ -77,6 +89,9 @@ export interface DocumentRuntime {
     api: DocumentSourcePort,
     resolution: DocumentConflictResolution,
   ): Promise<boolean>;
+  /** Loads a recovered draft over the source as unsaved text once the source
+   *  has landed. Never writes the source: the save lifecycle decides. */
+  restoreDraft(draft: RecoveredDraft): Promise<DocumentRestoreOutcome>;
   save(api: DocumentSourcePort): Promise<boolean>;
   setJsonSession(patch: Partial<JsonDocumentSession>): void;
   setMarkdownMode(mode: MarkdownViewMode): void;
@@ -168,6 +183,33 @@ export function createDocumentRuntime({
       return false;
     }
   };
+
+  /** Resolves once the editor holds loaded text, or with null when the
+   *  document is gone or the wait ran out. */
+  const editorLanded = (): Promise<DocumentState['editor']> =>
+    new Promise((resolve) => {
+      const loaded = store.getState().editor;
+      if (loaded) {
+        resolve(loaded);
+        return;
+      }
+      const watch: { stop: () => void } = { stop: () => undefined };
+      const settle = (editor: DocumentState['editor']) => {
+        watch.stop();
+        resolve(editor);
+      };
+      const unsubscribe = store.subscribe((state) => {
+        if (state.editor || state.lifecycle === 'disposed') settle(state.editor);
+      });
+      const timeout = setTimeout(() => settle(null), DOCUMENT_RESTORE_WAIT_MS);
+      const onAbort = () => settle(null);
+      controller.signal.addEventListener('abort', onAbort);
+      watch.stop = () => {
+        unsubscribe();
+        clearTimeout(timeout);
+        controller.signal.removeEventListener('abort', onAbort);
+      };
+    });
 
   const save = async (api: DocumentSourcePort): Promise<boolean> => {
     while (true) {
@@ -273,6 +315,22 @@ export function createDocumentRuntime({
         );
         return false;
       }
+    },
+    async restoreDraft(draft) {
+      if (disposed) return 'refused';
+      // The wait is not a guarded operation: the document's scope is fixed for
+      // its life, and the source landing is what the restore is waiting for.
+      const editor = await editorLanded();
+      if (!editor || disposed) return 'refused';
+      const before = store.getState();
+      const after = restoreDocumentDraft(before, draft);
+      if (after !== before) {
+        store.setState(after);
+        return 'restored';
+      }
+      return before.editor && documentEditorText(draft.content) === before.editor.baseline
+        ? 'unchanged'
+        : 'refused';
     },
     retireOperations,
     save,

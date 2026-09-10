@@ -2,14 +2,14 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { DependencyProvider } from '@/app/composition/dependency-context';
+import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
 import { LibraryWelcome, type WorkspaceSessionController } from '@/features/workspace/public';
 import { createWorkspaceSessionRuntime } from '@/features/workspace/test-support';
 import { appDependencies } from '@/test/fakes/app';
 import { sessionPersistence } from '@/test/fakes/workspace';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
 
-import { DependencyProvider } from '@/app/composition/dependency-context';
-import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
 import { WorkspaceLayout, type WorkspaceComposition } from './workspace-layout';
 
 afterEach(cleanup);
@@ -32,6 +32,7 @@ function mount(overrides: Partial<WorkspaceComposition> = {}) {
     hasActiveFolder: true,
     notices: [],
     panes: <div data-testid="panes" />,
+    recovery: null,
     session: active,
     sidebar: <div data-testid="sidebar" />,
     started: true,

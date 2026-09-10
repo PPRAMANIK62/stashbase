@@ -56,6 +56,9 @@ import { closeStateDb } from './state-db.ts';
 import { requireFolder, withWindowContext } from './http.ts';
 import { mount as mountWindowContextRoutes } from './routes/window-context.ts';
 import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
+import { createRecoveryDraftRouteDeps, mount as mountRecoveryDraftRoutes } from './routes/recovery-drafts.ts';
+import { RECOVERY_JOURNAL_KEY_BYTES, createRecoveryJournal } from './recovery-journal.ts';
+import { recoveryJournalDir } from './local-data.ts';
 import { mount as mountLibraryRoutes } from './routes/library.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
 import { mount as mountAppearanceRoutes } from './routes/appearance.ts';
@@ -278,6 +281,22 @@ mountInternalShutdownRoute(app, {
   shutdown: () => { void shutdown('Electron request'); },
 });
 
+function recoveryJournalKeyFromEnv(): Buffer | null {
+  const raw = process.env.STASHBASE_RECOVERY_JOURNAL_KEY;
+  // Daemon and Agent children spawned by this server must never inherit the key.
+  delete process.env.STASHBASE_RECOVERY_JOURNAL_KEY;
+  if (!raw) return null;
+  const key = Buffer.from(raw, 'base64');
+  if (key.length !== RECOVERY_JOURNAL_KEY_BYTES || key.toString('base64') !== raw) {
+    log.warn('recovery journal key is malformed; recovery stays disabled');
+    return null;
+  }
+  return key;
+}
+const recoveryJournalKey = recoveryJournalKeyFromEnv();
+if (!recoveryJournalKey) log.info('recovery journal disabled: no OS-protected key was provided');
+const recoveryJournal = createRecoveryJournal({ dir: recoveryJournalDir(), key: recoveryJournalKey });
+
 // Static layer is mounted before the API routes for renderer bundle
 // requests, but data routes must bypass it entirely. In packaged asar
 // builds, serve-static can still issue directory-normalisation redirects
@@ -347,6 +366,7 @@ mountTranscriptionRoutes(app);
 // before the generic file-content wildcard routes.
 mountIndexingRoutes(app);
 mountFilesRoutes(app);
+mountRecoveryDraftRoutes(app, createRecoveryDraftRouteDeps(recoveryJournal));
 mountFoldersRoutes(app);
 mountUploadRoutes(app);
 mountAttachRoutes(app);
