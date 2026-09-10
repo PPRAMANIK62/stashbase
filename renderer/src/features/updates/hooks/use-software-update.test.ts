@@ -64,7 +64,7 @@ describe('useSoftwareUpdate', () => {
 
   it('runs one command at a time and stays busy until it answers', async () => {
     const updates = harness(accepted({ phase: 'idle' }));
-    let release: (result: UpdateResult) => void = () => undefined;
+    let release!: (result: UpdateResult) => void;
     updates.port.check.mockImplementation(
       () =>
         new Promise<UpdateResult>((resolve) => {

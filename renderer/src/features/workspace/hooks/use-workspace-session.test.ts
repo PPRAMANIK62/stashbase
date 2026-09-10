@@ -174,24 +174,24 @@ describe('workspace session restore', () => {
   });
 });
 
+/** A saved session naming `folderPath`, which is a current member. */
+const savedSession = (folderPath: string) => ({
+  ...createWorkspaceSessionSnapshot(),
+  activeFolderPath: folderPath,
+  folders: [
+    {
+      activeTabId: null,
+      expandedPaths: [],
+      folderPath,
+      selectedPath: null,
+      tabs: [],
+    },
+  ],
+});
+
 describe('initial folder landing', () => {
   const writing = { ...member, path: '/library/writing' };
   const bothMembers = librarySnapshot({ ...settled, members: [member, writing] });
-
-  /** A saved session naming `folderPath`, which is a current member. */
-  const savedSession = (folderPath: string) => ({
-    ...createWorkspaceSessionSnapshot(),
-    activeFolderPath: folderPath,
-    folders: [
-      {
-        activeTabId: null,
-        expandedPaths: [],
-        folderPath,
-        selectedPath: null,
-        tabs: [],
-      },
-    ],
-  });
 
   it('opens the folder the window was created for', async () => {
     const queryClient = createTestQueryClient();
