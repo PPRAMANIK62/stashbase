@@ -62,3 +62,24 @@ export function galleryContents(entry: GalleryEntry): GalleryContents {
     ? { files: entry.files, kind: 'files' }
     : { kind: 'summary', line: entry.contents };
 }
+
+/**
+ * Which folder name a copy takes.
+ *
+ * The entry's own name wins whenever the Library's rule accepts it, because
+ * that is the name the reader just read on the card. The repository's derived
+ * segment is the fallback, and the entry name is the last resort so a caller
+ * always has something to send and the server owns the refusal.
+ *
+ * `nameIssue` is null for a usable name. That inversion is why this decision
+ * lives here with a test rather than inline at the composition root, where it
+ * shipped backwards: a valid name was discarded and an invalid one would have
+ * named a folder after its own validation message.
+ */
+export function copyFolderName(
+  request: GalleryCopyRequest,
+  { derivedName, nameIssue }: { derivedName: string | null; nameIssue: string | null },
+): string {
+  if (nameIssue === null) return request.name;
+  return derivedName ?? request.name;
+}

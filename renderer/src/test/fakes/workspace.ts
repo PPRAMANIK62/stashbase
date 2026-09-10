@@ -197,7 +197,7 @@ export function workspaceRuntimeOptions(
  *  proof somewhere it does not belong. */
 export function githubImportApi(overrides: Partial<GitHubImportPort> = {}): GitHubImportPort {
   return {
-    readFolderName: (name: string) => (name.includes('/') ? 'name cannot contain slashes' : null),
+    folderNameIssue: (name: string) => (name.includes('/') ? 'name cannot contain slashes' : null),
     readUrl: (raw: string) => {
       const match = /^https:\/\/github\.com\/[^/]+\/([^/]+)$/.exec(raw.trim());
       return match?.[1]

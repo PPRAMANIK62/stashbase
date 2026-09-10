@@ -31,9 +31,9 @@ describe('GitHub import adapter', () => {
   });
 
   it('refuses a destination name with the shared folder-name rule', () => {
-    expect(adapter().readFolderName('notes')).toBeNull();
-    expect(adapter().readFolderName('a/b')).toBe('name cannot contain slashes');
-    expect(adapter().readFolderName('.hidden')).toBe('name cannot start with "."');
+    expect(adapter().folderNameIssue('notes')).toBeNull();
+    expect(adapter().folderNameIssue('a/b')).toBe('name cannot contain slashes');
+    expect(adapter().folderNameIssue('.hidden')).toBe('name cannot start with "."');
   });
 
   it('sends the pasted URL and the chosen name, and answers the published path', async () => {

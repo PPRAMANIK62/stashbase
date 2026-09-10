@@ -7,6 +7,7 @@
  * one shop with two frames rather than two shops.
  */
 export type { GalleryPort } from './application/ports';
+export { copyFolderName } from './domain/entry';
 export type { GalleryCopyRequest, GalleryEntry } from './domain/entry';
 export { GALLERY_SNAPSHOT } from './domain/snapshot';
 export { createGalleryIndexAdapter } from './infrastructure/gallery-api';

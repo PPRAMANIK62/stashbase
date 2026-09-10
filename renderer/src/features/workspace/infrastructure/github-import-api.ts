@@ -66,7 +66,7 @@ export function createGitHubImportAdapter(client: HttpClient): GitHubImportPort 
     // vocabulary. Refusing inline with a second approximation would let the
     // two drift; the server still parses both again, so this is feedback
     // rather than authority.
-    readFolderName: (name) => validateFolderName(name),
+    folderNameIssue: (name) => validateFolderName(name),
     readUrl: (raw) => {
       const parsed = parseGitHubRepositoryUrl(raw);
       return parsed.ok

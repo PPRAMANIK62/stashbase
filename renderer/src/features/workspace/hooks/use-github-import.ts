@@ -63,12 +63,12 @@ export function useGitHubImport(
     onSuccess: (path: string) => onImported(path),
   });
 
-  const nameIssue = folderName ? port.readFolderName(folderName) : null;
+  const nameIssue = folderName ? port.folderNameIssue(folderName) : null;
   const urlIssue = url.trim() && !parsed.ok ? parsed.message : null;
 
   const { isPending, mutate, reset } = run;
   const submit = useCallback(() => {
-    if (isPending || !parsed.ok || !folderName || port.readFolderName(folderName)) return;
+    if (isPending || !parsed.ok || !folderName || port.folderNameIssue(folderName)) return;
     const next = new AbortController();
     setController(next);
     mutate({ signal: next.signal });

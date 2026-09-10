@@ -68,7 +68,7 @@ export interface GitHubImportPort {
   /** Why the server would refuse this destination name, or null when usable.
    *  Carried here rather than re-derived in the feature so inline feedback is
    *  the same rule the request will meet. */
-  readFolderName(name: string): string | null;
+  folderNameIssue(name: string): string | null;
   /** The destination name the server would derive from this URL, or why it
    *  would refuse the URL. */
   readUrl(raw: string): { folderName: string; ok: true } | { message: string; ok: false };

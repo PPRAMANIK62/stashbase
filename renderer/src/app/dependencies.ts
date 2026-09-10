@@ -21,7 +21,11 @@ import {
   type AgentSessionPort,
 } from '@/features/agent/public';
 import { createDocumentAdapters, type DocumentAdapters } from '@/features/documents/public';
-import { createGalleryIndexAdapter, type GalleryPort } from '@/features/gallery/public';
+import {
+  copyFolderName,
+  createGalleryIndexAdapter,
+  type GalleryPort,
+} from '@/features/gallery/public';
 import {
   createPreparationControlAdapter,
   createPreparationStatusAdapter,
@@ -154,12 +158,11 @@ export function createDependencies(): AppDependencies {
       // show is still a folder in the switcher, so it says exactly that
       // rather than implying nothing happened.
       async copy(request, signal) {
-        // The entry's own name when the Library's rule accepts it, since that
-        // is what the reader just read on the card; the repository's derived
-        // name otherwise.
         const derived = workspace.githubImport.readUrl(request.repo);
-        const folderName = workspace.githubImport.readFolderName(request.name)
-          ?? (derived.ok ? derived.folderName : request.name);
+        const folderName = copyFolderName(request, {
+          derivedName: derived.ok ? derived.folderName : null,
+          nameIssue: workspace.githubImport.folderNameIssue(request.name),
+        });
         const path = await workspace.githubImport.run(request.repo, folderName, signal);
         if (!(await openedFolderWindow(bridge.library, path))) {
           throw new Error('the copy was made but no window could open it');
