@@ -9,14 +9,7 @@ export type { AgentCatalogPort, AgentContextPort, AgentSessionPort } from './app
 export type { AgentFilesChanged } from './application/session-runtime';
 export type { AgentScopeEnvironment } from './domain/context';
 export type { AgentScope } from './domain/session';
-export type {
-  AgentInstructions,
-  AgentInstructionsPort,
-} from './application/ports';
+export type { AgentInstructionsPort } from './application/ports';
 export { createAgentInstructionsAdapter } from './infrastructure/agent-instructions-api';
-export {
-  useAgentInstructions,
-  type AgentInstructionsEditor,
-} from './hooks/use-agent-instructions';
 export type { AgentWorkspaceRuntime } from './application/workspace-runtime';
 export type { AgentScopeOutline } from './domain/starters';

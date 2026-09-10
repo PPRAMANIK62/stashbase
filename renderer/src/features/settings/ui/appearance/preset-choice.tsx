@@ -7,7 +7,7 @@ import { surfaceClasses } from '@/lib/surface-classes';
 import { useSurface } from '@/lib/surface-context';
 import { cn } from '@/lib/utils';
 
-export interface PresetOption {
+interface PresetOption {
   readonly label: string;
   readonly value: string;
 }

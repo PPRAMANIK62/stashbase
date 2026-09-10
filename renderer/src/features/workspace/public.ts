@@ -9,7 +9,7 @@
  */
 export { useWorkspace } from './hooks/use-workspace';
 export { useFiles } from './hooks/use-files';
-export { useHiddenFiles, type HiddenFilesView } from './hooks/use-hidden-files';
+export { useHiddenFiles } from './hooks/use-hidden-files';
 export { useLibrary } from './hooks/use-library';
 export { useLibraryLifecycle } from './hooks/use-library-lifecycle';
 export {

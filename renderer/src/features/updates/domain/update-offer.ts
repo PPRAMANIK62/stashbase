@@ -12,7 +12,7 @@ import type { UpdatePhaseName, UpdateStatus } from '@/features/updates/domain/up
 
 /** The one thing a phase invites. `primary` runs whatever main decided this
  *  phase's next step is; `check` asks again. */
-export interface UpdateAction {
+interface UpdateAction {
   readonly kind: 'primary' | 'check';
   readonly label: string;
 }

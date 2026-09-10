@@ -2,7 +2,6 @@ export {
   type AgentRuntimePort,
   type AppearancePort,
   type CapturePort,
-  type OnboardingAnswers,
   type OnboardingPort,
   type McpAccessPort,
   type TranscriptionPort,
@@ -17,12 +16,7 @@ export { createOnboardingAdapter } from './infrastructure/onboarding-api';
 export { createTranscriptionAdapter } from './infrastructure/transcription-api';
 export { appearanceSurface } from './domain/appearance';
 export {
-  searchSetupInvitation,
-  type SearchSetupInvitation,
-} from './domain/search-setup-invitation';
-export {
   useSearchSetupInvitation,
-  type SearchSetupInvitationInput,
   type SearchSetupInvitationView,
 } from './hooks/use-search-setup-invitation';
 export { Settings } from './ui/settings';
