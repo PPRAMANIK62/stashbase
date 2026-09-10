@@ -1,0 +1,11 @@
+# The formatter and the lint gates compare bytes, so every text file is checked
+# out with LF on every platform. Without this a Windows checkout arrives with
+# CRLF and the whole renderer reads as unformatted.
+* text=auto eol=lf
+
+# Files git must never translate.
+*.png binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
