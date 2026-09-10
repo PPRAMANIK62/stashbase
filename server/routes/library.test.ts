@@ -7,6 +7,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
+import { filesystemPath } from '../filesystem-path.ts';
+
 const isolatedEnvNames = [
   'HOME',
   'USERPROFILE',
@@ -99,6 +101,10 @@ test('library routes return authoritative membership and open the selected folde
 
   const selectedFolder = path.join(testHome, 'Research');
   fs.mkdirSync(selectedFolder);
+  // The library API answers in source spelling with POSIX separators, which is
+  // not what path.join produces on Windows. Filesystem calls keep the native
+  // spelling above.
+  const selectedFolderPath = filesystemPath.absolute(selectedFolder);
   const app = express();
   app.use(express.json());
   app.use(withWindowContext);
@@ -141,8 +147,8 @@ test('library routes return authoritative membership and open the selected folde
     current: { name: string; path: string } | null;
     recent: Array<{ path: string }>;
   };
-  assert.deepEqual(payload.current, { name: 'Research', path: selectedFolder });
-  assert.equal(payload.recent[0]?.path, selectedFolder);
+  assert.deepEqual(payload.current, { name: 'Research', path: selectedFolderPath });
+  assert.equal(payload.recent[0]?.path, selectedFolderPath);
 
   const current = await fetch(`${baseUrl}/api/library`, { headers });
   assert.equal(current.status, 200);

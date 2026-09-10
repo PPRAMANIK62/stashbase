@@ -7,6 +7,7 @@ import test from "node:test";
 import express from "express";
 
 import { fileVersion } from "../files.ts";
+import { filesystemPath } from "../filesystem-path.ts";
 import { clearCurrentFolder, removeRecent, setCurrentFolder } from "../folder.ts";
 import { requireFolder } from "../http.ts";
 import { mount } from "./files.ts";
@@ -62,6 +63,9 @@ test("reveal resolves the requested registered folder and rejects an unregistere
   const outsiderRoot = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-reveal-outsider-"));
   const memberSource = path.join(memberRoot, "source.ts");
   fs.writeFileSync(memberSource, "export const answer = 42;\n", "utf8");
+  // Reveal answers in source spelling with POSIX separators, which is not
+  // what path.join produces on Windows.
+  const revealedSource = filesystemPath.absolute(memberSource);
   setCurrentFolder(memberRoot);
   setCurrentFolder(activeRoot);
 
@@ -84,14 +88,14 @@ test("reveal resolves the requested registered folder and rejects an unregistere
       { method: "POST" },
     );
     assert.equal(revealedResponse.status, 200);
-    assert.deepEqual(revealed, [memberSource]);
+    assert.deepEqual(revealed, [revealedSource]);
 
     const rejectedResponse = await fetch(
       `http://127.0.0.1:${address.port}/api/reveal/source.ts?folder=${encodeURIComponent(outsiderRoot)}`,
       { method: "POST" },
     );
     assert.equal(rejectedResponse.status, 400);
-    assert.deepEqual(revealed, [memberSource]);
+    assert.deepEqual(revealed, [revealedSource]);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearCurrentFolder();
