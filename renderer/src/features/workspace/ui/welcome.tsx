@@ -1,6 +1,8 @@
+/** What a window shows before any folder is open: the library's folders, the
+ *  two ways to add one, and the Gallery band the caller composes in. */
 import { useQuery } from '@tanstack/react-query';
 import { Folder, FolderOpen, FolderPlus, GitFork, LoaderCircle } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type {
@@ -11,12 +13,12 @@ import type {
 import { libraryQuery } from '@/features/workspace/application/queries';
 import { displayFolderPath, folderName } from '@/features/workspace/domain/library';
 import { useFolders } from '@/features/workspace/hooks/use-folders';
-import { useGitHubImport } from '@/features/workspace/hooks/use-github-import';
+import { useGitHubImportDialog } from '@/features/workspace/hooks/use-github-import-dialog';
 import { focusRing } from '@/lib/focus-ring';
-
-import { ImportGitHubDialog } from './import-github-dialog';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/shared/brand/logo';
+
+import { ImportGitHubDialog } from './import-github-dialog';
 
 export interface LibraryWelcomeProps {
   api: LibraryPort;
@@ -37,13 +39,7 @@ export function LibraryWelcome({
 }: LibraryWelcomeProps) {
   const library = useQuery(libraryQuery(api));
   const folders = useFolders(api, folderPicker);
-  const [importOpen, setImportOpen] = useState(false);
-  const importRequest = useGitHubImport(githubImport, {
-    onImported: (path) => {
-      setImportOpen(false);
-      folders.select(path);
-    },
-  });
+  const importDialog = useGitHubImportDialog(githubImport, folders.select);
 
   if (!library.data || library.data.activeFolder || isRestoringSession) return null;
 
@@ -140,7 +136,7 @@ export function LibraryWelcome({
             <Button
               disabled={folders.isPending}
               leadingIcon={GitFork}
-              onClick={() => setImportOpen(true)}
+              onClick={importDialog.start}
               variant="tertiary"
             >
               Import from GitHub
@@ -148,9 +144,9 @@ export function LibraryWelcome({
           </div>
           <ImportGitHubDialog
             folderHome={library.data.homeDirectory}
-            import={importRequest}
-            onClose={() => setImportOpen(false)}
-            open={importOpen}
+            import={importDialog.request}
+            onClose={importDialog.close}
+            open={importDialog.open}
           />
           {folders.failure && (
             <p className="mt-3 text-caption text-destructive" role="alert">
@@ -159,8 +155,8 @@ export function LibraryWelcome({
           )}
         </div>
         {/* The shelf takes a wider measure than the hero above it, but its
-          * heading keeps the hero's center axis: two competing alignments on
-          * one screen read as two screens. */}
+         * heading keeps the hero's center axis: two competing alignments on
+         * one screen read as two screens. */}
         {gallery && (
           <section className="mt-7 flex w-full max-w-5xl flex-col items-center">
             <div aria-hidden="true" className="mb-7 h-px w-10 bg-border" />
