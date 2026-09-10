@@ -1,7 +1,7 @@
 import type { AppearanceSurface } from '@/shared/domain/appearance';
 
-export type AppearanceTheme = 'system' | 'light' | 'dark';
-export type AppearanceScale = 'small' | 'default' | 'large';
+type AppearanceTheme = 'system' | 'light' | 'dark';
+type AppearanceScale = 'small' | 'default' | 'large';
 
 export interface AppearancePreferences {
   readonly theme: AppearanceTheme;
@@ -16,6 +16,14 @@ export type AppearanceChange =
   | { readonly theme: AppearanceTheme }
   | { readonly uiScale: AppearanceScale }
   | { readonly readingTextSize: AppearanceScale };
+
+/** Both scale rows offer the same three steps, so the steps are one
+ *  vocabulary rather than a choice each row makes for itself. */
+const SCALE_CHOICES: readonly { readonly label: string; readonly value: AppearanceScale }[] = [
+  { label: 'Small', value: 'small' },
+  { label: 'Default', value: 'default' },
+  { label: 'Large', value: 'large' },
+];
 
 /** Parameterised by field so a row's choices cannot carry a value the field
  *  does not accept. */
@@ -48,21 +56,13 @@ export const APPEARANCE_ROWS: readonly AppearanceRow[] = [
     title: 'Theme',
   },
   {
-    choices: [
-      { label: 'Small', value: 'small' },
-      { label: 'Default', value: 'default' },
-      { label: 'Large', value: 'large' },
-    ],
+    choices: SCALE_CHOICES,
     detail: 'Scales app controls and chrome without changing document text.',
     field: 'uiScale',
     title: 'Interface size',
   },
   {
-    choices: [
-      { label: 'Small', value: 'small' },
-      { label: 'Default', value: 'default' },
-      { label: 'Large', value: 'large' },
-    ],
+    choices: SCALE_CHOICES,
     detail: 'Changes Markdown reading and editing text without affecting the interface.',
     field: 'readingTextSize',
     title: 'Reading text size',
