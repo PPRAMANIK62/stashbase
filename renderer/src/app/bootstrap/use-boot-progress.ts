@@ -11,10 +11,9 @@ export interface BootProgressOptions {
  * Startup signalling for the window: when the first paint is trustworthy, and
  * when the Agent surface is allowed to exist.
  *
- * `data-boot-settled` on the body is what the desktop harness and the E2E
- * journeys wait on, so it is set exactly once the library has answered and no
- * folder restore is still in flight — earlier and a screenshot catches a
- * half-built shell. The Agent latch is separate and one-way: once a library has
+ * `data-boot-settled` on the body is what a driven runtime pass waits on, so
+ * it is set exactly once the library has answered and no folder restore is
+ * still in flight. Earlier and a screenshot catches a half-built shell. The Agent latch is separate and one-way: once a library has
  * ever held a folder the Agent workspace stays mounted, so emptying the library
  * does not tear down a running conversation.
  */

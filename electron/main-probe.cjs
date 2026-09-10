@@ -44,8 +44,8 @@ function createServerChildEnvironment({
 
 /** Keep the Electron-owned process single-layered unless the caller is an
  * explicit Vite development session. A watch wrapper can outlive or orphan
- * its actual listener during Electron shutdown, while direct source and E2E
- * launches need one child whose exit is the server lifecycle boundary. */
+ * its actual listener during Electron shutdown, while a direct source launch
+ * needs one child whose exit is the server lifecycle boundary. */
 function createServerArguments({ entry, portArgs, packaged, vite }) {
   if (packaged) return [entry, ...portArgs];
   return vite ? ['watch', entry, ...portArgs] : [entry, ...portArgs];
