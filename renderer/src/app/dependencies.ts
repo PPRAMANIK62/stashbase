@@ -53,6 +53,7 @@ import {
   type WorkspaceAdapters,
 } from '@/features/workspace/public';
 import { readBridge } from '@/platform/electron/bridge';
+import type { BugReportBridge } from '@/platform/electron/bug-report';
 import type { CaptureBridge } from '@/platform/electron/capture';
 import { createExternalNavigation } from '@/platform/electron/external-navigation';
 import { fileManagerLabel } from '@/platform/electron/file-manager';
@@ -73,6 +74,8 @@ export interface AppDependencies {
     context: AgentContextPort;
     session: AgentSessionPort;
   };
+  /** Opens the bug-report review for this window; null outside Electron. */
+  bugReport: BugReportBridge | null;
   /** Desktop clipboard capture; null outside Electron or when the capability is absent. */
   capture: CaptureBridge | null;
   documents: {
@@ -121,6 +124,7 @@ export function createDependencies(): AppDependencies {
       context: createAgentContextAdapter(http, bridge.runtime.serverOrigin),
       session: createAgentSessionAdapter(http, bridge.runtime.serverOrigin),
     },
+    bugReport: bridge.bugReport ?? null,
     capture: bridge.capture ?? null,
     documents: {
       adapters: createDocumentAdapters({

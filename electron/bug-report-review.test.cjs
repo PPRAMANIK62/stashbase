@@ -275,6 +275,62 @@ test('review window is isolated, local-only, and denies popup or arbitrary navig
   assert.equal(win.loadedFile, htmlPath);
 });
 
+test('replacement review window sandboxes the app:// page and denies every other origin', async () => {
+  const instances = [];
+  class FakeBrowserWindow extends EventEmitter {
+    constructor(options) {
+      super();
+      this.options = options;
+      this.webContents = new EventEmitter();
+      this.webContents.id = 33;
+      this.webContents.setWindowOpenHandler = (handler) => { this.openHandler = handler; };
+      instances.push(this);
+    }
+
+    setMenuBarVisibility() {}
+    isDestroyed() { return false; }
+    show() { this.shown = true; }
+    loadURL(url) { this.loadedUrl = url; return Promise.resolve(); }
+  }
+  const preloadPath = path.join(
+    __dirname, '..', 'dist', 'electron', 'bug-report', 'review-window-preload.cjs',
+  );
+  const result = createBugReportReviewWindow({
+    BrowserWindow: FakeBrowserWindow,
+    preloadPath,
+    appUrl: 'app://renderer/bug-report.html',
+  });
+  const win = instances[0];
+
+  assert.equal(win.options.webPreferences.preload, preloadPath);
+  assert.equal(win.options.webPreferences.sandbox, true);
+  assert.equal(win.options.webPreferences.contextIsolation, true);
+  assert.equal(win.options.webPreferences.nodeIntegration, false);
+  assert.equal(win.options.webPreferences.webviewTag, false);
+  assert.equal(win.options.webPreferences.experimentalFeatures, false);
+  assert.equal(win.options.webPreferences.spellcheck, true);
+  assert.equal(win.options.parent, undefined);
+  assert.equal(win.options.fullscreenable, false);
+  assert.deepEqual(win.openHandler({ url: 'https://example.com' }), { action: 'deny' });
+
+  const navigate = (event, url) => {
+    let prevented = false;
+    win.webContents.emit(event, { preventDefault: () => { prevented = true; } }, url);
+    return prevented;
+  };
+  assert.equal(navigate('will-navigate', 'app://renderer/bug-report.html#ready'), false);
+  assert.equal(navigate('will-navigate', 'file:///private/file.txt'), true);
+  assert.equal(navigate('will-redirect', 'https://example.com/'), true);
+  assert.equal(navigate('will-attach-webview', undefined), true);
+
+  await result.loaded;
+  assert.equal(win.loadedUrl, 'app://renderer/bug-report.html');
+  assert.throws(
+    () => createBugReportReviewWindow({ BrowserWindow: FakeBrowserWindow, preloadPath }),
+    TypeError,
+  );
+});
+
 test('review opened from a full-screen source presents in that space instead of a separate desktop', () => {
   const instances = [];
   class FakeBrowserWindow extends EventEmitter {

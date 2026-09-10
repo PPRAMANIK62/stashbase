@@ -40,6 +40,7 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       context: agentContextPort(),
       session: agentSessionPort().port,
     },
+    bugReport: null,
     capture: null,
     documents: documentsApi(),
     library: { api: adapters.library, folderPicker: folderPicker(), lifecycle: adapters.lifecycle },

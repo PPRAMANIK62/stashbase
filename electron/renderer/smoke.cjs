@@ -13,6 +13,7 @@ const {
 } = require('../app-protocol.cjs');
 const {
   applicationWindowWebPreferences,
+  isAllowedApplicationUrl,
   secureApplicationWindow,
 } = require('../window-security.cjs');
 const { installRequestAuthorization } = require('./requests.cjs');
@@ -78,6 +79,12 @@ app
     const capture = require(
       path.join(repositoryRoot, 'dist', 'electron', 'capture', 'monitor.cjs'),
     );
+    const bugReportOpen = require(
+      path.join(repositoryRoot, 'dist', 'electron', 'bug-report', 'open.cjs'),
+    );
+    const bugReportReview = require(
+      path.join(repositoryRoot, 'dist', 'electron', 'bug-report', 'review-ipc.cjs'),
+    );
     const authorizedWindows = new Set();
     const openedExternalUrls = [];
     const activeFolders = new WeakMap();
@@ -89,7 +96,27 @@ app
         capability === externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY ||
         capability === lifecycle.LIBRARY_LIFECYCLE_CAPABILITY ||
         capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY ||
+        capability === bugReportOpen.BUG_REPORT_CAPABILITY ||
         capability === capture.CAPTURE_CAPABILITY);
+    const openedBugReviews = [];
+    bugReportOpen.registerBugReportOpen({
+      BrowserWindow,
+      ipcMain,
+      expectedOrigins: new Set([APP_ORIGIN]),
+      isLiveWindow,
+      hasCapability,
+      openReview: async (sourceWindow) => { openedBugReviews.push(sourceWindow); },
+    });
+    // No draft is ever bound here, so every review channel must answer FORBIDDEN.
+    bugReportReview.registerBugReportReviewIpc({
+      ipcMain,
+      bugReports: {},
+      draftIdForSender: () => null,
+      isReviewFrameUrl: (url) => isAllowedApplicationUrl(url, APP_ORIGIN),
+      prepareApprovedReport: async () => ({ ok: false }),
+      openPreparedReport: async () => ({ ok: false }),
+      savePreparedReport: async () => ({ ok: false }),
+    });
     boundary.registerDialog({
       BrowserWindow,
       dialog: {
@@ -199,6 +226,8 @@ app
       await new Promise((resolve) => setTimeout(resolve, 25));
       const popup = window.open('https://example.com/');
       return {
+        bugReportFrozen: Object.isFrozen(window.stashbase.bugReport),
+        bugReportOpen: await window.stashbase.bugReport.open(),
         captureFrozen: Object.isFrozen(window.stashbase.capture),
         captureKeys: Object.keys(window.stashbase.capture).sort(),
         captureWatch: await window.stashbase.capture.refreshWatch(),
@@ -239,6 +268,8 @@ app
   `);
 
     assert.deepEqual(result, {
+      bugReportFrozen: true,
+      bugReportOpen: { ok: true },
       captureFrozen: true,
       captureKeys: [
         'markCurrentImageHandled',
@@ -252,6 +283,7 @@ app
       externalNavigationFrozen: true,
       folderResult: { ok: true, folderPath: null },
       globalKeys: [
+        'bugReport',
         'capture',
         'externalNavigation',
         'runtime',
@@ -284,6 +316,7 @@ app
       windowLifecycleKeys: ['onPrepareContextRelease', 'reload'],
     });
     assert.deepEqual(openedExternalUrls, ['https://example.com/docs']);
+    assert.deepEqual(openedBugReviews, [window]);
     assert.deepEqual(receivedLibraryRequest, {
       method: 'POST',
       origin: APP_ORIGIN,
@@ -314,6 +347,56 @@ app
     `);
     assert.equal(folderCursor, 'pointer');
     assert.equal(activeFolders.get(window), null);
+
+    const reviewWindow = new BrowserWindow({
+      show: false,
+      webPreferences: applicationWindowWebPreferences({
+        preloadPath: path.join(
+          repositoryRoot, 'dist', 'electron', 'bug-report', 'review-window-preload.cjs',
+        ),
+      }),
+    });
+    secureApplicationWindow(reviewWindow, APP_ORIGIN);
+    await reviewWindow.loadURL(`${APP_URL}bug-report.html`);
+    const reviewResult = await reviewWindow.webContents.executeJavaScript(`
+      (async () => {
+        const deadline = Date.now() + 5000;
+        while (document.title !== 'Report a Bug' && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        return {
+          bridgeFrozen: Object.isFrozen(window.stashbase.bugReportReview),
+          bridgeKeys: Object.keys(window.stashbase.bugReportReview).sort(),
+          get: await window.stashbase.bugReportReview.get(),
+          globalKeys: Object.keys(window.stashbase),
+          title: document.title,
+        };
+      })()
+    `);
+
+    assert.deepEqual(reviewResult, {
+      bridgeFrozen: true,
+      bridgeKeys: [
+        'discard',
+        'excludeArtifact',
+        'get',
+        'getArtifactPreview',
+        'includeArtifact',
+        'openGitHub',
+        'prepare',
+        'reopen',
+        'saveArtifacts',
+        'updateDescription',
+      ],
+      get: {
+        ok: false,
+        error: { code: 'FORBIDDEN', message: 'This window cannot access a bug report review.' },
+      },
+      globalKeys: ['bugReportReview'],
+      title: 'Report a Bug',
+    });
+    reviewWindow.destroy();
+
     console.log('replacement Electron boundary smoke passed');
     clearTimeout(timeout);
     window.destroy();

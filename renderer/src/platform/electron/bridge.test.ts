@@ -64,4 +64,27 @@ describe('Electron bridge', () => {
     };
     expect(() => readBridge()).toThrow(/Unrecognized key\(s\) in object: 'windowId'/u);
   });
+
+  it('passes the bug-report capability through only when it is complete', () => {
+    const bugReport = { open: async () => ({ ok: true as const }) };
+    window.stashbase = {
+      bugReport,
+      externalNavigation,
+      library,
+      runtime,
+      workspaceSession,
+      windowLifecycle,
+    };
+    expect(readBridge().bugReport).toBe(bugReport);
+
+    window.stashbase = {
+      bugReport: {},
+      externalNavigation,
+      library,
+      runtime,
+      workspaceSession,
+      windowLifecycle,
+    };
+    expect(readBridge().bugReport).toBeUndefined();
+  });
 });

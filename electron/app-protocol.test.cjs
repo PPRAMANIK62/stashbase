@@ -32,6 +32,10 @@ test('app protocol resolves only renderer-host assets beneath its build root', (
     assetPathFromRequest('app://renderer/assets/app.js?cache=1', root),
     path.join(root, 'assets', 'app.js'),
   );
+  assert.equal(
+    assetPathFromRequest('app://renderer/bug-report.html', root),
+    path.join(root, 'bug-report.html'),
+  );
   assert.equal(assetPathFromRequest('app://other/index.html', root), null);
   assert.equal(assetPathFromRequest('app://renderer/%2e%2e/secret', root), null);
   assert.equal(assetPathFromRequest('app://renderer/assets%2fsecret', root), null);
@@ -76,6 +80,18 @@ test('app protocol attaches restrictive CSP to packaged asset responses', async 
     'frame-src http://127.0.0.1:8090/asset/ http://127.0.0.1:8090/asset-derived/',
   );
   assert.equal(result.headers.get('x-content-type-options'), 'nosniff');
+
+  // The bug-report review page is a second document on the same origin, so it
+  // inherits the shell's policy rather than carrying one of its own.
+  const reviewPage = await handler({ method: 'GET', url: 'app://renderer/bug-report.html' });
+  assert.equal(
+    fetched,
+    pathToFileURL(path.resolve('/repo/dist/renderer/bug-report.html')).toString(),
+  );
+  assert.equal(
+    reviewPage.headers.get('content-security-policy'),
+    productionContentSecurityPolicy('http://127.0.0.1:8090'),
+  );
 
   const denied = await handler({ method: 'POST', url: 'app://renderer/' });
   assert.equal(denied.status, 405);

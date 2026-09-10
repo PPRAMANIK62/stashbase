@@ -64,6 +64,14 @@ export default defineConfig({
     outDir: '../dist/renderer',
     emptyOutDir: true,
     manifest: true,
+    // Two windows, two pages: the workspace and the bug-report review, each
+    // its own HTML entry so main can load either by URL.
+    rollupOptions: {
+      input: {
+        bugReport: fileURLToPath(new URL('./bug-report.html', import.meta.url)),
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+      },
+    },
   },
   test: {
     environment: 'happy-dom',

@@ -5,6 +5,10 @@
       "productArea": "Agent Panel"
     },
     {
+      "name": "bug-report",
+      "productArea": "Bug Reporting"
+    },
+    {
       "name": "documents",
       "productArea": "Documents"
     },
@@ -33,6 +37,8 @@
     "shared/html-sanitization.ts"
   ],
   "wireSchemaModules": [
+    "shared/protocols/electron/bug-report-review.ts",
+    "shared/protocols/electron/bug-report.ts",
     "shared/protocols/electron/capture.ts",
     "shared/protocols/electron/external-navigation.ts",
     "shared/protocols/electron/library.ts",

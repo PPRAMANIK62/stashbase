@@ -17,6 +17,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const { pathToFileURL } = require('node:url');
 const {
   createServerArguments,
   createServerChildEnvironment,
@@ -29,7 +30,6 @@ const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
 const { collectRedactedApplicationLog, readApplicationLogTail } = require('./bug-report-log.cjs');
 const { captureWindowScreenshot } = require('./bug-report-screenshot.cjs');
 const { createBugReportHandoff } = require('./bug-report-handoff.cjs');
-const { registerBugReportReviewIpc } = require('./bug-report-review-ipc.cjs');
 const { createBugReportReviewWindow } = require('./bug-report-review-window.cjs');
 const { createUpdateInstaller } = require('./update-install-strategy.cjs');
 const { createUpdateManager } = require('./update-manager.cjs');
@@ -41,6 +41,7 @@ const {
 } = require('./app-protocol.cjs');
 const {
   applicationWindowWebPreferences,
+  isAllowedApplicationUrl,
   secureApplicationWindow,
 } = require('./window-security.cjs');
 const { installRequestAuthorization } = require('./renderer/requests.cjs');
@@ -160,10 +161,23 @@ let workspaceSessionCapability = null;
 let windowLifecycleCapability = null;
 let externalNavigationCapability = null;
 let captureCapability = null;
+let bugReportCapability = null;
 let captureMonitor = null;
 let replacementWindowLifecycle = null;
 let workspaceSessionRestoreWindow = null;
 let replacementBoundaryInstalled = false;
+
+const BUG_REPORT_REVIEW_FILE_URL = pathToFileURL(
+  path.join(__dirname, 'bug-report-review.html'),
+).toString();
+
+function isBugReportReviewFrameUrl(url) {
+  if (typeof url !== 'string') return false;
+  if (url === BUG_REPORT_REVIEW_FILE_URL || url.startsWith(`${BUG_REPORT_REVIEW_FILE_URL}#`)) {
+    return true;
+  }
+  return !USE_DEV_VITE && isAllowedApplicationUrl(url, APP_ORIGIN);
+}
 
 function installReplacementBoundary() {
   if (replacementBoundaryInstalled) return;
@@ -215,12 +229,48 @@ function installReplacementBoundary() {
     'capture',
     'monitor.cjs',
   ));
+  const bugReportOpen = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'bug-report',
+    'open.cjs',
+  ));
+  const bugReportReview = require(path.join(
+    PROJECT_ROOT,
+    'dist',
+    'electron',
+    'bug-report',
+    'review-ipc.cjs',
+  ));
   libraryFolderDialogCapability = boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY;
   libraryLifecycleCapability = lifecycle.LIBRARY_LIFECYCLE_CAPABILITY;
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
   windowLifecycleCapability = windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY;
   externalNavigationCapability = externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY;
   captureCapability = capture.CAPTURE_CAPABILITY;
+  bugReportCapability = bugReportOpen.BUG_REPORT_CAPABILITY;
+  bugReportOpen.registerBugReportOpen({
+    BrowserWindow,
+    ipcMain,
+    expectedOrigins: new Set([RENDERER_ORIGIN]),
+    isLiveWindow: (win) => isLiveMainWindow(win),
+    hasCapability: (win, capability) => (
+      replacementWindowCapabilities.get(win)?.has(capability) === true
+    ),
+    openReview: (win) => openBugReportReview(win),
+  });
+  bugReportReview.registerBugReportReviewIpc({
+    ipcMain,
+    bugReports,
+    draftIdForSender: (senderWebContentsId) => (
+      bugReportReviewDraftBySender.get(senderWebContentsId) ?? null
+    ),
+    prepareApprovedReport: (snapshot) => bugReportHandoff.prepare(snapshot),
+    openPreparedReport: (snapshot) => bugReportHandoff.openGitHub(snapshot),
+    savePreparedReport: (snapshot) => bugReportHandoff.saveToDownloads(snapshot),
+    isReviewFrameUrl: (url) => isBugReportReviewFrameUrl(url),
+  });
   // Clipboard-image offers fail closed: main re-reads the durable Settings
   // opt-in from the server on every refresh and never enables from memory.
   captureMonitor = capture.registerCaptureMonitor({
@@ -350,16 +400,6 @@ const bugReportHandoff = createBugReportHandoff({
   baseTemporaryDirectory: path.join(app.getPath('temp'), 'stashbase', 'bug-reports'),
   downloadsDirectory: async () => app.getPath('downloads'),
   openExternal: (url) => shell.openExternal(url),
-});
-registerBugReportReviewIpc({
-  ipcMain,
-  bugReports,
-  draftIdForSender: (senderWebContentsId) => (
-    bugReportReviewDraftBySender.get(senderWebContentsId) ?? null
-  ),
-  prepareApprovedReport: (snapshot) => bugReportHandoff.prepare(snapshot),
-  openPreparedReport: (snapshot) => bugReportHandoff.openGitHub(snapshot),
-  savePreparedReport: (snapshot) => bugReportHandoff.saveToDownloads(snapshot),
 });
 
 const APP_CONFIG_FILE = path.join(os.homedir(), '.stashbase', 'config.json');
@@ -835,9 +875,22 @@ async function openBugReportReview(win) {
   try {
     review = createBugReportReviewWindow({
       BrowserWindow,
-      preloadPath: path.join(__dirname, 'bug-report-review-preload.cjs'),
-      htmlPath: path.join(__dirname, 'bug-report-review.html'),
       sourceWindow: isLiveMainWindow(win) ? win : null,
+      ...(USE_DEV_VITE
+        ? {
+          preloadPath: path.join(__dirname, 'bug-report-review-preload.cjs'),
+          htmlPath: path.join(__dirname, 'bug-report-review.html'),
+        }
+        : {
+          preloadPath: path.join(
+            PROJECT_ROOT,
+            'dist',
+            'electron',
+            'bug-report',
+            'review-window-preload.cjs',
+          ),
+          appUrl: `${APP_URL}bug-report.html`,
+        }),
     });
   } catch {
     bugReports.discardDraft(created.draft.id, source.webContentsId);
@@ -918,7 +971,8 @@ async function createWindow(initialFolder) {
     workspaceSessionCapability &&
     windowLifecycleCapability &&
     externalNavigationCapability &&
-    captureCapability
+    captureCapability &&
+    bugReportCapability
   ) {
     replacementWindowCapabilities.set(
       win,
@@ -929,6 +983,7 @@ async function createWindow(initialFolder) {
         windowLifecycleCapability,
         externalNavigationCapability,
         captureCapability,
+        bugReportCapability,
       ]),
     );
   }

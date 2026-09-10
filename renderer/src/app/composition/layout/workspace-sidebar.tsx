@@ -1,13 +1,17 @@
 /**
  * The window's left column: the library picker, the panel navigator, and the
- * Settings entry at its foot.
+ * Settings and bug-report entries at its foot.
  *
  * Every panel it can show is bound here — the file tree to its transport, the
  * chats list to the agent catalog, search to its retrieval ports — so the
  * navigator itself only decides which of them is on screen.
  */
-import { Settings as SettingsIcon } from 'lucide-react';
+import { Bug, Settings as SettingsIcon } from 'lucide-react';
 
+import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
+import type { SidebarNavigatorState } from '@/app/composition/commands/use-workspace-commands';
+import { useDependencies } from '@/app/composition/dependency-context';
+import type { DocumentSources } from '@/app/composition/folder/use-document-sources';
 import { Sidebar, SidebarFooter, SidebarGroup, SidebarHeader } from '@/components/ui/sidebar';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
 import { AgentChats, type AgentScope, type AgentWorkspaceRuntime } from '@/features/agent/public';
@@ -24,12 +28,8 @@ import {
 import { Logo } from '@/shared/brand/logo';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-import { useDependencies } from '@/app/composition/dependency-context';
 import { SidebarNavigator } from './sidebar-navigator';
 import { sidebarPanels } from './sidebar-panels';
-import type { DocumentSources } from '@/app/composition/folder/use-document-sources';
-import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
-import type { SidebarNavigatorState } from '@/app/composition/commands/use-workspace-commands';
 
 export interface WorkspaceSidebarProps {
   activeFolder: ActiveLibraryFolder | null;
@@ -58,6 +58,7 @@ export function WorkspaceSidebar({
   workspace,
 }: WorkspaceSidebarProps) {
   const dependencies = useDependencies();
+  const bugReport = dependencies.bugReport;
   return (
     <Sidebar className="bg-surface-1" variant="inset">
       <SidebarHeader className="workspace-titlebar h-11 flex-row items-center gap-2.5 px-4 py-0">
@@ -124,6 +125,15 @@ export function WorkspaceSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton icon={SettingsIcon} onClick={() => settings.openSettings()}>
               Settings
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              disabled={bugReport === null}
+              icon={Bug}
+              onClick={() => void bugReport?.open()}
+            >
+              {bugReport ? 'Report a bug' : 'Report a bug (desktop app only)'}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

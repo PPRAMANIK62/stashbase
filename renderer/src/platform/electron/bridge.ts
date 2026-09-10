@@ -3,6 +3,7 @@ import {
   rendererRuntimeConfigSchema,
 } from '@/protocols/electron/runtime';
 
+import { isBugReportBridge, type BugReportBridge } from './bug-report';
 import { isCaptureBridge, type CaptureBridge } from './capture';
 import type { ExternalNavigationBridge } from './external-navigation';
 import type { LibraryBridge } from './folder-picker';
@@ -17,6 +18,8 @@ interface DesktopWorkspaceSessionBridge {
 interface DesktopLibraryBridge extends LibraryBridge, LibraryLifecycleBridge {}
 
 interface DesktopBridge {
+  /** Optional: opening the bug-report review exists only in the desktop shell. */
+  bugReport?: BugReportBridge;
   /** Optional: clipboard-image offers exist only in the desktop shell. */
   capture?: CaptureBridge;
   externalNavigation: ExternalNavigationBridge;
@@ -29,6 +32,8 @@ interface DesktopBridge {
 declare global {
   interface Window {
     stashbase?: {
+      bugReport?: unknown;
+      bugReportReview?: unknown;
       capture?: unknown;
       externalNavigation?: ExternalNavigationBridge;
       library?: DesktopLibraryBridge;
@@ -73,8 +78,10 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   ) {
     throw new Error('The window lifecycle is unavailable.');
   }
+  const bugReport = globalWindow.stashbase?.bugReport;
   const capture = globalWindow.stashbase?.capture;
   return {
+    ...(isBugReportBridge(bugReport) ? { bugReport } : {}),
     ...(isCaptureBridge(capture) ? { capture } : {}),
     externalNavigation,
     library,
