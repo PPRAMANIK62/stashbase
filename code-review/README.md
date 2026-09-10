@@ -153,7 +153,6 @@ the contract-to-journey map.
 | Renderer module boundaries and layer promotion | [Renderer Architecture](renderer-architecture.md) |
 | Theme tokens, primitives, CSS boundaries | [Renderer Styling](renderer-styling.md) |
 | Journey-to-test ownership and remaining gaps | [Journey Coverage](journey-coverage.md) |
-| Electron E2E mechanics, baselines, fixtures | [UI Regression Testing](ui-regression-testing.md) |
 | Source CI, packaging, release gating | [Release Pipeline](release-pipeline.md) |
 
 Some changes require more than one contract. An Agent file write, for example,

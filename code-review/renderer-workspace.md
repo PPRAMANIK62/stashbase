@@ -108,7 +108,7 @@ semantic readiness.
 The initial renderer contains only window chrome and the minimum workspace
 shell. Feature surfaces that open on demand remain dynamic entries. The
 authoritative budget is `437 KiB` of initial static JavaScript, and the current
-required dynamic-entry set lives in `scripts/check-renderer-chunks.mjs`.
+required dynamic-entry set lives in `scripts/renderer/size.mjs`.
 Change that list or budget only when the ownership of eager shell behavior
 changes, never to make an accidental dependency pass.
 
@@ -122,7 +122,7 @@ changes, never to make an accidental dependency pass.
 | Renderer tree model | `web-src/src/features/workspace/lib/fileTreeModel.ts` (nesting, manual-rank ordering, visible rows), `lib/treeKeyboard.ts` (roving-focus rules), `hooks/useTreeRoving.ts` (row registry and per-row binding) |
 | Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `shared/library-files.ts`, `server/routes/files.ts`, the asynchronous request listing in `server/file-listing.ts`, and bounded selection-time inspection in `server/generic-file-preview.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
-| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, `server/generic-file-preview.test.ts`, `e2e/journeys/formats-media.spec.ts`, and `scripts/check-renderer-chunks.mjs` |
+| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, `server/generic-file-preview.test.ts`, and `scripts/renderer/size.mjs` |
 
 The four action hooks are private Seams inside the workspace Module. Do not make
 components depend on them directly; that would create a second transition
@@ -163,9 +163,10 @@ pnpm test:renderer
 pnpm build:web
 ```
 
-Run `pnpm test:e2e:smoke` for launch/navigation/save behavior and
-`pnpm test:e2e:functional` for affected folder, tab, search, focus, or layout
-journeys. Use `pnpm test:e2e:visual` only for representative composition
+Journey automation retired with the Playwright suites; prove launch, navigation, and save behavior through the Electron
+boundary suites and `pnpm test:electron:smoke`, and prove affected folder,
+tab, search, focus, or layout journeys with focused renderer tests and a
+driven runtime pass. Reserve manual review for representative composition
 changes.
 
 Related journeys: [J01](../design-docs/user-journeys.md#j01-complete-onboarding-and-reach-first-value),
@@ -178,5 +179,5 @@ for the complete cross-surface loop, and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
 for project registration and originating-window entry.
 Related contracts: [Window Lifecycle](window-lifecycle.md),
-[File Transactions](file-transactions.md), [Agent Panel](agent-panel.md), and
-[UI Regression Testing](ui-regression-testing.md).
+[File Transactions](file-transactions.md), and
+[Agent Panel](agent-panel.md).

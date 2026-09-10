@@ -113,7 +113,5 @@ A visual contribution should:
   the Renderer Styling contract when implementation mechanics or validation
   change.
 
-Exact tokens, corner assignments, primitive ownership, exemptions, and Linux
-baseline workflow belong only in
-[Renderer Styling](../code-review/renderer-styling.md) and
-[UI Regression Testing](../code-review/ui-regression-testing.md).
+Exact tokens, corner assignments, primitive ownership, and exemptions belong
+only in [Renderer Styling](../code-review/renderer-styling.md).

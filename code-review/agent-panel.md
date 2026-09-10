@@ -206,7 +206,7 @@
 | Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `features/agent-panel/lib/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
 | Attachment HTTP Adapter | `web-src/src/common/api/api.ts` and `server/routes/attach.ts` |
 | Markdown Adapter | `web-src/src/features/agent-panel/components/AgentMarkdown.tsx` |
-| Focused evidence | `web-src/src/features/agent-panel/__tests__/agent-*.test.ts`, `e2e/fixtures/fake-codex-app-server.test.mjs`, and `e2e/journeys/agent-panel.spec.ts` |
+| Focused evidence | `web-src/src/features/agent-panel/__tests__/agent-*.test.ts` |
 
 ## Validation
 
@@ -219,8 +219,8 @@ pnpm test:agent
 pnpm build:web
 ```
 
-Run `pnpm test:e2e:functional` for the affected Agent journey and
-`pnpm test:e2e:visual` for covered composition changes. Exact protocol fixture
+Journey automation retired with the Playwright suites; prove an affected Agent journey with focused renderer tests, story
+accessibility, and a driven runtime pass. Exact protocol fixture
 sequences belong in tests. Real credentials, packaged discovery, and
 clipboard/native Seams remain in release sanity.
 
@@ -233,5 +233,4 @@ core loop and
 for the Library-to-project session transition.
 
 Related contracts: [Agent Runtime](agent-runtime.md),
-[MCP Access](mcp-access.md), [Renderer Styling](renderer-styling.md), and
-[UI Regression Testing](ui-regression-testing.md).
+[MCP Access](mcp-access.md), and [Renderer Styling](renderer-styling.md).

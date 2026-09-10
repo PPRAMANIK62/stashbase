@@ -343,7 +343,7 @@ than enabling native commands against the old folder-home cwd.
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
 | Renderer Adapter | `web-src/src/common/lib/agentCatalog.ts`, the `activateChatTab` action in `web-src/src/store/contexts/AppContext.tsx`, `runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
-| Focused evidence | `server/__tests__/agent-contract.test.ts`, `opencode-agent.test.ts`, `hosted-agent-broker.test.ts`, `opencode-native-smoke.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts`, and `e2e/fixtures/fake-codex-app-server.test.mjs`; J11 in `e2e/journeys/agent-workflows.spec.ts` proves the first post-rebind MCP write for the established native adapters |
+| Focused evidence | `server/__tests__/agent-contract.test.ts`, `opencode-agent.test.ts`, `hosted-agent-broker.test.ts`, `opencode-native-smoke.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts` |
 
 ## Validation
 
@@ -356,8 +356,9 @@ pnpm test:agent:native
 pnpm test:opencode:native
 ```
 
-Run `pnpm test:e2e:agent-protocol` when the Codex vocabulary changes and
-`pnpm test:e2e:functional` for renderer-visible lifecycle changes. Packaged
+Journey automation retired with the Playwright suites; when the Codex vocabulary changes, prove it through the agent server
+suite, and prove renderer-visible lifecycle changes with focused renderer
+tests and a driven runtime pass. Packaged
 discovery and one credentialed real-CLI turn remain release sanity checks.
 
 Related journeys: [J06](../design-docs/user-journeys.md#j06-start-and-continue-an-agent-chat)

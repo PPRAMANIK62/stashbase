@@ -137,7 +137,7 @@ Two variants exist and are not defects:
   an export nothing outside it reads.
 
 The prefix is a reading aid, not a load-bearing contract — nothing dispatches
-on it, and `scripts/check-renderer-chunks.mjs` measures the real chunk split.
+on it, and `scripts/renderer/size.mjs` measures the real chunk split.
 Renaming across the three idioms would touch ten-plus files and the chunk
 manifest for no behavior change, so leave existing names alone and pick the
 idiom that matches the shape of the new boundary.
@@ -368,11 +368,11 @@ exactly where `api` belongs — so it would need a block scoped to
 options for the same rule, so that block would silently drop each feature's
 sibling-import patterns for every component in the tree, and keeping both
 would mean duplicating all seven boundary regexes into a second set that has
-to stay in sync with the first. `scripts/check-renderer-api-access.mjs` reads
+to stay in sync with the first. `scripts/renderer/architecture.mjs` reads
 the import declarations instead: it flags the `api` binding under any
 `components/` directory (and the composition root's own modules), under any
 alias, and passes `import type`. `pnpm lint:web` runs its unit test and then
-the check, the same pairing `test:e2e:check-focus` uses.
+the check, so the checker is proven before it gates.
 
 ## Implementation Map
 
@@ -384,8 +384,8 @@ the check, the same pairing `test:e2e:check-focus` uses.
 | Composition root | `web-src/src/app/App.tsx` over `app/components/` (including `MainPane.tsx` and `Sidebar.tsx`) and `app/hooks/` |
 | Cross-feature triggers | `web-src/src/common/lib/settingsTrigger.ts`, `librarySearchTrigger.ts`, `embeddingSetupTrigger.ts` |
 | Boundary enforcement | `.oxlintrc.json` (direction per layer/feature, depth under `app/**`) and the `lint:web` script |
-| API-access enforcement | `scripts/check-renderer-api-access.mjs` — the `api` client binding is not importable from a component |
-| Lazy-surface guard | `scripts/check-renderer-chunks.mjs` — the pinned dynamic-entry set and the initial-JS budget |
+| API-access enforcement | `scripts/renderer/architecture.mjs` — the `api` client binding is not importable from a component |
+| Lazy-surface guard | `scripts/renderer/size.mjs` — the pinned dynamic-entry set and the initial-JS budget |
 | Path aliases | `web-src/tsconfig.json` `compilerOptions.paths`, `web-src/vite.config.ts` `resolve.alias` |
 
 ## Validation
@@ -396,10 +396,10 @@ pnpm typecheck
 pnpm build:web
 ```
 
-`pnpm lint:web` also runs `scripts/check-renderer-api-access.mjs` and its
+`pnpm lint:web` also runs `scripts/renderer/architecture.mjs` and its
 unit test, which hold the component/hook boundary above.
 
-`pnpm build:web` also runs `scripts/check-renderer-chunks.mjs`, which holds
+`pnpm build:web` also runs `scripts/renderer/size.mjs`, which holds
 the initial-JS budget and the required dynamic-entry set. Moving a lazy
 surface between layers changes its manifest path — update that list rather
 than raising the budget. The budget is also the check on the barrels: a

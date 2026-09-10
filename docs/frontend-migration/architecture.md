@@ -530,7 +530,7 @@ listener or string event may bypass the same save, permission, and workflow
 path used by visible controls.
 
 The foundation must prove themes, interface scaling, reduced motion, native
-titlebar geometry, overlay layering, and Linux visual baselines.
+titlebar geometry and overlay layering.
 
 ## Technology Decisions
 
@@ -574,7 +574,7 @@ target `renderer` immediately; direct `vp` remains available for focused
 diagnosis.
 
 Vite+ task-result caching is disabled repository-wide. CI may reuse pnpm's
-content-addressed dependency store, but Electron smoke, E2E, visual,
+content-addressed dependency store, but Electron smoke,
 native/runtime, packaging, signing, release, credentialed, and undeclared-side-
 effect tasks never restore task outputs.
 

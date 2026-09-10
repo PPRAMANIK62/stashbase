@@ -140,19 +140,18 @@ CodeMirror Markdown editor, HTML preview, or iframe document surface.
 | Trust Interface | Milkdown schema rendering in `CrepeDocument.tsx` — document Markdown never renders through a raw HTML string; sanitized-HTML trust is a [Document Viewers](document-viewers.md) concern |
 | Workspace Adapter | `useDocumentActions.ts`, document tabs, Find, outline, lightbox, and upload actions |
 | Asset/navigation Adapter | `/asset` route plus `web-src/src/common/api/api.ts` and Milkdown navigation helpers |
-| Focused evidence | `web-src/src/features/documents/milkdown/__tests__/`, navigation/image/Find renderer tests, and `e2e/journeys/markdown-*.spec.ts` |
+| Focused evidence | `web-src/src/features/documents/milkdown/__tests__/`, navigation/image/Find renderer tests |
 
 ## Validation
 
 Run `pnpm typecheck`, `pnpm test:renderer`, and `pnpm build:web`. Add focused
 tests at the changed parsing, serialization, trust, navigation, or document
-lifecycle Seam. Run `pnpm test:e2e:functional` for user-visible Markdown
+lifecycle Seam. Journey automation retired with the Playwright suites; prove user-visible Markdown
 journey changes, `pnpm test:electron:smoke` for retained-tab/native lifecycle,
-and `pnpm test:e2e:visual` on Linux for composition changes.
+Composition changes are reviewed by eye.
 
 When no deterministic automated interaction exists, verify the affected
-behavior manually and add the lowest practical regression. Harness and
-baseline rules live in [UI Regression Testing](ui-regression-testing.md).
+behavior manually and add the lowest practical regression.
 Executable source HTML remains a separate
 [Document Viewers](document-viewers.md) concern.
 

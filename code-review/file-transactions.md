@@ -238,7 +238,7 @@ pnpm test:library-files
 pnpm test:renderer
 ```
 
-Run `pnpm test:e2e:functional` for user-visible CRUD, failed-save navigation,
+Journey automation retired with the Playwright suites; prove user-visible CRUD, failed-save navigation,
 or conflict UX. Cover POSIX, Windows drive/UNC, case-only rename, symlink
 escape, target collision, disconnect/crash recovery, and the
 `V1 → V2 → conflict` sequence at the lowest deterministic layer.

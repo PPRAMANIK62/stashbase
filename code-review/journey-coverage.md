@@ -15,9 +15,11 @@ outcome, but user-visible behavior without a journey is a traceability gap.
 
 - **Contract Test** proves a deterministic Interface, invariant, failure mode,
   or recovery rule at the lowest useful layer.
-- **Journey E2E** proves that the decisive observable flow crosses its real
-  product Seams. A Journey ID in a test name or tag identifies intent; it does
-  not imply every Required Observable Result is covered.
+- **Driven Runtime Pass** proves that the decisive observable flow crosses its
+  real product Seams by driving the built application. Journey automation
+  retired with the Playwright suites, so this evidence is currently produced by
+  hand and recorded in the owning task entry rather than replayed by a
+  command.
 - **AI Eval** measures probabilistic quality such as semantic relevance,
   source grounding, context use, or task completion on representative inputs.
 - **Release Check** covers behavior that requires a packaged application,
@@ -83,16 +85,9 @@ aliases, and Journey E2E owns representative composition.
   behavior without claiming a packaged installation; the Linux workspace
   visual suite owns the floating banner's composition above persistent account
   utilities.
-- **Journey E2E:** [launch smoke](../e2e/smoke/launch.spec.ts) and
-  [library navigation](../e2e/journeys/library-navigation.spec.ts) exercise
-  blank-workspace entry, AI Index skip behavior, folder selection, and local
-  availability. [Navigation layout](../e2e/journeys/navigation-layout.spec.ts)
-  verifies that Appearance Settings remains usable with the operating system's
-  reduced-motion preference while transform movement is removed and quiet
-  state feedback remains, and that a folder name too long for a narrowed
-  sidebar truncates inside the column instead of crossing onto the tab strip.
-  These checks do not yet prove the full orientation,
-  first-value, and return sequence as one onboarding outcome.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** onboarding mechanics are deterministic. If first value uses
   semantic retrieval or a real Agent, its quality evidence comes from J05 or
   J10 rather than being duplicated here.
@@ -113,9 +108,9 @@ aliases, and Journey E2E owns representative composition.
 - **Contract Test:** workspace transitions, library mutation, cleanup, and
   window retirement run through `pnpm test:renderer`,
   `pnpm test:library-files`, and `pnpm test:electron`.
-- **Journey E2E:** [library navigation](../e2e/journeys/library-navigation.spec.ts)
-  and [library mutations](../e2e/journeys/library-mutations.spec.ts) exercise
-  entry, switching, and removal without source deletion.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** not required.
 - **Release Check:** real operating-system folder picking and file drop remain
   release evidence.
@@ -134,18 +129,9 @@ aliases, and Journey E2E owns representative composition.
   recovery reload, shared renderer/Agent/MCP version authority, conflict
   decisions, format detection, content-write boundaries, and their
   failure/confirmation paths.
-- **Journey E2E:** [document editing smoke](../e2e/smoke/document-editing.spec.ts),
-  [workspace navigation depth](../e2e/journeys/navigation-depth.spec.ts),
-  [Markdown, JSON, and TXT](../e2e/journeys/markdown-json.spec.ts), focused
-  `plain-text-document.test.ts`,
-  [outline and Find](../e2e/journeys/markdown-outline-find.spec.ts),
-  [library mutations](../e2e/journeys/library-mutations.spec.ts), and
-  [format and media](../e2e/journeys/formats-media.spec.ts) cover representative
-  format classes and document work, including preview-only affordances,
-  truthful generic-file and excluded-folder visibility, Quick Open parity,
-  strict read-only text versus binary fallback, `.txt` authoring capability,
-  explicit PDF/DOCX preview-failure identity, external-write conflict recovery,
-  and a live edit flushed through recovery reload.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** not required.
 - **Release Check:** complex packaged PDF, DOCX, and media behavior remains
   release evidence.
@@ -165,11 +151,9 @@ aliases, and Journey E2E owns representative composition.
   Windows extractor bootloader argument wiring without discarding stderr.
   `pnpm test:electron` locks the focused-window and unclaimed-composer offer
   policy.
-- **Journey E2E:** [preparation capture](../e2e/journeys/preparation-capture.spec.ts)
-  proves default-off opt-in, explicit screenshot acceptance, opt-out stopping
-  later offers, visible source publication, deterministic OCR through the real
-  preparation path, Exact Search, and navigation back to the image source.
-  Viewer journeys separately cover source continuity and failure identity.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** extraction correctness is format-specific deterministic or
   dataset evidence; no shared product-level quality Eval is currently claimed.
 - **Release Check:** operating-system screenshot capture and representative
@@ -187,8 +171,9 @@ aliases, and Journey E2E owns representative composition.
   Python daemon tests additionally lock the fixed ONNX model identity,
   provider/dimension collection separation, and cross-collection cleanup for
   renamed or deleted sources; Exact Search remains provider-independent.
-- **Journey E2E:** [semantic search UI](../e2e/journeys/semantic-search-ui.spec.ts)
-  covers mode, scope, readiness, result presentation, and source navigation.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** `pnpm eval:semantic-retrieval` runs the versioned, synthetic
   [semantic retrieval dataset](../evals/semantic-retrieval/README.md) through
   the production index and Retrieval interfaces. It reports provider, model,
@@ -212,7 +197,7 @@ aliases, and Journey E2E owns representative composition.
 
 **Status:** Release-dependent.
 
-- **Contract Test:** `pnpm test:agent`, `pnpm test:e2e:agent-protocol`, and
+- **Contract Test:** `pnpm test:agent` and
   renderer tests cover consent, normalized protocol, scope, lifecycle,
   permissions, failed-install external recheck without another download,
   managed Codex PowerShell path ownership and missing-output diagnostics,
@@ -227,12 +212,9 @@ aliases, and Journey E2E owns representative composition.
   attribution across retries, stable model profile routing, and allowance
   classification. Config tests also prove that ambient credentials and process
   injection flags do not enter the bundled runtime.
-- **Journey E2E:** [Agent Panel](../e2e/journeys/agent-panel.spec.ts) exercises
-  the Built-in Agent account gate and bring-your-own choices, then
-  exercises the built-in panel against the deterministic fake Codex runtime,
-  including
-  retaining a started cross-folder Chat through Library removal and opening a
-  fresh explicitly Library-scoped Chat.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
 - **Release Check:** packaged OpenCode version/executability plus a fake-gateway
@@ -246,10 +228,9 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** Agent, MCP, file transaction, and Markdown suites prove
   the decisive Seams independently.
-- **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
-  proves a deterministic Agent request through visible approval and the real
-  MCP/file transaction boundary, workspace refresh without focus theft, user
-  review/edit/save, close, and durable reopen.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** deterministic fake-Agent evidence can prove the write/review
   workflow; whether a real Agent selects and writes the requested accepted
   content belongs to J10 task-quality Eval.
@@ -263,8 +244,9 @@ aliases, and Journey E2E owns representative composition.
   `pnpm test:retrieval` cover operation parity, transport, authorization,
   path confinement, direct and prepared text reads, text-format mutation
   boundaries, and reconcile.
-- **Journey E2E:** in-repository transport and operation tests cover the
-  StashBase side; third-party client UI is intentionally outside product E2E.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** retrieval quality is shared with J05; client generation quality
   is outside StashBase ownership.
 - **Release Check:** packaged launcher, copied configuration, URL access, and
@@ -284,8 +266,9 @@ aliases, and Journey E2E owns representative composition.
   [redaction](../electron/bug-report-redaction.test.cjs), and
   [handoff](../electron/bug-report-handoff.test.cjs) prove the app-owned draft,
   privacy, approval, and artifact boundaries.
-- **Journey E2E:** native-window integration is exercised below packaged UI,
-  but no full packaged review-window flow is claimed.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** not required.
 - **Release Check:** packaged capture, review, Downloads copy, and browser
   handoff remain release evidence.
@@ -296,11 +279,9 @@ aliases, and Journey E2E owns representative composition.
 
 - **Contract Test:** J02 and J04–J07 prove their owner Interfaces and recovery
   rules independently.
-- **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
-  proves one Golden Path from a visible image through deterministic OCR,
-  derived-text UI retrieval, scoped Agent retrieval, approved real MCP
-  writeback, user review/save, Chat close, and later Exact Search. Native
-  extractor packaging and hosted providers remain release or focused evidence.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** Gap. No first-class representative dataset currently measures
   whether an Agent receives the relevant project evidence and produces a
   source-grounded result suitable for explicit writeback.
@@ -320,14 +301,9 @@ aliases, and Journey E2E owns representative composition.
   attributed built-in calls and unattributed external calls remain distinct.
   [renderer scope tests](../web-src/src/features/agent-panel/__tests__/agent-folder-pill.test.ts)
   prove the Library-to-folder scope presentation.
-- **Journey E2E:** [Agent workflows](../e2e/journeys/agent-workflows.spec.ts)
-  rejects one visible `create_project` approval and proves no directory or
-  membership appears, then approves the same real MCP action and proves folder
-  creation, `AGENTS.md`, registration, same-Chat rebind, originating-window
-  entry, transcript continuity, and a post-rebind real MCP write inside the
-  new project. Adapter contract tests additionally prove Codex keeps its thread
-  and Claude keeps its native session id while subsequent execution moves to
-  the project cwd.
+- **Driven Runtime Pass:** none recorded. Journey automation retired with
+  the Playwright suites; this journey has no end-to-end proof until one is
+  driven and recorded.
 - **AI Eval:** Gap. No representative real-Agent Eval proves that the Agent
   chooses `create_project` after an explicit project decision, avoids bare
   filesystem creation, and does not create a project merely because exploratory
@@ -352,11 +328,11 @@ coverage status, or a residual check changes. A Journey E2E should carry its
 their owning contract instead.
 
 Do not add per-assertion rows, copied test counts, or broad commands as proof.
-The test suite owns exact setup and assertions, while
-`pnpm test:e2e:functional --list` remains the functional inventory. E2E
-fixture isolation, selectors, readiness, visual baselines, and flake policy
-live in [UI Regression Testing](ui-regression-testing.md). Packaged checks live
-in [UI Release Sanity](../release-checklists/ui-sanity.md).
+The test suite owns exact setup and assertions. Journey automation retired
+with the Playwright suites, so a journey's end-to-end proof is a driven
+runtime pass recorded in its owning task entry until a replacement instrument
+is decided. Packaged checks live in
+[UI Release Sanity](../release-checklists/ui-sanity.md).
 
 ### Known traceability gap
 

@@ -10,15 +10,15 @@ Describe the user-facing outcome and the problem this change solves.
 
 - [ ] `pnpm typecheck`
 - [ ] Focused tests for the affected behavior
-- [ ] Renderer build or E2E coverage, when the change affects the UI
+- [ ] Renderer build, when the change affects the UI
+- [ ] A driven runtime pass through the built app, for a changed journey
 
-## UI and visual baselines
+## UI review
 
 - [ ] This PR changes a rendered UI surface or visual state.
-- [ ] This fork PR allows maintainer edits if a reviewed Linux visual baseline update is needed.
-- [ ] This PR does not change a visual surface, or existing visual baselines remain valid.
+- [ ] Story accessibility passes for the changed surfaces.
 
-For an intentional UI change, maintainers generate and review Linux baselines after code review. Contributors do not need to run the baseline workflow or commit PNGs.
+Pixel baselines are retired. An intentional UI change is reviewed by eye against explicit viewport, theme, content, and reduced-motion conditions.
 
 ## Documentation
 

@@ -2,7 +2,7 @@
 
 Run this short pass against release-candidate packages after source CI and the
 platform packaging workflows succeed. It covers native, packaged, credentialed,
-and media seams that the required Playwright suite intentionally does not fake.
+and media seams that no automated suite fakes.
 It is not a second copy of the automated smoke suite.
 
 `Jxx` labels refer to the stable product flows in

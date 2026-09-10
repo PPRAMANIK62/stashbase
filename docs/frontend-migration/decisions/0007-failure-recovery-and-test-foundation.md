@@ -2,6 +2,10 @@
 status: accepted
 ---
 
+Its Playwright journey and pixel-baseline provisions are superseded by
+[Decision 0018](0018-retire-playwright-journey-evidence.md). Everything else
+here stands.
+
 # Contain renderer failures and adopt a frontend-specific test foundation
 
 Bootstrap, shell, feature, and lazy-surface boundaries remount only failed

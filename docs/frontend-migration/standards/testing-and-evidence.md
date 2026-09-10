@@ -14,16 +14,18 @@ model and every rule a command enforces — are specified in
 | Application test | command ordering, cancellation, stale-result rejection, port use |
 | Adapter contract test | serialization, runtime validation, error translation |
 | Rendered component test | semantics, interaction, focus, observable state |
-| Journey E2E | decisive product Seams compose into the required outcome |
-| Visual test | representative layout, theme, density, and overlay composition |
+| Driven runtime pass | decisive product Seams compose into the required outcome when the built application is driven by hand |
 | Release check | packaged, native, credentialed, or platform-owned behavior |
 
 The replacement uses Vitest for domain, application, adapter, and component
 tests; React Testing Library plus `user-event` for semantic interaction; MSW at
 HTTP boundaries; and axe for automated accessibility checks. Application tests
 prefer port fakes over transport mocks. Component tests construct real scoped
-Zustand runtimes and isolated QueryClients. Playwright Electron journeys remain
-the authority for real cross-process behavior.
+Zustand runtimes and isolated QueryClients. The Electron boundary suites and
+`pnpm test:electron:smoke` are the authority for real cross-process behavior;
+[Decision 0018](../decisions/0018-retire-playwright-journey-evidence.md)
+retired the Playwright journeys and pixel baselines that previously held that
+role.
 
 Focused component tests and temporary production-backed runtime harnesses cover
 meaningful default, focus, disabled, loading, empty, error, long-content,
@@ -34,8 +36,8 @@ deterministic fixtures document focused variants and compositions; Autodocs,
 the accessibility addon, and interaction plays make component contracts
 inspectable but do not replace product test or journey evidence. Source checks
 prove Fluid's Base UI flavor remains exclusive and Base UI access stays inside
-the installed component layer. Final Playwright visual evidence targets
-representative product composition rather than a parallel design system.
+the installed component layer. Composition is reviewed by eye rather than against
+pixel baselines.
 
 Accessibility evidence combines axe with semantic queries, keyboard-only
 interaction, focus order and return, announcements, forced colors, reduced
@@ -98,7 +100,7 @@ replacement contract differs.
 
 ## Migration Test Harness
 
-The renderer test harness and stable E2E/build path target `renderer` directly;
+The renderer test harness and stable build path target `renderer` directly;
 there is no renderer selector and product tests do not fork between
 implementations. `web-src` tests are reference material outside the supported
 test inventory.
@@ -110,9 +112,9 @@ inherited `ELECTRON_RUN_AS_NODE`. Worktrees exercising indexing or sync provide
 Replacement CI records and checks the pinned Vite+ resolved-tool inventory and
 runs the isolated format, lint, test, typecheck, build, and boundary gates.
 Vite+ task-result caching is disabled for all repository tasks. CI may reuse
-pnpm's content-addressed dependency store; Electron, E2E, visual,
-native/runtime, packaging, signing, release, credentialed, and side-effecting
-evidence never restores task outputs.
+pnpm's content-addressed dependency store; Electron, native/runtime,
+packaging, signing, release, credentialed, and side-effecting evidence never
+restores task outputs.
 
 ## Slice Gate
 
@@ -128,16 +130,16 @@ pnpm build:web
 ```
 
 It also runs focused commands from every crossed review contract and the
-specific renderer/component/E2E tests named in the capability ledger.
+specific renderer and component tests named in the capability ledger.
 Documentation changes run:
 
 ```bash
 pnpm test:docs
 ```
 
-E2E changes additionally run `pnpm test:e2e:check-focus`. Promote only
-release-blocking cross-feature paths to smoke; broader behavior belongs in
-functional journeys.
+Promote only release-blocking cross-feature paths to the Electron smoke
+runner; broader behavior belongs in focused renderer tests and a driven
+runtime pass.
 
 ## Cutover Gate
 
@@ -151,15 +153,13 @@ pnpm typecheck
 pnpm lint:web
 pnpm build:web
 pnpm test:docs
-pnpm test:e2e:check-focus
+env -u ELECTRON_RUN_AS_NODE pnpm test:electron
 env -u ELECTRON_RUN_AS_NODE pnpm test:electron:smoke
-env -u ELECTRON_RUN_AS_NODE pnpm test:e2e:smoke
-env -u ELECTRON_RUN_AS_NODE pnpm test:e2e:functional
 ```
 
-Run `pnpm test:e2e:visual` on Linux for covered composition changes. Generate
-intentional baselines through the repository workflow; do not approve local
-macOS or Windows goldens.
+Each journey additionally carries a driven runtime pass through the built
+application, recorded in its owning task entry. Composition is reviewed by
+eye; there are no pixel baselines to approve.
 
 Record initial JavaScript, required dynamic entries, production build output,
 startup stages, representative interaction measurements, renderer long tasks,

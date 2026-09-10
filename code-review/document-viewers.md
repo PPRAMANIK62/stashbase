@@ -124,7 +124,7 @@ forwarding, and script confinement.
 | Preview-control Modules | `web-src/src/features/documents/hooks/usePdfDocument.ts`, `usePdfZoom.ts`, `usePdfPageTracking.ts`, `usePdfFindRegistration.ts`, `usePdfPreparation.ts`, `useFileReprocess.ts` (the Reprocess command and its stale-reply guard, shared by the PDF chrome row and the image and DOCX banners), `useAudioFallbackController.ts`, `useAudioTranscriptController.ts`, `web-src/src/features/documents/lib/audioPlayback.ts`, `audioTranscript.ts`, `findIframe.ts`, `previewChunkHighlight.ts`, `pdfText.ts`, `pdfFindController.ts`, `previewIframe.ts`, and `previewMessages.ts` |
 | Worker/Sanitizer Seam | `web-src/src/features/documents/workers/docxPreview.worker.ts`, `shared/html-sanitization.ts` |
 | Server asset/preparation Adapters | `/asset` and `/derived-asset` routes, `/api/file-preview`, `server/generic-file-preview.ts`, `server/docx.ts`, media preparation Modules |
-| Focused evidence | `web-src/src/features/documents/__tests__/pdf-viewer.test.ts`, `pdf-text.test.ts`, `audio-playback.test.ts`, `audio-transcript.test.ts`, `json-document.test.ts`, `json-source-model.test.ts`, `plain-text-document.test.ts`, `text-document.test.ts`, `server/generic-file-preview.test.ts`, plus `e2e/journeys/formats-media.spec.ts` and `markdown-json.spec.ts` |
+| Focused evidence | `web-src/src/features/documents/__tests__/pdf-viewer.test.ts`, `pdf-text.test.ts`, `audio-playback.test.ts`, `audio-transcript.test.ts`, `json-document.test.ts`, `json-source-model.test.ts`, `plain-text-document.test.ts`, `text-document.test.ts`, `server/generic-file-preview.test.ts` |
 
 ## Validation
 
@@ -137,7 +137,7 @@ pnpm test:conversion-scheduler
 pnpm build:web
 ```
 
-Run `pnpm test:e2e:functional` for viewer selection, valid fixtures, failure
+Journey automation retired with the Playwright suites; prove viewer selection, valid fixtures, failure
 identity, navigation, or Find changes. Packaged complex PDF/DOCX/media and
 native codec behavior remain release checks.
 

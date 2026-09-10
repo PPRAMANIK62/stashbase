@@ -49,7 +49,7 @@ Deliver:
 - explicit construction, subscription, and disposal rules for scoped Zustand
   runtimes;
 - TanStack Query ownership, scoped-key, and cancellation rules; and
-- Vitest, Testing Library, user-event, MSW, axe, Playwright, and focused
+- Vitest, Testing Library, user-event, MSW, axe, and focused
   renderer runtime harnesses targeting the replacement.
 
 Exit when the new shell starts through the real Electron path and

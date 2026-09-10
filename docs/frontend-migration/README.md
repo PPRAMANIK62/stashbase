@@ -141,6 +141,9 @@ and no Required behavior is hidden behind a passing broad command.
 - [Decision 0016](decisions/0016-renderer-quality-gates.md) keeps only
   Fluid primitives with a product caller and records the renderer quality
   gates that `pnpm check:web` enforces.
+- [Decision 0018](decisions/0018-retire-playwright-journey-evidence.md)
+  retires the Playwright journey suites and pixel baselines, and defines the
+  evidence that replaces them.
 - [Decision 0017](decisions/0017-protected-draft-journal.md) proposes the
   crash-recovery draft journal: an Electron-provisioned, `safeStorage`-wrapped
   key, a server-owned encrypted store outside library folders, bounded
@@ -179,8 +182,10 @@ The rebuild is complete only when:
 - every J01–J11 renderer responsibility is implemented or explicitly proven
   to remain outside the renderer;
 - every crossed contract has focused evidence against the new implementation;
-- the existing release-blocking Electron and Playwright journeys run against
-  the new production entry;
+- the release-blocking Electron boundary suites run against the new
+  production entry, and each journey carries the evidence
+  [Decision 0018](decisions/0018-retire-playwright-journey-evidence.md)
+  defines;
 - accessibility, visual composition, startup, and chunk budgets are accepted;
 - no supported command, production import, build entry, or evidence path
   references the legacy renderer;

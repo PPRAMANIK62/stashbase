@@ -9,8 +9,7 @@
 // one — the renderer's tests live beside the feature that owns them, so
 // enumerating them here would go stale on every move. The inert `web-src`
 // reference tree is intentionally outside the supported test inventory.
-// Playwright specs (*.spec.ts) are collected by playwright.config.ts and
-// Python tests by unittest discovery, so neither needs this check.
+// Python tests run by unittest discovery, so they do not need this check.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,7 +23,7 @@ const replacementViteConfig = fs.readFileSync(
   'utf8',
 );
 
-const SCAN_ROOTS = ['server', 'electron', 'shared', 'mcp', 'scripts', 'renderer', 'e2e'];
+const SCAN_ROOTS = ['server', 'electron', 'shared', 'mcp', 'scripts', 'renderer'];
 const TEST_FILE = /\.test\.(ts|tsx|cjs|mjs)$/;
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-app', 'runtime']);
 

@@ -58,8 +58,8 @@ Evidence: focused protocol, domain, runtime, adapter, hook, component, story
 accessibility, platform bridge, Electron preload/IPC/window, app-protocol,
 boundary smoke (both pages), architecture, typecheck, and web build checks,
 plus a driven runtime pass opening the rebuilt review from the replacement
-shell through prepare, back, and cancel. J09 E2E and visual evidence is
-deferred to finalization.
+shell through prepare, back, and cancel. J09 journey evidence is deferred to
+finalization.
 
 ## 55 — Add protected draft-journal storage
 
@@ -124,6 +124,5 @@ suspension on a disabled journal, folder-scoped listing with named
 unavailable and failed states, restore and discard decisions with pending
 state, discard-all, and the shell's per-folder wiring, plus a driven run of
 the real Electron app with a stand-in keyring that proved crash, relaunch,
-offer, restore, dirty editor, autosave, and journal clear end to end. E2E
-journeys, visual baselines, and journey coverage remain deferred to
-finalization.
+offer, restore, dirty editor, autosave, and journal clear end to end. Journey
+coverage remains deferred to finalization.

@@ -228,8 +228,7 @@ leaves the index to the next explicit sync.
 
 Evidence: focused file-change domain, session domain, adapter, runtime, diff
 view, activity, documents query, preparation adapter, protocol, architecture,
-typecheck, lint, and web build checks. The legacy J07 Playwright journey no
-longer runs against the served build; J07 E2E evidence is deferred to
+typecheck, lint, and web build checks. J07 journey evidence is deferred to
 finalization (see Task 52).
 
 ## 52 — Converge Chat conclusions into documents
@@ -263,10 +262,10 @@ dirty editor meets the reload, merge, or overwrite decision.
 
 Known gap: the composition test stubs the Milkdown builder, so it proves the
 shell-to-conflict chain rather than the editor's own editing. The legacy J07
-Playwright journey targets selectors the replacement renderer does not have
+The retired journey suite targeted selectors the replacement renderer does not have
 and cannot run against the served build; it is rewritten at finalization.
 
 Evidence: focused tab drag, mention ranking, shell composer-focus, and J07
 composition tests; typecheck, lint, architecture, and web build checks.
-Playwright J07, visual, accessibility, and real-runtime Canvas write evidence
+J07 accessibility and real-runtime Canvas write evidence
 remain deferred to finalization.

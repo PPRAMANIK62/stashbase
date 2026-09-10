@@ -3,7 +3,7 @@
 These instructions apply to tasks in this migration plan and to their
 implementation across `renderer`, Electron, preload, shared protocols, and
 server adapters. They override the repository's ordinary documentation and
-E2E timing while the replacement remains under construction.
+evidence timing while the replacement remains under construction.
 
 ## Current stage
 
@@ -20,7 +20,7 @@ For each migration task:
    focused-test, and manual runtime checks.
 4. Preserve permanent `design-docs/` and `code-review/` as the Shipping record;
    migration scaffolding does not update them.
-5. Defer Playwright/Electron E2E journeys and their CI wiring, visual
+5. Defer Electron journey evidence and its CI wiring, visual
    baselines, Journey Coverage, release evidence, and broad UI evidence until
    the maintainer declares the replacement behavior and visual composition
    ready for finalization.
@@ -32,5 +32,5 @@ capability Proven or Cut over from implementation checks alone.
 
 When the maintainer explicitly declares behavior and UI finalized, reconcile
 the complete replacement with `design-docs/` and `code-review/`, then add the
-required E2E, visual, journey, accessibility, performance, and release evidence
+required journey, accessibility, performance, and release evidence
 before cutover.
