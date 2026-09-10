@@ -31,6 +31,10 @@ export interface WorkspaceListing {
   files: WorkspaceFile[];
   folderName: string;
   folders: WorkspaceFolder[];
+  /** The hidden-entry visibility the server actually applied to this listing.
+   *  Read back rather than assumed, so a window's menu can never disagree with
+   *  the rows it is showing. */
+  showHiddenFiles: boolean;
 }
 
 interface FileNode extends WorkspaceFile {

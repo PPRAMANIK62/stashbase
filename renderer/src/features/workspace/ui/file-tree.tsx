@@ -54,7 +54,12 @@ import { entryOf, FileTreeRow, rowIsRestricted, type FileTreeRowMarker } from '.
 import { useTreeSpaceContextMenu } from './file-tree-space-menu';
 import { FileTreeLoading, FileTreeUnavailable } from './file-tree-status';
 
-const EMPTY_LISTING: WorkspaceListing = { files: [], folderName: '', folders: [] };
+const EMPTY_LISTING: WorkspaceListing = {
+  files: [],
+  folderName: '',
+  folders: [],
+  showHiddenFiles: false,
+};
 const TREE_PAGE_SIZE = 240;
 
 export type { FileTreeRowMarker };
@@ -63,6 +68,9 @@ export interface FileTreeProps {
   api: FilesPort;
   onOpenSource?: ((source: SourceReference) => void) | undefined;
   /** Offered from the row context menu for failed or cancelled sources. */
+  /** The Workbench-wide hidden-entry visibility, offered on the tree's own
+   *  space. Absent when the window has no folder to list. */
+  hiddenFiles?: { readonly disabled: boolean; readonly shown: boolean; toggle(): void } | undefined;
   onReprocess?: ((source: SourceReference) => void) | undefined;
   onScopeLost?: ((scope: WorkspaceScope) => void) | undefined;
   /** Settles the open documents under an entry before it is renamed or
@@ -77,6 +85,7 @@ export interface FileTreeProps {
 
 export function FileTree({
   api,
+  hiddenFiles,
   onOpenSource,
   onReprocess,
   onScopeLost,
@@ -314,6 +323,7 @@ export function FileTree({
           const row = renderedRows.find((candidate) => candidate.node.path === entry.path);
           if (row) beginRename(row);
         },
+        hiddenFiles: hiddenFiles ?? null,
         onReprocess: (entry) => onReprocess?.(sourceOf(entry)),
         onReveal: (entry) => void reveal.reveal(entry.path),
       }}

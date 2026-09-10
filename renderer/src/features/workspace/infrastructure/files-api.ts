@@ -43,6 +43,7 @@ function mapListing(listing: WorkspaceFilesWire): WorkspaceListing {
       kind: folder.kind ?? 'normal',
       path: folder.path,
     })),
+    showHiddenFiles: listing.showHiddenFiles,
   };
 }
 

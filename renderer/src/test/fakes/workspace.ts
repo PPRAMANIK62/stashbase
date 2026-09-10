@@ -11,10 +11,11 @@ import type {
   ClipboardCapturePort,
   ClipboardImageOffer,
   FilesPort,
-  LibraryPort,
   LibraryFolderPickerPort,
   LibraryLifecyclePort,
+  LibraryPort,
   UploadPort,
+  WorkspacePreferencesPort,
   WorkspaceQueryScope,
   WorkspaceSessionPort,
 } from '@/features/workspace/application/ports';
@@ -62,6 +63,7 @@ export function listing(
   return {
     files: files.map((file) => (typeof file === 'string' ? listingFile({ path: file }) : file)),
     folderName,
+    showHiddenFiles: false,
     folders: folders.map((folder) =>
       typeof folder === 'string' ? listingFolder({ path: folder }) : folder,
     ),
@@ -188,6 +190,18 @@ export function workspaceRuntimeOptions(
   };
 }
 
+/** Hidden entries off by default, matching the server's own default and its
+ *  recovery for invalid stored state. */
+export function workspacePreferences(
+  overrides: Partial<WorkspacePreferencesPort> = {},
+): WorkspacePreferencesPort {
+  return {
+    load: vi.fn(async () => false),
+    setShowHiddenFiles: vi.fn(async (next: boolean) => next),
+    ...overrides,
+  };
+}
+
 /** Every Workspace port, as one record. Override one entry at a time. */
 export function workspaceAdapters(overrides: Partial<WorkspaceAdapters> = {}): WorkspaceAdapters {
   return {
@@ -195,6 +209,7 @@ export function workspaceAdapters(overrides: Partial<WorkspaceAdapters> = {}): W
     files: filesApi(),
     library: libraryApi(),
     lifecycle: libraryLifecycle(),
+    preferences: workspacePreferences(),
     session: sessionPersistence(),
     upload: uploadApi(),
     ...overrides,

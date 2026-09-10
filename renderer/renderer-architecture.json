@@ -61,6 +61,7 @@
     "shared/protocols/http/search.ts",
     "shared/protocols/http/semantic-search.ts",
     "shared/protocols/http/transcription.ts",
+    "shared/protocols/http/workspace-preferences.ts",
     "shared/protocols/websocket/agent-session.ts"
   ]
 }

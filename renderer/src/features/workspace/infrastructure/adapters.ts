@@ -4,6 +4,7 @@ import type {
   LibraryLifecyclePort,
   LibraryPort,
   UploadPort,
+  WorkspacePreferencesPort,
   WorkspaceSessionPort,
 } from '@/features/workspace/application/ports';
 import type { CaptureBridge } from '@/platform/electron/capture';
@@ -14,6 +15,7 @@ import type { HttpClient } from '@/platform/http/client';
 import { createLibraryAdapter } from './api';
 import { createClipboardCaptureAdapter } from './capture-api';
 import { createFilesAdapter } from './files-api';
+import { createWorkspacePreferencesAdapter } from './workspace-preferences-api';
 import { createLibraryLifecycleAdapter } from './library-lifecycle';
 import type { WorkspaceSessionBridge } from './session-persistence';
 import { createWorkspaceSessionAdapter } from './session-persistence';
@@ -27,6 +29,7 @@ export interface WorkspaceAdapters {
   files: FilesPort;
   library: LibraryPort;
   lifecycle: LibraryLifecyclePort;
+  preferences: WorkspacePreferencesPort;
   session: WorkspaceSessionPort;
   upload: UploadPort;
 }
@@ -60,6 +63,7 @@ export function createWorkspaceAdapters({
     clipboardCapture: capture ? createClipboardCaptureAdapter(capture) : null,
     files: createFilesAdapter(http),
     library: createLibraryAdapter(http),
+    preferences: createWorkspacePreferencesAdapter(http),
     lifecycle: createLibraryLifecycleAdapter(library),
     session: createWorkspaceSessionAdapter(workspaceSession),
     upload: createUploadAdapter(serverOrigin),

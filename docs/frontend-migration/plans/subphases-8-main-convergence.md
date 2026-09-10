@@ -248,7 +248,7 @@ and `pnpm test:docs`.
 
 **Blocked by:** 64.
 
-**Status:** Not started.
+**Status:** Complete.
 
 One durable application-level preference over the workspace-preferences
 routes, consulted by the file listing, with the server keeping classification
@@ -264,9 +264,43 @@ truth, and the toggle bumps the shared tree version so other windows refetch
 on their normal status poll. Turning it off drops hidden rows from the tree,
 keyboard order, selection, and Quick Open without closing open tabs.
 
-Evidence: focused protocol, adapter, listing projection, tree, Quick Open,
-and menu tests; the workspace and library-files server suites;
-`pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`.
+The control sits on the file tree's own space menu rather than a new panel
+header. It is a property of the whole tree, the space menu already exists for
+tree-wide actions, and task 64 recorded `main`'s launcher and header chrome as
+Remove; adding a header button here would have reintroduced it by the back
+door. The row announces itself as a checkbox and its icon carries the state.
+
+The listing echoes the visibility the server applied and the menu reads that
+echo, so a window can never show rows one way and its menu the other. A
+successful write invalidates the open folder's listing directly instead of
+waiting for the shared tree-version poll, because the reader just asked for it
+and up to eight seconds of nothing would read as a broken control; other
+windows still converge on that poll. A refused or failed write changes
+nothing on screen.
+
+The write route is guarded the way task 66 guarded its sibling. It previously
+forwarded the whole body to durable configuration after checking one field's
+type, so an unknown key was persisted and an empty body counted as a write.
+It now parses against a registered wire schema and refuses both.
+
+Quick Open needed no filter of its own. It reads the same listing the tree
+does and ranks by relevance alone, so the Workbench visibility reaches it
+without a second reader to keep in step. Turning the visibility off likewise
+cannot close a tab opened from a hidden path: nothing in the documents runtime
+reads the listing. Both were verified rather than assumed, because both are
+product guarantees that a later listing-driven reconcile would silently break.
+
+Evidence: focused protocol tests for the tolerant read and the strict write;
+route tests proving an unknown key, a non-boolean, and an empty body are all
+refused rather than persisted; hook tests for reading the applied visibility
+rather than holding one, asking for the opposite, ignoring a second gesture
+while a write is open, and leaving the applied value alone when a write is
+refused; menu tests for the checked state matching the listing and for the row
+being absent when no folder is listed; a Quick Open composition test proving a
+hidden entry is offered, opens, leaves the picker when the visibility goes
+off, and keeps its open tab; plus `pnpm test:renderer`, `pnpm test:config`,
+`pnpm test:protocols`, `pnpm test:inventory`, `pnpm typecheck`,
+`pnpm lint:web`, `pnpm build:web`, and `pnpm test:docs`.
 
 ## 68 — Import a public GitHub repository
 

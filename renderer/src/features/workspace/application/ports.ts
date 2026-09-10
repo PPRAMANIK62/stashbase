@@ -50,6 +50,15 @@ export interface LibraryLifecyclePort {
   setActiveFolder(folderPath: string | null): Promise<void>;
 }
 
+/** The Workbench's hidden-entry visibility. One durable application-level
+ *  value, so it is neither folder-scoped nor per window. The server keeps
+ *  classification authority: this only asks for eligible hidden entries to be
+ *  listed, and never widens what is eligible. */
+export interface WorkspacePreferencesPort {
+  load(signal: AbortSignal): Promise<boolean>;
+  setShowHiddenFiles(next: boolean, signal: AbortSignal): Promise<boolean>;
+}
+
 export interface FilesPort {
   load(folderPath: string, signal: AbortSignal): Promise<WorkspaceListing>;
   reveal(folderPath: string, entryPath: string, signal: AbortSignal): Promise<void>;

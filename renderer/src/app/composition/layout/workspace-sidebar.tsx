@@ -36,6 +36,9 @@ export interface WorkspaceSidebarProps {
   agent: { runtime: AgentWorkspaceRuntime; scope: AgentScope };
   documents: DocumentTabsRuntime | null;
   folder: {
+    /** The Workbench-wide hidden-entry visibility, offered on the tree's own
+     *  space. Null while no folder is listed. */
+    hiddenFiles: { readonly disabled: boolean; readonly shown: boolean; toggle(): void } | null;
     rowMarkers: Record<string, FileTreeRowMarker>;
     search: FolderSearchReadiness;
   };
@@ -88,6 +91,7 @@ export function WorkspaceSidebar({
             files: workspace ? (
               <FileTree
                 api={dependencies.workspace.adapters.files}
+                {...(folder.hiddenFiles ? { hiddenFiles: folder.hiddenFiles } : {})}
                 key={workspace.scope.generation}
                 onOpenSource={sources.open}
                 onReprocess={onReprocess}

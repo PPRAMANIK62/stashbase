@@ -1,5 +1,7 @@
 import { ContextMenu } from '@base-ui/react/context-menu';
 import {
+  Eye,
+  EyeOff,
   ExternalLink,
   FilePlus,
   FolderPlus,
@@ -32,10 +34,17 @@ export interface FileTreeMenuActions {
   onRename(entry: WorkspaceEntry): void;
   onReprocess(entry: WorkspaceEntry): void;
   onReveal(entry: WorkspaceEntry): void;
+  /** The Workbench-wide hidden-entry visibility, offered on the tree's own
+   *  space because it is a property of the whole tree rather than a row. */
+  hiddenFiles: { readonly disabled: boolean; readonly shown: boolean; toggle(): void } | null;
 }
 
 interface MenuAction {
+  /** Present on a row that carries state rather than only an effect. The row
+   *  then announces itself as a checkbox and the icon shows which way it is. */
+  checked?: boolean;
   destructive?: boolean;
+  disabled?: boolean;
   icon: LucideIcon;
   label: string;
   run(): void;
@@ -53,7 +62,21 @@ function actionsFor(
     { icon: FilePlus, label: 'New file', run: () => actions.onCreate('file', parentPath) },
     { icon: FolderPlus, label: 'New folder', run: () => actions.onCreate('folder', parentPath) },
   ];
-  if (target.kind === 'space') return create('');
+  if (target.kind === 'space') {
+    const rows: MenuRow[] = create('');
+    if (actions.hiddenFiles) {
+      const { disabled, shown, toggle } = actions.hiddenFiles;
+      rows.push('separator', {
+        checked: shown,
+        disabled,
+        icon: shown ? Eye : EyeOff,
+        label: 'Show hidden files',
+        run: toggle,
+        title: 'List eligible hidden folders such as .github and .vscode',
+      });
+    }
+    return rows;
+  }
   const { entry } = target;
   if (target.restricted) {
     return [{ icon: ExternalLink, label: revealLabel, run: () => actions.onReveal(entry) }];
@@ -126,12 +149,17 @@ export function FileTreeMenu({
                 />
               ) : (
                 <ContextMenu.Item
+                  {...(row.checked === undefined
+                    ? {}
+                    : { 'aria-checked': row.checked, role: 'menuitemcheckbox' })}
                   className={cn(
                     'flex h-7 cursor-pointer items-center gap-2 px-2 text-[12px] outline-none',
                     focusRing('data-[highlighted]:bg-hover'),
                     row.destructive && 'text-destructive',
+                    row.disabled && 'pointer-events-none opacity-50',
                     shape.bg,
                   )}
+                  disabled={row.disabled ?? false}
                   key={row.label}
                   onClick={row.run}
                   title={row.title}

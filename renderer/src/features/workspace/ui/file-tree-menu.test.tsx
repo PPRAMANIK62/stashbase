@@ -144,6 +144,37 @@ describe('file tree menu', () => {
     expect(screen.queryByRole('menuitem', { name: 'New file' })).toBeNull();
   });
 
+  it('offers the hidden-file visibility on the tree space, checked to match the listing', async () => {
+    const toggle = vi.fn();
+    const client = createTestQueryClient();
+    withQueryClient(
+      <FileTree
+        api={treeApi()}
+        hiddenFiles={{ disabled: false, shown: true, toggle }}
+        revealLabel="Show in file manager"
+        runtime={treeRuntime(client)}
+      />,
+      client,
+    );
+    await screen.findByRole('tree', { name: 'Files' });
+
+    fireEvent.contextMenu(screen.getByRole('tree', { name: 'Files' }));
+    const row = await screen.findByRole('menuitemcheckbox', { name: 'Show hidden files' });
+    expect(row.getAttribute('aria-checked')).toBe('true');
+
+    await userEvent.setup().click(row);
+    expect(toggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the visibility row out when the window lists no folder', async () => {
+    renderTree(treeApi());
+    await screen.findByRole('tree', { name: 'Files' });
+
+    fireEvent.contextMenu(screen.getByRole('tree', { name: 'Files' }));
+    await screen.findByRole('menuitem', { name: 'New file' });
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Show hidden files' })).toBeNull();
+  });
+
   it('offers restricted entries only the reveal action', async () => {
     renderTree(treeApi());
     const user = userEvent.setup();

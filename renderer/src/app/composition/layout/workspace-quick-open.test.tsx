@@ -40,6 +40,101 @@ afterEach(() => {
 });
 
 describe('workspace Quick Open composition', () => {
+  it('surfaces a hidden entry the listing carries, and drops it when the listing does not', async () => {
+    const queryClient = createTestQueryClient();
+    const hiddenFile = {
+      availability: 'available' as const,
+      format: 'md' as const,
+      heading: '',
+      importedAt: '',
+      kind: 'regular' as const,
+      path: '.github/workflows/ci.md',
+      size: 4,
+      snippet: '',
+    };
+    let showHidden = true;
+    const filesApi: WorkspaceAdapters['files'] = {
+      load: vi.fn<WorkspaceAdapters['files']['load']>(async () => ({
+        files: showHidden ? [hiddenFile] : [],
+        folderName: 'Notes',
+        folders: [],
+        showHiddenFiles: showHidden,
+      })),
+      createEntry: vi.fn(),
+      deleteEntry: vi.fn(),
+      renameEntry: vi.fn(),
+      reveal: vi.fn(async () => undefined),
+    };
+    const sourceApi: DocumentAdapters['source'] = {
+      load: vi.fn(() => new Promise<never>(() => undefined)),
+      overwrite: vi.fn(),
+      save: vi.fn(),
+    };
+    workspace = createWorkspaceRuntime({
+      folder: { name: 'Notes', path: '/library/notes' },
+      generation: 1,
+      queries: {
+        cancel: () => queryClient.cancelQueries(),
+        remove: () => queryClient.removeQueries(),
+      },
+    });
+    documents = createDocumentTabsRuntime({
+      api: sourceApi,
+      createId: () => 'opened-tab',
+      createQueries: () => ({
+        cancel: vi.fn(async () => undefined),
+        remove: vi.fn(),
+        replaceSource: vi.fn(),
+      }),
+      folderPath: '/library/notes',
+      generation: 1,
+    });
+
+    const base = appDependencies();
+    const view = (
+      <QueryClientProvider client={queryClient}>
+        <DependencyProvider
+          dependencies={{
+            ...base,
+            workspace: {
+              ...base.workspace,
+              adapters: { ...base.workspace.adapters, files: filesApi },
+              revealLabel: 'Show in file manager',
+            },
+          }}
+        >
+          <WorkspaceQuickOpen documents={documents} onClose={vi.fn()} open workspace={workspace} />
+        </DependencyProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view);
+
+    // Quick Open reads the same listing the tree does, so the Workbench
+    // visibility reaches it without a filter of its own.
+    const option = await screen.findByRole(
+      'option',
+      { name: /ci\.md/ },
+      { timeout: 5_000 },
+    );
+    await userEvent.setup().click(option);
+    await waitFor(() =>
+      expect(documents.openSources()).toEqual([
+        { folderPath: '/library/notes', path: '.github/workflows/ci.md' },
+      ]),
+    );
+
+    showHidden = false;
+    await queryClient.invalidateQueries();
+    rerender(view);
+
+    // The row leaves the picker, and the tab opened from it stays put: nothing
+    // in the documents runtime reads the listing.
+    await waitFor(() => expect(screen.queryByRole('option', { name: /ci\.md/ })).toBeNull());
+    expect(documents.openSources()).toEqual([
+      { folderPath: '/library/notes', path: '.github/workflows/ci.md' },
+    ]);
+  });
+
   it('maps visible files to typed open and reveal actions resolved by app composition', async () => {
     const queryClient = createTestQueryClient();
     const filesApi: WorkspaceAdapters['files'] = {
@@ -68,6 +163,7 @@ describe('workspace Quick Open composition', () => {
         ],
         folderName: 'Notes',
         folders: [],
+        showHiddenFiles: false,
       })),
       createEntry: vi.fn(),
       deleteEntry: vi.fn(),

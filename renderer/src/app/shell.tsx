@@ -18,6 +18,7 @@ import { useSearchSetupInvitation } from '@/features/settings/public';
 import {
   LibraryWelcome,
   useFiles,
+  useHiddenFiles,
   useLibrary,
   useWorkspace,
   useWorkspaceSession,
@@ -82,6 +83,13 @@ function WorkspaceWindow() {
   const listing = useFiles(workspace, workspaceDeps.adapters.files).data;
   const status = useFolderStatus(dependencies.preparation.statusApi, folderPath).data ?? null;
   const folder = useFolderReadiness(listing, status);
+  // The visibility the listing on screen was built with, so the menu and the
+  // rows beside it can never disagree.
+  const hiddenFiles = useHiddenFiles(
+    workspaceDeps.adapters.preferences,
+    listing?.showHiddenFiles ?? false,
+    folderPath,
+  );
   const preparation = usePreparationCommands(dependencies.preparation.controlApi);
   const refresh = useFolderRefresh({
     folderPath,
@@ -153,7 +161,12 @@ function WorkspaceWindow() {
           activeFolder={activeFolder}
           agent={{ runtime, scope: agent.scope }}
           documents={documents}
-          folder={folder}
+          folder={{
+            ...folder,
+            hiddenFiles: listing
+              ? { disabled: hiddenFiles.pending, shown: hiddenFiles.showHiddenFiles, toggle: hiddenFiles.toggle }
+              : null,
+          }}
           navigator={chrome.navigator}
           onReprocess={refresh.reprocess}
           settings={chrome.settings}
