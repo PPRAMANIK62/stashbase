@@ -8,8 +8,8 @@ import { appDependencies } from '@/test/fakes/app';
 import { sessionPersistence } from '@/test/fakes/workspace';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
 
-import { DependencyProvider } from './dependency-context';
-import type { WorkspaceNotice } from './use-workspace-notices';
+import { DependencyProvider } from '@/app/composition/dependency-context';
+import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
 import { WorkspaceLayout, type WorkspaceComposition } from './workspace-layout';
 
 afterEach(cleanup);

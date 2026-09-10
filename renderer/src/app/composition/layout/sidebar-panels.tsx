@@ -1,11 +1,10 @@
 import { Bot, FolderTree, ListTree, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import type { SidebarPanelId } from '@/app/composition/commands/use-workspace-commands';
 import { SidebarGroup } from '@/components/ui/sidebar';
 import { DocumentOutline, type DocumentTabsRuntime } from '@/features/documents/public';
 import type { IconComponent } from '@/lib/icon-context';
-
-import type { SidebarPanelId } from './use-workspace-commands';
 
 export interface SidebarPanel {
   /** True when the panel takes the whole column instead of sitting inside the

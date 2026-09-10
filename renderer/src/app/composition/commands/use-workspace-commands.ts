@@ -12,6 +12,10 @@
 import { useCallback, useState } from 'react';
 
 import { useBootProgress } from '@/app/bootstrap/use-boot-progress';
+import {
+  useWorkspaceNotices,
+  type WorkspaceNotice,
+} from '@/app/composition/folder/use-workspace-notices';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
 import type { SettingsSectionId } from '@/features/settings/public';
 import type {
@@ -24,7 +28,6 @@ import { useCommandSurface, type CommandSurface } from '@/shared/runtime/use-com
 import type { PreparationCommands } from './use-preparation-commands';
 import { useQuickOpenCommand } from './use-quick-open-command';
 import { useSidebarSearchCommand } from './use-sidebar-search-command';
-import { useWorkspaceNotices, type WorkspaceNotice } from './use-workspace-notices';
 
 /** Every panel the sidebar can show. A panel is named, never numbered: the
  *  index the tab strip wants is derived from the registry, so inserting a panel

@@ -13,7 +13,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { agentSurfaceProps } from '@/features/agent/public';
 import type { WorkspaceSessionController } from '@/features/workspace/public';
 
-import type { WorkspaceNotice } from './use-workspace-notices';
+import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
 import { WorkspaceNotices } from './workspace-notices';
 
 import '@/app/shell.css';

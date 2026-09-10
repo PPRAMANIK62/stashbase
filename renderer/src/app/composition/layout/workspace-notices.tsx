@@ -1,7 +1,6 @@
+import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-
-import type { WorkspaceNotice } from './use-workspace-notices';
 
 /** The strip above the workspace where a refusal the reader did not ask about
  *  is reported. A notice they can clear carries its own dismissal, and its

@@ -1,3 +1,6 @@
+import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
+import { useDependencies } from '@/app/composition/dependency-context';
+import type { DocumentSources } from '@/app/composition/folder/use-document-sources';
 /**
  * The Agent beside the open document.
  *
@@ -16,9 +19,6 @@ import type { WorkspaceSessionController } from '@/features/workspace/public';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { AgentDocumentWorkspace } from './agent-document-workspace';
-import { useDependencies } from './dependency-context';
-import type { DocumentSources } from './use-document-sources';
-import type { SettingsCommand } from './use-workspace-commands';
 
 export interface WorkspacePanesProps {
   agent: { outline: AgentScopeOutline | null; runtime: AgentWorkspaceRuntime };

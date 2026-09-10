@@ -24,12 +24,12 @@ import {
 import { Logo } from '@/shared/brand/logo';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-import { useDependencies } from './dependency-context';
+import { useDependencies } from '@/app/composition/dependency-context';
 import { SidebarNavigator } from './sidebar-navigator';
 import { sidebarPanels } from './sidebar-panels';
-import type { DocumentSources } from './use-document-sources';
-import type { SettingsCommand } from './use-workspace-commands';
-import type { SidebarNavigatorState } from './use-workspace-commands';
+import type { DocumentSources } from '@/app/composition/folder/use-document-sources';
+import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
+import type { SidebarNavigatorState } from '@/app/composition/commands/use-workspace-commands';
 
 export interface WorkspaceSidebarProps {
   activeFolder: ActiveLibraryFolder | null;

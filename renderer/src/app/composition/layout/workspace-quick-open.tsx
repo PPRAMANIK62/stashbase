@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 
+import { useDependencies } from '@/app/composition/dependency-context';
 import { openDocument } from '@/app/workflows/open-document';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
 import {
@@ -14,8 +15,6 @@ import {
   useReveal,
   type WorkspaceRuntime,
 } from '@/features/workspace/public';
-
-import { useDependencies } from './dependency-context';
 
 export interface WorkspaceQuickOpenProps {
   documents: DocumentTabsRuntime;

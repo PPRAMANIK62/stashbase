@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { DependencyProvider } from '@/app/composition/dependency-context';
 import {
   createDocumentTabsRuntime,
   type DocumentAdapters,
@@ -13,7 +14,6 @@ import { createWorkspaceRuntime } from '@/features/workspace/test-support';
 import { appDependencies } from '@/test/fakes/app';
 import { createTestQueryClient } from '@/test/query';
 
-import { DependencyProvider } from './dependency-context';
 import { WorkspaceQuickOpen } from './workspace-quick-open';
 
 let documents: DocumentTabsRuntime;

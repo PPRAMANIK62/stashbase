@@ -4,13 +4,13 @@ import { Bot, FolderTree } from 'lucide-react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vite-plus/test';
 
+import type { SidebarPanelId } from '@/app/composition/commands/use-workspace-commands';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { createDocumentTabsRuntime } from '@/features/documents/public';
 import { documentTabsRuntimeOptions } from '@/test/fakes/documents';
 
 import { SidebarNavigator } from './sidebar-navigator';
 import { sidebarPanels, type SidebarPanel } from './sidebar-panels';
-import type { SidebarPanelId } from './use-workspace-commands';
 
 function createRuntime() {
   return createDocumentTabsRuntime(documentTabsRuntimeOptions({ createId: () => 'tab-1' }));

@@ -1,11 +1,11 @@
 import { useId } from 'react';
 
+import type { SidebarPanelId } from '@/app/composition/commands/use-workspace-commands';
 import { SidebarContent, SidebarGroup } from '@/components/ui/sidebar';
 import { TabsSubtle, TabsSubtleItem } from '@/components/ui/tabs-subtle';
 import { Tooltip } from '@/components/ui/tooltip';
 
 import type { SidebarPanel } from './sidebar-panels';
-import type { SidebarPanelId } from './use-workspace-commands';
 
 interface SidebarNavigatorProps {
   onSelect(panel: SidebarPanelId): void;

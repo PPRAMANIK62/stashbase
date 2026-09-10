@@ -3,8 +3,8 @@ import { Settings } from '@/features/settings/public';
 import { ClipboardOffer, type WorkspaceRuntime } from '@/features/workspace/public';
 import { applyCaptureWatch } from '@/platform/electron/capture';
 
-import { useDependencies } from './dependency-context';
-import type { SettingsCommand } from './use-workspace-commands';
+import { useDependencies } from '@/app/composition/dependency-context';
+import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
 import { WorkspaceQuickOpen } from './workspace-quick-open';
 
 /** Everything that floats over the window: quick open, Settings, and the

@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
 
 import { preparationFailure, type PreparationControlPort } from '@/features/preparation/public';
-import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 import type { FailureView } from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 /** One lane per call and per subject: a second reprocess of the same file
  *  replaces the first, while reprocessing a different file leaves it running. */

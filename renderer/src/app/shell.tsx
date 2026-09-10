@@ -12,19 +12,19 @@ import {
 } from '@/features/workspace/public';
 
 import { DependencyProvider, useDependencies } from './composition/dependency-context';
-import { useAgentEnvironment } from './composition/use-agent-environment';
-import { useComposerFocusSignal } from './composition/use-capture-focus';
-import { useDocumentSources } from './composition/use-document-sources';
-import { useDocumentWorkspace } from './composition/use-document-workspace';
-import { useFolderReadiness } from './composition/use-folder-readiness';
-import { useFolderRefresh } from './composition/use-folder-refresh';
-import { usePreparationCommands } from './composition/use-preparation-commands';
-import { useWorkspaceCommands } from './composition/use-workspace-commands';
-import { WorkspaceDialogs } from './composition/workspace-dialogs';
-import { WorkspaceLayout } from './composition/workspace-layout';
-import { WorkspacePanes } from './composition/workspace-panes';
-import { WorkspaceSidebar } from './composition/workspace-sidebar';
-import { WorkspaceTitlebar } from './composition/workspace-titlebar';
+import { useAgentEnvironment } from './composition/folder/use-agent-environment';
+import { useComposerFocusSignal } from './composition/commands/use-capture-focus';
+import { useDocumentSources } from './composition/folder/use-document-sources';
+import { useDocumentWorkspace } from './composition/folder/use-document-workspace';
+import { useFolderReadiness } from './composition/folder/use-folder-readiness';
+import { useFolderRefresh } from './composition/folder/use-folder-refresh';
+import { usePreparationCommands } from './composition/commands/use-preparation-commands';
+import { useWorkspaceCommands } from './composition/commands/use-workspace-commands';
+import { WorkspaceDialogs } from './composition/layout/workspace-dialogs';
+import { WorkspaceLayout } from './composition/layout/workspace-layout';
+import { WorkspacePanes } from './composition/layout/workspace-panes';
+import { WorkspaceSidebar } from './composition/layout/workspace-sidebar';
+import { WorkspaceTitlebar } from './composition/layout/workspace-titlebar';
 import type { AppDependencies } from './dependencies';
 
 /** The window's root: it publishes the adapter record and nothing else. Every
