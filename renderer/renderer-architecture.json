@@ -55,6 +55,7 @@
     "shared/protocols/http/library.ts",
     "shared/protocols/http/mcp.ts",
     "shared/protocols/http/media.ts",
+    "shared/protocols/http/onboarding.ts",
     "shared/protocols/http/preparation.ts",
     "shared/protocols/http/recovery-drafts.ts",
     "shared/protocols/http/search.ts",

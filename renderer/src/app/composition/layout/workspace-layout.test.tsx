@@ -86,8 +86,20 @@ describe('workspace layout', () => {
   it('shows a notice and offers the dismissal it carries', async () => {
     const onDismiss = vi.fn();
     const notices: WorkspaceNotice[] = [
-      { message: 'Preparation was refused.', onDismiss, tone: 'input' },
-      { message: 'The host lost this folder.', onDismiss: null, tone: 'capability' },
+      {
+        action: null,
+        dismissLabel: 'Dismiss',
+        message: 'Preparation was refused.',
+        onDismiss,
+        tone: 'input',
+      },
+      {
+        action: null,
+        dismissLabel: 'Dismiss',
+        message: 'The host lost this folder.',
+        onDismiss: null,
+        tone: 'capability',
+      },
     ];
     mount({ notices });
 

@@ -13,6 +13,7 @@ import type {
   AgentRuntimePort,
   CapturePort,
   McpAccessPort,
+  OnboardingPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
 import type { AgentAllowance, AgentRuntime } from '@/features/settings/domain/agent-catalog';
@@ -200,6 +201,26 @@ export function mcpAccessPort(overrides: Partial<McpAccessPort> = {}): McpAccess
     setDockerAccess: vi.fn(async (enabled: boolean) => ({ ...access.http, dockerAccess: enabled })),
     setDockerPort: vi.fn(async (port: number) => ({ ...access.http, dockerPort: port })),
     status: vi.fn(async () => access),
+    ...overrides,
+  };
+}
+
+/** The invitation revision the fakes treat as already answered. A fake cannot
+ *  import a feature's runtime value, so this literal is kept in step with
+ *  `SEARCH_SETUP_INVITATION_VERSION` by the hook test that pins them equal. */
+export const ANSWERED_SEARCH_SETUP_VERSION = 1;
+
+/** Answered by default, the quiet state: an unrelated composition test should
+ *  not have to dismiss a one-time invitation to reach the workspace. Override
+ *  `load` with a null revision to exercise the offer itself. */
+export function onboardingPort(overrides: Partial<OnboardingPort> = {}): OnboardingPort {
+  return {
+    answerSearchSetup: vi.fn(async (version: number) => ({
+      searchSetupInvitationVersion: version,
+    })),
+    load: vi.fn(async () => ({
+      searchSetupInvitationVersion: ANSWERED_SEARCH_SETUP_VERSION,
+    })),
     ...overrides,
   };
 }

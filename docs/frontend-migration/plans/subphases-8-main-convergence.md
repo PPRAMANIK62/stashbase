@@ -188,7 +188,7 @@ occurrence of the retired vocabulary remains.
 
 **Blocked by:** 65.
 
-**Status:** Not started.
+**Status:** Complete.
 
 The skip was folder-scoped durable state and `main` deleted both of its
 accessors. The offer is now a one-time invitation at the first folder
@@ -202,10 +202,47 @@ This changes persisted state and rewrites the J01 primary flow.
 the model, including that a stored folder-scoped skip is ignored rather than
 translated. Update J01 and its coverage row in the same change.
 
-Evidence: focused domain, adapter, hook, component, and composition tests for
-the one-time transition, each manual route back, and persistence across
-relaunch; J01 and Journey Coverage updates; `pnpm typecheck`,
-`pnpm lint:web`, `pnpm build:web`.
+The answer is a durable server-side preference rather than `main`'s
+`localStorage`, which its own fallback comment admits can be rejected so that
+"the setup can reappear on a later launch". `OnboardingPreferences` already
+existed for versioned one-time notices and `/api/onboarding` already served it,
+so the invitation records the revision it answered and a raised revision
+re-offers deliberately. The replacement uses no browser storage anywhere; this
+would have been its first exception, for the one kind of state the architecture
+already routes through a server-owned port.
+
+Writing that preference is now validated. The route previously spread an
+unvalidated body into `config.json`, so any key a caller sent became durable
+state; it parses against a registered wire schema and refuses an unknown key,
+an empty patch, or a revision that is not a whole count.
+
+The invitation is a non-blocking notice in the strip above the workspace, not a
+dialog. Decision 0019 argues that onboarding must not gate first value, and a
+modal between the reader and the files they just opened is that gate; the strip
+already carries what the window says about things the reader did not ask about,
+so the offer joins it and sits after any refusal. Taking it up opens the
+Settings section that owns the two sources rather than carrying a second copy
+of the provider and key UI.
+
+Closing the invitation is local state, not a read of the write. The reader has
+answered the moment they click, so a failed save leaves the stored answer alone
+and the invitation returns on a later launch, which is the safe direction to
+fail. The offer also holds until the folder's readiness has answered: treating
+an unknown readiness as unconfigured showed the invitation for a moment and
+then withdrew it from a reader who was already set up.
+
+J01 already described this model: it arrived with the merge. Only the evidence
+needed recording.
+
+Evidence: focused domain tests for every offer state including a raised
+revision and an unanswered readiness, notice-strip tests for the offer's
+action, decline label, and ordering behind a refusal, hook tests for the offer, the single durable answer however many
+times the reader clicks, and the refusal to offer before the stored answer has
+loaded, protocol tests for the read and the strict write, route tests proving
+an unknown or malformed preference is refused rather than persisted, plus
+`pnpm test:renderer`, `pnpm test:config`, `pnpm test:protocols`,
+`pnpm test:inventory`, `pnpm typecheck`, `pnpm lint:web`, `pnpm build:web`,
+and `pnpm test:docs`.
 
 ## 67 — Surface hidden files and folders on demand
 

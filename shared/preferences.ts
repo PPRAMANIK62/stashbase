@@ -42,4 +42,9 @@ export interface UpdatePreferences {
 
 export interface OnboardingPreferences {
   sourceCodeNoticeVersion?: number;
+  /** The revision of the search-by-meaning setup invitation the user has
+   *  already answered, by configuring a source or declining it. Absent means
+   *  never answered, which is the only state that offers it. */
+  searchSetupInvitationVersion?: number;
 }
+

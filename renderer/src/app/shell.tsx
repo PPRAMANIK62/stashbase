@@ -14,6 +14,7 @@ import {
   useDocumentSaveBarrier,
 } from '@/features/documents/public';
 import { useFolderStatus } from '@/features/preparation/public';
+import { useSearchSetupInvitation } from '@/features/settings/public';
 import {
   LibraryWelcome,
   useFiles,
@@ -101,11 +102,20 @@ function WorkspaceWindow() {
   useEffect(() => runtime.setScopeEnvironment(agent.environment), [agent.environment, runtime]);
   useComposerFocusSignal(dependencies.capture, useAgentComposerFocused());
 
+  // `not-set-up` is the one semantic state that means no source is configured;
+  // until the folder's status answers at all, the question is unanswered
+  // rather than false, so the offer holds instead of flashing.
+  const searchSetup = useSearchSetupInvitation(dependencies.settings.onboardingApi, {
+    configured: status === null ? null : status.semantic.state !== 'not-set-up',
+    folderActive: folderPath !== null,
+  });
+
   const chrome = useWorkspaceCommands({
     documents,
     hostFailure: sources.hostFailure,
     library,
     preparation,
+    searchSetup: searchSetup.open ? searchSetup : null,
     session,
     workspace,
   });

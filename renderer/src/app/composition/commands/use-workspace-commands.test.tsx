@@ -24,6 +24,7 @@ function mountCommands() {
         documents: null,
         hostFailure: null,
         library: null,
+        searchSetup: null,
         preparation: { dismissFailure: vi.fn(), failure: null },
         session,
         workspace: null,

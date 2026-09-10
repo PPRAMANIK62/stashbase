@@ -1,6 +1,8 @@
 export {
   type AgentRuntimePort,
   type CapturePort,
+  type OnboardingAnswers,
+  type OnboardingPort,
   type McpAccessPort,
   type TranscriptionPort,
 } from './application/ports';
@@ -9,6 +11,16 @@ export { createAgentRuntimeAdapter } from './infrastructure/agent-runtime-api';
 export { createMcpAccessAdapter } from './infrastructure/mcp-access-api';
 export { createEmbedderAdapter } from './infrastructure/embedder-api';
 export { createCaptureAdapter } from './infrastructure/capture-api';
+export { createOnboardingAdapter } from './infrastructure/onboarding-api';
 export { createTranscriptionAdapter } from './infrastructure/transcription-api';
+export {
+  searchSetupInvitation,
+  type SearchSetupInvitation,
+} from './domain/search-setup-invitation';
+export {
+  useSearchSetupInvitation,
+  type SearchSetupInvitationInput,
+  type SearchSetupInvitationView,
+} from './hooks/use-search-setup-invitation';
 export { Settings } from './ui/settings';
 export type { SettingsSectionId } from './ui/settings-types';

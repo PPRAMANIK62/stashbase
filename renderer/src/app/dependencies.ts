@@ -38,11 +38,13 @@ import {
   createCaptureAdapter,
   createEmbedderAdapter,
   createMcpAccessAdapter,
+  createOnboardingAdapter,
   createTranscriptionAdapter,
   type AgentRuntimePort,
   type CapturePort,
   type EmbedderPort,
   type McpAccessPort,
+  type OnboardingPort,
   type TranscriptionPort,
 } from '@/features/settings/public';
 import {
@@ -98,6 +100,7 @@ export interface AppDependencies {
     captureApi: CapturePort;
     embedderApi: EmbedderPort;
     mcpAccessApi: McpAccessPort;
+    onboardingApi: OnboardingPort;
     transcriptionApi: TranscriptionPort;
   };
   workspace: {
@@ -154,6 +157,7 @@ export function createDependencies(): AppDependencies {
       captureApi: createCaptureAdapter(http),
       embedderApi: createEmbedderAdapter(http),
       mcpAccessApi: createMcpAccessAdapter(http),
+      onboardingApi: createOnboardingAdapter(http),
       transcriptionApi: createTranscriptionAdapter(http),
     },
     workspace: { adapters: workspace, revealLabel: fileManagerLabel() },

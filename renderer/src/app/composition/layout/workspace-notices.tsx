@@ -2,10 +2,10 @@ import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-not
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-/** The strip above the workspace where a refusal the reader did not ask about
- *  is reported. A notice they can clear carries its own dismissal, and its
- *  tone decides whether it interrupts: something to correct is an alert, a
- *  capability StashBase could not reach is a status. */
+/** The strip above the workspace where something the reader did not ask about
+ *  is reported. A notice they can clear carries its own dismissal, an offer
+ *  also carries the thing to take up, and the tone decides whether it
+ *  interrupts: something to correct is an alert, everything else is a status. */
 export function WorkspaceNotices({ notices }: { notices: readonly WorkspaceNotice[] }) {
   return notices.map((notice) => (
     <div
@@ -23,7 +23,12 @@ export function WorkspaceNotices({ notices }: { notices: readonly WorkspaceNotic
       </p>
       {notice.onDismiss && (
         <Button onClick={notice.onDismiss} size="compact" variant="tertiary">
-          Dismiss
+          {notice.dismissLabel}
+        </Button>
+      )}
+      {notice.action && (
+        <Button onClick={notice.action.onAct} size="compact" variant="secondary">
+          {notice.action.label}
         </Button>
       )}
     </div>

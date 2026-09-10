@@ -83,11 +83,17 @@ aliases, and a driven runtime pass owns representative composition.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
   library membership, so a failed or pending membership load cannot claim the
   library is empty.
+  The setup invitation for search by meaning is proven at three layers: a pure
+  decision covering never-offered, answered, already-configured, bare-window,
+  and raised-revision states; a hook covering the offer, the single durable
+  answer however many times the reader clicks, and the refusal to offer before
+  the stored answer has loaded; and a route test proving an unknown or
+  malformed preference is refused rather than written into durable config.
+  The visual suite reference above is historical: pixel baselines retired with
+  the Playwright journeys.
   The Settings smoke drives the development-only update simulator through the
   production update-state bridge to verify available and ready update-banner
-  behavior without claiming a packaged installation; the Linux workspace
-  visual suite owns the floating banner's composition above persistent account
-  utilities.
+  behavior without claiming a packaged installation.
 - **Driven Runtime Pass:** none recorded. Journey automation retired with
   the Playwright suites; this journey has no end-to-end proof until one is
   driven and recorded.

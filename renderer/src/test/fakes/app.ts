@@ -12,6 +12,7 @@ import {
   capturePort,
   embedderPort,
   mcpAccessPort,
+  onboardingPort,
   transcriptionPort,
 } from './settings';
 import { folderPicker, workspaceAdapters } from './workspace';
@@ -55,6 +56,7 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       captureApi: capturePort(),
       embedderApi: embedderPort(),
       mcpAccessApi: mcpAccessPort(),
+      onboardingApi: onboardingPort(),
       transcriptionApi: transcriptionPort(),
     },
     workspace: { adapters, revealLabel: 'Show in file manager' },
