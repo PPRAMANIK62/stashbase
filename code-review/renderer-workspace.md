@@ -5,205 +5,332 @@
 
 ## Scope and Ownership
 
-The active-folder workspace is the deep renderer Module. It owns folder,
-document, file-mutation, and retrieval transitions behind one Interface. The
-application shell owns presentation composition—Chat, dialogs, toasts, Find,
-and layout—and calls that Interface instead of duplicating transition rules.
+A window is one folder scope, the documents open on it, and the panels that
+read them. The Workspace feature owns library membership presentation, the
+Files tree, folder mutations, and the folder's own transitions behind
+`renderer/src/features/workspace/public.ts`. Nothing outside that barrel
+reaches into the feature.
 
-Renderer state is retained presentation state, not durable truth. The server
-owns membership, source bytes, source versions, preparation completion, and
-semantic readiness.
+Cross-feature ordering belongs to app composition rather than to any feature.
+The window's chrome, its notice strip, its command surfaces, and the two named
+document workflows live under `renderer/src/app/composition/` and
+`renderer/src/app/workflows/`. `renderer/src/app/shell.tsx` decides only what
+each composed part is handed, and `renderer/src/app/dependencies.ts` is the one
+file that selects Adapters and binds Ports.
+
+The layer model, the state-ownership rules, and every gate that enforces them
+belong to [Renderer Architecture](renderer-architecture.md). What matters here
+is one consequence of it. The Workspace feature answers for its own transports
+through a single Adapter record (`createWorkspaceAdapters` in
+`renderer/src/features/workspace/infrastructure/adapters.ts`), so moving one of
+its Ports between HTTP and the desktop bridge is not an app change.
+
+Renderer state is presentation state. The server owns membership, source bytes,
+source versions, preparation completion, and semantic readiness. The window's
+own arrangement is persisted as a session snapshot, and that snapshot is
+untrusted input on the way back in.
 
 ## Workspace Invariants
 
-- Every asynchronous folder open, file load, index refresh, and binary stat
-  applies only while its captured folder, tab, and generation remain current.
-- A folder-open mutation has a bounded local-transport attempt and retries a
-  timed-out connection. Once the server acknowledges the window-folder
-  binding, the renderer commits navigation and resolves the initiating action;
-  file listing, manual order, and index-status follow-up continue in the
-  background under the same generation guard. None of those follow-ups owns
-  the switcher's **Opening…** state.
-- Active-folder listing performs recursive directory I/O asynchronously and
-  yields during large flat-directory classification. It lists generic files
-  without reading a preview prefix, represents excluded project directories
-  without descending, and cannot monopolize the shared Node request loop while
-  a folder is opening.
-- Hidden-directory visibility is an explicit option on the server-owned
-  listing Interface (`FolderListingOptions` in `server/file-listing.ts`), fed
-  from the durable application-level workspace preference. Classification —
-  which hidden paths are eligible, which stay protected (VCS databases,
-  derived state, junk), and which remain bounded excluded rows — lives in the
-  listing Module; the renderer never fetches a fully hidden tree and filters
-  policy in memory. The renderer owns the menu's accessible checked state,
-  the italic hidden-row presentation, and the toggle transition; the tree and
-  Quick Open both read the same listing, so their parity is structural. The
-  toggle route bumps the shared tree version, and every window's normal
-  status poll converges it. One listing generation rejects stale successes,
-  failures, and post-listing stat continuations; rapid preference writes
-  serialize opposite user intents at the renderer-to-server boundary. A
-  toggle-off clears expansion, selection, and active-folder targets that left
-  the listing but never closes an open tab. Tree-version pruning confirms
-  omitted open files with a server stat because listing omission may mean
-  hidden visibility changed rather than that the source was deleted, and only
-  a still-current batch may close the exact clean tabs it proved missing.
-- One source identity owns at most one document tab in a window. The workspace
-  reducer resolves concurrent open completions against its latest state; an
-  asynchronous caller's earlier duplicate check is never the uniqueness
-  authority. Active-folder relative paths and out-of-folder folder-plus-path
-  pairs remain distinct identities.
-- Pane geometry is in-memory renderer state, never a durable preference.
-  Sidebar width and Agent chat width carry static bounds in
-  `state/stateHelpers.ts`; the Document Outline dock's height carries only a
-  static floor. Its ceiling is whatever the file tree can spare above the
-  tree section's own `min-height`, measured from live geometry by the handle
-  and enforced identically by the sidebar's flex layout, so a stored height
-  the window cannot hold shrinks the outline and never the tree below its
-  floor. The three handles are named ARIA separators whose keyboard steps
-  come from the same helpers the reducers clamp with; a handle with its own
-  arithmetic would drift from the store.
-- The search popup sends an explicit Library scope for its unfiltered search;
-  its retained selection must not inherit an active Chat's MCP search default.
-- Folder switching resets folder-scoped documents and readiness without
-  clearing library search or silently rebinding a started or drafted Chat.
-- Folder loss and the 412 recovery ladder also preserve Chat tabs. They clear
-  the stale document workspace and preparation state only; the structured
-  Agent scope-retirement event decides per bound tab whether a completely
-  blank Chat returns to Library or user work remains visible.
-- Every site that clears folder context builds its preparation-indicator
-  reset from the one shared plan in `lib/folderScopedReset.ts`. The folder
-  switch/loss plan and the 412 index-status recovery ladder keep their own
-  surrounding order and their own conditional workspace reset, but a
-  folder-scoped indicator field belongs to that shared plan, never to one
-  site's inline ladder — a stale banner outliving a recovery is the failure
-  this rules out.
-- Retained membership state (expanded tree rows, pending semantic names) is
-  stored as keyed records, not `Set`s, so `State` stays serializable and
-  structurally comparable. Read it through the `NameSet` helpers in
-  `state/stateHelpers.ts`; a raw index would report inherited object
-  properties as members.
-- Per-agent chat-tab recency is retained state, not a projection of
-  `chatTabs`: activation reorders it while tab order stays put. One helper
-  owns every write so the reducer cases that open, create, activate, close,
-  and re-agent a tab cannot maintain it differently.
-- An out-of-folder result retains its owning member folder and stays read-only;
-  it never resolves against a same-named file in the active folder.
-- Document navigation and native context release cross the same save barrier.
-  A failed save blocks the transition and keeps the recoverable buffer mounted.
-- Tabs, trees, overlays, and dialogs expose semantic selection/focus state.
-  Overlay dismissal restores focus to the initiating control. Destructive
-  library confirmation identifies the complete home-shortened member path,
-  not only its parent directory.
-- The document tab list is content-sized and shrinks under overflow. New Tab
-  follows the last tab while space remains and stays outside the scroller.
-  Dropping a tab on the empty remainder of the strip appends it to the end;
-  individual tab targets retain ownership of between-tab drops.
-- Drag-only organization gestures keep keyboard equivalents that route through
-  the same action: the file row's Move to… picker
-  (`features/workspace/components/MoveFilePicker.tsx`) calls the drop path's
-  `moveFile`, Ctrl/Cmd+Shift+Arrow reorders document tabs through the drag
-  path's `TABS_REORDER`, and Delete closes the focused tab — the tab chip's
-  visual close control stays presentational inside `role="tab"`.
-- Tree row order, visibility, and keyboard order all come from the one tree
-  model. Collapsed descendants do not create DOM; expanded rows register with
-  the roving-focus hook and navigation resolves against the same visible-path
-  list. Excluded and unreadable folder placeholders are non-expandable but
-  stay actionable through the system file manager; reduced in-app capability
-  must not be styled or exposed as a disabled object.
-- A generic file's `format: generic` is one renderer capability signal: the
-  tree and Quick Open mute it and explain that Search and automatic Chat
-  context exclude it. Selection alone invokes bounded preview inspection.
-  Restricted entries expose reveal-only actions. Every restricted entry —
-  file or folder — carries the same muted ink and the same external-action
-  glyph revealed on row hover/focus; its delayed tooltip names the system
-  file manager, and the row's own explanation uses that same platform name
-  rather than a generic one. Row activation and the context menu expose the
-  action without requiring pointer hover. A reduced-capability row states it
-  in one vocabulary: marking the state on one kind of row while leaving
-  another kind visually identical to a fully working entry is a defect.
-- Muted row ink is a resting-state signal only. Selection restores full
-  foreground ink, because the muted role does not clear AA against the
-  selected-row fill and these rows are the common case once the tree lists
-  every file.
-- A row-level control sizes to the row's content budget rather than to the
-  icon-button recipe's own box; a control taller than that budget silently
-  grows the rows that carry it and breaks the whole-pixel drop-target math.
-  Reveal-on-hover is spelled in utilities against the row group, never as a
-  descendant rule in the tree stylesheet — that sheet is unlayered and would
-  defeat the control's own recipe.
-- JSON Tree/Source mode, expansion, selected path, and tree query are retained
-  per recent tab. Only the active JSON tab owns Find/editor registration, and
-  the bounded tree entry remains lazy.
-- TXT tabs retain literal source identity and share the active-tab Find/save
-  authority. Only valid in-folder UTF-8 sources can enter edit mode;
-  out-of-folder and decode-error tabs stay read-only.
+- Every asynchronous completion passes through a Runtime's `capture()` and
+  `accept()` pair. `capture()` is taken before the operation's first `await`
+  and handed back afterwards; `accept()` runs the completion only while the
+  captured scope is still live, no newer retirement has intervened, and the
+  runtime is not disposed. One shared implementation
+  (`createScopeGuard` in `renderer/src/shared/runtime/scope-guard.ts`) backs
+  the workspace, document, tabs, and Agent runtimes, so an ad-hoc generation
+  counter beside a runtime is a defect. The generation travels beside the scope
+  rather than inside it, because the scope alone cannot tell a completion apart
+  from one the same scope retired while it was in flight.
+- A workspace runtime exists per folder and per generation and never outlives
+  either. `useScopedRuntime` in
+  `renderer/src/shared/runtime/use-scoped-runtime.ts` refuses to hand back a
+  runtime built for a key that has since changed, so a render between a folder
+  change and the new runtime's commit sees no runtime rather than the previous
+  folder's. Rebinding a folder in place calls `retireOperations()` instead of
+  disposing, because the folder stays open while the work aimed at its previous
+  tree does not.
+- Asynchronous work that does not settle into a store takes a named lane from
+  `useRequestSignals` in
+  `renderer/src/shared/runtime/use-request-signals.ts`. Repeating a command on
+  the same lane aborts the call already in flight, lanes are independent, and
+  unmounting aborts all of them. Folder changes share one lane, so asking for a
+  second folder abandons the first and the abandoned request is exactly the one
+  whose signal is aborted.
+- The workspace session is explicit. `WorkspaceSessionSnapshot` in
+  `renderer/src/features/workspace/domain/session.ts` is one versioned,
+  concept-specific shape carrying the active folder, per-folder expansion,
+  selection and tab identities, and the two remembered pane widths. It is not
+  whole-store persistence middleware, and no store is serialized wholesale.
+  Every bound in that module is a restore-time guard. A snapshot read back from
+  disk is truncated and clamped rather than believed, and the wire schema in
+  `shared/protocols/electron/workspace-session.ts` refuses a version, a shape,
+  or a byte size it does not own.
+- Nothing is restored before the saved session has loaded. A folder may only be
+  opened once the session controller reports `ready`, which is also the only
+  state that carries a folder to restore. Saves are queued and drained one at a
+  time, and a failed save is swallowed rather than allowed to make the
+  workspace unusable.
+- Which folder a window lands on is one ordered rule, not a chain of
+  conditions. `chooseFolderLanding` in
+  `renderer/src/features/workspace/domain/landing.ts` reads the server's folder
+  for this window, then the folder the desktop created the window for, then the
+  saved session's folder when it is still a member, then nothing. The
+  desktop's claim is a distinct pending state between the first two, so the
+  race is settled by the ordering rather than by a guard beside it, and the
+  welcome screen never flashes while a claim is outstanding. Reading the
+  server's folder first is what stops a spent claim pulling a reader back to
+  where they started, and it is also what makes a reload correct with no
+  further rule.
+- Multi-window reconciliation goes through durable owners, never through
+  renderer replication. Exactly one window claims the stored snapshot at
+  startup (`claimRestore` in `electron/main.cjs` over
+  `electron/workspace/session.ts`); every later window starts from defaults, so
+  two windows never restore the same folder and tabs. Membership,
+  active-folder binding, and the folder's tree revision are read back from the
+  server or the host rather than mirrored between windows. A window never
+  merges another window's snapshot.
+- Telling the host which folder this window is on can itself fail, and a window
+  whose host disagrees about its folder can no longer reconcile anything. That
+  refusal is reported as a notice rather than swallowed.
+- Folder loss and host-reported removal share one reconciliation lane. Starting
+  either abandons the other, and every step after an `await` re-asks whether its
+  own signal is still the live one before writing. Losing the server is not
+  proof of scope loss, so a failed membership read preserves the mounted
+  workspace and its own recovery rather than retiring the folder.
+- Hidden-entry visibility is one durable application-level preference and the
+  server keeps classification authority. `WorkspacePreferencesPort` in
+  `renderer/src/features/workspace/application/ports.ts` only asks for eligible
+  hidden entries to be listed and can never widen what is eligible. Which
+  hidden paths are eligible, which stay protected, and which surface as bounded
+  excluded rows is decided in `server/file-listing.ts` behind
+  `FolderListingOptions`, and `/api/files` reads the durable preference itself.
+- The renderer owns the toggle and the echoed state, nothing more. Every read
+  and write answers with the visibility the server actually applied, and the
+  menu is drawn from the listing on screen rather than from a value the window
+  asked for, so rows and menu cannot disagree. A refused or failed write
+  changes nothing. The successful write invalidates the open folder's listing
+  directly, because the reader just asked for it; other windows converge on the
+  ordinary preparation-status poll, whose idle interval is the upper bound on
+  that convergence.
+- Public repository import is a folder-explicit request from a Library surface.
+  The server owns cloning, isolated staging, atomic publication, registration,
+  and the background sync trigger. The renderer owns validation feedback and
+  the request lifecycle only. URL and destination-name feedback comes from the
+  same repository Contracts the server validates with
+  (`shared/github-import.ts` and `shared/folder-name.ts`), so a reader is
+  refused inline by the rule that would refuse them anyway; the server parses
+  both again, which makes the renderer's copy feedback rather than authority.
+  The destination name follows the URL until the reader edits it and stops
+  following once they have.
+- A refusal names a code the adapter turns into a sentence, so no transport
+  prose reaches a reader and a code this build does not know falls back to the
+  ladder's own line. A cancelled import leaves no partial member behind. The
+  published path is opened through the same folder lane every other folder
+  change uses, so the save barrier and abandonment rules apply to it too.
+- Retrieval navigates within the selected workspace only. The search surface is
+  bound to the active folder's path, each backend sends that folder explicitly,
+  and occurrences outside the searched folder are dropped before they reach the
+  reader whatever the daemon answered. Quick Open ranks only the open folder's
+  listing and refuses an intent whose folder is not the open one. There is no
+  Library-wide retrieval scope in this renderer, so no surface has a scope
+  selection to inherit or retain.
+- Ways to search a folder are a registry, not a branch. `SearchBackend` in
+  `renderer/src/features/retrieval/ui/search/backend.ts` carries a backend's
+  request, rows, copy, and readiness gate, and
+  `renderer/src/features/retrieval/ui/search/backends.ts` is the whole list in
+  tab order. A backend that search by meaning gates declares an index gate; the
+  absence of one is the statement that the backend answers from the folder
+  itself and is never held back.
+- One source identity owns at most one document tab in a window. Tab
+  transitions are queued and each re-reads the open set after the save it
+  awaited, so an asynchronous caller's earlier duplicate check is never the
+  uniqueness authority. Closing a tab disposes its document runtime, so an
+  in-flight load or save for a retired document can never land.
+- Document navigation, tab closure, folder change, and native context release
+  all cross the same save barrier. A failed save blocks the transition and keeps
+  the recoverable buffer mounted. Retiring the documents under an entry about to
+  be renamed or deleted saves and closes each one and re-checks the captured
+  folder scope after every close; what is still open then is no longer this
+  folder's to settle, and the entry must stay where it is.
+- Window-level chords that cross features are owned by app composition. One
+  hook per chord under `renderer/src/app/composition/commands/` declares its
+  matcher and its action over the single listener in
+  `renderer/src/app/composition/commands/use-window-command.ts`. A feature does
+  not register a chord that belongs to the window.
+- Two exceptions are deliberate and bounded. The Documents feature owns the
+  chords whose verbs are its own in
+  `renderer/src/features/documents/hooks/use-document-commands.ts`, and every
+  one of them asks its runtime to act and reads back whether it did rather than
+  inspecting document state. The sidebar collapse chord belongs to the
+  installed sidebar primitive. A third such owner needs a reason in review.
+- In-app menus are typed targets rather than conditionals. A tree menu is built
+  from one target union in
+  `renderer/src/features/workspace/ui/file-tree-menu.tsx`, a row that carries
+  state announces itself as a checkbox, and a restricted entry offers reveal
+  and nothing else. The tree's own space, down to the sidebar footer, re-enters
+  a right click into the section's menu as long as Files is showing and no
+  other owner claims the spot.
+- Sidebar panels are a registry too.
+  `renderer/src/app/composition/layout/sidebar-panels.tsx` is the whole
+  definition of the navigator, in tab order, and nothing downstream counts tabs
+  or compares indices. A panel declares whether it replaces the scrolling tree
+  region, and a panel expensive to mount stays unmounted until it is selected.
+  The document outline is one of those panels and carries no geometry of its
+  own. It shares the sidebar's width and the tree's scrolling region, so the
+  only resizable seams in the window are the sidebar rail and the Agent seam.
+- Both workspace panes are always mounted. The Agent keeps its transcript,
+  composer draft, and focus while a document is opened and closed beside it, so
+  the split is a width rather than a route. The document pane keeps a floor and
+  the Agent pane yields, which is what makes a narrow window collapse the chat
+  instead of crushing the page being read.
+- Pane geometry is durable, held in the session snapshot and clamped by the
+  same bounds in both directions. The Agent seam is a named ARIA separator with
+  arrow-key steps and a double-click reset, and every path reports a width
+  clamped to the record the domain clamps with. A handle with its own
+  arithmetic would drift from the snapshot.
+- A drag is never the only way to do something. Dragging a tree row or a
+  document tab carries one source identity and nothing else, and the receiver
+  decides what the Agent may read; the same source reaches the composer through
+  its keyboard mention path, which [Agent Panel](agent-panel.md) contracts.
+  **Known Gap.** The sidebar rail is the exception. It resizes by pointer only
+  and is not in the tab order, so collapsing has a chord and a titlebar control
+  while resizing has no keyboard equivalent.
+- Tree row order, visibility, and keyboard order all come from one model.
+  Collapsed descendants create no DOM, and the whole keyboard contract is a
+  pure function over the rendered rows
+  (`renderer/src/features/workspace/ui/file-tree-keyboard.ts`), so it can be
+  read and tested without a DOM. Excluded and unreadable folder placeholders
+  are non-expandable but stay actionable through the system file manager;
+  reduced in-app capability must not be styled or exposed as a disabled object.
+- A generic file's format is one renderer capability signal. The tree and Quick
+  Open mute it and say that Search and automatic Chat context exclude it.
+  Restricted entries expose reveal-only actions, and a reduced-capability row
+  states it in one vocabulary. Marking the state on one kind of row while
+  leaving another kind visually identical to a fully working entry is a defect.
+- A settled mutation hands focus to the row it produced, and only once the
+  refreshed listing actually shows that row. Expansion and selection move with
+  a renamed entry and are dropped under one that left the tree, so a renamed
+  folder stays open and its selected descendant stays selected.
+- Tabs, trees, overlays, and dialogs expose semantic selection and focus state.
+  Destructive confirmation identifies the complete subject. Library removal
+  names the home-shortened member path, and entry deletion names the
+  folder-relative path, both in a copyable monospace block beside the sentence.
+- The strip above the workspace carries only things the reader did not ask
+  about directly. A refusal of their own request is said as an alert, a
+  capability StashBase could not reach as a quiet status, and an optional offer
+  as an offer with the thing to take up beside the dismissal. Order is by
+  urgency, so a refusal of something the reader did try precedes an offer of
+  something they have not asked for.
+- The open folder's cached views are re-read through one composer
+  (`renderer/src/app/composition/folder/refresh-folder.ts`). Each feature owns
+  the invalidation of its own keys and a caller names what changed rather than a
+  query key. Two things disagree with the cache. The daemon publishes a tree
+  revision with every status poll, and a revision that moves means something
+  outside the app touched the folder, but only after a revision has been seen
+  for this folder, otherwise every folder switch would refetch a listing it just
+  fetched. The Agent reports exactly which files its settled write changed, and
+  nothing selects a file on the reader's behalf.
+- Preparation calls the shell makes on the reader's behalf take one lane per
+  call and per subject, and a refusal becomes one sentence the strip can show.
+  A second reprocess of the same file replaces the first while reprocessing a
+  different file leaves it running.
 - Polling, timers, controllers, and native subscriptions retire when their
-  generation or window context ends. Late results cannot repopulate reset
-  state.
-- The GitHub import dialog owns acquisition form state while its focused hook
-  owns the request controller. Valid shared URL and folder-name rules gate submission; the
-  existing `actions.openFolder(path)` transition owns successful membership and
-  navigation. A published-path open failure remains in the dialog with a
-  retry-open action that never starts a second clone.
-- The blank-chat lifecycle follows [Agent Panel](agent-panel.md); the workspace
-  may reveal or dock it but does not redefine Agent session scope. A Chat
-  holding an unsent request is not reusable blank state, so window-folder
-  transitions must neither redirect it nor claim its tab.
+  generation or window context ends. The folder's status poll is nested under
+  the folder's own query key, so retiring a folder cancels and drops the poll
+  with the listing. Late results cannot repopulate reset state.
+- The window declares when its first paint is trustworthy. `data-boot-settled`
+  is set exactly once the library has answered and no folder restore is still
+  in flight, which is what the desktop harness waits on. The Agent latch is
+  separate and one-way, so emptying the library does not tear down a running
+  conversation.
+- The blank-chat lifecycle follows [Agent Panel](agent-panel.md). The workspace
+  may reveal or dock the Agent but does not redefine Agent session scope.
 
-## Shell Performance Contract
+## Failure Containment
 
-The initial renderer contains only window chrome and the minimum workspace
-shell. Feature surfaces that open on demand remain dynamic entries. The
-authoritative budget is `437 KiB` of initial static JavaScript, and the current
-required dynamic-entry set lives in `scripts/renderer/size.mjs`.
-Change that list or budget only when the ownership of eager shell behavior
-changes, never to make an accidental dependency pass.
+[Renderer Architecture](renderer-architecture.md) states the rule this window
+is held to. How far it actually reaches is below.
 
-The shared menu body remains a dynamic entry, but its loader is bounded. If a
-server restart leaves the browser's first module URL permanently pending, the
-loader retries through a distinct bundled URL rather than leaving a navigation
-menu on its loading placeholder forever.
+There is one boundary implementation and three placements.
+`renderer/src/shared/runtime/surface-boundary.tsx` draws the recovery and owns
+none of its words: it is a leaf, so it cannot reach a feature's
+failure-message module, and a caught render error's own message is written for
+a developer rather than a reader. Every caller supplies its sentence and its
+way out.
+
+Startup sits above it. `renderer/src/app/bootstrap/startup.tsx` catches a
+window whose preload bridge is missing and renders
+`renderer/src/app/bootstrap/startup-failure.tsx` instead of a shell that would
+fail on its first call. The shell is the second placement:
+`renderer/src/app/shell-boundary.tsx` wraps the whole composition, so a render
+failure anywhere inside it remounts that subtree and offers to reopen the
+workspace rather than leaving an empty window. Deferred surfaces are the third.
+`lazySurface` in `renderer/src/shared/runtime/lazy-surface.tsx` names the three
+decisions every code-split surface makes, and the Agent workspace and Quick
+Open each pass it a boundary with their own recovery.
+
+The shell recovery's wording is deliberately narrow, because the guarantee is.
+Journaled snapshots survive the remount, since the server sealed them to disk
+outside React. The dirty buffer does not, because the tabs runtime is disposed
+with the subtree. Snapshots also trail the typist by design, so the newest text
+was never journaled, and on an installation without operating-system key
+protection the journal is off entirely. The sentence therefore promises what
+could be stored rather than recovery.
+
+Losing the local server does not reload the renderer. No renderer module calls
+the window-lifecycle bridge's reload, cached views and their unsaved buffers
+stay mounted, and each refused read offers its own retry. The folder's status
+poll re-attempts on its own interval, so a recovered server converges without
+the reader doing anything.
+
+**Known Gap.** Settings has no boundary of its own, so a render failure inside
+it is caught by the shell boundary and remounts the whole composition rather
+than the dialog. There is also no bounded reconnect ladder for HTTP. Every renderer query is
+configured with retries off, so recovery from server loss is either the
+preparation poll's fixed interval or a reader-initiated retry, not a ladder. The
+one bounded reconnect ladder in the renderer belongs to the Agent session
+socket and is contracted in [Agent Runtime](agent-runtime.md).
+
+## Deferred Surfaces
+
+The initial renderer carries the window chrome, the sidebar, and the folder's
+own surfaces. Settings, Quick Open, the Agent workspace, the Agent chats list,
+and every document viewer are dynamic entries behind `lazySurface` or `lazy`,
+and Settings and Quick Open do not even import until they are opened. Move a
+surface into or out of that set only when the ownership of eager shell behavior
+changes. Nothing measures the result. A surface that becomes eagerly imported
+by accident is caught by review, not by an assertion, which is one instance of
+the performance-budget gap [Renderer Architecture](renderer-architecture.md)
+records.
 
 ## Implementation Map
 
 | Role | Stable entry points |
 |---|---|
-| Interface | `ActiveFolderWorkspace` in `web-src/src/store/hooks/useActiveFolderWorkspace.ts` |
-| Primary owners | `web-src/src/store/state/state.ts`, `state/stateReducer.ts` and the `state/workspaceReducer.ts`, `state/chatReducer.ts`, `state/uiShellReducer.ts` sub-reducers it composes, `state/stateHelpers.ts`, `lib/folderScopedReset.ts`, `lib/folderPath.ts`, `lib/folderTransition.ts`, and the internal `hooks/useDocumentActions.ts`, `hooks/useFileActions.ts`, `hooks/useFolderActions.ts`, `hooks/useSearchActions.ts` Modules |
-| Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx`, the pane-geometry handles in `web-src/src/features/workspace/components/WorkspaceSplitters.tsx`, and lazy `features/workspace/components/ImportGitHubModal.tsx` and `FolderHeaderMenu.tsx` boundaries |
-| Renderer tree model | `web-src/src/features/workspace/lib/fileTreeModel.ts` (nesting, manual-rank ordering, visible rows), `lib/treeKeyboard.ts` (roving-focus rules), `hooks/useTreeRoving.ts` (row registry and per-row binding) |
-| Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `shared/library-files.ts`, `server/routes/files.ts`, `server/routes/workspace-preferences.ts`, the asynchronous request listing in `server/file-listing.ts`, and bounded selection-time inspection in `server/generic-file-preview.ts` |
-| Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
-| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `splitter-keyboard.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`, `file-listing-generation.test.ts`, `hidden-visibility-actions.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`, `hidden-entries.test.ts`, `hidden-files-menu.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, `server/generic-file-preview.test.ts`, and `scripts/renderer/size.mjs` |
+| Interface | `renderer/src/features/workspace/public.ts`, with `WorkspaceRuntime` in `renderer/src/features/workspace/application/runtime.ts` as the folder's own transition seam |
+| Primary owners | `renderer/src/features/workspace/domain/tree.ts`, `domain/workspace.ts`, `domain/library.ts`, `domain/session.ts`, and the `application/runtime.ts`, `application/session-runtime.ts`, `application/open-folder.ts`, `application/add-folder.ts`, `application/remove-folder.ts`, `application/queries.ts`, `application/failure-messages.ts` Modules over the Ports in `application/ports.ts` |
+| Feature hooks | `renderer/src/features/workspace/hooks/use-workspace.ts`, `use-workspace-session.ts`, `use-library.ts`, `use-library-lifecycle.ts`, `use-files.ts`, `use-tree.ts`, `use-hidden-files.ts`, `use-folders.ts`, `use-file-operations.ts`, `use-github-import.ts`, `use-remove-folder.ts`, `use-reveal.ts` |
+| Feature views | `renderer/src/features/workspace/ui/sidebar.tsx`, `ui/welcome.tsx`, `ui/file-tree.tsx` with its `file-tree-model.ts`, `file-tree-keyboard.ts`, `file-tree-focus.ts`, `file-tree-rows.tsx`, `file-tree-menu.tsx`, `file-tree-naming.tsx`, `file-tree-space-menu.ts` concerns, `ui/import-github-dialog.tsx`, `ui/remove-folder-dialog.tsx`, `ui/delete-entry-dialog.tsx`, `ui/clipboard-offer.tsx` |
+| Document tabs and barrier | `renderer/src/features/documents/application/tabs-runtime.ts`, `application/document-runtime.ts`, `hooks/use-document-tabs.ts`, `hooks/use-document-commands.ts`, `hooks/use-document-save-barrier.ts` |
+| Retrieval surfaces | `renderer/src/features/retrieval/ui/library-search.tsx`, `ui/search/surface.tsx`, `ui/search/backend.ts`, `ui/search/backends.ts`, `ui/quick-open.tsx`, `ui/managed-quick-open.tsx`, `ui/readiness-notices.tsx` |
+| Composition root | `renderer/src/app/shell.tsx`, `renderer/src/app/providers.tsx`, `renderer/src/app/dependencies.ts`, `renderer/src/app/composition/dependency-context.tsx` |
+| Window chrome and layout | `renderer/src/app/composition/commands/use-workspace-commands.ts`, `use-window-command.ts`, `use-quick-open-command.ts`, `use-sidebar-search-command.ts`, `use-preparation-commands.ts`, `use-capture-focus.ts`, and `renderer/src/app/composition/layout/workspace-layout.tsx`, `workspace-sidebar.tsx`, `sidebar-navigator.tsx`, `sidebar-panels.tsx`, `workspace-panes.tsx`, `agent-document-workspace.tsx`, `workspace-titlebar.tsx`, `workspace-notices.tsx`, `workspace-dialogs.tsx`, `workspace-quick-open.tsx` |
+| Folder-scoped binders | `renderer/src/app/composition/folder/use-document-workspace.ts`, `use-document-sources.ts`, `use-folder-readiness.ts`, `use-folder-refresh.ts`, `use-workspace-notices.ts`, `use-recovery-drafts.ts`, `refresh-folder.ts` |
+| Named workflows | `renderer/src/app/workflows/open-document.ts` and `renderer/src/app/workflows/retire-documents.ts` |
+| Scope and liveness mechanics | `renderer/src/shared/runtime/scope-guard.ts`, `use-scoped-runtime.ts`, `use-retained-runtime.ts`, `use-request-signals.ts`, `use-command-surface.ts`, `lazy-surface.tsx`, and `renderer/src/app/bootstrap/startup.tsx`, `startup-failure.tsx`, `use-boot-progress.ts` |
+| Server transport Adapter | `renderer/src/features/workspace/infrastructure/api.ts`, `files-api.ts`, `workspace-preferences-api.ts`, `github-import-api.ts`, `upload-api.ts` over `renderer/src/platform/http/client.ts` and `renderer/src/platform/http/classify.ts`, against `server/routes/files.ts`, `server/routes/workspace-preferences.ts`, and `server/file-listing.ts` |
+| Desktop lifecycle Adapter | `renderer/src/features/workspace/infrastructure/library-lifecycle.ts`, `capture-api.ts`, and `renderer/src/features/documents/infrastructure/window-lifecycle.ts` over `renderer/src/platform/electron/bridge.ts`, `library-lifecycle.ts`, `window-lifecycle.ts`, `folder-picker.ts`, `capture.ts`, `file-manager.ts` |
+| Session store | `renderer/src/features/workspace/infrastructure/session-persistence.ts` over `shared/protocols/electron/workspace-session.ts`, persisted by `electron/workspace/session.ts` and claimed for exactly one window in `electron/main.cjs` |
+| Focused evidence | `renderer/src/features/workspace/application/runtime.test.ts`, `session-runtime.test.ts`, `open-folder.test.ts`, `remove-folder.test.ts`, `queries.test.ts`, `renderer/src/features/workspace/domain/session.test.ts`, `domain/tree.test.ts`, `domain/workspace.test.ts`, `renderer/src/features/workspace/hooks/use-workspace-session.test.ts`, `use-library-lifecycle.test.ts`, `use-hidden-files.test.ts`, `use-github-import.test.ts`, `use-file-operations.test.tsx`, `use-tree.test.ts`, `renderer/src/features/workspace/ui/file-tree.test.tsx`, `file-tree-keyboard.test.ts`, `file-tree-menu.test.tsx`, `sidebar.test.tsx`, `welcome.test.tsx`, `renderer/src/features/documents/application/tabs-runtime.test.ts`, `renderer/src/features/retrieval/ui/search/surface.test.tsx`, `ui/search/exact-backend.test.tsx`, `renderer/src/app/composition/layout/workspace-layout.test.tsx`, `workspace-sidebar.test.tsx`, `workspace-quick-open.test.tsx`, `agent-document-workspace.test.tsx`, `renderer/src/app/composition/commands/use-workspace-commands.test.tsx`, `use-quick-open-command.test.tsx`, `renderer/src/app/workflows/open-document.test.ts`, `retire-documents.test.ts`, `renderer/src/app/bootstrap/startup.test.tsx`, `use-boot-progress.test.tsx`, `server/routes/workspace-preferences.test.ts`, `server/__tests__/github-import.test.ts`, `server/routes/files.test.ts`, and `electron/workspace/session.test.cjs` |
 
-The four action hooks are private Seams inside the workspace Module. Do not make
-components depend on them directly; that would create a second transition
-Interface.
-
-`AppContext.tsx` owns exactly one `useReducer` over the single `State` shape in
-`state.ts` — that stays the one source of truth. `State` is three nested
-slices (`WorkspaceSlice`, `ChatSlice`, `UiShellSlice`); slice membership is
-declared once, by the field's position in one of those interfaces, and nothing
-restates it. `reducer` composes one sub-reducer per slice, each of which sees
-every action and rebuilds only its own slice, so an action spanning two slices
-is expressed once per slice rather than in a coordinating branch. A sub-reducer
-answers `undefined` for an action it does not own; an action **no** slice
-claims therefore produces `undefined` instead of a silent no-op, which is what
-replaces the exhaustiveness check the single pre-split switch got from the
-compiler.
-
-State is NOT exposed through one merged read hook. Delivery is four sibling
-contexts: `WorkspaceContext` publishes `state.workspace` plus the derived
-`activeTab`, `ChatContext` and `UiShellContext` publish their slice verbatim,
-and `ActionsContext` carries the stable `actions`/`dispatch` pair. A component
-that reads one slice does not re-render when a dispatch only touches another.
-Components call
-`useWorkspace()` / `useChat()` / `useUiShell()` / `useAppActions()` for exactly
-what they need; there is no merged `useApp()`. A component that genuinely reads
-across slices throughout its body (`AgentView.tsx`, `App.tsx`) may merge them
-into one local object after calling the hooks — that's a local convenience,
-not a second Interface, and it does not change which slice's change triggers
-that component's own re-render.
+Only part of the Feature hooks row is public. `use-workspace.ts`,
+`use-workspace-session.ts`, `use-library.ts`, `use-library-lifecycle.ts`,
+`use-files.ts`, `use-hidden-files.ts`, and `use-reveal.ts` are re-exported and
+are what the app composes with. The rest are private Seams inside the feature,
+reached only by its own views. Exporting one of those would create a second
+transition Interface beside the runtime, which is the shape this layering
+exists to prevent. A sibling feature reaches none of them.
 
 ## Validation
 
@@ -215,11 +342,17 @@ pnpm test:renderer
 pnpm build:web
 ```
 
-Journey automation retired with the Playwright suites; prove launch, navigation, and save behavior through the Electron
-boundary suites and `pnpm test:electron:smoke`, and prove affected folder,
-tab, search, focus, or layout journeys with focused renderer tests and a
-driven runtime pass. Reserve manual review for representative composition
-changes.
+Add `pnpm check:web` when a change moves a module, changes what a layer
+imports, or moves ownership between a feature and composition; the gate set
+behind it is defined in
+[Renderer Architecture](renderer-architecture.md). Add `pnpm test:protocols`
+when a wire schema changes.
+
+Journey automation retired with the Playwright suites. Prove launch,
+navigation, and save behavior through the Electron boundary suites and
+`pnpm test:electron:smoke`, and prove affected folder, tab, search, focus, or
+layout journeys with focused renderer tests and a driven runtime pass. Reserve
+manual review for representative composition changes.
 
 Related journeys: [J01](../design-docs/user-journeys.md#j01-complete-onboarding-and-reach-first-value),
 [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folder), and
@@ -232,6 +365,8 @@ for the complete cross-surface loop, and
 for project registration and originating-window entry, and
 [J12](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder)
 for pending folder-pinned activation.
-Related contracts: [Window Lifecycle](window-lifecycle.md),
-[File Transactions](file-transactions.md), and
+Related contracts: [Renderer Architecture](renderer-architecture.md),
+[Window Lifecycle](window-lifecycle.md),
+[File Transactions](file-transactions.md),
+[Settings and Config](settings-config.md), and
 [Agent Panel](agent-panel.md).

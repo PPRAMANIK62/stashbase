@@ -5,8 +5,8 @@
 
 ## Included Wiki Agent
 
-- Wiki Agent is the included `stashbase` adapter and the default blank-chat
-  preference. It uses exact-version
+- Wiki Agent is the included `stashbase` adapter and the runtime a new chat
+  opens on whenever it is ready. It uses exact-version
   `opencode-ai@1.18.19` and `@opencode-ai/sdk@1.18.19` dependencies; packaging
   copies the dependency's platform-specific postinstall target to a stable
   resource outside asar rather than relying on dependency collection to retain
@@ -231,14 +231,14 @@ it is not a third scope.
   `developerInstructions`, Claude as the native preset append, and Wiki Agent
   as its OpenCode Agent prompt. MCP advertises tools without a second top-level
   instruction prompt. No Adapter mutates a started native session's prompt in
-  place or grows a live setter. A saved edit reaches an open Chat because the renderer
-  remounts that session (resuming its native session id when it has content),
-  so the guidance arrives the one way every adapter already supports. They are
-  guidance, not authorization or a security boundary.
-- Each live panel session owns one policy for search by meaning. The renderer
-  sends it over the normalized protocol before a ready-transition prompt;
-  attributed MCP search reads it from the session registry. It changes
-  retrieval strategy only and never owns Preparation or index lifecycle.
+  place or grows a live setter, so a saved edit reaches the next session that
+  mounts under that scope rather than the conversation already running. They
+  are guidance, not authorization or a security boundary.
+- Each live panel session owns one policy for search by meaning. The
+  normalized protocol carries it and every Adapter implements the event;
+  attributed MCP search reads the session's answer from the registry. It
+  changes retrieval strategy only and never owns Preparation or index
+  lifecycle.
 - Window folder switching does not tear down or rebind started sessions.
 - Folder removal ends every session bound to that member across windows but
   does not end library sessions. Before closing each affected transport, the
@@ -324,42 +324,51 @@ assumed CLI versions.
   visible without settling a turn or changing session readiness. The Adapter
   assigns this classification from native event structure; the renderer never
   parses provider prose to recover severity.
-- Turn-scoped runtime errors carry a structured failure kind — rate-limit,
-  quota, included-allowance exhaustion, hosted access restriction,
-  auth-expired, or network — classified once in the adapters through
-  the shared classifier; an unmatched message stays a plain error. The
-  renderer maps the kind to recovery copy and actions without parsing
-  messages, and every card carries a truthful action. Rate, network, and
-  quota failures clear on the provider side, so their Try again resends the
-  failed prompt on the live session. An expired sign-in offers Codex's
-  in-app browser sign-in (stashing the session id so the post-login
-  reconnect resumes the same native thread) or names Claude's terminal
-  `/login` steps with an in-place Reconnect — these two replace the
-  session's native process, because credentials are read at process start
-  and an external login is invisible to the running process until it is
-  replaced; never require an app restart for this. Acting on any recovery
-  removes its stale failure card — neither its button nor its red provider
-  error may outlive the state they described — and auto-resends the failed
-  prompt (immediately for Try again, on session readiness for sign-in and
-  Reconnect), so the stale provider error does not remain presented as a
-  current failure: the user sees an answer when recovery worked or a fresh
-  card when it did not. Included-Agent account/allowance recovery arms
-  the same one-shot retry while Agent Settings is open. The armed retry is
-  cleared by
-  every other session reset. A turn failure never gates the panel and never
-  ends the session.
+- A turn-scoped runtime error carries a structured failure kind. The kinds are
+  rate-limit, quota, included-allowance exhaustion, hosted access restriction,
+  auth-expired, and network, and an unmatched message stays a plain error. The
+  shared classifier assigns the kind once, in the adapters, from native event
+  structure. A turn failure never gates the panel and never ends the session,
+  so the session that reported one is still the one a retry runs on.
+- The kind is what a recovery has to be selected from. Rate, network, and
+  quota failures clear on the provider side, so resending the failed prompt on
+  the live session is a truthful action for them. The other three are not.
+  Credentials are read at process start and an external login is invisible to
+  the running process until it is replaced, so an expired sign-in is recovered
+  by replacing the session's native process (Codex through its in-app browser
+  sign-in with the session id stashed so the reconnect resumes the same native
+  thread, Claude by naming its terminal `/login` steps behind an in-place
+  reconnect), and an exhausted included allowance is recovered in Agent
+  Settings. None of the three may require an app restart. Renderer code selects
+  by the assigned kind and never parses provider prose; what the replacement
+  renderer currently offers is a Known Gap in
+  [Agent Panel](agent-panel.md#known-gaps).
 - Skills are discovered and invoked through native capability paths. The
   runtime never exposes or concatenates skill-file contents into a prompt.
 
-## Known Gap — OpenCode Directory Rebind
+## Known Gaps
 
-An attributed Wiki Agent Library chat participates in `create_project`:
-the live panel scope changes and subsequent MCP operations remain attached to
-that session/window. OpenCode 1.18.19 has no supported operation for moving the
-same native session between directory projects. The Adapter therefore does not
-claim a durable session-folder override: restored history remains under
-Library, and the continued chat stays on its safe MCP-only agent profile rather
-than enabling native commands against the old folder-home cwd.
+Required behavior is stricter than Current behavior in each of these. Every
+gap below is observed in Shipping.
+
+- **OpenCode directory rebind.** An attributed Wiki Agent Library chat
+  participates in `create_project`. The live panel scope changes and subsequent
+  MCP operations remain attached to that session and window. OpenCode 1.18.19
+  has no supported operation for moving the same native session between
+  directory projects, so the Adapter claims no durable session-folder override.
+  Restored history remains under Library, and the continued chat stays on its
+  safe MCP-only agent profile rather than enabling native commands against the
+  old folder-home cwd.
+- **An instruction edit does not reach a running session.** Resolved
+  instructions are injected once, when a native session mounts, and no Adapter
+  grows a live setter for them. A save is therefore effective for the next
+  session that mounts under that scope. Nothing remounts a conversation that is
+  already open, so the surface says a save applies from the next conversation
+  rather than promising the running one.
+- **Retrieval policy runs on its Adapter default.** Every Adapter implements
+  the search-by-meaning event and defaults to enabled, and attributed MCP
+  search reads that answer from the session registry. No renderer surface
+  sends the event, so every live session searches by meaning.
 
 ## Implementation Map
 
@@ -368,14 +377,14 @@ than enabling native commands against the old folder-home cwd.
 | Agent Interface | `AgentAdapter`, normalized client/server events, scope resolution, attach, and stop in `server/agent-contract.ts` |
 | Adapter registry | `server/agent-adapters.ts` |
 | StashBase/OpenCode Adapter | `server/opencode-runtime.ts`, `server/opencode-agent.ts`, and `server/hosted-agent-broker.ts` |
-| Turn failure classification | `classifyAgentTurnFailure` in `server/agent-turn-failure.ts` over the shared kinds in `shared/agent-protocol.ts`; renderer recovery guidance in `web-src/src/features/agent-panel/lib/turnFailure.ts` |
+| Turn failure classification | `classifyAgentTurnFailure` in `server/agent-turn-failure.ts` over the shared kinds in `shared/agent-protocol.ts`. The kind crosses the socket schema in `shared/protocols/websocket/agent-session.ts` and reaches renderer transcript state; what the renderer currently does with it is a Known Gap in [Agent Panel](agent-panel.md#known-gaps) |
 | Preparation Interface | `AgentBootstrapCoordinator` and its structured failure contract in `server/agent-runtime-installer.ts`; discovery and one-shot debug controls in `server/agent-cli.ts` and `server/agent-runtime-paths.ts` |
 | MCP wiring | `ensureAgentMcp` and the launcher writer in `server/agent-mcp.ts` |
 | Claude Adapter | `server/agent.ts` and its SDK/native-process helpers |
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
-| Agent Instructions Interface | `assets/agent-instructions/default.md` owns the product default; `server/agent-instructions.ts` resolves it or working-folder persistence; `server/routes/agent-instructions.ts` is the authorized HTTP Adapter; `server/agent-runtime-instructions.ts` owns the separate internal routing policy and native-session composition |
-| Renderer Adapter | `web-src/src/common/lib/agentCatalog.ts`, the `activateChatTab` action in `web-src/src/store/contexts/AppContext.tsx`, `runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
+| Agent Instructions Interface | `assets/agent-instructions/default.md` and `assets/agent-instructions/library.md` own the two product defaults; `server/agent-instructions.ts` owns scope matching, defensive reads, clearing, and config compaction; `server/routes/agent-instructions.ts` is the authorized HTTP Adapter over the wire shapes in `shared/agent-instructions.ts` and `shared/protocols/http/agent-instructions.ts`; `server/agent-runtime-instructions.ts` owns the separate internal routing policy and native-session composition |
+| Renderer Adapters | `renderer/src/features/agent/infrastructure/catalog-api.ts` maps the runtime catalog to whether a conversation can send, `renderer/src/features/agent/infrastructure/session-api.ts` maps the socket and history vocabulary, and `renderer/src/features/agent/infrastructure/agent-instructions-api.ts` maps the instructions routes. Session and tab lifetime is `renderer/src/features/agent/application/workspace-runtime.ts`. Renderer-side rules are [Agent Panel](agent-panel.md) |
 | Focused evidence | `server/agent-instructions.test.ts`, `server/__tests__/agent-contract.test.ts`, `opencode-agent.test.ts`, `hosted-agent-broker.test.ts`, `opencode-native-smoke.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, and `agent.test.ts` |
 
 ## Validation
@@ -385,14 +394,19 @@ Run:
 ```bash
 pnpm typecheck
 pnpm test:agent
+pnpm test:config
+pnpm test:protocols
 pnpm test:agent:native
 pnpm test:opencode:native
 ```
 
-Journey automation retired with the Playwright suites; when the Codex vocabulary changes, prove it through the agent server
-suite, and prove renderer-visible lifecycle changes with focused renderer
-tests and a driven runtime pass. Packaged
-discovery and one credentialed real-CLI turn remain release sanity checks.
+`pnpm test:config` is where the Agent Instructions store is proven, and
+`pnpm test:protocols` covers the Agent wire schemas. Journey automation retired
+with the Playwright suites. When the Codex vocabulary changes, prove it through
+the agent server suite. Prove renderer-visible lifecycle changes with focused
+renderer tests and a driven runtime pass through the built application.
+Packaged discovery and one credentialed real-CLI turn remain release sanity
+checks.
 
 Related journeys: [J06](../design-docs/user-journeys.md#j06-start-and-continue-an-agent-chat)
 and the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)

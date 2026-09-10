@@ -20,52 +20,43 @@ and uses a hosted service only as its metered model provider.
 
 ## Current Experience
 
-- Chat begins expanded. With no document it is the primary work surface;
-  opening a source docks the same mounted session beside it, and closing the
-  last source expands an open Chat again.
-- A blank Chat keeps the durable greeting **Your Wiki is here**. In a bare
-  window every contentless Chat derives the **Gallery** band below its
-  composer, one scrolling page with the hero: ready-made Wikis to download
-  and open (see [Workspace](workspace.md) for the shop's two forms and the
-  no-folder contract). The first sent turn replaces the band with the
-  transcript, a folder window never shows the band, and a runtime gate
-  keeps it reachable beneath its card. A gated Chat keeps its composer, holds
-  whatever is written into it, and carries that request onto the runtime that
-  arrives; the gate is a notice beneath the composer naming each runtime that
+- Chat begins expanded in a folder window. With no document it is the primary
+  work surface; opening a source docks the same mounted session beside it, and
+  closing the last source expands an open Chat again.
+- A blank Chat keeps the durable greeting **Your Wiki is here.** and offers at
+  most three starters below the composer, **Build my wiki** first. The
+  greeting, composer, and starters remain one vertically centered action
+  group, and the first sent turn replaces them with the transcript. Starting a
+  wiki over the user's own files is a plain conversation. The user asks in the
+  composer, and the durable Wiki behavior lives in Agent Instructions, so the
+  visible request is exactly what the Agent receives. A starter fills the
+  composer and never sends, and so does **Copy prompt** on a Gallery entry's
+  detail page.
+- A runtime gate is a notice beneath the composer naming each runtime that
   cannot carry a turn by its own stage, never a screen in place of the
-  request. Nothing is sent for the user: the gate lifting leaves the request
-  in the composer to read and send.
-  Starting a wiki over the user's own
-  files is a plain conversation: the user asks in the composer, and the
-  durable Wiki behavior lives in Agent Instructions, so the visible
-  request is exactly what the Agent receives. A folder-scoped blank Chat
-  offers **Build my wiki** as the first of at most three starters below the
-  composer, and an entry's Gallery detail page offers its exact request
-  through **Copy prompt**; both fill the composer and neither sends.
-  The greeting and composer remain one vertically centered action group. A
-  Library-scoped blank Chat stays focused on the greeting and composer without
-  starters or a bottom suggestion carousel.
-- The Chat's **Search by meaning** control is a single switch inside the
-  session scope picker, below the folder list and outside the Agent's Mode
-  and model settings. It sits with scope because scope decides what a lookup
-  may reach and this decides how it matches. On adds meaning-based retrieval
-  on top of text matching; turning it Off never stops search. It is On when
-  searching by meaning is available and can be turned Off per Chat to keep
-  `search_library` text-only. Both states retain direct and prepared document
-  retrieval; asking to turn it On while searching by meaning isn't set up
-  opens the explicit setup path.
-- **Agent Instructions** is a glyph action at the right of the Chat tab strip,
-  separate from conversation controls and sharing a centre line with the
-  chat-panel toggle beside it. It edits the active Chat's scope — the concrete
-  working folder, or the Library scope for a Library-wide Chat — named in its
-  tooltip, and a quiet dot shows when that scope customizes its packaged
-  default. The Library scope has its own default, oriented toward locating
-  work across folders and starting new projects (asking before creating one),
-  rather than maintaining one folder's Wiki.
+  request. A gated Chat keeps its composer, holds whatever is written into it,
+  and carries that request onto the runtime that arrives, while the starters
+  give their row to the gate's own recovery. Nothing is sent for the user, so
+  the gate lifting leaves the request in the composer to read and send.
+- The Gallery is not part of Chat. It is the band on the welcome screen a
+  window with no folder open shows, and the overlay the sidebar's **Gallery**
+  row raises inside a folder window. See [Workspace](workspace.md) for the
+  shop's two forms and the no-folder contract.
+- Agent retrieval adds meaning-based evidence on top of text matching whenever
+  a source for search by meaning is configured, and uses text matching alone
+  when none is. The Agent chooses the strategy for each lookup rather than
+  being told once, and either strategy keeps direct and prepared document text
+  reachable.
+- **Instructions** sits in the composer beside the Agent's own settings. It
+  edits the active Chat's scope, the concrete working folder, named in its
+  title, and a quiet dot shows when that scope has replaced its packaged
+  default. The dialog explains that every Chat in the scope starts with the
+  text and that open Chats pick it up on their next conversation, and it
+  offers **Restore default** once the scope is customized.
   The editor saves in StashBase rather than the source tree, and saving takes
   effect from the next message in every open Chat already using that folder,
-  not only in Chats started afterwards — the editor opens from the tab strip,
-  so there is always an open Chat that a new-Chats-only rule would exclude. A
+  not only in Chats started afterwards. The editor opens from the composer, so
+  there is always an open Chat that a new-Chats-only rule would exclude. A
   Chat mid-turn applies it once that turn settles. The plain-language packaged
   default contains every StashBase-owned behavior: search the Wiki when an
   answer may depend on the user's work, answer briefly and name source files,
@@ -74,38 +65,43 @@ and uses a hosted service only as its metered model provider.
   Clearing and saving restores that default. Existing `AGENTS.md` and
   `CLAUDE.md` files remain separate user-owned runtime inputs and are never
   changed.
-- New users start with **Wiki Agent** selected. The New Chat picker lists Codex,
-  Claude Code, then Wiki Agent, with comparable visual weight across their
-  leading marks. Its second line says **Sign in for free credits**
-  while signed out and **Free credits included** after sign-in, keeping the
-  zero-setup choice available without
-  placing it ahead of explicit bring-your-own runtimes. Its pinned OpenCode runtime is included
-  with the app, requires no Agent installation or model API key, and becomes
-  ready after StashBase account sign-in. Settings shows the remaining percent
-  and reset time for the current fixed seven-day allowance window, with token
-  detail available on demand, and keeps Codex and Claude Code as explicit
-  alternatives. It never exposes the allowance's dollar value.
-- New Chat is the deliberate creation entry and reuses a completely blank tab.
-  Its standing seat is the sidebar's top row; while the sidebar is collapsed,
-  the titlebar's left cluster shows a compose button carrying the same action
-  beside the sidebar toggle, so starting a chat never requires reopening the
-  sidebar. Exactly one of the two entries is on screen at a time.
-  Opening the app, a folder, a tab, or history never grants runtime-installation
-  consent; a missing bring-your-own runtime waits for **Install and continue**.
+- New users start with **Wiki Agent** selected. The Agent is chosen in the
+  composer, from a control that names the current provider, beside the model
+  and thinking controls for the same Agent. Choosing a different provider
+  starts a new Chat rather than repointing the current one, and all three
+  controls stop taking input while a turn streams. Wiki Agent's pinned
+  OpenCode runtime is included with the app, requires no Agent installation or
+  model API key, and becomes ready after StashBase account sign-in. Settings
+  shows the remaining percent and reset time for the current fixed seven-day
+  allowance window, with token detail available on demand, and keeps Codex and
+  Claude Code as explicit alternatives. It never exposes the allowance's
+  dollar value.
+- **New chat** is the deliberate creation entry and reuses a completely blank
+  tab. It sits at the top of the sidebar's Chats panel, and becomes **Set up
+  an Agent** while no runtime is ready. The panel below it groups the folder's
+  conversations by day, newest first, merging restored history with open tabs
+  and omitting allocations that hold no work. A row renames in place and its
+  menu offers deletion. Opening the app, a folder, a tab, or history never
+  grants runtime-installation consent; a missing bring-your-own runtime waits
+  for **Install and continue**.
 - An installed but signed-out Codex runtime stops at a dedicated sign-in gate.
   **Sign in with ChatGPT** runs that same discovered executable's official
   browser flow; completion resumes preparation without another installation.
 - Every conversation is scoped to Library or one member folder. Drafts,
   attachments, content, and resumed history freeze that scope, while folder
-  switching preserves started work. History remains attributable to its Agent
-  and home scope.
+  switching preserves started work. The Chats panel lists the active folder's
+  conversations, so work started in another folder stays mounted without being
+  listed there. History remains attributable to its Agent and home scope.
 - Removing a conversation's folder is an expected scope retirement, not a
-  transport failure. A completely blank Chat silently starts again at Library;
-  a Chat with a draft, attachment, queued follow-up, transcript, active turn,
-  or resumed identity keeps that work visible and offers **New Library Chat**.
+  transport failure. A completely blank Chat silently returns to Library
+  scope. A Chat with a draft, attachment, queued follow-up, transcript, active
+  turn, or resumed identity keeps that work visible, says the folder was
+  removed and the transcript is preserved, and reports how many queued
+  messages were cancelled with it.
 - Runtime capabilities determine model, permission, and effort controls without
   rewriting global CLI defaults. New sessions start in Auto, where the agent
-  decides when an action needs approval; Ask is an explicit per-session pick.
+  decides when an action needs approval. Ask, Plan, and Edit are explicit
+  per-session picks.
   A fresh Codex chat shows Default until its native thread reports the model it
   actually started with; the catalog's suggested default is not presented as
   live session state.
@@ -170,16 +166,18 @@ and uses a hosted service only as its metered model provider.
   Library from a folder Chat is explicit; empty results do not broaden the
   search automatically. Search scope mechanics live in
   [MCP Access](../../code-review/mcp-access.md).
-- The **Search by meaning** switch is live session policy, not Agent
-  permission mode. The renderer sends the effective value before any
-  ready-transition prompt and reapplies it when searching by meaning becomes
-  available or unavailable. Turning it Off leaves prepared PDF and document
-  text searchable and does not alter background indexing.
+- Whether a Chat may add meaning-based evidence to a lookup is live session
+  policy, not Agent permission mode. Leaving it off keeps prepared PDF and
+  document text searchable and never alters background indexing.
 - Agent Instructions are durable working-folder metadata, not a live turn
   control or a security boundary. Save failures remain visible, the folder
   requires live library membership, and changes reach matching open folder
-  Chats from their next message. Library-wide Chats resolve the packaged
-  default. The editor and its API expose only that user-visible text. Runtime
+  Chats from their next message. Exactly one scope applies to a Chat and
+  scopes never combine. A Chat resolves that scope's saved text, or that
+  scope's own packaged default when it has none. Library scope has its own
+  packaged default, which
+  a Library-wide customization may replace. The editor and its API expose only
+  that user-visible text. Runtime
   Adapters preserve it exactly while composing a separate, non-user-visible
   product policy that prefers StashBase MCP for library orientation and
   prepared document reads. Product routing is never registered as if the user
@@ -217,8 +215,8 @@ and uses a hosted service only as its metered model provider.
   provider changes compatible with existing desktop builds.
 - Folder-scope retirement never offers Retry or reconnects user work into a
   broader scope. In-flight tools and queued follow-ups become visibly
-  cancelled; the original Chat remains readable, and continuing begins in a
-  separate explicitly Library-scoped Chat.
+  cancelled, and the original Chat remains readable rather than presenting a
+  transport failure.
 - The selected permission mode governs which actions the runtime approves on
   its own. Every approval it surfaces — permission, deletion, command, network,
   or broader filesystem — is an explicit user decision; the panel never answers
@@ -250,7 +248,28 @@ and uses a hosted service only as its metered model provider.
 - [Agent Runtime](../../code-review/agent-runtime.md) owns native lifecycle.
 - [MCP Access](../../code-review/mcp-access.md) owns Agent file boundaries.
 
-## Known Gap — Wiki Agent Project Rebind
+## Known Gaps
+
+### No surface for a Library-scoped Chat
+
+Library scope is implemented end to end, with its own packaged Agent
+Instructions oriented toward locating work across folders and starting new
+projects. No window shows it. A window with no folder open shows the welcome
+screen instead of a Chat, and a folder window's Chats panel lists only that
+folder's conversations. So a Library-scoped conversation cannot be started or
+returned to, which leaves
+[J11](../user-journeys.md#j11-turn-a-conversation-into-a-project)'s entry
+state unreachable from the product and hides a blank Chat that has returned to
+Library scope after its folder was removed.
+
+### No control for meaning-based Agent retrieval
+
+The contract above treats a Chat's use of meaning-based evidence as live
+session policy the user owns. Nothing offers that choice. Every Chat keeps
+meaning-based retrieval on whenever a source is configured, so the only way to
+constrain a lookup to text matching is for the Agent to ask for it.
+
+### Wiki Agent project rebind
 
 An attributed Wiki Agent Library chat can create a project and move its
 live panel scope to that folder. OpenCode cannot yet move the same native

@@ -64,7 +64,7 @@ aliases, and a driven runtime pass owns representative composition.
 | [J10 Core loop](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work) | [Workspace](../design-docs/design/workspace.md), [Documents](../design-docs/design/documents.md), [Preparation](../design-docs/design/preparation.md), [Search](../design-docs/design/search.md), [Agent Panel](../design-docs/design/agent-panel.md) | [Renderer Workspace](renderer-workspace.md), [Data Lifecycle](data-lifecycle.md), [Agent Runtime](agent-runtime.md), [Agent Panel](agent-panel.md), [MCP Access](mcp-access.md), [File Transactions](file-transactions.md), [Markdown Rendering](markdown-rendering.md) |
 | [J11 Conversation to project](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project) | [Workspace](../design-docs/design/workspace.md), [Agent Panel](../design-docs/design/agent-panel.md) | [Renderer Workspace](renderer-workspace.md), [Settings and Config](settings-config.md), [MCP Access](mcp-access.md), [Agent Runtime](agent-runtime.md), [Agent Panel](agent-panel.md), [File Transactions](file-transactions.md), [Data Lifecycle](data-lifecycle.md) |
 | [J12 Build Wiki Pages](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder) | [Agent Panel](../design-docs/design/agent-panel.md), [Search](../design-docs/design/search.md), [Workspace](../design-docs/design/workspace.md) | [Agent Panel](agent-panel.md), [Settings and Config](settings-config.md), [Renderer Workspace](renderer-workspace.md), [File Transactions](file-transactions.md), [Data Lifecycle](data-lifecycle.md) |
-| [J13 Gallery download](../design-docs/user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery) | [Agent Panel](../design-docs/design/agent-panel.md), [Workspace](../design-docs/design/workspace.md) | [Agent Panel](agent-panel.md) |
+| [J13 Gallery download](../design-docs/user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery) | [Agent Panel](../design-docs/design/agent-panel.md), [Workspace](../design-docs/design/workspace.md) | [Gallery](gallery.md), [Agent Panel](agent-panel.md) |
 
 ## J01: Onboarding
 
@@ -89,11 +89,14 @@ aliases, and a driven runtime pass owns representative composition.
   answer however many times the reader clicks, and the refusal to offer before
   the stored answer has loaded; and a route test proving an unknown or
   malformed preference is refused rather than written into durable config.
-  The visual suite reference above is historical: pixel baselines retired with
-  the Playwright journeys.
-  The Settings smoke drives the development-only update simulator through the
-  production update-state bridge to verify available and ready update-banner
-  behavior without claiming a packaged installation.
+  The update surface is proven at three layers: a wire contract that refuses a
+  snapshot carrying a field its phase does not allow; an Electron boundary
+  suite covering an authorized call, a foreign sender, a window without the
+  capability, a state the projection cannot describe, and the
+  development-only simulator having no handler in a packaged build; and
+  renderer suites over the phase table, the adapter's validation, both view
+  models, and the notice by role and label. The boundary smoke asserts the
+  preload's frozen updates key list.
 - **Driven Runtime Pass:** none recorded. Journey automation retired with
   the Playwright suites; this journey has no end-to-end proof until one is
   driven and recorded.
@@ -108,7 +111,10 @@ aliases, and a driven runtime pass owns representative composition.
   the source/derived/hosted distinction, authorizes useful content, reaches a
   concrete first result, and returns without unnecessary onboarding replay.
   The first local-model download and selection path is also lower-layer and
-  packaged-release evidence rather than a complete driven runtime pass.
+  packaged-release evidence rather than a complete driven runtime pass. No driven
+  pass reaches any update phase beyond `unsupported`, because an unpackaged
+  build reports exactly that; the phases a reader would act on are proven by
+  the simulator through the real bridge or by a packaged release.
 
 ## J02: Folder
 
@@ -116,7 +122,8 @@ aliases, and a driven runtime pass owns representative composition.
 
 - **Contract Test:** workspace transitions, library mutation, cleanup, GitHub
   repository import (`server/__tests__/github-import.test.ts`,
-  `web-src/src/features/workspace/__tests__/import-github-modal.test.ts`), and
+  `renderer/src/features/workspace/infrastructure/github-import-api.test.ts`,
+  `renderer/src/features/workspace/hooks/use-github-import.test.ts`), and
   window retirement run through `pnpm test:renderer`,
   `pnpm test:library-files`, and `pnpm test:electron`.
 - **Driven Runtime Pass:** none recorded. Journey automation retired with
@@ -142,13 +149,20 @@ aliases, and a driven runtime pass owns representative composition.
   default and show-hidden listings, protected VCS/derived paths, bounded
   hidden excluded rows, sync/async parity, and large-scan yielding;
   `pnpm test:config` locks default-off recovery, strict failure, and durable
-  hidden-files persistence; renderer `hidden-entries.test.ts`,
-  `hidden-files-menu.test.ts`, `hidden-visibility-actions.test.ts`, and
-  `file-listing-generation.test.ts` lock row marking, checked semantics,
-  rapid/failing writes, and stale continuation ownership.
-- **Driven Runtime Pass:** none recorded. Journey automation retired with
-  the Playwright suites; this journey has no end-to-end proof until one is
-  driven and recorded.
+  hidden-files persistence. On the renderer side
+  `renderer/src/features/workspace/hooks/use-hidden-files.test.ts` locks the
+  echoed state through rapid and failing writes,
+  `renderer/src/features/workspace/ui/file-tree-menu.test.tsx` locks the
+  toggle's checked semantics in the tree's own context menu, and
+  `renderer/src/features/workspace/infrastructure/files-api.test.ts` locks row
+  marking and stale continuation ownership.
+- **Driven Runtime Pass:** crash recovery is driven through the real
+  application with a stand-in keyring, covering a crash, the relaunch, the
+  offer of the surviving draft, the restore into a dirty editor, its autosave
+  through the ordinary versioned save, and the journal clearing afterward. The
+  rest of the journey has no driven pass: reading, editing, saving, navigating
+  under the save barrier, and external-write conflict resolution are proven by
+  the contract tests above and not yet by driving the built application.
 - **AI Eval:** not required.
 - **Release Check:** complex packaged PDF, DOCX, and media behavior remains
   release evidence.
@@ -295,9 +309,10 @@ aliases, and a driven runtime pass owns representative composition.
   [redaction](../electron/bug-report-redaction.test.cjs), and
   [handoff](../electron/bug-report-handoff.test.cjs) prove the app-owned draft,
   privacy, approval, and artifact boundaries.
-- **Driven Runtime Pass:** none recorded. Journey automation retired with
-  the Playwright suites; this journey has no end-to-end proof until one is
-  driven and recorded.
+- **Driven Runtime Pass:** the review window is driven through the real
+  application, opened from the shell and taken through prepare, back, and
+  cancel. Capture, the Downloads copy, and the browser handoff are not driven;
+  they remain the release evidence below.
 - **AI Eval:** not required.
 - **Release Check:** packaged capture, review, Downloads copy, and browser
   handoff remain release evidence.
@@ -328,8 +343,12 @@ aliases, and a driven runtime pass owns representative composition.
   attribution, history override ordering, and rebind-race rollback.
   [MCP transport tests](../server/__tests__/mcp-http-transport.test.ts) prove
   attributed built-in calls and unattributed external calls remain distinct.
-  [renderer scope tests](../web-src/src/features/agent-panel/__tests__/agent-folder-pill.test.ts)
-  prove the Library-to-folder scope presentation.
+  [agent socket schema tests](../shared/protocols/websocket/agent-session.test.ts)
+  prove the `scope-changed` event's shape and the refusal of a contradictory
+  scope, and
+  [session context tests](../renderer/src/features/agent/application/session-runtime.context.test.ts)
+  prove the renderer applies a folder move to the live conversation and drops a
+  send whose context resolved after it.
 - **Driven Runtime Pass:** none recorded. Journey automation retired with
   the Playwright suites; this journey has no end-to-end proof until one is
   driven and recorded.
@@ -340,6 +359,14 @@ aliases, and a driven runtime pass owns representative composition.
 - **Release Check:** one packaged real-runtime conversation-to-project flow on
   each supported path family remains release evidence after deterministic E2E
   exists.
+- **Gap:** the journey's entry state cannot be reached from the product. Library
+  scope is implemented end to end, down to its own packaged instructions, but no
+  window shows a Library-scoped Chat: a window with no folder open renders the
+  welcome screen rather than a Chat, and a folder window's Chats panel filters
+  to that folder. So the conversation this journey starts from can be neither
+  started nor returned to, and no evidence below can stand in for that. The
+  owning gap is in
+  [Agent Panel](../design-docs/design/agent-panel.md#no-surface-for-a-library-scoped-chat).
 - **Gap:** real-Agent intent/tool choice still needs an Eval. Codex
   configuration leaves `create_project` on the default prompt path, but no
   focused test locks that tool allowlist; Claude requires equivalent focused
@@ -390,18 +417,31 @@ aliases, and a driven runtime pass owns representative composition.
 
 **Status:** Partial.
 
-- **Contract Test:** renderer tests
-  ([gallery.test.ts](../web-src/src/features/templates/__tests__/gallery.test.ts))
-  cover the index contract: whole-parse-or-whole-fallback, session
-  caching, fallback-not-cached, and snapshot enrichment of unpublished
-  fields. [server/routes/gallery.test.ts](../server/routes/gallery.test.ts)
+- **Contract Test:** the index contract is proven at the wire
+  ([gallery.test.ts](../shared/protocols/http/gallery.test.ts)):
+  whole-parse-or-whole-fallback, additive stripping, refusal of an entry
+  missing a required field, and refusal of an index past its bound. Renderer
+  tests cover the adapter's fallback and screenshot proxying
+  ([gallery-api.test.ts](../renderer/src/features/gallery/infrastructure/gallery-api.test.ts)),
+  snapshot enrichment of unpublished fields
+  ([entry.test.ts](../renderer/src/features/gallery/domain/entry.test.ts)), the
+  session-lived index and the one-at-a-time copy latch
+  ([use-gallery.test.tsx](../renderer/src/features/gallery/hooks/use-gallery.test.tsx),
+  [use-gallery-copy.test.ts](../renderer/src/features/gallery/hooks/use-gallery-copy.test.ts)),
+  and that both entrances write one shop
+  ([gallery-shop.test.tsx](../renderer/src/app/composition/gallery/gallery-shop.test.tsx)). [server/routes/gallery.test.ts](../server/routes/gallery.test.ts)
   covers the daemon proxy: upstream proxying with cache, the offline
   unsupported-schema envelope, and the image route refusing non-gallery
   hosts. [github-import tests](../server/__tests__/github-import.test.ts)
   cover the shared acquisition path.
-- **Driven Runtime Pass:** none recorded. Journey automation retired with
-  the Playwright suites; this journey has no end-to-end proof until one is
-  driven and recorded.
+- **Driven Runtime Pass:** the browse and inspect halves are driven through the
+  real application on a clean profile. With no folder open and no click, the
+  shelf derives on the welcome screen a bare window shows, from the bundled
+  snapshot, with no account and no Agent runtime present. Clicking a card opens
+  that entry's page carrying its file tree and the request that produced the
+  wiki. **Make a copy** is not pressed in this pass: it downloads a real public
+  repository and registers a real Library folder, so it stays release evidence
+  below.
 - **AI Eval:** none needed — the journey is deterministic acquisition and
   presentation; no model produces its content.
 - **Release Check:** a packaged build should download one real entry

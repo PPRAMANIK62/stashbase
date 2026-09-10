@@ -88,10 +88,10 @@ retrieval as one first-class RAG layer instead of relying on exact terms alone.
 StashBase should strongly recommend setting up search by meaning because
 document libraries often need meaning-based retrieval, while keeping keyword
 search as a supported local state.
-Launch into an empty Library remains quiet. The first activated folder offers
-setup once; completing it or choosing **Not now** prevents automatic replays
-across folders and relaunches. The **By meaning** search mode, the persistent
-setup action, and Settings remain deliberate routes back.
+Launch into an empty Library remains quiet. The first folder to resolve offers
+setup once, as a notice rather than a gate; answering it either way prevents
+automatic replays across folders and relaunches. Because nothing prompts a
+second time, a deliberate route back into setup has to stay discoverable.
 Activating search by meaning automatically prepares Library folders and keeps
 eligible files synchronized; Build Wiki remains an independent visible-file
 action.

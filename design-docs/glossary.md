@@ -23,9 +23,10 @@ Codex; it is not itself synonymous with any runtime.
 ## Agent Instructions
 
 The user-visible, editable guidance StashBase stores for Chat. A plain-language
-packaged default applies to every Chat. A concrete working folder may customize
-it in application metadata; Library-wide Chats use the packaged default and
-have no Library-wide customization. Runtime Adapters preserve this text while
+packaged default applies to every Chat. Each scope has its own default and its
+own optional customization in application metadata: a concrete working folder,
+or the Library as a whole. Exactly one scope applies to a Chat, and scopes
+never combine. Runtime Adapters preserve this text while
 composing a separate internal Agent runtime policy that is not exposed in the
 editor. Saving remounts matching folder Chats so the new composition applies
 from their next message. It is guidance, not a security boundary.
@@ -64,8 +65,8 @@ Hosted usage draws on the signed-in account's included monthly **credits**
 **allowance** for the Wiki Agent's seven-day quota; the two quotas never
 share a noun, so neither surface can be mistaken for the other.
 
-A Chat's **Search by meaning** control decides whether that Chat uses the
-capability. Turning it off keeps retrieval text-only; it does not pause or
+Whether a Chat may add meaning-based evidence is that Chat's own retrieval
+policy. Without it, retrieval stays text-only; it does not pause or
 delete background search data. Describe background work as preparing or
 updating files for search by meaning. Use `semantic indexing`, `semantic
 retrieval`, `vector`, and `embedding` only in engineering contracts or a
@@ -90,13 +91,14 @@ Use **Build Wiki** for the explicit folder-scoped request that asks an
 Agent to create or improve these pages from Sources. The request never grants
 permission to move, rename, delete, or broadly rewrite Sources.
 
-Use **Gallery** for the curated shop of ready-made Wikis — real folders
-with a wiki built from them, each downloadable as a copy that opens in its
-own window. A bare window's blank Chat derives the Gallery band below its
-composer; the sidebar's Gallery row raises it as an overlay inside a
-folder window. An entry's detail page shows what is inside the copy and
-the request that built it (**Copy prompt** is its one prompt affordance —
-the Gallery never places or sends composer text).
+Use **Gallery** for the curated shop of ready-made Wikis. Every entry is a
+real folder with a wiki built from it, downloadable as a copy that opens in
+its own window. The welcome screen a window with no folder open shows
+carries the Gallery band under its folder choices; the sidebar's Gallery row
+raises the same shop as an overlay inside a folder window. An entry's detail
+page shows what is inside the copy and the request that built it. **Copy
+prompt** is its one prompt affordance, and the Gallery never places or sends
+composer text.
 
 ## Canvas
 

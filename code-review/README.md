@@ -55,9 +55,8 @@ Use this route to accept a journey, feature slice, or release claim:
    not reduce the journey to its happy path or title.
 2. Open [Journey Coverage](journey-coverage.md) and verify that its Area and
    Contract route matches the behavior being accepted.
-3. For each Required result, identify the appropriate Contract Test, Journey
-   E2E, AI Eval, or Release Check. One evidence type does not substitute for
-   another.
+3. For each Required result, identify the evidence type Journey Coverage
+   assigns to it. One evidence type does not substitute for another.
 4. Follow the owning contract's validation entry points and read the exact test
    setup and assertions. A suite command, passing count, or `Jxx` label is not
    proof by itself.
@@ -65,9 +64,9 @@ Use this route to accept a journey, feature slice, or release claim:
    Partial, Release-dependent, or Gap. Record missing or contradictory evidence
    instead of inferring it from adjacent tests.
 
-This route checks whether the product promise is implemented and proven. It
-does not require one large E2E test when focused evidence at several Seams is
-more decisive.
+This route checks whether the product promise is implemented and proven.
+Focused evidence at several Seams is usually more decisive than one wide test,
+and it is never a reason to skip the journey's Required results.
 
 ## Diff-first Review
 
@@ -96,7 +95,12 @@ Useful local searches:
 ```bash
 rg -F "server/file-save.ts" code-review
 rg -F "FilesystemPathModule" code-review
+rg -F "renderer/src/features/documents" code-review
 ```
+
+The renderer lives under `renderer/`. A changed file there usually belongs to
+Renderer Architecture for its layer placement and to the feature contract that
+owns its behavior, so expect two owners rather than one.
 
 If `rg` is unavailable, use an equivalent fixed-string repository search.
 
@@ -148,6 +152,7 @@ the contract-to-journey map.
 | Markdown parsing, assets, navigation, trust | [Markdown Rendering](markdown-rendering.md) |
 | App config, credentials, onboarding, appearance | [Settings and Config](settings-config.md) |
 | MCP tools, transports, credentials, scope | [MCP Access](mcp-access.md) |
+| Gallery index, copy, and outbound reach | [Gallery](gallery.md) |
 | CLI discovery, installation, native sessions, history | [Agent Runtime](agent-runtime.md) |
 | Chat renderer, transcript, composer, permissions | [Agent Panel](agent-panel.md) |
 | Renderer module boundaries and layer promotion | [Renderer Architecture](renderer-architecture.md) |
@@ -229,9 +234,9 @@ route, or internal test Seam does not by itself justify another contract.
   documents summarize their local routes; this map resolves ambiguity.
 - A journey ID describes product coverage; a test path and assertion describe
   implementation coverage. Do not substitute one for the other.
-- Journey Coverage distinguishes Contract Tests, Journey E2E, AI Evals, and
-  Release Checks. Do not describe deterministic mechanics as proof of
-  probabilistic retrieval or Agent quality.
+- Journey Coverage owns the evidence vocabulary and the distinctions between
+  its types. Do not describe deterministic mechanics as proof of probabilistic
+  retrieval or Agent quality.
 - Add a regression at the lowest useful layer, then promote only
-  release-blocking cross-feature behavior into E2E smoke.
+  release-blocking cross-process behavior into the Electron smoke.
 - Run `pnpm test:docs` when changing this documentation system.
