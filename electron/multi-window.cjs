@@ -187,7 +187,26 @@ function createWindowRegistry({ platform = process.platform } = {}) {
 
   return {
     add(windowId, win, folder = null) {
-      records.set(windowId, { win, folderKey: folderKey(folder, platform) });
+      const raw = typeof folder === 'string' ? folder.trim() : '';
+      records.set(windowId, {
+        win,
+        folderKey: folderKey(folder, platform),
+        // The spelling this window was created for, kept exactly as the caller
+        // wrote it. `folderKey` is for matching and lowercases on Windows;
+        // handing that to the renderer would reopen the folder under a rewritten
+        // name, which is the one thing an equivalent spelling may never do.
+        initialFolder: raw || null,
+      });
+    },
+    /** The folder this window was created for, answered at most once. The
+     *  registry forgets it as it answers: a window that reloads keeps its
+     *  identity and the server still holds its current folder, so a value that
+     *  lingered here would fight a folder the reader has since moved to. */
+    claimInitialFolder(windowId) {
+      const record = records.get(windowId);
+      const folder = record?.initialFolder ?? null;
+      if (record) record.initialFolder = null;
+      return folder;
     },
     remove(windowId) {
       records.delete(windowId);

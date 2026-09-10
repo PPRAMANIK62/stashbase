@@ -43,6 +43,13 @@ export interface WorkspaceSessionPort {
 }
 
 export interface LibraryLifecyclePort {
+  /** The folder the desktop created this window to show, in the desktop's own
+   *  spelling, or null when nobody named one. Idempotent for the life of this
+   *  renderer: the transport answers once and the desktop then forgets, so the
+   *  adapter holds the answer and every later caller reads the same one.
+   *  Signal-free on purpose — a cancelled claim would lose the folder for
+   *  good, since there is no second copy left to ask for. */
+  claimInitialFolder(): Promise<string | null>;
   notifyFolderRemoved(folderPath: string): Promise<void>;
   onFolderRemoved(handler: (folderPath: string) => void): () => void;
   onPrepareFolderRemoval(handler: (folderPath: string) => boolean | Promise<boolean>): () => void;

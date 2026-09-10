@@ -70,6 +70,7 @@ function WorkspaceWindow() {
   const session = useWorkspaceSession(
     workspaceDeps.adapters.library,
     workspaceDeps.adapters.session,
+    workspaceDeps.adapters.lifecycle,
   );
   const library = useLibrary(workspaceDeps.adapters.library).data ?? null;
   const workspace = useWorkspace(workspaceDeps.adapters.library, session);

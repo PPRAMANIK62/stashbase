@@ -29,6 +29,9 @@ function windowFixture(id, url = 'app://renderer/') {
 function harness() {
   const handlers = new Map();
   const opened = [];
+  // What main was created for, one claim each. `second` is a window nobody
+  // named a folder for.
+  const initialFolders = new Map();
   const first = windowFixture(11);
   const second = windowFixture(12);
   const windows = [first, second];
@@ -38,6 +41,11 @@ function harness() {
       fromWebContents: (webContents) => (
         windows.find((candidate) => candidate.webContents === webContents)?.window ?? null
       ),
+    },
+    claimInitialFolder: (window) => {
+      const folder = initialFolders.get(window) ?? null;
+      initialFolders.delete(window);
+      return folder;
     },
     expectedOrigins: new Set(['app://renderer']),
     hasCapability: (_window, capability) => capability === LIBRARY_LIFECYCLE_CAPABILITY,
@@ -61,7 +69,8 @@ function harness() {
     senderFrame: fixture.frame,
   });
   registerLifecycle(dependencies);
-  return { eventFor, first, folders, handlers, opened, second };
+  initialFolders.set(first.window, '/workspace/Notes');
+  return { eventFor, first, folders, handlers, initialFolders, opened, second };
 }
 
 test('folder removal coordinator rejects stale acknowledgements and settles current work', async () => {
@@ -187,4 +196,42 @@ test('opening a window refuses an untrusted sender and a malformed request', asy
   });
   // Neither reached main.
   assert.deepEqual(setup.opened, []);
+});
+
+test('claiming an initial folder answers the creating folder once and none thereafter', async () => {
+  const setup = harness();
+  const handler = setup.handlers.get('library:claim-initial-folder');
+
+  // The spelling main was created for crosses unchanged; matching main's own
+  // lowercased key here would reopen the folder under a rewritten name.
+  assert.deepEqual(await handler(setup.eventFor(setup.first)), {
+    folderPath: '/workspace/Notes',
+    ok: true,
+  });
+
+  // Spent. A window that reloads re-reads its folder from the server instead.
+  assert.deepEqual(await handler(setup.eventFor(setup.first)), { folderPath: null, ok: true });
+
+  // A window nobody named a folder for answers none, which is a success.
+  assert.deepEqual(await handler(setup.eventFor(setup.second)), { folderPath: null, ok: true });
+});
+
+test('claiming an initial folder refuses an untrusted sender and an unowned payload', async () => {
+  const setup = harness();
+  const handler = setup.handlers.get('library:claim-initial-folder');
+
+  setup.first.frame.url = 'https://example.com/';
+  assert.deepEqual(await handler(setup.eventFor(setup.first)), {
+    failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
+    ok: false,
+  });
+  // Refused before the claim was spent, so the real window can still make it.
+  assert.equal(setup.initialFolders.get(setup.first.window), '/workspace/Notes');
+
+  // The channel carries nothing: the sender main authorized is the window
+  // being answered, so a payload is a caller this build never shipped.
+  assert.deepEqual(await handler(setup.eventFor(setup.second), { folderPath: '/etc' }), {
+    failure: { kind: 'invalid-response', message: 'The initial folder request was invalid.' },
+    ok: false,
+  });
 });

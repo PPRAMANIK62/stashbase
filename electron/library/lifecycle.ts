@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 
 import {
+  LIBRARY_CLAIM_INITIAL_FOLDER_CHANNEL,
   LIBRARY_FOLDER_REMOVAL_READY_CHANNEL,
   LIBRARY_FOLDER_REMOVAL_REQUESTED_CHANNEL,
   LIBRARY_FOLDER_REMOVED_CHANNEL,
@@ -13,6 +14,8 @@ import {
   type LibraryFolderDialogFailure,
   libraryFolderPathRequestSchema,
   libraryFolderRemovalReadySchema,
+  libraryInitialFolderRequestSchema,
+  libraryInitialFolderSuccessSchema,
   libraryLifecycleResponseSchema,
   libraryOpenFolderWindowResponseSchema,
   libraryPrepareFolderRemovalResponseSchema,
@@ -31,6 +34,10 @@ interface WindowWebContents {
 type LifecycleWindow = BrowserWindow & { webContents: WindowWebContents };
 
 export interface LifecycleDependencies extends SenderAuthorization {
+  /** The folder this window was created for, and never twice: main hands it
+   *  over and forgets it. A window nobody named a folder for answers null,
+   *  which is an ordinary answer rather than a failure. */
+  claimInitialFolder(window: BrowserWindow): string | null;
   ipcMain: Pick<IpcMain, 'handle'>;
   liveWindows(): LifecycleWindow[];
   /** Shows a member in a window of its own, or focuses the one already
@@ -151,6 +158,20 @@ export function registerLifecycle(dependencies: LifecycleDependencies): void {
     const action = await dependencies.openFolderWindow(senderWindow, request.data.folderPath);
     if (!action) return failure('unavailable', 'That folder could not be opened in a window.');
     return libraryOpenFolderWindowResponseSchema.parse({ action, ok: true });
+  });
+
+  dependencies.ipcMain.handle(LIBRARY_CLAIM_INITIAL_FOLDER_CHANNEL, (event, rawRequest) => {
+    const senderWindow = authorizeSender(event, dependencies, LIBRARY_LIFECYCLE_CAPABILITY);
+    if (!senderWindow) {
+      return failure('unauthorized', 'This window cannot claim an initial folder.');
+    }
+    if (!libraryInitialFolderRequestSchema.safeParse(rawRequest).success) {
+      return failure('invalid-response', 'The initial folder request was invalid.');
+    }
+    return libraryInitialFolderSuccessSchema.parse({
+      folderPath: dependencies.claimInitialFolder(senderWindow),
+      ok: true,
+    });
   });
 
   dependencies.ipcMain.handle(LIBRARY_PREPARE_FOLDER_REMOVAL_CHANNEL, async (event, rawRequest) => {

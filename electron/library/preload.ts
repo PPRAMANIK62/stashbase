@@ -1,4 +1,5 @@
 import {
+  LIBRARY_CLAIM_INITIAL_FOLDER_CHANNEL,
   LIBRARY_FOLDER_DIALOG_CHANNEL,
   LIBRARY_FOLDER_REMOVAL_READY_CHANNEL,
   LIBRARY_FOLDER_REMOVAL_REQUESTED_CHANNEL,
@@ -10,6 +11,7 @@ import {
   type LibraryFolderDialogFailure,
   type LibraryFolderDialogRequest,
   type LibraryFolderDialogResponse,
+  type LibraryInitialFolderResponse,
   type LibraryLifecycleResponse,
   type LibraryOpenFolderWindowResponse,
   type LibraryPrepareFolderRemovalResponse,
@@ -18,6 +20,7 @@ import {
   libraryFolderDialogResponseSchema,
   libraryFolderRemovalReadySchema,
   libraryFolderRemovalRequestedSchema,
+  libraryInitialFolderResponseSchema,
   libraryLifecycleResponseSchema,
   libraryOpenFolderWindowResponseSchema,
   libraryPrepareFolderRemovalResponseSchema,
@@ -25,7 +28,7 @@ import {
 } from '../../shared/protocols/electron/library.ts';
 
 export interface IpcRenderer {
-  invoke(channel: string, payload: unknown): Promise<unknown>;
+  invoke(channel: string, payload?: unknown): Promise<unknown>;
   on(channel: string, listener: (event: unknown, payload: unknown) => void): void;
 }
 
@@ -33,6 +36,7 @@ export interface LibraryPreload {
   chooseFolder(
     request?: Partial<LibraryFolderDialogRequest>,
   ): Promise<LibraryFolderDialogResponse>;
+  claimInitialFolder(): Promise<LibraryInitialFolderResponse>;
   notifyFolderRemoved(folderPath: string): Promise<LibraryLifecycleResponse>;
   openFolderWindow(folderPath: string): Promise<LibraryOpenFolderWindowResponse>;
   onFolderRemoved(handler: (folderPath: string) => void): () => void;
@@ -132,6 +136,15 @@ export function createLibraryPreload(ipcRenderer: IpcRenderer): LibraryPreload {
       }
       const parsedResponse = libraryFolderDialogResponseSchema.safeParse(response);
       return parsedResponse.success ? parsedResponse.data : invalidResponse();
+    },
+    async claimInitialFolder() {
+      try {
+        const response = await ipcRenderer.invoke(LIBRARY_CLAIM_INITIAL_FOLDER_CHANNEL);
+        const parsed = libraryInitialFolderResponseSchema.safeParse(response);
+        return parsed.success ? parsed.data : invalidLifecycleResponse();
+      } catch {
+        return lifecycleUnavailable();
+      }
     },
     notifyFolderRemoved(folderPath: string) {
       return invokeLifecycle(

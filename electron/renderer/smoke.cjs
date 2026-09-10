@@ -143,7 +143,16 @@ app
       expectedOrigins: new Set([APP_ORIGIN]),
       isLiveWindow,
       hasCapability,
+      // This harness creates its window for no folder, which is why it expects
+      // the welcome screen below rather than a folder workspace.
+      claimInitialFolder: () => null,
       liveWindows: () => [...authorizedWindows].filter(isLiveWindow),
+      // Required by the service and never exercised here: this smoke proves
+      // the preload surface exists and is frozen, not that a second window
+      // opens. Present so the dependency is total rather than latently
+      // undefined, since a .cjs harness is not typechecked against the
+      // service's interface.
+      openFolderWindow: async () => 'opened',
       setActiveFolder: (window, folder) => {
         activeFolders.set(window, folder);
         return true;
@@ -304,9 +313,11 @@ app
       url: APP_URL,
       libraryKeys: [
         'chooseFolder',
+        'claimInitialFolder',
         'notifyFolderRemoved',
         'onFolderRemoved',
         'onPrepareFolderRemoval',
+        'openFolderWindow',
         'prepareFolderRemoval',
         'setActiveFolder',
       ],

@@ -112,6 +112,9 @@ export function libraryLifecycle(
   overrides: Partial<LibraryLifecyclePort> = {},
 ): LibraryLifecyclePort {
   return {
+    // No folder named for this window, so every test that does not care about
+    // the desktop's answer lands the way a plain relaunch does.
+    claimInitialFolder: vi.fn(async (): Promise<string | null> => null),
     notifyFolderRemoved: vi.fn(async () => undefined),
     onFolderRemoved: vi.fn(() => () => undefined),
     onPrepareFolderRemoval: vi.fn(() => () => undefined),

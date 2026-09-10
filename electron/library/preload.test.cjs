@@ -116,3 +116,50 @@ test('library preload validates the folder-window call and its answer', async ()
     ok: false,
   });
 });
+
+test('library preload claims the initial folder and refuses a rewritten answer', async () => {
+  const ipc = createIpc({ folderPath: '/workspace/Notes', ok: true });
+  const api = createLibraryPreload(ipc);
+
+  assert.deepEqual(await api.claimInitialFolder(), {
+    folderPath: '/workspace/Notes',
+    ok: true,
+  });
+  // The channel carries nothing: main answers the sender it authorized.
+  assert.deepEqual(ipc.invocations.at(-1), ['library:claim-initial-folder', undefined]);
+
+  // No folder is an ordinary answer a caller reads without sorting a failure.
+  const none = createLibraryPreload(createIpc({ folderPath: null, ok: true }));
+  assert.deepEqual(await none.claimInitialFolder(), { folderPath: null, ok: true });
+
+  // Main's refusal of a sender it would not authorize reaches the renderer as
+  // that refusal, not as a window with no folder.
+  const denied = createLibraryPreload(createIpc({
+    failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
+    ok: false,
+  }));
+  assert.deepEqual(await denied.claimInitialFolder(), {
+    failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
+    ok: false,
+  });
+
+  // A shape this build does not understand and a bridge that threw both read
+  // as a refusal rather than as a window that was named no folder.
+  const malformed = createLibraryPreload(createIpc({ folderPath: 42, ok: true }));
+  assert.deepEqual(await malformed.claimInitialFolder(), {
+    failure: {
+      kind: 'invalid-response',
+      message: 'The folder lifecycle returned an invalid response.',
+    },
+    ok: false,
+  });
+  const extra = createLibraryPreload(
+    createIpc({ folderPath: '/workspace/Notes', ok: true, restored: true }),
+  );
+  assert.equal((await extra.claimInitialFolder()).ok, false);
+  const broken = createLibraryPreload(createIpc(new Error('no bridge')));
+  assert.deepEqual(await broken.claimInitialFolder(), {
+    failure: { kind: 'unavailable', message: 'The folder lifecycle is unavailable.' },
+    ok: false,
+  });
+});

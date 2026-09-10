@@ -322,6 +322,10 @@ function installReplacementBoundary() {
     hasCapability: (win, capability) => (
       replacementWindowCapabilities.get(win)?.has(capability) === true
     ),
+    claimInitialFolder: (win) => {
+      const windowId = windowRegistry.idForWindow(win);
+      return windowId ? windowRegistry.claimInitialFolder(windowId) : null;
+    },
     liveWindows: () => [...mainWindows].filter((win) => isLiveMainWindow(win)),
     // A folder already showing somewhere is focused rather than opened twice,
     // which is the same rule the File menu and the protocol launch follow.

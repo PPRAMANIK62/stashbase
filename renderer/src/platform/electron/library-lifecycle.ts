@@ -1,10 +1,12 @@
 import type {
+  LibraryInitialFolderResponse,
   LibraryLifecycleResponse,
   LibraryOpenFolderWindowResponse,
   LibraryPrepareFolderRemovalResponse,
 } from '@/protocols/electron/library';
 
 export interface LibraryLifecycleBridge {
+  claimInitialFolder(): Promise<LibraryInitialFolderResponse>;
   notifyFolderRemoved(folderPath: string): Promise<LibraryLifecycleResponse>;
   onFolderRemoved(handler: (folderPath: string) => void): () => void;
   onPrepareFolderRemoval(handler: (folderPath: string) => boolean | Promise<boolean>): () => void;
@@ -23,4 +25,17 @@ export async function openedFolderWindow(
   if (!bridge) return false;
   const response = await bridge.openFolderWindow(folderPath);
   return response.ok;
+}
+
+/** The folder this window was created for, claimed once. Null means this
+ *  window lands wherever it would have landed anyway: nobody named a folder
+ *  for it, there is no desktop to ask, or the desktop refused. The reader's
+ *  next move is the same in all three, so they are one answer rather than a
+ *  refusal every caller would have to remember to sort. */
+export async function claimedInitialFolder(
+  bridge: Pick<LibraryLifecycleBridge, 'claimInitialFolder'> | null,
+): Promise<string | null> {
+  if (!bridge) return null;
+  const response = await bridge.claimInitialFolder();
+  return response.ok ? response.folderPath : null;
 }

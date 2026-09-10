@@ -6,6 +6,7 @@ import {
   libraryFolderDialogResponseSchema,
   libraryFolderRemovalReadySchema,
   libraryFolderRemovalRequestedSchema,
+  libraryInitialFolderResponseSchema,
   libraryLifecycleResponseSchema,
   libraryPrepareFolderRemovalResponseSchema,
   librarySetActiveFolderRequestSchema,
@@ -88,6 +89,47 @@ test('library lifecycle protocol validates folder identity and correlated releas
       folderPath: '/workspace/notes',
       ready: true,
       requestId: '',
+    }).success,
+    false,
+  );
+});
+
+test('initial folder protocol answers a folder, answers none, and refuses a rewritten answer', () => {
+  assert.deepEqual(
+    libraryInitialFolderResponseSchema.parse({ folderPath: '/workspace/notes', ok: true }),
+    { folderPath: '/workspace/notes', ok: true },
+  );
+  // No folder is the ordinary answer for a window nobody named one for, so it
+  // parses as a success rather than arriving as a failure a caller must sort.
+  assert.deepEqual(libraryInitialFolderResponseSchema.parse({ folderPath: null, ok: true }), {
+    folderPath: null,
+    ok: true,
+  });
+  assert.deepEqual(
+    libraryInitialFolderResponseSchema.parse({
+      failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
+      ok: false,
+    }),
+    {
+      failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
+      ok: false,
+    },
+  );
+  assert.equal(
+    libraryInitialFolderResponseSchema.safeParse({ folderPath: 42, ok: true }).success,
+    false,
+  );
+  assert.equal(
+    libraryInitialFolderResponseSchema.safeParse({ folderPath: '', ok: true }).success,
+    false,
+  );
+  // Strict, unlike the folder dialog: main and the preload ship together, so
+  // an unowned field is this build disagreeing with itself.
+  assert.equal(
+    libraryInitialFolderResponseSchema.safeParse({
+      folderPath: '/workspace/notes',
+      ok: true,
+      restored: true,
     }).success,
     false,
   );

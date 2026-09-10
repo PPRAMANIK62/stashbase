@@ -5,6 +5,7 @@ export const LIBRARY_FOLDER_DIALOG_CHANNEL = 'library:choose-folder';
 export const LIBRARY_LIFECYCLE_CAPABILITY = 'library.lifecycle';
 export const LIBRARY_SET_ACTIVE_FOLDER_CHANNEL = 'library:set-active-folder';
 export const LIBRARY_OPEN_FOLDER_WINDOW_CHANNEL = 'library:open-folder-window';
+export const LIBRARY_CLAIM_INITIAL_FOLDER_CHANNEL = 'library:claim-initial-folder';
 export const LIBRARY_PREPARE_FOLDER_REMOVAL_CHANNEL = 'library:prepare-folder-removal';
 export const LIBRARY_FOLDER_REMOVAL_REQUESTED_CHANNEL = 'library:folder-removal-requested';
 export const LIBRARY_FOLDER_REMOVAL_READY_CHANNEL = 'library:folder-removal-ready';
@@ -70,8 +71,27 @@ export const libraryOpenFolderWindowSuccessSchema = z
   .object({ ok: z.literal(true), action: z.enum(['opened', 'focused']) })
   .strict();
 
+/** Claiming carries nothing: the window asking is the window being answered,
+ *  and main reads its identity from the sender it already authorized. Stated
+ *  here so both sides refuse a payload rather than one side ignoring it. */
+export const libraryInitialFolderRequestSchema = z.undefined();
+
+/** The folder main created this window for, answered at most once: main
+ *  forgets it as the claim is made, so a window that reloads does not land
+ *  again on a folder its reader has since left. `null` is the ordinary answer
+ *  for a window nobody named a folder for, not a failure to report. Strict,
+ *  like every other answer main and this preload ship together. */
+export const libraryInitialFolderSuccessSchema = z
+  .object({ folderPath: folderPathSchema.nullable(), ok: z.literal(true) })
+  .strict();
+
 export const libraryLifecycleResponseSchema = z.union([
   libraryLifecycleSuccessSchema,
+  libraryFolderDialogFailureSchema,
+]);
+
+export const libraryInitialFolderResponseSchema = z.union([
+  libraryInitialFolderSuccessSchema,
   libraryFolderDialogFailureSchema,
 ]);
 
@@ -102,3 +122,4 @@ export type LibraryPrepareFolderRemovalResponse = z.infer<
 export type LibraryOpenFolderWindowResponse = z.infer<
   typeof libraryOpenFolderWindowResponseSchema
 >;
+export type LibraryInitialFolderResponse = z.infer<typeof libraryInitialFolderResponseSchema>;

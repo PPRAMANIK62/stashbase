@@ -39,6 +39,7 @@ function lifecycleHarness() {
   let removedHandler: ((folderPath: string) => void) | undefined;
   let prepareHandler: ((folderPath: string) => boolean | Promise<boolean>) | undefined;
   const lifecycle: LibraryLifecyclePort = {
+    claimInitialFolder: vi.fn(async () => null),
     notifyFolderRemoved: vi.fn(async () => undefined),
     onFolderRemoved: vi.fn((handler) => {
       removedHandler = handler;

@@ -33,6 +33,9 @@ const {
   windowLifecycleShortcutAction,
   windowIdFromArgv,
 } = require('./multi-window.cjs');
+const { registerWindowLifecycle } = require('../dist/electron/window/lifecycle.cjs');
+const { createWindowLifecycleUpdateBarrier } = require('./update-window-barrier.cjs');
+const { createUpdateManager } = require('./update-manager.cjs');
 
 test('Linux main windows auto-hide the native application menu bar', () => {
   assert.equal(applicationWindowChromeOptions('linux').autoHideMenuBar, true);
@@ -529,6 +532,29 @@ test('folder registry finds an existing context, excludes the sender, and retire
   assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes'), null);
 });
 
+test('window registry answers the initial folder spelling once, then forgets it', () => {
+  const registry = createWindowRegistry({ platform: 'win32' });
+  const created = { name: 'created-for-notes' };
+  const bare = { name: 'bare' };
+  registry.add('window-1', created, 'C:\\Users\\Ada\\Notes');
+  registry.add('window-2', bare);
+
+  // The match key lowercases on Windows and the claim does not: a window
+  // created for a folder must reopen it under its reader's own spelling.
+  assert.equal(registry.findByFolder('c:/users/ada/notes'), created);
+  assert.equal(registry.claimInitialFolder('window-1'), 'C:\\Users\\Ada\\Notes');
+
+  // One shot. The claim is spent, while the window stays matchable, so a
+  // reload cannot land again on a folder its reader has since left.
+  assert.equal(registry.claimInitialFolder('window-1'), null);
+  assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes'), created);
+
+  // A window nobody named a folder for, and a window that is already gone,
+  // both answer the same ordinary "no folder".
+  assert.equal(registry.claimInitialFolder('window-2'), null);
+  assert.equal(registry.claimInitialFolder('missing'), null);
+});
+
 test('window registry resolves main-owned request authorization records', () => {
   const registry = createWindowRegistry({ platform: 'linux' });
   const window = { webContents: { id: 41 } };
@@ -772,4 +798,163 @@ test('preload reads and bounds the main-process window identity', () => {
     windowIdFromArgv([`${WINDOW_ID_ARG_PREFIX}${'x'.repeat(200)}`]).length,
     128,
   );
+});
+
+function updateBarrierFixture({ installUpdate = () => {} } = {}) {
+  const sent = [];
+  const handlers = new Map();
+  const windowHandlers = new Map();
+  const webContentsHandlers = new Map();
+  const windows = new Set();
+  let blocked = 0;
+  let installs = 0;
+  let requests = 0;
+
+  function createWindow(id) {
+    const frame = { url: 'app://renderer/' };
+    const webContents = {
+      id,
+      isDestroyed: () => false,
+      mainFrame: frame,
+      on: (event, handler) => webContentsHandlers.set(`${id}:${event}`, handler),
+      send: (channel, payload) => sent.push({ id, channel, payload }),
+    };
+    const win = {
+      close: () => {},
+      isDestroyed: () => false,
+      on: (event, handler) => windowHandlers.set(`${id}:${event}`, handler),
+      webContents,
+    };
+    return { win, webContents, event: { sender: webContents, senderFrame: frame } };
+  }
+
+  const first = createWindow(71);
+  const second = createWindow(72);
+  const lifecycle = registerWindowLifecycle(
+    {
+      BrowserWindow: {
+        fromWebContents: (candidate) => (
+          [first, second].find((entry) => entry.webContents === candidate)?.win ?? null
+        ),
+      },
+      expectedOrigins: new Set(['app://renderer']),
+      hasCapability: () => true,
+      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+      isLiveWindow: (candidate) => windows.has(candidate),
+    },
+    { createRequestId: () => `release-${(requests += 1)}`, timeoutMs: 1_000 },
+  );
+
+  for (const entry of [first, second]) {
+    windows.add(entry.win);
+    lifecycle.attach(entry.win);
+    webContentsHandlers.get(`${entry.webContents.id}:did-finish-load`)();
+  }
+
+  const barrier = createWindowLifecycleUpdateBarrier({
+    lifecycle: () => lifecycle,
+    getWindows: () => windows,
+    isLiveWindow: (win) => windows.has(win) && !win.isDestroyed(),
+    onBlocked: () => {
+      blocked += 1;
+    },
+  });
+
+  const updater = new EventEmitter();
+  updater.downloadUpdate = async () => {
+    updater.emit('update-downloaded', { version: '2.1.0' });
+  };
+  updater.checkForUpdates = async () => {};
+  const manager = createUpdateManager({
+    updater,
+    currentVersion: '2.0.0',
+    isPackaged: true,
+    readAutoCheck: async () => true,
+    beforeInstall: barrier.prepare,
+    afterInstallFailure: barrier.revoke,
+    installUpdate: () => {
+      installs += 1;
+      installUpdate();
+    },
+    openReleasePage: async () => {},
+    setTimer: (fn, delay) => ({ fn, delay, unref() {} }),
+    clearTimer: () => {},
+  });
+
+  return {
+    answer: async (entry, ready) => {
+      const request = sent.find((message) => message.id === entry.webContents.id)?.payload;
+      await handlers.get('window:context-release-ready')(entry.event, { ...request, ready });
+    },
+    blocked: () => blocked,
+    close: (entry, closeEvent) => windowHandlers.get(`${entry.webContents.id}:close`)(closeEvent),
+    first,
+    installs: () => installs,
+    manager,
+    second,
+    sent,
+    updater,
+  };
+}
+
+test('one refused save cancels the update install and leaves every window unapproved', async () => {
+  const setup = updateBarrierFixture();
+  await setup.manager.start();
+  setup.updater.emit('update-available', { version: '2.1.0' });
+
+  const acting = setup.manager.primaryAction();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(setup.sent.map((message) => message.payload.reason), [
+    'update-install',
+    'update-install',
+  ]);
+
+  await setup.answer(setup.first, false);
+  await setup.answer(setup.second, true);
+  await acting;
+
+  assert.equal(setup.installs(), 0);
+  assert.equal(setup.manager.getState().phase, 'ready');
+  assert.equal(setup.blocked(), 1);
+
+  let prevented = 0;
+  setup.close(setup.second, {
+    preventDefault: () => {
+      prevented += 1;
+    },
+  });
+  assert.equal(prevented, 1);
+  assert.equal(setup.sent.length, 3);
+  assert.equal(setup.sent.at(-1).payload.reason, 'window-close');
+});
+
+test('an install that fails after every window approved stops pre-approving their closes', async () => {
+  const setup = updateBarrierFixture({
+    installUpdate: () => {
+      throw new Error('installer rejected');
+    },
+  });
+  await setup.manager.start();
+  setup.updater.emit('update-available', { version: '2.1.0' });
+
+  const acting = setup.manager.primaryAction();
+  await new Promise((resolve) => setImmediate(resolve));
+  await setup.answer(setup.first, true);
+  await setup.answer(setup.second, true);
+  await acting;
+
+  assert.equal(setup.installs(), 1);
+  assert.equal(setup.blocked(), 0);
+  assert.equal(setup.manager.getState().phase, 'error');
+  assert.match(setup.manager.getState().message, /installer rejected/);
+
+  let prevented = 0;
+  setup.close(setup.second, {
+    preventDefault: () => {
+      prevented += 1;
+    },
+  });
+  assert.equal(prevented, 1);
+  assert.equal(setup.sent.length, 3);
+  assert.equal(setup.sent.at(-1).payload.reason, 'window-close');
 });

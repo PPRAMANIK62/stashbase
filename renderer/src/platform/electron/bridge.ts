@@ -64,6 +64,7 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   ) {
     throw new Error('The library folder picker is unavailable.');
   }
+    typeof library.claimInitialFolder !== 'function' ||
   if (
     !workspaceSession ||
     typeof workspaceSession.read !== 'function' ||

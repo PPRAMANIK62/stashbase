@@ -10,6 +10,7 @@ const externalNavigation = {
 };
 const library = {
   chooseFolder: async () => ({ ok: true as const, folderPath: null }),
+  claimInitialFolder: async () => ({ folderPath: null, ok: true as const }),
   notifyFolderRemoved: async () => ({ ok: true as const }),
   onFolderRemoved: () => () => undefined,
   openFolderWindow: async () => ({ action: 'opened' as const, ok: true as const }),
