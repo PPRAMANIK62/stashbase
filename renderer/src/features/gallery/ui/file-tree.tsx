@@ -1,3 +1,6 @@
+/** The published file list of one Gallery entry, drawn as a collapsible tree.
+ *  The flat paths are folded into folders here rather than by the server, so
+ *  the shop can show a shape for any entry it can list. */
 import { ChevronRight, Folder } from 'lucide-react';
 import { useMemo, useState } from 'react';
 

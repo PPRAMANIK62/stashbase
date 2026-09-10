@@ -1,3 +1,5 @@
+/** The Workbench tree's context menu: what a right click offers on a row and
+ *  on the tree's own space, and the one action a restricted entry keeps. */
 import { ContextMenu } from '@base-ui/react/context-menu';
 import {
   Eye,

@@ -1,3 +1,5 @@
+/** One Gallery entry's page, and the section frame its spec sheet is built
+ *  from. The reasoning behind the order of the page sits on the component. */
 import { ArrowLeft, Check, Copy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -82,10 +84,10 @@ export function GalleryEntryPage({
       </div>
 
       {/* Wide, the text reads down one fixed column and the images take the
-        * rest, so the left edge stays put from one entry to the next. Narrow,
-        * the same blocks stack with the screenshot first — what a wiki looks
-        * like is the reason to want one, and it should not be below the fold.
-        * The screenshots come first in the source for exactly that. */}
+       * rest, so the left edge stays put from one entry to the next. Narrow,
+       * the same blocks stack with the screenshot first — what a wiki looks
+       * like is the reason to want one, and it should not be below the fold.
+       * The screenshots come first in the source for exactly that. */}
       <div
         className={cn(
           'grid min-h-0 flex-1 gap-8 overflow-y-auto',
@@ -93,8 +95,8 @@ export function GalleryEntryPage({
         )}
       >
         {/* `min-h-0` on both columns, or a grid item's automatic minimum
-          * keeps the row as tall as its content and a long build prompt walks
-          * straight out of the dialog. */}
+         * keeps the row as tall as its content and a long build prompt walks
+         * straight out of the dialog. */}
         <div className="min-h-0 min-w-0 @2xl:col-start-2 @2xl:row-start-1">
           <GalleryScreenshots name={entry.name} screenshots={entry.screenshots ?? []} />
         </div>
@@ -106,7 +108,7 @@ export function GalleryEntryPage({
                 {entry.name}
               </h3>
               {/* The same badge the card carried, so the shelf and the page
-                * agree about what this is. */}
+               * agree about what this is. */}
               <Badge color="gray" size="compact">
                 {entry.category}
               </Badge>
@@ -117,8 +119,8 @@ export function GalleryEntryPage({
           </div>
 
           {/* Both artifacts stand at once. Neither is long enough to be worth
-            * a click, and the request is what teaches a reader what to ask
-            * for on a folder of their own. */}
+           * a click, and the request is what teaches a reader what to ask
+           * for on a folder of their own. */}
           <Section label="What's inside">
             {contents.kind === 'files' ? (
               <GalleryFileTree paths={contents.files} />
@@ -130,8 +132,8 @@ export function GalleryEntryPage({
           </Section>
 
           {/* The prompt is the one thing here with no natural length, so it
-            * is the one thing that scrolls. Giving the column the scrollbar
-            * instead would hide the file tree and the label behind it. */}
+           * is the one thing that scrolls. Giving the column the scrollbar
+           * instead would hide the file tree and the label behind it. */}
           <Section className="min-h-0 flex-1" label="How it's built">
             <p
               className={cn(
@@ -161,8 +163,8 @@ export function GalleryEntryPage({
       </div>
 
       {/* The page's conclusion, on its own rule beneath everything that argues
-        * for it. No ellipsis: nothing further to answer — the copy lands in
-        * the folder home and opens itself. */}
+       * for it. No ellipsis: nothing further to answer — the copy lands in
+       * the folder home and opens itself. */}
       <div className="mt-4 flex shrink-0 items-center justify-between gap-4 border-t border-border pt-4">
         <p className="m-0 min-w-0 text-caption text-destructive" role="alert">
           {issue}

@@ -1,3 +1,6 @@
+/** Every capability the Workspace feature asks of the host, and the failure
+ *  ladders those requests come back on. Adapters implement these; nothing
+ *  named here knows which transport answers. */
 import type { LibraryFailureKind, LibrarySnapshot } from '@/features/workspace/domain/library';
 import type { WorkspaceSessionSnapshot } from '@/features/workspace/domain/session';
 import type { WorkspaceEntry, WorkspaceListing } from '@/features/workspace/domain/tree';

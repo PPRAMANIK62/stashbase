@@ -1,3 +1,6 @@
+/** Fake Agent ports and runtime definitions the Agent tests build on. The
+ *  shapes live in one place, so a port change lands here rather than in every
+ *  test that names it. */
 import { screen, waitFor } from '@testing-library/react';
 import { expect, vi } from 'vite-plus/test';
 
@@ -148,7 +151,6 @@ export function pendingAgentContextPort(): AgentContextPort {
     upload: vi.fn(async () => []),
   });
 }
-
 
 /** The Agent canvas paints before the catalog answers, so a test that assumes
  *  a runtime waits for the setup gate to lift rather than for the heading:
