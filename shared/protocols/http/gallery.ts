@@ -56,7 +56,12 @@ export const galleryEntrySchema = z
 export const galleryIndexSchema = z
   .object({
     schemaVersion: z.literal(GALLERY_SCHEMA_VERSION),
-    wikis: z.array(galleryEntrySchema),
+    /** Bounded for the same reason every array inside an entry is: this
+     *  document arrives from a host outside the machine, and a shelf is
+     *  browsed by a reader rather than paged. An index past this is a
+     *  publication mistake, and refusing it whole falls back to the bundled
+     *  snapshot, which is the same answer as any other unreadable index. */
+    wikis: z.array(galleryEntrySchema).max(500),
   })
   .strip();
 

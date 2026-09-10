@@ -48,3 +48,18 @@ test('refuses the whole index when one entry is unusable', () => {
   });
   assert.equal(index.success, false);
 });
+
+test('refuses an index longer than a shelf a reader browses', () => {
+  // The document comes from a host outside the machine, so the outer array is
+  // bounded like every array inside an entry. Refusing it whole falls back to
+  // the bundled snapshot.
+  const wikis = Array.from({ length: 501 }, (_unused, index) => ({
+    ...ENTRY,
+    id: `entry-${index}`,
+  }));
+  assert.equal(galleryIndexSchema.safeParse({ schemaVersion: 1, wikis }).success, false);
+  assert.equal(
+    galleryIndexSchema.safeParse({ schemaVersion: 1, wikis: wikis.slice(0, 500) }).success,
+    true,
+  );
+});
