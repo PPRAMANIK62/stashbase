@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
   [
-    'group relative isolate inline-flex cursor-pointer items-center justify-center outline-none',
+    'group relative isolate inline-flex cursor-pointer items-center justify-center whitespace-nowrap outline-none',
     'transition-colors duration-fast',
     'disabled:pointer-events-none disabled:opacity-50',
     FOCUS_RING,
