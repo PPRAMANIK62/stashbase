@@ -26,17 +26,22 @@ import { UninstallAgentDialog } from './uninstall-dialog';
 
 export interface AgentRuntimesPanelProps {
   agentRuntimeApi: AgentRuntimePort;
+  /** Opens the section that owns hosted account sign-in. */
+  onOpenAccount: () => void;
 }
 
-export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps) {
+export function AgentRuntimesPanel({ agentRuntimeApi, onOpenAccount }: AgentRuntimesPanelProps) {
   const runtimes = useAgentRuntimes(agentRuntimeApi);
   const [uninstallTarget, setUninstallTarget] = useState<AgentRuntime | null>(null);
 
   const onAction = (action: AgentRuntimeAction, runtime: AgentRuntime) => {
     if (action.kind === 'login') runtimes.login(runtime.id);
     else if (action.kind === 'install' || action.kind === 'retry') runtimes.install(runtime.id);
-    // 'account' has no in-app sign-in surface yet in this renderer; nothing
-    // to dispatch to until that Settings-owned account flow exists.
+    // A hosted account is one account, and the section that owns signing into
+    // it is Search by Meaning. Sending the reader there is not where this
+    // control belongs long term, but it is the route that exists, and a
+    // button that does nothing is worse than one that hands off.
+    else onOpenAccount();
   };
 
   const confirmUninstall = () => {

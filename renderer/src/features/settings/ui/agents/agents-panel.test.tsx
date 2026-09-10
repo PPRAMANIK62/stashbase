@@ -19,11 +19,24 @@ function uninstalled(runtime: AgentRuntime): AgentRuntime {
   return { ...runtime, installed: false, preparation: { kind: 'idle' } };
 }
 
+/** Recorded per render so a case can assert the hand-off happened. */
+let openedAccount = 0;
+
 function renderPanel(port: AgentRuntimePort) {
-  return withQueryClient(<AgentRuntimesPanel agentRuntimeApi={port} />);
+  return withQueryClient(
+    <AgentRuntimesPanel
+      agentRuntimeApi={port}
+      onOpenAccount={() => {
+        openedAccount += 1;
+      }}
+    />,
+  );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  openedAccount = 0;
+  cleanup();
+});
 
 const codex = agentRuntime({
   id: 'codex',
@@ -61,6 +74,33 @@ describe('AgentRuntimesPanel', () => {
     expect(detail.id).toBe(panelId);
     expect(detail.hidden).toBe(false);
     expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('hands a runtime that needs an account off to the section that owns sign-in', async () => {
+    // The button used to render and do nothing. Whether it is the right home
+    // for account identity is a separate question; a dead control is not.
+    const port = agentRuntimePort({
+      listAgents: vi.fn(async () => catalog([
+        agentRuntime({
+          id: 'stashbase',
+          installed: true,
+          label: 'Wiki Agent',
+          preparation: {
+            failure: {
+              note: 'An account is required to use Wiki Agent.',
+              refusal: 'account-required',
+              stage: 'install',
+            },
+            kind: 'failed',
+          },
+        }),
+      ])),
+    });
+    renderPanel(port);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in' }));
+    expect(openedAccount).toBe(1);
   });
 
   it('installs a not-yet-installed runtime and writes the response into the catalog', async () => {

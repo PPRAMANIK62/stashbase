@@ -54,7 +54,7 @@ function Harness() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={queryClient}>
-      <AgentRuntimesPanel agentRuntimeApi={fakePort()} />
+      <AgentRuntimesPanel agentRuntimeApi={fakePort()} onOpenAccount={() => undefined} />
     </QueryClientProvider>
   );
 }

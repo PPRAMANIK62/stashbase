@@ -54,7 +54,12 @@ export default function ManagedSettings({
       icon: Bot,
       id: 'agents',
       label: 'Agents',
-      render: () => <AgentRuntimesPanel agentRuntimeApi={agentRuntimeApi} />,
+      render: () => (
+        <AgentRuntimesPanel
+          agentRuntimeApi={agentRuntimeApi}
+          onOpenAccount={() => onSectionChange('ai-index')}
+        />
+      ),
     },
     embedderApi
       ? {
