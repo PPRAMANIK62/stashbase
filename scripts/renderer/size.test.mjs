@@ -17,7 +17,7 @@ function write(root, relativePath, lines) {
 
 function fixture(context) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-renderer-size-'));
-  context.after(() => fs.rmSync(root, { recursive: true }));
+  context.after(() => fs.rmSync(root, { recursive: true, maxRetries: 10, retryDelay: 100 }));
   fs.mkdirSync(path.join(root, 'renderer/src'), { recursive: true });
   return root;
 }

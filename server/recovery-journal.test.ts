@@ -32,7 +32,7 @@ function snapshot(overrides: Partial<RecoveryDraftSnapshot> = {}): RecoveryDraft
 
 function harness(t: test.TestContext, key: Buffer | null = KEY) {
   const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'recovery-journal-')), 'journal');
-  t.after(() => fs.rmSync(path.dirname(dir), { recursive: true, force: true }));
+  t.after(() => fs.rmSync(path.dirname(dir), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   let clock = START;
   const journal = createRecoveryJournal({ dir, key, now: () => clock });
   const files = () => (fs.existsSync(dir) ? fs.readdirSync(dir).sort() : []);

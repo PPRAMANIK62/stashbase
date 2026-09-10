@@ -24,7 +24,7 @@ function fakeSafeStorage({ available = true } = {}) {
 
 function harness(t, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'recovery-key-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const filePath = path.join(dir, 'nested', 'recovery-journal.key');
   const safeStorage = fakeSafeStorage(options);
   const warnings = [];

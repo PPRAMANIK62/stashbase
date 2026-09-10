@@ -45,7 +45,7 @@ function harness(overrides = {}) {
 
 test('workspace session store round-trips validated state and ignores corrupt versions', async (t) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'stashbase-session-'));
-  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  t.after(() => fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const filePath = path.join(directory, 'workspace-session.json');
   const store = createWorkspaceSessionStore({ filePath });
 

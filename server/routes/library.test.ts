@@ -19,7 +19,7 @@ const isolatedEnvNames = [
 
 test('a deliberately removed built-in folder stays out of library membership after restart', (t) => {
   const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-library-seed-'));
-  t.after(() => fs.rmSync(testHome, { force: true, recursive: true }));
+  t.after(() => fs.rmSync(testHome, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 }));
 
   const folderHome = path.join(testHome, 'Documents', 'StashBase');
   fs.mkdirSync(path.join(folderHome, '👋 Start Here'), { recursive: true });
@@ -78,7 +78,7 @@ test('library routes return authoritative membership and open the selected folde
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
     }
-    fs.rmSync(testHome, { force: true, recursive: true });
+    fs.rmSync(testHome, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   });
 
   process.env.HOME = testHome;
@@ -181,7 +181,7 @@ test('library routes return authoritative membership and open the selected folde
     method: 'POST',
   });
   assert.equal(openedMissing.status, 200);
-  fs.rmSync(missingFolder, { recursive: true });
+  fs.rmSync(missingFolder, { recursive: true, maxRetries: 10, retryDelay: 100 });
 
   const lost = await fetch(`${baseUrl}/api/library`, { headers });
   assert.equal(lost.status, 200);

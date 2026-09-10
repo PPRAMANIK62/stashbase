@@ -25,7 +25,7 @@ interface Harness {
 
 function harness(t: test.TestContext, key: Buffer | null = crypto.randomBytes(RECOVERY_JOURNAL_KEY_BYTES)): Promise<Harness> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'recovery-drafts-route-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const versions = new Map<string, string>();
   const deps: RecoveryDraftRouteDeps = {
     journal: createRecoveryJournal({ dir: path.join(dir, 'journal'), key }),

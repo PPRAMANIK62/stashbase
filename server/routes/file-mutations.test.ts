@@ -82,7 +82,7 @@ test("entry mutations honor an explicit folder that names the active folder and 
     await server.close();
     clearCurrentFolder();
     removeRecent(root);
-    fs.rmSync(root, { force: true, recursive: true });
-    fs.rmSync(other, { force: true, recursive: true });
+    fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
+    fs.rmSync(other, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }
 });

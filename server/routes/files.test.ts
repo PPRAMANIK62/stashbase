@@ -53,7 +53,7 @@ test("versioned document route accepts JSON through the shared source authority"
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearCurrentFolder();
     removeRecent(root);
-    fs.rmSync(root, { force: true, recursive: true });
+    fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -101,9 +101,9 @@ test("reveal resolves the requested registered folder and rejects an unregistere
     clearCurrentFolder();
     removeRecent(activeRoot);
     removeRecent(memberRoot);
-    fs.rmSync(activeRoot, { force: true, recursive: true });
-    fs.rmSync(memberRoot, { force: true, recursive: true });
-    fs.rmSync(outsiderRoot, { force: true, recursive: true });
+    fs.rmSync(activeRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
+    fs.rmSync(memberRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
+    fs.rmSync(outsiderRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -143,7 +143,7 @@ test("folder-scoped browser assets load without a window header", async () => {
       );
       assert.equal(rejected.status, 404);
     } finally {
-      fs.rmSync(outsider, { force: true, recursive: true });
+      fs.rmSync(outsider, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
     }
 
     const unscoped = await fetch(`http://127.0.0.1:${address.port}/asset/viewer.pdf`);
@@ -152,7 +152,7 @@ test("folder-scoped browser assets load without a window header", async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearCurrentFolder();
     removeRecent(root);
-    fs.rmSync(root, { force: true, recursive: true });
+    fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -190,6 +190,6 @@ test("folder-scoped DOCX fallback remains reachable without an active folder", a
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearCurrentFolder();
     removeRecent(root);
-    fs.rmSync(root, { force: true, recursive: true });
+    fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }
 });

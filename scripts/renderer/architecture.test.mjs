@@ -40,7 +40,7 @@ function write(root, relativePath, source) {
 
 function fixture(context) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-renderer-architecture-'));
-  context.after(() => fs.rmSync(root, { recursive: true }));
+  context.after(() => fs.rmSync(root, { recursive: true, maxRetries: 10, retryDelay: 100 }));
   write(
     root,
     'renderer/renderer-architecture.json',
