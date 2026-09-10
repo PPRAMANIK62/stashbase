@@ -117,7 +117,7 @@ Evidence: `pnpm test:docs`, `pnpm test:inventory`, `pnpm typecheck`,
 
 **Blocked by:** 63.
 
-**Status:** Not started.
+**Status:** Complete.
 
 Classify every arrived surface in the capability ledger before any of it is
 implemented. Hidden-file visibility, GitHub import, Agent Instructions, Wiki
@@ -127,14 +127,23 @@ its reason. The launcher and composer chrome, the resizable outline dock, and
 the agent-panel and retrieval behavior fixes are recorded Remove, so a later
 reader can see they were considered rather than missed.
 
-Add the J12 and J13 rows to the ledger and their evidence rows to Journey
-Coverage. The docs checker requires exactly one journey heading and one
-coverage row per `Jxx`, so the merge leaves `pnpm test:docs` red until both
-journeys are registered.
+`main` shipped its own J12 and J13 journey and coverage sections, so only the
+ledger needed the new rows; the docs checker validates J01 through J13.
 
-Record a decision for anything that changes persisted state, a trust
-boundary, a cross-process Interface, or a product outcome. The onboarding
-model in task 66 is known to qualify.
+Ten capabilities are assessed. Hidden entry visibility, public repository
+import, Agent Instructions, Wiki Pages, and the Gallery are Retain. The
+search-by-meaning onboarding model and the product vocabulary are Change. The
+launcher and composer chrome, the resizable outline dock, and the agent-panel
+and retrieval behavior fixes are Remove, each with its reason, so a later
+reader sees they were considered rather than missed.
+
+[Decision 0019](../decisions/0019-one-time-search-setup-invitation.md) records
+the one persisted-state change, including that a stored folder-scoped skip is
+ignored rather than translated, and unblocks task 66.
+
+J10 and J11 remain Not assessed. They are not arrivals; tasks 57 and 58 own
+them, and task 59 needs them along with the two performance gates that still
+have no recorded baseline.
 
 Evidence: `pnpm test:docs`, and an assessed ledger row carrying a disposition
 and a reason for each arrived capability.
@@ -172,9 +181,10 @@ meaning search mode, a persistent Files-panel action, and Settings as the
 manual routes back. Declining never costs local functionality and never
 prevents pending Wiki Pages from being built.
 
-This changes persisted state and rewrites the J01 primary flow, so it lands
-with a decision record rather than as a port. Update J01 and its coverage row
-in the same change.
+This changes persisted state and rewrites the J01 primary flow.
+[Decision 0019](../decisions/0019-one-time-search-setup-invitation.md) fixes
+the model, including that a stored folder-scoped skip is ignored rather than
+translated. Update J01 and its coverage row in the same change.
 
 Evidence: focused domain, adapter, hook, component, and composition tests for
 the one-time transition, each manual route back, and persistence across

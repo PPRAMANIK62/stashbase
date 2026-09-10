@@ -141,6 +141,9 @@ and no Required behavior is hidden behind a passing broad command.
 - [Decision 0016](decisions/0016-renderer-quality-gates.md) keeps only
   Fluid primitives with a product caller and records the renderer quality
   gates that `pnpm check:web` enforces.
+- [Decision 0019](decisions/0019-one-time-search-setup-invitation.md) adopts
+  the one-time setup invitation for search by meaning in place of the
+  folder-scoped skip.
 - [Decision 0018](decisions/0018-retire-playwright-journey-evidence.md)
   retires the Playwright journey suites and pixel baselines, and defines the
   evidence that replaces them.
