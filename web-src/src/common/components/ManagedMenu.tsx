@@ -1,16 +1,12 @@
 import { useMemo, useRef } from 'react';
-import { CheckIcon } from '@/common/components/icons';
 import type { MenuProps } from '@/common/components/Menu';
+import { renderMenuItems } from '@/common/components/menuItemRows';
 import {
   Menu as MenuRoot,
-  MenuItem as MenuPrimitiveItem,
   MenuPopup,
   MenuPortal,
   MenuPositioner,
-  MenuSeparator,
 } from '@/common/components/ui/menu';
-import { MenuSectionLabel } from '@/common/components/ui/menu-radio';
-import { cn } from '@/common/lib/utils';
 
 export default function ManagedMenu({
   anchor,
@@ -76,74 +72,4 @@ export default function ManagedMenu({
       </MenuPortal>
     </MenuRoot>
   );
-}
-
-function renderMenuItems(
-  items: MenuProps['items'],
-  returnFocusRef: { current: boolean },
-) {
-  return items.map((item, index) => (
-              item.separator
-                ? <MenuSeparator key={`separator-${index}`} />
-                : 'heading' in item && item.heading !== undefined
-                ? <MenuSectionLabel key={`heading-${index}`}>{item.heading}</MenuSectionLabel>
-                : (
-                  <MenuPrimitiveItem
-                    key={`${item.label}-${index}`}
-                    label={item.label}
-                    disabled={item.disabled}
-                    title={item.title}
-                    /* Rows carrying `checked` are a single-select picker
-                     * (the folder switcher marks exactly one row current),
-                     * so they announce as `menuitemradio` with a real
-                     * `aria-checked` instead of leaving the check glyph as
-                     * the only, purely visual, signal. Spread rather than
-                     * plain props: an explicit `role={undefined}` would
-                     * override — and erase — the primitive's own
-                     * `menuitem` role on command rows. */
-                    {...(item.checked !== undefined
-                      ? { role: 'menuitemradio' as const, 'aria-checked': item.checked }
-                      : undefined)}
-                    className={item.danger
-                      ? 'text-danger data-highlighted:bg-destructive/10'
-                      : undefined}
-                    onClick={() => {
-                      returnFocusRef.current = item.returnFocus !== false;
-                      item.onSelect();
-                    }}
-                  >
-                    <span className="flex min-w-0 flex-col gap-0.5">
-                      <span className="flex items-center gap-2 whitespace-nowrap">
-                        {item.icon && (
-                          <span className="shrink-0 [&_svg]:block [&_svg]:size-4" aria-hidden="true">
-                            {item.icon}
-                          </span>
-                        )}
-                        <span className="min-w-0 truncate">{item.label}</span>
-                        {item.attention && (
-                          <span
-                            className="size-1.5 shrink-0 rounded-full bg-status-danger/80"
-                            title="Needs attention"
-                            role="img"
-                            aria-label="Needs attention"
-                          />
-                        )}
-                      </span>
-                      {item.detail && (
-                        <span className={cn('truncate text-xs text-muted-foreground', item.icon && 'pl-6')}>
-                          {item.detail}
-                        </span>
-                      )}
-                    </span>
-                    {item.shortcut && (
-                      <span className="shrink-0 text-xs tracking-wider text-muted-foreground">
-                        {item.shortcut}
-                      </span>
-                    )}
-                    {item.checked && (
-                      <CheckIcon className="ml-auto size-4 shrink-0 text-accent" aria-hidden="true" />
-                    )}
-                  </MenuPrimitiveItem>
-                )
-  ));
 }

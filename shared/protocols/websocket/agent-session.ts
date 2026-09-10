@@ -59,6 +59,10 @@ export const agentClientEventSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("close") }).strict(),
   z.object({ t: z.literal("set-model"), model: boundedText(200).optional() }).strict(),
   z.object({ t: z.literal("set-mode"), mode: boundedText(64) }).strict(),
+  /** Product retrieval policy for this panel session. Disabling similarity
+   * search keeps `search_library` available through its lexical path; it
+   * never disables prepared-text access or background indexing. */
+  z.object({ t: z.literal("set-similarity-search"), enabled: z.boolean() }).strict(),
 ]);
 
 export const agentServerEventSchema = z.union([

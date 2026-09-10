@@ -11,6 +11,7 @@ import { refreshLibraryMembership } from '@/features/workspace/lib/libraryMember
 import { useOpenFolderWatchdog } from '@/features/workspace/hooks/useOpenFolderWatchdog';
 import { Menu, type MenuItem } from '@/common/components/Menu';
 import { Button } from '@/common/components/ui/button';
+import { ImportGitHubModal } from '@/features/workspace/components/ImportGitHubModal';
 
 export function FolderSwitcher() {
   const state = useWorkspace();
@@ -18,6 +19,7 @@ export function FolderSwitcher() {
   const bridge = electronBridge();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const [importGitHubOpen, setImportGitHubOpen] = useState(false);
   const [openingFolder, setOpeningFolder] = useState<{ path: string; name: string } | null>(null);
   const openingRequestRef = useRef(0);
 
@@ -70,6 +72,10 @@ export function FolderSwitcher() {
     onPick: (path) => {
       setAnchor(null);
       openFolder(path);
+    },
+    onImportGitHub: () => {
+      setAnchor(null);
+      setImportGitHubOpen(true);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- openFolder/isCurrent are stable per render inputs below
   }), [actions, bridge, activePath, state.homeDir, state.libraryFolderStatuses, state.recent]);
@@ -124,6 +130,9 @@ export function FolderSwitcher() {
           items={items.list}
           onClose={() => setAnchor(null)}
         />
+      )}
+      {importGitHubOpen && (
+        <ImportGitHubModal onClose={() => setImportGitHubOpen(false)} />
       )}
     </>
   );

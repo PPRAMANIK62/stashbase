@@ -18,9 +18,14 @@ manager, or a primary graph-navigation tool.
 
 ## Current Experience
 
+- The New Tab control follows the last document tab and remains reachable
+  when the tab list overflows. Dropping a tab in the empty space to its right
+  moves that tab to the end.
+
 - A new window opens directly into the workspace with no folder selected and
   one expanded, reusable blank library Chat. It never silently restores a
-  folder or installs an Agent runtime.
+  folder, installs an Agent runtime, or opens account sign-in or setup for
+  search by meaning.
 - On first launch with a brand-new empty default folder home, StashBase seeds
   the ordinary local **👋 Start Here** folder and adds it to the library
   without automatically opening it. Its `00 Welcome.html` is the human entry;
@@ -31,31 +36,56 @@ manager, or a primary graph-navigation tool.
   deleting the seeded folder does not recreate it, and application updates
   never overwrite the user's copy.
 - Files exposes Chat, the active folder tree, and account utilities without
-  making sign-in a condition of local work. With no active folder, the
-  workspace distinguishes an empty library from an existing library awaiting
-  selection, and claims neither while membership is still loading: the
-  empty-library invitation appears only once the library is confirmed empty,
-  never as a launch flash on a populated library. A populated library awaiting
-  selection states that Chat and search cover the whole library and offers one
-  Choose Folder invitation beneath New Chat, opening the same membership menu
-  the titlebar switcher serves.
+  making sign-in a condition of local work. A bare window boots
+  chat-primary with the Gallery band below the blank Chat's composer — the
+  product leads with what it does, and no folder is required to browse or
+  download an entry. The sidebar's launcher group under New Chat carries
+  the two standing routes: a **Gallery** row (in a folder window it raises
+  the Gallery as a near-fullscreen overlay instead of the band — a folder
+  window never lends a chat tab to the shop) and, in a bare window only, a
+  **Choose Folder…** row serving the same native-picker flow as the
+  titlebar switcher menu. The rest of the bare sidebar stays empty — no
+  membership, no scope explainer; browsing members and the GitHub import
+  flow belong to the titlebar Library switcher. A window whose folder is
+  removed lands its completely blank Chat back on that same gallery
+  surface; a folder window keeps its restored work instead. The band
+  itself is the [Agent Panel](agent-panel.md)'s surface; the entries and
+  their downloads are the Gallery's own contract (see
+  [Agent Panel](agent-panel.md) and the engineering contract in
+  `code-review/agent-panel.md`).
+- With a document open, a Document Outline dock sits under the file tree.
+  Its top seam is a drag handle and a keyboard-operable separator: the
+  outline grows upward into whatever room the tree can spare, and the tree
+  keeps a floor of its header plus four rows (only the header once the tree
+  is folded). The dock is a sized block, never a growing one: the list
+  inside scrolls, and a window too short for the chosen height shrinks the
+  outline first, never the tree below its floor. Folding the outline leaves
+  its strip alone; the strip's toggle is the way back.
 - Packaged builds check the official stable release channel when the default-on
   preference permits it. An available update floats a dismissible announcement
-  above the account row with one explicit Update action; the Discord,
-  bug-report, and Settings utilities keep their places beneath it. Dismissing
+  above the account row with one explicit Update action; the Settings utility
+  keeps its place beneath it (Discord and bug reporting live inside Settings →
+  General, under Community and support). Dismissing
   hides that announcement only — a newer release, or a download becoming ready
   to install, announces again, and Settings remains the standing update and
   preference surface.
 - A signed-in account is recognizable by its Google display name and avatar in
   Files, with the full email retained in the account menu. Missing or failed
-  profile display data falls back without changing account controls; signed
-  out remains the complete Anonymous local-workspace state.
-- Users can open or create a local folder, switch folders in place, favorite a
+  profile display data falls back without changing account controls; **Sign
+  in** names the complete signed-out local-workspace state and its optional
+  route to Wiki Agent and search by meaning.
+- Users can open or create a local folder, import a public GitHub repository
+  directly into the default folder home, switch folders in place, favorite a
   member, open it in another window, sync it, or remove it from the library.
-  A created folder is an ordinary directory. Removing membership clears only
-  StashBase-owned state.
+  A created folder or imported repository is an ordinary directory. Removing
+  membership clears only StashBase-owned state.
 - The titlebar folder switcher keeps the window's current folder identity
-  visible and offers the full library membership. A name wider than the
+  visible and offers the full library membership alongside pinned "New Folder…",
+  "Import from GitHub…", and "Open Folder…" actions. The sidebar's active
+  folder header offers **Change Folder…** at the top of its ⋯ menu, opening
+  that same membership menu — with a folder open, the sidebar is where
+  people look for "switch", and the titlebar trigger alone proved
+  undiscoverable; a standing icon beside the name crowded it. A name wider than the
   sidebar column truncates within that column instead of crossing onto the
   document tab strip. Folder-level actions remain attributable to the active
   folder.
@@ -63,7 +93,8 @@ manager, or a primary graph-navigation tool.
   independent active folders, tabs, search presentation, and Chat tabs.
 - Folder switches reset folder-scoped documents but preserve library search
   state and scope-pinned chats. A blank welcome chat may follow the new folder;
-  started work and unsent drafts never silently rebind.
+  started work, unsent drafts, and a pending Build Wiki intent never silently
+  rebind.
 - Removing a member preserves Chat tabs. A completely blank Chat returns to
   Library without interruption; a Chat containing user work stays readable in
   its retired folder scope and offers a separate **New Library Chat**.
@@ -73,7 +104,22 @@ manager, or a primary graph-navigation tool.
   open through Quick Open or their tree row. Ordinary user dotfiles remain
   visible, while dot-notes retain the established hidden-note namespace;
   exact app-derived artifacts, bundle resources, junk metadata, and
-  dot-directories remain infrastructure rather than workspace content.
+  dot-directories remain infrastructure rather than workspace content by
+  default.
+- The Files panel menu offers a checkable **Show Hidden Files** action. It is
+  an application-level preference: every window applies the same durable
+  value, and a missing or invalid stored value recovers to the safe default
+  view. When enabled, eligible user-owned dot-directories such as `.github`
+  and `.vscode` and their descendants join the tree and Quick Open with
+  normal capability, distinguished by a subtle italic rather than a disabled
+  style. VCS databases such as `.git`, StashBase-owned `.stashbase` and
+  `.stashbase-*` state, other derived state, dot-notes,
+  bundle resources, and junk metadata never surface in either mode, and
+  hidden excluded caches keep their bounded non-expandable rows. Turning the
+  option off removes hidden rows from the tree, keyboard order, selection,
+  and Quick Open without closing open tabs. Visibility here is a Workbench
+  choice only: hidden-directory content stays outside Preparation, indexing,
+  Search, automatic Chat context, and Agent/MCP discovery.
 - Dependency caches and generated build directories such as `node_modules`
   appear as non-expandable excluded-folder rows. StashBase does not recurse
   into them, so a project can explain their presence without paying the cost
@@ -94,22 +140,29 @@ manager, or a primary graph-navigation tool.
   file row's **Move to…** folder picker, and document tabs reorder by drag or
   by keyboard. Destructive operations confirm intent. Library-removal
   confirmation names the complete
-  home-shortened member path that remains on disk. Agent instruction files
-  remain visible and user-owned; hidden tool infrastructure and derived data
-  do not surface as workspace content.
-- Durable folder purpose, organization guidance, and Agent working rules live
-  in the visible, user-owned `AGENTS.md`, not separate Library metadata.
-- Current folder entry makes one create-only exception to explicit mutation:
-  it seeds `AGENTS.md` when missing. This accepted Shipping behavior is tracked
-  as an invasive-design
-  [Known Gap](../../code-review/file-transactions.md#known-gap--instruction-seeding-on-folder-entry),
-  not as precedent for other automatic source writes.
+  home-shortened member path that remains on disk. Runtime-native instruction
+  files such as `AGENTS.md` and `CLAUDE.md` remain visible and user-owned;
+  hidden tool infrastructure and derived data do not surface as workspace
+  content.
+- Durable guidance for StashBase Chats lives in the Agent panel's **Agent
+  Instructions** editor as application metadata: each working folder edits its
+  own, and Library-wide Chats edit one Library-scope guidance with its own
+  packaged default oriented toward finding work and starting new projects.
+  Opening a folder never creates, migrates, or edits instruction files in the
+  user's source tree.
 
 ## Experience Contract
 
 - Folder entry is navigation first; listing, preparation, and indexing continue
   in the background. Code-heavy project infrastructure that cannot surface in
   the Workbench does not make those background scans hold navigation closed.
+  The switcher leaves its **Opening…** state when the local server confirms the
+  window-folder binding; a delayed list, ordering read, preparation pass, or
+  semantic reconcile cannot extend that state indefinitely.
+- GitHub import accepts one public repository URL and one portable folder-home
+  child name. Import fields remain locked while Git runs; cancellation leaves
+  no partial published folder. A completed clone is retained and its local path
+  stays actionable if the later folder-open transition fails.
 - Closing a window either makes its live edit durable or leaves the window open
   with an actionable failure. Closing one window never tears down another.
 - Folder removal never deletes user files. Every affected window saves first
@@ -121,7 +174,8 @@ manager, or a primary graph-navigation tool.
   Chat tabs; the Agent lifecycle retires only sessions bound to the removed
   member.
   StashBase commits membership removal only after preparation, derived data,
-  index rows, ordering, and folder-bound runtime state have finished cleanup.
+  index rows, ordering, folder-scoped Agent Instructions, and folder-bound
+  runtime state have finished cleanup.
 - Folder membership and favorites never replace unreadable settings with
   fallback defaults. A durable library change fails instead, preserving the
   user's existing configuration for recovery.
@@ -130,7 +184,9 @@ manager, or a primary graph-navigation tool.
 - Tree completeness is scoped to user workspace content: excluded directory
   placeholders explain intentionally untraversed infrastructure, while hidden
   product-derived artifacts never surface. A collapsed or excluded directory
-  does not create descendant DOM.
+  does not create descendant DOM. The hidden-files preference widens only
+  Workbench visibility — retrieval, indexing, and Agent discovery scope are
+  server-owned policies it never changes.
 - Repeated or concurrent navigation to one source focuses its existing
   persistent tab. The same relative path in different Library folders remains
   a distinct source.
@@ -184,14 +240,17 @@ manager, or a primary graph-navigation tool.
 ## Related Journeys and Contracts
 
 Journeys: [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-value),
-[J02](../user-journeys.md#j02-add-and-open-a-folder), and
-[J03](../user-journeys.md#j03-read-and-edit-source-documents). The core loop is
+[J02](../user-journeys.md#j02-add-and-open-a-folder),
+[J03](../user-journeys.md#j03-read-and-edit-source-documents), and
+[J13](../user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery). The core loop is
 [J10](../user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work).
 Cross-area
 routes also include [J05](../user-journeys.md#j05-search-and-open-source-evidence)
 and [J08](../user-journeys.md#j08-connect-an-external-agent-through-mcp).
 Chat-first project entry is
-[J11](../user-journeys.md#j11-turn-a-conversation-into-a-project).
+[J11](../user-journeys.md#j11-turn-a-conversation-into-a-project). Folder-first
+Wiki Page building is
+[J12](../user-journeys.md#j12-build-wiki-pages-from-a-local-folder).
 
 Contracts: [Architecture](../../code-review/architecture.md),
 [Renderer Workspace](../../code-review/renderer-workspace.md),

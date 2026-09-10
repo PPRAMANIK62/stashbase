@@ -1,7 +1,7 @@
 # Capabilities and Boundaries
 
 This is the detailed product-facing capability reference bundled on
-2026-08-27. Use the narrow capability names below: preview, Workbench content
+2026-08-31. Use the narrow capability names below: preview, Workbench content
 editing, retrieval text, Agent/MCP access, and file mutation are not
 interchangeable.
 
@@ -14,7 +14,7 @@ interchangeable.
 | JSON (`.json`) | Source-preserving Tree and Source views | Existing JSON is content-editable; New Note creates Markdown | Direct raw source text | `read_file`, `write_file`, and `edit_file` use source text |
 | HTML (`.html`, `.htm`) | Compatibility preview | Preview-only in the Workbench | Clean text derived in memory from the source | MCP file helpers use raw HTML source text |
 | PDF (`.pdf`) | Source PDF preview | Preview-only | Prepared Markdown | `read_file` returns current prepared Markdown; content writes are rejected |
-| Image (`.png`, `.jpg`, `.jpeg`, `.webp`) | Source image preview and lightbox | Preview-only; imports create visible image sources | Prepared OCR evidence | External MCP `read_file` does not return image bytes; a built-in Agent may consume an explicitly supplied source image |
+| Image (`.png`, `.jpg`, `.jpeg`, `.webp`) | Source image preview and lightbox | Preview-only; imports create visible image sources | Prepared OCR evidence | External MCP `read_file` does not return image bytes; an Agent Panel runtime may consume an explicitly supplied source image |
 | DOCX (`.docx`) | Sanitized source-based preview with prepared fallback | Preview-only | Prepared HTML | `read_file` returns current prepared HTML; content writes are rejected |
 | Audio (`.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.opus`, `.aac`, `.aiff`, `.aif`) | Source playback or compatible local audio preview | Preview-only | Prepared timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
 | Video (`.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv`, `.avi`) | Media playback when compatible, otherwise a local audio preview | Preview-only | Audio track prepared as timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
@@ -30,7 +30,7 @@ are reveal-only, and generic bytes are never decoded lossily.
 - The tree shows ordinary files instead of filtering unknown formats. Generic
   rows are muted because Search and automatic Chat context exclude them.
 - Dependency and generated-output directories are visible as non-expandable
-  excluded rows; StashBase does not traverse their contents. Exact derived
+  excluded rows; StashBase does not traverse their contents. Derived
   artifacts and dot-directories remain hidden infrastructure.
 - Files open in persistent tabs with format-appropriate surfaces.
 - Markdown Writer Mode and Reading View use the same underlying source.
@@ -59,6 +59,8 @@ Preparation creates the representation needed for retrieval or Agent reading:
 
 Prepared text, compatible media previews, checkpoints, and indexes stay in
 StashBase application data. They never appear as extra workspace files.
+Agent-authored `wiki/` pages are different: they are visible,
+ordinary user-owned Markdown sources.
 
 Preparation runs in the background and does not block folder entry or ordinary
 preview. A result counts as current only when the format-specific work is
@@ -70,40 +72,41 @@ downloads a speech model under **Settings → Transcription**.
 
 ## Search
 
-### Exact Search
+### Keyword Search
 
-Exact Search is the UI name for word-based or keyword retrieval. It requires no
-AI Index account or key. It searches direct source text and any current
-prepared text that is ready.
+Keyword search is exact literal text matching — the search popup's
+**By keyword** mode. It never needs setup. It searches direct Source text and
+any current prepared text that is ready.
 
-### Similar Search
+### Search by Meaning
 
-Similar Search is the UI name for meaning-based or semantic retrieval. It uses
-AI Index and can find related material even when the query and source use
-different wording.
+Searching by meaning — the search popup's **By meaning** mode — finds related
+material even when the query and Source use different wording.
 
-AI Index can use:
+It can use:
 
 - hosted capacity after explicit StashBase sign-in; or
 - a user-provided OpenAI or OpenRouter key configured in Settings.
 
-Hosted indexing and Similar queries share the allowance displayed in the
-account menu. If it is exhausted or unavailable, hosted semantic work stops;
-Exact Search and all local-file workflows continue.
+Hosted indexing and meaning-based queries share the allowance displayed in the
+account menu. If it is exhausted or unavailable, hosted searching by meaning
+pauses; keyword search and all local-file workflows continue.
 
 The search popup uses Library scope by default and can narrow to one folder.
 Results always identify visible source files, even when their evidence came
 from PDF extraction, DOCX conversion, OCR, or a transcript. A missing result
-may mean wrong scope, wrong mode, incomplete Preparation, incomplete AI Index,
-provider failure, or quota state; those are not equivalent conditions.
+may mean wrong scope, wrong mode, incomplete Preparation, files still being
+prepared for search by meaning, provider failure, or quota state; those are not
+equivalent conditions.
 
-## Built-In Agent Chat
+## Agent Panel Chat
 
 - The built-in panel runs supported Claude Code or Codex runtimes.
 - A new app window starts with one reusable blank Chat.
 - A missing runtime waits for explicit **Install and continue**.
 - Agent authentication belongs to the selected runtime and provider. It is
-  separate from StashBase account sign-in and AI Index credentials.
+  separate from StashBase account sign-in and the credentials for search by
+  meaning.
 - Every conversation has visible Library or folder scope. A started draft,
   turn, attachment set, or restored conversation keeps that scope when the
   window switches folders.
@@ -126,8 +129,9 @@ Library through MCP.
 
 Common operations include:
 
-- `library_info` for Library folders and AI Index status;
-- `search_library` for Exact or Similar retrieval with explicit narrowing;
+- `library_info` for Library folders and the status of search by meaning;
+- `search_library` for keyword search or search by meaning with explicit
+  narrowing;
 - `reindex` for external disk changes;
 - `create_project` for a new ordinary folder under an authorized location;
 - bounded `list_directory`, `read_file`, `write_file`, `edit_file`,
@@ -147,10 +151,11 @@ Keep these separate when explaining setup or recovery:
 
 | Capability | Credential owner |
 |---|---|
-| Hosted AI Index | StashBase account session |
-| Bring-your-own AI Index | OpenAI or OpenRouter key stored through StashBase Settings |
-| Built-in Claude Code | Claude runtime/provider authentication |
-| Built-in Codex | Codex runtime/provider authentication, including the runtime's ChatGPT sign-in flow |
+| Hosted search by meaning | StashBase account session |
+| Bring-your-own provider for search by meaning | OpenAI or OpenRouter key stored through StashBase Settings |
+| Build Wiki | The selected Wiki Agent, Claude Code, or Codex Agent; no separate credential |
+| Agent Panel Claude Code | Claude runtime/provider authentication |
+| Agent Panel Codex | Codex runtime/provider authentication, including the runtime's ChatGPT sign-in flow |
 | External MCP client | That client's account plus the StashBase MCP connection configuration |
 
 No credential should be requested through an environment variable as the
@@ -160,14 +165,15 @@ normal StashBase setup path.
 
 - Adding or opening a folder authorizes that ordinary directory as one Library
   member; it does not migrate its files.
-- Current Shipping folder entry has one create-only source-mutation exception:
-  if `AGENTS.md` is missing, StashBase seeds a visible user-owned instruction
-  file. It never overwrites an existing `AGENTS.md`.
+- Adding or opening a folder never creates or edits `AGENTS.md`, `CLAUDE.md`, or
+  another instruction file. Use **Agent Instructions** in the Chat tab toolbar
+  for working-folder guidance stored by StashBase. Library-wide Chats use the
+  packaged default rather than a separate Library-wide setting.
 - Folder entry prioritizes navigation while Preparation and indexing continue
   in the background.
 - Removing a folder from the Library saves active edits, clears StashBase-owned
-  derived/index/runtime state for that member, and leaves the source folder and
-  its files on disk.
+  derived/index/runtime state and folder-scoped Agent Instructions for that
+  member, and leaves the source folder and its files on disk.
 - Deleting a source is a separate explicit destructive operation.
 - Generated representations never appear in the file tree or search results as
   independent sources.

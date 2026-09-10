@@ -97,7 +97,9 @@
   box-sizing: border-box;
   color: var(--fg);
   font-size: var(--reading-font-size);
-  font-family: inherit;
+  /* The reading voice (Geist), not the chrome's system sans — this is
+   * the app's primary reading surface. */
+  font-family: var(--font-reading);
   line-height: 1.62;
   outline: none;
 }
@@ -136,9 +138,18 @@
   color: var(--crepe-color-on-surface-variant);
   border-right: 1px solid var(--border);
 }
-.crepe-shell .milkdown-code-block .cm-activeLine,
-.crepe-shell .milkdown-code-block .cm-activeLineGutter {
+/* The current-line paint appears only while the code block is actually
+   being edited. CodeMirror keeps a cursor (parked on line 1) in every
+   unfocused editor, so an unconditional paint put a tinted bar on the
+   first line of every code block in the document — read state wearing
+   edit chrome. */
+.crepe-shell .milkdown-code-block .cm-editor.cm-focused .cm-activeLine,
+.crepe-shell .milkdown-code-block .cm-editor.cm-focused .cm-activeLineGutter {
   background: var(--stash-code-current-line) !important;
+}
+.crepe-shell .milkdown-code-block .cm-editor:not(.cm-focused) .cm-activeLine,
+.crepe-shell .milkdown-code-block .cm-editor:not(.cm-focused) .cm-activeLineGutter {
+  background: transparent !important;
 }
 .crepe-shell .milkdown-code-block .cm-selectionBackground,
 .crepe-shell .milkdown-code-block.cm-focused .cm-selectionBackground,

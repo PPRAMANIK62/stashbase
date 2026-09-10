@@ -14,6 +14,11 @@
   required. Otherwise it creates a new tab. No started tab is hijacked.
 - A blank tab may follow a window folder switch. Draft or attachments freeze
   the scope visible to the user; content and resumed history remain pinned.
+- The Gallery holds no chat state: the inline band is DERIVED (bare window
+  and contentless chat — no tab flag, no reducer field), the overlay is an
+  app-level dialog outside chat tabs, and nothing the Gallery does places,
+  pins, or sends composer text. Its one prompt affordance is explicit
+  clipboard copy on the entry detail.
 - A structured `scope-removed` exit retires only Chats bound to that member. A
   completely blank tab reconnects in place with an explicit Library scope. A
   tab containing any user work preserves its tab, draft, attachments,
@@ -30,7 +35,7 @@
   Installation and authentication failures retain a separate **Check again**
   action; it calls the no-download discovery path so external recovery does not
   silently grant installation consent or start another login.
-- Built-in is the default blank-chat preference and appears after Codex and
+- Wiki Agent is the default blank-chat preference and appears after Codex and
   Claude Code in selection surfaces. Its quiet second line is **Sign in for
   free credits** while signed out and **Free credits included** after sign-in.
   Its gate distinguishes
@@ -41,12 +46,20 @@
 - Tab activation and history resume only select renderer state. A missing
   runtime remains on the setup gate until **Install and continue**; activation
   code must not call the preparation endpoint speculatively.
+- A runtime-gated contentless chat still renders its composer bar under the
+  gate card with the agent pill ENABLED (rebinding an unclaimed tab is
+  renderer-local and sends nothing): the pill is the gated agent's way out,
+  and hiding or disabling it would strand the chat on install/sign-in.
 - A validated `scope-changed` event may migrate only the same live
   Library-scoped Chat that created a project. Update the tab binding before the
   owning window enters the new member so the conversation stays selected;
   other windows receive membership only. If folder entry fails, keep the new
   project scope visible and report an actionable open failure rather than
   reverting to an ambiguous Library presentation.
+- Folder-scoped mention and attachment discovery always uses an explicit
+  member-folder listing with default-safe hidden filtering, including when the
+  Agent scope matches the window's active folder. Workbench Show Hidden Files
+  never widens Agent-visible paths; Library-scoped chats keep mentions disabled.
 
 ## Layout and Visibility
 
@@ -67,13 +80,13 @@
 
 ## Composer and Controls
 
-- The sidebar New Chat split button is the only creation/Agent-selection
-  surface. Its agent picker — the named agent and its chevron form one
-  control — changes preference without creating a chat. The row carries no
-  hover surface of its own: each target in it highlights only its own box,
-  and a rule separates the New Chat/agent pair from chat history.
-- The scope picker is available before session binding and remains visible but
-  locked after binding. Model and effort come from runtime capabilities, and
+- The sidebar New Chat row is the standing creation entry — a pure action
+  whose agent choice lives in the composer's agent pill, not on the row.
+  While the sidebar is collapsed, the titlebar's left cluster carries a
+  compose New Chat button running the same blank-tab rule; it renders only
+  in that state, so exactly one creation entry is visible at a time.
+- The scope picker is available before session binding and remains visible and
+  openable after binding, with its scope rows locked in place. Model and effort come from runtime capabilities, and
   Default remains an omitted override. An idle Codex conversation applies a
   model choice to its next turn on the same thread; its row is disabled only
   during an active turn. Before a fresh Codex thread reports its actual model,
@@ -91,10 +104,85 @@
   explicitly overridden; a default or inherited effort claims no bar space.
   When a runtime advertises only one of the two settings, the pill opens that
   list directly.
+- The **Search by meaning** control is one switch row pinned under the
+  session scope popup's folder list, never an entry in Mode or the model
+  settings menu. The switch is required, not stylistic: the scope rows above
+  it are a radio list whose selected row wears a check, so a check on this
+  row would make one glyph mean "the one selected" and "on" inside a single
+  popup. The row stays ONE control semantically — a `menuitemcheckbox` whose
+  indicator is drawn as a track and thumb — rather than a menu item with a
+  second focusable switch inside it. It belongs with scope because the two
+  are one question in halves — scope is what a lookup may reach, this is how
+  it matches — and it belongs INSIDE that popup rather than beside it on the
+  composer bar, because the bar's width is the docked panel's width and this
+  is the row's least-touched setting. A checkbox is load-bearing, not
+  cosmetic: checked ADDS meaning-based retrieval on top of text matching that
+  never goes away, so the control must never present as a switch over search
+  itself. Off does not stop search. Its explicit state belongs to the mounted
+  Chat session. Checking it while searching by meaning is unavailable opens
+  setup; unchecked keeps library search available through direct and current
+  prepared text.
+- Hosting independent scope controls makes the popup openable for the life of
+  the conversation. The binding lock is a rule about the scope VALUE, so a bound
+  Chat dims and disables the scope rows in place and says why, rather than
+  killing the trigger and taking the retrieval setting down with it.
+- Agent Instructions is an action beside the Chat tab list, outside the APG
+  `tablist` and the conversation's scope popup. It resolves the active tab's
+  scope — its connected folder (or its visible window folder before binding),
+  or the Library scope for a library-bound tab — opens a managed modal, and
+  loads and saves through the scope-addressed HTTP contract (`scope=library`
+  or an absolute member path). A quiet customized marker updates
+  after reads and saves; the absence of that marker means the scope's packaged
+  default is active. Copy says a save applies from the next message and never
+  claims to edit `AGENTS.md` or `CLAUDE.md`.
+- It is a glyph, not a labelled button: it shares a row whose purpose is
+  showing which conversations are open, and a label there costs tab width that
+  a docked panel does not have. Its one tooltip doubles as the accessible name
+  and names the scope, because which scope it edits follows the active tab and
+  the button cannot show that. It aligns to the chat-panel toggle beside it,
+  not to the tab baseline — two adjacent glyph buttons share a centre line, and
+  the toggle's is the titlebar band's, measured from the pane top so tab height
+  cannot move it.
+- A save applies to live sessions, not only to Chats started later. The
+  resolved instructions are injected when a native session mounts and no
+  Adapter has a live setter for them, so applying an edit means REMOUNTING — resume in place when
+  the conversation has content so the transcript survives, plain reconnect when
+  it is blank. This is the same move a thinking-effort change makes, which is
+  why it needs no adapter-specific server path. A session remounts only for its
+  own connected scope, and defers to turn-end while a turn is in flight rather
+  than stranding a streaming reply.
+- The save is announced as a scope-addressed broadcast, not a callback to the
+  tab that opened the editor. Several mounted Chats can share one folder — or
+  the Library scope — so each session decides for itself whether the saved
+  scope is its own; a threaded callback would reach one session and silently
+  miss its siblings.
+- The editor is a text field, not a form of caveats. One line under it carries
+  the only non-obvious consequence (guidance takes effect from the next
+  message); the character tally appears only near the cap; the description
+  names the working folder and stops. The folder name is emphasis by weight —
+  accent there read as a link to
+  somewhere the press does not go.
+- An unwritten scope opens with its packaged default as real editable text.
+  Clearing and saving removes the customization and reloads that default. Both
+  defaults are short, user-visible Markdown; the folder default is organized
+  around answering questions, making changes, and maintaining Wiki Pages,
+  while the Library default is organized around locating work across folders
+  and asking before starting a new project. Neither states a permission rule,
+  which is the Mode control's to enforce.
 - CodeMirror owns composer text, selection, undo, and `@`/`/` key handoff. The
   UI remains a capped-height chat input, not an editor workbench.
-- Suggestions only prefill a draft; they never send. Their rotation pauses
-  while hovered or focused.
+- An empty composition renders no rotating suggestion carousel. The
+  **Gallery** band renders below the hero as one scrolling page with the
+  greeting and composer whenever the window is bare and the chat has no
+  content — derived in `ChatPane` from window state, never a tab flag — and
+  the first sent turn replaces it with the transcript. A runtime gate
+  shares one scroller with the band instead of hiding it. Directly below
+  the composer at rest stands nothing. In a folder window the sidebar's
+  Gallery row raises the app-level overlay (`GalleryOverlayGate`) instead;
+  no chat tab is lent to the shop.
+- The user's visible request is exactly what the Agent receives. Durable Wiki
+  behavior lives only in Agent Instructions; no surface carries a second
+  hidden prompt.
 - File and image context is explicit through mentions and each runtime's
   advertised attachment capability. Selection, drag/drop, and composer-focused
   paste are available only when that runtime can actually read the uploaded
@@ -114,7 +202,12 @@
 - Streaming follows the bottom only while the user remains there. Otherwise a
   jump-to-latest control appears.
 - A terminal failure creates at most one persistent turn explanation, preferring
-  the runtime's specific message. Record it before advancing queued follow-ups.
+  the runtime's specific message. Record it before advancing queued follow-ups
+  and keep it until the user acts on its recovery.
+- Active-turn follow-ups live in the renderer queue until the terminal handoff.
+  A waiting item may be deleted by id without interrupting the current turn or
+  changing its siblings; once steering has begun, a stale delete cannot discard
+  the in-flight item.
 - A non-fatal runtime notice appends transcript evidence without refreshing
   runtime failure state, explaining a turn error, or closing a session when it
   arrives before readiness. It uses polite warning semantics rather than an
@@ -122,10 +215,16 @@
 - A classified turn failure renders as a recovery card whose action follows the
   adapter-assigned kind only (see the turn-failure contract in
   [Agent Runtime](agent-runtime.md#protocol-boundary)); guidance copy and the
-  settle-then-auto-retry behavior live in
+  dismiss-then-auto-retry behavior live in
   `web-src/src/features/agent-panel/lib/turnFailure.ts` and
   `hooks/useAgentSession.ts`. The retry belongs to the card's own turn — the
-  nearest user prompt above the card, never the transcript's newest.
+  nearest user prompt above the card, never the transcript's newest. The latest
+  failed turn reuses its existing user block so recovery does not duplicate the
+  prompt; a card acted on after later turns appends its prompt at the tail so
+  the new answer remains correctly attributed. Removing the acted-on card
+  prevents its provider error from remaining a red alert while recovery is
+  already connecting or retrying; a failed retry produces a fresh actionable
+  card.
 - Completed thinking, interim narration, and tool activity fold under one
   working-trace header while the final answer remains visible. Interrupted work
   stays expanded. Resumed history has no invented duration or timestamp:
@@ -192,16 +291,38 @@
 - Active thinking or tool work has one liveness cue at a time and becomes
   static under reduced motion.
 
+## Gallery
+
+- The index is a remote contract: `gallery.ts` parses the published gallery
+  index whole or rejects it whole (`schemaVersion` gates shape
+  changes; a broken or future index falls back entirely to the bundled
+  snapshot, never renders half). Snapshot first, one fetch per session;
+  a fallback answer is not cached so the next load retries. Same-id
+  snapshot entries may fill optional fields the published entry has not
+  published; published values win where present.
+- The renderer's CSP keeps `connect-src`/`img-src` at `'self'`: the index
+  and screenshots travel only through the daemon's gallery proxy.
+  `server/routes/gallery.ts` pins the upstream hosts; the image route
+  refuses any `src` outside the gallery CDN prefixes so it cannot become a
+  general-purpose proxy. Total index failure answers a 200 envelope with
+  an unsupported `schemaVersion` (a 5xx would only stamp a console error
+  into every offline session for identical client behavior).
+- Download rides the existing public-GitHub import
+  (`api.importPublicGitHubRepository`) into the folder home and opens the
+  copy in a NEW window; an in-flight latch keeps a double click one
+  download, and failure surfaces one toast. No dialog, no location picker,
+  and the shop window is never taken over.
+
 ## Implementation Map
 
 | Role | Stable entry points |
 |---|---|
 | Panel boundary | `web-src/src/features/agent-panel/components/ChatPane.tsx` and `AgentView.tsx` |
 | Window-level catalog prime | `web-src/src/features/agent-panel/hooks/useAgentCatalogPrime.ts` — the one eager runtime read, called from `app/App.tsx` because every chat surface is lazy |
-| Account-state projection | `web-src/src/common/lib/accountEvents.ts` publishes the last resolved signed-in state from the lazy `useHostedAccount` owner; eager `NewChatButton.tsx` subscribes to that narrow snapshot so its Built-in credit line changes with identity without pulling account API or OAuth code into the initial bundle |
+| Account-state projection | `web-src/src/common/lib/accountEvents.ts` publishes the last resolved signed-in state from the lazy `useHostedAccount` owner; eager `NewChatButton.tsx` subscribes to that narrow snapshot so its Wiki Agent credit line changes with identity without pulling account API or OAuth code into the initial bundle |
 | Sidebar entry points | `web-src/src/features/agent-panel/components/NewChatButton.tsx` (the split button, and the only reader of the next-chat agent preference) and `ScopeHistoryButton.tsx` (the per-scope history clock, which owns the `SessionHistoryMenu` lazy boundary). Both are exported from the feature barrel and merely placed by `app/components/Sidebar.tsx`; the sidebar holds no Agent logic of its own |
-| Session state Interface | `web-src/src/features/agent-panel/hooks/useAgentSession.ts` owns transport, event routing, and session reset/resume, and composes the focused sub-hooks beside it in `web-src/src/features/agent-panel/hooks/`. It returns those sub-hooks as owner-named groups (controls, queue, mentions, skills, runtime, transcript) rather than one flat surface; the transcript rules its events imply are pure Modules in `lib/transcriptEvents.ts` |
-| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx` owns the block list and turn layout over the pure turn model in `lib/turnModel.ts`, with the user half in `AgentUserTurn.tsx` and the tool surface in `AgentToolActivity.tsx`; `AgentComposer.tsx` owns the draft and its send predicate, with the suggestion popup in `MentionSuggestions.tsx` and the session pills in `ComposerPills.tsx`; `MentionComposer.tsx`, and `SessionHistoryMenu.tsx` over `hooks/useSessionHistory.ts`, which merges every registered agent's listings and routes a rename or delete through the row's own agent and scope |
+| Session state Interface | `web-src/src/features/agent-panel/hooks/useAgentSession.ts` owns transport, event routing, session reset/resume, and the tab-local pending Build Wiki intent, and composes the focused sub-hooks beside it in `web-src/src/features/agent-panel/hooks/`. It returns those owners as named groups (controls, queue, mentions, skills, runtime, transcript, wiki) rather than one flat surface; the transcript rules its events imply are pure Modules in `lib/transcriptEvents.ts` |
+| Transcript/composer Modules | `web-src/src/features/agent-panel/components/AgentMessages.tsx` owns the block list and turn layout over the pure turn model in `lib/turnModel.ts`, with the user half in `AgentUserTurn.tsx` and the tool surface in `AgentToolActivity.tsx`; `AgentComposer.tsx` owns the draft, its send predicate, and the control bar, passing only `SimilaritySearchControl.tsx` into the shared `ScopeMenu` footer; `ChatPane.tsx` places `AgentInstructionsControl.tsx` beside the tab list and owns the captured scope for `AgentInstructionsModal.tsx`; `useAgentInstructionsEditor.ts` owns presence reads plus dialog API ordering and errors; `AgentEmptyState.tsx` owns the blank-chat greeting; `features/templates/` owns the Gallery (`gallery.ts` the snapshot-plus-fetch index contract, `TemplatesView.tsx` the band, `detail/GalleryDetailOverlay.tsx` + `detail/useDownloadWiki.ts` the entry detail and download, `GalleryOverlayGate.tsx` + `common/lib/galleryTrigger.ts` the app-level overlay) with `server/routes/gallery.ts` as its daemon proxy; `MentionComposer.tsx`, `ComposerPills.tsx`, and `SessionHistoryMenu.tsx` own their focused controls |
 | State Interfaces | Chat tab state/actions in `web-src/src/store/state/state.ts` and `state/stateReducer.ts`; activation consent in the `activateChatTab` action (`store/contexts/AppContext.tsx`) over `store/lib/chatTabPlan.ts`; focused pure state Modules under `features/agent-panel/lib/` |
 | Runtime transport Adapter | connection URL/lifecycle Modules and `runtimeFailurePresentation.ts` under `features/agent-panel/lib/` over the normalized [Agent Runtime](agent-runtime.md) protocol |
 | Attachment HTTP Adapter | `web-src/src/common/api/api.ts` and `server/routes/attach.ts` |
@@ -216,17 +337,24 @@ Run:
 pnpm typecheck
 pnpm test:renderer
 pnpm test:agent
+pnpm test:library-files
 pnpm build:web
 ```
 
-Journey automation retired with the Playwright suites; prove an affected Agent journey with focused renderer tests, story
-accessibility, and a driven runtime pass. Exact protocol fixture
+`pnpm test:renderer` covers the gallery index contract
+(`features/templates/__tests__/`); `pnpm test:library-files` covers the
+daemon's gallery proxy guard (`server/routes/gallery.test.ts`).
+Journey automation retired with the Playwright suites; prove an affected Agent
+journey with focused renderer tests, story accessibility, and a driven runtime
+pass. Exact protocol fixture
 sequences belong in tests. Real credentials, packaged discovery, and
 clipboard/native Seams remain in release sanity.
 
 Related journeys: [J01](../design-docs/user-journeys.md#j01-complete-onboarding-and-reach-first-value),
 [J06](../design-docs/user-journeys.md#j06-start-and-continue-an-agent-chat), and
-[J07](../design-docs/user-journeys.md#j07-converge-chat-into-a-document), plus
+[J07](../design-docs/user-journeys.md#j07-converge-chat-into-a-document),
+[J12](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder),
+[J13](../design-docs/user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery), plus
 the [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
 core loop and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)

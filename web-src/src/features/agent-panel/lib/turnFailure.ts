@@ -14,15 +14,15 @@ export interface TurnFailureGuidance {
    * the already-running process until it is replaced. `resend` retries the
    * failed prompt on the live session — quota, rate, and network failures
    * clear on the provider side, so no process replacement is needed.
-   * Acting on any of them settles the card to a plain message — a stale
-   * button must not outlive the state it described. */
+   * Acting on any of them removes the stale failure card. The retry's current
+   * outcome supplies either the answer or a fresh actionable error. */
   action: { id: TurnFailureActionId; label: string };
 }
 
 /** Map a classified turn failure to its truthful recovery. The renderer
  * switches on the adapter-assigned kind only — never on message prose. */
 export function turnFailureGuidance(kind: AgentTurnFailureKind, agent: AgentKind): TurnFailureGuidance {
-  const runtimeName = agent === 'stashbase' ? 'Built-in' : agent === 'codex' ? 'Codex' : 'Claude';
+  const runtimeName = agent === 'stashbase' ? 'Wiki Agent' : agent === 'codex' ? 'Codex' : 'Claude';
   switch (kind) {
     case 'rate-limit':
       return {
@@ -34,7 +34,7 @@ export function turnFailureGuidance(kind: AgentTurnFailureKind, agent: AgentKind
       return {
         title: 'Usage limit reached',
         guidance: agent === 'stashbase'
-          ? 'Built-in reached a provider usage limit. Wait for the provider’s reset or choose another Agent, then try again.'
+          ? 'Wiki Agent reached a provider usage limit. Wait for the provider’s reset or choose another Agent, then try again.'
           : `Your ${agent === 'codex' ? 'ChatGPT' : 'Claude'} plan’s usage is used up for now. Wait for the provider’s reset or upgrade the plan, then try again.`,
         action: { id: 'resend', label: 'Try again' },
       };

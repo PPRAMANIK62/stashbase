@@ -3,7 +3,7 @@
  *
  * Backed by Codex app-server's structured thread APIs. Delete maps to the
  * native irreversible thread/delete operation so it has the same meaning as
- * Delete Chat for every built-in agent.
+ * Delete Chat for every Agent Panel runtime.
  */
 import express from 'express';
 import { getCurrentFolder, getFolderHome } from '../folder.ts';

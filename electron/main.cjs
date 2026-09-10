@@ -23,6 +23,7 @@ const {
   createServerChildEnvironment,
   isCompatibleServerHealth,
   serverStartupTimeoutMs,
+  waitForStableServerProbe,
 } = require('./main-probe.cjs');
 const { shouldOfferClipboardImage } = require('./clipboard-watch-policy.cjs');
 const { createRecoveryKeyProvider } = require('./recovery-key.cjs');
@@ -514,7 +515,10 @@ function writeFileAtomic(file, content, options = {}) {
  *  skip the spawn and just point the window at it — handy for editing
  *  the server in your editor with tsx-watch hot reload. */
 async function startOrReuseServer() {
-  const existing = await probeServer(SERVER_PORT, 300);
+  const existing = await waitForStableServerProbe(
+    () => probeServer(SERVER_PORT, 300),
+    { timeoutMs: 5_000, retryMs: 150 },
+  );
   if (existing.compatible) {
     if (!app.isPackaged) {
       console.log(`[electron] reusing existing server at ${SERVER_URL}`);
@@ -757,7 +761,14 @@ async function ensureServer() {
 
 async function probeServer(port, timeoutMs) {
   const health = await requestJson(port, '/api/health', timeoutMs);
-  if (!health.reachable) return { compatible: false, occupied: false, legacyStashBase: false };
+  if (!health.reachable) {
+    return {
+      compatible: false,
+      occupied: health.connected,
+      legacyStashBase: false,
+      transient: health.connected,
+    };
+  }
   if (
     health.statusCode === 200 &&
     isCompatibleServerHealth(health.body, {
@@ -766,7 +777,7 @@ async function probeServer(port, timeoutMs) {
       resourcesPath: RESOURCES_ROOT,
     })
   ) {
-    return { compatible: true, occupied: true, legacyStashBase: false };
+    return { compatible: true, occupied: true, legacyStashBase: false, transient: false };
   }
 
   const folder = await requestJson(port, '/api/folder', timeoutMs);
@@ -776,11 +787,18 @@ async function probeServer(port, timeoutMs) {
     typeof folder.body === 'object' &&
     ('current' in folder.body || 'recent' in folder.body) &&
     'homeDir' in folder.body;
-  return { compatible: false, occupied: true, legacyStashBase };
+  return { compatible: false, occupied: true, legacyStashBase, transient: false };
 }
 
 function requestJson(port, requestPath, timeoutMs, options = {}) {
   return new Promise((resolve) => {
+    let connected = false;
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve({ ...result, connected });
+    };
     const req = http.request(
       {
         host: SERVER_HOST,
@@ -798,17 +816,21 @@ function requestJson(port, requestPath, timeoutMs, options = {}) {
         });
         res.on('end', () => {
           try {
-            resolve({ reachable: true, statusCode: res.statusCode ?? 0, body: JSON.parse(body) });
+            finish({ reachable: true, statusCode: res.statusCode ?? 0, body: JSON.parse(body) });
           } catch {
-            resolve({ reachable: true, statusCode: res.statusCode ?? 0, body: null });
+            finish({ reachable: true, statusCode: res.statusCode ?? 0, body: null });
           }
         });
       },
     );
-    req.on('error', () => resolve({ reachable: false, statusCode: 0, body: null }));
+    req.on('socket', (socket) => {
+      if (!socket.connecting) connected = true;
+      else socket.once('connect', () => { connected = true; });
+    });
+    req.on('error', () => finish({ reachable: false, statusCode: 0, body: null }));
     req.on('timeout', () => {
       req.destroy();
-      resolve({ reachable: false, statusCode: 0, body: null });
+      finish({ reachable: false, statusCode: 0, body: null });
     });
     req.end();
   });

@@ -14,28 +14,89 @@ Avoid: `global store`, `app state` when this narrower meaning is intended.
 
 ## Agent Panel
 
-The built-in Agent capability for working against an explicit library or
+The Agent capability for working against an explicit library or
 folder scope. **Chat** is the Agent Panel's visible conversation surface: it
 leads before a document is opened and docks beside the Document Workbench when
-a source is active. The Agent Panel may run Built-in, Claude Code, or
+a source is active. The Agent Panel may run Wiki Agent, Claude Code, or
 Codex; it is not itself synonymous with any runtime.
 
-## Built-in
+## Agent Instructions
 
-The included zero-install Agent shown as **Built-in** in Agent pickers and Chat
+The user-visible, editable guidance StashBase stores for Chat. A plain-language
+packaged default applies to every Chat. A concrete working folder may customize
+it in application metadata; Library-wide Chats use the packaged default and
+have no Library-wide customization. Runtime Adapters preserve this text while
+composing a separate internal Agent runtime policy that is not exposed in the
+editor. Saving remounts matching folder Chats so the new composition applies
+from their next message. It is guidance, not a security boundary.
+
+`AGENTS.md`, `CLAUDE.md`, and other runtime-native instruction files remain
+ordinary user-owned runtime inputs. StashBase neither creates nor rewrites
+them, and does not call those files Agent Instructions in product UI.
+
+## Wiki Agent
+
+The included zero-install Agent shown as **Wiki Agent** in Agent pickers and Chat
 chrome, with **Sign in for free credits** under its picker label while signed
 out and **Free credits included** after sign-in. It uses
 StashBase's pinned local OpenCode runtime and the signed-in account allowance.
 `stashbase` remains its implementation identifier.
 
-## AI Index
+## Search by meaning
 
-The user-facing name for the optional meaning-based index within the local RAG
-layer. It enables semantic retrieval when an embedding source is configured,
-but it is not the whole RAG layer: preparation and exact retrieval remain
-useful without it. Use `semantic indexing`, `semantic retrieval`, and
-`embedding` only in engineering contracts or a disclosure that needs the
-technical mechanism.
+The user-facing name for optional meaning-based retrieval across the Wiki.
+When an embedding source is configured, it combines vector similarity with
+text matching and always returns evidence through a visible Source. Keyword
+search — always-available exact text matching — works without it; the search
+popup's mode toggle pairs **By meaning** with **By keyword**.
+
+Write the name as a plain phrase: lowercase in running copy ("set up search
+by meaning", "preparation for search by meaning"), and title-cased **Search
+by Meaning** only where the surrounding chrome title-cases sibling labels
+(such as the Settings tab). Keep the phrase after a verb or preposition.
+Never make it the subject of a finite verb — sentence-initial "Search by
+meaning isn't…" reads as an imperative. Recast such sentences as an action
+("Set up search by meaning") or use the gerund ("Searching by meaning stops
+until a key is added").
+
+Hosted usage draws on the signed-in account's included monthly **credits**
+("Free monthly credits", "Remaining credits for search by meaning"). Reserve
+**allowance** for the Wiki Agent's seven-day quota; the two quotas never
+share a noun, so neither surface can be mistaken for the other.
+
+A Chat's **Search by meaning** control decides whether that Chat uses the
+capability. Turning it off keeps retrieval text-only; it does not pause or
+delete background search data. Describe background work as preparing or
+updating files for search by meaning. Use `semantic indexing`, `semantic
+retrieval`, `vector`, and `embedding` only in engineering contracts or a
+disclosure that needs the technical mechanism.
+
+## Wiki
+
+The product-level knowledge space StashBase presents over the Library. A Wiki
+brings together user-owned **Sources**, visible source-linked **Wiki Pages**,
+keyword search, search by meaning, and Agent work without replacing the
+folders as source of truth. It is not a separate hosted knowledge store.
+
+## Wiki Pages
+
+Visible Markdown under a folder's `wiki/` directory, with `wiki/index.md` as
+the entry page and optional focused pages beside it. Wiki Pages organize and
+explain Sources through relative links. They are ordinary user-owned files,
+not hidden StashBase derived data, and they re-enter browsing, search, and
+future Agent work.
+
+Use **Build Wiki** for the explicit folder-scoped request that asks an
+Agent to create or improve these pages from Sources. The request never grants
+permission to move, rename, delete, or broadly rewrite Sources.
+
+Use **Gallery** for the curated shop of ready-made Wikis — real folders
+with a wiki built from them, each downloadable as a copy that opens in its
+own window. A bare window's blank Chat derives the Gallery band below its
+composer; the sidebar's Gallery row raises it as an overlay inside a
+folder window. An entry's detail page shows what is inside the copy and
+the request that built it (**Copy prompt** is its one prompt affordance —
+the Gallery never places or sends composer text).
 
 ## Canvas
 
@@ -94,7 +155,8 @@ communicates this capability boundary; it does not mean the file is missing.
 
 Rebuildable text, assets, indexes, checkpoints, and status records that
 StashBase creates from source files. Derived data stays outside the visible
-workspace and never replaces source-file identity.
+workspace and never replaces source-file identity. Do not use this term for
+visible, user-owned Wiki Pages.
 
 ## Library
 
@@ -109,24 +171,27 @@ source-grounded Agent context. It combines Preparation with exact and
 meaning-based retrieval. **Local** describes ownership of sources, derived
 state, and index lifecycle; configured embedding capacity may be hosted.
 
-AI Index is the optional meaning-based index inside this layer, not a synonym
-for the whole layer.
+Searching by meaning is the optional retrieval capability inside this layer,
+not a synonym for the whole layer.
 
 ## Preparation
 
 Format-specific work that makes a source usable for search or Agent reading,
 such as PDF extraction, image OCR, DOCX text derivation, or media
-transcription. Preparation and AI Index readiness are separate states.
+transcription. Preparation and readiness for search by meaning are separate
+states.
 
 ## Product scenario
 
 A durable, high-level reason someone uses StashBase. A scenario explains
 motivation and desired outcome; it does not prescribe screens or test steps.
 
-## Source file
+## Source
 
-The user-owned file that remains visible, openable, and authoritative. Search
-evidence and Agent-readable derived text always resolve back to this identity.
+An original user-owned file that remains visible, openable, and authoritative.
+Product headings and controls may use **Source** or **Sources**; explanatory
+prose may say source file. Search evidence, prepared text, and Wiki Pages
+always resolve or link back to this identity.
 
 ## User journey
 

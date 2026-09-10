@@ -38,13 +38,13 @@ import { cancelConversionsUnderAndWait } from '../conversion.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { deleteDerivedForSource, deleteDerivedUnderFolder, type DerivedCleanupStats } from '../derived-store.ts';
 import { deleteFileOrderForRoot } from '../file-order.ts';
-import { ensureAgentsFile } from '../agent-rules.ts';
 import { stopAgentRuntimeForFolder } from '../agent-contract.ts';
 import {
   libraryOpenFolderRequestSchema,
   libraryRemoveFolderRequestSchema,
   librarySnapshotSchema,
 } from '../../shared/protocols/http/library.ts';
+import { GitHubImportError, importPublicGitHubRepository } from '../github-import.ts';
 
 const log = logger('routes/folder');
 
@@ -129,7 +129,7 @@ async function removeLibraryFolder(rawPath: string): Promise<void> {
   }
   const finishRemoval = await beginLibraryFolderRemovalAsync(abs);
   try {
-    // Built-in Agent sessions are folder-pinned and survive window folder
+    // Wiki Agent sessions are folder-pinned and survive window folder
     // switches, so removal must also end the sessions BOUND to this folder —
     // including ones in windows currently showing another folder. Do this
     // BEFORE releasing window folder contexts so the structured retirement
@@ -161,7 +161,6 @@ export function mount(app: express.Express): void {
     try {
       const changed = setCurrentFolder(request.data.path);
       const folderRoot = getCurrentFolder()!;
-      if (ensureAgentsFile(folderRoot)) noteTreeChanged();
       const windowId = currentWindowId();
       if (changed) {
         res.once('finish', () => notifyFolderSwitch(folderRoot, windowId));
@@ -223,7 +222,6 @@ export function mount(app: express.Express): void {
     try {
       const changed = setCurrentFolder(target, { create, exclusiveCreate });
       const folderRoot = getCurrentFolder()!;
-      if (ensureAgentsFile(folderRoot)) noteTreeChanged();
       const windowId = currentWindowId();
       if (changed) {
         res.once('finish', () => notifyFolderSwitch(folderRoot, windowId));
@@ -264,6 +262,33 @@ export function mount(app: express.Express): void {
     const root = getFolderHome();
     if (!fs.existsSync(root)) ensureFolderHome();
     res.json({ path: getFolderHome() });
+  });
+
+  // Import a public GitHub repository into the StashBase folder home.
+  // Works before any folder is open.
+  app.post('/api/github/import', async (req, res) => {
+    const ac = new AbortController();
+    const abort = () => ac.abort(new Error('GitHub import request closed'));
+    const abortOnPrematureClose = () => { if (!res.writableEnded) abort(); };
+    req.once('aborted', abort);
+    res.once('close', abortOnPrematureClose);
+    try {
+      const result = await importPublicGitHubRepository({
+        url: req.body?.url,
+        folderName: req.body?.folderName,
+        signal: ac.signal,
+      });
+      res.json(result);
+    } catch (err: unknown) {
+      if (ac.signal.aborted || res.destroyed) return;
+      if (err instanceof GitHubImportError) {
+        return res.status(err.status).json({ error: err.message, code: err.code });
+      }
+      sendFolderOperationError(res, err);
+    } finally {
+      req.removeListener('aborted', abort);
+      res.removeListener('close', abortOnPrematureClose);
+    }
   });
 
   // Star / unstar a member folder. Pure library metadata — never touches

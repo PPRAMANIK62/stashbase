@@ -34,7 +34,10 @@ export const stashbaseCodeTheme = EditorView.theme({
   '.cm-content': { padding: '20px 0 72px', caretColor: 'var(--focus-ring)' },
   '.cm-line': { padding: '0 20px' },
   '.cm-gutters': { backgroundColor: 'var(--pane)', color: 'var(--muted)', border: '0' },
-  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--accent) 7%, transparent)' },
+  // Focused only: an unfocused editor still has a cursor parked on line 1,
+  // and painting its line put a standing tinted bar on every code surface
+  // the moment it opened.
+  '&.cm-focused .cm-activeLine, &.cm-focused .cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--accent) 7%, transparent)' },
   '&.cm-focused': { outline: 'none' },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'color-mix(in srgb, var(--accent) 28%, transparent)' },
 });

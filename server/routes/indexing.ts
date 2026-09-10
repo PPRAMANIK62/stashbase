@@ -35,6 +35,7 @@ import {
 import { noteTreeChanged } from '../watcher.ts';
 import { sendError } from '../http.ts';
 import { filesystemPath } from '../filesystem-path.ts';
+import { isRetrievalEligibleDirectoryPath, isRetrievalEligiblePath } from '../indexable.ts';
 import {
   parseSearchTypes,
   SEARCH_TYPES_VALIDATION_ERROR,
@@ -133,6 +134,12 @@ export async function reprocessFileInFolder(
     (err as any).status = 400;
     throw err;
   }
+  if (!isRetrievalEligiblePath(rel)) {
+    const err = new Error('hidden and excluded paths are not eligible for Preparation');
+    (err as any).status = 400;
+    (err as any).code = 'PATH_NOT_PREPARABLE';
+    throw err;
+  }
 
   const { folderRoot } = await requireRequestFolder(folderName?.trim() || undefined);
 
@@ -197,6 +204,12 @@ async function prepareConvertibleInFolder(relPath: string, folderName?: string):
   if (!rel) {
     const err = new Error('path required');
     (err as any).status = 400;
+    throw err;
+  }
+  if (!isRetrievalEligiblePath(rel)) {
+    const err = new Error('hidden and excluded paths are not eligible for Preparation');
+    (err as any).status = 400;
+    (err as any).code = 'PATH_NOT_PREPARABLE';
     throw err;
   }
   const { folderRoot } = await requireRequestFolder(folderName?.trim() || undefined);
@@ -296,12 +309,12 @@ export function mount(app: express.Express): void {
       if (result.availability.state === 'unavailable') {
         if (result.availability.reason === 'hosted-quota-exhausted') {
           return res.status(402).json({
-            error: 'Your hosted AI Index allowance is exhausted. Exact search is still available.',
+            error: 'Your hosted allowance for search by meaning is used up. Keyword search is still available.',
             code: 'HOSTED_QUOTA_EXHAUSTED',
           });
         }
         return res.status(412).json({
-          error: 'AI Index is disabled until you set it up in StashBase Settings',
+          error: 'To search by meaning, set it up in StashBase Settings.',
           code: 'EMBEDDER_KEY_REQUIRED',
         });
       }
@@ -432,6 +445,7 @@ async function resolveScopePrefix(folderRoot: string, raw: unknown): Promise<str
   if (typeof raw !== 'string') return false;
   const rel = raw.trim().replace(/^\/+|\/+$/g, '');
   if (!rel) return undefined;
+  if (!isRetrievalEligibleDirectoryPath(rel)) return false;
   try {
     const abs = await filesystemPath.resolveUnderAsync(folderRoot, rel, { access: 'existing' });
     return (await fs.promises.stat(abs)).isDirectory() ? abs : false;

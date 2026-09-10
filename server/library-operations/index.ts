@@ -13,7 +13,7 @@ import {
   routeError,
 } from '../library-file-access.ts';
 import { listLibraryDirectory } from '../library-directory.ts';
-import { readLibraryFile } from '../library-file-reader.ts';
+import { readLibraryFile, type LibraryFileLineRange } from '../library-file-reader.ts';
 import {
   deleteLibraryFile,
   editLibraryFile,
@@ -30,7 +30,9 @@ import {
   searchHitsFromEvidence,
   type Retrieval,
   type RetrievalMode,
+  type SourceEvidence,
 } from '../retrieval/index.ts';
+import { attributedAgentSession, attributedSessionForWindow, attributedRequestSession } from '../agent-session-registry.ts';
 import type { IndexerStatus, SearchHit } from '../indexer.ts';
 import type { KeywordHitFile } from '../search-display.ts';
 import type { SyncResult } from '../sync.ts';
@@ -49,16 +51,20 @@ export interface LibraryOperations {
   search(input: {
     query: string;
     topK?: number;
+    /** Omission uses the attributed chat scope; library explicitly searches globally. */
+    scope?: 'current' | 'library';
     folder?: string;
     pathPrefix?: string;
     types?: readonly SearchTypeCategory[];
-    /** `semantic` (default) uses AI Index; `keyword` is exact ripgrep search
-     *  that works before AI Index setup but requires a folder or path-prefix
-     *  scope. */
+    /** Requested retrieval mode. An attributed panel session with search by
+     * meaning off resolves every request to lexical retrieval. */
     mode?: RetrievalMode;
     caseStrict?: boolean;
     wholeWord?: boolean;
-  }): Promise<{ hits: SearchHit[]; truncated?: boolean }>;
+    /** Transport attribution, never model-controlled tool arguments. */
+    agentSessionId?: string;
+    windowId?: string;
+  }): Promise<{ mode: RetrievalMode; folder?: string | null; hits: SearchHit[]; truncated?: boolean }>;
   /** Ripgrep keyword search over every member folder (or one `folder`).
    * File paths come back folder-relative next to their member folder root so
    * a caller can open results across folders without prefix guessing. */
@@ -76,7 +82,7 @@ export interface LibraryOperations {
    * project; folder-bound and unattributed callers only create + register. */
   createProject(input: { name: unknown; location?: unknown; agentSessionId?: string; windowId?: string }): Promise<unknown>;
   listDirectory(path?: unknown): Promise<unknown>;
-  read(path: unknown): Promise<unknown>;
+  read(path: unknown, range?: LibraryFileLineRange): Promise<unknown>;
   write(input: { path: unknown; content: unknown; baseVersion?: string }): Promise<unknown>;
   edit(input: { path: unknown; oldText: unknown; newText: unknown; replaceAll?: boolean; baseVersion?: string }): Promise<unknown>;
   move(input: { path: unknown; newPath: unknown; cascade?: boolean }): Promise<unknown>;
@@ -97,6 +103,8 @@ export interface LibraryOperationsDependencies {
   edit: typeof editLibraryFile;
   move: typeof moveLibraryFile;
   delete: typeof deleteLibraryFile;
+  /** null means the request did not come from an attributable panel session. */
+  similaritySearchEnabled: (agentSessionId?: string, windowId?: string) => boolean | null;
 }
 
 const productionDependencies: LibraryOperationsDependencies = {
@@ -113,6 +121,8 @@ const productionDependencies: LibraryOperationsDependencies = {
   edit: editLibraryFile,
   move: moveLibraryFile,
   delete: deleteLibraryFile,
+  similaritySearchEnabled: (agentSessionId, windowId) =>
+    attributedRequestSession(agentSessionId, windowId)?.similaritySearchEnabled() ?? null,
 };
 
 /** Build the deep library module. Tests may replace only the dependencies they exercise. */
@@ -123,41 +133,78 @@ export function createLibraryOperations(
   return {
     info: async () => deps.getLibraryInfo(),
 
-    async search({ query, topK = 8, folder, pathPrefix, types, mode = 'semantic', caseStrict, wholeWord }) {
+    async search({
+      query,
+      topK = 8,
+      scope: requestedScope = 'current',
+      folder,
+      pathPrefix,
+      types,
+      mode = 'semantic',
+      caseStrict,
+      wholeWord,
+      agentSessionId,
+      windowId,
+    }) {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) throw routeError('query required', 400);
-      const scope = await deps.normalizeSearchScope(folder, pathPrefix);
-      // Keyword retrieval walks one member subtree, so a whole-library call
-      // must choose a folder or a prefix whose owning member can be derived.
-      if (mode === 'keyword' && !scope.folderRoot) {
-        throw routeError('keyword search requires a folder scope; pass `folder` or `path_prefix`', 400);
+      if (requestedScope !== 'current' && requestedScope !== 'library') {
+        throw routeError('scope must be current or library', 400);
       }
-      const result = await deps.retrieval.search({
-        mode,
-        query: trimmedQuery,
-        topK,
-        folderRoot: scope.folderRoot,
-        pathPrefix: scope.pathPrefix,
-        types,
-        caseStrict,
-        wholeWord,
-      });
+      if (folder != null && typeof folder !== 'string') throw routeError('folder must be a string', 400);
+      if (pathPrefix != null && typeof pathPrefix !== 'string') throw routeError('path_prefix must be a string', 400);
+      folder = folder?.trim() || undefined;
+      if (requestedScope === 'library' && (folder || pathPrefix)) {
+        throw routeError('library scope cannot be combined with folder or path_prefix', 400);
+      }
+      // Scope must come from caller identity, never the app-wide sole active
+      // turn: an unrelated external MCP client may search concurrently.
+      const session = agentSessionId
+        ? attributedAgentSession(agentSessionId)
+        : attributedSessionForWindow(windowId);
+      if (requestedScope === 'current' && !session && (agentSessionId || (windowId && !folder && !pathPrefix))) {
+        throw routeError('search session is no longer available or is ambiguous', 409);
+      }
+      const defaultFolder = requestedScope === 'current' ? session?.boundFolder() ?? undefined : undefined;
+      const scope = await deps.normalizeSearchScope(folder || defaultFolder, pathPrefix);
+      const similarityEnabled = deps.similaritySearchEnabled(agentSessionId, windowId);
+      const effectiveMode: RetrievalMode = similarityEnabled === false ? 'keyword' : mode;
+      const result = effectiveMode === 'keyword' && !scope.folderRoot
+        ? await searchKeywordAcrossLibrary({
+            query: trimmedQuery,
+            topK,
+            types,
+            caseStrict,
+            wholeWord,
+          }, deps)
+        : await deps.retrieval.search({
+            mode: effectiveMode,
+            query: trimmedQuery,
+            topK,
+            folderRoot: scope.folderRoot,
+            pathPrefix: scope.pathPrefix,
+            types,
+            caseStrict,
+            wholeWord,
+          });
       if (result.availability.state === 'unavailable') {
         if (result.availability.reason === 'hosted-quota-exhausted') {
           throw routeError(
-            'Your hosted AI Index allowance is exhausted. Exact search is still available.',
+            'Your hosted allowance for search by meaning is used up. Keyword search is still available.',
             402,
             'HOSTED_QUOTA_EXHAUSTED',
           );
         }
         throw routeError(
-          'AI Index is disabled until you set it up in StashBase Settings',
+          'To search by meaning, set it up in StashBase Settings.',
           412,
           'EMBEDDER_KEY_REQUIRED',
         );
       }
       const memberRoots = scope.folderRoot ? [scope.folderRoot] : await deps.memberFolderRoots();
       return {
+        mode: effectiveMode,
+        folder: scope.folderRoot ?? null,
         hits: searchHitsFromEvidence(result.evidence, memberRoots),
         ...(result.truncated ? { truncated: true } : {}),
       };
@@ -248,7 +295,7 @@ export function createLibraryOperations(
     createProject: (input) => asLibraryOperation(() => deps.createProject(input)),
 
     listDirectory: (path) => asLibraryOperation(() => deps.listDirectory(path)),
-    read: (path) => asLibraryOperation(() => deps.read(path)),
+    read: (path, range) => asLibraryOperation(() => deps.read(path, range)),
     write: ({ path, content, baseVersion }) => asLibraryOperation(() => {
       if (typeof content !== 'string') throw routeError('content (string) required', 400);
       return deps.write(path, content, { baseVersion });
@@ -260,6 +307,71 @@ export function createLibraryOperations(
     }),
     move: ({ path, newPath, cascade }) => asLibraryOperation(() => deps.move(path, newPath, { cascade })),
     delete: (path) => asLibraryOperation(() => deps.delete(path)),
+  };
+}
+
+/** Library-wide lexical retrieval for `search_library`. The lower Retrieval
+ * Interface intentionally owns one folder at a time because ripgrep and the
+ * prepared-text walk are folder-rooted. This operation-level fan-out keeps
+ * that implementation detail away from Agent callers while preserving one
+ * visible-source evidence model across direct and prepared text. */
+async function searchKeywordAcrossLibrary(
+  input: {
+    query: string;
+    topK: number;
+    types?: readonly SearchTypeCategory[];
+    caseStrict?: boolean;
+    wholeWord?: boolean;
+  },
+  deps: Pick<LibraryOperationsDependencies, 'memberFolderRoots' | 'retrieval'>,
+): Promise<{
+  evidence: SourceEvidence[];
+  availability: { state: 'ready' } | { state: 'partial'; reason: 'truncated' };
+  truncated: boolean;
+}> {
+  const roots = await deps.memberFolderRoots();
+  let lastError: unknown = null;
+  const outcomes = await mapWithConcurrency(roots, KEYWORD_FOLDER_CONCURRENCY, async (root) => {
+    try {
+      const result = await deps.retrieval.search({
+        mode: 'keyword',
+        query: input.query,
+        folderRoot: root,
+        types: input.types,
+        caseStrict: input.caseStrict === true,
+        wholeWord: input.wholeWord === true,
+      });
+      return { root, result };
+    } catch (error: unknown) {
+      log.warn(`library keyword search skipped ${root}: ${errorMessage(error)}`);
+      lastError = error;
+      return null;
+    }
+  });
+  if (roots.length > 0 && outcomes.every((outcome) => outcome === null)) {
+    throw lastError ?? routeError('keyword search failed', 500);
+  }
+
+  const all: SourceEvidence[] = [];
+  let truncated = false;
+  for (const outcome of outcomes) {
+    if (!outcome) continue;
+    truncated = truncated || outcome.result.truncated;
+    for (const evidence of outcome.result.evidence) {
+      const relative = filesystemPath.relative(outcome.root, evidence.sourcePath);
+      if (relative == null || !(await deepestOwnerIs(outcome.root, relative, roots))) continue;
+      all.push(evidence);
+    }
+  }
+  const limit = Math.max(1, Math.floor(input.topK));
+  const evidence = all.slice(0, limit);
+  truncated = truncated || evidence.length < all.length;
+  return {
+    evidence,
+    availability: truncated
+      ? { state: 'partial', reason: 'truncated' }
+      : { state: 'ready' },
+    truncated,
   };
 }
 

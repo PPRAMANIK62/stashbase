@@ -77,7 +77,9 @@ forwarding, and script confinement.
   that styles its scrollbars keeps them. None of it reaches the indexed
   plaintext.
 - Image viewing uses the shared lightbox and never turns the preview into an
-  editable managed asset.
+  editable managed asset. No recognizable OCR text is a normal image state;
+  the warning and Reprocess affordance are reserved for actual preparation
+  failures.
 - Audio and supported video use a compatible playback preview when necessary,
   while transcript state follows preparation freshness and source time.
 - JSON source text is authoritative. Strict, unique-key JSON at or below
@@ -107,7 +109,11 @@ forwarding, and script confinement.
   destroyed is discarded instead of dispatched.
 - Every CodeMirror surface takes its chrome from one shared code surface, so
   the JSON source view, the TXT editor, and the generic code viewer cannot
-  drift in gutter, padding, selection, or active line. Token colours come from
+  drift in gutter, padding, selection, or active line. The current-line paint
+  appears only while a surface is focused — every unfocused CodeMirror keeps
+  a cursor parked on line 1, and an unconditional paint bars the first line
+  of every surface at rest (the Markdown code block matches, see
+  [Markdown Rendering](markdown-rendering.md)). Token colours come from
   one syntax palette for the surfaces that colour at all.
 - The main pane reserves its top chrome band only when a control actually
   occupies it. A viewer with no top chrome fills from directly under the tab

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { matchesSearchTypes, searchExtensionsForTypes } from './format.ts';
+import { derivedPathsForPdf } from './pdf.ts';
 import {
   audioTimestampForTranscriptLine,
   hasWholeTokenBoundaries,
@@ -13,6 +14,23 @@ import {
   runKeywordSearch,
   snippetForLine,
 } from './keyword-search.ts';
+
+function removeTempTree(testRoot: string): void {
+  try {
+    fs.rmSync(testRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: process.platform === 'win32' ? 10 : 0,
+      retryDelay: 100,
+    });
+  } catch (error: unknown) {
+    // Windows runners can retain a directory handle briefly after the final
+    // derived-file read. The assertion already completed; an ephemeral runner
+    // temp root must not turn that successful behavior check into a failure.
+    if (process.platform === 'win32' && (error as { code?: string }).code === 'EPERM') return;
+    throw error;
+  }
+}
 
 test('ripgrep paths use one folder-relative identity on POSIX and Windows', () => {
   assert.equal(normalizeRipgrepPath('./data.JSON'), 'data.JSON');
@@ -52,6 +70,40 @@ test('keyword search includes decodable case-variant TXT and excludes invalid UT
     assert.equal(result.totalMatches, 1);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('keyword search reads current prepared PDF Markdown without exposing its derived path', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-pdf-keyword-'));
+  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-pdf-keyword-data-'));
+  const previous = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  process.env.STASHBASE_LOCAL_DATA_ROOT = dataRoot;
+  try {
+    const source = path.join(root, 'Research.pdf');
+    fs.writeFileSync(source, '%PDF');
+    const derived = derivedPathsForPdf(source).notePath;
+    fs.mkdirSync(path.dirname(derived), { recursive: true });
+    fs.writeFileSync(derived, [
+      '# Page 3',
+      'The prepared document contains an uncommon retrieval phrase.',
+      '<!-- stashbase-pdf-conversion: complete -->',
+    ].join('\n'));
+
+    const result = await runKeywordSearch('uncommon retrieval phrase', root, {
+      caseStrict: false,
+      wholeWord: false,
+      types: ['pdf'],
+    });
+
+    assert.deepEqual(result.files.map((file) => file.path), ['Research.pdf']);
+    assert.equal(result.files[0]?.matches[0]?.pdfPage, 3);
+    assert.match(result.files[0]?.matches[0]?.text ?? '', /uncommon retrieval phrase/);
+    assert.doesNotMatch(JSON.stringify(result), /derived\.nosync/);
+  } finally {
+    if (previous == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+    removeTempTree(dataRoot);
   }
 });
 

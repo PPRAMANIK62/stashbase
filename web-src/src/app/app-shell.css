@@ -118,7 +118,7 @@ body.is-electron.platform-darwin.is-fullscreen {
    * min-width:0 + truncate. Every other child here is fixed-width, so
    * the squeeze lands on the name.
    * (Collapse keeps the stored --sidebar-width, so the cap holds.) */
-  max-width: calc(var(--sidebar-width) - var(--titlebar-controls-left) - 8px);
+  max-width: calc(var(--sidebar-width) - var(--titlebar-controls-left));
 }
 
 /* No traffic lights on the right on any platform — a plain corner

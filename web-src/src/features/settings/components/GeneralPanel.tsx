@@ -1,5 +1,7 @@
 import { electronBridge, type DesktopUpdateSimulation } from '@/common/lib/electronBridge';
 import { useGeneralSettings } from '@/features/settings/hooks/useGeneralSettings';
+import { BugIcon, DiscordIcon } from '@/common/components/icons';
+import { DISCORD_INVITE_URL, openExternalUrl } from '@/common/lib/externalLink';
 import { Button } from '@/common/components/ui/button';
 import { Checkbox } from '@/common/components/ui/checkbox';
 import { Field, FieldDescription, FieldLabel } from '@/common/components/ui/field';
@@ -184,6 +186,35 @@ export function GeneralPanel() {
             </Field>
           </section>
         )}
+      </div>
+
+      {/* Community and support moved here from the sidebar footer: the
+        * footer keeps identity + Settings only, and everything a user
+        * reaches occasionally lives behind the one Settings entry. The
+        * bug-report flow itself stays in the Electron main process, so
+        * the browser dev shell disables the button rather than hiding
+        * it. */}
+      <div className="mt-7 border-t border-border pt-6">
+        <SectionHeading level={3} className="mb-1">Community and support</SectionHeading>
+        <SectionDescription>
+          Get help, share feedback, or report a problem.
+        </SectionDescription>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { openExternalUrl(DISCORD_INVITE_URL); }}>
+            <DiscordIcon />
+            Join the StashBase Discord
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!electronBridge()?.reportBug}
+            title={electronBridge()?.reportBug ? undefined : 'Report a bug (desktop app only)'}
+            onClick={() => { void electronBridge()?.reportBug?.(); }}
+          >
+            <BugIcon />
+            Report a bug
+          </Button>
+        </div>
       </div>
     </div>
   );

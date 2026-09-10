@@ -153,10 +153,19 @@ test('workspace listing accepts visible and restricted filesystem entries', () =
       },
     ],
     folders: [{ path: 'notes' }, { path: 'node_modules', kind: 'excluded' }],
+    showHiddenFiles: false,
   });
 
   assert.equal(listing.files[1]?.entryKind, 'special');
   assert.equal(listing.folders[1]?.kind, 'excluded');
+  assert.equal(listing.showHiddenFiles, false);
+});
+
+test('workspace listing requires the applied hidden visibility', () => {
+  assert.equal(
+    workspaceFilesSchema.safeParse({ folder: 'Research', files: [], folders: [] }).success,
+    false,
+  );
 });
 
 test('workspace listing rejects unknown formats and unowned fields', () => {

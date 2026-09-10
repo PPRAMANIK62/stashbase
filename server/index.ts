@@ -60,8 +60,10 @@ import { createRecoveryDraftRouteDeps, mount as mountRecoveryDraftRoutes } from 
 import { RECOVERY_JOURNAL_KEY_BYTES, createRecoveryJournal } from './recovery-journal.ts';
 import { recoveryJournalDir } from './local-data.ts';
 import { mount as mountLibraryRoutes } from './routes/library.ts';
+import { mount as mountGalleryRoutes } from './routes/gallery.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
 import { mount as mountAppearanceRoutes } from './routes/appearance.ts';
+import { mount as mountWorkspacePreferenceRoutes } from './routes/workspace-preferences.ts';
 import { mount as mountCaptureRoutes } from './routes/capture.ts';
 import { mount as mountUpdateRoutes } from './routes/updates.ts';
 import { mount as mountTranscriptionRoutes } from './routes/transcription.ts';
@@ -79,6 +81,7 @@ import { blake3File } from './file-hash.ts';
 import { mount as mountSessionsRoutes } from './routes/sessions.ts';
 import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
+import { mount as mountAgentInstructionsRoutes } from './routes/agent-instructions.ts';
 import { mount as mountOnboardingRoutes } from './routes/onboarding.ts';
 import { createRendererOriginPolicy } from './middleware/renderer-origin.ts';
 import { mount as mountAccountRoutes } from './routes/account.ts';
@@ -92,6 +95,7 @@ import { createClientErrorHandler } from './client-error.ts';
 import { startHostedEmbeddingBroker, stopHostedEmbeddingBroker } from './hosted-embedding-broker.ts';
 import { hostedAccountState, setHostedQuotaAvailableHandler } from './hosted-account.ts';
 import { stopOpenCodeRuntime } from './opencode-runtime.ts';
+import { cancelAllGitHubImports } from './github-import.ts';
 
 const log = logger('server');
 
@@ -332,6 +336,8 @@ if (!DEV_VITE) {
 // before a window has an open folder, so mount them before the gate.
 mountWindowContextRoutes(app);
 mountLibraryRoutes(app);
+// Gallery browsing works before any folder is open too.
+mountGalleryRoutes(app);
 mountOnboardingRoutes(app);
 
 // Route-prefix gate: every API path under these roots needs an open
@@ -355,6 +361,7 @@ app.use([
 
 // ----- mount routes -------------------------------------------------------
 mountAppearanceRoutes(app);
+mountWorkspacePreferenceRoutes(app);
 mountCaptureRoutes(app);
 mountUpdateRoutes(app);
 mountAccountRoutes(app, {
@@ -377,6 +384,7 @@ mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in
 mountSessionsRoutes(app); // global (no requireFolder) — lists all local sessions
 mountCodexSessionsRoutes(app); // global (no requireFolder) — filters to current folder when open
 mountAgentSessionsRoutes(app); // shared contract history surface for the built-in panel
+mountAgentInstructionsRoutes(app); // global + explicit member-folder Chat guidance
 
 // Renderer error sink. The root `ErrorBoundary` POSTs render-time
 // exceptions here so they appear in the same server log developers
@@ -678,6 +686,7 @@ async function shutdown(reason: string): Promise<void> {
       cancelAgentInstalls: cancelAgentRuntimeInstalls,
       closeBundledAgent: stopOpenCodeRuntime,
       closeHostedBroker: stopHostedEmbeddingBroker,
+      cancelGitHubImports: cancelAllGitHubImports,
       cancelModelDownloads: cancelAllTranscriptionModelDownloads,
       cancelConversions: cancelAllConversions,
       closeStateDb,
@@ -690,6 +699,9 @@ async function shutdown(reason: string): Promise<void> {
       },
       onAgentInstallsCancelled: (cancelled) => {
         if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} Agent install(s)`);
+      },
+      onGitHubImportsCancelled: (cancelled) => {
+        if (cancelled > 0) log.info(`shutdown: cancelled ${cancelled} GitHub import(s)`);
       },
       onError: (step, err) => {
         log.warn(`shutdown: ${step} cleanup failed: ${err instanceof Error ? err.message : String(err)}`);

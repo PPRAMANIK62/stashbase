@@ -5,7 +5,7 @@
 
 ## One Library, One Operation Layer
 
-The built-in Agent panel and external clients call the same library operations.
+The Agent Panel and external clients call the same library operations.
 Stdio, Streamable HTTP, and app HTTP routes are adapters over that operation
 layer; none may implement a broader filesystem path or a different source
 identity rule.
@@ -19,24 +19,50 @@ clients and are not a general host-filesystem API.
 - Every file path resolves under an authorized library member. Hidden derived
   data is not listable or writable; a read may consume manifest-known current
   derived text only through its live visible source.
-- Search defaults to the whole library and may narrow to a member folder, safe
-  path prefix, and validated source-type category. Invalid narrowing fails; it
-  never silently widens.
-- `search_library(query, mode?, folder?, path_prefix?, types?, case_strict?,
+- Search defaults to the attributed live Chat scope. Exact session identity
+  wins; legacy window identity is usable only for its sole active turn. Stale
+  or ambiguous supplied identity fails rather than widening. Unattributed
+  external callers and Library Chats retain the whole-library default; scope
+  never borrows the app-wide sole active turn. Explicit `folder` overrides the
+  default, and `path_prefix` must stay inside the effective member folder.
+  `scope: "library"` explicitly requests global search and cannot combine with
+  folder/prefix filters. Invalid narrowing fails; it never silently widens.
+  Responses report the effective `folder` (null for the whole library).
+- `search_library(query, mode?, scope?, folder?, path_prefix?, types?, case_strict?,
   whole_word?, top_k?)` searches in semantic mode by default or exact keyword
-  mode, returning the same source-hit shape; keyword mode requires `folder` or
-  `path_prefix`, and `types` accepts the shared source categories.
+  mode, returning the same source-hit shape and the strategy actually used.
+  Both strategies share the Chat-scope default and `types` accepts the shared
+  source categories. Library-wide keyword search fans through member roots at
+  the operation boundary rather than exposing that folder-rooted mechanism to
+  callers.
+- An attributable panel session may resolve any `search_library` request to
+  keyword mode while its **Search by meaning** control is Off. This policy
+  comes from trusted transport attribution, never model-controlled tool
+  arguments; ambiguous or external callers retain their requested strategy.
 - Results retain absolute visible-source identity for Agent tools. Converted
   evidence never exposes an AppData path.
 - `library_info` returns folder identity and provider state, not a second
-  folder-description store. Durable folder purpose and working instructions
-  remain visible, user-owned source in `AGENTS.md`.
+  folder-description or Agent Instructions store. StashBase Chat instructions
+  remain distinct from the panel Runtime Adapter's internal library-routing
+  policy. The MCP server publishes capability and tool descriptions but no
+  second top-level instruction prompt; user-owned portable rules may remain
+  visible source in `AGENTS.md`.
 - File mutations use the shared transaction/version boundary and schedule or
   reconcile index maintenance after success.
 - `list_directory` enumerates only the requested directory surface and does
   not read file bodies. `read_file` has an `8 MiB` response ceiling for source
   and current derived text; oversized content fails explicitly rather than
   consuming unbounded server memory.
+- `read_file` accepts an optional 1-based `offset`/`limit` line window over
+  every readable family, direct and derived alike. The window is applied after
+  the bounded read, so it narrows what a caller receives and never widens what
+  the server admits: a source above the read ceiling stays unreadable in every
+  window. A malformed bound is a `400`, never a silent whole-file read.
+- A windowed response is self-describing — `partial`, `totalLines`, and a
+  `nextOffset` that is absent once the window ends the file — and omits
+  `version`. Dropping the version token keeps a window outside the optimistic
+  write path, so a partial read cannot be laundered into a version-checked
+  full-file overwrite.
 - The Workbench tree is intentionally wider than the Agent file surface.
   Generic files, user dotfiles admitted only by the Workbench, excluded-folder
   placeholders, symlinks, and special entries do not appear in
@@ -53,7 +79,7 @@ clients and are not a general host-filesystem API.
 - `create_project` creates only beneath the default folder home or an already
   authorized location. Both the selected location and creatable target must
   remain inside that owned root after symlinks are resolved. The operation
-  seeds missing Agent instructions create-only and registers the folder.
+  registers an empty folder and never seeds Agent instruction files.
   Session rebind requires trusted live-session attribution; ambiguous or
   external callers only create and register.
 
@@ -79,7 +105,7 @@ clients and are not a general host-filesystem API.
 StashBase writes durable MCP client configuration only for the bring-your-own
 Chat agents: Agent readiness calls `ensureAgentMcp` (Claude Code, Codex), which
 regenerates the platform MCP launcher and idempotently rewrites that agent's own
-config. Built-in injects the same launcher into each private OpenCode
+config. Wiki Agent injects the same launcher into each private OpenCode
 server with the owning window and live-session attribution; it does not write a
 user config file.
 StashBase config does not mirror client config. Every external client —
@@ -87,7 +113,7 @@ including Claude Desktop — is configured by the user from the read-only
 Settings → MCP page (standard stdio config, URL access, token, Docker
 opt-in); manual and URL setup are documented in
 [docs/mcp-configuration.md](../docs/mcp-configuration.md). No route connects
-or disconnects a third-party client. A built-in Agent's MCP failure may link to
+or disconnects a third-party client. An Agent Panel runtime's MCP failure may link to
 this page as a manual recovery reference, but retry remains owned by Agent
 readiness.
 
@@ -98,13 +124,13 @@ approval path. Ordinary `write_file` and `edit_file` may be accepted only by
 the built-in panel's explicit Edit policy. Move, delete, commands, network,
 sandbox changes, and broader access remain explicit approval decisions.
 
-Built-in Library chats disable native cwd file and command tools because
+Wiki Agent Library chats disable native cwd file and command tools because
 the Library is a non-contiguous membership set; every file operation therefore
 crosses this MCP authorization boundary. A folder chat may use native local
 tools only inside its selected member cwd, with external directories denied.
 
 `create_project` creates a new source folder and changes Library membership.
-A built-in Agent call must follow an explicit user request or a visible
+An Agent Panel runtime call must follow an explicit user request or a visible
 approval that names the action and target; exploratory conversation alone is
 not consent. The operation returns the resolved project path. Only an
 attributable live Library Chat may rebind to it; folder-bound, stale,
@@ -120,7 +146,7 @@ unattributed, and external callers never redirect a built-in session.
 | HTTP client Adapter | `mcp/library-operations-http.ts` |
 | HTTP server Adapter | `server/routes/mcp-http.ts` and `server/mcp-http-service.ts` |
 | Settings Interface | `server/mcp-http-settings.ts` and the narrow read/HTTP routes in `server/routes/mcp.ts` |
-| Launcher and built-in agent wiring | `ensureAgentMcp` and `ensureMcpLauncher` in `server/agent-mcp.ts`, with per-session OpenCode injection in `server/opencode-runtime.ts` |
+| Launcher and Agent Panel runtime wiring | `ensureAgentMcp` and `ensureMcpLauncher` in `server/agent-mcp.ts`, with per-session OpenCode injection in `server/opencode-runtime.ts` |
 | Focused evidence | `server/library-operations/index.test.ts`, `server/routes/library-files.test.ts`, and `server/__tests__/mcp-http-*.test.ts` |
 
 ## Validation

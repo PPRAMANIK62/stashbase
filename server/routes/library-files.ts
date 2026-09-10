@@ -12,7 +12,7 @@ import { sendError } from '../http.ts';
 import {
   requireLibraryStatusFolder,
 } from '../library-file-access.ts';
-import { agentContextFile } from '../library-file-reader.ts';
+import { agentContextFile, parseLibraryFileLineBound } from '../library-file-reader.ts';
 import { currentWindowId } from '../folder.ts';
 import { AGENT_SESSION_ID_HEADER } from '../agent-session-registry.ts';
 import { createLibraryOperations, type LibraryOperations } from '../library-operations/index.ts';
@@ -43,10 +43,11 @@ const log = logger('routes/library-files');
 
 
 export function mount(app: express.Express, operations: LibraryOperations = createLibraryOperations()): void {
-  // Hybrid search over the whole library (optional `folder`, `path_prefix`,
-  // and source `types` filters). Powers MCP's `search_library`. Hidden `.md`
-  // files are remapped or dropped (same rule as /api/search) so an external
-  // client never sees an internal path.
+  // Unified source search using the attributed chat scope (optional `folder`,
+  // `path_prefix`, and source `types` filters). Powers MCP's
+  // `search_library`; an attributed panel-session policy may resolve the
+  // request to lexical retrieval. Hidden derived text is searched but always
+  // remapped to its visible source identity.
   app.post('/api/library/search', async (req, res) => {
     try {
       const query = typeof req.body?.query === 'string' ? req.body.query : '';
@@ -68,12 +69,18 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
       res.json(await operations.search({
         query,
         topK,
+        scope: req.body?.scope,
         folder: req.body?.folder,
         pathPrefix: req.body?.path_prefix,
         types,
         mode,
         caseStrict: req.body?.case_strict === true,
         wholeWord: req.body?.whole_word === true,
+        // Retrieval policy is a property of the live panel session, never a
+        // model-controlled tool argument. Older native MCP hosts may retain
+        // only the window id; the operation layer owns the safe fallbacks.
+        agentSessionId: req.header(AGENT_SESSION_ID_HEADER)?.trim() || undefined,
+        windowId: req.header('x-stashbase-window-id')?.trim() || undefined,
       }));
     } catch (err: unknown) {
       sendError(res, err);
@@ -177,7 +184,7 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
     }
   });
 
-  // Resolve the best file path to hand to a built-in agent for a visible
+  // Resolve the best file path to hand to an Agent Panel runtime for a visible
   // source file. PDF/DOCX use app-data extracted text for reading. HTML/images
   // keep the original source as the read path; their extracted text layers
   // are indexing inputs, not source replacements.
@@ -199,7 +206,12 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
 
   app.get('/api/library/file', async (req, res) => {
     try {
-      res.json(await operations.read(req.query.path));
+      const offset = parseLibraryFileLineBound(req.query.offset, 'offset');
+      const limit = parseLibraryFileLineBound(req.query.limit, 'limit');
+      res.json(await operations.read(
+        req.query.path,
+        offset == null && limit == null ? undefined : { offset, limit },
+      ));
     } catch (err: unknown) {
       sendError(res, err);
     }

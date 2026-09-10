@@ -33,6 +33,29 @@ test('OpenCode history distinguishes allocated blanks from started conversations
   assert.equal(openCodeSessionHasContent({ title: 'Summarize the research folder' }, 0), true);
 });
 
+test('OpenCode applies the search-by-meaning policy before native client readiness', () => {
+  const ws = new FakeWebSocket();
+  const runtime: OpenCodeSessionRuntime = {
+    client: async () => new Promise<never>(() => {}),
+    beginTurn: () => {},
+    endTurn: () => {},
+    onExit: () => () => {},
+    close: async () => {},
+  };
+  const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
+    windowId: 'similarity-policy-window',
+    folder: '/workspace',
+  }, runtime);
+
+  assert.equal(session.similaritySearchEnabled(), true);
+  ws.emit('message', Buffer.from(JSON.stringify({ t: 'set-similarity-search', enabled: false })));
+  assert.equal(session.similaritySearchEnabled(), false);
+  ws.emit('message', Buffer.from(JSON.stringify({ t: 'set-similarity-search', enabled: true })));
+  assert.equal(session.similaritySearchEnabled(), true);
+
+  session.dispose();
+});
+
 test('bundled OpenCode inherits launch plumbing but no ambient credentials or injection flags', () => {
   assert.deepEqual(safeOpenCodeInheritedEnvironment({
     PATH: '/usr/bin',
@@ -92,8 +115,14 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
     enabled: true,
     timeout: 10_000,
   });
-  assert.equal(attributed.agent?.['stashbase-folder']?.prompt, 'Use StashBase tools.');
-  assert.equal(attributed.agent?.['stashbase-library']?.prompt, 'Use StashBase tools.');
+  for (const profile of ['stashbase-folder', 'stashbase-library'] as const) {
+    const prompt = attributed.agent?.[profile]?.prompt ?? '';
+    assert.match(prompt, /StashBase MCP/i);
+    assert.match(prompt, /search_library/);
+    assert.match(prompt, /read_file/);
+    assert.match(prompt, /Use StashBase tools\./);
+    assert.notEqual(prompt, 'Use StashBase tools.');
+  }
 });
 
 test('an unexpected bundled runtime exit terminates the panel instead of leaving a turn working', async () => {

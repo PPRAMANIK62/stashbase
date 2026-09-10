@@ -69,6 +69,28 @@ export async function loadWithRetry<T>(
   throw lastError;
 }
 
+/** A browser can leave a dynamic import pending forever when its serving
+ * process restarts after accepting the request. A second import of the same
+ * URL joins that pending module-map entry, so recovery needs both a bound and
+ * a genuinely different fallback URL supplied by the caller. */
+export async function loadWithAlternateRetry<T>(
+  primary: () => Promise<T>,
+  alternate: () => Promise<T>,
+  timeoutMs = 2_000,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`module load timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([primary(), deadline]);
+  } catch {
+    return alternate();
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
 export function lazyWithRetry<T extends ComponentType<any>>(
   loader: () => Promise<{ default: T }>,
 ) {

@@ -4,6 +4,8 @@ import { AGENT_META, type AgentKind } from '@/common/lib/agentCatalog';
 import { errorMessage } from '@/common/api/apiTransport';
 import { electronBridge } from '@/common/lib/electronBridge';
 import { openSettings } from '@/common/lib/settingsTrigger';
+import { openEmbeddingSetup } from '@/common/lib/embeddingSetupTrigger';
+import { onAgentInstructionsSaved } from '@/common/lib/agentInstructionsTrigger';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useStateWithRef } from '@/common/hooks/useStateWithRef';
 import type { Action, AppActions, ChatState, WorkspaceState } from '@/store/contexts/AppContext';
@@ -159,11 +161,25 @@ export function useAgentSession({
   // the same place as `resumeIdRef`, so it cannot leak into later retries.
   const nextConnectionScopeRef = useRef<LibraryScope | null>(initialScope ?? null);
   // The failed prompt to auto-resend once the replacement session is ready,
-  // armed only by an acted-on failure card (sign-in / reconnect). Firing it
-  // makes the recovery's outcome visible immediately: an answer when the
-  // recovery stuck, a fresh failure card when it did not. Any other session
-  // reset clears it so a stale retry can never land in a different session.
-  const pendingRetryRef = useRef<{ text: string; attachments: Attachment[] } | null>(null);
+  // armed only by an acted-on failure card (sign-in / reconnect). It also
+  // records whether the visible user block can be reused without attaching
+  // the retried answer to a later turn. Firing it makes the recovery's outcome
+  // visible immediately: an answer when the recovery stuck, a fresh failure
+  // card when it did not. Any other session reset clears it so a stale retry
+  // can never land in a different session.
+  const pendingRetryRef = useRef<{
+    text: string;
+    attachments: Attachment[];
+    appendBlock: boolean;
+  } | null>(null);
+  // null follows product availability: search by meaning starts on once
+  // configured; an explicitly disabled chat stays off even if credentials later change.
+  // The effective policy is always false while no embedding source exists,
+  // but text retrieval (including prepared documents) remains available.
+  const [similaritySearchPreference, setSimilaritySearchPreference] = useState<boolean | null>(null);
+  const similaritySearchEnabled = workspace.embedderHasKey === true
+    && similaritySearchPreference !== false;
+  const similaritySearchEnabledRef = useLatestRef(similaritySearchEnabled);
   // The permission mode the live connection was opened with (rode the
   // connect URL); `ready` re-sends `set-mode` only when the mode moved
   // while the connection was coming up.
@@ -174,9 +190,6 @@ export function useAgentSession({
   const sessionIdRef = useRef<string | null>(null);
   const idRef = useLatestRef(id);
   const titleRef = useLatestRef(title);
-  // Empty-state starter suggestion → composer draft. Prefill only; the
-  // nonce lets the same template be re-applied after the user edits it.
-  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
   const exitReceivedRef = useRef(false);
@@ -185,6 +198,24 @@ export function useAgentSession({
   // deltas append to one bubble; a tool call closes it).
   const openKind = useRef<'assistant' | 'thinking' | null>(null);
   const turnErrorTrackerRef = useRef(new TurnErrorTracker());
+
+  function sendSimilaritySearchPolicy(enabled = similaritySearchEnabledRef.current) {
+    wsRef.current?.send(JSON.stringify({ t: 'set-similarity-search', enabled }));
+  }
+
+  function changeSimilaritySearch(enabled: boolean) {
+    setSimilaritySearchPreference(enabled);
+    const effective = enabled && workspace.embedderHasKey === true;
+    sendSimilaritySearchPolicy(effective);
+    if (enabled && workspace.embedderHasKey !== true) openEmbeddingSetup();
+  }
+
+  // Completing or removing setup for search by meaning changes the effective policy without a
+  // new Chat connection. Re-apply it live; the ready handler below covers
+  // initial connection ordering.
+  useEffect(() => {
+    if (readyRef.current) sendSimilaritySearchPolicy(similaritySearchEnabled);
+  }, [similaritySearchEnabled]);
 
   // The sub-hooks below take the refs above only where the core genuinely
   // co-owns them. `blocksRef`, `turnActiveRef`, `wsRef`, and `sessionIdRef`
@@ -233,6 +264,44 @@ export function useAgentSession({
     knownFilePathsRef: mentions.knownFilePathsRef,
     sessionFolder,
   });
+
+  /* Agent Instructions edited for some scope. The resolved text is injected
+   * when a native session MOUNTS, so there is no live setter to call — applying
+   * an edit means remounting, exactly the move a thinking-effort change
+   * makes. Resume in place when the conversation has content so the
+   * transcript survives; a blank chat just starts again.
+   *
+   * Deferred rather than immediate while a turn is in flight: remounting
+   * mid-turn would strand the reply being streamed. The armed flag then
+   * lands at turn-end, which is the next moment the guidance can matter. */
+  const [, setInstructionsStale, instructionsStaleRef] = useStateWithRef(false);
+
+  function maybeApplyAgentInstructions() {
+    if (!instructionsStaleRef.current || !readyRef.current || turnActiveRef.current) return;
+    // Cleared BEFORE the reset so the `ready` this triggers cannot arm a
+    // second remount and loop.
+    setInstructionsStale(false);
+    if (blocksRef.current.length > 0 && sessionIdRef.current) {
+      resetSessionState({ resumeId: sessionIdRef.current });
+    } else {
+      reconnect();
+    }
+  }
+
+  function handleAgentInstructionsSaved(scope: LibraryScope) {
+    // The editor edits a scope — a folder or the Library; this session only
+    // cares when that scope is the one it actually connected with.
+    if (!libraryScopesEqual(controls.connectedScopeRef.current, scope)) return;
+    setInstructionsStale(true);
+    maybeApplyAgentInstructions();
+  }
+
+  const agentInstructionsSavedRef = useLatestRef(handleAgentInstructionsSaved);
+  useEffect(
+    () => onAgentInstructionsSaved((scope) => agentInstructionsSavedRef.current(scope)),
+    [agentInstructionsSavedRef],
+  );
+
   const skills = useAgentSkills({ phase, wsRef });
   const reconcileSessionFolder = useSessionFolderReconcile({
     sessionFolder,
@@ -575,37 +644,44 @@ export function useAgentSession({
     void runtimeCatalog.loginToCodex();
   }
 
-  /** An acted-on failure card first settles to a plain message — its button
-   * and guidance describe a state the action is about to change, and a stale
-   * "Sign in"/"Reconnect"/"Try again" must not outlive it. The failed prompt
-   * is then auto-resent — immediately for `resend` (quota, rate, network
-   * clear on the provider side), or once the replacement session is ready
-   * for the sign-in/reconnect recoveries — so the outcome is visible without
-   * retyping: an answer when the recovery stuck, a fresh card when not. */
+  /** An acted-on failure card is removed before recovery begins: its red
+   * provider error describes the failed attempt, not the recovery now in
+   * progress. The failed prompt is then auto-resent — immediately for
+   * `resend` (quota, rate, network clear on the provider side), or once the
+   * replacement session is ready for sign-in/reconnect — so the outcome is
+   * current: an answer when recovery worked, a fresh card when it did not. */
   function handleTurnFailureAction(blockId: string, action: TurnFailureActionId) {
-    setBlocks((bs) => bs.map((b) => (
-      b.kind === 'error' && b.id === blockId ? { kind: 'error', id: b.id, text: b.text } : b
-    )));
-    // The retry is the prompt of the turn THIS card settled — the nearest
+    // Resolve the retry before removing the card. `useStateWithRef` updates
+    // blocksRef synchronously, so filtering first would lose the card index
+    // and could make an old card resend the transcript's newest prompt.
+    const bs = blocksRef.current;
+    const cardIndex = bs.findIndex((b) => b.id === blockId);
+    // The retry is the prompt of the turn THIS card belongs to — the nearest
     // user block above the card, not the transcript's newest. A failure
     // never ends the session, so the user may have kept chatting before
     // acting on an older card.
-    const bs = blocksRef.current;
-    const cardIndex = bs.findIndex((b) => b.id === blockId);
     let cardUser: Extract<Block, { kind: 'user' }> | null = null;
     for (let i = (cardIndex >= 0 ? cardIndex : bs.length) - 1; i >= 0; i--) {
       const candidate = bs[i];
       if (candidate.kind === 'user') { cardUser = candidate; break; }
     }
-    const retry = cardUser ? { text: cardUser.text, attachments: cardUser.attachments ?? [] } : null;
+    // The newest failed turn already has its visible user block; reusing that
+    // turn avoids painting the same prompt twice. An older card must append
+    // its retry at the transcript tail so the new answer cannot attach to a
+    // later user turn.
+    const appendBlock = cardIndex < 0 || bs.slice(cardIndex + 1).some((block) => block.kind === 'user');
+    const retry = cardUser
+      ? { text: cardUser.text, attachments: cardUser.attachments ?? [], appendBlock }
+      : null;
+    setBlocks((current) => current.filter((block) => !(block.kind === 'error' && block.id === blockId)));
     if (action === 'resend') {
-      if (retry) promptQueue.resendFailedPrompt(retry);
+      if (retry) promptQueue.resendFailedPrompt(retry, retry.appendBlock);
       return;
     }
     if (action === 'open-agent-settings') {
       // Account/allowance recovery completes outside this view. Keep the
       // failed prompt armed so the runtime's account-change reconnect can
-      // retry it exactly once when Built-in becomes ready again.
+      // retry it exactly once when Wiki Agent becomes ready again.
       if (retry) pendingRetryRef.current = retry;
       openSettings('agents');
       return;
@@ -659,9 +735,12 @@ export function useAgentSession({
     switch (ev.t) {
       case 'ready':
         readyRef.current = true;
+        // Policy precedes every prompt sent from this ready transition, so a
+        // pending Build Wiki or recovery turn cannot race the server default.
+        sendSimilaritySearchPolicy();
         setPhase('live');
         runtimeCatalog.refreshRuntimes();
-        // Starting a built-in agent can create root-level instruction files
+        // Starting an Agent Panel runtime can create root-level instruction files
         // (`AGENTS.md`, and for Claude the `CLAUDE.md` bridge). Refresh the
         // tree immediately instead of waiting for the next index-status poll;
         // a cross-folder session refreshes its own folder's listing too.
@@ -685,8 +764,9 @@ export function useAgentSession({
         {
           const retry = pendingRetryRef.current;
           pendingRetryRef.current = null;
-          if (retry) promptQueue.resendFailedPrompt(retry);
+          if (retry) promptQueue.resendFailedPrompt(retry, retry.appendBlock);
         }
+        maybeApplyAgentInstructions();
         break;
       case 'session-id':
         sessionIdRef.current = ev.id;
@@ -801,6 +881,7 @@ export function useAgentSession({
           (message) => setBlocks((bs) => [...bs, { kind: 'error', id: nextBlockId(), text: message }]),
           promptQueue.runNextQueuedPrompt,
         );
+        maybeApplyAgentInstructions();
         break;
       }
       case 'error':
@@ -941,6 +1022,11 @@ export function useAgentSession({
     queue: promptQueue,
     mentions,
     skills,
+    similaritySearch: {
+      enabled: similaritySearchEnabled,
+      availabilityKnown: workspace.embedderHasKey !== null,
+      change: changeSimilaritySearch,
+    },
     transcript: {
       blocks,
       turnActive,
@@ -949,8 +1035,6 @@ export function useAgentSession({
       fatal,
       fatalRecoveryLabel,
       scopeRetired,
-      prefill,
-      setPrefill,
       stop,
       reconnect,
       reconnectAfterFatal,

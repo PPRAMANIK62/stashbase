@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 
 import { FolderIcon, LibraryIcon } from '@/common/components/icons';
 import { cn } from '@/common/lib/utils';
@@ -33,8 +33,20 @@ const LIBRARY_VALUE = '__library__';
  * ordering, and states rather than two lookalikes that drift.
  *
  * Callers vary only the copy (`heading`, `libraryDetail`), the side the
- * popup opens toward, and whether the trigger is locked (the composer
- * locks it once a conversation has content — a chat never rebinds).
+ * popup opens toward, whether the trigger is locked (the composer locks it
+ * once a conversation has content — a chat never rebinds), and an optional
+ * `footer` section pinned below the list.
+ *
+ * `footer` exists for Chat controls whose meaning is inseparable from the
+ * selected scope: retrieval answers how matching works, while Agent
+ * Instructions edit durable guidance for that exact scope. It is a slot
+ * rather than a built-in section so this stays the scope picker: the caller
+ * owns what goes in it, and the search popup passes nothing.
+ *
+ * A locked scope no longer kills the trigger when a footer is present.
+ * The lock is a rule about the scope VALUE, not about reading the binding,
+ * and a menu holding independent scope controls has to stay openable for the
+ * life of the conversation. Locked rows go inert in place and say why.
  */
 export function ScopeMenu({
   scope,
@@ -47,6 +59,7 @@ export function ScopeMenu({
   locked = false,
   disabled = false,
   triggerClassName,
+  footer,
   onSetScope,
 }: {
   scope: LibraryScope;
@@ -61,15 +74,20 @@ export function ScopeMenu({
   locked?: boolean;
   disabled?: boolean;
   triggerClassName?: string;
+  /** Caller-owned section pinned below the scrolling scope list. */
+  footer?: ReactNode;
   onSetScope: (scope: LibraryScope) => void;
 }) {
   const headingId = useId();
   const isLibrary = scope.kind === 'library';
+  // Something in the popup is still actionable, so the trigger stays live
+  // and keeps a normal pill's weight rather than a settled value's dimming.
+  const openable = Boolean(footer);
   return (
     <Menu>
       <MenuTrigger
-        render={<Pill locked={locked} className={cn('max-w-40', triggerClassName)} />}
-        disabled={disabled || locked}
+        render={<Pill locked={locked && !openable} className={cn('max-w-40', triggerClassName)} />}
+        disabled={disabled || (locked && !openable)}
         aria-label={ariaLabel ?? heading}
         title={isLibrary
           ? `${heading} — the whole library`
@@ -90,57 +108,70 @@ export function ScopeMenu({
             * doing both jobs cannot drift out of step with the text beside
             * it. The trigger keeps its `aria-label` — its visible text is
             * the current scope, not the question. */}
-          <MenuPopup className="max-h-overlay-sm w-overlay-md overflow-auto p-1.5" aria-labelledby={headingId}>
-            {/* The heading is the popup's (and the radio group's) name, not
-              * a menu item of its own — `presentation` keeps this row out of
-              * the menu's item semantics. */}
-            <div role="presentation" className="flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm">
-              <span id={headingId} className="font-semibold text-foreground">{heading}</span>
-            </div>
-            {/* One single-choice set, so `menuitemradio` rows in a radio
-              * group rather than plain menu items with a decorative check:
-              * the current scope reads back as `aria-checked`, not as a
-              * styling difference only sighted users get. The rows keep the
-              * `MenuOption` look by wearing its variant classes; the check
-              * glyph now comes from the radio primitive's own indicator
-              * (`pr-8` clears its lane on the checked row only, matching
-              * the old inline-check layout on unchecked rows). */}
-            <MenuRadioGroup
-              aria-labelledby={headingId}
-              className="flex flex-col gap-px"
-              value={isLibrary ? LIBRARY_VALUE : scope.path}
-              onValueChange={(value) => onSetScope(
-                value === LIBRARY_VALUE ? LIBRARY_SCOPE : folderScope(String(value)),
-              )}
-            >
-              <MenuRadioItem
-                value={LIBRARY_VALUE}
-                label="Library"
-                closeOnClick
-                className={cn(menuOptionVariants({ active: isLibrary }), isLibrary && 'pr-8')}
+          {/* The list scrolls, the footer does not: a pinned section that
+            * scrolls out of reach behind a long folder list is a setting
+            * the user cannot find twice. */}
+          <MenuPopup className="max-h-overlay-sm w-overlay-md p-0" aria-labelledby={headingId}>
+            <div className="min-h-0 flex-1 overflow-auto p-1.5">
+              {/* The heading is the popup's (and the radio group's) name, not
+                * a menu item of its own — `presentation` keeps this row out of
+                * the menu's item semantics. */}
+              <div role="presentation" className="flex flex-col items-start gap-0.5 px-2 pt-1 pb-2 text-sm">
+                <span id={headingId} className="font-semibold text-foreground">{heading}</span>
+                {locked && (
+                  <span className="text-xs font-normal text-muted-foreground">Set for this conversation</span>
+                )}
+              </div>
+              {/* One single-choice set, so `menuitemradio` rows in a radio
+                * group rather than plain menu items with a decorative check:
+                * the current scope reads back as `aria-checked`, not as a
+                * styling difference only sighted users get. The rows keep the
+                * `MenuOption` look by wearing its variant classes; the check
+                * glyph now comes from the radio primitive's own indicator
+                * (`pr-8` clears its lane on the checked row only, matching
+                * the old inline-check layout on unchecked rows). */}
+              <MenuRadioGroup
+                aria-labelledby={headingId}
+                className="flex flex-col gap-px"
+                value={isLibrary ? LIBRARY_VALUE : scope.path}
+                onValueChange={(value) => onSetScope(
+                  value === LIBRARY_VALUE ? LIBRARY_SCOPE : folderScope(String(value)),
+                )}
               >
-                <MenuOptionContent icon={LibraryIcon} title="Library" description={libraryDetail} />
-              </MenuRadioItem>
-              {entries.length > 0 && <MenuSectionLabel>Folders</MenuSectionLabel>}
-              {entries.map((entry) => {
-                const active = scope.kind === 'folder' && scope.path === entry.path;
-                return (
-                  <MenuRadioItem
-                    key={entry.path}
-                    value={entry.path}
-                    label={basename(entry.path)}
-                    closeOnClick
-                    className={cn(menuOptionVariants({ active }), active && 'pr-8')}
-                  >
-                    <MenuOptionContent
-                      icon={FolderIcon}
-                      title={basename(entry.path)}
-                      description={shortenFolderPath(entry.path, homeDir)}
-                    />
-                  </MenuRadioItem>
-                );
-              })}
-            </MenuRadioGroup>
+                <MenuRadioItem
+                  value={LIBRARY_VALUE}
+                  label="Library"
+                  closeOnClick
+                  disabled={locked}
+                  className={cn(menuOptionVariants({ active: isLibrary }), isLibrary && 'pr-8')}
+                >
+                  <MenuOptionContent icon={LibraryIcon} title="Library" description={libraryDetail} />
+                </MenuRadioItem>
+                {entries.length > 0 && <MenuSectionLabel>Folders</MenuSectionLabel>}
+                {entries.map((entry) => {
+                  const active = scope.kind === 'folder' && scope.path === entry.path;
+                  return (
+                    <MenuRadioItem
+                      key={entry.path}
+                      value={entry.path}
+                      label={basename(entry.path)}
+                      closeOnClick
+                      disabled={locked}
+                      className={cn(menuOptionVariants({ active }), active && 'pr-8')}
+                    >
+                      <MenuOptionContent
+                        icon={FolderIcon}
+                        title={basename(entry.path)}
+                        description={shortenFolderPath(entry.path, homeDir)}
+                      />
+                    </MenuRadioItem>
+                  );
+                })}
+              </MenuRadioGroup>
+            </div>
+            {footer && (
+              <div className="shrink-0 border-t border-border p-1.5">{footer}</div>
+            )}
           </MenuPopup>
         </MenuPositioner>
       </MenuPortal>

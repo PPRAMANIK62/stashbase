@@ -3,7 +3,7 @@ import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { toSourcePath } from './folder.ts';
 import { detectFormat, isDerivedNoteName } from './format.ts';
 import { fileVersionAsync, readTextAsync, saveTextAsync } from './files.ts';
-import { contentSizeError } from './indexable.ts';
+import { contentSizeError, shouldIndexFilePath } from './indexable.ts';
 import { errorMessage, logger } from './log.ts';
 import { preserveTextSourceFormat } from './markdown-source-format.ts';
 import { indexer } from './state.ts';
@@ -34,6 +34,17 @@ export function validateEditableFileWrite(name: string): void {
 }
 
 export async function upsertSavedFile(name: string, content: string): Promise<string | undefined> {
+  // Saves under hidden or excluded directories (reachable once hidden files
+  // are shown in the Workbench) stay outside the index. Delete any row from a
+  // formerly visible identity immediately; waiting for reconcile would leave
+  // hidden content available to Search or Chat after an edit.
+  if (!shouldIndexFilePath(name)) {
+    await indexer.deleteFile(toSourcePath(name)).catch((err) => {
+      log.warn(`save: failed to remove ineligible file from index ${name}: ${errorMessage(err)}`);
+    });
+    log.info(`save: removed/skipped index update for ${name} because the path is not indexable`);
+    return undefined;
+  }
   if (!isEmbeddingAvailable()) {
     log.info(`save: skipped index update for ${name} because semantic embedding is unavailable`);
     return undefined;
@@ -50,7 +61,7 @@ export async function upsertSavedFile(name: string, content: string): Promise<st
       log.warn(`save: failed to remove oversized file from index ${name}: ${errorMessage(err)}`);
     });
     log.warn(`save: skipped index update for ${name}: ${tooLarge}`);
-    return `${tooLarge}. AI Index will skip it until you split or reduce it and run sync.`;
+    return `${tooLarge}. This file won't be searchable by meaning until you split or reduce it and run sync.`;
   }
   try {
     await indexer.upsertFile(toSourcePath(name), content);
@@ -58,7 +69,7 @@ export async function upsertSavedFile(name: string, content: string): Promise<st
   } catch (err: unknown) {
     const message = errorMessage(err);
     log.warn(`save: index update failed for ${name}: ${message}`);
-    return `Saved, but AI Index update failed: ${message}`;
+    return `Saved, but the file couldn't be updated for search by meaning: ${message}`;
   }
 }
 

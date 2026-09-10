@@ -12,6 +12,7 @@ import { clearAgentRuntimeFailure } from '../agent-contract.ts';
 import { codexAccessOptions, isStashbaseWorkspaceEdit, isWorkspaceFileChange, permanentlyDeleteCodexThread } from '../codex-agent.ts';
 import { CodexRpcPeer } from '../codex-rpc-transport.ts';
 import { CodexSession } from '../codex-session-runtime.ts';
+import { resolveAgentInstructions, setAgentInstructions } from '../agent-instructions.ts';
 import { clearCurrentFolder, runWithWindowId, setCurrentFolder } from '../folder.ts';
 
 class FakeCodexProcess extends EventEmitter {
@@ -180,6 +181,49 @@ test('Codex publishes its native model catalog before ready and forwards a selec
   session.dispose();
 });
 
+test('Codex keeps Agent Instructions user-visible while injecting hidden StashBase routing policy', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-instructions-'));
+  const instructions = 'Prefer primary research notes.';
+  runWithWindowId('instructions-window', () => setCurrentFolder(folder));
+  setAgentInstructions({ kind: 'folder', path: folder }, instructions);
+  t.after(() => {
+    runWithWindowId('instructions-window', () => clearCurrentFolder());
+    setAgentInstructions({ kind: 'folder', path: folder }, '');
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess();
+  const session = new CodexSession(
+    ws as unknown as WebSocket,
+    'instructions-window',
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => native.proc as unknown as ChildProcessWithoutNullStreams,
+  );
+  t.after(() => session.dispose());
+
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'summarize the PDFs' }));
+  await settle();
+
+  const developerInstructions = native.requests.find(
+    (request) => request.method === 'thread/start',
+  )?.params.developerInstructions;
+  assert.equal(resolveAgentInstructions(folder), instructions);
+  assert.equal(typeof developerInstructions, 'string');
+  assert.match(String(developerInstructions), /StashBase MCP/i);
+  assert.match(String(developerInstructions), /search_library/);
+  assert.match(String(developerInstructions), /read_file/);
+  assert.match(String(developerInstructions), /Prefer primary research notes\./);
+  assert.notEqual(developerInstructions, instructions);
+});
+
 test('Codex changes the model for the next turn without replacing its thread', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-switch-'));
   runWithWindowId('model-switch-window', () => setCurrentFolder(folder));
@@ -216,6 +260,19 @@ test('Codex changes the model for the next turn without replacing its thread', a
   assert.equal('model' in (turns[1]?.params ?? {}), false, 'a busy model change must not affect the next turn');
   assert.equal(turns[2]?.params.threadId, 'thread-1');
   assert.equal(turns[2]?.params.model, 'model-two');
+  session.dispose();
+});
+
+test('Codex applies the panel search-by-meaning policy live', () => {
+  const ws = new FakeWebSocket();
+  const session = new CodexSession(ws as unknown as WebSocket, 'similarity-policy-window');
+
+  assert.equal(session.similaritySearchEnabled(), true);
+  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: false }));
+  assert.equal(session.similaritySearchEnabled(), false);
+  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: true }));
+  assert.equal(session.similaritySearchEnabled(), true);
+
   session.dispose();
 });
 

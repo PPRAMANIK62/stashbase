@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type MutableRefObject } from 'react';
+import { useCallback, useMemo, useRef, type MutableRefObject } from 'react';
 import {
   CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION,
   DIRECT_TEXT_EXTENSION_ALTERNATION,
@@ -70,6 +70,9 @@ export function useFileActions(
     refreshIndexState,
     toast,
   } = dependencies;
+  const hiddenVisibilityGeneration = useRef(0);
+  const hiddenVisibilityIntent = useRef<boolean | null>(null);
+  const hiddenPreferenceWrites = useRef<Promise<void>>(Promise.resolve());
   const newNote = useCallback(async () => {
     if (!(await flushSave())) return;
     const targetFolderPath = stateRef.current.workspace.folderPath;
@@ -149,6 +152,43 @@ export function useFileActions(
     }
   }, [refreshIndexState, toast]);
 
+  /** Toggle the application-level hidden-files visibility. The server owns
+   *  the durable value and bumps the shared tree version, so other windows
+   *  converge on their next status poll; this window reloads immediately.
+   *  Open tabs keep their documents — only tree rows, keyboard order,
+   *  selection, and Quick Open (which reads the same listing) change. */
+  const toggleShowHiddenFiles = useCallback(async () => {
+    const targetFolderPath = stateRef.current.workspace.folderPath;
+    const show = !(hiddenVisibilityIntent.current ?? stateRef.current.workspace.showHiddenFiles);
+    hiddenVisibilityIntent.current = show;
+    const generation = ++hiddenVisibilityGeneration.current;
+    const write = hiddenPreferenceWrites.current.then(async () => {
+      await api.putWorkspacePreferences({ showHiddenFiles: show });
+    });
+    // Preserve invocation order at the durable owner even when requests have
+    // very different latency. A failed write does not poison later toggles.
+    hiddenPreferenceWrites.current = write.catch(() => undefined);
+    try {
+      await write;
+    } catch (e: unknown) {
+      if (generation === hiddenVisibilityGeneration.current) {
+        toast('Failed to update hidden files preference: ' + errorMessage(e), { level: 'error' });
+        // An earlier queued write may have succeeded. Reload server truth so
+        // the checked state converges instead of assuming the failed intent.
+        if (targetFolderPath && stateRef.current.workspace.folderPath === targetFolderPath) {
+          await loadFiles(targetFolderPath);
+        }
+        if (generation === hiddenVisibilityGeneration.current) hiddenVisibilityIntent.current = null;
+      }
+      return;
+    }
+    if (generation !== hiddenVisibilityGeneration.current) return;
+    if (targetFolderPath && stateRef.current.workspace.folderPath === targetFolderPath) {
+      await loadFiles(targetFolderPath);
+    }
+    if (generation === hiddenVisibilityGeneration.current) hiddenVisibilityIntent.current = null;
+  }, [loadFiles, toast]);
+
   const newFolder = useCallback(async (path: string) => {
     if (!path) return;
     const targetFolderPath = stateRef.current.workspace.folderPath;
@@ -169,12 +209,12 @@ export function useFileActions(
     if (!targetFolderPath) return;
     // PDFs own a dot-prefixed derived note (`.paper.md`) + image
     // bundle (`.paper_files/`) sitting next to them — say so up front
-    // so the user knows the index goes with it. Plain notes just
-    // mention "file + index".
+    // so the user knows the search data goes with it. Plain notes keep the
+    // same product-level explanation.
     const isPdf = /\.pdf$/i.test(name);
     const prompt = isPdf
-      ? `Delete ${name}? This also removes the derived markdown + image bundle and the indexed content.`
-      : `Delete ${name}? (removes file + index)`;
+      ? `Delete ${name}? This also removes the derived markdown + image bundle and its search data.`
+      : `Delete ${name}? This also removes its search data.`;
     if (!(await askConfirm(prompt))) return;
     if (stateRef.current.workspace.folderPath !== targetFolderPath) return;
     const activeFile = getActiveTab(stateRef.current.workspace)?.file;
@@ -208,9 +248,11 @@ export function useFileActions(
       await loadFiles(targetFolderPath);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 404) {
-        const files = await loadFiles(targetFolderPath);
+        await loadFiles(targetFolderPath);
         if (stateRef.current.workspace.folderPath !== targetFolderPath) return;
-        dispatch({ type: 'PRUNE_MISSING_FILE_TABS', names: files.map((f) => f.name) });
+        for (const tab of stateRef.current.workspace.tabs.filter((t) => isFolderFileTab(t, name))) {
+          dispatch({ type: 'CLOSE_TAB', id: tab.id });
+        }
         return;
       }
       await loadFiles(targetFolderPath);
@@ -259,9 +301,13 @@ export function useFileActions(
       await loadFiles(targetFolderPath);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 404) {
-        const files = await loadFiles(targetFolderPath);
+        await loadFiles(targetFolderPath);
         if (stateRef.current.workspace.folderPath !== targetFolderPath) return;
-        dispatch({ type: 'PRUNE_MISSING_FILE_TABS', names: files.map((f) => f.name) });
+        for (const tab of stateRef.current.workspace.tabs.filter(
+          (t) => t.file && !t.file.folder && t.file.name.startsWith(path + '/'),
+        )) {
+          dispatch({ type: 'CLOSE_TAB', id: tab.id });
+        }
         return;
       }
       await loadFiles(targetFolderPath);
@@ -322,7 +368,7 @@ export function useFileActions(
       if (j.indexWarning) {
         toast('Renamed. ' + j.indexWarning, { level: 'warning' });
       } else if (j.indexDeferred) {
-        toast('Renamed. Updating AI Index in the background.', { level: 'info' });
+        toast('Renamed. Updating the file for search by meaning in the background.', { level: 'info' });
       }
     } catch (e: unknown) {
       if (stateRef.current.workspace.folderPath !== targetFolderPath) return;
@@ -413,7 +459,7 @@ export function useFileActions(
       if (j.indexWarning) {
         toast('Moved. ' + j.indexWarning, { level: 'warning' });
       } else if (j.indexDeferred) {
-        toast('Moved. Updating AI Index in the background.', { level: 'info' });
+        toast('Moved. Updating the file for search by meaning in the background.', { level: 'info' });
       }
       return true;
     } catch (e: unknown) {
@@ -521,6 +567,7 @@ export function useFileActions(
     renameFolder,
     reprocessFile,
     revealFile,
+    toggleShowHiddenFiles,
     upload,
   }), [
     copyFileLink,
@@ -533,6 +580,7 @@ export function useFileActions(
     renameFolder,
     reprocessFile,
     revealFile,
+    toggleShowHiddenFiles,
     upload,
   ]);
 }

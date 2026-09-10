@@ -11,8 +11,9 @@ export function createHttpLibraryOperations(
   const headers = (extra?: Record<string, string>): Record<string, string> => ({
     ...(extra ?? {}),
     ...(windowId ? { 'x-stashbase-window-id': windowId } : {}),
-    // Per-session attribution for host-side tools (create_project). Comes
-    // from the spawning session's environment, never from tool arguments.
+    // Per-session attribution for host-side policy and tools (search by
+    // meaning and create_project). Comes from the spawning session's
+    // environment, never from tool arguments.
     ...(agentSessionId ? { [AGENT_SESSION_ID_HEADER]: agentSessionId } : {}),
   });
   const json = async <T>(url: string, init?: RequestInit): Promise<T> => {
@@ -36,11 +37,12 @@ export function createHttpLibraryOperations(
   const pathQuery = (path: unknown) => `path=${encodeURIComponent(typeof path === 'string' ? path : '')}`;
   return {
     info: () => json(`${webBase}/api/library/info`, { headers: headers() }),
-    search: ({ query, topK, folder, pathPrefix, types, mode, caseStrict, wholeWord }) => json(`${webBase}/api/library/search`, {
+    search: ({ query, topK, scope, folder, pathPrefix, types, mode, caseStrict, wholeWord }) => json(`${webBase}/api/library/search`, {
       method: 'POST', headers: headers({ 'content-type': 'application/json' }),
       body: JSON.stringify({
         query,
         top_k: topK,
+        ...(scope !== undefined ? { scope } : {}),
         ...(folder ? { folder } : {}),
         ...(pathPrefix ? { path_prefix: pathPrefix } : {}),
         ...(types !== undefined ? { types } : {}),
@@ -67,7 +69,12 @@ export function createHttpLibraryOperations(
       body: JSON.stringify({ name, ...(location != null ? { location } : {}) }),
     }),
     listDirectory: (path) => json(`${webBase}/api/library/directory?${pathQuery(path)}`, { headers: headers() }),
-    read: (path) => json(`${webBase}/api/library/file?${pathQuery(path)}`, { headers: headers() }),
+    read: (path, range) => json(
+      `${webBase}/api/library/file?${pathQuery(path)}`
+        + (range?.offset != null ? `&offset=${range.offset}` : '')
+        + (range?.limit != null ? `&limit=${range.limit}` : ''),
+      { headers: headers() },
+    ),
     write: ({ path, content, baseVersion }) => json(`${webBase}/api/library/file`, {
       method: 'PUT', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify({ path, content, ...(typeof baseVersion === 'string' ? { baseVersion } : {}) }),
     }),

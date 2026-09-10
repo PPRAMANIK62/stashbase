@@ -1,6 +1,6 @@
 # StashBase
 
-**Turn local files into Agent-ready context.**
+**Turn your local files into a Wiki for your agents.**
 
 [![Website](https://img.shields.io/badge/website-stashbase.ai-0a66c2.svg)](https://stashbase.ai)
 [![Release](https://img.shields.io/github/v/release/liliu-z/stashbase?label=release)](https://github.com/liliu-z/stashbase/releases/latest)
@@ -8,345 +8,142 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-support%20%26%20chat-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/zsRZH4PTq9)
 
-Much of your best context already lives in local files: notes, papers,
-contracts, project data, scanned documents, and recordings. Open a folder in
-StashBase and work with that material in place:
+StashBase is an open-source, local-first app that helps your agents find and
+reuse context across personal notes, research libraries, project docs, and
+knowledge bases.
 
-- 📂 **Work in place:** browse, read, and edit supported files without moving them into a proprietary workspace.
-- 🔎 **Prepare and search:** extract difficult formats, search exact text immediately, and optionally add meaning-based retrieval with AI Index.
-- 🤖 **Use with Agents:** run Claude Code or Codex in the built-in Chat, or share the same authorized library with other MCP clients.
+Build linked Markdown Wiki Pages from your sources, make difficult formats
+searchable, and work with Wiki Agent, Claude Code, Codex, or other MCP clients.
+Your original files stay in place, and the Wiki Pages remain ordinary files
+you own.
 
-Your folders remain the source of truth; StashBase adds a search index that can be rebuilt from them.
+## Demo
 
-The core idea:
+Browse local sources and work with an Agent in the same workspace. This demo
+uses the bundled guides to answer **“How do I use StashBase?”**
 
-```text
-Local files -> prepared evidence -> retrieval -> Agents
-```
+![StashBase demo: browsing local guides and asking Wiki Agent how to use StashBase](assets/readme/demo.gif)
 
----
+## From Files to Context
 
-## 🚀 Demo
+Giving an Agent access to a folder is a starting point. Useful evidence may be
+buried in a long document, use different words from your question, or live in a
+scan or recording. StashBase helps turn that material into reusable context:
 
-Open a local folder in StashBase and ask the built-in Agent: **How do I use StashBase?**
+- **Build a Wiki from your sources.** Ask an Agent to create a linked overview
+  and focused pages that explain what's inside, with links back to the original
+  files. Those pages become context for later work.
+- **Find the material that matters.** Search by meaning alongside keyword
+  search, with text extracted from PDFs, DOCX files, images, and recordings.
+  Results lead back to the source files.
+- **Work with your agents.** Use the included Wiki Agent, bring Claude Code or
+  Codex into Chat, or connect an external MCP client to the same library.
+- **Keep your files yours.** Browse, read, and edit supported files alongside
+  the conversation. Sources keep their original layout; Wiki Pages are visible
+  Markdown you can open and use outside StashBase.
 
-![StashBase demo: browsing local guides and asking the built-in Agent how to use StashBase](assets/readme/demo.gif)
+## Get Started
 
----
+**macOS 12+ (Apple Silicon)** and **Windows 10+ (x64)** are the primary
+platforms. Linux x86_64 Debian 12+ / Ubuntu 22.04+ is community-supported.
 
-## 💡 Try It
-
-StashBase's primary platforms are **macOS 12+ (Apple Silicon)** and **Windows 10+ (x64)**. A community-supported Linux build is also available for **x86_64 Debian 12+ / Ubuntu 22.04+**.
-
-### macOS
-
-Apple Silicon Macs running macOS 12 or later can install with Homebrew:
+On macOS, install with Homebrew:
 
 ```bash
 brew install --cask liliu-z/stashbase/stashbase
 ```
 
-Or download the `StashBase-*-mac-arm64.dmg` from [Releases](https://github.com/liliu-z/stashbase/releases), drag the app to **Applications**, and open it there. Published macOS artifacts are signed with Apple Developer ID and notarized by Apple.
+Or [download the latest release](https://github.com/liliu-z/stashbase/releases/latest):
 
-### Windows
+| Platform | Download |
+|---|---|
+| macOS Apple Silicon | `StashBase-*-mac-arm64.dmg` |
+| Windows x64 | `StashBase-*-win-x64.exe` |
+| Linux x86_64 | `StashBase-*-linux-amd64.deb` or `.AppImage` |
 
-1. Download the latest `StashBase-*-win-x64.exe` installer from [Releases](https://github.com/liliu-z/stashbase/releases)
-2. Run the installer
-3. **If Windows SmartScreen appears:**
-   - Windows SmartScreen is a security feature that warns about files from the internet. Since you've confirmed the installer came from the official GitHub Releases page, it's safe to proceed
-   - Click **More info** → **Run anyway**
-4. Follow the installer prompts to complete installation
+See [Installation](docs/installation.md) for platform steps, updates, and
+troubleshooting.
 
-**To update**: Quit StashBase, then run the newer installer over the existing installation.
+### Build Your First Wiki
 
-**To uninstall**: Open **Settings → Apps**, then select **StashBase** under **Installed apps** (Windows 11) or **Apps & features** (Windows 10).
+1. **Choose your material.** Open your own folder, or explore the Gallery in
+   the app and choose **Make a copy** to download and open a ready-made Wiki.
+2. **Choose an Agent.** Wiki Agent is included and selected initially; sign in
+   to StashBase to use its included model allowance. You can also select
+   Claude Code or Codex and use your own provider account.
+3. **Build and use the Wiki.** In a Chat scoped to your folder, try:
 
-### Linux
+   > Build a Wiki from the sources in this folder. Create an overview, organize
+   > the main topics, and link back to the source files.
 
-For Debian 12+ or Ubuntu 22.04+ on x86_64, download the latest `StashBase-*-linux-amd64.deb` asset from [Releases](https://github.com/liliu-z/stashbase/releases), then install it with `apt` so any required system packages are resolved:
+   Then ask a question about the material, open its sources beside the Chat,
+   and ask the Agent to improve the pages as you learn more.
 
-```bash
-sudo apt install ./StashBase-*-linux-amd64.deb
-```
+A Build Wiki request creates or improves `wiki/index.md` and, when useful,
+pages beside it, preserving Sources outside `wiki/`. Building or updating
+these pages is an explicit Agent request; opening a folder does not
+schedule automatic Wiki maintenance.
 
-Run the same command with a newer package to update. To remove StashBase, run `sudo apt remove stashbase`.
+The first folder offers setup for **search by meaning**. You can use StashBase
+sign-in with included monthly credits or your own OpenAI/OpenRouter key.
+Choose **Not now** to continue with keyword search. This setup is independent
+of building Wiki Pages and can be completed later in Settings.
 
-For a portable build, download `StashBase-*-linux-*.AppImage`, make it executable with `chmod +x`, and run it directly.
+See [Using StashBase](docs/using-stashbase.md) for search, transcription, and
+everyday file workflows. You can also ask Chat **“How do I use StashBase?”**
 
-### First Launch
+## Explore the Gallery
 
-The first window opens with no folder selected and one reusable blank Chat.
+Start with a real folder that already has a Wiki built from it. Gallery entries
+include starter prompts, and entries with a build request let you copy it for
+your own material.
 
-1. **Enable AI Index**: Sign in to StashBase for free monthly AI Index usage,
-   or use your own OpenAI/OpenRouter key. To continue without it, choose **Skip
-   AI Index for now**; exact text search and local file work remain available.
-2. **Ask how StashBase works**: In the Chat that is already open, ask **“How do
-   I use StashBase?”** It starts against the whole Library, including Start
-   Here's detailed Agent-readable product, workflow, capability, comparison,
-   and troubleshooting guides. You can also ask why StashBase differs from
-   direct Agent file access, NotebookLM, or Obsidian. StashBase uses a supported
-   system Claude Code or Codex runtime when available; if it is missing,
-   installation waits for **Install and continue**. Agent provider login is
-   separate from StashBase sign-in and AI Index configuration.
-3. **Open source files when you need them**: On a brand-new empty default
-   folder home, StashBase adds **👋 Start Here** to the Library without opening
-   it automatically. Open it from the titlebar's **Library** menu, or use **Add
-   Folder…** to work with one of your own local folders. Start Here's short
-   Welcome is the human entry; its other ordinary Markdown files are detailed
-   context for Chat and remain readable when needed. Selecting a source brings
-   it alongside the same conversation.
+For example, [How to Start a Startup](https://stashbase.ai/examples/cs183b/)
+brings together Stanford CS183B lecture transcripts and a founder playbook.
+Use it to explore questions about startup ideas, product-market fit, and growth.
 
-StashBase processes only folders in its Library. Apart from the bundled Start
-Here introduction, folders join only when you explicitly add or open them. You
-can remove a folder at any time; StashBase clears its app-owned state but never
-deletes your files from disk.
+Your own starting point might be a research collection, project documents, or
+personal notes. Build an overview of the topics, decisions, and sources, then
+use it with your Agent as the work continues.
 
-Transcription and external MCP access can be configured later when you need
-them. Neither is required to begin browsing local files.
+[Explore the Gallery →](https://stashbase.ai/gallery/)
 
-### Updating and Uninstalling
+## Your Files and Your Data
 
-- **Updates**: Quit StashBase and run the newer installer. Your library and settings are preserved
-- **Uninstalls**: On macOS, remove StashBase from Applications; on Windows or Linux, follow the platform-specific removal steps above. Your local files are never deleted
+Sources and Wiki Pages stay in ordinary local folders. Extracted text and
+search indexes are app-managed data. Removing a folder from the Library clears
+StashBase's state for it without deleting your files.
 
-### Troubleshooting Installation
+Local browsing, editing, preview, and keyword search need no cloud account.
+OCR and optional audio/video transcription run locally. Hosted search by
+meaning sends relevant text to the selected embedding provider for indexing
+and queries for retrieval.
 
-**Installer won't start on Windows**
-- Make sure the file extension is `.exe` (not `.msi` or other formats)
-- Try running the installer as Administrator (right-click → Run as administrator)
-- If antivirus software blocks it, temporarily disable it and try again (it's safe to do so from official releases)
+Wiki Agent runs locally, with prompts and necessary model context sent through
+StashBase's hosted model gateway. Claude Code and Codex use their own provider
+accounts. Local-first means you retain your files and control which folders
+join the Library; model-backed features can still use cloud services.
 
-**macOS blocks or rejects the downloaded app**
-- Delete that copy and download the current DMG again from the official Releases page
-- Do not bypass Gatekeeper for an artifact that still reports a signing or malware-verification problem; report the StashBase version and macOS version in the Discord community
+## Connect Your Agents
 
-**App won't launch after installation**
-- Try restarting your computer
-- Uninstall and reinstall the latest version
-- Check the [Discord community](https://discord.gg/zsRZH4PTq9) for help
+StashBase configures its MCP connection automatically for Wiki Agent and for
+Claude Code or Codex used in the built-in Chat. You can review tool calls and
+file edits in the app.
 
-**Out of disk space errors**
-- Your library index needs space proportional to your files. Add more disk space or remove large files
-- Remove the folder from the Library to clear its StashBase-owned index and derived data. Your source files are never deleted
+To use an external MCP client, keep StashBase running and copy the connection
+configuration from **Settings → MCP** into that client. It can search the
+library, read prepared source content, and use bounded file operations within
+the authorized folders.
 
-**Can't find installed app**
-- On Windows: Press the Windows key and search for "StashBase"
-- On macOS: Open Finder → Applications → look for StashBase
-- On Linux: Run `stashbase` from terminal or find it in your applications menu
-
----
-
-## Document Workbench
-
-StashBase works directly with ordinary local folders. The Files sidebar,
-persistent tabs, Quick Open, and format-specific viewers keep source work in
-the same workspace as Chat.
-
-The Files tree reports ordinary local files even when StashBase cannot index
-their format. Muted files are excluded from Search and automatic Chat context:
-strict UTF-8 content opens read-only, while binary, oversized, unavailable, or
-restricted entries keep an explicit cannot-open surface. Dependency and build
-directories are represented without recursively loading their contents.
-
-Use **File → New Window** or Cmd/Ctrl+Shift+N to keep different folders and
-tools side by side. Window close follows VS Code's platform shortcuts;
-Cmd/Ctrl+W continues to close the active document tab.
-
-Use Cmd/Ctrl+O to open a source file in the active folder. The Command Palette
-opens with Cmd/Ctrl+Shift+P or F1 (or by typing `>` in Quick Open) and exposes
-safe application actions with their existing safeguards.
-
----
-
-## Search and Preparation
-
-The local RAG layer has two core jobs: prepare files and index their contents.
-
-### Prepare
-
-Some formats need preparation before their contents can be searched. StashBase keeps the original files in place and creates derived text only where needed for search and Agent access.
-
-| Format | Visible source | Indexed text |
-|---|---|---|
-| Markdown | The Markdown file | Source text |
-| HTML | The HTML file | Clean text extracted from the HTML |
-| JSON | The JSON file | Source-preserving tree and exact source text |
-| Plain text (`.txt`) | The plain-text file | Source text |
-| PDF | The original PDF | Derived Markdown |
-| DOCX | The original DOCX | Derived HTML |
-| Images | The original image | OCR text |
-| Audio and video | The original media | Audio track transcribed locally to timestamped Markdown |
-
-For PDF, DOCX, audio, and video, Agents read the derived text while the original remains the visible source file. Audio and video play directly when supported; otherwise, StashBase creates a compatible local audio preview. Large files dragged into the app stream to disk instead of being held entirely in memory. See [Architecture](design-docs/architecture.md) and [Preparation](design-docs/design/preparation.md) for the product and system contracts.
-
-Preview, Workbench editing, retrieval text, Agent reads, and file writes are
-separate capabilities. See the canonical
-[Format Capability Matrix](design-docs/design/documents.md#format-capability-matrix)
-for the current per-format boundary.
-
-Audio and video transcription is optional. Download a local speech model from
-**Settings → Transcription** when you need it. Small (465 MiB) is the default;
-Tiny (74 MiB) and Base (141 MiB) are lighter choices. Transcription runs on
-your machine with no transcription API cost.
-
-### AI Index
-
-Sign in to StashBase for free monthly AI Index usage, or configure your own
-OpenAI/OpenRouter key in **Settings → AI Index**. An OpenAI restricted key
-needs access only to embeddings with `text-embedding-3-small`; model-list
-access is not required. Exact search needs neither option.
-
-StashBase builds its AI Index and exact text search over:
-
-- Markdown, valid UTF-8 plain text, HTML, and raw JSON text
-- PDF-derived Markdown
-- DOCX-derived HTML
-- OCR text from images
-- timestamped transcripts from audio and video
-
-Search results point back to the user-visible source file, not hidden app data.
-
-Hosted indexing and meaning-based queries share one monthly token allowance.
-The avatar menu shows the remaining percentage and reset date. If the hosted
-allowance runs out, Exact search and all local file workflows keep working.
-
-Background preparation is intentionally quiet. Browsing a folder should feel like browsing files, not watching an indexing job. If preparation fails, StashBase shows a lightweight failure marker and lets you retry. Readiness matters most when you search, so that is where StashBase shows how much of your content is ready.
-
----
-
-## MCP
-
-MCP is the main interface between StashBase and Agents.
-
-While the StashBase app is running, a local MCP server makes the same library available to external clients and the built-in Agent panel.
-
-Common tools:
-
-- `library_info` - return the default folder home, opened folder paths and names, and embedder status. Folder purpose, organization rules, and durable Agent instructions belong in the visible, user-owned `AGENTS.md` instead of separate library metadata.
-- `search_library` - search the library in semantic (default) or keyword mode, optionally filtered by source type. Semantic mode may search the whole library; exact keyword mode works before AI Index is set up and requires a folder or path-prefix scope.
-- `reindex` - reconcile disk changes and make updated files searchable.
-- `create_project` - create and register a new project folder beneath an authorized location.
-
-StashBase also exposes bounded file helpers for opened folders:
-
-- `list_directory`
-- `read_file`
-- `write_file`
-- `edit_file`
-- `move_file`
-- `delete_file`
-
-These helpers exist for Agent clients that run in a sandbox and cannot directly access the user's host files. They are not a general-purpose filesystem API.
-
-### Connect a Client
-
-Built-in receives the MCP connection automatically; StashBase also configures the selected Codex or Claude Code runtime during readiness. For any external MCP-compatible client, copy the standard configuration or the server connection details from **Settings → MCP** and register them in that client.
-
-For setup examples, URL-based clients, Docker access, ports, CORS boundaries, and token rotation, see [MCP configuration](docs/mcp-configuration.md).
-
----
-
-## Built-In Agent Chat
-
-StashBase includes a built-in chat whose **Built-in** choice runs a pinned
-local OpenCode runtime against the whole library or one selected folder. It
-uses the signed-in account's fixed seven-day model allowance without a separate Agent
-install or model API key. Codex and Claude Code remain available as
-bring-your-own runtimes and appear before Built-in in the picker. Its second
-line says **Sign in for free credits** while signed out and **Free credits
-included** after sign-in. Chat fills the workspace until you open a document,
-then adapts into a side panel so the conversation and source stay visible
-together.
-
-The chat is a convenient client of the same MCP server, not a separate
-knowledge base. It adds:
-
-- Sessions keep their chosen Library or folder scope even when the window
-  switches folders.
-- New Chat reuses a completely blank conversation when possible; Built-in is
-  selected initially and later chats use the Agent you last selected.
-- Tool calls and file edits can be reviewed in the app.
-- Session history stays in the selected runtime's native local storage.
-- Agent replies render GFM and offline LaTeX math without changing the copied
-  or persisted Markdown source.
-- `@` mentions find files and folders with forgiving workspace-path search;
-  selecting one inserts only its workspace-relative path.
-
-Built-in keeps sessions, file and command execution, permissions, and
-Diffs local; only prompts and necessary model context pass through the metered
-StashBase gateway. Claude Code and Codex keep their normal provider login and
-native history. Those provider credentials are independent from StashBase
-account sign-in and the embedding source selected for AI Index.
-
----
-
-## Storage Model
-
-Local files are the source of truth.
-
-```text
-~/.stashbase/config.json          # app-level config, including transcription preferences
-
-<folder>/
-  paper.pdf                       # user file
-
-<appData>/derived.nosync/         # derived text, assets, transcript work, media previews
-<appData>/models/whisper/         # explicitly downloaded local speech models
-<appData>/vector-store.nosync/    # Milvus Lite vector store
-<appData>/state/state.db          # conversion failures and local app state
-```
-
-Removing a folder from the library clears StashBase's app-owned state for that folder. It does not delete the folder or its files from disk.
-
----
-
-## Design and Maintenance
-
-StashBase is also an experiment in human-directed, AI-first software
-development. Humans retain control of product direction, engineering Seams,
-trust decisions, and releases. AI helps explore designs, implement changes,
-maintain documentation, produce evidence, and review diffs.
-
-The goal is not autonomous code generation. It is a closed engineering loop in
-which intent, contracts, implementation, and evidence remain traceable:
-
-```text
-intent → design → engineering contract → implementation → evidence
-   ↑                                                     │
-   └──────────────── diff-first review ──────────────────┘
-```
-
-Product acceptance runs forward from a
-[Journey](design-docs/user-journeys.md) through
-[Journey Coverage](code-review/journey-coverage.md) to exact evidence. Diff
-review runs backward through
-[Reverse Traceability Review](code-review/README.md#reverse-traceability-review)
-to an owning engineering contract and either an affected Journey or an
-explicit cross-cutting rationale.
-
-Start with the [Project Maintenance Model](MAINTENANCE.md) for the working
-method, then descend into the product design and engineering contracts:
-
-- [Project maintenance model](MAINTENANCE.md) - human and AI responsibilities and the maintenance loop
-- [Design docs guide](design-docs/README.md) - product design and extension model
-- [Overview](design-docs/overview.md) - product thesis
-- [Principles](design-docs/principles.md) - durable decision rules
-- [Architecture](design-docs/architecture.md) - system boundaries and invariants
-- [Product direction](design-docs/product-direction.md) - intended product shape
-- [Product scenarios](design-docs/product-scenarios.md) - high-level user motivations
-- [User journeys](design-docs/user-journeys.md) - observable workflows and stable coverage IDs
-- [Glossary](design-docs/glossary.md) - shared product language
-- [Code review contracts](code-review/README.md) - maintainer invariants and validation maps
-
----
+See [MCP Configuration](docs/mcp-configuration.md) for client examples,
+transports, and access settings.
 
 ## Build From Source
 
 For contributors and developers running StashBase locally from source.
 
-### Linux prerequisites (Ubuntu / Debian)
-
-Install Node.js 24+, pnpm, Python 3.10+, and the native build tools used by the packaged sidecars:
+Install Node.js 24+, pnpm, and Python 3.10+. On Ubuntu / Debian, install
+the native build tools used by the packaged sidecars:
 
 ```bash
 sudo apt install build-essential binutils cmake curl git nasm pkg-config python3 python3-venv xz-utils
@@ -363,14 +160,18 @@ pnpm setup:python-extract
 
 # Build the renderer and run Electron
 pnpm build:web
-pnpm electron
+env -u ELECTRON_RUN_AS_NODE pnpm electron
 
 # Development mode
-pnpm dev
+env -u ELECTRON_RUN_AS_NODE pnpm dev
 
 # Optional: include the local PDF/OCR extractor sidecar
 pnpm build:python-extract-sidecar
 ```
+
+The launch commands above use POSIX shell syntax to clear an inherited
+`ELECTRON_RUN_AS_NODE`. On Windows, clear that variable in your shell before
+running `pnpm electron` or `pnpm dev`.
 
 Before opening a PR:
 
@@ -384,51 +185,33 @@ of creating ad hoc distributable builds.
 
 ---
 
-## Status
-
-Early alpha.
-
-Primary support:
-
-- macOS arm64
-- Windows 10+ x64
-
-Community-supported:
-
-- Linux x86_64 Debian 12+ / Ubuntu 22.04+
-
-Reasonably stable:
-
-- Local folder library model
-- Markdown, literal plain text, HTML, JSON, PDF, and image preview
-- PDF extraction, image OCR, and local audio and video transcription, with persisted failures and retry
-- AI Index and exact text search
-- MCP access for built-in and externally configured clients
-- Bounded file helpers for sandboxed Agents
-- Built-in, Claude Code, and Codex panel
-
-### Where We Need Help
-
-- [Agent panel polish](https://github.com/liliu-z/stashbase/issues?q=is%3Aissue+is%3Aopen+label%3A%22area%3A+agent-panel%22)
-- [Search filters and ranking controls](https://github.com/liliu-z/stashbase/issues?q=is%3Aissue+is%3Aopen+label%3A%22area%3A+search%22)
-- [Long-running conversion and recovery edge cases](https://github.com/liliu-z/stashbase/issues?q=is%3Aissue+is%3Aopen+label%3A%22area%3A+preparation%22)
-- [Packaging polish across platforms](https://github.com/liliu-z/stashbase/issues?q=is%3Aissue+is%3Aopen+label%3A%22area%3A+packaging%22)
-
----
-
 ## Contributing
 
-Small focused PRs are preferred. Open an issue before larger changes so scope and direction can be discussed first.
+StashBase is also an experiment in human-directed, AI-first development.
+Humans own product direction and trust decisions; AI helps connect design,
+implementation, review, and evidence. The
+[Project Maintenance Model](MAINTENANCE.md) describes that working loop.
 
-For substantial design, implementation, or review work, follow the
-[Project Maintenance Model](MAINTENANCE.md).
+Small focused PRs are preferred. Open an issue before larger changes so scope
+and direction can be discussed first.
 
-Not sure where to start? Pick something from [Where We Need Help](#where-we-need-help), or open [`design-docs/`](design-docs/) in StashBase and ask the Agent — or just ask us.
+- [Contributing guide](CONTRIBUTING.md) — development and validation.
+- [Product design](design-docs/README.md) — intent, workflows, and contribution areas.
+- [Engineering contracts](code-review/README.md) — ownership, invariants, and review.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for local development, validation, and release-maintainer notes.
+## Status
 
----
+**Early alpha.** Feedback and contributions are welcome, especially around
+Agent workflows, search quality, preparation and recovery, and cross-platform
+reliability.
+
+[Report an issue](https://github.com/liliu-z/stashbase/issues) or
+[join the Discord community](https://discord.gg/zsRZH4PTq9) for support and discussion.
 
 ## About
 
-StashBase is an independent open-source project built by [Li Liu](https://github.com/liliu-z), who works on [Milvus](https://github.com/milvus-io/milvus) at [Zilliz](https://zilliz.com) and brings years of vector-retrieval experience to making local files searchable in Agent workflows.
+StashBase is an independent open-source project built by
+[Li Liu](https://github.com/liliu-z), bringing vector-retrieval experience to
+making local knowledge useful to Agents.
+
+Licensed under [Apache 2.0](LICENSE).

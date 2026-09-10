@@ -1,8 +1,8 @@
 /**
- * Settings → AI Index panel. The user can choose the signed-in StashBase
- * allowance, direct OpenAI, or OpenRouter's OpenAI-compatible endpoint. With
- * no active source, indexing and meaning-based search are disabled (files
- * still save, preview, and Exact search); the setup modal on folder load lives in
+ * Settings → Search by Meaning panel. The user can choose the signed-in StashBase
+ * credits, direct OpenAI, or OpenRouter's OpenAI-compatible endpoint. With
+ * no active source, searching by meaning is unavailable (files still save,
+ * preview, and keyword search keeps working); the setup modal on folder load lives in
  * `EmbedderRequireKeyGate` so it fires whether or not Settings is open.
  */
 import { useState } from 'react';
@@ -105,7 +105,7 @@ export function EmbeddingPanel() {
         {/* role="alert": the failure replaces the panel after an async
           * load, so it must announce itself — nothing else changes on
           * screen for a listener to notice. */}
-        <div role="alert" className="text-sm text-destructive">Couldn’t load embedder settings: {loadError}</div>
+        <div role="alert" className="text-sm text-destructive">Couldn’t load settings for search by meaning: {loadError}</div>
         <div className="mt-2.5 flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={retryLoad}>Retry</Button>
         </div>
@@ -128,9 +128,9 @@ export function EmbeddingPanel() {
     <>
       <div>
         <div>
-          <SectionHeading level={3} className="mb-1">AI Index</SectionHeading>
+          <SectionHeading level={3} className="mb-1">Search by Meaning</SectionHeading>
           <SectionDescription className="mb-2.5">
-            Powers meaning-based search and Agent retrieval. The model stays fixed so the local index remains compatible.
+            Find related Sources and Wiki Pages even when the wording differs. The model stays fixed so local search data remains compatible.
           </SectionDescription>
           {showingHostedSummary && (
             <Card surface="raised" className="p-4">
@@ -140,7 +140,7 @@ export function EmbeddingPanel() {
                   * turn sits under the Settings dialog title's h2. */}
                 <AccountSummary
                   account={state.account}
-                  description="Using the StashBase account allowance"
+                  description="Using the StashBase account credits"
                   heading
                 />
                 {state.account.quota && (
@@ -154,12 +154,12 @@ export function EmbeddingPanel() {
                 <div className="mt-3">
                   {/* The primitive, not an inline-width div: Root carries
                     * role="progressbar" with aria-valuenow/max, so the
-                    * remaining allowance is a number and not only a
+                    * remaining credits are a number and not only a
                     * coloured rectangle. The track takes the card's full
                     * width instead of the primitive's inline step. */}
                   <Progress
                     className="block"
-                    aria-label="Remaining AI Index allowance"
+                    aria-label="Remaining credits for search by meaning"
                     value={hostedQuotaRemainingPercent(state.account.quota)}
                   >
                     <ProgressTrack className="w-full">
@@ -205,7 +205,7 @@ export function EmbeddingPanel() {
                   setKeyFormOpen(false);
                   void useAccountAllowance();
                 }}
-              >Use account allowance</Button>
+              >Use account credits</Button>
             </Card>
           )}
           {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (
@@ -214,7 +214,7 @@ export function EmbeddingPanel() {
               * aria-label on the control. The legend is hidden because the
               * panel heading above already carries the visible name for
               * this block; the fieldset still announces the grouping. */}
-            <FieldLegend className="sr-only">Embedding provider</FieldLegend>
+            <FieldLegend className="sr-only">Provider for search by meaning</FieldLegend>
             <SegmentedControl
               disabled={addBusy}
               value={[selectedProvider]}
@@ -316,7 +316,7 @@ export function EmbeddingPanel() {
           ))}
           {!showingHostedSummary && !signInFormOpen && !showingAuthChoice && (
             <SectionDescription className="mt-3.5 [&_code]:font-mono [&_code]:text-xs [&_code]:whitespace-nowrap [&_code]:text-accent">
-              Stored locally in <code>~/.stashbase/config.json</code>. Used only for embeddings, never chat.
+              Stored locally in <code>~/.stashbase/config.json</code>. Used only for search by meaning, never Chat.
             </SectionDescription>
           )}
         </div>

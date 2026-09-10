@@ -26,7 +26,7 @@ test('every built-in runtime declares the fundamental Shared Agent Contract beha
   assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => [adapter.id, adapter.label]), [
     ['codex', 'Codex'],
     ['claude', 'Claude Code'],
-    ['stashbase', 'Built-in'],
+    ['stashbase', 'Wiki Agent'],
   ]);
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
     for (const capability of REQUIRED_SHARED_CAPABILITIES) {
@@ -69,7 +69,8 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
   const clientEvents: AgentClientEvent[] = [
     { t: 'prompt', text: 'first', titleHint: 'Title' }, { t: 'steer', id: 'queued', text: 'follow-up' },
     { t: 'permission-reply', id: 'approval', allow: true, always: true }, { t: 'interrupt' },
-    { t: 'set-model', model: 'native-model' }, { t: 'set-mode', mode: 'plan' }, { t: 'close' },
+    { t: 'set-model', model: 'native-model' }, { t: 'set-mode', mode: 'plan' },
+    { t: 'set-similarity-search', enabled: false }, { t: 'close' },
   ];
   const events: AgentServerEvent[] = [
     { t: 'ready' }, { t: 'session-id', id: 'session' }, { t: 'session-title', title: 'Title' },
@@ -87,7 +88,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'exit', message: 'runtime stopped unexpectedly' },
     { t: 'exit', reason: 'scope-removed', folder: '/Users/me/Projects/Research' },
   ];
-  assert.equal(clientEvents.length, 7);
+  assert.equal(clientEvents.length, 8);
   assert.equal(events.length, 19);
 });
 

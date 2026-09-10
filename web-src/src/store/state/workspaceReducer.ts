@@ -11,6 +11,7 @@
  */
 import type { Action, NameSet, OpenFile, Tab, WorkspaceSlice } from './state';
 import {
+  OUTLINE_MIN_HEIGHT,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   forgetClosedTabs,
@@ -238,12 +239,28 @@ export function workspaceReducer(w: WorkspaceSlice, a: Action): WorkspaceSlice |
     case 'FILES_LOADED': {
       const folderPath = a.folderPath ?? (a.folder ? w.folderPath : '');
       const folderChanged = folderPath !== w.folderPath;
+      const hidesPreviouslyVisibleEntries = !folderChanged
+        && w.showHiddenFiles
+        && a.showHiddenFiles === false;
+      const visiblePaths = hidesPreviouslyVisibleEntries
+        ? new Set([...a.files.map((file) => file.name), ...a.folders.map((folder) => folder.path)])
+        : null;
       return {
         ...w,
         files: a.files,
         folders: a.folders,
         folder: a.folder,
         folderPath,
+        // Only a listing that consulted the server carries the flag;
+        // optimistic local FILES_LOADED patches keep the last known value.
+        showHiddenFiles: a.showHiddenFiles ?? w.showHiddenFiles,
+        ...(visiblePaths
+          ? {
+              expanded: toNameSet(Object.keys(w.expanded).filter((path) => visiblePaths.has(path))),
+              selectedPath: w.selectedPath && !visiblePaths.has(w.selectedPath) ? '' : w.selectedPath,
+              activeFolder: w.activeFolder && !visiblePaths.has(w.activeFolder) ? '' : w.activeFolder,
+            }
+          : {}),
         ...(folderChanged
           ? { recentFilePaths: [], editorHistory: [] }
           : {}),
@@ -341,6 +358,13 @@ export function workspaceReducer(w: WorkspaceSlice, a: Action): WorkspaceSlice |
       // collapse, but that decision lives in the drag handler (it has
       // the raw cursor delta); here we just keep the stored width sane.
       return { ...w, sidebarWidth: Math.max(SIDEBAR_MIN_WIDTH, Math.min(a.width, SIDEBAR_MAX_WIDTH)) };
+    case 'OUTLINE_HEIGHT':
+      // Only the floor is static. The ceiling is whatever the file tree
+      // can spare above its own floor, which the drag handle measures from
+      // live geometry; the dock's flex layout re-clamps a stored height the
+      // window can no longer hold, so the store keeps the intent and the
+      // tree keeps its rows.
+      return { ...w, outlineHeight: Math.max(OUTLINE_MIN_HEIGHT, a.height) };
     case 'ACTIVE_FOLDER':
       // Semantically "make this folder the user's current target" —
       // also moves the visual focus there.

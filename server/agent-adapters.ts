@@ -1,5 +1,5 @@
 /**
- * Built-in implementations of the Shared Agent Contract.
+ * Bundled implementations of the Shared Agent Contract.
  *
  * Keeping this declaration separate from server startup makes the common
  * contract testable without creating an HTTP server or native process.
@@ -49,7 +49,7 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     history: claudeHistoryActions(),
   },
   {
-    id: 'stashbase', label: 'Built-in', vendor: 'StashBase · OpenCode · DeepSeek',
+    id: 'stashbase', label: 'Wiki Agent', vendor: 'StashBase · OpenCode · DeepSeek',
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
       attachments: false,

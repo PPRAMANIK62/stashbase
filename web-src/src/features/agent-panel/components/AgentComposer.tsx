@@ -21,9 +21,10 @@ import {
 } from '@/common/lib/libraryScope';
 import { ScopeMenu } from '@/common/components/ScopeMenu';
 import { MentionComposer, type MentionComposerHandle } from '@/features/agent-panel/components/MentionComposer';
+import { SimilaritySearchControl } from '@/features/agent-panel/components/SimilaritySearchControl';
 import {
-  ModelEffortMenu, ModeMenu, nextPermMode,
-  type ComposerEffortControl, type ComposerModeControl, type ComposerModelControl,
+  AgentMenu, ModelEffortMenu, ModeMenu, nextPermMode,
+  type ComposerAgentControl, type ComposerEffortControl, type ComposerModeControl, type ComposerModelControl,
 } from '@/features/agent-panel/components/ComposerPills';
 import {
   MentionSuggestions, useMentionSuggestions,
@@ -34,7 +35,7 @@ import type { AgentSkill, Attachment } from '@/features/agent-panel/lib/types';
 /* The composer's prop contract stays readable from one place even though
  * the pill and mention halves are owned by the modules that render them. */
 export type {
-  ComposerEffortControl, ComposerModeControl, ComposerModelControl,
+  ComposerAgentControl, ComposerEffortControl, ComposerModeControl, ComposerModelControl,
 } from '@/features/agent-panel/components/ComposerPills';
 export type {
   ComposerMentionSources, ComposerSkillSource,
@@ -52,10 +53,16 @@ export type {
  * thing no variant expresses: a circle that tints ACCENT on hover rather
  * than muted. Circular, not squircular: a true circle is the one shape
  * that reads as a button rather than as a smaller copy of the composer
- * around it. `rounded-full` also opts out of the app-wide squircle (see
- * globals.css), which is what keeps it a circle instead of a bulged
- * superellipse. Stop holds its red under the pointer — the ghost variant's
- * muted hover would read as the button going inert mid-turn.
+ * around it. `rounded-full` also opts out of the app-wide continuous
+ * corner (see globals.css), which is what keeps it a circle instead of a
+ * bulged superellipse. BOTH states wear the accent: this is the composer's one
+ * key action, and send→stop must read as the same button changing verbs,
+ * not two buttons trading places. (Not red for stop: the danger palette
+ * is budgeted for destructive actions, and stopping a turn is routine —
+ * a red disc made every streaming turn wear a warning light.) Hover dims
+ * the fill — never grays it — so mid-turn it cannot read as going inert.
+ * The stop glyph takes size-3.5, under the primitive's size-4 default:
+ * the fill-weight square at 16px filled the disc edge to edge.
  */
 function SendButton({ turnActive, disabled, onStop, onSend }: {
   turnActive: boolean;
@@ -68,11 +75,11 @@ function SendButton({ turnActive, disabled, onStop, onSend }: {
       <Button
         variant="ghost"
         size="icon-sm"
-        className="rounded-full border-destructive bg-destructive text-primary-foreground hover:bg-destructive hover:text-primary-foreground"
+        className="rounded-full bg-accent text-primary-foreground hover:bg-accent/85 hover:text-primary-foreground"
         aria-label="Stop agent"
         onClick={onStop}
       >
-        <StopIcon />
+        <StopIcon className="size-3.5" />
       </Button>
     );
   }
@@ -80,7 +87,7 @@ function SendButton({ turnActive, disabled, onStop, onSend }: {
     <Button
       variant="ghost"
       size="icon-sm"
-      className="rounded-full border-border bg-muted text-foreground enabled:hover:border-accent enabled:hover:bg-accent enabled:hover:text-primary-foreground disabled:opacity-40"
+      className="rounded-full bg-accent text-primary-foreground enabled:hover:bg-accent/85 enabled:hover:text-primary-foreground disabled:opacity-40"
       aria-label="Send message"
       disabled={disabled}
       onClick={onSend}
@@ -99,6 +106,16 @@ export interface ComposerScopeControl {
   onSet: (scope: LibraryScope) => void;
 }
 
+/** StashBase's retrieval policy for the mounted session. It rides the
+ * composer bar's context half with scope rather than the Agent's run
+ * settings, and stays owned by AgentView because the live session — not
+ * the composer — holds the policy. */
+export interface ComposerSimilaritySearch {
+  enabled: boolean;
+  availabilityKnown: boolean;
+  onChange: (enabled: boolean) => void;
+}
+
 /** Context attachments — owned by AgentView so panel drops, the `+`
  * picker, and the send path share one list. */
 export interface ComposerAttachments {
@@ -111,8 +128,9 @@ export interface ComposerAttachments {
 }
 
 export function AgentComposer({
-  phase, disabled, turnActive, active, agentShortName, hero, prefill,
-  mode, effort, model, scope, mentions, skills, attachments,
+  phase, disabled, turnActive, active, agentShortName, hero,
+  mode, effort, model, scope, similaritySearch, mentions, skills, attachments,
+  agentPick,
   closedPlaceholder, onDraftChange, onFocusChange, onSend, onStop,
 }: {
   phase: 'connecting' | 'live' | 'closed';
@@ -120,12 +138,13 @@ export function AgentComposer({
   turnActive: boolean;
   active: boolean;
   agentShortName: string;
+  /** The leading agent pill — who this not-yet-started chat talks to.
+   *  Absent (or `show: false`) once a conversation exists. */
+  agentPick?: ComposerAgentControl;
   /** Empty-chat PRESENTATION only — the resting height and the one
    * sanctioned shadow. Width is deliberately NOT part of it: both layouts
    * mount the same instance at the same measure. */
   hero?: boolean;
-  /** Empty-state starter template. Prefills the draft only — never sends. */
-  prefill?: { text: string; nonce: number } | null;
   /** A terminal state can be expected and non-reconnectable (folder scope
    * retirement). Keep its composer draft visible, but do not tell the user
    * to reconnect to a scope that no longer exists. */
@@ -134,6 +153,7 @@ export function AgentComposer({
   effort: ComposerEffortControl;
   model: ComposerModelControl;
   scope: ComposerScopeControl;
+  similaritySearch: ComposerSimilaritySearch;
   mentions: ComposerMentionSources;
   skills: ComposerSkillSource;
   attachments: ComposerAttachments;
@@ -158,12 +178,6 @@ export function AgentComposer({
   });
 
   useEffect(() => { if (active) composerRef.current?.focus(); }, [active]);
-
-  // Starter-suggestion prefill: replace the draft and keep focus in the
-  // editor so typing continues naturally. Sending stays a user action.
-  useEffect(() => {
-    if (prefill) composerRef.current?.setText(prefill.text);
-  }, [prefill]);
 
   function cycleMode() {
     mode.onSet(nextPermMode(mode.value));
@@ -206,7 +220,7 @@ export function AgentComposer({
     // composer share the `-md` measure — which the old chat-primary hook
     // (a 944px wrapper around a 920px card) had drifted away from.
     <div
-      className="relative mx-auto w-measure-md p-2"
+      className="relative mx-auto w-measure-md px-4 py-2"
       data-draft-empty={text.trim() ? 'false' : 'true'}
     >
       <MentionSuggestions state={suggestions} skills={skills} />
@@ -218,15 +232,18 @@ export function AgentComposer({
         // The hero corner — one step past every overlay in the app. The
         // composer is the surface the eye rests on, and the extra radius
         // is what makes it read as the anchor rather than another panel.
-        'flex flex-col gap-1.5 rounded-2xl border border-border bg-background px-2 pt-2 pb-1.5',
+        // pb matches px so the send disc sits equidistant from the right
+        // and bottom edges — at the hero radius the corner sweep makes any
+        // inset mismatch read as the button drifting off-center.
+        'flex flex-col gap-1.5 rounded-hero border border-border bg-background px-3 pt-2 pb-3',
         // Hero (empty-state) presentation: the composer is the visual
         // anchor of an otherwise bare pane, so it earns a taller resting
         // input and the one sanctioned non-overlay shadow. Docked mode
         // stays flat and compact beside a document.
-        // 56px ≈ two and a half lines: a shade taller than the docked
-        // composer's two, which is all the extra presence the empty
-        // pane's anchor needs. Four lines read as a form to fill in.
-        hero && 'shadow-raised [--composer-min-h:56px]',
+        // 72px ≈ three lines: the plump-anchor presence the empty pane
+        // asks for (paired with the hero corner). More reads as a form
+        // to fill in.
+        hero && 'shadow-raised [--composer-min-h:72px]',
       )}>
         {(attachments.items.length > 0 || attachments.uploading) && (
           <div className="flex flex-wrap items-center gap-1">
@@ -306,8 +323,21 @@ export function AgentComposer({
               <PlusIcon />
             </Button>
           )}
-          {/* Scope reads left (with the attach control); the run settings
-            * — model, mode — group right next to send. */}
+          {/* The bar splits by ownership, not by control type: what
+            * StashBase supplies as library context — the attach control and
+            * the scope — reads left; the Agent's own run settings (model,
+            * mode) group right next to send. Retrieval mode is library
+            * context too, but it rides INSIDE the scope popup rather than
+            * beside it: scope is what a lookup may reach and matching is
+            * how it compares. Durable Agent Instructions live in the panel
+            * toolbar rather than this conversation-control popup. Only the
+            * scope itself is worth the docked bar's width. */}
+          {/* WHO leads the bar: the agent pill sits before where and
+            * how, and only while the chat is still unclaimed. Never
+            * disabled with the composer: rebinding an unclaimed tab is
+            * renderer-local (no wire), and a runtime-gated chat NEEDS
+            * the pill live — it is the way out of a gated agent. */}
+          {agentPick?.show && <AgentMenu agentPick={agentPick} disabled={false} />}
           <ScopeMenu
             scope={scope.current}
             entries={scope.entries}
@@ -317,6 +347,13 @@ export function AgentComposer({
             ariaLabel={scopePillAriaLabel(scope.current, scope.locked)}
             locked={scope.locked}
             disabled={disabled}
+            footer={(
+              <SimilaritySearchControl
+                enabled={similaritySearch.enabled}
+                availabilityKnown={similaritySearch.availabilityKnown}
+                onChange={similaritySearch.onChange}
+              />
+            )}
             onSetScope={scope.onSet}
           />
           <span className="flex-1" />

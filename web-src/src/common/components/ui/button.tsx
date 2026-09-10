@@ -19,12 +19,16 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // The expanded tint is scoped to POPUP triggers (aria-haspopup):
+        // it means "your menu is open", not "the thing you control is
+        // visible" — a panel toggle carries aria-expanded as a steady
+        // state and must not sit permanently lit.
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border-border bg-background hover:bg-muted hover:text-foreground aria-[haspopup]:aria-expanded:bg-muted aria-[haspopup]:aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         ghost:
           // Preflight is off in this renderer, so the UA button background
           // must be cleared explicitly — ghost means transparent at rest.
-          "bg-transparent hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "bg-transparent hover:bg-muted hover:text-foreground aria-[haspopup]:aria-expanded:bg-muted aria-[haspopup]:aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30",
         // Quiet destructive affordance: a bordered outline that stays calm at

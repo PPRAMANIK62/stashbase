@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { EditIcon, PreviewIcon } from '@/common/components/icons';
 import { useAppActions, useWorkspace } from '@/store/contexts/AppContext';
 import { DocumentViewer } from '@/features/documents';
@@ -29,6 +30,17 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
   const cur = activeTab?.file ?? null;
   const editMode = activeTab?.editMode ?? false;
   const saveStatus = activeTab?.saveStatus ?? { text: '', cls: '' };
+  // "Saved" is a tick, not a standing state: fade it out shortly after it
+  // lands (the store keeps the status for tab dots and tests; this is
+  // presentation only). Everything else — Saving…, Unsaved, errors —
+  // stays visible for as long as the store says so.
+  const [saveTickVisible, setSaveTickVisible] = useState(true);
+  useEffect(() => {
+    setSaveTickVisible(true);
+    if (saveStatus.cls !== 'saved') return;
+    const timer = setTimeout(() => setSaveTickVisible(false), 2000);
+    return () => clearTimeout(timer);
+  }, [saveStatus.cls, saveStatus.text, state.activeTabId]);
   const hasTabs = state.tabs.length > 0;
   const emptyTab = !!activeTab && !cur;
   // Out-of-folder tab (a library search hit viewed without switching the
@@ -108,11 +120,12 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
         aria-labelledby={activeTab ? `document-tab-${activeTab.id}` : undefined}
       >
         {!hasTabs && !state.folderPath && (
-          /* No folder open at all (empty library, or an open failure).
-           * The sidebar's zero-folder block owns the add-folder action;
-           * this pane stays a quiet pointer toward it. */
+          /* Bare window with no open document (chat leads the layout;
+           * this pane only shows once the chat panel is hidden). The
+           * Library switcher and the chat's Templates gallery own the
+           * add-folder actions — this stays a quiet pointer. */
           <div className="grid h-full place-items-center p-10 text-center text-base text-muted-foreground">
-            <p className="m-0 leading-loose">Add a folder from the sidebar to get started.</p>
+            <p className="m-0 leading-loose">Open a folder from the Library switcher to get started.</p>
           </div>
         )}
         {!hasTabs && !!state.folderPath && (
@@ -190,7 +203,7 @@ export function MainPane({ workspaceHidden = false }: { workspaceHidden?: boolea
             /* `role="status"` (an implicit polite live region): the save
              * tick — and more importantly a save ERROR — is otherwise
              * invisible to a screen reader mid-edit. Styling unchanged. */
-            <span role="status" className={cn('text-sm transition-opacity duration-standard', saveStatus.cls === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
+            <span role="status" className={cn('text-sm transition-opacity duration-standard', saveStatus.cls === 'error' ? 'text-destructive' : 'text-muted-foreground', saveStatus.cls === 'saved' && !saveTickVisible && 'opacity-0')}>
               {saveStatus.text}
             </span>
           )}

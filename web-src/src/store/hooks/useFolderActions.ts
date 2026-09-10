@@ -51,11 +51,20 @@ export async function runFolderOpenTransition({
   try {
     const opened = await request();
     if (!opened.current || generation !== openGeneration.current) return;
-    commitNavigation(opened.current, generation);
+    const current = opened.current;
+    commitNavigation(current, generation);
     if (openingFolderGeneration.current === generation) {
       openingFolderGeneration.current = null;
     }
-    await afterNavigation(opened.current, generation);
+    // Navigation is complete once the server binding is acknowledged and the
+    // new folder identity is committed. Listing/order/index follow-up must not
+    // keep the caller's "Opening …" state alive; it owns its own liveness and
+    // stale-generation checks.
+    void Promise.resolve()
+      .then(() => afterNavigation(current, generation))
+      .catch((err: unknown) => {
+        console.warn('[folder] background open follow-up failed:', err);
+      });
   } finally {
     if (openingFolderGeneration.current === generation) {
       openingFolderGeneration.current = null;

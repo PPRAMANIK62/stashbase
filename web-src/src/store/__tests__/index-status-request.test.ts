@@ -134,6 +134,7 @@ test('a stale status 412 cannot cancel a successful folder-open navigation', asy
   }>();
   const navigationCommitted = deferred<void>();
   const afterNavigation = deferred<void>();
+  let backgroundSettled = false;
   const pendingNavigationActions: Action[] = [];
   const dispatch = (action: Action) => {
     pendingNavigationActions.push(action);
@@ -155,7 +156,10 @@ test('a stale status 412 cannot cancel a successful folder-open navigation', asy
       commitOpenedFolderNavigation(dispatch, folderContextPath, current);
       navigationCommitted.resolve();
     },
-    afterNavigation: () => afterNavigation.promise,
+    afterNavigation: async () => {
+      await afterNavigation.promise;
+      backgroundSettled = true;
+    },
   });
 
   assert.equal(openGeneration.current, 11);
@@ -166,7 +170,13 @@ test('a stale status 412 cannot cancel a successful folder-open navigation', asy
     recent: [],
   });
   await navigationCommitted.promise;
+  await opening;
   assert.equal(openingFolderGeneration.current, null);
+  assert.equal(
+    backgroundSettled,
+    false,
+    'folder navigation must resolve before listing/index follow-up work settles',
+  );
 
   const currentPoll = await runIndexStatusRequest({
     activeFolderPath: folderContextPath.current,
@@ -205,5 +215,4 @@ test('a stale status 412 cannot cancel a successful folder-open navigation', asy
   assert.equal(state.workspace.folder, 'new-library');
 
   afterNavigation.resolve();
-  await opening;
 });

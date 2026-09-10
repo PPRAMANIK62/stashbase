@@ -1,23 +1,30 @@
 /**
- * The two draggable dividers of the workspace shell: sidebar ↔ main pane
- * and main pane ↔ chat panel. Both are keyboard-operable ARIA separators;
- * the e2e layout journey asserts their names and aria-value* attributes,
- * so DOM structure and labels here are load-bearing.
+ * The three draggable dividers of the workspace shell: sidebar ↔ main
+ * pane, main pane ↔ chat panel, and — inside the sidebar — file tree ↔
+ * Document Outline dock. All are keyboard-operable ARIA separators; the
+ * e2e layout journey asserts their names and aria-value* attributes, so
+ * DOM structure and labels here are load-bearing.
  */
 import {
   useEffect,
   useRef,
+  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from 'react';
 import '@/features/workspace/workspace.css';
 import { useAppActions, useChat, useWorkspace } from '@/store/contexts/AppContext';
 import {
   clampChatWidth,
+  clampOutlineHeight,
   CHAT_MAX_WIDTH,
   CHAT_MIN_WIDTH,
+  isOutlineSplitterKey,
   isSplitterKey,
+  OUTLINE_MIN_HEIGHT,
   resizeChatByKeyboard,
+  resizeOutlineByKeyboard,
   resizeSidebarByKeyboard,
   SIDEBAR_COLLAPSE_AT,
   SIDEBAR_MIN_WIDTH,
@@ -273,5 +280,148 @@ export function ChatSplitter() {
       onPointerCancel={finish}
       onKeyDown={onKeyDown}
     />
+  );
+}
+
+/** The tallest the outline dock can be right now: its rendered height plus
+ *  the room the tree section has above its computed `min-height`. The two
+ *  are the column's only flexible siblings, so the sum is exact — and it
+ *  is the same bound the flex layout enforces on a stored height the
+ *  window can no longer hold. `null` without geometry: a detached render,
+ *  or a test DOM that lays nothing out. */
+function measureOutlineCeiling(tree: HTMLElement | null, dock: HTMLElement | null): number | null {
+  if (!tree || !dock) return null;
+  const treeFloor = Number.parseFloat(getComputedStyle(tree).minHeight);
+  const ceiling = Math.round(dock.offsetHeight + tree.offsetHeight - treeFloor);
+  return Number.isFinite(ceiling) && ceiling > 0 ? ceiling : null;
+}
+
+/** Horizontal drag handle on the seam between the file tree and the
+ *  Document Outline dock. Drags the dock's height — header strip plus
+ *  list — from OUTLINE_MIN_HEIGHT up to whatever the tree can spare above
+ *  its own floor (FILE_TREE_MIN_HEIGHT, or just its header row while the
+ *  tree is folded). That ceiling is not a constant: it is read from the two
+ *  sections' live geometry (`measureOutlineCeiling`), so the store clamps
+ *  only the floor. The seat is a zero-height flow item between the two
+ *  sections; the 6px strip it positions straddles the seam evenly, which a
+ *  strip inside either section could not — each clips its own overflow.
+ *  Mounted only while the outline is expanded: the header toggle is the
+ *  way back from a fold, and a drag on a folded strip has nothing to size.
+ *
+ *  Same live-drag scheme as the two column handles: rAF-batched writes to
+ *  the dock's own `height` (the same property the sidebar renders from
+ *  state, on the same element), one dispatch at gesture end. */
+export function OutlineSplitter({
+  treeRef,
+  dockRef,
+}: {
+  treeRef: RefObject<HTMLElement | null>;
+  dockRef: RefObject<HTMLElement | null>;
+}) {
+  const state = useWorkspace();
+  const { dispatch } = useAppActions();
+  // `h` and `ceiling` are the RENDERED dock height and the bound at drag
+  // start — the rendered height, not the stored one, so a drag begins
+  // where the user sees the seam even after a window shrink clamped it.
+  const startRef = useRef<{ y: number; h: number; ceiling: number } | null>(null);
+  const pendingHeightRef = useRef<number | null>(null);
+  const frameRef = useRef<number | null>(null);
+  // The measured ceiling behind aria-valuemax/valuenow. Read after paint
+  // (a passive effect: layout is settled, so the read forces nothing) on
+  // every render of the sidebar, and again on window resize.
+  const [ceiling, setCeiling] = useState<number | null>(null);
+
+  useEffect(() => {
+    setCeiling(measureOutlineCeiling(treeRef.current, dockRef.current));
+  });
+  useEffect(() => {
+    const remeasure = () => setCeiling(measureOutlineCeiling(treeRef.current, dockRef.current));
+    window.addEventListener('resize', remeasure);
+    return () => window.removeEventListener('resize', remeasure);
+  }, [treeRef, dockRef]);
+
+  function writePendingHeight() {
+    frameRef.current = null;
+    const height = pendingHeightRef.current;
+    if (height !== null) dockRef.current?.style.setProperty('height', `${height}px`);
+  }
+
+  function queueHeight(height: number) {
+    pendingHeightRef.current = height;
+    if (frameRef.current === null) frameRef.current = requestAnimationFrame(writePendingHeight);
+  }
+
+  function cancelPendingFrame() {
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+  }
+
+  useEffect(() => () => {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+  }, []);
+
+  function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    const dock = dockRef.current;
+    const rendered = dock?.offsetHeight || state.outlineHeight;
+    startRef.current = {
+      y: e.clientY,
+      h: rendered,
+      ceiling: measureOutlineCeiling(treeRef.current, dock) ?? rendered,
+    };
+    pendingHeightRef.current = null;
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+  }
+  function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const start = startRef.current;
+    if (!start) return;
+    // Pulling the seam UP (negative dy) grows the dock.
+    queueHeight(clampOutlineHeight(start.h - (e.clientY - start.y), start.ceiling));
+  }
+  function onPointerUp() {
+    cancelPendingFrame();
+    const finalHeight = pendingHeightRef.current;
+    if (startRef.current && finalHeight !== null) {
+      writePendingHeight();
+      dispatch({ type: 'OUTLINE_HEIGHT', height: finalHeight });
+    }
+    startRef.current = null;
+    pendingHeightRef.current = null;
+  }
+
+  // What the user sees: the stored height, clamped the way the flex layout
+  // clamps it. Without geometry the stored height is all there is to
+  // report, and the keyboard cannot grow past it.
+  const valueNow = ceiling === null ? state.outlineHeight : clampOutlineHeight(state.outlineHeight, ceiling);
+  const valueMax = ceiling === null ? valueNow : Math.max(ceiling, OUTLINE_MIN_HEIGHT);
+
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!isOutlineSplitterKey(event.key)) return;
+    event.preventDefault();
+    const bound = measureOutlineCeiling(treeRef.current, dockRef.current) ?? state.outlineHeight;
+    const next = resizeOutlineByKeyboard(clampOutlineHeight(state.outlineHeight, bound), bound, event.key);
+    if (next !== state.outlineHeight) dispatch({ type: 'OUTLINE_HEIGHT', height: next });
+  }
+
+  return (
+    <div className="outline-splitter-seat">
+      <div
+        className="outline-splitter"
+        role="separator"
+        tabIndex={0}
+        aria-label="Resize Document Outline"
+        aria-orientation="horizontal"
+        aria-valuemin={OUTLINE_MIN_HEIGHT}
+        aria-valuemax={valueMax}
+        aria-valuenow={valueNow}
+        aria-valuetext={`${valueNow} pixels`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onKeyDown={onKeyDown}
+      />
+    </div>
   );
 }

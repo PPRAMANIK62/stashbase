@@ -18,6 +18,9 @@ export interface QueuedPrompt {
 
 interface PromptToSend {
   text: string;
+  /** Optional concise text for the transcript. Presets use this to keep the
+   * user-visible turn natural while sending a fuller operating contract. */
+  displayText?: string;
   attachments: Attachment[];
   titleHint?: string;
   skill?: string;
@@ -105,6 +108,12 @@ export function useAgentPromptQueue({
     mutateQueue((queue) => queue.map((p) => (p.id === promptId ? { ...p, status } : p)));
   }
 
+  /** Remove one prompt only while it is still local and unsent. A stale
+   * click must not discard a steer that already moved in flight. */
+  function deleteQueuedPrompt(promptId: string) {
+    mutateQueue((queue) => queue.filter((prompt) => prompt.id !== promptId || prompt.status !== 'waiting'));
+  }
+
   function send(text: string, skill?: string) {
     const atts = attachmentsRef.current;
     const titleHint = capabilitiesRef.current?.titleHint && isDefaultChatTitle(titleRef.current) ? text : undefined;
@@ -143,13 +152,18 @@ export function useAgentPromptQueue({
 
   /** Resend a failed prompt on a recovery card's behalf: explicit historical
    *  attachments (not the composer's chips), queued behind an active turn so
-   *  an old card acted on mid-turn never races a concurrent prompt. */
-  function resendFailedPrompt(retry: { text: string; attachments: Attachment[] }) {
+   *  an old card acted on mid-turn never races a concurrent prompt. The
+   *  latest failed turn can reuse its existing user block; an older card
+   *  appends at the tail so the retried answer keeps the right owner. */
+  function resendFailedPrompt(
+    retry: { text: string; attachments: Attachment[] },
+    appendBlock = true,
+  ) {
     if (turnActiveRef.current) {
       mutateQueue((queue) => [...queue, { id: nextBlockId(), ...retry, status: 'waiting' }]);
       return;
     }
-    void sendPromptNow({ ...retry, appendBlock: true });
+    void sendPromptNow({ ...retry, appendBlock });
   }
 
   function runNextQueuedPrompt() {
@@ -190,6 +204,7 @@ export function useAgentPromptQueue({
 
   async function sendPromptNow({
     text,
+    displayText,
     attachments: atts,
     titleHint,
     skill,
@@ -203,7 +218,7 @@ export function useAgentPromptQueue({
       return;
     }
     if (appendBlock) {
-      setBlocks((bs) => [...bs, { kind: 'user', id: nextBlockId(), text, attachments: atts.length ? atts : undefined, at: Date.now() }]);
+      setBlocks((bs) => [...bs, { kind: 'user', id: nextBlockId(), text: displayText ?? text, attachments: atts.length ? atts : undefined, at: Date.now() }]);
     }
     setTurnBusy(true);
     openKindRef.current = null;
@@ -265,6 +280,7 @@ export function useAgentPromptQueue({
     clearQueue,
     retireQueue,
     setQueuedPromptStatus,
+    deleteQueuedPrompt,
     runNextQueuedPrompt,
     steerQueuedPrompt,
     send,

@@ -5,6 +5,8 @@
  */
 import type {
   AgentContextFile,
+  AgentInstructionsScope,
+  AgentInstructionsState,
   AgentDiscoveryPolicy,
   AgentSetupFailureSimulation,
   AgentTurnFailureSimulation,
@@ -26,6 +28,7 @@ import type {
   FilesPayload,
   GenericFilePreview,
   FolderState,
+  GitHubImportResult,
   IndexStatus,
   KeywordSearchResult,
   LibraryKeywordSearchResult,
@@ -43,13 +46,13 @@ import type {
   AudioPreviewStatus,
   UploadResult,
   OnboardingPreferences,
+  WorkspacePreferences,
 } from '@/common/api/apiTypes';
 import {
   ApiError,
   encodePath,
   getWindowId,
   getJson,
-  head,
   parseJsonOrThrow,
   requestHeaders,
   send,
@@ -75,6 +78,12 @@ export const api = {
   /** Absolute path of the default folder home. New Folder opens the native
    *  picker here, but users can still open any folder on disk. */
   getFolderHome: () => getJson<{ path: string }>('/api/folder-home'),
+  /** Import a public GitHub repository into the StashBase folder home. */
+  importPublicGitHubRepository: (
+    input: { url: string; folderName?: string },
+    opts?: { signal?: AbortSignal },
+  ) =>
+    send<GitHubImportResult>('POST', '/api/github/import', input, { signal: opts?.signal }),
   /** Star / unstar a library folder. Metadata only — never touches the
    *  folder on disk. */
   setFolderFavorite: (path: string, favorite: boolean) =>
@@ -91,20 +100,24 @@ export const api = {
     send<Record<string, never>>('PUT', '/api/file-order', { parentPath, names }),
 
   // Files / folders listing --------------------------------------
-  // `folder` (optional) lists an explicit library-member folder instead of
-  // the window's current one — used by cross-folder chat tabs for mention
-  // and attachment scoping.
+  // `folder` (optional) requests the default-safe listing for Agent mentions
+  // and attachments. It never inherits the Workbench show-hidden preference.
   listFiles: (folder?: string) => getJson<FilesPayload>(
     folder ? `/api/files?folder=${encodeURIComponent(folder)}` : '/api/files',
   ),
   // `folder` (optional, also on getFile below) reads from an explicit member
   // folder — out-of-folder tabs view files without switching the window.
   statFile: (name: string, opts?: { folder?: string }) =>
-    head('/api/files/' + encodePath(name) + folderQuery(opts?.folder)),
+    getJson<{ version?: string }>('/api/file-stat/' + encodePath(name) + folderQuery(opts?.folder)),
 
   getOnboarding: () => getJson<OnboardingPreferences>('/api/onboarding'),
   putOnboarding: (patch: Partial<OnboardingPreferences>) =>
     send<OnboardingPreferences>('PUT', '/api/onboarding', patch),
+
+  /** Application-level Workbench visibility preference (hidden files).
+   *  Listings echo the effective value back in `FilesPayload`. */
+  putWorkspacePreferences: (patch: Partial<WorkspacePreferences>) =>
+    send<WorkspacePreferences>('PUT', '/api/workspace-preferences', patch),
 
   // CRUD ---------------------------------------------------------
   createNote: (content: string, dir: string) =>
@@ -216,6 +229,8 @@ export const api = {
   // to one member folder (`path_prefix` is that folder's absolute subpath).
   librarySearch: (query: string, top_k = 8, opts?: { folder?: string; pathPrefix?: string }) =>
     send<{ hits: SearchHit[] }>('POST', '/api/library/search', {
+      // The popup owns its scope independently of any active Chat.
+      ...(!opts?.folder && !opts?.pathPrefix ? { scope: 'library' } : {}),
       query,
       top_k,
       ...(opts?.folder ? { folder: opts.folder } : {}),
@@ -320,6 +335,13 @@ export const api = {
   }>) => send<AgentsResponse>('PUT', '/api/terminal/debug', patch),
   resetManagedAgent: (agent: Exclude<import('@shared/agent-protocol').AgentId, 'stashbase'>) =>
     send<AgentsResponse>('DELETE', `/api/terminal/clis/${encodeURIComponent(agent)}/managed`),
+  getAgentInstructions: (scope: AgentInstructionsScope) =>
+    getJson<AgentInstructionsState>(`/api/agent-instructions?scope=${encodeURIComponent(agentInstructionsScopeValue(scope))}`),
+  setAgentInstructions: (scope: AgentInstructionsScope, text: string) =>
+    send<AgentInstructionsState>('PUT', '/api/agent-instructions', {
+      scope: agentInstructionsScopeValue(scope),
+      text,
+    }),
   mcpStatus: () =>
     getJson<{
       command: string;
@@ -368,6 +390,13 @@ export const api = {
   deleteSession: (id: string, agent: import('@shared/agent-protocol').AgentId = 'stashbase', scope?: SessionScopeParams) =>
     send<Record<string, never>>('DELETE', agentSessionBase(agent) + '/' + encodeURIComponent(id) + sessionScopeQuery(scope)),
 };
+
+/** One primitive per scope — the request param and the identity key
+ *  effects depend on (`useAgentInstructionsPresence`), so the two can
+ *  never disagree on what distinguishes scopes. */
+export function agentInstructionsScopeValue(scope: AgentInstructionsScope): string {
+  return scope.kind === 'library' ? 'library' : scope.path;
+}
 
 function agentSessionBase(agent: import('@shared/agent-protocol').AgentId): string {
   return `/api/agents/${encodeURIComponent(agent)}/sessions`;

@@ -18,6 +18,7 @@ import { highlightRanges } from '@/features/search/lib/highlightRanges';
 import { EMBEDDER_KEY_ERROR, useLibrarySearchController } from '@/features/search/hooks/useLibrarySearchController';
 import { SearchStatusBanner } from '@/features/search/components/SearchStatusBanner';
 import { SemanticHitRow } from '@/features/search/components/SemanticHitRow';
+import { openEmbeddingSetup } from '@/common/lib/embeddingSetupTrigger';
 
 /**
  * The library search popup — the app's one search surface. A palette-style
@@ -195,11 +196,15 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
        * otherwise empty panel. */
       return null;
     }
-    if (error === EMBEDDER_KEY_ERROR || (error && error.startsWith('AI Index is disabled'))) {
+    if (error === EMBEDDER_KEY_ERROR || (error && error.startsWith('To search by meaning'))) {
+      /* The banner above this list already makes the setup offer in full,
+       * so this empty state says only what the banner does not: the path
+       * that works right now. Repeating the offer put the same two
+       * sentences twice on one popup. */
       return renderEmpty(
         <>
-          <div>Set up AI Index to search by meaning.</div>
-          <div>Exact text search works without AI Index.</div>
+          <div>Results will appear here once setup is complete.</div>
+          <div>Switch to By keyword to search right away.</div>
         </>,
       );
     }
@@ -297,19 +302,25 @@ export default function ManagedLibrarySearch({ prefill, onClose }: {
             * carry the selection instead. */}
           <SegmentedControl aria-label="Search mode" className="border-0 bg-muted p-0.5" value={[mode]} onValueChange={(next) => {
             const picked = next[0] as LibrarySearchMode | undefined;
-            if (picked && picked !== mode) setSearchMode(picked);
+            if (!picked || picked === mode) return;
+            if (picked === 'semantic' && state.embedderHasKey === false) {
+              onClose();
+              openEmbeddingSetup();
+              return;
+            }
+            setSearchMode(picked);
           }}>
             <SegmentedControlItem
               value="semantic"
               className={SEARCH_MODE_SEGMENT_CLASS}
               title={state.embedderHasKey === false
-                ? 'Match by meaning — needs AI Index'
-                : 'Match by meaning'}
+                ? 'Find matches even when the wording differs — needs setup'
+                : 'Find matches even when the wording differs'}
             >
-              Similar
+              By meaning
             </SegmentedControlItem>
-            <SegmentedControlItem value="keyword" className={SEARCH_MODE_SEGMENT_CLASS} title="Match exact text">
-              Exact
+            <SegmentedControlItem value="keyword" className={SEARCH_MODE_SEGMENT_CLASS} title="Match the exact text you type">
+              By keyword
             </SegmentedControlItem>
           </SegmentedControl>
         </div>

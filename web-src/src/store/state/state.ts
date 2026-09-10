@@ -45,14 +45,19 @@ import type {
 export {
   CHAT_MAX_WIDTH,
   CHAT_MIN_WIDTH,
+  FILE_TREE_MIN_HEIGHT,
+  OUTLINE_MIN_HEIGHT,
   SPLITTER_KEYBOARD_STEP,
   SIDEBAR_COLLAPSE_AT,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
   clampChatWidth,
+  clampOutlineHeight,
   hasName,
+  isOutlineSplitterKey,
   isSplitterKey,
   resizeChatByKeyboard,
+  resizeOutlineByKeyboard,
   resizeSidebarByKeyboard,
   getActiveTab,
   makeChatTab,
@@ -276,6 +281,12 @@ export interface WorkspaceSlice {
   files: FileMeta[];
   folders: FolderMeta[];
 
+  /** Server-owned application-level hidden-files visibility, as echoed by
+   *  the most recent listing. Drives the Files-panel menu's checked state
+   *  and the hidden-row presentation; the durable value lives in app
+   *  config, never here. */
+  showHiddenFiles: boolean;
+
   /** Manual sidebar ordering — map of `parentPath` → ordered list of
    *  child basenames. Empty map = use default (folders-first +
    *  alphabetical) for every folder. Mutated by drag-to-reorder in the
@@ -314,9 +325,17 @@ export interface WorkspaceSlice {
   /** Width (px) of the sidebar. User-resizable via the drag handle on
    *  the sidebar's right edge; clamped to [SIDEBAR_MIN_WIDTH, MAX]. */
   sidebarWidth: number;
+  /** Height (px) of the sidebar's Document Outline dock (its header strip
+   *  plus the list). User-resizable via the drag handle on the seam it
+   *  shares with the file tree; the store holds the floor
+   *  (OUTLINE_MIN_HEIGHT) while the ceiling is whatever the tree can
+   *  spare above FILE_TREE_MIN_HEIGHT, measured live and re-applied by
+   *  the dock's flex layout whenever the window can no longer hold the
+   *  stored height. */
+  outlineHeight: number;
 
-  /** User-visible paths whose AI Index content is still being
-   *  embedded/indexed. Keyword search ignores this state and can search
+  /** User-visible paths whose content is still being embedded/indexed for
+   *  search by meaning. Keyword search ignores this state and can search
    *  converted/source text without embeddings. */
   pendingSemanticNames: NameSet;
   semanticIndexing: NonNullable<IndexStatus['semanticIndexing']> | null;
@@ -441,6 +460,7 @@ const initialWorkspace: WorkspaceSlice = {
   libraryFolderStatuses: {},
   files: [],
   folders: [],
+  showHiddenFiles: false,
   fileOrder: {},
   tabs: [],
   recentFilePaths: [],
@@ -452,6 +472,9 @@ const initialWorkspace: WorkspaceSlice = {
   folderCollapsed: false,
   sidebarCollapsed: false,
   sidebarWidth: 280,
+  // The 26px strip over a 154px list — the Library list's cap, so the two
+  // dock lists read as one rhythm until the user sizes the outline.
+  outlineHeight: 180,
   pendingSemanticNames: {},
   semanticIndexing: null,
   pendingConversions: [],
@@ -500,7 +523,7 @@ export type Action =
   | { type: 'LIBRARY_FOLDER_STATUS'; path: string; status: LibraryFolderStatus }
   | { type: 'LIBRARY_FOLDER_STATUS_REMOVE'; path: string }
   | { type: 'FOLDER_CONTEXT'; folder: string; folderPath: string }
-  | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; folder: string; folderPath?: string }
+  | { type: 'FILES_LOADED'; files: FileMeta[]; folders: FolderMeta[]; folder: string; folderPath?: string; showHiddenFiles?: boolean }
   | { type: 'FILE_ORDER_LOADED'; order: Record<string, string[]> }
   /** Replace one folder's ordered list (optimistic update before the
    *  PUT lands). Names list may include entries that no longer exist
@@ -530,6 +553,7 @@ export type Action =
   | { type: 'FOLDER_FOLD_TOGGLE' }
   | { type: 'SIDEBAR_SET_COLLAPSED'; collapsed: boolean }
   | { type: 'SIDEBAR_WIDTH'; width: number }
+  | { type: 'OUTLINE_HEIGHT'; height: number }
   | { type: 'CHAT_TOGGLE' }
   | { type: 'CHAT_WIDTH'; width: number }
   | { type: 'AGENTS_LOADED'; agents: ChatSlice['agents'] }

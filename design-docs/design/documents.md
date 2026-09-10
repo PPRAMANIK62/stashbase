@@ -82,7 +82,7 @@ assertions.
 | JSON | `.json` | Source-preserving Tree and Source views | Existing sources are content-editable; New Note creates Markdown | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
 | HTML | `.html`, `.htm` | Compatibility preview | Preview-only in the Workbench | In-memory text derived from the source without durable Preparation | `read_file`, `write_file`, and `edit_file` use raw HTML source |
 | PDF | `.pdf` | Source PDF preview | Preview-only | Prepared Markdown | `read_file` returns current prepared Markdown; content writes are rejected |
-| Image | `.png`, `.jpg`, `.jpeg`, `.webp` | Source image preview and lightbox | Preview-only; accepted imports create visible image sources | Prepared OCR evidence | Search consumes OCR; external MCP `read_file` does not return image bytes; a built-in Agent may consume an explicitly supplied source image |
+| Image | `.png`, `.jpg`, `.jpeg`, `.webp` | Source image preview and lightbox | Preview-only; accepted imports create visible image sources | Prepared OCR evidence | Search consumes OCR; external MCP `read_file` does not return image bytes; an Agent Panel runtime may consume an explicitly supplied source image |
 | DOCX | `.docx` | Sanitized source-based preview with a prepared fallback | Preview-only | Prepared HTML | `read_file` returns current prepared HTML; content writes are rejected |
 | Audio | `.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.opus`, `.aac`, `.aiff`, `.aif` | Source playback or compatible local audio preview | Preview-only | Prepared timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
 | Video container | `.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv`, `.avi` | Media playback when compatible, otherwise a local audio preview | Preview-only | Audio track prepared as timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
@@ -92,6 +92,11 @@ Rename, move, and delete are file-mutation capabilities over regular files in
 the active Workbench, including generic regular files; they do not make a
 preview-only format content-editable or widen Agent access. Restricted
 filesystem entries are reveal-only. Generic bytes are never decoded lossily.
+
+`read_file` returns the whole readable text by default and, on request, one
+declared line window of it, so a long source can be consumed a piece at a time
+instead of spending an Agent's entire context in one call. A window is opt-in
+and never silently substituted for a whole read.
 
 ## Experience Contract
 
@@ -114,6 +119,9 @@ filesystem entries are reveal-only. Generic bytes are never decoded lossily.
   lossy replacement-character decode.
 - A structured JSON view is a controller over source text, never a second
   document model or persistence path.
+- A partial read announces itself, reports the source's full length, and offers
+  the offset that continues it. It never carries a version token, so a window
+  cannot be mistaken for the whole file by a later version-checked write.
 - Rendering untrusted document content never grants application privileges or
   loads arbitrary remote resources.
 - Product copy, Agent tool descriptions, and tests qualify format access by

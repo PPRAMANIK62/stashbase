@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react';
-import { lazyWithRetry } from '@/common/components/ErrorBoundary';
+import { lazy, type ComponentType, type ReactNode } from 'react';
+import { loadWithAlternateRetry } from '@/common/components/ErrorBoundary';
 import { LazyManaged } from '@/common/components/LazyManaged';
 import { PopupLoadingStatus } from '@/common/components/ui/status';
 
@@ -12,8 +12,24 @@ export type MenuItem =
       separator?: false;
     }
   | {
+      /** Cascading submenu row: opens `items` in a child popup BESIDE the
+       *  parent, which stays on screen. ATTACHED-trigger compositions
+       *  only (see the Submenu note in ui/menu.tsx) — ManagedMenu's
+       *  detached root must never receive one of these. */
       separator?: false;
       heading?: undefined;
+      label: string;
+      icon?: ReactNode;
+      detail?: string;
+      disabled?: boolean;
+      title?: string;
+      items: MenuItem[];
+      onSelect?: undefined;
+    }
+  | {
+      separator?: false;
+      heading?: undefined;
+      items?: undefined;
       label: string;
       /** Optional leading glyph (a 16px icon element). */
       icon?: ReactNode;
@@ -21,6 +37,12 @@ export type MenuItem =
       shortcut?: string;
       danger?: boolean;
       disabled?: boolean;
+      /** Marks the current choice with the trailing accent DOT (and
+       *  `menuitemradio`/`aria-checked` semantics, like `checked`). The
+       *  picker idiom for rows that already carry an attention dot slot —
+       *  one mark language, no separate check glyph. Give it to every row
+       *  of the picker, not just the current one. */
+      current?: boolean;
       /** Marks the current choice in picker-style menus. Defining it (true
        *  OR false) turns the row into a `menuitemradio` carrying
        *  `aria-checked`, so give it to every row of a picker, not just the
@@ -52,7 +74,13 @@ export interface MenuProps {
   minWidth?: number;
 }
 
-const ManagedMenu = lazyWithRetry(() => import('@/common/components/ManagedMenu'));
+const ManagedMenu = lazy(() => loadWithAlternateRetry<{ default: ComponentType<MenuProps> }>(
+  () => import('@/common/components/ManagedMenu'),
+  // A distinct URL is intentional: retrying the primary URL would join the
+  // browser's same indefinitely-pending module-map entry after a dev-server
+  // or local app-server restart.
+  () => import('@/common/components/ManagedMenu?menu-retry'),
+));
 
 export function Menu(props: MenuProps) {
   const { anchor } = props;

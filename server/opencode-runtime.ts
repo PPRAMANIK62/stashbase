@@ -20,7 +20,8 @@ import {
 } from '@opencode-ai/sdk';
 import { getHostedAccountSession } from './app-config.ts';
 import { ensureMcpLauncher } from './agent-mcp.ts';
-import { buildStashbasePreamble } from './agent-preamble.ts';
+import { resolveAgentInstructions } from './agent-instructions.ts';
+import { composeAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
 import { appDataRoot } from './local-data.ts';
 import { logger } from './log.ts';
 import {
@@ -129,8 +130,9 @@ export function buildOpenCodeConfig(
   model: { apiKey: string; baseUrl: string; model: string },
   mcp: string,
   mcpEnvironment: Record<string, string> = {},
-  preamble?: string,
+  agentInstructions?: string,
 ): Config {
+  const runtimeInstructions = composeAgentRuntimeInstructions(agentInstructions);
   const permission = {
     edit: 'ask',
     bash: 'ask',
@@ -178,14 +180,14 @@ export function buildOpenCodeConfig(
     },
     agent: {
       'stashbase-folder': {
-        description: 'StashBase built-in Agent for one authorized library folder.',
+        description: 'StashBase Wiki Agent for one authorized library folder.',
         mode: 'primary',
-        ...(preamble ? { prompt: preamble } : {}),
+        prompt: runtimeInstructions,
       },
       'stashbase-library': {
-        description: 'StashBase built-in Agent for the authorized library.',
+        description: 'StashBase Wiki Agent for the authorized library.',
         mode: 'primary',
-        ...(preamble ? { prompt: preamble } : {}),
+        prompt: runtimeInstructions,
         // A Library chat spans a non-contiguous set of registered folders.
         // Native cwd tools cannot express that membership boundary, so this
         // mode reaches files only through the scoped StashBase MCP server.
@@ -216,9 +218,9 @@ export function buildOpenCodeConfig(
 function openCodeConfig(
   model: { apiKey: string; baseUrl: string; model: string },
   mcpEnvironment: Record<string, string>,
-  preamble?: string,
+  agentInstructions?: string,
 ): Config {
-  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, preamble);
+  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, agentInstructions);
 }
 
 class OpenCodeRuntime {
@@ -230,7 +232,7 @@ class OpenCodeRuntime {
 
   constructor(
     private readonly mcpEnvironment: Record<string, string> = {},
-    private readonly preamble?: string,
+    private readonly agentInstructions?: string,
     private readonly requireAccount = true,
     private readonly agentSessionId = 'history',
   ) {
@@ -274,7 +276,7 @@ class OpenCodeRuntime {
             retryable: true,
           },
         },
-        error: 'Sign in to StashBase to use Built-in.',
+        error: 'Sign in to StashBase to use Wiki Agent.',
       };
     }
     return {
@@ -283,7 +285,7 @@ class OpenCodeRuntime {
       installed: true,
       source: 'bundled',
       state: 'available',
-      bootstrap: { phase: 'ready', progress: 1, message: 'Built-in is ready.' },
+      bootstrap: { phase: 'ready', progress: 1, message: 'Wiki Agent is ready.' },
     };
   }
 
@@ -337,7 +339,7 @@ class OpenCodeRuntime {
     const executable = bundledOpenCodeExecutable();
     if (!executable) throw new Error('The bundled OpenCode runtime is missing.');
     if (this.requireAccount && !getHostedAccountSession()) {
-      throw new Error('Sign in to StashBase to use Built-in.');
+      throw new Error('Sign in to StashBase to use Wiki Agent.');
     }
     await startHostedAgentBroker();
     if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
@@ -347,7 +349,7 @@ class OpenCodeRuntime {
     const password = cryptoRandomSecret();
     const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
     const model = hostedAgentRuntime(this.agentSessionId);
-    if (!model) throw new Error('The built-in Agent model broker is not running.');
+    if (!model) throw new Error('The Wiki Agent model broker is not running.');
     const child = spawn(executable, [
       'serve',
       '--hostname=127.0.0.1',
@@ -355,7 +357,7 @@ class OpenCodeRuntime {
       '--pure',
       '--log-level=WARN',
     ], {
-      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.preamble), username, password),
+      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.agentInstructions), username, password),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -448,7 +450,9 @@ export function createOpenCodeSessionRuntime(
   const sessionRuntime = new OpenCodeRuntime({
     STASHBASE_WINDOW_ID: context.windowId,
     STASHBASE_AGENT_SESSION_ID: context.agentSessionId,
-  }, buildStashbasePreamble(context.cwd, context.scope), true, context.agentSessionId);
+  }, resolveAgentInstructions(
+    context.scope === 'library' ? null : context.cwd,
+  ), true, context.agentSessionId);
   return {
     client: (directory) => sessionRuntime.client(directory),
     beginTurn: (turnId, profile) => beginHostedAgentTurn(context.agentSessionId, turnId, profile),

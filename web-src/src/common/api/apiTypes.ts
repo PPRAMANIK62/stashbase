@@ -52,12 +52,14 @@ export type {
   GenericFilePreview,
   FolderMeta,
   FolderState,
+  GitHubImportResult,
   UploadResult,
   UploadResultEntry,
   WorkspaceEntryAvailability,
   WorkspaceFileKind,
 } from '@shared/library-files';
 export type { SessionBlock, SessionInfo, SessionReplay } from '@shared/agent-sessions';
+export type { AgentInstructionsScope, AgentInstructionsState } from '@shared/agent-instructions';
 export type { McpHttpStatus } from '@shared/mcp';
 export type {
   AppearancePreferences,
@@ -66,6 +68,7 @@ export type {
   CapturePreferences,
   OnboardingPreferences,
   UpdatePreferences,
+  WorkspacePreferences,
 } from '@shared/preferences';
 export type {
   KeywordHitFile,

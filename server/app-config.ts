@@ -2,7 +2,7 @@
  * App-level config persistence — the single `~/.stashbase/config.json`.
  * Writes enforce owner-only POSIX permissions; Windows relies on the user's
  * profile ACL. This module owns the file primitives and the user-preference
- * accessors (API keys, terminal CLI, embedder provider); `folder.ts`
+ * accessors (API keys, Agent Instructions, terminal CLI, embedder provider); `folder.ts`
  * reuses the same primitives for library membership. Extracted from folder.ts:
  * credentials and preferences have nothing to do with the folder registry, and
  * routes that only need a key shouldn't import the whole window-context machinery.
@@ -20,6 +20,7 @@ import type {
   CapturePreferences,
   OnboardingPreferences,
   UpdatePreferences,
+  WorkspacePreferences,
 } from '../shared/preferences.ts';
 import type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
 import { LOCAL_EMBEDDING_SOURCE } from '../shared/embedding.ts';
@@ -33,6 +34,7 @@ export type {
   CapturePreferences,
   OnboardingPreferences,
   UpdatePreferences,
+  WorkspacePreferences,
 } from '../shared/preferences.ts';
 export type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
 
@@ -61,6 +63,10 @@ export const DEFAULT_CAPTURE_PREFERENCES: CapturePreferences = {
 
 export const DEFAULT_UPDATE_PREFERENCES: UpdatePreferences = {
   autoCheck: true,
+};
+
+export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
+  showHiddenFiles: false,
 };
 
 export interface EmbedderConfig {
@@ -121,7 +127,7 @@ export interface AppConfigFile {
     model?: string;
     baseUrl?: string;
   };
-  /** Active AI Index funding source. BYOK credentials and the account
+  /** Active embedding funding source. BYOK credentials and the account
    * session are retained independently so switching never destroys the
    * other option or silently falls back after a hosted failure. */
   embeddingSource?: EmbeddingSource;
@@ -161,11 +167,21 @@ export interface AppConfigFile {
   /** Explicit opt-ins for ambient capture. Absent and invalid values fail
    * closed so upgrades never begin reading the clipboard automatically. */
   capture?: Partial<CapturePreferences>;
+  /** Application-level Workbench visibility preferences. Absent and invalid
+   * values fail closed to the default safe view. */
+  workspace?: Partial<WorkspacePreferences>;
   /** Desktop release checks are enabled by default. The Electron main process
    * reads this through the local server so this process remains the sole
    * config writer. */
   updates?: Partial<UpdatePreferences>;
   onboarding?: OnboardingPreferences;
+  /** User-authored Chat guidance owned by StashBase. Folder entries use the
+   * exact spelling of library membership paths; `library` customizes the
+   * Library-wide default; no project file is created. */
+  agentInstructions?: {
+    folders?: Array<{ path: string; text: string }>;
+    library?: string;
+  };
 }
 
 export function readAppConfigStrict(): AppConfigFile {
@@ -345,7 +361,7 @@ export function setEmbeddingSource(source: EmbeddingSource): EmbeddingSource {
   if (source === 'stashbase-account') {
     if (!getHostedAccountSession()) throw new Error('Sign in before selecting the StashBase account allowance.');
   } else if (source === LOCAL_EMBEDDING_SOURCE) {
-    throw new Error('The local AI Index source is no longer available.');
+    throw new Error('The local embedding source is no longer available.');
   } else {
     const direct = getEmbedderConfig();
     if (!direct.apiKey || direct.provider !== source) throw new Error(`Add a ${source === 'openrouter' ? 'OpenRouter' : 'OpenAI'} key before selecting it.`);
@@ -570,6 +586,36 @@ export function setCapturePreferences(next: Partial<CapturePreferences>): Captur
   return resolved;
 }
 
+export function normalizeWorkspacePreferences(value: unknown): WorkspacePreferences {
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<WorkspacePreferences>
+    : {};
+  return {
+    showHiddenFiles: typeof raw.showHiddenFiles === 'boolean'
+      ? raw.showHiddenFiles
+      : DEFAULT_WORKSPACE_PREFERENCES.showHiddenFiles,
+  };
+}
+
+/** Fallback read: an unreadable config must fail safe to the default view
+ *  rather than block folder listings. */
+export function getWorkspacePreferences(): WorkspacePreferences {
+  return normalizeWorkspacePreferences(readAppConfig().workspace);
+}
+
+/** Strict read-modify-write: a malformed config fails the toggle instead of
+ *  being silently replaced with defaults. */
+export function setWorkspacePreferences(next: Partial<WorkspacePreferences>): WorkspacePreferences {
+  const cfg = readAppConfigStrict();
+  const resolved = normalizeWorkspacePreferences({
+    ...normalizeWorkspacePreferences(cfg.workspace),
+    ...next,
+  });
+  cfg.workspace = resolved;
+  writeAppConfigStrict(cfg);
+  return resolved;
+}
+
 export function normalizeUpdatePreferences(value: unknown): UpdatePreferences {
   const raw = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Partial<UpdatePreferences>
@@ -657,7 +703,7 @@ export function migrateRetiredLocalEmbeddingSource(): void {
   if (next) cfg.embeddingSource = next;
   else delete cfg.embeddingSource;
   writeAppConfigStrict(cfg);
-  log.info(`retired local AI Index source${next ? `; selected ${next}` : '; AI Index is not configured'}`);
+  log.info(`retired local embedding source${next ? `; selected ${next}` : '; no embedding source configured'}`);
 }
 
 export function getOnboardingPreferences(): OnboardingPreferences {

@@ -10,6 +10,7 @@ import {
   createUpdatePreferencesStore,
   normalizeCapturePreferences,
   normalizeUpdatePreferences,
+  normalizeWorkspacePreferences,
   type AppConfigFile,
 } from './app-config.ts';
 
@@ -29,6 +30,38 @@ test('clipboard image capture is default-off and persists only an explicit opt-i
   assert.deepEqual(normalizeCapturePreferences({ clipboardImageImport: 'yes' }), {
     clipboardImageImport: false,
   });
+});
+
+test('hidden-files visibility is default-off and invalid stored state recovers to the safe view', () => {
+  assert.deepEqual(normalizeWorkspacePreferences(undefined), { showHiddenFiles: false });
+  assert.deepEqual(normalizeWorkspacePreferences(null), { showHiddenFiles: false });
+  assert.deepEqual(normalizeWorkspacePreferences('yes'), { showHiddenFiles: false });
+  assert.deepEqual(normalizeWorkspacePreferences({ showHiddenFiles: 'yes' }), { showHiddenFiles: false });
+  assert.deepEqual(normalizeWorkspacePreferences({ showHiddenFiles: 1 }), { showHiddenFiles: false });
+  assert.deepEqual(normalizeWorkspacePreferences({ showHiddenFiles: true }), { showHiddenFiles: true });
+  assert.deepEqual(normalizeWorkspacePreferences({ showHiddenFiles: false }), { showHiddenFiles: false });
+});
+
+test('hidden-files visibility persists across fresh app-config processes', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-workspace-preferences-'));
+  const configDir = path.join(home, '.stashbase');
+  const configPath = path.join(configDir, 'config.json');
+  fs.mkdirSync(configDir);
+  fs.writeFileSync(configPath, JSON.stringify({ appearance: { theme: 'dark' } }));
+  try {
+    const write = runConfigMutation(home, `
+      config.setWorkspacePreferences({ showHiddenFiles: true });
+    `);
+    assert.equal(write.status, 0, write.stderr);
+    const read = runConfigMutation(home, `
+      process.stdout.write(JSON.stringify(config.getWorkspacePreferences()));
+    `);
+    assert.equal(read.status, 0, read.stderr);
+    assert.deepEqual(JSON.parse(read.stdout), { showHiddenFiles: true });
+    assert.equal(JSON.parse(fs.readFileSync(configPath, 'utf8')).appearance.theme, 'dark');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('desktop update checks are default-on and preserve unrelated config', () => {
@@ -105,6 +138,41 @@ function runConfigMutation(home: string, statement: string) {
   );
 }
 
+test('removing library membership clears only its StashBase-owned Agent Instructions', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-agent-instructions-remove-'));
+  const configDir = path.join(home, '.stashbase');
+  const configPath = path.join(configDir, 'config.json');
+  const removed = path.join(home, 'removed');
+  const retained = path.join(home, 'retained');
+  fs.mkdirSync(configDir);
+  fs.mkdirSync(removed);
+  fs.mkdirSync(retained);
+  fs.writeFileSync(configPath, JSON.stringify({
+    recentFolders: [removed, retained].map((folder, index) => ({
+      path: folder,
+      openedAt: `2026-08-0${index + 1}T00:00:00.000Z`,
+    })),
+    agentInstructions: {
+      folders: [
+        { path: removed, text: 'Removed guidance' },
+        { path: retained, text: 'Retained guidance' },
+      ],
+    },
+  }));
+  try {
+    const result = runConfigMutation(home, `
+      const folder = await import('./server/folder.ts');
+      await folder.removeRecentAsync(${JSON.stringify(removed)});
+    `);
+    assert.equal(result.status, 0, result.stderr);
+    const saved = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.deepEqual(saved.recentFolders.map((entry: { path: string }) => entry.path), [retained]);
+    assert.deepEqual(saved.agentInstructions.folders, [{ path: retained, text: 'Retained guidance' }]);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('retired folder metadata does not escape library APIs or survive a membership write', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-folder-metadata-test-'));
   const configDir = path.join(home, '.stashbase');
@@ -156,6 +224,7 @@ test('credential and source mutations never overwrite malformed config through a
     `config.setHostedAccountSession({ accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'person@example.com' });`,
     `config.setEmbedderConfig({ provider: 'openai', apiKey: 'sk-test' });`,
     `config.setEmbeddingSource('openai');`,
+    `config.setWorkspacePreferences({ showHiddenFiles: true });`,
   ];
   for (const statement of statements) {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-config-corrupt-test-'));
@@ -174,7 +243,7 @@ test('credential and source mutations never overwrite malformed config through a
   }
 });
 
-test('retired local AI Index cannot be selected again', () => {
+test('retired local embedding source cannot be selected again', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-local-embedding-config-test-'));
   try {
     const result = runConfigMutation(home, `
@@ -187,7 +256,7 @@ test('retired local AI Index cannot be selected again', () => {
   }
 });
 
-test('retired local AI Index migrates to account, BYOK, or unconfigured state', () => {
+test('retired local embedding source migrates to account, BYOK, or unconfigured state', () => {
   const session = {
     accessToken: 'access',
     refreshToken: 'refresh',

@@ -12,7 +12,7 @@ Electron renderer windows
         ▼
 Node application server
   ├─ local file operations and preparation orchestration
-  ├─ built-in Agent bridge
+  ├─ Agent Panel bridge
   ├─ MCP transports and library operations
   └─ Supabase session and loopback embedding broker
         │
@@ -30,9 +30,11 @@ presentation, and Agent tabs.
 
 ## Ownership Boundaries
 
-- The user owns source files and visible `AGENTS.md` / `CLAUDE.md` files.
+- The user owns source files and visible `AGENTS.md` / `CLAUDE.md` files;
+  StashBase never creates or rewrites those runtime-native inputs.
 - The Node server owns authorized filesystem operations, format preparation,
-  reconcile orchestration, Settings writes, MCP, and Agent adapters.
+  reconcile orchestration, Settings writes including scoped Agent Instructions,
+  MCP, and Agent adapters.
 - The Python daemon owns chunking, embeddings, vector storage, and semantic
   retrieval. It receives text and source identity; it never decides how a
   source format is converted. For hosted embeddings it calls a Node-owned
@@ -101,8 +103,8 @@ surface.
 - Application quit is an authenticated owner-to-server shutdown handshake.
   Signals are timeout fallbacks, not the normal cleanup path.
 - The shutdown ladder closes hosted-broker listening, active, and idle sockets
-  independently of MCP, Agent-install, conversion, database, and indexer
-  cleanup failures.
+  independently of MCP, Agent-install, GitHub-import, conversion, database, and
+  indexer cleanup failures.
 - Static renderer serving must bypass every API and asset route before serving
   the web bundle.
 - `shared/file-formats.ts` and `shared/library-files.ts` carry the exact

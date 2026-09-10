@@ -97,11 +97,12 @@ product vocabulary; the test suite owns exact setup and assertions.
 
 ## Capabilities and Product Areas
 
-StashBase has three product capabilities. The **Document Workbench** spans the
-Workspace and Documents areas; the **local RAG layer** spans Preparation and
-Search and Retrieval; the **Agent Panel** is both a capability and a product
-area. Product capabilities describe what StashBase is. Product areas divide
-design and contribution ownership.
+StashBase is a **Wiki** for local files, delivered through three product
+capabilities. The **Document Workbench** spans the Workspace and Documents
+areas; the Wiki's **local RAG layer** spans Preparation and Search and
+Retrieval; visible **Wiki Pages** are built through the **Agent Panel**, which
+is also a product area. Product capabilities describe what StashBase is.
+Product areas divide design and contribution ownership.
 
 ## Product Areas
 
@@ -111,7 +112,7 @@ design and contribution ownership.
 | Documents            | Read, edit, and navigate supported source files                | [Documents](design/documents.md)         |
 | Preparation          | Make difficult formats searchable without replacing the source | [Preparation](design/preparation.md)     |
 | Search and Retrieval | Find source evidence for people and Agents                     | [Search and Retrieval](design/search.md) |
-| Agent Panel          | Collaborate with Built-in or bring-your-own Agents in scope    | [Agent Panel](design/agent-panel.md)     |
+| Agent Panel          | Collaborate with Wiki Agent or bring-your-own Agents in scope  | [Agent Panel](design/agent-panel.md)     |
 | Bug Reporting        | Prepare a local, user-reviewed report without telemetry        | [Bug Reporting](design/bug-reporting.md) |
 
 Each area document uses the same shape: user outcome, scope and non-goals,

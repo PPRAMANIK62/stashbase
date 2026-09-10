@@ -40,9 +40,9 @@ export interface AgentMeta {
 export const AGENT_META: Record<AgentKind, AgentMeta> = {
   stashbase: {
     id: 'stashbase',
-    name: 'Built-in',
-    shortName: 'Built-in',
-    launcherLabel: 'Built-in',
+    name: 'Wiki Agent',
+    shortName: 'Wiki Agent',
+    launcherLabel: 'Wiki Agent',
     capabilities: { connection: true, prompts: true, interrupt: true, transcript: true, approvals: true, history: true, attachments: false, modes: false, effort: false, models: false, skills: false, steering: false, titleHint: true },
     controlsNote: 'Runs locally · Model usage uses your StashBase allowance',
     Icon: CubeLogoIcon,
@@ -73,7 +73,7 @@ export const AGENTS: AgentMeta[] = [AGENT_META.codex, AGENT_META.claude, AGENT_M
  * get the action that unlocks the allowance, while signed-in users get the
  * confirmation. Before the first account response, retain the capability
  * promise without guessing that the user is anonymous. */
-export function builtInLauncherDetail(signedIn: boolean | null): string {
+export function wikiAgentLauncherDetail(signedIn: boolean | null): string {
   return signedIn === false ? 'Sign in for free credits' : 'Free credits included';
 }
 

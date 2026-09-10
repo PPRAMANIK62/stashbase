@@ -18,16 +18,52 @@ semantic readiness.
 
 - Every asynchronous folder open, file load, index refresh, and binary stat
   applies only while its captured folder, tab, and generation remain current.
+- A folder-open mutation has a bounded local-transport attempt and retries a
+  timed-out connection. Once the server acknowledges the window-folder
+  binding, the renderer commits navigation and resolves the initiating action;
+  file listing, manual order, and index-status follow-up continue in the
+  background under the same generation guard. None of those follow-ups owns
+  the switcher's **Opening…** state.
 - Active-folder listing performs recursive directory I/O asynchronously and
   yields during large flat-directory classification. It lists generic files
   without reading a preview prefix, represents excluded project directories
   without descending, and cannot monopolize the shared Node request loop while
   a folder is opening.
+- Hidden-directory visibility is an explicit option on the server-owned
+  listing Interface (`FolderListingOptions` in `server/file-listing.ts`), fed
+  from the durable application-level workspace preference. Classification —
+  which hidden paths are eligible, which stay protected (VCS databases,
+  derived state, junk), and which remain bounded excluded rows — lives in the
+  listing Module; the renderer never fetches a fully hidden tree and filters
+  policy in memory. The renderer owns the menu's accessible checked state,
+  the italic hidden-row presentation, and the toggle transition; the tree and
+  Quick Open both read the same listing, so their parity is structural. The
+  toggle route bumps the shared tree version, and every window's normal
+  status poll converges it. One listing generation rejects stale successes,
+  failures, and post-listing stat continuations; rapid preference writes
+  serialize opposite user intents at the renderer-to-server boundary. A
+  toggle-off clears expansion, selection, and active-folder targets that left
+  the listing but never closes an open tab. Tree-version pruning confirms
+  omitted open files with a server stat because listing omission may mean
+  hidden visibility changed rather than that the source was deleted, and only
+  a still-current batch may close the exact clean tabs it proved missing.
 - One source identity owns at most one document tab in a window. The workspace
   reducer resolves concurrent open completions against its latest state; an
   asynchronous caller's earlier duplicate check is never the uniqueness
   authority. Active-folder relative paths and out-of-folder folder-plus-path
   pairs remain distinct identities.
+- Pane geometry is in-memory renderer state, never a durable preference.
+  Sidebar width and Agent chat width carry static bounds in
+  `state/stateHelpers.ts`; the Document Outline dock's height carries only a
+  static floor. Its ceiling is whatever the file tree can spare above the
+  tree section's own `min-height`, measured from live geometry by the handle
+  and enforced identically by the sidebar's flex layout, so a stored height
+  the window cannot hold shrinks the outline and never the tree below its
+  floor. The three handles are named ARIA separators whose keyboard steps
+  come from the same helpers the reducers clamp with; a handle with its own
+  arithmetic would drift from the store.
+- The search popup sends an explicit Library scope for its unfiltered search;
+  its retained selection must not inherit an active Chat's MCP search default.
 - Folder switching resets folder-scoped documents and readiness without
   clearing library search or silently rebinding a started or drafted Chat.
 - Folder loss and the 412 recovery ladder also preserve Chat tabs. They clear
@@ -58,6 +94,10 @@ semantic readiness.
   Overlay dismissal restores focus to the initiating control. Destructive
   library confirmation identifies the complete home-shortened member path,
   not only its parent directory.
+- The document tab list is content-sized and shrinks under overflow. New Tab
+  follows the last tab while space remains and stays outside the scroller.
+  Dropping a tab on the empty remainder of the strip appends it to the end;
+  individual tab targets retain ownership of between-tab drops.
 - Drag-only organization gestures keep keyboard equivalents that route through
   the same action: the file row's Move to… picker
   (`features/workspace/components/MoveFilePicker.tsx`) calls the drop path's
@@ -100,8 +140,16 @@ semantic readiness.
 - Polling, timers, controllers, and native subscriptions retire when their
   generation or window context ends. Late results cannot repopulate reset
   state.
+- The GitHub import dialog owns acquisition form state while its focused hook
+  owns the request controller. Valid shared URL and folder-name rules gate submission; the
+  existing `actions.openFolder(path)` transition owns successful membership and
+  navigation. A published-path open failure remains in the dialog with a
+  retry-open action that never starts a second clone.
 - The blank-chat lifecycle follows [Agent Panel](agent-panel.md); the workspace
-  may reveal or dock it but does not redefine Agent session scope.
+  may reveal or dock it but does not redefine Agent session scope. A pending
+  Build Wiki intent is started and pinned by the Agent Panel; window-folder
+  transitions must neither redirect it nor count that tab as reusable blank
+  state.
 
 ## Shell Performance Contract
 
@@ -112,17 +160,22 @@ required dynamic-entry set lives in `scripts/renderer/size.mjs`.
 Change that list or budget only when the ownership of eager shell behavior
 changes, never to make an accidental dependency pass.
 
+The shared menu body remains a dynamic entry, but its loader is bounded. If a
+server restart leaves the browser's first module URL permanently pending, the
+loader retries through a distinct bundled URL rather than leaving a navigation
+menu on its loading placeholder forever.
+
 ## Implementation Map
 
 | Role | Stable entry points |
 |---|---|
 | Interface | `ActiveFolderWorkspace` in `web-src/src/store/hooks/useActiveFolderWorkspace.ts` |
 | Primary owners | `web-src/src/store/state/state.ts`, `state/stateReducer.ts` and the `state/workspaceReducer.ts`, `state/chatReducer.ts`, `state/uiShellReducer.ts` sub-reducers it composes, `state/stateHelpers.ts`, `lib/folderScopedReset.ts`, `lib/folderPath.ts`, `lib/folderTransition.ts`, and the internal `hooks/useDocumentActions.ts`, `hooks/useFileActions.ts`, `hooks/useFolderActions.ts`, `hooks/useSearchActions.ts` Modules |
-| Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx` |
+| Shell Adapter | `web-src/src/store/contexts/AppContext.tsx` (the single `useReducer` composition root), `web-src/src/store/contexts/WorkspaceContext.tsx`, `ChatContext.tsx`, `UiShellContext.tsx`, `ActionsContext.tsx`, `web-src/src/app/App.tsx`, `web-src/src/app/components/MainPane.tsx`, the pane-geometry handles in `web-src/src/features/workspace/components/WorkspaceSplitters.tsx`, and lazy `features/workspace/components/ImportGitHubModal.tsx` and `FolderHeaderMenu.tsx` boundaries |
 | Renderer tree model | `web-src/src/features/workspace/lib/fileTreeModel.ts` (nesting, manual-rank ordering, visible rows), `lib/treeKeyboard.ts` (roving-focus rules), `hooks/useTreeRoving.ts` (row registry and per-row binding) |
-| Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `shared/library-files.ts`, `server/routes/files.ts`, the asynchronous request listing in `server/file-listing.ts`, and bounded selection-time inspection in `server/generic-file-preview.ts` |
+| Server transport Adapter | `web-src/src/common/api/api.ts`, `apiTransport.ts`, `shared/library-files.ts`, `server/routes/files.ts`, `server/routes/workspace-preferences.ts`, the asynchronous request listing in `server/file-listing.ts`, and bounded selection-time inspection in `server/generic-file-preview.ts` |
 | Electron lifecycle Adapter | `onPrepareContextRelease` and folder/library events consumed by `useActiveFolderWorkspace.ts` |
-| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, `server/generic-file-preview.test.ts`, and `scripts/renderer/size.mjs` |
+| Focused evidence | `web-src/src/store/__tests__/` (including `index-status-request.test.ts`, `context-slice-stability.test.ts`, `splitter-keyboard.test.ts`, `folder-path.test.ts`, `folder-transition.test.ts`, `folder-scoped-reset.test.ts`, `file-listing-generation.test.ts`, `hidden-visibility-actions.test.ts`), `web-src/src/features/workspace/__tests__/` (including `file-tree-model.test.ts`, `tree-keyboard.test.ts`, `workspace-surfaces.test.ts`, `accessibility-semantics.test.ts`, `hidden-entries.test.ts`, `hidden-files-menu.test.ts`), `web-src/src/features/preparation/__tests__/preparation-notices.test.ts`, `web-src/src/common/__tests__/workspace-layout.test.ts`, `web-src/src/common/__tests__/overlay-stack.test.ts`, `lazy-load.test.ts`, `api-transport.test.ts`, `server/__tests__/file-listing.test.ts`, `server/generic-file-preview.test.ts`, and `scripts/renderer/size.mjs` |
 
 The four action hooks are private Seams inside the workspace Module. Do not make
 components depend on them directly; that would create a second transition
@@ -177,7 +230,9 @@ search presentation and result navigation, and
 [J10](../design-docs/user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
 for the complete cross-surface loop, and
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
-for project registration and originating-window entry.
+for project registration and originating-window entry, and
+[J12](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder)
+for pending folder-pinned activation.
 Related contracts: [Window Lifecycle](window-lifecycle.md),
 [File Transactions](file-transactions.md), and
 [Agent Panel](agent-panel.md).

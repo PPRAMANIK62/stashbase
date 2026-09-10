@@ -3,9 +3,9 @@
 > Review contract for supported CLI discovery, managed installation, MCP
 > preparation, native session ownership, history, and protocol normalization.
 
-## Included Built-in Agent
+## Included Wiki Agent
 
-- Built-in is the included `stashbase` adapter and the default blank-chat
+- Wiki Agent is the included `stashbase` adapter and the default blank-chat
   preference. It uses exact-version
   `opencode-ai@1.18.19` and `@opencode-ai/sdk@1.18.19` dependencies; packaging
   copies the dependency's platform-specific postinstall target to a stable
@@ -26,7 +26,7 @@
   final signed binary and observe it still running; `--version` alone is not a
   runtime proof.
 - Readiness is a cheap packaged-binary and StashBase-account check. It never
-  installs a runtime or asks for a model key. Sign-out ends Built-in
+  installs a runtime or asks for a model key. Sign-out ends Wiki Agent
   sessions and processes before clearing the Node-owned account session.
 - Each live panel session owns a loopback-only OpenCode server with random
   Basic authentication. Its MCP child receives the exact window id and a
@@ -46,8 +46,9 @@
   model pricing, or monetary balances to the renderer or OpenCode state.
 - The hosted service owns DeepSeek routing, picodollar cost accounting,
   fixed seven-day windows, and allowance enforcement in a ledger separate
-  from AI Index. It pre-reserves before every call and settles provider usage
-  exactly once without making an account balance negative. The first call of
+  from the one for search by meaning. It pre-reserves before every call and
+  settles provider usage exactly once without making an account balance
+  negative. The first call of
   a submitted prompt pins policy and model versions for that turn; all later
   model calls caused by the same prompt reuse its turn identity and $0.20
   ceiling. It does not own Agent processes, sessions, tools, permission
@@ -157,9 +158,9 @@
   retain bounded timeout, exit-code, and stderr diagnostics. Shutdown cancels
   preparation.
 - Readiness configures the matching CLI's StashBase MCP entry through
-  `ensureAgentMcp`, the only writer of the built-in agents' own config files.
+  `ensureAgentMcp`, the only writer of the Agent Panel runtimes' own config files.
   Native attach repeats that idempotent write immediately before process
-  start. There is no user-facing connect/disconnect for built-in agents; MCP
+  start. There is no user-facing connect/disconnect for Agent Panel runtimes; MCP
   is part of readiness, and Settings surfaces a repair action only on
   failure.
 - Preparation is one staged Interface: discover, install only when missing,
@@ -208,9 +209,36 @@ Missing scope uses the window's current folder or Library when none is active;
 it is not a third scope.
 
 - A library session uses the reserved folder-home cwd and retrieves through
-  library MCP. It does not create member-folder instruction files.
-- A folder session uses that folder's cwd. `AGENTS.md` is create-only;
-  Claude's `CLAUDE.md` bridge is create-only. Both remain visible user files.
+  library MCP. Its Runtime Adapter resolves the Library scope's exact
+  user-visible Agent Instructions — the saved Library-wide customization, or
+  the packaged Library default — before composing the internal routing policy.
+- A folder session uses that folder's cwd. Its Runtime Adapter injects that
+  exact member's resolved Agent Instructions plus the internal routing policy.
+  Runtime startup never creates `AGENTS.md`, `CLAUDE.md`, or another source
+  file; existing runtime-native files remain visible, user-owned inputs under
+  that runtime's native rules.
+- `assets/agent-instructions/default.md` (folder Chats) and `library.md`
+  (Library-wide Chats) are the two packaged defaults. The Agent Instructions
+  Interface resolves the session scope's default or its saved customization;
+  the editor and HTTP Adapter expose only that exact text. At native session
+  startup, each Runtime Adapter composes it with the product-owned policy from
+  `server/agent-runtime-instructions.ts`. That policy prefers StashBase MCP for
+  library orientation and prepared PDF, DOCX, audio, or video reads. It directs
+  search to use the Chat scope unless the user explicitly requests global
+  search; server-side defaults belong to [MCP Access](mcp-access.md). It avoids a
+  redundant parser unless original-source analysis was explicitly requested or
+  prepared text is unavailable. Codex receives the composition as
+  `developerInstructions`, Claude as the native preset append, and Wiki Agent
+  as its OpenCode Agent prompt. MCP advertises tools without a second top-level
+  instruction prompt. No Adapter mutates a started native session's prompt in
+  place or grows a live setter. A saved edit reaches an open Chat because the renderer
+  remounts that session (resuming its native session id when it has content),
+  so the guidance arrives the one way every adapter already supports. They are
+  guidance, not authorization or a security boundary.
+- Each live panel session owns one policy for search by meaning. The renderer
+  sends it over the normalized protocol before a ready-transition prompt;
+  attributed MCP search reads it from the session registry. It changes
+  retrieval strategy only and never owns Preparation or index lifecycle.
 - Window folder switching does not tear down or rebind started sessions.
 - Folder removal ends every session bound to that member across windows but
   does not end library sessions. Before closing each affected transport, the
@@ -228,7 +256,7 @@ it is not a third scope.
 
 ## Native Process Ownership
 
-- Each live Built-in chat owns one authenticated OpenCode server. The
+- Each live Wiki Agent chat owns one authenticated OpenCode server. The
   per-session process boundary keeps MCP attribution exact when turns run
   concurrently. All servers may share OpenCode's native history store, while
   their injected config and credentials remain process-local.
@@ -267,6 +295,9 @@ assumed CLI versions.
   thread. The Adapter ignores model changes while a turn is active; returning
   to `Default` omits the next turn's model override.
 - Attachments are explicit; the current source is never implicit context.
+- `set-similarity-search` changes the session's product retrieval policy for
+  subsequent attributed `search_library` calls. Every Adapter implements the
+  event, while the operation layer owns the semantic-to-keyword resolution.
 - Permission callbacks normalize into one renderer approval flow. Access policy
   remains outside transport/process modules.
 - Runtime errors settle only the matching active turn once. Retry-in-progress
@@ -307,11 +338,12 @@ assumed CLI versions.
   session's native process, because credentials are read at process start
   and an external login is invisible to the running process until it is
   replaced; never require an app restart for this. Acting on any recovery
-  settles its card to a plain message — a stale button must not outlive the
-  state it described — and auto-resends the failed prompt (immediately for
-  Try again, on session readiness for sign-in and Reconnect), so the
-  outcome is visible without retyping: an answer when the recovery worked, a
-  fresh card when it did not. Included-Agent account/allowance recovery arms
+  removes its stale failure card — neither its button nor its red provider
+  error may outlive the state they described — and auto-resends the failed
+  prompt (immediately for Try again, on session readiness for sign-in and
+  Reconnect), so the stale provider error does not remain presented as a
+  current failure: the user sees an answer when recovery worked or a fresh
+  card when it did not. Included-Agent account/allowance recovery arms
   the same one-shot retry while Agent Settings is open. The armed retry is
   cleared by
   every other session reset. A turn failure never gates the panel and never
@@ -321,7 +353,7 @@ assumed CLI versions.
 
 ## Known Gap — OpenCode Directory Rebind
 
-An attributed Built-in Library chat participates in `create_project`:
+An attributed Wiki Agent Library chat participates in `create_project`:
 the live panel scope changes and subsequent MCP operations remain attached to
 that session/window. OpenCode 1.18.19 has no supported operation for moving the
 same native session between directory projects. The Adapter therefore does not
@@ -342,8 +374,9 @@ than enabling native commands against the old folder-home cwd.
 | Claude Adapter | `server/agent.ts` and its SDK/native-process helpers |
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
+| Agent Instructions Interface | `assets/agent-instructions/default.md` owns the product default; `server/agent-instructions.ts` resolves it or working-folder persistence; `server/routes/agent-instructions.ts` is the authorized HTTP Adapter; `server/agent-runtime-instructions.ts` owns the separate internal routing policy and native-session composition |
 | Renderer Adapter | `web-src/src/common/lib/agentCatalog.ts`, the `activateChatTab` action in `web-src/src/store/contexts/AppContext.tsx`, `runtimeFailurePresentation.ts`, and [Agent Panel](agent-panel.md) |
-| Focused evidence | `server/__tests__/agent-contract.test.ts`, `opencode-agent.test.ts`, `hosted-agent-broker.test.ts`, `opencode-native-smoke.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, `agent.test.ts` |
+| Focused evidence | `server/agent-instructions.test.ts`, `server/__tests__/agent-contract.test.ts`, `opencode-agent.test.ts`, `hosted-agent-broker.test.ts`, `opencode-native-smoke.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, and `agent.test.ts` |
 
 ## Validation
 

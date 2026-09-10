@@ -37,11 +37,16 @@ import {
   type WorkspaceSlice,
 } from '@/store/state/state';
 import { rememberPreferredAgent } from '@/common/lib/agentPreference';
+import { openGalleryOverlay } from '@/common/lib/galleryTrigger';
 import { newChatPlan } from '@/store/lib/chatTabPlan';
 import { useLatestRef } from '@/common/hooks/useLatestRef';
 import { useFeedbackActions } from '@/store/hooks/useFeedbackActions';
 import { useFindActions } from '@/store/hooks/useFindActions';
-import { useActiveFolderWorkspace } from '@/store/hooks/useActiveFolderWorkspace';
+import { createFileListingGeneration } from '@/store/lib/fileListingGeneration';
+import {
+  useActiveFolderWorkspace,
+  type LoadedFileListing,
+} from '@/store/hooks/useActiveFolderWorkspace';
 import { ActionsProvider, type AppActions } from './ActionsContext';
 import { WorkspaceProvider } from './WorkspaceContext';
 import { ChatProvider } from './ChatContext';
@@ -80,6 +85,13 @@ export function canApplyExternalTextRefresh(
   return workspace.folderPath === folderPathAtStart
     && latest?.file?.name === name
     && !latest.dirty;
+}
+
+class FileListingRequestError {
+  constructor(
+    readonly cause: unknown,
+    readonly isCurrent: () => boolean,
+  ) {}
 }
 
 /**
@@ -121,6 +133,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // repopulate the workspace during the render gap.
   const folderContextPath = useRef(state.workspace.folderPath);
   folderContextPath.current = state.workspace.folderPath;
+  // Every listing shares one ownership generation. A slow response issued
+  // before a newer preference write or tree refresh must not restore stale
+  // visibility after the newer listing has started.
+  const fileListingGeneration = useRef(createFileListingGeneration());
   const {
     askCascadeForRename,
     askConfirm,
@@ -144,21 +160,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadFilesFromServer = useCallback(async (
     expectedFolderPath?: string,
     ownsRequest?: () => boolean,
-  ) => {
-    const j = await api.listFiles();
-    const files = j.files ?? [];
-    const requestIsCurrent = ownsRequest
+  ): Promise<LoadedFileListing | null> => {
+    const ownership = fileListingGeneration.current.begin(() => ownsRequest
       ? ownsRequest()
-      : expectedFolderPath === undefined || folderContextPath.current === expectedFolderPath;
-    if (!requestIsCurrent) return null;
+      : expectedFolderPath === undefined || folderContextPath.current === expectedFolderPath);
+    const { isCurrent } = ownership;
+    let j: Awaited<ReturnType<typeof api.listFiles>>;
+    try {
+      j = await api.listFiles();
+    } catch (err: unknown) {
+      // A stale failure has no authority to clear or otherwise replace a
+      // newer successful tree. Current failures keep their existing recovery
+      // behavior in `loadFiles` below.
+      if (!isCurrent()) return null;
+      throw new FileListingRequestError(err, isCurrent);
+    }
+    const files = j.files ?? [];
+    if (!isCurrent()) return null;
     dispatch({
       type: 'FILES_LOADED',
       files,
       folders: j.folders ?? [],
       folder: j.folder ?? 'notes',
       folderPath: expectedFolderPath,
+      ...(typeof j.showHiddenFiles === 'boolean' ? { showHiddenFiles: j.showHiddenFiles } : {}),
     });
-    return files;
+    return { files, isCurrent };
   }, []);
 
   const loadFiles = useCallback(async (
@@ -166,8 +193,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ownsRequest?: () => boolean,
   ) => {
     try {
-      return (await loadFilesFromServer(expectedFolderPath, ownsRequest)) ?? [];
-    } catch (err: unknown) {
+      return (await loadFilesFromServer(expectedFolderPath, ownsRequest))?.files ?? [];
+    } catch (failure: unknown) {
+      if (failure instanceof FileListingRequestError && !failure.isCurrent()) return [];
+      const err = failure instanceof FileListingRequestError ? failure.cause : failure;
       const requestIsCurrent = ownsRequest
         ? ownsRequest()
         : expectedFolderPath === undefined || folderContextPath.current === expectedFolderPath;
@@ -326,7 +355,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     primeFind,
   });
 
-  const actions = useMemo<AppActions>(() => ({
+  const actions = useMemo<AppActions>(() => {
+    const activateChatTab: AppActions['activateChatTab'] = (agent) => {
+      rememberPreferredAgent(agent);
+      const current = stateRef.current.chat;
+      const plan = newChatPlan(current.chatTabs, agent);
+      if (plan.kind === 'reuse') {
+        if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });
+        dispatch({ type: 'CHAT_TAB_ACTIVATE', id: plan.id });
+      } else {
+        dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, current.chatTabs) });
+      }
+      if (!current.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
+    };
+    return {
     bootstrap: workspace.bootstrap, openFolder: workspace.openFolder, openFolderByName: workspace.openFolderByName,
     loadFiles: workspace.loadFiles, markVisibleFilesPendingForSearch: workspace.markVisibleFilesPendingForSearch,
     refreshIndexState: workspace.refreshIndexState, runSync: workspace.runSync,
@@ -353,21 +395,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         tab: hasOpenTab ? undefined : makeChatTab(agent, current.chatTabs),
       });
     },
-    activateChatTab: (agent) => {
-      rememberPreferredAgent(agent);
-      const current = stateRef.current.chat;
-      const plan = newChatPlan(current.chatTabs, agent);
-      if (plan.kind === 'reuse') {
-        if (plan.switchAgent) dispatch({ type: 'CHAT_TAB_SET_AGENT', id: plan.id, agent });
-        dispatch({ type: 'CHAT_TAB_ACTIVATE', id: plan.id });
-      } else {
-        dispatch({ type: 'CHAT_TAB_NEW', tab: makeChatTab(agent, current.chatTabs) });
-      }
-      if (!current.chatOpen) dispatch({ type: 'CHAT_TOGGLE' });
-    },
+    activateChatTab,
+    openGallery: () => openGalleryOverlay(),
     newNote: workspace.newNote, newFolder: workspace.newFolder, deleteFile: workspace.deleteFile, deleteFolder: workspace.deleteFolder,
     renameFile: workspace.renameFile, renameFolder: workspace.renameFolder, moveFile: workspace.moveFile,
-    reprocessFile: workspace.reprocessFile, revealFile: workspace.revealFile, copyFileLink: workspace.copyFileLink, upload: workspace.upload,
+    reprocessFile: workspace.reprocessFile, revealFile: workspace.revealFile, toggleShowHiddenFiles: workspace.toggleShowHiddenFiles, copyFileLink: workspace.copyFileLink, upload: workspace.upload,
     scheduleSave: workspace.scheduleSave, flushSave: workspace.flushSave,
     resolveConflictOverwrite: workspace.resolveConflictOverwrite,
     resolveConflictReload: workspace.resolveConflictReload,
@@ -375,7 +407,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     registerEditor: workspace.registerEditor,
     registerFindController, openFind, closeFind, setFindQuery,
     toggleFindCaseSensitive, toggleFindWholeWord, findNext, findPrev,
-  }), [
+    };
+  }, [
     workspace,
     resolveCascadePrompt,
     showAlert, askConfirm, resolveModal, toast,

@@ -22,6 +22,7 @@ describe('files API', () => {
           ],
           folder: 'Research',
           folders: [{ path: 'notes' }],
+          showHiddenFiles: false,
         },
         status: 200,
       })),

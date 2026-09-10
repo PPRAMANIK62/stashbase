@@ -14,8 +14,13 @@ import test from 'node:test';
 import { act, createElement as h } from 'react';
 import { appActions, appState, mountApp, withDom } from '@/common/__tests__/renderHarness';
 import { FileTree } from '@/features/workspace/components/FileTree';
-import { ChatSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
-import { resizeChatByKeyboard, resizeSidebarByKeyboard } from '@/store/state/stateHelpers';
+import { ChatSplitter, OutlineSplitter, SidebarSplitter } from '@/features/workspace/components/WorkspaceSplitters';
+import {
+  OUTLINE_MIN_HEIGHT,
+  resizeChatByKeyboard,
+  resizeOutlineByKeyboard,
+  resizeSidebarByKeyboard,
+} from '@/store/state/stateHelpers';
 import { toNameSet, type Action, type State } from '@/store/state/state';
 
 function keydown(key: string): KeyboardEvent {
@@ -88,6 +93,39 @@ test('the chat handle is a named separator bounded by the panel range', async ()
 
     await dom.fire(separator, keydown('ArrowLeft'));
     assert.deepEqual(dispatched, [{ type: 'CHAT_WIDTH', width: resizeChatByKeyboard(480, 'ArrowLeft') }]);
+  });
+});
+
+test('the outline handle is a horizontal separator that reports the store’s floor', async () => {
+  await withDom(async (dom) => {
+    const dispatched: Action[] = [];
+    // Nothing laid out behind the refs: the handle has no ceiling to
+    // measure, so the stored height is its whole range — it can shrink
+    // from there but not grow, and it must say so rather than invent a
+    // bound.
+    const detached = { current: null };
+    await mountApp(dom, h(OutlineSplitter, { treeRef: detached, dockRef: detached }), {
+      state: appState({ workspace: { outlineHeight: 180 } }),
+      dispatch: (action) => dispatched.push(action),
+    });
+
+    const [separator] = dom.byRole('separator');
+    assert.ok(separator, 'the tree/outline seam is exposed as a separator');
+    assert.equal(separator.getAttribute('aria-label'), 'Resize Document Outline');
+    assert.equal(separator.getAttribute('aria-orientation'), 'horizontal');
+    assert.equal(separator.getAttribute('aria-valuemin'), String(OUTLINE_MIN_HEIGHT));
+    assert.equal(separator.getAttribute('aria-valuenow'), '180');
+    assert.equal(separator.getAttribute('aria-valuemax'), '180');
+    assert.equal(separator.getAttribute('aria-valuetext'), '180 pixels');
+    assert.equal(separator.tabIndex, 0, 'the handle is reachable by keyboard');
+
+    await dom.fire(separator, keydown('ArrowUp'));
+    assert.deepEqual(dispatched, [], 'with no measured room the outline cannot grow');
+    // Down still works, and by the store's rule rather than its own.
+    await dom.fire(separator, keydown('ArrowDown'));
+    assert.deepEqual(dispatched, [
+      { type: 'OUTLINE_HEIGHT', height: resizeOutlineByKeyboard(180, 180, 'ArrowDown') },
+    ]);
   });
 });
 

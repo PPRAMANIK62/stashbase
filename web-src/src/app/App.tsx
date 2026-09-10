@@ -16,6 +16,7 @@ import { CascadePromptModal } from '@/app/components/CascadePromptModal';
 import { AlertConfirmModal } from '@/app/components/AlertConfirmModal';
 import { Toasts } from '@/common/components/Toasts';
 import { ChatPane, useAgentCatalogPrime, useChatLayoutFollowUp } from '@/features/agent-panel';
+import { GalleryOverlayGate } from '@/features/templates';
 import { EditorHistoryNavigator, LinkFilePicker, usePreviewMessages } from '@/features/documents';
 import { LibrarySearch, QuickOpen } from '@/features/search';
 import { EmbedderRequireKeyGate, SettingsPortal, useAppliedAppearance } from '@/features/settings';
@@ -201,6 +202,7 @@ function AppBody() {
       <AlertConfirmModal />
       <Toasts />
       <EmbedderRequireKeyGate />
+      <GalleryOverlayGate />
       <SettingsPortal />
     </>
   );

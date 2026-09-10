@@ -2,7 +2,7 @@
   "name": "stashbase",
   "version": "2.0.0",
   "packageManager": "pnpm@11.5.1",
-  "description": "Local-first knowledge base desktop app.",
+  "description": "StashBase is a Wiki for your local files.",
   "author": {
     "name": "liliu-z",
     "email": "bingwuthu@gmail.com"
@@ -24,7 +24,7 @@
     "milvus",
     "embeddings",
     "rag",
-    "ai-index"
+    "semantic-search"
   ],
   "type": "module",
   "main": "electron/main.cjs",
@@ -54,7 +54,7 @@
     "setup:python": "node scripts/setup-python.mjs",
     "setup:python-extract": "node scripts/setup-python.mjs --with-extract",
     "test:python": "node scripts/test-python.mjs",
-    "test:config": "node --import tsx --test server/app-config.test.ts server/embedding-availability.test.ts server/hosted-account.test.ts server/account-route.test.ts",
+    "test:config": "node --import tsx --test server/app-config.test.ts server/agent-instructions.test.ts server/embedding-availability.test.ts server/hosted-account.test.ts server/account-route.test.ts",
     "lint:web": "vp run @stashbase/renderer#lint && pnpm check:renderer-architecture",
     "check:renderer-architecture": "depcruise --config dependency-cruiser.config.cjs renderer/src && node scripts/renderer/architecture.mjs",
     "test:renderer-architecture": "node --test scripts/electron/dev.test.mjs scripts/renderer/architecture.test.mjs scripts/renderer/check-web.test.mjs scripts/renderer/conventions.test.mjs scripts/renderer/size.test.mjs && pnpm check:renderer-architecture",
@@ -69,7 +69,7 @@
     "test:inventory": "node scripts/check-test-inventory.mjs",
     "test:toolchain": "node --test scripts/check-vite-plus-toolchain.test.mjs scripts/vite-plus-ci.test.mjs && node scripts/check-vite-plus-toolchain.mjs",
     "test:conversion-scheduler": "node --import tsx --test server/html.test.ts server/filesystem-path.test.ts server/folder-relative-path.test.ts server/folder-window.test.ts server/window-context-route.test.ts server/internal-shutdown-route.test.ts server/middleware/renderer-origin.test.ts server/stale-lock.test.ts server/parent-watchdog.test.ts server/files.test.ts server/file-formats.test.ts server/file-hash.test.ts server/http.test.ts server/markdown-source-format.test.ts server/keyword-search.test.ts server/index-status.test.ts server/indexer-mfs-path.test.ts server/semantic-workload.test.ts server/session-path.test.ts server/conversion-scheduler.test.ts server/conversion-auxiliary.test.ts server/conversion-status.test.ts server/conversion.test.ts server/extractor-process.test.ts server/audio-transcription.test.ts server/transcription-models.test.ts server/transcription-provider.test.ts server/transcription-runtime.test.ts server/transcription-tools.test.ts server/upload.test.ts server/client-error.test.ts server/semantic-indexing-state.test.ts",
-    "test:library-files": "node --import tsx --test server/library-file-mutations.test.ts server/library-operations/index.test.ts server/routes/library.test.ts server/routes/library-files.test.ts server/routes/files.test.ts server/routes/file-mutations.test.ts server/routes/attach.test.ts server/__tests__/file-listing.test.ts server/generic-file-preview.test.ts server/recovery-journal.test.ts server/routes/recovery-drafts.test.ts",
+    "test:library-files": "node --import tsx --test server/library-file-mutations.test.ts server/library-operations/index.test.ts server/routes/library.test.ts server/routes/library-files.test.ts server/routes/gallery.test.ts server/routes/files.test.ts server/routes/file-mutations.test.ts server/routes/attach.test.ts server/__tests__/file-listing.test.ts server/__tests__/github-import.test.ts server/generic-file-preview.test.ts server/recovery-journal.test.ts server/routes/recovery-drafts.test.ts",
     "test:retrieval": "node --import tsx --test server/retrieval/index.test.ts scripts/semantic-retrieval-metrics.test.ts scripts/semantic-retrieval-dataset.test.ts scripts/semantic-retrieval-runner.test.ts",
     "eval:semantic-retrieval": "node --import tsx scripts/run-semantic-retrieval-eval.ts",
     "test:agent": "node --import tsx --test server/__tests__/agent.test.ts server/__tests__/agent-contract.test.ts server/__tests__/agent-history-routes.test.ts server/__tests__/agent-projects.test.ts server/__tests__/agent-runtime-installer.test.ts server/__tests__/agent-turn-failure.test.ts server/__tests__/codex-agent.test.ts server/__tests__/agent-cli.test.ts server/__tests__/opencode-agent.test.ts server/__tests__/hosted-agent-broker.test.ts server/codex-history.test.ts",
@@ -165,6 +165,10 @@
       {
         "from": "assets/builtin-library",
         "to": "assets/builtin-library"
+      },
+      {
+        "from": "assets/agent-instructions",
+        "to": "assets/agent-instructions"
       },
       {
         "from": "node_modules/opencode-ai/bin/opencode.exe",

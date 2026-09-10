@@ -71,7 +71,7 @@ Evidence: `pnpm test:docs`, `pnpm test:inventory`, `pnpm typecheck`,
 
 **Blocked by:** 62.
 
-**Status:** Not started.
+**Status:** Complete.
 
 Merge `main` and settle the shared server, Electron, and protocol surface.
 Task 62 runs first so the branch never carries a red suite: `main` touched 31
@@ -93,9 +93,25 @@ proxy, the GitHub import request, and file stat. Register them in the shared
 protocol so later tasks consume validated wire schemas rather than widening
 one when they need it.
 
-Evidence: `pnpm test:config`, `pnpm test:library-files`, `pnpm test:agent`,
-`pnpm test:conversion-scheduler`, `pnpm test:mcp`, `pnpm test:electron`,
-`pnpm typecheck`, and `pnpm build`.
+Two crossings needed a decision rather than a side. The workspace listing now
+echoes the visibility the server applied, so `workspaceFilesSchema` gains a
+required `showHiddenFiles` and the handler keeps parsing through it; an
+explicit member listing is Agent-facing and always reports false. Library
+semantic results keep the replacement's server-resolved folder and relative
+path while adopting `main`'s `mode` and `folder` fields. The panel protocol
+gains `set-similarity-search` as a schema variant rather than the inline union
+`main` extended, and the sandboxed window from Decision 0010 is kept whole
+against `main`'s unsandboxed one.
+
+Folder entry no longer seeds `AGENTS.md`. `main` removed that write, which
+closes the instruction-seeding Known Gap the file-transactions contract
+carried.
+
+Evidence: `pnpm test:docs`, `pnpm test:inventory`, `pnpm typecheck`,
+`pnpm lint:web`, `pnpm test:renderer`, `pnpm build:web`, `pnpm test:protocols`,
+`pnpm test:config`, `pnpm test:library-files`, `pnpm test:agent`,
+`pnpm test:retrieval`, `pnpm test:conversion-scheduler`, `pnpm test:mcp`,
+`pnpm test:electron`, and `pnpm test:electron:smoke` all pass.
 
 ## 64 — Assess arrived capabilities and register the new journeys
 

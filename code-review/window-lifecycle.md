@@ -49,8 +49,11 @@ after readiness, a save failure or timeout keeps the window open.
   non-Vite launches use the actual server as Electron's one child so shutdown
   cannot orphan a listener behind a watch wrapper. Source readiness has a
   bounded allowance for cold TypeScript loading; the pre-bundled packaged
-  server retains its shorter failure bound. Packaged launches explicitly remove
-  both development markers.
+  server retains its shorter failure bound. A listener that accepted the TCP
+  connection but temporarily missed the health-response deadline receives a
+  bounded re-probe before Electron decides whether to reuse or start a server;
+  one short timeout can never race a competing child onto the same port.
+  Packaged launches explicitly remove both development markers.
 - Browser-owned OAuth returns focus only through the packaged `stashbase://`
   handler, which accepts the exact data-free `oauth-complete` authority.
   Renderer polling updates account state without racing that browser-owned
@@ -128,6 +131,9 @@ creation, presentation, survival, and retirement.
 - Child cleanup timeout: use the bounded fallback and retain diagnostics.
 - Server startup failure: record the cause before opening the native error
   dialog so unattended launches retain actionable process output.
+- Temporarily unresponsive listener during startup: re-probe for a bounded
+  interval. Reuse it if compatibility becomes visible, start only after the
+  port becomes free, and retain port-in-use guidance if it stays occupied.
 - Second launch during startup: route to the existing application instance.
 - Orphaned sibling server on the port: reclaim and rebind once; a
   live-parented or foreign holder keeps the port-in-use guidance.
@@ -139,7 +145,7 @@ creation, presentation, survival, and retirement.
 | Role | Stable entry points |
 |---|---|
 | Native window Module | `electron/multi-window.cjs` |
-| Process owner Adapter | `electron/main.cjs`; child-environment construction in `electron/main-probe.cjs` |
+| Process owner Adapter | `electron/main.cjs`; child-environment construction and bounded stable-port probing in `electron/main-probe.cjs` |
 | Renderer bridge Adapter | `electron/preload.cjs` and `useActiveFolderWorkspace.ts` |
 | Server context Interface | window-scoped registry and retirement in `server/folder.ts` |
 | HTTP Adapters | `server/routes/window-context.ts`, `server/routes/internal-shutdown.ts` |

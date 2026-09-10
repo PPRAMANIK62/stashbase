@@ -24,7 +24,11 @@ import {
 } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { getEmbeddingSource, getEmbedderConfig } from './app-config.ts';
-import { isEmbeddingAvailable } from './embedding-availability.ts';
+import {
+  embeddingAvailability,
+  isEmbeddingAvailable,
+  type EmbeddingAvailability,
+} from './embedding-availability.ts';
 import { hostedEmbeddingRuntime } from './hosted-embedding-broker.ts';
 import { syncIndex, type SyncResult } from './sync.ts';
 import { getDaemon, isMfsDaemonRetiringError } from './mfs-daemon.ts';
@@ -64,6 +68,29 @@ export function clearIndexWarning(folder: string): void {
 }
 function recordIndexWarning(folder: string, message: string): void {
   indexWarnings.set(filesystemPath.identity(folder), { message, at: new Date().toISOString() });
+}
+
+export function embeddingRuntimeUnavailableMessage(
+  folderAbs: string,
+  availability: EmbeddingAvailability = embeddingAvailability(),
+  source = getEmbeddingSource(),
+): string {
+  if (!availability.configured) {
+    return `embedder: no embedding source active — ${folderAbs} bound but semantic retrieval is unavailable until an account or key is selected`;
+  }
+  if (!availability.available && availability.reason === 'hosted-quota-exhausted') {
+    return `embedder: hosted search credits exhausted — ${folderAbs} bound but semantic indexing is paused until the credits reset`;
+  }
+  if (source === 'stashbase-account') {
+    return `embedder: hosted embedding runtime is not ready — ${folderAbs} bound for cleanup; semantic indexing will resume after runtime recovery`;
+  }
+  return `embedder: configured embedding runtime is not ready — ${folderAbs} bound for cleanup; semantic indexing will resume after runtime recovery`;
+}
+
+function hasLostIndexerBinding(result: SyncResult): boolean {
+  return result.failed.some(({ error }) => (
+    /no bound root matches path .*call bind_root first/i.test(error)
+  ));
 }
 
 const folderSyncGeneration = new Map<string, number>();
@@ -268,7 +295,7 @@ export async function bindIndexerForFolder(folderAbs: string): Promise<void> {
         : getEmbedderConfig().provider,
   };
   if (!cfg) {
-    log.warn(`embedder: no embedding source active — ${folderAbs} bound but AI Index is disabled until an account or key is selected`);
+    log.warn(embeddingRuntimeUnavailableMessage(folderAbs));
   }
   await indexer.bindFolder(filesystemPath.absolute(folderAbs), runtime);
 }
@@ -393,7 +420,7 @@ export async function runFolderSyncOperation(
   scheduledGeneration = currentFolderSyncGeneration(folderRoot),
 ): Promise<SyncResult> {
   const shouldContinue = () => shouldContinueFolderSync(folderRoot, scheduledGeneration, opts.shouldContinue);
-  let daemonRetirementRetries = 0;
+  let daemonRecoveryRetries = 0;
   try {
     if (opts.clearDecisionAtStart && !clearSemanticIndexingDecision(folderRoot)) {
       throw new Error('semantic indexing decision could not be cleared');
@@ -412,6 +439,11 @@ export async function runFolderSyncOperation(
           semanticEnabled: deps.semanticEnabled,
           ...semanticSyncPolicy(folderRoot, opts.forceEmbedding),
         });
+        if (daemonRecoveryRetries === 0 && hasLostIndexerBinding(result)) {
+          daemonRecoveryRetries += 1;
+          log.info(`indexer binding changed during sync for ${folderRoot}; retrying from bind`);
+          continue;
+        }
         if (result.cancelled) {
           return result;
         }
@@ -431,8 +463,8 @@ export async function runFolderSyncOperation(
         // member is rejected by the same close even though its generation is
         // still valid. Re-run that authoritative diff once: bind waits for
         // daemon retirement and replays current bindings before continuing.
-        if (daemonRetirementRetries === 0 && isMfsDaemonRetiringError(err)) {
-          daemonRetirementRetries += 1;
+        if (daemonRecoveryRetries === 0 && isMfsDaemonRetiringError(err)) {
+          daemonRecoveryRetries += 1;
           log.info(`daemon retired during sync for ${folderRoot}; retrying on the replacement generation`);
           continue;
         }

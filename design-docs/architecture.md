@@ -7,14 +7,15 @@ source of truth for file, module, route, and function-level detail.
 ## System Shape
 
 ```text
-Local files → Convert → Index → Retrieve → MCP → Agents
-     ↑                                          │
-     └──────────── Agent-written files ─────────┘
+Sources ────────────────→ Document Workbench
+   ├→ Build Wiki → Wiki Pages ───────────────────┐
+   └→ Prepare → Search by keyword/meaning → MCP ─┴→ Agents
 ```
 
-The Document Workbench is the user-facing surface over local files.
-Preparation and Search and Retrieval form the local RAG layer, while the Agent
-Panel is the built-in Agent client over the same authorized context.
+The Document Workbench is the user-facing surface over local files. Sources,
+visible Wiki Pages, Search, and Agent work form the Wiki. Preparation and
+Search and Retrieval own the local RAG part, while the Agent Panel builds Wiki
+Pages and consumes the same authorized context.
 
 The desktop application owns file access, user interaction, format
 preparation, the MCP boundary, and Agent execution. A local indexing runtime
@@ -28,7 +29,10 @@ operate as one local library per installation.
 | Data | Owner | Rule |
 |---|---|---|
 | Local files and folders | User | They remain the source of truth. |
-| `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never overwritten by StashBase. |
+| Wiki Pages under `wiki/` | User | They are ordinary visible files created or edited through an explicit Agent action. `wiki/index.md` is the entry page. |
+| Agent Instructions | StashBase product and settings | One packaged default plus an optional working-folder customization resolves to the user-visible guidance. Library-wide Chats use the default. It is never a source-folder write. |
+| Agent runtime policy | StashBase Agent Adapters | Non-user-visible product guidance routes library orientation and prepared document reads through StashBase MCP. It is composed only at native session startup and is never exposed as Agent Instructions. |
+| `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never created, migrated, or overwritten by StashBase. |
 | Extracted text, previews, indexes, preparation records | StashBase | They are rebuildable derived state. |
 | Included OpenCode runtime | StashBase | It is pinned, packaged, private application state and never resolved from the user's PATH. |
 | Bring-your-own Agent runtimes | User / provider | They are explicitly discovered or demand-installed and keep their provider-owned login and history. |
@@ -39,12 +43,14 @@ operate as one local library per installation.
 Credentials and optional hosted-account sessions are owned by the local Node
 service. Provider and account tokens do not cross into renderer responses,
 OpenCode configuration/history, or the indexing daemon. When the user selects
-hosted AI Index, Node may send extracted text through the hosted Adapter. When
-the user runs Built-in, the Node broker sends prompts and necessary model
+hosted search by meaning, Node may send extracted text through the hosted
+Adapter. When
+the user runs Wiki Agent, the Node broker sends prompts and necessary model
 context through the hosted model Adapter; sessions, tool execution, permissions,
 Diffs, and files remain local. The hosted service owns model routing and usage
 accounting, not Agent execution or session storage. Agent accounting is a
-separate cost ledger from AI Index: the service atomically reserves and settles
+separate cost ledger from hosted search by meaning: the service atomically
+reserves and settles
 each model request against its prompt turn, fixed seven-day account window,
 short-term limits, and UTC-day provider budget. Model and policy versions are
 pinned when a turn begins. The visible source and durable library remain local.
@@ -63,9 +69,10 @@ update payload; a Linux package may request administrator approval; and
 AppImage relaunch waits until the old process releases its single-instance
 lock.
 
-Derived artifacts must not appear as ordinary files in the workspace. When
-search finds derived evidence, the result still identifies and opens the
-user-visible source file.
+Machine-derived artifacts must not appear as ordinary files in the workspace.
+When search finds derived evidence, the result still identifies and opens the
+user-visible Source. Wiki Page Markdown is not machine-derived AppData: it is
+visible, user-owned content and follows ordinary file transactions.
 
 ## Scope And Access
 
@@ -74,18 +81,31 @@ user-visible source file.
   show different folders at the same time; those are independent UI scopes,
   not separate libraries or indexing runtimes.
 - Search and Agent retrieval stay within authorized library membership and
-  return visible source identity. Exact retrieval works before AI Index setup.
+  return visible Source identity. Keyword search works before any setup for
+  search by meaning.
   Mode-specific scope rules live in [Search and Retrieval](design/search.md)
   and [MCP Access](../code-review/mcp-access.md).
+- Agent Instructions resolve from one packaged plain-language default plus an
+  optional member-folder customization in application config. Library-wide
+  Chats use the packaged default because they have no concrete working folder.
+  Each runtime Adapter preserves the resolved text while composing the separate
+  internal Agent runtime policy. Saving remounts matching folder Chats so the
+  new composition applies from their next message. The editor and HTTP surface
+  expose only Agent Instructions; opening a folder or starting a runtime never
+  writes either instruction layer into user content.
 - MCP file operations are bounded to authorized library folders and never form
   a general filesystem Interface. Membership-changing operations remain inside
   an app-owned or already authorized root.
 - One local runtime owns indexing state. Other processes communicate through
   its supported boundary rather than maintaining competing copies of the index.
 - The included Agent runtime is already packaged and starts only for an active
-  Built-in session. Bring-your-own readiness is demand-driven: opening
+  Wiki Agent session. Bring-your-own readiness is demand-driven: opening
   the app or a folder does not install an Agent runtime; explicit Chat actions
   own preparation and recovery.
+- Build Wiki pins one blank Chat to its folder while selected-Agent setup
+  or reconnect completes. The pending intent is renderer-local, independent
+  of setup for search by meaning, and sends at most once; it is not durable
+  application state and cannot widen to Library implicitly.
 - Closing a window releases only its UI and folder context. Shared application
   resources remain alive until the application session quits, and a window is
   retired only after its current edit is durable.
@@ -97,7 +117,7 @@ user-visible source file.
   remains the visible source. The product-facing classifications live in the
   [Documents format matrix](design/documents.md#format-capability-matrix).
 - Preparation and semantic indexing are separate stages. Current prepared text
-  may support exact retrieval before AI Index is ready.
+  may support keyword search before the semantic index is ready.
 - Incomplete, stale, or partial derived output is never current truth.
 - Reconcile brings external changes back into derived state and the index
   without blocking folder navigation or ordinary local work.
@@ -131,9 +151,15 @@ Format completion, scheduler, freshness, quota, and cleanup rules live in
   exception tracked in
   [Document Viewers](../code-review/document-viewers.md#trust-boundary).
 - External URLs and local-file navigation follow explicit, validated paths.
+- The renderer never reaches the open internet: its CSP pins network and
+  image loading to the local daemon. The Gallery's published index and
+  screenshots arrive only through the daemon's gallery proxy, which pins
+  its upstreams to the gallery's own CDN hosts and refuses any other
+  source, so it cannot be bent into a general-purpose proxy (engineering
+  contract in [Agent Panel](../code-review/agent-panel.md#gallery)).
 - Network, commands, deletion, rename, and broader filesystem access remain
   explicit approval decisions in the Agent Panel.
-- Every Built-in panel session receives a private OpenCode server
+- Every Wiki Agent panel session receives a private OpenCode server
   credential and MCP attribution identity. A Library-wide session disables
   native cwd file/command tools and uses the membership-checked MCP layer;
   folder sessions deny paths outside their working folder. The private process

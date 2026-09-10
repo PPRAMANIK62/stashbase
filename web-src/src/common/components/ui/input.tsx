@@ -17,7 +17,10 @@ function Input({ className, ...props }: InputPrimitive.Props) {
         // at two sizes, which is the whole point of the box role.
         "h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-base text-foreground transition-tint outline-none",
         "placeholder:text-placeholder",
-        "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+        // No focus ring on text fields, app-wide: the caret and the echo
+        // of typing are the focus affordance (the composer set the idiom;
+        // the palette fields already suppressed theirs). The aria-invalid
+        // ring below is validation state, not focus, and stays.
         "disabled:pointer-events-none disabled:opacity-50",
         "aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
         className

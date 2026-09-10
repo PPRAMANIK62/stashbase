@@ -15,6 +15,7 @@ import {
   sanitizeFilename,
 } from '../files.ts';
 import { detectViewerFormat, isNoteName } from '../format.ts';
+import { getWorkspacePreferences } from '../app-config.ts';
 import {
   exactMemberFolderRootAsync,
   getCurrentFolder,
@@ -180,12 +181,15 @@ export function mount(
   adapters: FileRouteAdapters = defaultFileRouteAdapters,
 ): void {
   // ----- list -----
-  // Optional `?folder=` lists an explicit library-member folder instead of
-  // the window's current one. Powers cross-folder chat tabs (`@` mentions and
-  // attachment validation run against the session's bound folder). Membership
-  // is validated — an arbitrary filesystem path is rejected.
+  // Optional `?folder=` lists an explicit library-member folder for Agent
+  // mention/attachment validation. It intentionally keeps the default-safe
+  // listing regardless of the Workbench preference: showing hidden rows never
+  // widens Agent discovery. Membership is still validated here.
   app.get('/api/files', async (req, res) => {
     try {
+      // Application-level Workbench visibility applies only to the current
+      // window listing. Explicit member listings are Agent-facing.
+      const showHidden = getWorkspacePreferences().showHiddenFiles;
       const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
       if (rawFolder) {
         const member = filesystemPath.isAbsolute(rawFolder)
@@ -203,14 +207,16 @@ export function mount(
           folder: result.folder,
           files: result.files.files,
           folders: result.files.folders,
+          showHiddenFiles: false,
         }));
         return;
       }
-      const listing = await listFilesAndFoldersAsync();
+      const listing = await listFilesAndFoldersAsync({ showHidden });
       res.json(workspaceFilesSchema.parse({
         folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
         files: listing.files,
         folders: listing.folders,
+        showHiddenFiles: showHidden,
       }));
     } catch (err: unknown) {
       sendError(res, err);
@@ -282,6 +288,23 @@ export function mount(
           if (version) res.setHeader('x-stashbase-file-version', version);
         }
         res.sendStatus(status);
+      } catch (err: unknown) {
+        sendError(res, err);
+      }
+    });
+  });
+
+  // Renderer liveness checks use JSON rather than fetch HEAD: Electron's
+  // network observer reports successful HEAD requests as ERR_ABORTED, which
+  // makes routine cross-window tab retention indistinguishable from a real
+  // request failure in release E2E diagnostics.
+  app.get('/api/file-stat/*', (req, res) => {
+    const name = (req.params as any)[0] as string;
+    void runWithExplicitReadFolder(req, res, async () => {
+      try {
+        const status = await fileHeadStatusAsync(name);
+        if (status !== 204) return res.status(status).json({ error: status === 404 ? 'not found' : 'unsupported format' });
+        res.json({ version: (await fileStatVersionAsync(name)) ?? undefined });
       } catch (err: unknown) {
         sendError(res, err);
       }

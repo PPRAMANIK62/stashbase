@@ -207,14 +207,13 @@ export function AgentRuntimeGate({
   onCopyInstall: () => void;
   onOpenMcpSetup: () => void;
 }) {
+  let card: ReactNode;
   if (!runtime) {
-    return <AgentRuntimeChecking name={fallbackName} onRefresh={onRefresh} />;
-  }
-  if (bootstrapActive) {
-    return <AgentRuntimeProgress runtime={runtime} fallbackName={fallbackName} />;
-  }
-  if (bootstrapFailed) {
-    return (
+    card = <AgentRuntimeChecking name={fallbackName} onRefresh={onRefresh} />;
+  } else if (bootstrapActive) {
+    card = <AgentRuntimeProgress runtime={runtime} fallbackName={fallbackName} />;
+  } else if (bootstrapFailed) {
+    card = (
       <AgentRuntimeFailure
         runtime={runtime}
         fallbackName={fallbackName}
@@ -226,9 +225,8 @@ export function AgentRuntimeGate({
         onOpenMcpSetup={onOpenMcpSetup}
       />
     );
-  }
-  if (runtimeUnavailable) {
-    return (
+  } else if (runtimeUnavailable) {
+    card = (
       <AgentRuntimeSetup
         runtime={runtime}
         fallbackName={fallbackName}
@@ -236,6 +234,12 @@ export function AgentRuntimeGate({
         onRefresh={onCheck}
       />
     );
+  } else {
+    return null;
   }
-  return null;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {card}
+    </div>
+  );
 }

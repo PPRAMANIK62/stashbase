@@ -87,8 +87,8 @@ test('chrome type scale and radius scale are the only visual values', () => {
   // now lives in globals.css's plain `:root` and styles.css forwards it,
   // so BOTH halves are asserted: the numbers, and the bridge that carries
   // them into Tailwind's namespace. Losing either one silently returns the
-  // renderer to two copies of nine numbers.
-  for (const step of ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl']) {
+  // renderer to two copies of ten numbers.
+  for (const step of ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl']) {
     assert.match(globalTokens, new RegExp(`--text-${step}: calc\\([0-9]+px \\* var\\(--ui-scale\\)\\);`),
       `globals.css is missing the --text-${step} step`);
     assert.match(styles, new RegExp(`--text-${step}: var\\(--text-${step}\\);`),
@@ -158,12 +158,12 @@ test('chrome type scale and radius scale are the only visual values', () => {
   // sanctioned literal was a 999px pill in the hand-rolled transcription
   // progress bar; that bar is the Progress primitive now, and every capsule
   // in the app reaches the shape through `rounded-full`, which is also the
-  // single squircle opt-out. A literal radius here is a defect, not a
+  // single corner-shape opt-out. A literal radius here is a defect, not a
   // shape that needed one.
   assert.deepEqual(legacy.match(/border-radius: *\d+px/g) ?? [], []);
-  // The squircle is what makes the corners read as continuous rather than
-  // merely large; losing it silently would flatten the whole app.
-  assert.match(legacy, /corner-shape: squircle;/);
+  // The superellipse is what makes the corners read as continuous rather
+  // than merely large; losing it silently would flatten the whole app.
+  assert.match(legacy, /corner-shape: superellipse\(1\.3\);/);
 
   // Migrated components consume named tokens, not arbitrary-value escapes.
   // Reuses walkSources above (rather than a hardcoded directory list) so
@@ -238,7 +238,7 @@ test('shell geometry and reading-surface fixes stay pinned', () => {
   assert.match(appShell, /\.sidebar-drag-zone \{[^}]*width: var\(--titlebar-controls-left\)/s);
   // The left cluster ellipsizes at the sidebar column edge instead of
   // bleeding onto the tab strip…
-  assert.match(appShell, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\) - 8px\)/s);
+  assert.match(appShell, /\.titlebar-controls \{[^}]*max-width: calc\(var\(--sidebar-width\) - var\(--titlebar-controls-left\)\)/s);
   // …and the collapsed-sidebar budget is ONE token shared by the cluster
   // cap and both tab-row reserves, so the floating controls never overlap
   // a tab.
@@ -484,12 +484,16 @@ const NOT_A_SPACING_DECISION = /shadow|^font(-size)?$|^--text-|^--(ui|reading)-f
  */
 const CSS_OFF_RAMP_EXEMPTIONS: Record<string, { values: string[]; why: string }> = {
   'common/styles/tree.css': {
-    values: ['3px', '3px'],
-    why: 'The tree row’s vertical padding is the largest value that keeps `min-height: 28px` the thing that DECLARES the row height. The line box is 20.15px at the default interface size and 21.7px at Large, so 3+20.15+3 and 3+21.7+3 both stay under 28 and every row lands on a whole pixel; the ramp’s 4 makes the content box 28.15px, which wins over the min-height and leaves each row a fraction taller than the last one’s offset. Not an amount of air: it is 28 minus the tallest line box the size preference can produce, halved.',
+    values: ['23px'],
+    why: 'The tree row’s min-height is the VS Code Explorer reference density (22px) deliberately loosened by exactly 1px — 13px type at 22-23px rows is what makes a file tree read as a professional tool, while the ramp’s neighbours miss the mark in both directions: 24 drifts toward a generic SaaS sidebar and 20 clips the Large-interface line box. Not an amount of air: a row height tuned to an external reference, with flex centring absorbing the remainder.',
   },
   'features/workspace/workspace.css': {
-    values: ['-3px'],
-    why: 'The sidebar splitter’s `margin-left` is -width/2, the offset that straddles its 6px grab area evenly across the sidebar/main boundary that `left` puts it on. Not an amount of air: any other value hands more of the grab zone to one pane than the other.',
+    values: ['-3px', '-3px'],
+    why: 'The two workspace drag handles centre their 6px grab area on the seam they sit on: the sidebar splitter’s `margin-left` and the outline splitter’s `top` are both -width/2 (-height/2), the offset that straddles the boundary evenly. Not an amount of air: any other value hands more of the grab zone to one pane than the other.',
+  },
+  'features/templates/templates.css': {
+    values: ['1.5px'],
+    why: 'A gradient coordinate tuning rasterization rather than layout: 1.5px softens the template dot edge with a half-pixel antialias ramp. It does not answer how much layout space surrounds an element.',
   },
 };
 
@@ -547,7 +551,7 @@ test('spacing in colocated CSS stays on the derived ramp', () => {
 });
 
 test('font size in colocated CSS comes off the type scale, never a literal', () => {
-  // The scale is nine roles, and until this landed every `.css` file
+  // The scale is ten roles, and until this landed every `.css` file
   // reached them by re-typing `calc(12px * var(--ui-scale))` — the
   // definition of `--text-sm`, spelled out, once per rule. That is not a
   // shortcut around the scale, it IS the scale copied by hand, which is
@@ -563,7 +567,7 @@ test('font size in colocated CSS comes off the type scale, never a literal', () 
   const ROLE_FOR_PX: Record<string, string> = {
     '10': '--text-2xs', '11': '--text-xs', '12': '--text-sm', '13': '--text-base',
     '14': '--text-lg', '16': '--text-xl', '20': '--text-2xl', '24': '--text-3xl',
-    '30': '--text-4xl',
+    '30': '--text-4xl', '40': '--text-5xl',
   };
   const problems: string[] = [];
   for (const file of walkFiles('web-src/src', '.css')) {
@@ -580,7 +584,7 @@ test('font size in colocated CSS comes off the type scale, never a literal', () 
       problems.push(
         `${file} sets ${property} from the literal ${literal[0]} — ${role
           ? `that step is \`var(${role})\``
-          : `and it is not even a step on the scale (10/11/12/13/14/16/20/24/30)`}. globals.css owns the ramp; nothing else restates it.`,
+          : `and it is not even a step on the scale (10/11/12/13/14/16/20/24/30/40)`}. globals.css owns the ramp; nothing else restates it.`,
       );
     }
   }
@@ -613,7 +617,7 @@ test('overlay geometry comes off the two size scales, never a literal', () => {
   // clamps to its parent, so it narrows when the agent panel is dragged
   // narrow rather than when the window is. Folding it into the overlay
   // ramp would tie the transcript's measure to the Settings dialog.
-  const measures = ['xs', 'sm', 'md', 'lg'].map((step) => {
+  const measures = ['xs', 'sm', 'md', 'lg', 'xl'].map((step) => {
     const match = new RegExp(`--measure-${step}: min\\((\\d+)px, 100%\\);`).exec(globals);
     assert.ok(match, `globals.css is missing --measure-${step}`);
     assert.match(styles, new RegExp(`--container-measure-${step}: var\\(--measure-${step}\\);`));
@@ -780,7 +784,15 @@ const RAW_CONTROL_EXEMPTIONS: Record<string, { count: number; why: string }> = {
   },
   'features/settings/components/embedder/EmbeddingAuthChoice.tsx': {
     count: 2,
-    why: 'AI Index setup cards. Not a radio group (each fires on click, nothing reads as pre-selected) and not `Button`s (that primitive is a centred single-line -ui-cornered ITEM; these are two-line, left-aligned, -container-cornered BOXES that keep full opacity when disabled).',
+    why: 'Setup cards for search by meaning. Not a radio group (each fires on click, nothing reads as pre-selected) and not `Button`s (that primitive is a centred single-line -ui-cornered ITEM; these are two-line, left-aligned, -container-cornered BOXES that keep full opacity when disabled).',
+  },
+  'features/templates/TemplatesView.tsx': {
+    count: 1,
+    why: 'The gallery card — one whole-card click target (cover strip over caption) opening the entry detail. `Button` is a centred single-line -ui-cornered ITEM; a media card face cancels its display, padding, corner, and type before it helps.',
+  },
+  'features/templates/detail/GalleryDetailOverlay.tsx': {
+    count: 2,
+    why: 'The read-only file tree’s folder-toggle rows and the screenshot thumbnails. Both are content-shaped targets (an indented tree row, an image tile), not centred single-line items — `Button` would be cancelled wholesale before it contributed.',
   },
   'features/settings/components/TranscriptionPanel.tsx': {
     count: 1,

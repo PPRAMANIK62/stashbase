@@ -18,7 +18,7 @@ import { filesystemPath } from './filesystem-path.ts';
 import { resolveSafe } from './file-paths.ts';
 import { runWithFolderRoot } from './folder.ts';
 import { detectFormat, detectViewerFormat, isConvertibleSource } from './format.ts';
-import { contentSizeError } from './indexable.ts';
+import { contentSizeError, isRetrievalEligiblePath, shouldIndexFilePath } from './indexable.ts';
 import { remapFileOrderPath, removeFileOrderPath } from './file-order.ts';
 import {
   normalizeLibraryFilePath,
@@ -160,6 +160,7 @@ export async function moveLibraryFile(
 
     let indexWarning: string | undefined;
     try {
+      const newPathIsRetrievalEligible = isRetrievalEligiblePath(newTarget.folderRel);
       if (opaque) {
         await indexer.deleteFile(oldTarget.abs).catch((err) => {
           log.warn(`library move: failed to remove opaque source index row ${oldTarget.abs}: ${errorMessage(err)}`);
@@ -185,17 +186,26 @@ export async function moveLibraryFile(
             log.warn(`library move: failed to remove legacy derived index row ${sourcePath}: ${errorMessage(err)}`);
           });
         }
-        try {
-          if (!queueConvertibleSource(newTarget.abs, newTarget.folderRel)) {
-            throw new Error(`no conversion owner for ${oldFormat} source`);
+        if (newPathIsRetrievalEligible) {
+          try {
+            if (!queueConvertibleSource(newTarget.abs, newTarget.folderRel)) {
+              throw new Error(`no conversion owner for ${oldFormat} source`);
+            }
+          } catch (err: unknown) {
+            log.warn(`library move: conversion kickoff failed for ${newTarget.abs}: ${errorMessage(err)}`);
           }
-        } catch (err: unknown) {
-          log.warn(`library move: conversion kickoff failed for ${newTarget.abs}: ${errorMessage(err)}`);
+          indexWarning = 'Searchable text is being regenerated in the background.';
         }
-        indexWarning = 'Searchable text is being regenerated in the background.';
+      } else if (!newPathIsRetrievalEligible) {
+        await indexer.deleteFile(oldTarget.abs).catch((err) => {
+          log.warn(`library move: failed to remove hidden source index row ${oldTarget.abs}: ${errorMessage(err)}`);
+        });
+        await indexer.deleteFile(newTarget.abs).catch((err) => {
+          log.warn(`library move: failed to remove hidden target index row ${newTarget.abs}: ${errorMessage(err)}`);
+        });
       } else if (!isEmbeddingAvailable()) {
         await indexer.deleteFile(oldTarget.abs);
-        indexWarning = 'AI Index was not updated because it is not set up.';
+        indexWarning = "The file wasn't updated for search by meaning because it isn't set up yet.";
       } else {
         const movedContent = (await readTextAsync(newTarget.folderRel)) ?? '';
         const tooLarge = contentSizeError(movedContent);
@@ -203,14 +213,18 @@ export async function moveLibraryFile(
           await indexer.deleteFile(oldTarget.abs).catch((err) => {
             log.warn(`library move: failed to remove old index row ${oldTarget.abs}: ${errorMessage(err)}`);
           });
-          indexWarning = `${tooLarge}. The file moved, but AI Index will skip it until you split or reduce it and run sync.`;
+          indexWarning = `${tooLarge}. The file moved, but it won't be searchable by meaning until you split or reduce it and run sync.`;
         } else {
           await indexer.renameFile(oldTarget.abs, newTarget.abs, movedContent);
         }
       }
       for (const updated of applied?.updated ?? []) {
-        if (!isEmbeddingAvailable()) break;
         if (updated.name === newTarget.folderRel) continue;
+        if (!shouldIndexFilePath(updated.name)) {
+          await indexer.deleteFile(filesystemPath.join(oldTarget.folderRoot, updated.name));
+          continue;
+        }
+        if (!isEmbeddingAvailable()) continue;
         const body = await readTextAsync(updated.name);
         if (body != null) await indexer.upsertFile(filesystemPath.join(oldTarget.folderRoot, updated.name), body);
       }
@@ -220,7 +234,7 @@ export async function moveLibraryFile(
       await indexer.deleteFile(oldTarget.abs).catch((cleanupErr) => {
         log.warn(`library move: stale-source cleanup failed for ${oldTarget.abs}: ${errorMessage(cleanupErr)}`);
       });
-      indexWarning = `Moved, but AI Index update failed: ${errorMessage(err)}`;
+      indexWarning = `Moved, but the file couldn't be updated for search by meaning: ${errorMessage(err)}`;
     }
     return {
       oldPath: oldTarget.abs,
@@ -269,7 +283,7 @@ export async function deleteLibraryFile(
     return {
       path: target.abs,
       alreadyGone: !removed,
-      ...(failures.length ? { indexWarning: `Deleted, but AI Index cleanup failed for ${failures.length} path(s). Run sync to reconcile.` } : {}),
+      ...(failures.length ? { indexWarning: `Deleted, but search-data cleanup failed for ${failures.length} path(s). Run sync to reconcile.` } : {}),
     };
   });
 }

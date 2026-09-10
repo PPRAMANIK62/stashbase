@@ -97,6 +97,9 @@
   --radius-lg: var(--radius-container);
   --radius-xl: var(--radius-container);
   --radius-2xl: var(--radius-container);
+  /* The composer's plump anchor corner — see `--radius-hero` in
+   * globals.css. Generates `rounded-hero`; nothing else may use it. */
+  --radius-hero: var(--radius-hero);
   /* Overlay and measure geometry (steps defined in globals.css).
    * `--container-*` is the namespace that generates width utilities, so
    * one entry lands `w-overlay-md` AND `max-w-overlay-md` at once, so a
@@ -111,10 +114,12 @@
   --container-overlay-lg: var(--overlay-w-lg);
   --container-overlay-xl: var(--overlay-w-xl);
   --container-overlay-2xl: var(--overlay-w-2xl);
+  --container-overlay-3xl: var(--overlay-w-3xl);
   --container-measure-xs: var(--measure-xs);
   --container-measure-sm: var(--measure-sm);
   --container-measure-md: var(--measure-md);
   --container-measure-lg: var(--measure-lg);
+  --container-measure-xl: var(--measure-xl);
   --shadow-elevation: var(--shadow-elevation);
   --shadow-low: 0 1px 2px rgba(var(--shadow-color), 0.05);
   /* Raised-card presence without overlay drama — the hero composer's one
@@ -168,6 +173,8 @@
   --text-3xl--line-height: 1.15;
   --text-4xl: var(--text-4xl);
   --text-4xl--line-height: 1.1;
+  --text-5xl: var(--text-5xl);
+  --text-5xl--line-height: 1.05;
   /* Motion bridge — `duration-*` and `ease-*` utilities resolve to the
    * role tokens in globals.css. `ease-out`/`ease-in-out` deliberately
    * OVERRIDE Tailwind's built-ins: the stock curves are too weak to read
@@ -202,6 +209,21 @@
     :root[data-theme='system'] & {
       @slot;
     }
+  }
+}
+
+/* Focus styling is gated on real keyboard navigation, app-wide.
+ * Chromium's :focus-visible flips to keyboard modality on ANY keydown —
+ * a bare modifier is enough, and macOS screenshot chords deliver theirs
+ * to the focused window — so the last mouse-clicked control lit up in
+ * screenshots. globals.css already gates its unlayered outline rule on
+ * `html.kbd-nav` (see common/lib/keyboardModality.ts); redefining the
+ * variant here walks every `focus-visible:` utility — the Button ring,
+ * the checkbox halo, all of them — through the same gate, so no
+ * primitive needs to know it exists. */
+@custom-variant focus-visible {
+  html.kbd-nav &:focus-visible {
+    @slot;
   }
 }
 

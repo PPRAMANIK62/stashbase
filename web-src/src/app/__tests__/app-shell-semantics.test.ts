@@ -48,6 +48,36 @@ test('the sidebar column carries the macOS window drag zone as a non-interactive
   });
 });
 
+test('an open document seats the outline handle on the tree seam, and folding the outline retires it', async () => {
+  const tab = makeTab();
+  tab.file = { name: 'Note.md', format: 'md', content: '# Hello' };
+  await withDom(async (dom) => {
+    const { element, state } = sidebar({ tabs: [tab], activeTabId: tab.id });
+    await mountApp(dom, element, { state });
+
+    const [handle] = dom.byLabel('Resize Document Outline');
+    assert.ok(handle, 'the dock exposes its resize handle');
+    const dock = dom.query('#sidebar-outline-section')?.closest('section');
+    assert.ok(dock, 'the outline list sits inside the dock section');
+    // The handle rides a zero-height seat placed BETWEEN the folder zone
+    // and the dock — never inside either, where the section's overflow
+    // clip would take the far half of its grab strip.
+    assert.equal(handle.parentElement?.nextElementSibling, dock);
+    assert.equal(handle.parentElement?.previousElementSibling?.tagName, 'SECTION');
+    // The dock is a sized block from the store, so the list inside scrolls
+    // instead of growing the dock with its headings.
+    assert.equal(dock.style.height, '180px');
+
+    // Folding the outline retires the handle: the strip's own toggle is
+    // the way back, and a folded strip has nothing to size.
+    const toggle = dom.query('button[aria-controls="sidebar-outline-section"]');
+    assert.ok(toggle);
+    await dom.fire(toggle, new MouseEvent('click', { bubbles: true }));
+    assert.equal(dom.byLabel('Resize Document Outline').length, 0);
+    assert.equal(dock.style.height, '', 'a folded dock is just its strip');
+  });
+});
+
 test('the shell titlebar is a banner landmark rooted by a visually-hidden h1', async () => {
   await withDom(async (dom) => {
     await mountApp(dom, h(TitlebarControls), { state: appState() });
@@ -61,6 +91,33 @@ test('the shell titlebar is a banner landmark rooted by a visually-hidden h1', a
     assert.ok(h1, 'the heading outline has a root');
     assert.equal(h1.textContent, 'StashBase');
     assert.match(h1.className, /(^| )sr-only( |$)/, 'the h1 is for the accessibility tree, not the paint');
+  });
+});
+
+test('collapsing the sidebar seats a New Chat action in the titlebar band', async () => {
+  // The sidebar's New Chat row disappears with the sidebar, so the shell
+  // lends the action a collapsed-only seat beside the way back in — and
+  // only then: two simultaneous creation entries would be two rules for
+  // one function.
+  await withDom(async (dom) => {
+    let activations = 0;
+    await mountApp(dom, h(TitlebarControls), {
+      state: appState({ workspace: { sidebarCollapsed: true } }),
+      actions: appActions({ activateChatTab: () => { activations += 1; } }),
+    });
+    const [compose] = dom.byLabel('New Chat');
+    assert.ok(compose, 'the collapsed band carries the creation entry');
+    await dom.fire(compose, new MouseEvent('click', { bubbles: true }));
+    assert.equal(activations, 1, 'the button runs the same blank-tab rule as the sidebar row');
+  });
+
+  await withDom(async (dom) => {
+    await mountApp(dom, h(TitlebarControls), { state: appState() });
+    assert.equal(
+      dom.byLabel('New Chat').length,
+      0,
+      'with the sidebar open, its row stays the one visible creation entry',
+    );
   });
 });
 

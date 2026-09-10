@@ -106,7 +106,13 @@
   overflow-y: visible;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
-  flex: 1 1 auto;
+  /* Content-sized, shrinkable (`0 1 auto`): with room to spare the list
+   * ends at its last tab, so the New-tab control TRAILS the tabs (the
+   * browser/editor convention — pinned at the window's far edge it sat
+   * against the chat-panel toggle, reading as chrome instead of "next
+   * tab goes here"). Under pressure the list shrinks and scrolls, and
+   * the control holds the row's right edge beside it. */
+  flex: 0 1 auto;
   min-width: 0;
 }
 .tab {
@@ -114,17 +120,24 @@
   align-items: center;
   gap: 6px;
   padding: 6px 8px 6px 10px;
-  /* `flex: 1 1 0` makes every tab take an equal share of the
-   * available width up to `max-width`; under pressure they shrink
-   * down to `min-width` (just enough for a couple of chars + the
-   * close button). */
-  flex: 1 1 0;
+  /* A definite 200px width (not a 200px flex BASIS: the content-sized
+   * list above measures its intrinsic width through min/max and a bare
+   * basis loses to the label's content size there) keeps every tab the
+   * width it has always rendered at — the old `flex: 1 1 0` equal
+   * share capped at `max-width: 200px` anyway. No grow, so the list
+   * ends at its last tab; under pressure tabs shrink down to
+   * `min-width` (just enough for a couple of chars + the close
+   * button). */
+  flex: 0 1 auto;
+  width: 200px;
   max-width: 200px;
   min-width: 60px;
   border: 1px solid transparent;
   border-bottom: none;
-  border-top-left-radius: var(--radius-control);
-  border-top-right-radius: var(--radius-control);
+  /* `-ui`, the item-inside-a-box role: a tab is a hover/selected item in
+   * the strip, same as a tree row or menu item — not a sub-24px control. */
+  border-top-left-radius: var(--radius-ui);
+  border-top-right-radius: var(--radius-ui);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -211,11 +224,12 @@
 .tab-new {
   width: 28px;
   height: 28px;
-  /* Pinned beside the scroller rather than inside it, so it never
-   * scrolls away with the tabs it sits next to. Centred against the
-   * strip row: `flex-end` instead puts it a pixel low, because the
-   * scroller reserves a gutter below the tabs that this control does
-   * not have. electron/tab-strip-layout-smoke.cjs asserts the result. */
+  /* Beside the scroller rather than inside it, so it trails the last
+   * tab while the room lasts and never scrolls away once the list
+   * overflows. Centred against the strip row: `flex-end` instead puts
+   * it a pixel low, because the scroller reserves a gutter below the
+   * tabs that this control does not have.
+   * electron/tab-strip-layout-smoke.cjs asserts the result. */
   flex: 0 0 28px;
   align-self: center;
   border: 0;
@@ -276,11 +290,52 @@
   background: var(--accent);
 }
 
+/* Drag handle on the seam between the file tree and the Document
+ * Outline dock. The seat is a zero-height item in the sidebar column's
+ * flow, so the strip it positions can straddle the seam evenly: both
+ * sections clip their own overflow, and a strip inside either would lose
+ * the half on the far side. Same 6px hit area and `::after` line as the
+ * sidebar handle above, turned on its side. */
+.outline-splitter-seat {
+  position: relative;
+  flex: none;
+  height: 0;
+  z-index: var(--layer-chrome);
+}
+.outline-splitter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 6px;
+  /* -height/2: the same centring the sidebar handle's `margin-left`
+   * does, straddling the seam the seat sits on. Recorded in
+   * CSS_OFF_RAMP_EXEMPTIONS. */
+  top: -3px;
+  cursor: row-resize;
+  background: transparent;
+}
+.outline-splitter::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  background: transparent;
+  transition: background var(--motion-fast) var(--motion-ease-hover);
+}
+.outline-splitter:hover::after,
+.outline-splitter:active::after,
+.outline-splitter:focus-visible::after {
+  background: var(--accent);
+}
+
 /* Match the sidebar's drag handle above: a 6px hit area whose only
  * visible cue is a crisp line drawn by `::after` — not a fat colored
- * band. The strip is painted CANVAS so it reads as part of the chat
- * panel; left transparent it exposed a 6px slice of the white body
- * between the sunken tab strip and the canvas panel. */
+ * band. The strip paints CANVAS — every pane shares that surface now,
+ * so it blends into the document side of the divider line; left
+ * transparent it would expose the app grid's ground instead. */
 .chat-splitter {
   grid-column: 3;
   grid-row: 1;
@@ -290,15 +345,21 @@
 }
 /* This line is the panel's only left divider: a 1px `--border` seam at
  * rest (the panel itself has no border-left), brightening to a 2px accent
- * on hover/active. Pinned to the strip's LEFT edge — the true main|chat
- * boundary now that the strip belongs to the panel side — so there's
- * a single line, not a splitter line + a separate panel border. */
+ * on hover/active. 1px matches every other resting border — the app
+ * borders are unified on the site's outer-frame weight. Pinned to the
+ * strip's RIGHT edge, where the chat column actually starts: every pane
+ * shares one surface colour now, so whatever sits left of this line
+ * reads as the document side and the chat sheet begins AT the line.
+ * Drawn at the left edge, the 6px strip joined the chat sheet and
+ * pushed its centered content (the composer) 3px off the optical
+ * centre. One line either way — never a splitter line + a separate
+ * panel border. */
 .chat-splitter::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
+  right: 0;
   width: 1px;
   background: var(--border);
   transition: background var(--motion-fast) var(--motion-ease-hover), width var(--motion-fast) var(--motion-ease-hover);
