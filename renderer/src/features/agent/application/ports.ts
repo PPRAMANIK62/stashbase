@@ -13,6 +13,21 @@ import type { AgentSessionCommand } from '@/features/agent/domain/session-comman
 import { featureErrorClass, type FeatureError } from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
+/** The standing instructions a scope's Chats run under: a packaged default a
+ *  reader may replace, never a resolved prompt. The runtime composes the real
+ *  prompt server-side, so nothing here is the text a turn actually carries. */
+export interface AgentInstructionsPort {
+  load(scope: AgentScope, signal: AbortSignal): Promise<AgentInstructions>;
+  /** Empty text restores the packaged default. */
+  save(scope: AgentScope, text: string, signal: AbortSignal): Promise<AgentInstructions>;
+}
+
+export interface AgentInstructions {
+  /** False while the packaged default is standing. */
+  readonly customized: boolean;
+  readonly text: string;
+}
+
 export interface AgentCatalogPort {
   listAgents(signal: AbortSignal): Promise<AgentCatalog>;
   prepareAgent(

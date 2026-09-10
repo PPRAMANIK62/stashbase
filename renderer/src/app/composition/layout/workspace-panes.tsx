@@ -47,6 +47,7 @@ export function WorkspacePanes({
       agent={
         <AgentWorkspace
           catalog={dependencies.agent.catalog}
+          instructions={dependencies.agent.instructions}
           onOpenAgentSettings={() => settings.openSettings('agents')}
           onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
           onOpenSource={sources.open}

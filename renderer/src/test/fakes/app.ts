@@ -3,7 +3,12 @@ import { vi } from 'vite-plus/test';
 import type { AppDependencies } from '@/app/dependencies';
 import type { CaptureBridge } from '@/platform/electron/capture';
 
-import { agentCatalogPort, agentContextPort, agentSessionPort } from './agent';
+import {
+  agentCatalogPort,
+  agentContextPort,
+  agentInstructionsApi,
+  agentSessionPort,
+} from './agent';
 import { documentsApi } from './documents';
 import { preparationControlApi, preparationStatusApi } from './preparation';
 import { exactSearchApi, indexDecisionApi, semanticSearchApi } from './retrieval';
@@ -39,6 +44,7 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
     agent: {
       catalog: agentCatalogPort(),
       context: agentContextPort(),
+      instructions: agentInstructionsApi(),
       session: agentSessionPort().port,
     },
     bugReport: null,

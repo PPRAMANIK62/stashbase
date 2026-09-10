@@ -19,6 +19,7 @@ import {
   CLAUDE_AGENT,
   CODEX_AGENT,
   idleAgentSessionPort,
+  agentInstructionsApi,
 } from '@/test/fakes/agent';
 import { createTestQueryClient, withQueryClient } from '@/test/query';
 
@@ -61,6 +62,7 @@ function renderWorkspace(
       />
       <ManagedAgentWorkspace
         catalog={catalog}
+        instructions={agentInstructionsApi()}
         onOpenAgentSettings={vi.fn()}
         onOpenExternal={vi.fn()}
         onReprocess={onReprocess}

@@ -4,6 +4,7 @@ import type {
   AgentCatalogPort,
   AgentConnectionListener,
   AgentContextPort,
+  AgentInstructionsPort,
   AgentSessionPort,
 } from '@/features/agent/application/ports';
 import type { Agent, AgentAbilities } from '@/features/agent/domain/agent-catalog';
@@ -95,6 +96,18 @@ export function idleAgentSessionPort(overrides: Partial<AgentSessionPort> = {}):
     connect: vi.fn(() => ({ close: vi.fn(), send: vi.fn(() => true) })),
     ...overrides,
   }).port;
+}
+
+/** Instructions that read as the packaged default and save what they are
+ *  given. Override `load` to exercise a customized scope. */
+export function agentInstructionsApi(
+  overrides: Partial<AgentInstructionsPort> = {},
+): AgentInstructionsPort {
+  return {
+    load: vi.fn(async () => ({ customized: false, text: 'Packaged default.' })),
+    save: vi.fn(async (_scope, text: string) => ({ customized: text !== '', text })),
+    ...overrides,
+  };
 }
 
 export function agentCatalogPort(

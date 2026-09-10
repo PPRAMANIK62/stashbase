@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import {
+  agentScopeKey,
   agentScopesEqual,
   agentSessionIsBlank,
   createAgentSessionState,
@@ -300,5 +301,24 @@ describe('Agent session domain', () => {
       message: 'Skill directory is unreadable.',
     });
     expect(failed.skill).toBe(null);
+  });
+});
+
+describe('agent scope identity', () => {
+  it('names each kind of scope once, so two readers cannot disagree', () => {
+    expect(agentScopeKey({ kind: 'library' })).toBe('library');
+    expect(agentScopeKey({ kind: 'folder', path: '/library/notes' })).toBe('/library/notes');
+  });
+
+  it('separates folders from each other and from the Library', () => {
+    expect(agentScopeKey({ kind: 'folder', path: '/a' })).not.toBe(
+      agentScopeKey({ kind: 'folder', path: '/b' }),
+    );
+    // Folder paths are absolute, which is what keeps them clear of the
+    // Library's literal spelling; a bare `library` would collide, and the
+    // route refuses one for the same reason.
+    expect(agentScopeKey({ kind: 'folder', path: '/library' })).not.toBe(
+      agentScopeKey({ kind: 'library' }),
+    );
   });
 });

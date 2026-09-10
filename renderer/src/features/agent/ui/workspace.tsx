@@ -25,7 +25,10 @@ import { useStickToBottom } from '@/shared/runtime/use-stick-to-bottom';
 
 import { AgentContextComposer } from './composer/context-composer';
 import { AgentPermissionMode } from './composer/permission-mode';
+import { useAgentInstructions } from '@/features/agent/hooks/use-agent-instructions';
+
 import { AgentComposerSettings } from './composer/settings';
+import { AgentInstructionsControl } from './instructions/agent-instructions-control';
 import { AgentSetup } from './setup';
 import { AgentTranscript } from './transcript/transcript';
 import type { AgentWorkspaceProps } from './workspace-lazy';
@@ -58,6 +61,7 @@ function connectionNotice(connection: AgentConnection): { settled: boolean; text
 
 function ReadyWorkspace({
   agents,
+  instructions: instructionsApi,
   readyAgent,
   onOpenExternal,
   onOpenSource,
@@ -98,6 +102,7 @@ function ReadyWorkspace({
   const armedSkill = agentSkills(state.skillCatalog).find((skill) => skill.id === state.skill);
   const empty = state.transcript.length === 0;
   const scopeName = scopeLabel(state.scope);
+  const instructions = useAgentInstructions(instructionsApi, state.scope);
   const starters = useMemo(
     () => (scopeOutline ? suggestStarters(scopeName, scopeOutline) : []),
     [scopeName, scopeOutline],
@@ -199,6 +204,7 @@ function ReadyWorkspace({
                 text,
               }))}
               leftSlot={
+                <>
                 <AgentComposerSettings
                   activeAgent={activeAgent}
                   agents={agents}
@@ -210,6 +216,8 @@ function ReadyWorkspace({
                   onRequestCatalog={active.start}
                   state={{ ...state, activeTurn }}
                 />
+                <AgentInstructionsControl editor={instructions} scopeName={scopeName} />
+                </>
               }
               rightSlot={
                 activeAgent.abilities.modes ? (

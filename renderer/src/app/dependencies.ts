@@ -12,9 +12,11 @@ import type { ComponentProps } from 'react';
 
 import {
   createAgentCatalogAdapter,
+  createAgentInstructionsAdapter,
   createAgentContextAdapter,
   createAgentSessionAdapter,
   type AgentCatalogPort,
+  type AgentInstructionsPort,
   type AgentContextPort,
   type AgentSessionPort,
 } from '@/features/agent/public';
@@ -74,6 +76,7 @@ export interface AppDependencies {
      *  endpoint through its own port for its own question. */
     catalog: AgentCatalogPort;
     context: AgentContextPort;
+    instructions: AgentInstructionsPort;
     session: AgentSessionPort;
   };
   /** Opens the bug-report review for this window; null outside Electron. */
@@ -124,6 +127,7 @@ export function createDependencies(): AppDependencies {
   return {
     agent: {
       catalog: createAgentCatalogAdapter(http),
+      instructions: createAgentInstructionsAdapter(http),
       context: createAgentContextAdapter(http, bridge.runtime.serverOrigin),
       session: createAgentSessionAdapter(http, bridge.runtime.serverOrigin),
     },

@@ -2,12 +2,18 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 
+import type { AgentInstructionsPort } from '@/features/agent/application/ports';
 import { createAgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { cn } from '@/lib/utils';
 
 import { AgentTitlebar } from './titlebar';
 import ManagedAgentWorkspace from './workspace';
+
+const storyInstructions = {
+  load: async () => ({ customized: false, text: 'Keep answers grounded in this folder.' }),
+  save: async (_scope: unknown, text: string) => ({ customized: text !== '', text }),
+} as AgentInstructionsPort;
 
 const abilities: Agent['abilities'] = {
   attachments: true,
@@ -206,7 +212,8 @@ function WorkspacePreview({
               listAgents: async () => ({ agents }),
               prepareAgent: async () => ({ agents }),
             }}
-            onOpenExternal={() => undefined}
+            instructions={storyInstructions}
+        onOpenExternal={() => undefined}
             onOpenAgentSettings={() => undefined}
             runtime={runtime}
             scopeOutline={{

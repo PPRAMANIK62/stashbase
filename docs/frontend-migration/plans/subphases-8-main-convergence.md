@@ -359,7 +359,7 @@ clearing it on edit, and cancelling an open request; plus `pnpm test:renderer`,
 
 **Blocked by:** 64.
 
-**Status:** Not started.
+**Status:** Complete.
 
 Folder scopes and the Library scope each resolve a packaged default and an
 optional saved customization under the configuration's agent-instructions
@@ -368,9 +368,40 @@ and one exported scope-key helper keeps the request parameter and the effect
 identity from disagreeing. Runtime adapters inject the resolved text
 verbatim; the renderer never holds a resolved prompt as durable state.
 
-Evidence: focused protocol, scope-key, adapter, hook, and editor tests; the
-agent-instructions server suite; story accessibility; `pnpm typecheck`,
-`pnpm lint:web`, `pnpm build:web`.
+The scope's identity is one function in the agent domain. The editor keys its
+read on it and the transport spells `?scope=` with it, so the two cannot
+disagree, which is the failure `main` fixed with a shared helper. The renderer
+boundary put that helper in the domain rather than the protocol: a hook may not
+read a wire module, and the adapter may reach the domain, so the domain is the
+one layer both readers share.
+
+The route's scope contract is asymmetric and the protocol says so: a read
+answers with the scope object, a write sends its spelling. `resolveScope`
+re-derives the scope from that string, which keeps membership authority on the
+server rather than trusting a shape the renderer composed. The first draft sent
+the object and would have been refused; reading the route rather than assuming
+it caught that before a test could.
+
+Saving empty restores the packaged default, which is the only way back once a
+scope is customized, so the editor offers it as an action rather than leaving
+it to be discovered.
+
+Known gap: instructions bind when a session runtime is created, so an edit does
+not reach a Chat that is already open. The dialog says so plainly rather than
+implying otherwise. `main` refreshes a live session through a save broadcast;
+carrying that across is its own change against the replacement's session
+runtime, not part of this editor.
+
+Evidence: protocol tests for the state shape, the refused scope kinds, and the
+write's spelling; a domain test pinning one identity per scope and naming why
+the Library's literal is unambiguous; adapter tests for both scope spellings,
+the encoded folder path, the write body, and a refused response; hook tests for
+reading the active scope, reading nothing unscoped, the customized indicator,
+dirtiness, saving into the scope on screen, re-reading and abandoning the draft
+on a scope change, restoring the default, and keeping the draft when a save is
+refused; plus `pnpm test:renderer`, `pnpm test:agent`, `pnpm test:config`,
+`pnpm test:protocols`, `pnpm test:inventory`, `pnpm typecheck`,
+`pnpm lint:web`, `pnpm build:web`, and `pnpm test:docs`.
 
 
 

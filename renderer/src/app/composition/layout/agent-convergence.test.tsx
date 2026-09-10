@@ -10,6 +10,7 @@ import type { AgentSessionPort } from '@/features/agent/public';
 import { DocumentSaveError } from '@/features/documents/test-support';
 import {
   agentCatalogPort,
+  agentInstructionsApi,
   agentSessionPort,
   BUILT_IN_AGENT,
   pendingAgentContextPort,
@@ -134,6 +135,7 @@ function harness(): Harness {
     agent: {
       catalog: agentCatalogPort([BUILT_IN_AGENT]),
       context: pendingAgentContextPort(),
+      instructions: agentInstructionsApi(),
       session: session.port,
     },
     capture: captureBridge(),

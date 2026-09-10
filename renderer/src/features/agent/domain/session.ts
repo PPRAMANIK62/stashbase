@@ -344,6 +344,22 @@ export function scopeForWindowFolder(folderPath: string | null): AgentScope {
   return folderPath ? { kind: 'folder', path: folderPath } : { kind: 'library' };
 }
 
+/**
+ * A scope's stable identity: the literal `library`, or the folder's path.
+ *
+ * One function because two readers need it to agree. The instructions editor
+ * keys its read on it and the transport spells `?scope=` with it, and deriving
+ * those separately is how an editor shows one scope's text and saves it into
+ * another's.
+ *
+ * The Library's spelling is a literal, so it is only unambiguous because
+ * folder paths are absolute. The route refuses a relative folder scope for the
+ * same reason.
+ */
+export function agentScopeKey(scope: AgentScope): string {
+  return scope.kind === 'library' ? 'library' : scope.path;
+}
+
 export function scopeLabel(scope: AgentScope): string {
   if (scope.kind === 'library') return 'Library';
   const normalized = scope.path.replace(/[\\/]+$/u, '');

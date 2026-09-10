@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import type { AgentCatalogPort } from '@/features/agent/application/ports';
+import type { AgentCatalogPort, AgentInstructionsPort } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
 import type { AgentScopeOutline } from '@/features/agent/domain/starters';
@@ -11,6 +11,8 @@ import { AgentSurfaceBoundary } from './surface-boundary';
 
 export interface AgentWorkspaceProps {
   catalog: AgentCatalogPort;
+  /** The standing instructions this scope's Chats run under. */
+  instructions: AgentInstructionsPort;
   onOpenExternal(href: string): void;
   onOpenAgentSettings(): void;
   /** Opens a file the Agent changed beside the chat; the user chose it. */
