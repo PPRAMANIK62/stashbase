@@ -3,6 +3,7 @@ import { Bot, Mic, Plug, Search, Settings as SettingsIcon, SunMoon } from 'lucid
 import { AgentRuntimesPanel } from './agents/agents-panel';
 import { AiIndexPanel } from './ai-index/ai-index-panel';
 import { GeneralPanel } from './general/general-panel';
+import { McpAccessPanel } from './mcp/mcp-access-panel';
 import type { SettingsProps } from './settings-types';
 import { SettingsShell, type SettingsSectionDef } from './shell';
 import { TranscriptionPanel } from './transcription/transcription-panel';
@@ -17,6 +18,7 @@ export default function ManagedSettings({
   applyCaptureWatch = alwaysApplied,
   captureApi,
   embedderApi,
+  mcpAccessApi,
   onClose,
   onOpenExternal = ignoreExternal,
   onSectionChange,
@@ -62,7 +64,15 @@ export default function ManagedSettings({
           render: () => <TranscriptionPanel transcriptionApi={transcriptionApi} />,
         }
       : { available: false, icon: Mic, id: 'transcription', label: 'Transcription' },
-    { available: false, icon: Plug, id: 'mcp', label: 'MCP' },
+    mcpAccessApi
+      ? {
+          available: true,
+          icon: Plug,
+          id: 'mcp',
+          label: 'MCP',
+          render: () => <McpAccessPanel mcpAccessApi={mcpAccessApi} />,
+        }
+      : { available: false, icon: Plug, id: 'mcp', label: 'MCP' },
   ];
 
   return (

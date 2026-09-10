@@ -1,6 +1,7 @@
 import type {
   AgentRuntimePort,
   CapturePort,
+  McpAccessPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
 
@@ -8,6 +9,7 @@ export const settingsQueryKeys = {
   agentAllowance: ['settings', 'agent-allowance'] as const,
   agentCatalog: ['settings', 'agent-catalog'] as const,
   capture: ['settings', 'capture'] as const,
+  mcpAccess: ['settings', 'mcp-access'] as const,
   transcription: ['settings', 'transcription'] as const,
 };
 
@@ -31,6 +33,14 @@ export function transcriptionQuery(port: TranscriptionPort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.load(signal),
     queryKey: settingsQueryKeys.transcription,
+    retry: false,
+  } as const;
+}
+
+export function mcpAccessQuery(port: McpAccessPort) {
+  return {
+    queryFn: ({ signal }: { signal: AbortSignal }) => port.status(signal),
+    queryKey: settingsQueryKeys.mcpAccess,
     retry: false,
   } as const;
 }

@@ -47,6 +47,7 @@
     "shared/protocols/http/files.ts",
     "shared/protocols/http/index-status.ts",
     "shared/protocols/http/library.ts",
+    "shared/protocols/http/mcp.ts",
     "shared/protocols/http/media.ts",
     "shared/protocols/http/preparation.ts",
     "shared/protocols/http/search.ts",

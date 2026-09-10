@@ -12,13 +12,12 @@ import type { EmbedderPort } from '@/features/settings/application/embedder-port
 import type {
   AgentRuntimePort,
   CapturePort,
+  McpAccessPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
-import type {
-  AgentAllowance,
-  AgentRuntime,
-} from '@/features/settings/domain/agent-catalog';
+import type { AgentAllowance, AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import type { EmbedderState, HostedAccount } from '@/features/settings/domain/embedder';
+import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
 import type {
   TranscriptionModel,
   TranscriptionProvider,
@@ -166,6 +165,41 @@ export function transcriptionPort(overrides: Partial<TranscriptionPort> = {}): T
       modelId: 'base',
       providerId: 'local',
     })),
+    ...overrides,
+  };
+}
+
+/** A reachable listener with the Docker opt-in left off. */
+export function mcpHttpAccess(overrides: Partial<McpHttpAccess> = {}): McpHttpAccess {
+  return {
+    dockerAccess: false,
+    dockerActive: false,
+    dockerError: null,
+    dockerPort: 8848,
+    dockerUrl: 'http://host.docker.internal:8848/mcp',
+    loopbackUrl: 'http://127.0.0.1:7777/mcp',
+    settingsError: null,
+    token: 'token-abc',
+    ...overrides,
+  };
+}
+
+export function mcpAccess(overrides: Partial<McpAccess> = {}): McpAccess {
+  return {
+    command: '/home/ada/.stashbase/bin/stashbase-mcp',
+    config: '{\n  "mcpServers": {}\n}',
+    http: mcpHttpAccess(),
+    ...overrides,
+  };
+}
+
+export function mcpAccessPort(overrides: Partial<McpAccessPort> = {}): McpAccessPort {
+  const access = mcpAccess();
+  return {
+    rotateToken: vi.fn(async () => ({ ...access.http, token: 'token-rotated' })),
+    setDockerAccess: vi.fn(async (enabled: boolean) => ({ ...access.http, dockerAccess: enabled })),
+    setDockerPort: vi.fn(async (port: number) => ({ ...access.http, dockerPort: port })),
+    status: vi.fn(async () => access),
     ...overrides,
   };
 }

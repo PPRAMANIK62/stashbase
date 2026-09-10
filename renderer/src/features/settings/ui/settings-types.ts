@@ -2,6 +2,7 @@ import type { EmbedderPort } from '@/features/settings/application/embedder-port
 import type {
   AgentRuntimePort,
   CapturePort,
+  McpAccessPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
 
@@ -25,6 +26,7 @@ export interface SettingsProps {
   applyCaptureWatch?: (expected: boolean) => Promise<boolean>;
   captureApi?: CapturePort;
   embedderApi?: EmbedderPort;
+  mcpAccessApi?: McpAccessPort;
   onClose: () => void;
   onOpenExternal?: (href: string) => void;
   onSectionChange: (id: SettingsSectionId) => void;

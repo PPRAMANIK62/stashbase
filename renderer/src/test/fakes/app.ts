@@ -7,7 +7,13 @@ import { agentCatalogPort, agentContextPort, agentSessionPort } from './agent';
 import { documentsApi } from './documents';
 import { preparationControlApi, preparationStatusApi } from './preparation';
 import { exactSearchApi, indexDecisionApi, semanticSearchApi } from './retrieval';
-import { agentRuntimePort, capturePort, embedderPort, transcriptionPort } from './settings';
+import {
+  agentRuntimePort,
+  capturePort,
+  embedderPort,
+  mcpAccessPort,
+  transcriptionPort,
+} from './settings';
 import { folderPicker, workspaceAdapters } from './workspace';
 
 /** The desktop clipboard bridge. `appDependencies` leaves `capture` null, as
@@ -47,6 +53,7 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       agentRuntimeApi: agentRuntimePort(),
       captureApi: capturePort(),
       embedderApi: embedderPort(),
+      mcpAccessApi: mcpAccessPort(),
       transcriptionApi: transcriptionPort(),
     },
     workspace: { adapters, revealLabel: 'Show in file manager' },
