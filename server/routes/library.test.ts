@@ -64,12 +64,19 @@ test('library routes return authoritative membership and open the selected folde
   const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-library-route-'));
   const originalEnv = new Map(isolatedEnvNames.map((name) => [name, process.env[name]]));
   let closeIndexer: (() => Promise<void>) | undefined;
+  let closeStateDb: (() => void) | undefined;
   let clearWindowFolder: (() => void) | undefined;
   let server: HttpServer | undefined;
 
   t.after(async () => {
     clearWindowFolder?.();
     await closeIndexer?.();
+    // Removing a folder clears its semantic-indexing decision, which opens the
+    // state database under the redirected app data root. better-sqlite3 keeps
+    // that file plus its WAL and shared-memory sidecars open for the rest of
+    // the process, and Windows refuses to delete a directory holding an open
+    // mapped file. POSIX unlinks it regardless, so only Windows sees this.
+    closeStateDb?.();
     if (server?.listening) {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server?.close(() => resolve()));
@@ -87,15 +94,17 @@ test('library routes return authoritative membership and open the selected folde
   process.env.XDG_DATA_HOME = path.join(testHome, 'xdg-data');
   process.env.STASHBASE_LOCAL_DATA_ROOT = path.join(testHome, 'stashbase-data');
 
-  const [{ default: express }, folder, { withWindowContext }, libraryRoutes, state] =
+  const [{ default: express }, folder, { withWindowContext }, libraryRoutes, state, stateDb] =
     await Promise.all([
       import('express'),
       import('../folder.ts'),
       import('../http.ts'),
       import('./library.ts'),
       import('../state.ts'),
+      import('../state-db.ts'),
     ]);
   closeIndexer = () => state.indexer.close();
+  closeStateDb = stateDb.closeStateDb;
   clearWindowFolder = () =>
     folder.runWithWindowId('library-window', () => folder.clearCurrentFolder());
 
