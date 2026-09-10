@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { AgentInstructionsPort } from '@/features/agent/application/ports';
-import type { AgentScope } from '@/features/agent/domain/session-state';
-import { agentScopeKey } from '@/features/agent/domain/session';
 import { agentFailure } from '@/features/agent/application/failure-messages';
+import type { AgentInstructionsPort } from '@/features/agent/application/ports';
+import { agentScopeKey } from '@/features/agent/domain/session';
+import type { AgentScope } from '@/features/agent/domain/session-state';
 import type { FailureView } from '@/shared/domain/feature-error';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 export interface AgentInstructionsEditor {
   /** True while the standing text is the reader's own rather than the
@@ -39,6 +40,7 @@ export function useAgentInstructions(
   scope: AgentScope | null,
 ): AgentInstructionsEditor {
   const client = useQueryClient();
+  const signalFor = useRequestSignals<'save'>();
   const key = scope ? agentScopeKey(scope) : null;
 
   const stored = useQuery({
@@ -56,7 +58,7 @@ export function useAgentInstructions(
 
   const write = useMutation({
     mutationFn: ({ scope: target, text }: { scope: AgentScope; text: string }) =>
-      port.save(target, text, new AbortController().signal),
+      port.save(target, text, signalFor('save')),
     onSuccess: (next) => {
       client.setQueryData(['agent-instructions', key], next);
       setDraft(null);

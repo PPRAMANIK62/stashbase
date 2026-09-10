@@ -8,6 +8,7 @@ import {
 } from '@/features/settings/application/ports';
 import { onboardingQuery, settingsQueryKeys } from '@/features/settings/application/queries';
 import { searchSetupInvitation } from '@/features/settings/domain/search-setup-invitation';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 export interface SearchSetupInvitationInput {
   /** Whether an embedding source is configured, or null while the active
@@ -41,13 +42,12 @@ export function useSearchSetupInvitation(
   input: SearchSetupInvitationInput,
 ): SearchSetupInvitationView {
   const client = useQueryClient();
+  const signalFor = useRequestSignals<'answer'>();
   const answers = useQuery(onboardingQuery(port));
 
   const record = useMutation({
-    mutationFn: (version: number) =>
-      port.answerSearchSetup(version, new AbortController().signal),
-    onSuccess: (next: OnboardingAnswers) =>
-      client.setQueryData(settingsQueryKeys.onboarding, next),
+    mutationFn: (version: number) => port.answerSearchSetup(version, signalFor('answer')),
+    onSuccess: (next: OnboardingAnswers) => client.setQueryData(settingsQueryKeys.onboarding, next),
   });
 
   const invitation = searchSetupInvitation({

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { filesFailure } from '@/features/workspace/application/failure-messages';
 import type { GitHubImportPort } from '@/features/workspace/application/ports';
 import type { FailureView } from '@/shared/domain/feature-error';
+import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 export interface GitHubImportView {
   /** What the destination folder would be called, derived from the URL until
@@ -51,7 +52,7 @@ export function useGitHubImport(
 ): GitHubImportView {
   const [url, setUrlState] = useState('');
   const [typedName, setTypedName] = useState<string | null>(null);
-  const [controller, setController] = useState<AbortController | null>(null);
+  const signalFor = useRequestSignals<'import'>();
 
   const parsed = useMemo(() => port.readUrl(url), [port, url]);
   const derivedName = parsed.ok ? parsed.folderName : '';
@@ -59,7 +60,6 @@ export function useGitHubImport(
 
   const run = useMutation({
     mutationFn: ({ signal }: { signal: AbortSignal }) => port.run(url, folderName, signal),
-    onSettled: () => setController(null),
     onSuccess: (path: string) => onImported(path),
   });
 
@@ -69,20 +69,23 @@ export function useGitHubImport(
   const { isPending, mutate, reset } = run;
   const submit = useCallback(() => {
     if (isPending || !parsed.ok || !folderName || port.folderNameIssue(folderName)) return;
-    const next = new AbortController();
-    setController(next);
-    mutate({ signal: next.signal });
-  }, [folderName, isPending, mutate, parsed.ok, port]);
+    mutate({ signal: signalFor('import') });
+  }, [folderName, isPending, mutate, parsed.ok, port, signalFor]);
 
   const cancel = useCallback(() => {
-    controller?.abort();
+    // Reopening the lane aborts whatever is in flight on it. Nothing reads the
+    // fresh signal, and unmount aborts it.
+    signalFor('import');
     reset();
-  }, [controller, reset]);
+  }, [reset, signalFor]);
 
-  const setUrl = useCallback((next: string) => {
-    setUrlState(next);
-    reset();
-  }, [reset]);
+  const setUrl = useCallback(
+    (next: string) => {
+      setUrlState(next);
+      reset();
+    },
+    [reset],
+  );
 
   const setFolderName = useCallback((next: string) => setTypedName(next), []);
 
