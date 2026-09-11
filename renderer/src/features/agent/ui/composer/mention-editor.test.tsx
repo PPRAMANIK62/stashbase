@@ -18,6 +18,8 @@ afterEach(cleanup);
 const metrics = { fontSize: 14, lineHeight: 20, paddingX: 8, paddingY: 8 };
 
 interface Harness {
+  acceptPlaceholder?: boolean;
+  placeholder?: string;
   value?: string;
   chipPaths?: string[];
   statuses?: Record<string, ContextStatus>;
@@ -46,8 +48,11 @@ function harness(options: Harness = {}) {
       maxRows: 6,
       metrics,
       minRows: 3,
+      ...(merged.acceptPlaceholder === undefined
+        ? {}
+        : { acceptPlaceholder: merged.acceptPlaceholder }),
       onValueChange: spies.onValueChange,
-      placeholder: 'Ask',
+      placeholder: merged.placeholder ?? 'Ask',
       submit: spies.submit,
       value: merged.value ?? '',
     };
@@ -91,6 +96,29 @@ describe('mention editor', () => {
     expect(chipRuns('See @docs/a.md and @docs/a.md.bak, x@docs/a.md', ['docs/a.md'])).toEqual([
       { from: 4, path: 'docs/a.md', to: 14 },
     ]);
+  });
+
+  it('takes the placeholder as the draft on Tab when it is a request', () => {
+    const { editor, field, onValueChange } = harness({
+      acceptPlaceholder: true,
+      placeholder: 'Build a wiki for docs',
+    });
+    pressKey(field, 'Tab');
+    expect(editor.state.doc.toString()).toBe('Build a wiki for docs');
+    expect(onValueChange).toHaveBeenLastCalledWith('Build a wiki for docs');
+    // Once there is a draft, Tab is Tab again.
+    pressKey(field, 'Tab');
+    expect(editor.state.doc.toString()).toBe('Build a wiki for docs');
+  });
+
+  it('leaves a hint placeholder alone on Tab', () => {
+    const { editor, field, onValueChange } = harness({
+      acceptPlaceholder: false,
+      placeholder: 'Ask or write…',
+    });
+    pressKey(field, 'Tab');
+    expect(editor.state.doc.toString()).toBe('');
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 
   it('inserts a chip that serializes back to @path and binds it', () => {

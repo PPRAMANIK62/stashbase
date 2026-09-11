@@ -282,32 +282,28 @@ describe('Library Search', () => {
     );
   });
 
-  it('explains missing search-by-meaning setup without sending a request and keeps keyword search usable', async () => {
+  it('is keyword search alone until search by meaning is set up, with no mode to switch to', async () => {
     const semanticApi = semanticSearchApi({ search: vi.fn(async () => semanticResult) });
     const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
-    const rendered = renderSearch(exactApi, {
-      readiness: { state: 'not-set-up' },
-      semanticApi,
-    });
+    renderSearch(exactApi, { readiness: { state: 'not-set-up' }, semanticApi });
     const user = userEvent.setup();
 
-    const similarTab = screen.getByRole('tab', { name: 'By meaning' });
-    expect(similarTab.getAttribute('title')).toBe(
-      'Find matches even when the wording differs — needs setup',
-    );
-    await user.click(similarTab);
+    // No tab strip at all: a single mode needs no chooser, and nothing on the
+    // surface names the mode the reader has not turned on.
+    expect(screen.queryByRole('tab', { name: 'By meaning' })).toBeNull();
+    expect(screen.queryByRole('tablist', { name: 'Search mode' })).toBeNull();
+    expect(screen.queryByText(/set it up in StashBase Settings/u)).toBeNull();
+
     await user.type(screen.getByRole('combobox', { name: 'Search current workspace' }), 'answers');
-
-    expect(
-      screen.getByText('To search by meaning, set it up in StashBase Settings.'),
-    ).not.toBeNull();
-    expect(screen.getByText('Keyword search keeps working without it.')).not.toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Open Settings' }));
-    expect(rendered.onOpenSettings).toHaveBeenCalledWith('ai-index');
-    expect(semanticApi.search).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole('tab', { name: 'By keyword' }));
     expect(await screen.findByRole('option', { name: /answer\.md/u })).not.toBeNull();
+    expect(semanticApi.search).not.toHaveBeenCalled();
+  });
+
+  it('withholds the mode while the folder’s readiness is still unknown', () => {
+    renderSearch(exactSearchApi({ search: vi.fn(async () => result) }), {
+      readiness: { state: 'unknown' },
+    });
+    expect(screen.queryByRole('tab', { name: 'By meaning' })).toBeNull();
   });
 
   it('offers the search-by-meaning workload decision in both modes and forwards it folder-explicitly', async () => {

@@ -11,9 +11,10 @@ import {
 } from '@/features/agent/application/ports';
 import type { AgentAccessMode } from '@/features/agent/domain/access';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
-import type { AgentModel, AgentSkill } from '@/features/agent/domain/runtime-catalog';
+import type { AgentSkill } from '@/features/agent/domain/runtime-catalog';
 import type { AgentId, AgentScope, AgentSessionEvent } from '@/features/agent/domain/session';
 import type { AgentSessionCommand } from '@/features/agent/domain/session-command';
+import { toModel } from '@/features/agent/infrastructure/model-wire';
 import { request as httpRequest, type TransportRequest } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
@@ -31,7 +32,6 @@ import {
   agentSessionConnectSchema,
   type AgentAccessMode as AgentAccessModeWire,
   type AgentClientEvent,
-  type AgentModel as AgentModelWire,
   type AgentServerEvent,
   type AgentSkill as AgentSkillWire,
 } from '@/protocols/websocket/agent-session';
@@ -84,15 +84,6 @@ function historyEntry(
 /** The wire spells an absent field `key?: T | undefined`; the feature spells
  *  it as a missing key. Rebuild rather than widen, so nothing above this
  *  module has to test for both. */
-function toModel(wire: AgentModelWire): AgentModel {
-  return {
-    id: wire.id,
-    label: wire.label,
-    ...(wire.description === undefined ? {} : { description: wire.description }),
-    ...(wire.supportedEfforts === undefined ? {} : { supportedEfforts: wire.supportedEfforts }),
-  };
-}
-
 function toSkill(wire: AgentSkillWire): AgentSkill {
   return {
     id: wire.id,

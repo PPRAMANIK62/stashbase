@@ -70,7 +70,7 @@ export function oauthResultPage({
     <div class="stack">
       <!-- The real product mark with the light tokens baked in: ink front
            edges, gray back edges. -->
-      <div class="brand"><span class="brand-mark"><svg viewBox="0 0 512 512" fill="none" aria-hidden="true"><g stroke="#aeb9bf" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M92 158 L92 342"/><path d="M92 342 L256 436"/></g><g stroke="#202427" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"><path d="M92 158 L256 64 L338 111"/><path d="M92 158 L256 252 L420 158"/><path d="M420 158 L420 342"/><path d="M256 436 L420 342"/><path d="M256 342 L256 436"/></g></svg></span>StashBase</div>
+      <div class="brand"><span class="brand-mark"><svg viewBox="0 0 512 512" fill="none" aria-hidden="true"><g stroke="#a3a3a3" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><path d="M104 210 L104 321.1 A24 24 0 0 0 116.1 342 L216.9 399.7"/></g><g stroke="#202427" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"><path d="M338 111 L267.9 70.84 A24 24 0 0 0 244.1 70.84 L128.3 137.2 A24 24 0 0 0 128.3 178.8 L244.1 245.2 A24 24 0 0 0 267.9 245.2 L384.1 178.6 A24 24 0 0 1 420 199.4 L420 328.1 A24 24 0 0 1 407.9 348.9 L291.9 415.4 A24 24 0 0 1 256 394.6 L256 344"/></g></svg></span>StashBase</div>
       <section class="card" data-auto-return="${autoReturn ? 'true' : 'false'}" aria-labelledby="result-title">
         <div class="result-icon">${icon}</div>
         <h1 id="result-title">${safeTitle}</h1>

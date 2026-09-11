@@ -9,7 +9,7 @@
  * held here directly: a hook whose whole body was a call to another hook made
  * the shell four levels deep to answer "which panel is showing".
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { useBootProgress } from '@/app/bootstrap/use-boot-progress';
 import {
@@ -17,7 +17,7 @@ import {
   type WorkspaceNotice,
 } from '@/app/composition/folder/use-workspace-notices';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
-import type { SearchSetupInvitationView, SettingsSectionId } from '@/features/settings/public';
+import type { SettingsSectionId } from '@/features/settings/public';
 import type {
   LibrarySnapshot,
   WorkspaceRuntime,
@@ -54,8 +54,7 @@ export interface SettingsCommand {
 
 export interface WorkspaceCommands {
   navigator: SidebarNavigatorState;
-  /** Things raised by work the reader did not ask about directly: refusals,
-   *  and the one-time offer to set up search by meaning. */
+  /** Things raised by work the reader did not ask about directly. */
   notices: readonly WorkspaceNotice[];
   quickOpen: Pick<CommandSurface, 'close' | 'open'>;
   settings: SettingsCommand;
@@ -70,7 +69,6 @@ export function useWorkspaceCommands({
   hostFailure,
   library,
   preparation,
-  searchSetup,
   session,
   workspace,
 }: {
@@ -78,10 +76,6 @@ export function useWorkspaceCommands({
   hostFailure: string | null;
   library: LibrarySnapshot | null;
   preparation: Pick<PreparationCommands, 'dismissFailure' | 'failure'>;
-  /** The one-time invitation, or null while there is nothing to offer. The
-   *  offer is composed here because taking it up opens Settings, and this is
-   *  where that command lives. */
-  searchSetup: SearchSetupInvitationView | null;
   session: WorkspaceSessionController;
   workspace: WorkspaceRuntime | null;
 }): WorkspaceCommands {
@@ -113,26 +107,7 @@ export function useWorkspaceCommands({
     memberCount,
     settled: session.status.kind === 'ready' && library !== null,
   });
-  const answerSearchSetup = searchSetup?.answer;
-  const offer = useMemo(
-    () =>
-      answerSearchSetup
-        ? {
-            decline: answerSearchSetup,
-            setUp: () => {
-              answerSearchSetup();
-              openSettings('ai-index');
-            },
-          }
-        : null,
-    [answerSearchSetup, openSettings],
-  );
-  const notices = useWorkspaceNotices(
-    preparation.failure,
-    preparation.dismissFailure,
-    hostFailure,
-    offer,
-  );
+  const notices = useWorkspaceNotices(preparation.failure, preparation.dismissFailure, hostFailure);
 
   return {
     navigator: { focusRevision, openSearch, select: setSelected, selected },

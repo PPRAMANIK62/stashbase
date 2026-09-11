@@ -14,14 +14,20 @@ html:has(.workspace-shell) {
 
 /* macOS draws its traffic lights over the top-left corner of the frameless
    window (hiddenInset, at x 14 y 12, ending near x 66). Whatever the shell
-   puts in that corner starts to their right: the sidebar's header while the
-   sidebar is open, and the titlebar's control island once it has collapsed
-   away. The preload stamps the platform on the document root, so a browser
-   or another desktop keeps the row's own padding, and mirrors the window's
-   native fullscreen there, which hides the lights and takes the room with
-   them. */
+   puts in that corner starts to their right: the sidebar's own collapse
+   toggle while the sidebar is open, and the titlebar's control island once
+   it has collapsed away — the same max() below on both keeps the toggle in
+   one corner position across the two states. The preload stamps the
+   platform on the document root, so a browser or another desktop keeps the
+   row's own padding, and mirrors the window's native fullscreen there,
+   which hides the lights and takes the room with them. */
 html[data-platform='darwin'] .workspace-shell {
-  --traffic-light-room: 68px;
+  /* Lights end near x 66. The first control's box starts here, so with the
+     regular square (36px) around a 16px glyph the lights-to-glyph gap is
+     80 + 10 - 66 = 24px — a deliberate step and a half above the 16px the
+     trio keeps between its own glyphs (20px box gap minus the -ml-1
+     overlap), so the cluster reads apart from the native lights. */
+  --traffic-light-room: 80px;
 }
 
 html[data-platform='darwin'][data-fullscreen] .workspace-shell {
@@ -29,20 +35,21 @@ html[data-platform='darwin'][data-fullscreen] .workspace-shell {
 }
 
 html[data-platform='darwin'] .workspace-shell [data-slot='sidebar'] .workspace-titlebar {
-  padding-left: calc(1rem + var(--traffic-light-room));
+  padding-left: max(0.375rem, var(--traffic-light-room));
 }
 
-/* The inset keeps an 8px margin of its own once the sidebar is collapsed, so
-   the island's padding starts that much later, and falls back to the row's
-   own 8px once fullscreen has taken the room away. It eases at the same pace
-   as the inset's margin, so the toggle rides the sidebar's edge rather than
-   jumping ahead of it. */
+/* With the sidebar collapsed the island's padding starts where the sidebar
+   band's did, and falls back to the same 6px once fullscreen has taken the
+   traffic-light room away — 6px + the square's 10px glyph inset lands the
+   toggle glyph on the sidebar's shared 16px glyph column. It eases at the
+   same pace as the inset's margin, so the toggle rides the sidebar's edge
+   rather than jumping ahead of it. */
 html[data-platform='darwin']
   .workspace-shell
   [data-slot='sidebar'][data-state='collapsed']
   ~ [data-slot='sidebar-inset']
   > .workspace-titlebar {
-  padding-left: max(0.5rem, var(--traffic-light-room));
+  padding-left: max(0.375rem, var(--traffic-light-room));
 }
 
 html[data-platform='darwin'] .workspace-shell [data-slot='sidebar-inset'] > .workspace-titlebar {

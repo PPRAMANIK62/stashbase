@@ -21,6 +21,7 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 import { AgentDocumentWorkspace } from './agent-document-workspace';
 
 export interface WorkspacePanesProps {
+  chatPaneOpen: boolean;
   agent: { outline: AgentScopeOutline | null; runtime: AgentWorkspaceRuntime };
   documents: DocumentTabsRuntime | null;
   onPrepare(source: SourceReference): void;
@@ -33,6 +34,7 @@ export interface WorkspacePanesProps {
 
 export function WorkspacePanes({
   agent,
+  chatPaneOpen,
   documents,
   onPrepare,
   onReprocess,
@@ -44,6 +46,7 @@ export function WorkspacePanes({
   const dependencies = useDependencies();
   return (
     <AgentDocumentWorkspace
+      chatPaneOpen={chatPaneOpen}
       agent={
         <AgentWorkspace
           catalog={dependencies.agent.catalog}

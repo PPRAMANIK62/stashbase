@@ -1,5 +1,6 @@
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import type {
+  AccountPort,
   AgentRuntimePort,
   AppearancePort,
   CapturePort,
@@ -15,14 +16,16 @@ const SETTINGS_SECTION_IDS = [
   'general',
   'appearance',
   'agents',
-  'ai-index',
   'transcription',
+  'ai-index',
   'mcp',
 ] as const;
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
 export interface SettingsProps {
+  /** The StashBase account, which the Agents section owns. */
+  accountApi: AccountPort;
   agentRuntimeApi: AgentRuntimePort;
   /** Resolves true when the desktop watch matches the saved opt-in; absent outside Electron. */
   applyCaptureWatch?: (expected: boolean) => Promise<boolean>;

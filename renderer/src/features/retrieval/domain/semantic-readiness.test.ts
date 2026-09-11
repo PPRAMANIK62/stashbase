@@ -7,14 +7,12 @@ import {
 } from './semantic-readiness';
 
 describe('semantic readiness', () => {
-  it('explains a missing source and used-up credits without blocking keyword search', () => {
+  it('says nothing about a missing source, and explains used-up credits without blocking keyword search', () => {
+    // Not set up is not a state the reader is told about: the mode is not
+    // offered until it is turned on in Settings, so there is no notice to show.
     const missing = { state: 'not-set-up' } as const;
     expect(canSemanticSearch(missing)).toBe(false);
-    expect(semanticIndexNotice(missing)).toMatchObject({
-      actions: ['open-settings'],
-      detail: 'Keyword search keeps working without it.',
-      title: 'To search by meaning, set it up in StashBase Settings.',
-    });
+    expect(semanticIndexNotice(missing)).toBeNull();
 
     const quota = { state: 'quota-exhausted' } as const;
     expect(canSemanticSearch(quota)).toBe(false);

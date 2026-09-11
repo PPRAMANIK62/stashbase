@@ -1,11 +1,11 @@
 /**
- * Where search by meaning gets its embeddings: the hosted StashBase account, or a
- * key the reader brings themselves. The two are one radio group because only
- * one can be authorized at a time, and each row carries the controls that
- * belong to its own source so no dialog is needed to change either.
+ * Where search by meaning gets its embeddings: a key the reader brings. There
+ * is no other source, so the panel is one row that either holds a key or asks
+ * for one. Nothing here signs anyone in; the StashBase account belongs to the
+ * Agents section and buys OpenQuill's credits, not search.
  */
 
-import { KeyRound, LogIn, LogOut, RefreshCw, Trash2 } from 'lucide-react';
+import { KeyRound, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -13,127 +13,32 @@ import { InputField, InputGroup } from '@/components/ui/input-group';
 import { TabsSubtle, TabsSubtleItem } from '@/components/ui/tabs-subtle';
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import {
-  ACCOUNT_SOURCE,
-  activeEmbeddingSource,
   describeEmbedderSource,
-  describeQuota,
   EMBEDDER_PROVIDER_LABELS,
   EMBEDDER_PROVIDERS,
-  quotaRemainingPercent,
+  keyIsActive,
   type EmbedderProvider,
   type EmbedderState,
 } from '@/features/settings/domain/embedder';
 import { useEmbedder, type EmbedderViewModel } from '@/features/settings/hooks/use-embedder';
 import {
-  ChoiceList,
-  ChoiceRow,
-  ProgressBar,
   SettingsGroup,
+  SettingsList,
   SettingsPane,
+  SettingsRow,
   StatusChip,
 } from '@/features/settings/ui/rows';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 
 export interface AiIndexPanelProps {
   embedderApi: EmbedderPort;
-  onOpenExternal(href: string): void;
-}
-
-function AccountRow({ embedder, state }: { embedder: EmbedderViewModel; state: EmbedderState }) {
-  const account = state.account;
-  const active = activeEmbeddingSource(state) === ACCOUNT_SOURCE;
-  const busy = embedder.accountBusy;
-
-  const select = () => {
-    if (busy) return;
-    if (!account.signedIn) embedder.signIn();
-    else if (!active) embedder.useAccount();
-  };
-
-  return (
-    <ChoiceRow
-      checked={active}
-      detail={
-        account.signedIn ? (
-          <>
-            <span>{account.displayName ?? 'StashBase account'}</span>
-            {account.email && (
-              <>
-                {' · '}
-                <span>{account.email}</span>
-              </>
-            )}
-          </>
-        ) : (
-          'Hosted search by meaning with monthly included credits.'
-        )
-      }
-      firstTabStop
-      label="StashBase account"
-      onSelect={select}
-      title={
-        <>
-          StashBase account
-          {active && <StatusChip>Active</StatusChip>}
-        </>
-      }
-      trail={
-        account.signedIn ? (
-          <Button
-            disabled={busy}
-            leadingIcon={LogOut}
-            onClick={() => embedder.signOut()}
-            size="compact"
-            variant="ghost"
-          >
-            Sign out
-          </Button>
-        ) : (
-          <Button
-            disabled={busy}
-            leadingIcon={LogIn}
-            loading={embedder.signInPending}
-            onClick={() => embedder.signIn()}
-            size="compact"
-            variant="secondary"
-          >
-            {embedder.signInPending ? 'Waiting for browser…' : 'Sign in to StashBase'}
-          </Button>
-        )
-      }
-      value={ACCOUNT_SOURCE}
-    >
-      {account.signedIn && (
-        <>
-          <ProgressBar value={quotaRemainingPercent(account)} />
-          <div className="mt-1.5 flex items-center justify-between gap-3">
-            <p className="text-caption text-muted-foreground" role="status">
-              {describeQuota(account)}
-            </p>
-            <Button
-              disabled={busy}
-              leadingIcon={RefreshCw}
-              onClick={() => embedder.refreshAccount()}
-              size="compact"
-              variant="ghost"
-            >
-              Refresh usage
-            </Button>
-          </div>
-        </>
-      )}
-      {embedder.accountFailure && (
-        <FailureNotice className="mt-1.5" failure={embedder.accountFailure} />
-      )}
-    </ChoiceRow>
-  );
 }
 
 function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: EmbedderState }) {
   const [provider, setProvider] = useState<EmbedderProvider>(state.provider);
   const [key, setKey] = useState('');
-  const [editing, setEditing] = useState(!state.hasKey && !state.account.signedIn);
-  const active = activeEmbeddingSource(state) === state.provider;
+  const [editing, setEditing] = useState(!state.hasKey);
+  const active = keyIsActive(state);
   const busy = embedder.keyBusy;
   const label = EMBEDDER_PROVIDER_LABELS[state.provider];
 
@@ -152,22 +57,13 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
     });
   };
 
-  const select = () => {
-    if (busy) return;
-    if (!state.hasKey) openEditor();
-    else if (!active) embedder.selectProvider(state.provider);
-  };
-
   return (
-    <ChoiceRow
-      checked={active}
+    <SettingsRow
       detail={
         state.hasKey
           ? `${label} key stored`
-          : 'OpenAI or OpenRouter, billed to you instead of the hosted credits.'
+          : 'OpenAI or OpenRouter, billed to you. Used only for search by meaning.'
       }
-      label="Your own API key"
-      onSelect={select}
       title={
         <>
           Your own API key
@@ -202,7 +98,6 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
           </Button>
         )
       }
-      value={state.provider}
     >
       {editing && (
         <form className="flex max-w-[440px] flex-col items-start gap-2.5" onSubmit={submit}>
@@ -238,14 +133,16 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
             >
               Save key
             </Button>
-            <Button
-              disabled={busy}
-              onClick={() => setEditing(false)}
-              size="compact"
-              variant="ghost"
-            >
-              Cancel
-            </Button>
+            {state.hasKey && (
+              <Button
+                disabled={busy}
+                onClick={() => setEditing(false)}
+                size="compact"
+                variant="ghost"
+              >
+                Cancel
+              </Button>
+            )}
           </div>
         </form>
       )}
@@ -255,12 +152,12 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
         </p>
       )}
       {embedder.keyFailure && <FailureNotice className="mt-1.5" failure={embedder.keyFailure} />}
-    </ChoiceRow>
+    </SettingsRow>
   );
 }
 
-export function AiIndexPanel({ embedderApi, onOpenExternal }: AiIndexPanelProps) {
-  const embedder = useEmbedder(embedderApi, onOpenExternal);
+export function AiIndexPanel({ embedderApi }: AiIndexPanelProps) {
+  const embedder = useEmbedder(embedderApi);
   const state = embedder.state;
 
   if (embedder.loading) {
@@ -285,25 +182,13 @@ export function AiIndexPanel({ embedderApi, onOpenExternal }: AiIndexPanelProps)
 
   return (
     <SettingsPane
-      lede="Search by meaning and Agent context use it. Keyword search and every local workflow work without it."
+      lede="Search by meaning finds files even when the wording differs. It is off until you add an embedding key here. Keyword search and every local workflow work without it."
       title="Search by Meaning"
     >
-      <SettingsGroup hint={describeEmbedderSource(state)} title="Source">
-        <ChoiceList
-          aria-label="Provider for search by meaning"
-          onValueChange={(value) => {
-            if (embedder.selecting || value === activeEmbeddingSource(state)) return;
-            if (value === ACCOUNT_SOURCE) {
-              if (state.account.signedIn) embedder.useAccount();
-            } else if (state.hasKey) {
-              embedder.selectProvider(value === 'openrouter' ? 'openrouter' : 'openai');
-            }
-          }}
-          value={activeEmbeddingSource(state)}
-        >
-          <AccountRow embedder={embedder} state={state} />
+      <SettingsGroup hint={describeEmbedderSource(state)} title="Embedding key">
+        <SettingsList>
           <KeyRow embedder={embedder} state={state} />
-        </ChoiceList>
+        </SettingsList>
       </SettingsGroup>
     </SettingsPane>
   );

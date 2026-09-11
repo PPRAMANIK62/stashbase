@@ -1,8 +1,9 @@
 /** What sits inside a menu row's button: its leading icon and its label.
  *
  *  Both are shared by the parent rows and the sub rows, and both carry the
- *  same "lit" treatment — the row's colour and weight step up together when it
- *  is hovered or current, so a row never half-lights.
+ *  same "lit" treatment — the row's colour and glyph stroke step up together
+ *  when it is hovered or current, so a row never half-lights. Weight never
+ *  changes: a current row looks exactly like a hovered one.
  *
  *  The label is named, not guessed. This module used to read the row's
  *  children and peel the leading string off the front as "the label", which
@@ -52,13 +53,11 @@ export function MenuRowLabel({
   label,
   extras,
   lit,
-  emphasized,
   textClass,
 }: {
   label: React.ReactNode;
   extras: React.ReactNode;
   lit: boolean;
-  emphasized: boolean;
   textClass: string;
 }) {
   if (label === undefined || label === null || label === '') {
@@ -79,7 +78,7 @@ export function MenuRowLabel({
     <>
       <WeightedLabel
         className={cn('min-w-0 text-left', textClass)}
-        emphasized={emphasized}
+        emphasized={false}
         lit={lit}
         overflow="truncate"
       >

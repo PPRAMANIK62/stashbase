@@ -7,6 +7,7 @@ import type { GalleryEntry } from '@/features/gallery/domain/entry';
 import { useGalleryCopy } from './use-gallery-copy';
 
 const ENTRY: GalleryEntry = {
+  about: null,
   category: 'course',
   contents: '20 transcripts',
   description: 'A course.',

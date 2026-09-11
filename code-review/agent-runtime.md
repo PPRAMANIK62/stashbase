@@ -287,10 +287,45 @@ transcript events, approvals, history actions, capabilities, skills, models,
 and effort. Renderer code selects by adapter metadata and does not branch on
 assumed CLI versions.
 
-- Model catalogs and effort levels come from the native runtime. `Default`
-  means no override and never rewrites global CLI configuration. A fresh
-  Codex session keeps that label until its native thread reports the actual
-  model; catalog metadata is not presented as live session identity.
+- Model catalogs and effort levels come from the native runtime, in the
+  runtime's own order. Where the runtime declares them, a catalog entry
+  carries `isDefault` and `defaultEffort` (Codex's `isDefault` and
+  `defaultReasoningEffort`), and an entry the runtime hides from its own
+  picker is dropped. `Default` means no override and never rewrites global
+  CLI configuration; the composer names the declared default in its place,
+  and a runtime that declares none keeps the `Default` label until its native
+  thread reports the actual model. Catalog metadata is never presented as
+  live session identity.
+- A catalog is a property of the runtime, not of a session.
+  `server/agent-model-catalog.ts` keeps each native runtime's last-read
+  catalog and the model it last ran with nothing chosen in
+  `~/.stashbase/config.json`, and
+  the runtime listing hands that memory to new chats as `catalog`. Codex's
+  catalog is read at the runtime level from a bare app-server (`initialize`,
+  `model/list`, exit, in the home directory) the first time the listing finds
+  nothing remembered; a failed read is not retried for five minutes, so a
+  runtime that cannot answer never slows the listing twice in a row. Claude's
+  is read the same way from a bare SDK handshake (`initializationResult`, then
+  close, before any turn, so nothing is spent and no session is written). The
+  handshake names no default, because Claude keeps the chosen model and effort
+  in its own user settings, so `server/claude-model-catalog.ts` reads `model`
+  and `effortLevel` from the same `~/.claude/settings.json` the CLI reads (honoring
+  `CLAUDE_CONFIG_DIR`): the configured model is the default when the catalog
+  lists it, else the catalog's own `default` entry, and the persisted effort
+  is the default effort of every model that can run at it, and the default is
+  flagged in the catalog the way Codex flags its own. A Claude session
+  publishes that same reading, so the memory describes Claude alike whichever
+  path wrote it; a memory that names no default (one an older build's session
+  left) is completed by one runtime-level read. Project-level settings are not
+  consulted at the runtime level; a session reports the model it actually
+  runs on its first turn.
+- Permission modes are the product's four promises, and a runtime's `modes`
+  capability lists the ones it can honor; each Adapter owns how. Claude maps
+  them one to one onto its native `permissionMode`. Codex
+  (`server/codex-approval.ts`) keeps every mode on `on-request` approvals:
+  Plan is a read-only sandbox, Edit is a StashBase-side pass for file changes
+  inside the folder, and Auto hands review to the app-server's `auto_review`
+  reviewer. OpenQuill lists none and always asks.
 - Codex applies an explicit idle model change to the next turn of the existing
   thread. The Adapter ignores model changes while a turn is active; returning
   to `Default` omits the next turn's model override.
@@ -381,7 +416,8 @@ gap below is observed in Shipping.
 | Preparation Interface | `AgentBootstrapCoordinator` and its structured failure contract in `server/agent-runtime-installer.ts`; discovery and one-shot debug controls in `server/agent-cli.ts` and `server/agent-runtime-paths.ts` |
 | MCP wiring | `ensureAgentMcp` and the launcher writer in `server/agent-mcp.ts` |
 | Claude Adapter | `server/agent.ts` and its SDK/native-process helpers |
-| Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts` |
+| Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts`; `codex-model-catalog.ts` is the one reading of `model/list` a session and the runtime-level read share |
+| Model catalog memory | `server/agent-model-catalog.ts` remembers each runtime's catalog and observed default and reads Codex's without a session; `server/claude-model-catalog.ts` reads Claude's from a bare SDK handshake plus its user settings; `server/routes/terminal.ts` primes the memory before the listing answers |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
 | Agent Instructions Interface | `assets/agent-instructions/default.md` and `assets/agent-instructions/library.md` own the two product defaults; `server/agent-instructions.ts` owns scope matching, defensive reads, clearing, and config compaction; `server/routes/agent-instructions.ts` is the authorized HTTP Adapter over the wire shapes in `shared/agent-instructions.ts` and `shared/protocols/http/agent-instructions.ts`; `server/agent-runtime-instructions.ts` owns the separate internal routing policy and native-session composition |
 | Renderer Adapters | `renderer/src/features/agent/infrastructure/catalog-api.ts` maps the runtime catalog to whether a conversation can send, `renderer/src/features/agent/infrastructure/session-api.ts` maps the socket and history vocabulary, and `renderer/src/features/agent/infrastructure/agent-instructions-api.ts` maps the instructions routes. Session and tab lifetime is `renderer/src/features/agent/application/workspace-runtime.ts`. Renderer-side rules are [Agent Panel](agent-panel.md) |

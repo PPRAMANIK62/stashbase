@@ -105,7 +105,7 @@ describe('AgentWorkspace composer context', () => {
   it('suggests scope files for @ and binds the accepted one as an inline chip', async () => {
     const { runtime } = renderWorkspace(idleAgentSessionPort(), undefined, agentContextPort());
     act(() => runtime.setScopeEnvironment(researchEnvironment));
-    await screen.findByText('Your Wiki is here.');
+    await screen.findByText('From wiki to words.');
     await agentGateLifted();
     const composer = screen.getByRole('textbox', { name: 'Message' });
 
@@ -150,7 +150,7 @@ describe('AgentWorkspace composer context', () => {
     const port = idleAgentSessionPort();
     const { runtime } = renderWorkspace(port, undefined, agentContextPort());
     act(() => runtime.setScopeEnvironment(researchEnvironment));
-    await screen.findByText('Your Wiki is here.');
+    await screen.findByText('From wiki to words.');
     await agentGateLifted();
     const composer = screen.getByRole('textbox', { name: 'Message' });
     typeInto(composer, '@less');
@@ -168,7 +168,7 @@ describe('AgentWorkspace composer context', () => {
   it('sends a plain request while the whole folder is still being prepared', async () => {
     const port = idleAgentSessionPort();
     const { runtime } = renderWorkspace(port);
-    await screen.findByText('Your Wiki is here.');
+    await screen.findByText('From wiki to words.');
     await agentGateLifted();
     act(() => {
       runtime.setScopeEnvironment({
@@ -194,7 +194,7 @@ describe('AgentWorkspace composer context', () => {
     const port = idleAgentSessionPort();
     const onReprocess = vi.fn();
     const { runtime } = renderWorkspace(port, undefined, agentContextPort(), onReprocess);
-    await screen.findByText('Your Wiki is here.');
+    await screen.findByText('From wiki to words.');
     await agentGateLifted();
     act(() => {
       runtime.setScopeEnvironment({
@@ -271,7 +271,7 @@ describe('AgentWorkspace composer context', () => {
     const context = agentContextPort();
     const { runtime } = renderWorkspace(idleAgentSessionPort(), undefined, context);
     act(() => runtime.setScopeEnvironment(researchEnvironment));
-    await screen.findByText('Your Wiki is here.');
+    await screen.findByText('From wiki to words.');
     await agentGateLifted();
     expect(screen.queryByRole('button', { name: 'Attach files' })).toBeNull();
 

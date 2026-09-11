@@ -57,6 +57,29 @@ export function promptTimeLabel(
   return `${date}, ${time}`;
 }
 
+/** How long a turn took, as a reader would say it: seconds under a minute,
+ *  then minutes and seconds, then hours and minutes. */
+export function durationLabel(ms: number): string {
+  const seconds = Math.round(Math.max(0, ms) / 1000);
+  if (seconds < 1) return '<1s';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+/** When a reply settled, and how long its turn took when the prompt's own
+ *  time is known too: "3:31 PM · 12s". */
+export function replyTimeLabel(
+  at: number,
+  promptAt: number | undefined,
+  now: number,
+  locale: TimeLocale = RUNTIME_LOCALE,
+): string {
+  const settled = promptTimeLabel(at, now, locale);
+  return promptAt === undefined ? settled : `${settled} · ${durationLabel(at - promptAt)}`;
+}
+
 /** Ids of the prompts that open a new local day, relative to the previous
  *  timed prompt. The first prompt never starts a break. */
 export function transcriptDayBreaks(blocks: readonly AgentTranscriptBlock[]): Set<string> {

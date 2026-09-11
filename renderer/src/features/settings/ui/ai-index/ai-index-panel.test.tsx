@@ -4,59 +4,33 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { EmbedderError, type EmbedderPort } from '@/features/settings/application/embedder-port';
 import { failureMessage } from '@/features/settings/application/failure-messages';
-import type { EmbedderState } from '@/features/settings/domain/embedder';
-import { embedderPort, embedderState, SIGNED_IN_ACCOUNT } from '@/test/fakes/settings';
+import { embedderPort, embedderState, keyedEmbedderState } from '@/test/fakes/settings';
 import { withQueryClient } from '@/test/query';
 
 import { AiIndexPanel } from './ai-index-panel';
 
-const signedOut = embedderState();
-
-const signedIn = embedderState({
-  account: SIGNED_IN_ACCOUNT,
-  authorized: true,
-  model: 'hosted',
-  source: 'stashbase-account',
-});
-
-function renderPanel(port: EmbedderPort, onOpenExternal = vi.fn()) {
-  withQueryClient(<AiIndexPanel embedderApi={port} onOpenExternal={onOpenExternal} />);
-  return { onOpenExternal };
+function renderPanel(port: EmbedderPort) {
+  return withQueryClient(<AiIndexPanel embedderApi={port} />);
 }
 
 afterEach(cleanup);
 
 describe('search by meaning settings panel', () => {
-  it('shows the hosted account with its remaining credits and reset date', async () => {
-    renderPanel(embedderPort(signedIn));
-
-    expect(await screen.findByText('Ada Lovelace')).not.toBeNull();
-    expect(screen.getByText('ada@example.com')).not.toBeNull();
-    expect(screen.getByText(/25% remaining · 250 tokens left · Resets/u)).not.toBeNull();
-    expect(
-      screen.getByRole('radio', { name: 'StashBase account' }).getAttribute('aria-checked'),
-    ).toBe('true');
-    expect(screen.getByText('Active')).not.toBeNull();
-    expect(
-      screen.getByText('Meaning-based search and indexing use your StashBase account.'),
-    ).not.toBeNull();
-  });
-
-  it('starts a sign-in in the browser and saves a key without keeping it', async () => {
-    const port = embedderPort(signedOut);
-    const rendered = renderPanel(port);
+  it('opens on the key editor when nothing is set up, and never offers a sign-in', async () => {
+    const port = embedderPort(embedderState());
+    renderPanel(port);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: 'Sign in to StashBase' }));
-    await waitFor(() =>
-      expect(rendered.onOpenExternal).toHaveBeenCalledWith('https://accounts.example/sign-in'),
-    );
-    expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
     expect(
-      screen.getByText(
-        'Searching by meaning isn’t set up. Sign in or add a key. Keyword search keeps working.',
+      await screen.findByText(
+        'Searching by meaning isn’t set up. Add a key to turn it on. Keyword search keeps working.',
       ),
     ).not.toBeNull();
+    expect(screen.queryByRole('button', { name: /Sign in/u })).toBeNull();
+    expect(screen.queryByText(/StashBase account/u)).toBeNull();
+    // With no key there is nothing to cancel back to, so the editor is open
+    // and has no Cancel.
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
 
     await user.type(screen.getByPlaceholderText('Paste the key'), 'sk-secret');
     await user.click(screen.getByRole('button', { name: 'Save key' }));
@@ -65,28 +39,35 @@ describe('search by meaning settings panel', () => {
     );
   });
 
-  it('reports usage as temporarily unavailable and a rejected key as the reader’s to fix', async () => {
-    const port = embedderPort(
-      { ...signedIn, account: { ...SIGNED_IN_ACCOUNT, quota: null, quotaUnavailable: true } },
-      {
-        saveKey: vi.fn(async () => {
-          throw new EmbedderError('rejected', 'HTTP 401 from the provider');
-        }),
-      },
-    );
+  it('marks a stored key active and offers to replace or remove it', async () => {
+    renderPanel(embedderPort(keyedEmbedderState({ provider: 'openrouter', source: 'openrouter' })));
+
+    expect(await screen.findByText('OpenRouter key stored')).not.toBeNull();
+    expect(screen.getByText('Active')).not.toBeNull();
+    expect(
+      screen.getByText('Meaning-based search and indexing use your OpenRouter key.'),
+    ).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Replace key' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove key' })).not.toBeNull();
+    expect(screen.queryByPlaceholderText('Paste the key')).toBeNull();
+  });
+
+  it('reports a rejected key as the reader’s to fix', async () => {
+    const port = embedderPort(embedderState(), {
+      saveKey: vi.fn(async () => {
+        throw new EmbedderError('rejected', 'HTTP 401 from the provider');
+      }),
+    });
     renderPanel(port);
     const user = userEvent.setup();
 
-    expect(await screen.findByText('Usage is temporarily unavailable.')).not.toBeNull();
-    expect(screen.queryByPlaceholderText('Paste the key')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Add key' }));
-    await user.type(screen.getByPlaceholderText('Paste the key'), 'bad');
+    await user.type(await screen.findByPlaceholderText('Paste the key'), 'bad');
     await user.click(screen.getByRole('button', { name: 'Save key' }));
     expect((await screen.findByRole('alert')).textContent).toBe(failureMessage('rejected'));
   });
 
   it('reports an unreachable embedder quietly rather than as something to correct', async () => {
-    const port = embedderPort(embedderState({ hasKey: true }), {
+    const port = embedderPort(keyedEmbedderState(), {
       removeKey: vi.fn(async () => {
         throw new EmbedderError('unavailable', 'HTTP 503 from /api/embedder');
       }),
@@ -100,50 +81,17 @@ describe('search by meaning settings panel', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('switches the active source to a stored key by selecting its row', async () => {
-    const withKey: EmbedderState = {
-      ...signedIn,
-      hasKey: true,
-      provider: 'openrouter',
-    };
-    const port = embedderPort(withKey, {
-      selectProvider: vi.fn(async () => ({ ...withKey, source: 'openrouter' as const })),
-    });
-    renderPanel(port);
-    const user = userEvent.setup();
-
-    const keyRow = await screen.findByRole('radio', { name: 'Your own API key' });
-    expect(keyRow.getAttribute('aria-checked')).toBe('false');
-    expect(screen.getByText('OpenRouter key stored')).not.toBeNull();
-
-    await user.click(keyRow);
-
-    await waitFor(() =>
-      expect(port.selectProvider).toHaveBeenCalledWith('openrouter', expect.any(AbortSignal)),
-    );
-  });
-
-  it('marks the key row active when the stored key is the source', async () => {
+  it('does not call a stored key active while the server resolves another source', async () => {
+    // Until the server stops resolving a signed-in session to its own source,
+    // a stored key can sit beside a source this renderer does not offer. The
+    // panel then says search by meaning is not set up, which is what the
+    // window does with it.
     renderPanel(
-      embedderPort({
-        ...signedIn,
-        hasKey: true,
-        model: 'text-embedding-3-small',
-        provider: 'openai',
-        source: 'openai',
-      }),
+      embedderPort(embedderState({ authorized: true, hasKey: true, source: 'stashbase-account' })),
     );
 
-    const keyRow = await screen.findByRole('radio', { name: 'Your own API key' });
-    expect(keyRow.getAttribute('aria-checked')).toBe('true');
-    expect(
-      screen.getByRole('radio', { name: 'StashBase account' }).getAttribute('aria-checked'),
-    ).toBe('false');
-    expect(screen.getAllByText('Active')).toHaveLength(1);
-    expect(
-      screen.getByText('Meaning-based search and indexing use your OpenAI key.'),
-    ).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Replace key' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Remove key' })).not.toBeNull();
+    expect(await screen.findByText('OpenAI key stored')).not.toBeNull();
+    expect(screen.queryByText('Active')).toBeNull();
+    expect(screen.getByText(/isn’t set up/u)).not.toBeNull();
   });
 });

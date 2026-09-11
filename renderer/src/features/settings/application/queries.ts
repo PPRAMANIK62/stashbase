@@ -1,26 +1,36 @@
+import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import type {
+  AccountPort,
   AgentRuntimePort,
   AppearancePort,
   CapturePort,
   McpAccessPort,
-  OnboardingPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
 
 export const settingsQueryKeys = {
+  account: ['settings', 'account'] as const,
   agentAllowance: ['settings', 'agent-allowance'] as const,
   agentCatalog: ['settings', 'agent-catalog'] as const,
   appearance: ['settings', 'appearance'] as const,
   capture: ['settings', 'capture'] as const,
+  embedder: ['settings', 'embedder'] as const,
   mcpAccess: ['settings', 'mcp-access'] as const,
-  onboarding: ['settings', 'onboarding'] as const,
   transcription: ['settings', 'transcription'] as const,
 };
 
-export function onboardingQuery(port: OnboardingPort) {
+export function accountQuery(port: AccountPort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.load(signal),
-    queryKey: settingsQueryKeys.onboarding,
+    queryKey: settingsQueryKeys.account,
+    retry: false,
+  } as const;
+}
+
+export function embedderQuery(port: EmbedderPort) {
+  return {
+    queryFn: ({ signal }: { signal: AbortSignal }) => port.load(signal),
+    queryKey: settingsQueryKeys.embedder,
     retry: false,
   } as const;
 }

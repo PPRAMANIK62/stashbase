@@ -69,12 +69,12 @@ describe('library sidebar', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('renders the authoritative active folder', async () => {
+  it('renders the authoritative active folder as a switcher, not a selected place', async () => {
     renderLibrary({ api: { load: vi.fn(async () => activeLibrary) } });
 
-    expect(
-      (await screen.findByRole('button', { name: 'Research' })).getAttribute('aria-current'),
-    ).toBe('page');
+    const picker = await screen.findByRole('button', { name: 'Research' });
+    expect(picker.getAttribute('aria-haspopup')).toBe('menu');
+    expect(picker.getAttribute('aria-current')).toBeNull();
   });
 
   it('adds a non-color attention cue to the active folder when asked', async () => {
@@ -137,6 +137,8 @@ describe('library sidebar', () => {
 
     expect(openFolder).toHaveBeenCalledWith('/library/notes', expect.any(AbortSignal));
     expect(await screen.findByRole('button', { name: 'notes' })).not.toBeNull();
+    // The chooser closes with the choice: its member rows leave the screen.
+    await waitFor(() => expect(screen.queryByTitle('~/research')).toBeNull());
   });
 
   it('adds a subsequent folder from the active-folder chooser', async () => {
@@ -193,9 +195,9 @@ describe('library sidebar', () => {
         'aria-keyshortcuts',
       ),
     ).toBe('Delete');
-    await user.click(await screen.findByRole('button', { name: 'Remove Notes from Library' }));
+    await user.click(await screen.findByRole('button', { name: 'Remove Notes' }));
 
-    expect(await screen.findByRole('heading', { name: 'Remove from Library?' })).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: 'Remove this project?' })).not.toBeNull();
     expect(screen.getByText('~/Notes').getAttribute('title')).toBe('/home/person/Notes');
     expect(screen.getByText(/The folder and its files will stay on disk/u)).not.toBeNull();
 

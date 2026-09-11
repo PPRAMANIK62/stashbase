@@ -3,7 +3,7 @@ import { Copy, Pencil, RotateCcw } from 'lucide-react';
 
 import { SizeProvider } from '@/lib/size-context';
 
-import { ChatMessage } from './chat-message';
+import { ChatMessage, ChatMessageAction } from './chat-message';
 
 /** A deterministic stand-in for a dropped screenshot. `File` needs real bytes
  *  for the thumbnail's object URL, and a story must not depend on a fixture on
@@ -12,20 +12,16 @@ const attachment = new File([new Uint8Array([137, 80, 78, 71])], 'diagram.png', 
   type: 'image/png',
 });
 
+/** The meta row's actions are the shared icon-only control, so every story
+ *  lines its glyphs up the way the transcript does. */
 function MessageActions({ assistant = false }: { assistant?: boolean }) {
-  const Action = assistant ? RotateCcw : Pencil;
   return (
     <>
-      <button aria-label="Copy message" className="p-1" type="button">
-        <Copy size={14} />
-      </button>
-      <button
-        aria-label={assistant ? 'Regenerate response' : 'Edit message'}
-        className="p-1"
-        type="button"
-      >
-        <Action size={14} />
-      </button>
+      <ChatMessageAction icon={Copy} label={assistant ? 'Copy response' : 'Copy message'} />
+      <ChatMessageAction
+        icon={assistant ? RotateCcw : Pencil}
+        label={assistant ? 'Regenerate response' : 'Edit message'}
+      />
     </>
   );
 }
@@ -45,7 +41,7 @@ export const Conversation: Story = {
       <ChatMessage actions={<MessageActions />} from="user" time="Today, 10:42">
         Which folders have the most unreviewed documents?
       </ChatMessage>
-      <ChatMessage actions={<MessageActions assistant />} from="assistant">
+      <ChatMessage actions={<MessageActions assistant />} from="assistant" time="10:42 AM · 8s">
         Research has 18 documents awaiting review. Planning has 6, and Design has 3.
       </ChatMessage>
     </div>
@@ -73,7 +69,7 @@ export const LongReply: Story = {
       <ChatMessage from="user" time="Today, 11:12">
         Summarise what changed this week.
       </ChatMessage>
-      <ChatMessage actions={<MessageActions assistant />} from="assistant">
+      <ChatMessage actions={<MessageActions assistant />} from="assistant" time="11:13 AM · 41s">
         Three folders changed. Research gained 12 documents, all Markdown, and every one of them is
         indexed. Planning lost two drafts that were merged into the quarterly report. Design is
         unchanged apart from a rename, which the index picked up without a re-run.

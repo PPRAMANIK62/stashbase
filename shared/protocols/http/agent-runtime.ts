@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { agentModelSchema } from '../agent-model';
+
 export const agentIdSchema = z.enum(['stashbase', 'claude', 'codex']);
 
 export const agentBootstrapPhaseSchema = z.enum([
@@ -94,12 +96,24 @@ export const agentCapabilitiesSchema = z
     approvals: z.literal(true),
     history: z.literal(true),
     attachments: z.boolean(),
-    modes: z.boolean(),
+    /** The permission promises the runtime can honor; empty hides the control. */
+    modes: z.array(z.enum(['default', 'acceptEdits', 'plan', 'auto'])).max(8),
     effort: z.boolean(),
     models: z.boolean(),
     skills: z.boolean(),
     steering: z.boolean(),
     titleHint: z.boolean(),
+  })
+  .strict();
+
+/** What the service remembers a runtime offering, so a fresh chat can name
+ * the model and level it will run on before any session exists. */
+export const agentModelCatalogSchema = z
+  .object({
+    models: z.array(agentModelSchema).max(256),
+    /** The model the runtime last ran when nothing was chosen. */
+    defaultModel: z.string().max(200).optional(),
+    readAt: z.string().max(64),
   })
   .strict();
 
@@ -117,6 +131,7 @@ export const agentSchema = z
     state: z.enum(['available', 'unavailable', 'failed']).optional(),
     error: z.string().max(2000).optional(),
     capabilities: agentCapabilitiesSchema.optional(),
+    catalog: agentModelCatalogSchema.optional(),
   })
   .strict();
 

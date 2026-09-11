@@ -30,6 +30,9 @@ export interface InputMessageEditorContext {
   disabled: boolean;
   /** Already swapped to the drop hint while a file drag hovers. */
   placeholder: string;
+  /** The placeholder is a request rather than a hint, so Tab may fill the
+   *  empty field with it. Never true while the drop hint shows. */
+  acceptPlaceholder?: boolean;
   minRows: number;
   maxRows: number;
   /** The composer's step typography, so the field's text sits exactly where
@@ -43,6 +46,9 @@ export interface InputMessageEditorContext {
 export interface InputMessageEditorProps {
   /** Placeholder text shown when the value is empty. */
   placeholder?: string;
+  /** The placeholder is a request the reader may take as written: Tab on an
+   *  empty field fills it in, without sending. */
+  placeholderIsPrompt?: boolean;
   /** Minimum visible rows before the field grows. */
   minRows?: number;
   /** Maximum visible rows before the field starts to scroll. */

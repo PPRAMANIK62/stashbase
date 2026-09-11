@@ -1,14 +1,9 @@
 <svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="512" height="512" rx="112" fill="#f8fafc"/>
-  <g stroke="#6b7280" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M92 158 L92 342"/>
-    <path d="M92 342 L256 436"/>
+  <g stroke="#a3a3a3" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M104 210 L104 321.1 A24 24 0 0 0 116.1 342 L216.9 399.7"/>
   </g>
-  <g stroke="#171717" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M92 158 L256 64 L338 111"/>
-    <path d="M92 158 L256 252 L420 158"/>
-    <path d="M420 158 L420 342"/>
-    <path d="M256 436 L420 342"/>
-    <path d="M256 342 L256 436"/>
+  <g stroke="#171717" stroke-width="32" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M338 111 L267.9 70.84 A24 24 0 0 0 244.1 70.84 L128.3 137.2 A24 24 0 0 0 128.3 178.8 L244.1 245.2 A24 24 0 0 0 267.9 245.2 L384.1 178.6 A24 24 0 0 1 420 199.4 L420 328.1 A24 24 0 0 1 407.9 348.9 L291.9 415.4 A24 24 0 0 1 256 394.6 L256 344"/>
   </g>
 </svg>

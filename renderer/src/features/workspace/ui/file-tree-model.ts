@@ -1,5 +1,26 @@
 import type { TreeRow, WorkspaceEntry } from '@/features/workspace/domain/tree';
 import type { FileTreeNaming } from '@/features/workspace/hooks/use-file-operations';
+import type { ItemRect } from '@/lib/proximity-geometry';
+
+/** One string that changes exactly when the rendered rows' paths change. */
+export function renderedPathKey(rows: readonly TreeRow[]): string {
+  return rows.map((row) => row.node.path).join('\u0000');
+}
+
+/** The glided hover fill's rect: the pointer's row once measured, or null
+ *  while the pointer is on the selected row, which already wears the same
+ *  tint and would only darken under a second one. */
+export function hoverRect(
+  measured: boolean,
+  rects: readonly ItemRect[],
+  activeIndex: number | null,
+  rows: readonly TreeRow[],
+  selectedPath: string | null,
+): ItemRect | null {
+  if (!measured || activeIndex === null) return null;
+  if (rows[activeIndex]?.node.path === selectedPath) return null;
+  return rects[activeIndex] ?? null;
+}
 
 /** What one line of the tree shows: a listed entry, or the draft of a new one. */
 export type TreeItem =

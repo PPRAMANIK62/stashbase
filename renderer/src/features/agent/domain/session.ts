@@ -25,6 +25,7 @@ import {
   requestToolPermission,
   settleErrorBlock,
   settlePendingTools,
+  stampClosingReply,
   startTool,
 } from './session-transcript';
 
@@ -225,11 +226,14 @@ export function transitionAgentSession(
         ...state,
         transcript: replyToolPermission(state.transcript, action.toolUseId, action.allow),
       };
-    case 'turn-ended':
+    case 'settle-turn':
       return {
         ...state,
         connection: withTurn(state.connection, null),
-        transcript: settlePendingTools(state.transcript, action.isError ? 'error' : 'done'),
+        transcript: stampClosingReply(
+          settlePendingTools(state.transcript, action.isError ? 'error' : 'done'),
+          action.at,
+        ),
       };
     case 'append-notice':
       return {

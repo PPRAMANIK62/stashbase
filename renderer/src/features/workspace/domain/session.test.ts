@@ -7,6 +7,7 @@ import {
   recordFolderSession,
   setSessionActiveFolder,
   setSessionAgentPaneWidth,
+  setSessionSidebarOpen,
   setSessionSidebarWidth,
 } from './session';
 import { createWorkspaceState } from './workspace';
@@ -43,11 +44,57 @@ describe('workspace session state', () => {
           tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
         },
       ],
+      // The window's first folder brings the sidebar with it.
       shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 240 },
       version: 1,
     });
     expect(snapshot).not.toHaveProperty('scope');
     expect(snapshot).not.toHaveProperty('lifecycle');
+  });
+
+  it("brings the sidebar with a window's first folder and leaves later switches alone", () => {
+    const first = setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/library/notes');
+    expect(first.shell.sidebarOpen).toBe(true);
+
+    // Collapsing while working is a standing choice a folder switch keeps.
+    const collapsed = setSessionSidebarOpen(first, false);
+    const switched = setSessionActiveFolder(collapsed, '/library/writing');
+    expect(switched.shell.sidebarOpen).toBe(false);
+  });
+
+  it('arrives at the welcome screen with the sidebar collapsed, once', () => {
+    const inFolder = setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/library/notes');
+    const welcome = setSessionActiveFolder(inFolder, null);
+    expect(welcome).toMatchObject({ activeFolderPath: null, shell: { sidebarOpen: false } });
+
+    // The corner toggle brings the footer back while there, and the same "no
+    // folder" said again is not a second arrival.
+    const reopened = setSessionSidebarOpen(welcome, true);
+    expect(setSessionActiveFolder(reopened, null)).toBe(reopened);
+  });
+
+  it('arrives at the welcome screen when the active folder leaves the library', () => {
+    const inFolder = setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/library/notes');
+    expect(inFolder.shell.sidebarOpen).toBe(true);
+
+    expect(reconcileSessionMembership(inFolder, [])).toMatchObject({
+      activeFolderPath: null,
+      folders: [],
+      shell: { sidebarOpen: false },
+    });
+  });
+
+  it('restores a snapshot with no folder as an arrival at the welcome screen', () => {
+    const openOnWelcome = {
+      ...createWorkspaceSessionSnapshot(),
+      shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 240 },
+    };
+    expect(normalizeWorkspaceSession(openOnWelcome).shell.sidebarOpen).toBe(false);
+
+    // One still naming its folder keeps the reader's answer: a reload lands
+    // back in that folder, and only a landing on the welcome screen collapses it.
+    const inFolder = setSessionActiveFolder(openOnWelcome, '/library/notes');
+    expect(normalizeWorkspaceSession(inFolder).shell.sidebarOpen).toBe(true);
   });
 
   it('bounds document identity projections at the Workspace persistence owner', () => {
@@ -109,7 +156,7 @@ describe('workspace session state', () => {
     expect(reconcileSessionMembership(snapshot, ['/library/writing'])).toMatchObject({
       activeFolderPath: '/library/writing',
       folders: [{ folderPath: '/library/writing' }],
-      shell: { sidebarWidth: 160 },
+      shell: { sidebarWidth: 192 },
     });
   });
 });

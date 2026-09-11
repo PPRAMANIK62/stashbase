@@ -170,9 +170,16 @@ export function useWorkspaceSession(
     pendingPath !== null ||
     (unopened !== null && attemptedRestore.current !== unopened);
 
+  // A restored snapshot may still name the folder it was written in while the
+  // landing says this window has none. The effect above collapses the sidebar
+  // as the window arrives at the welcome screen, but it runs after the render
+  // that first shows that screen, so the frame between reads as arrived
+  // rather than painting the column open and then closing it.
+  const arriving = landing.source === 'none' && state.snapshot.activeFolderPath !== null;
+
   return {
     runtime,
-    shell: state.snapshot.shell,
+    shell: arriving ? { ...state.snapshot.shell, sidebarOpen: false } : state.snapshot.shell,
     status: restoring
       ? { kind: 'restoring' }
       : {

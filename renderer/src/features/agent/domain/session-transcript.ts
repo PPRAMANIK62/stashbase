@@ -237,6 +237,27 @@ export function settlePendingTools(
   );
 }
 
+/** Stamps the reply that closes the turn just ended — the last assistant
+ *  block after the last prompt — with when it settled. A reply that already
+ *  carries a time, or a turn that produced no reply, leaves every block as it
+ *  was. */
+export function stampClosingReply(
+  transcript: readonly AgentTranscriptBlock[],
+  at: number,
+): AgentTranscriptBlock[] {
+  let closing = -1;
+  for (let index = transcript.length - 1; index >= 0; index -= 1) {
+    const block = transcript[index];
+    if (block?.kind === 'user') break;
+    if (block?.kind !== 'assistant') continue;
+    if (block.at === undefined) closing = index;
+    break;
+  }
+  return transcript.map((block, index) =>
+    index === closing && block.kind === 'assistant' ? { ...block, at } : block,
+  );
+}
+
 /** Drops the retry offer on one error block, once its turn has been resent. */
 export function settleErrorBlock(
   transcript: readonly AgentTranscriptBlock[],

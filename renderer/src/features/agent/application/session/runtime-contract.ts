@@ -12,6 +12,7 @@ import type {
 import type { AgentAccessMode } from '@/features/agent/domain/access';
 import type { AgentContextItem } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
+import type { AgentModel } from '@/features/agent/domain/runtime-catalog';
 import type { AgentId, AgentScope, AgentSessionState } from '@/features/agent/domain/session';
 import type { CapturedScope } from '@/shared/runtime/scope-guard';
 
@@ -46,6 +47,10 @@ export interface AgentSessionRuntime {
   rename(title: string): void;
   reconnect(): void;
   retry(errorBlockId: string): boolean;
+  /** Takes a sent prompt back into the composer: its text, bound context and
+   *  armed skill replace the draft. Refused while a turn is active or when
+   *  the block is not a prompt. */
+  editPrompt(blockId: string): boolean;
   addContext(item: AgentContextItem): void;
   removeContext(key: string): void;
   /** Uploads transient files and binds each successful one to the draft. */
@@ -62,6 +67,11 @@ export interface AgentSessionRuntime {
   setSkill(skill: string | null): void;
   /** Asks a live runtime to re-read the skills it can run in this scope. */
   refreshSkills(): void;
+  /** Gives an unstarted session the catalog the service remembers for its
+   *  runtime, so the composer names the model and level before a session
+   *  exists. A started session takes its catalog from the socket instead,
+   *  so this is refused once the connection has left its draft state. */
+  seedModels(models: readonly AgentModel[]): void;
   setDraft(draft: string): void;
   setQueue(queue: QueueEntry[]): void;
   restore(entry: AgentHistoryEntry, connectWhenReady?: boolean): Promise<boolean>;

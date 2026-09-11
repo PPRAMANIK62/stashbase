@@ -99,12 +99,19 @@ type ButtonVariant = NonNullable<NonNullable<VariantProps<typeof buttonVariants>
    Pressing collapses the spread, shrinking the surface by exactly 1px per
    side at any width — a scale would warp (2% of a 400px button is 8px
    sideways but under 1px vertically). Fill colors are opaque color-mix()es
-   rather than alpha so the fill and its spread ring never seam. */
+   rather than alpha so the fill and its spread ring never seam.
+
+   The hover and press steps mix the fill toward the opposite pole of the
+   monochrome pair — ink toward paper, paper toward ink — and they mix far
+   enough to be seen: on a near-black fill a 10% step lands two shades away
+   and reads as no change at all, and a light fill stepped toward the page
+   background only lost contrast. Primary lightens 16% on hover and 22%
+   pressed; secondary darkens 8% on hover and 14% pressed. */
 const bgVariants: Record<ButtonVariant, string> = {
   primary:
-    '[--btn-bg:var(--foreground)] group-hover:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
+    '[--btn-bg:var(--foreground)] group-hover:[--btn-bg:color-mix(in_oklab,var(--foreground)_84%,var(--background))] group-active:[--btn-bg:color-mix(in_oklab,var(--foreground)_78%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
   secondary:
-    '[--btn-bg:var(--accent)] group-hover:[--btn-bg:color-mix(in_oklab,var(--accent)_80%,var(--background))] group-active:[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
+    '[--btn-bg:var(--accent)] group-hover:[--btn-bg:color-mix(in_oklab,var(--accent)_92%,var(--foreground))] group-active:[--btn-bg:color-mix(in_oklab,var(--accent)_86%,var(--foreground))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
   // The border ring is an outer hairline shadow at rest that hands off to an
   // inset hairline shadow when pressed, so the ring moves inward with the
   // surface. The translucent fill only ever reaches the ring's inner edge
@@ -121,9 +128,9 @@ const bgVariants: Record<ButtonVariant, string> = {
    geometric press-collapse still reacts on top. */
 const activeBgVariants: Record<ButtonVariant, string> = {
   primary:
-    '[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
+    '[--btn-bg:color-mix(in_oklab,var(--foreground)_78%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
   secondary:
-    '[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
+    '[--btn-bg:color-mix(in_oklab,var(--accent)_86%,var(--foreground))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
   tertiary:
     'bg-active shadow-[0_0_0_var(--hairline)_var(--border),inset_0_0_0_0px_var(--border)] group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_var(--hairline)_var(--border)]',
   ghost: 'bg-hover shadow-[0_0_0_1px_var(--hover)] group-active:shadow-[0_0_0_0px_var(--hover)]',

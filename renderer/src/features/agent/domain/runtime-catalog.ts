@@ -9,6 +9,11 @@ export interface AgentModel {
   /** Effort levels this model accepts; a model that names none runs only at
    *  whatever the runtime defaults to. */
   supportedEfforts?: string[];
+  /** The effort the runtime runs this model at when none is chosen. */
+  defaultEffort?: string;
+  /** Whether the runtime runs this model when none is chosen. Codex flags its
+   *  newest model; a runtime that says nothing leaves every entry unflagged. */
+  isDefault?: boolean;
 }
 
 export interface AgentSkill {

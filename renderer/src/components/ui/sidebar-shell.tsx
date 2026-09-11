@@ -157,6 +157,11 @@ const SidebarShell = forwardRef<HTMLDivElement, SidebarShellProps>(
         data-slot="sidebar"
         data-state={open ? 'expanded' : 'collapsed'}
         data-collapsible={open ? '' : 'offcanvas'}
+        // A collapsed rail is off screen, not gone: without `inert` its
+        // controls stay in the accessibility tree and duplicate the
+        // titlebar's (both name a sidebar toggle). Peek suspends it — the
+        // floated card is the interactive sidebar.
+        inert={!open && !isPeeking ? true : undefined}
         data-variant={variant}
         data-side={side}
         className={cn(

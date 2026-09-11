@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
-import type { AgentAccessMode } from '@/features/agent/domain/access';
+import { AGENT_ACCESS_MODES, type AgentAccessMode } from '@/features/agent/domain/access';
 import { AgentPermissionMode } from '@/features/agent/ui/composer/permission-mode';
 
 import { AgentActivityGroup, AgentPermissionCard } from './activity';
@@ -183,7 +183,7 @@ function AgentActivityHarness({ compact = false }: { compact?: boolean }) {
         tool={decision}
       />
       <div className="flex justify-end">
-        <AgentPermissionMode mode={mode} onChange={setMode} />
+        <AgentPermissionMode mode={mode} modes={AGENT_ACCESS_MODES} onChange={setMode} />
       </div>
     </div>
   );

@@ -60,6 +60,8 @@ import { resolveAgentRuntimeInstructions } from './agent-runtime-instructions.ts
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeFolderTrust } from './agent-rules.ts';
 import { disposeSessionsBoundToFolder, isAgentAccessMode, reportAgentRuntimeFailure, resolveSessionBinding, type AgentAccessMode, type AgentSessionTermination } from './agent-contract.ts';
+import { rememberAgentDefaultModel, rememberAgentModels } from './agent-model-catalog.ts';
+import { claudeCatalog, readClaudeUserSettings } from './claude-model-catalog.ts';
 import type { AgentClientEvent, AgentModel, AgentServerEvent, AgentSkill } from './agent-contract.ts';
 import {
   registerAttributedAgentSession,
@@ -504,12 +506,12 @@ export class AgentSession implements AttributedAgentSession {
     if (!this.q) return;
     try {
       const available = await this.q.supportedModels();
-      this.models = available.map((entry) => ({
-        id: entry.value,
-        label: entry.displayName || entry.value,
-        ...(entry.description ? { description: entry.description } : {}),
-        ...(entry.supportedEffortLevels ? { supportedEfforts: entry.supportedEffortLevels } : {}),
-      }));
+      // The same reading the runtime listing makes: the CLI's own settings
+      // name the default model and effort the handshake leaves unsaid.
+      const reading = claudeCatalog(available, readClaudeUserSettings());
+      this.models = reading.models;
+      rememberAgentModels('claude', this.models);
+      if (reading.defaultModel) rememberAgentDefaultModel('claude', reading.defaultModel);
       const selection = await selectClaudeModel(this.model, this.models, (model) => this.q!.setModel(model), Boolean(this.resume));
       // A resume is intentionally never reconfigured, even if a stale UI
       // parameter appears on the URL. It preserves the runtime's session model.
@@ -559,6 +561,9 @@ export class AgentSession implements AttributedAgentSession {
       this.send({ t: 'session-id', id: sid });
     }
     if (msg.type === 'system' && msg.subtype === 'init' && msg.model) {
+      // With nothing chosen, the model the SDK started is the runtime's own
+      // default, which its catalog does not flag.
+      if (!this.model) rememberAgentDefaultModel('claude', msg.model);
       this.send(claudeActiveModelEvent(this.models, msg.model));
     }
     if (msg.type === 'system' && msg.subtype === 'commands_changed') this.publishSkillCommands(msg.commands);

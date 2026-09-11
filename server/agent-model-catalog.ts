@@ -1,0 +1,184 @@
+/** What a runtime offers to run on, read at the runtime level.
+ *
+ * A model catalog is a property of the runtime, not of a chat: Codex answers
+ * `model/list` from a bare app-server with no thread, and every chat on the
+ * same runtime gets the same answer. So the catalog is read once here, kept
+ * in memory and in the config file, and handed to new chats through the
+ * runtime listing, which is how a fresh Chat names the model and level it
+ * will run on before any session exists. A live session still reads its own
+ * catalog when it starts and refreshes this memory, and the model it reports
+ * running with nothing chosen is remembered as the runtime's default for a
+ * runtime that flags none. Claude's read lives in `claude-model-catalog.ts`,
+ * because its default comes from the CLI's own settings rather than from the
+ * handshake. */
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import os from 'node:os';
+import readline from 'node:readline';
+import type { AgentId, AgentModel } from '../shared/agent-protocol.ts';
+import type { AgentModelCatalog } from '../shared/agent-runtime.ts';
+import { readAppConfig, writeAppConfig } from './app-config.ts';
+import { readClaudeModelCatalog } from './claude-model-catalog.ts';
+import { appVersion, spawnCodexAppServerProcess } from './codex-app-server-process.ts';
+import { loadCodexModelCatalog } from './codex-model-catalog.ts';
+import { CodexRpcPeer } from './codex-rpc-transport.ts';
+import { errorMessage, logger } from './log.ts';
+
+const log = logger('agent-model-catalog');
+
+type RememberedAgentId = Exclude<AgentId, 'stashbase'>;
+
+/** One runtime-level reading: the catalog, and the default it names when the
+ * runtime keeps that outside the catalog. */
+export interface CatalogReading {
+  models: AgentModel[];
+  defaultModel?: string;
+}
+
+/** A runtime-level read that failed, or that could not complete a memory, is
+ * not repeated before this much time passes, so a runtime that cannot answer
+ * does not slow every listing. */
+const READ_RETRY_MS = 5 * 60_000;
+
+const memory = new Map<RememberedAgentId, AgentModelCatalog>();
+const inFlight = new Map<RememberedAgentId, Promise<AgentModelCatalog | undefined>>();
+const attemptedAt = new Map<RememberedAgentId, number>();
+
+/** A memory a session wrote before the runtime's default was known: it lists
+ * models but names none as the one an unchosen turn runs on. */
+function incomplete(catalog: AgentModelCatalog): boolean {
+  return !catalog.defaultModel && !catalog.models.some((model) => model.isDefault === true);
+}
+let loaded = false;
+
+function remembered(id: AgentId): id is RememberedAgentId {
+  return id === 'claude' || id === 'codex';
+}
+
+function load(): void {
+  if (loaded) return;
+  loaded = true;
+  const stored = readAppConfig().agentModelCatalogs;
+  for (const id of ['claude', 'codex'] as const) {
+    const entry = stored?.[id];
+    if (!entry || !Array.isArray(entry.models) || typeof entry.readAt !== 'string') continue;
+    memory.set(id, {
+      models: entry.models,
+      ...(typeof entry.defaultModel === 'string' ? { defaultModel: entry.defaultModel } : {}),
+      readAt: entry.readAt,
+    });
+  }
+}
+
+function persist(): void {
+  const config = readAppConfig();
+  config.agentModelCatalogs = Object.fromEntries(memory);
+  writeAppConfig(config);
+}
+
+export function recallAgentModels(id: AgentId): AgentModelCatalog | undefined {
+  if (!remembered(id)) return undefined;
+  load();
+  return memory.get(id);
+}
+
+/** Keeps a catalog a session or a runtime-level read has just produced. An
+ * observed default survives as long as the new catalog still lists it. */
+export function rememberAgentModels(id: AgentId, models: AgentModel[]): void {
+  if (!remembered(id) || models.length === 0) return;
+  load();
+  const previous = memory.get(id)?.defaultModel;
+  const defaultModel = previous && models.some((model) => model.id === previous) ? previous : undefined;
+  memory.set(id, { models, ...(defaultModel ? { defaultModel } : {}), readAt: new Date().toISOString() });
+  persist();
+}
+
+/** Keeps the model a runtime reported running when nothing was chosen. Only
+ * a listed model can be a default; an unlisted one is not invented. */
+export function rememberAgentDefaultModel(id: AgentId, modelId: string): void {
+  if (!remembered(id)) return;
+  load();
+  const entry = memory.get(id);
+  if (!entry || entry.defaultModel === modelId || !entry.models.some((model) => model.id === modelId)) return;
+  memory.set(id, { ...entry, defaultModel: modelId });
+  persist();
+}
+
+/** The catalog a runtime listing entry carries: what is remembered, for a
+ * runtime that can run a turn and offers a choice of model. */
+export function rememberedCatalogFor(runtime: {
+  id: AgentId;
+  installed: boolean;
+  state: string;
+  capabilities: { models: boolean };
+}): AgentModelCatalog | undefined {
+  if (!runtime.capabilities.models || !runtime.installed || runtime.state !== 'available') return undefined;
+  return recallAgentModels(runtime.id);
+}
+
+/** Codex's catalog from a bare app-server: initialize, list, exit. The
+ * process runs in the home directory, so what it reports is the user's own
+ * default rather than a folder's project override. */
+export async function readCodexModelCatalog(
+  spawn: (cwd: string) => ChildProcessWithoutNullStreams = (cwd) => spawnCodexAppServerProcess(cwd),
+  timeoutMs = 8_000,
+): Promise<CatalogReading> {
+  const proc = spawn(os.homedir());
+  const rpc = new CodexRpcPeer((line) => {
+    if (!proc.stdin.writable) throw new Error('Codex app-server is not running.');
+    proc.stdin.write(`${line}\n`);
+  }, { requestTimeoutMs: timeoutMs });
+  const stdout = readline.createInterface({ input: proc.stdout });
+  stdout.on('line', (line) => rpc.receiveLine(line));
+  proc.stderr.resume();
+  proc.once('error', (err) => rpc.close(err));
+  proc.once('close', (code, signal) => {
+    rpc.close(new Error(`Codex app-server exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}.`));
+  });
+  try {
+    await rpc.request('initialize', {
+      clientInfo: { name: 'StashBase', title: null, version: appVersion() },
+      capabilities: { experimentalApi: true },
+    });
+    return { models: await loadCodexModelCatalog((method, params) => rpc.request(method, params)) };
+  } finally {
+    rpc.close();
+    stdout.close();
+    try { proc.kill(); } catch { /* already gone */ }
+  }
+}
+
+/** The runtime's catalog for the listing: what is remembered, or with nothing
+ * complete remembered yet, one runtime-level read shared by every caller
+ * waiting on it. A read that fails, or that still names no default, leaves
+ * what was remembered in place and is not repeated until the retry pause has
+ * passed or a session reads a catalog of its own. */
+export function ensureAgentModelCatalog(
+  id: AgentId,
+  options: { read?: () => Promise<CatalogReading>; now?: () => number } = {},
+): Promise<AgentModelCatalog | undefined> {
+  const known = recallAgentModels(id);
+  if (!remembered(id) || (known && !incomplete(known))) return Promise.resolve(known);
+  const now = options.now ?? Date.now;
+  const lastAttempt = attemptedAt.get(id);
+  if (lastAttempt !== undefined && now() - lastAttempt < READ_RETRY_MS) return Promise.resolve(known);
+  const pending = inFlight.get(id);
+  if (pending) return pending;
+  const read = options.read ?? (id === 'codex' ? readCodexModelCatalog : readClaudeModelCatalog);
+  const reading = read()
+    .then((result) => {
+      rememberAgentModels(id, result.models);
+      if (result.defaultModel) rememberAgentDefaultModel(id, result.defaultModel);
+      const completed = recallAgentModels(id);
+      if (completed && incomplete(completed)) attemptedAt.set(id, now());
+      else attemptedAt.delete(id);
+      return completed;
+    })
+    .catch((err: unknown) => {
+      attemptedAt.set(id, now());
+      log.debug(`could not read the ${id} model catalog: ${errorMessage(err)}`);
+      return recallAgentModels(id);
+    })
+    .finally(() => inFlight.delete(id));
+  inFlight.set(id, reading);
+  return reading;
+}

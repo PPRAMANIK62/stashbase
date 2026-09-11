@@ -103,16 +103,23 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
         radio,
         value,
         disabled,
+        closeOnClick,
         label,
         element,
         children: itemChildren,
       }: MenuItemRenderOptions) =>
         radio ? (
-          <Menu.RadioItem value={value} disabled={disabled} label={label} render={element}>
+          <Menu.RadioItem
+            closeOnClick={closeOnClick}
+            disabled={disabled}
+            label={label}
+            render={element}
+            value={value}
+          >
             {itemChildren}
           </Menu.RadioItem>
         ) : (
-          <Menu.Item disabled={disabled} label={label} render={element}>
+          <Menu.Item closeOnClick={closeOnClick} disabled={disabled} label={label} render={element}>
             {itemChildren}
           </Menu.Item>
         ),

@@ -16,6 +16,7 @@ import { libraryApi, librarySnapshot, workspaceAdapters } from '@/test/fakes/wor
 afterEach(cleanup);
 
 const PUBLISHED: GalleryEntry = {
+  about: 'Why I made this.\n\nWhat is in it, and who it is for.',
   category: 'reference',
   contents: 'Two pages',
   description: 'Everything about widgets.',
@@ -83,19 +84,23 @@ describe('Gallery shop', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Gallery' }));
     await user.click(await screen.findByRole('button', { name: /Widget Handbook/u }));
 
-    // The entry page states what is inside and how it was built before asking
-    // for the copy.
+    // The entry page states what is inside and the instructions the wiki
+    // was built with before asking for the copy.
     const page = await screen.findByRole('dialog', { name: 'Gallery' });
-    expect(within(page).getByRole('heading', { name: 'Widget Handbook' })).not.toBeNull();
-    // What's inside is the copy's own tree, so a nested path reads as a folder
-    // holding a file rather than as one long line.
-    expect(within(page).getByRole('button', { name: 'wiki' })).not.toBeNull();
-    expect(within(page).getByText('index.md')).not.toBeNull();
-    expect(within(page).getByText('README.md')).not.toBeNull();
-    // Both artifacts stand at once: neither is long enough to be worth a
-    // click, and the request is what teaches a reader what to ask for.
-    expect(within(page).getByRole('heading', { name: "How it's built" })).not.toBeNull();
+    // About is the publisher's own introduction, paragraph by paragraph; the
+    // inventory line and the file listing are not on the page.
+    expect(within(page).getByRole('heading', { name: 'About' })).not.toBeNull();
+    expect(within(page).getByText('Why I made this.')).not.toBeNull();
+    expect(within(page).getByText('What is in it, and who it is for.')).not.toBeNull();
+    expect(within(page).queryByText('Two pages')).toBeNull();
+    expect(within(page).queryByText('README.md')).toBeNull();
+    // The instructions are folded beneath the introduction: most readers
+    // never need them, and they are one press away for the ones who do. Copy
+    // is all the Gallery ever does with them: it never places composer text.
+    expect(within(page).queryByText('Build wiki pages from these notes.')).toBeNull();
+    await user.click(within(page).getByRole('button', { name: 'Agent Instructions' }));
     expect(within(page).getByText('Build wiki pages from these notes.')).not.toBeNull();
+    expect(within(page).getByRole('button', { name: 'Copy' })).not.toBeNull();
 
     await user.click(within(page).getByRole('button', { name: 'Make a copy' }));
     await waitFor(() =>
@@ -106,7 +111,7 @@ describe('Gallery shop', () => {
     );
     // The shop stays put for the next entry: a copy opens a window of its own.
     expect(screen.queryByRole('dialog', { name: 'Gallery' })).not.toBeNull();
-    await user.click(within(page).getByRole('button', { name: 'All Wikis' }));
+    await user.click(within(page).getByRole('button', { name: 'Gallery home' }));
     expect(await screen.findByRole('button', { name: /Widget Handbook/u })).not.toBeNull();
   });
 });

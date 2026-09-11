@@ -43,8 +43,10 @@ import { TreeGroup, TreeProximityHighlight } from './file-tree-group';
 import { treeKeyIntent } from './file-tree-keyboard';
 import { FileTreeMenu, type FileTreeMenuTarget } from './file-tree-menu';
 import {
+  hoverRect,
   itemKey,
   nestTreeItems,
+  renderedPathKey as pathKeyOf,
   treeItems,
   type RenderNode,
   type TreeItem,
@@ -116,10 +118,7 @@ export function FileTree({
   const { naming } = operations;
 
   const renderedRows = useMemo(() => tree.rows.slice(0, limit), [limit, tree.rows]);
-  const renderedPathKey = useMemo(
-    () => renderedRows.map((row) => row.node.path).join('\u0000'),
-    [renderedRows],
-  );
+  const renderedPathKey = useMemo(() => pathKeyOf(renderedRows), [renderedRows]);
   const rowFocus = useTreeRowFocus(renderedPathKey);
   const { focus, registerRow, reset: resetRoving, setRovingPath } = rowFocus;
 
@@ -152,7 +151,7 @@ export function FileTree({
 
   useTreeSpaceContextMenu(sectionElement, files.status);
 
-  const activeRect = isMeasured && activeIndex !== null ? itemRects[activeIndex] : null;
+  const activeRect = hoverRect(isMeasured, itemRects, activeIndex, renderedRows, tree.selectedPath);
 
   const endNaming = (returnTo: string | null) => {
     operations.cancelNaming();

@@ -20,7 +20,7 @@ const nativeAbilities: AgentAbilities = {
   attachments: true,
   effort: true,
   models: true,
-  modes: true,
+  modes: ['default', 'plan', 'acceptEdits', 'auto'],
   skills: true,
 };
 
@@ -30,7 +30,7 @@ const plainAbilities: AgentAbilities = {
   attachments: false,
   effort: false,
   models: false,
-  modes: true,
+  modes: ['default', 'plan', 'acceptEdits', 'auto'],
   skills: false,
 };
 
@@ -39,6 +39,7 @@ export function agentDefinition(overrides: Partial<Agent> = {}): Agent {
     abilities: plainAbilities,
     id: 'stashbase',
     label: 'OpenQuill',
+    models: [],
     needsSignIn: false,
     ready: true,
     ...overrides,

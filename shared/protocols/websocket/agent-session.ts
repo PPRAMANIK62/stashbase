@@ -18,14 +18,9 @@ export const agentTurnFailureKindSchema = z.enum([
 
 export const agentTurnFailureSchema = z.object({ kind: agentTurnFailureKindSchema }).strict();
 
-export const agentModelSchema = z
-  .object({
-    id: boundedText(200),
-    label: boundedText(500),
-    description: boundedText(2_000).optional(),
-    supportedEfforts: z.array(boundedText(64)).max(32).optional(),
-  })
-  .strict();
+import { agentModelSchema } from '../agent-model';
+
+export { agentModelSchema };
 
 export const agentSkillSchema = z
   .object({

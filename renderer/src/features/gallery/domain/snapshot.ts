@@ -11,6 +11,7 @@ import type { GalleryEntry } from './entry';
 
 export const GALLERY_SNAPSHOT: readonly GalleryEntry[] = [
   {
+    about: null,
     category: 'course',
     contents:
       '20 lecture transcripts · distilled founder playbook · STASHBASE.md maintenance rules',

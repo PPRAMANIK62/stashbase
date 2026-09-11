@@ -71,19 +71,28 @@ describe('workspace shell', () => {
     expect(sidebars).toHaveLength(1);
     expect(sidebars[0]?.getAttribute('data-variant')).toBe('inset');
     expect(container.querySelector('[data-slot="sidebar-inset"]')).not.toBeNull(); // dom-contract: sidebar primitive state
-    expect(sidebars[0]?.textContent).toContain('StashBase');
+    // No wordmark in the sidebar: the welcome screen owns the brand, and the
+    // column's standing rows are the footer's.
+    expect(sidebars[0]?.textContent).not.toContain('StashBase');
+    expect(sidebars[0]?.textContent).toContain('Settings');
     expect(within(container).getByLabelText('Agent workspace')).not.toBeNull();
     expect(sidebars[0]?.textContent).not.toContain('Files');
     expect(container.textContent).not.toContain('Document');
   });
 
-  it('collapses the Files sidebar from the titlebar control', async () => {
+  it('shows and hides the Files sidebar from its chrome controls', async () => {
     const sidebar = container.querySelector('[data-slot="sidebar"]'); // dom-contract: sidebar primitive state
-    const toggle = within(container).getByRole('button', { name: 'Toggle files sidebar' });
 
+    // A fresh window starts with the sidebar away; the titlebar carries the
+    // reopening control, and the sidebar's own header the hiding one.
+    expect(sidebar?.getAttribute('data-state')).toBe('collapsed');
+
+    const show = within(container).getByRole('button', { name: 'Show files sidebar' });
+    await act(async () => show.click());
     expect(sidebar?.getAttribute('data-state')).toBe('expanded');
 
-    await act(async () => toggle.click());
+    const hide = within(container).getByRole('button', { name: 'Hide files sidebar' });
+    await act(async () => hide.click());
 
     expect(sidebar?.getAttribute('data-state')).toBe('collapsed');
     await waitFor(() => {
@@ -122,9 +131,9 @@ describe('workspace shell', () => {
   });
 
   it('keeps the expand control clear of a floating sidebar', async () => {
-    const toggle = within(container).getByRole('button', { name: 'Toggle files sidebar' });
-
-    await act(async () => toggle.click());
+    // The window starts with the sidebar away, so the titlebar's reopening
+    // control is the collapsed trigger under test.
+    const toggle = within(container).getByRole('button', { name: 'Show files sidebar' });
     // The peek arms on a 150ms hover intent, so the delay is the behaviour
     // under test: pointing at the expand control must never arm it.
     vi.useFakeTimers();

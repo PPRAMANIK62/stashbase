@@ -43,7 +43,7 @@ export function RemoveFolderDialog({
           <div className="mb-1 flex size-8 items-center justify-center rounded-full bg-hover text-foreground">
             <FolderMinus aria-hidden="true" className="size-4" />
           </div>
-          <DialogTitle>Remove from Library?</DialogTitle>
+          <DialogTitle>Remove this project?</DialogTitle>
           <DialogDescription>
             StashBase will forget <span className="font-medium text-foreground">{name}</span> and
             clear its prepared and indexed data. The folder and its files will stay on disk.

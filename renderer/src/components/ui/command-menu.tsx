@@ -172,7 +172,7 @@ const CommandList = forwardRef<HTMLDivElement, CommandListProps>(
           {...props}
         >
           <ProximityHighlight
-            className={cn('bg-active', shape.bg)}
+            className={cn('bg-hover', shape.bg)}
             rect={activeRect}
             session={sessionRef.current}
           />

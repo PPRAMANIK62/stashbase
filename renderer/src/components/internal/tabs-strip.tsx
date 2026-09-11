@@ -237,20 +237,20 @@ interface TabsStripLabelProps {
   label: string;
   /** Selected, or nearest the cursor — glyph and label darken together. */
   isActive: boolean;
-  /** Selected. Only the selection bolds the label; hover does not. */
-  isSelected: boolean;
   /** Observed by a strip that animates a collapsing label to a measured
    *  layout width rather than handing framer "auto". */
   measureRef?: Ref<HTMLSpanElement>;
 }
 
 /** A tab's label — the shared weight-reserving label at the strip's step. */
-export function TabsStripLabel({ label, isActive, isSelected, measureRef }: TabsStripLabelProps) {
+export function TabsStripLabel({ label, isActive, measureRef }: TabsStripLabelProps) {
   const sizeClasses = useSize();
+  // Never emphasized: a selected tab reads exactly like a hovered one, in
+  // weight as in tint. The weight-reserving label is kept for its trim.
   return (
     <WeightedLabel
       className={sizeClasses.text}
-      emphasized={isSelected}
+      emphasized={false}
       lit={isActive}
       overflow="nowrap"
       ref={measureRef}
@@ -275,7 +275,6 @@ export function TabsStripLabel({ label, isActive, isSelected, measureRef }: Tabs
  */
 export function TabsStripCollapsingLabel({
   isActive,
-  isSelected,
   label,
   show,
 }: Omit<TabsStripLabelProps, 'measureRef'> & {
@@ -307,12 +306,7 @@ export function TabsStripCollapsingLabel({
           exit={{ width: 0, opacity: 0, marginLeft: 0 }}
           transition={transition}
         >
-          <TabsStripLabel
-            label={label}
-            isActive={isActive}
-            isSelected={isSelected}
-            measureRef={measured.ref}
-          />
+          <TabsStripLabel label={label} isActive={isActive} measureRef={measured.ref} />
         </motion.span>
       )}
     </AnimatePresence>

@@ -1,4 +1,9 @@
 import type {
+  HostedAccount,
+  HostedSignIn,
+  HostedSignInStatus,
+} from '@/features/settings/domain/account';
+import type {
   AgentAllowance,
   AgentCatalog,
   AgentDebugPatch,
@@ -65,24 +70,19 @@ export interface CapturePort {
   update(preferences: CapturePreferences, signal: AbortSignal): Promise<CapturePreferences>;
 }
 
-/** The revisions of one-time notices the reader has already answered. Absence
- *  is `null` here; the wire models it as a missing key. */
-export interface OnboardingAnswers {
-  readonly searchSetupInvitationVersion: number | null;
-}
-
-/** The revision of the search-by-meaning setup invitation this build offers.
- *  Raise it to deliberately re-offer a materially changed invitation to
- *  everyone who answered an older one. The server only stores the number this
- *  renderer decides to send, so the current value is the app's policy rather
- *  than wire vocabulary or a domain rule. */
-export const SEARCH_SETUP_INVITATION_VERSION = 1;
-
-/** One-time onboarding notices. Answering is durable and application-wide, so
- *  a decline survives a relaunch instead of living in browser storage. */
-export interface OnboardingPort {
-  answerSearchSetup(version: number, signal: AbortSignal): Promise<OnboardingAnswers>;
-  load(signal: AbortSignal): Promise<OnboardingAnswers>;
+/** The StashBase account, which exists for OpenQuill's free credits. A
+ *  sign-in is a browser round trip the server owns: the renderer starts it,
+ *  hands the URL to the browser, and polls until the server says the flow
+ *  finished. Sign-out answers with the signed-out account. */
+export interface AccountPort {
+  /** The provider's picture as bytes, or null when there is none to show.
+   *  Optional throughout: a missing picture is an initials fallback, never a
+   *  failure. */
+  avatar(signal: AbortSignal): Promise<Blob | null>;
+  load(signal: AbortSignal): Promise<HostedAccount>;
+  signInStatus(flowId: string, signal: AbortSignal): Promise<HostedSignInStatus>;
+  signOut(signal: AbortSignal): Promise<HostedAccount>;
+  startSignIn(signal: AbortSignal): Promise<HostedSignIn>;
 }
 
 /** The MCP page reads access details and changes how they are reached; it

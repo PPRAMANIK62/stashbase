@@ -54,30 +54,4 @@ describe('embedder API', () => {
       message: 'Invalid API key.',
     });
   });
-
-  it('starts an embedding-purpose sign-in and reads its status', async () => {
-    const request = vi.fn(async (input: HttpRequest) =>
-      input.path === '/api/account/oauth/start'
-        ? {
-            body: {
-              flowId: 'f1',
-              provider: 'google',
-              purpose: 'embedding',
-              url: 'https://accounts.example/x',
-            },
-            status: 200,
-          }
-        : { body: { state: 'complete' }, status: 200 },
-    );
-    const api = createEmbedderAdapter({ request });
-    const started = await api.startSignIn(signal);
-    expect(started.url).toBe('https://accounts.example/x');
-    expect(request).toHaveBeenCalledWith({
-      body: { provider: 'google', purpose: 'embedding' },
-      method: 'POST',
-      path: '/api/account/oauth/start',
-      signal,
-    });
-    expect((await api.signInStatus('f1', signal)).state).toBe('complete');
-  });
 });

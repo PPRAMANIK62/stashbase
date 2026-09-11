@@ -33,8 +33,6 @@ export type SemanticReadiness =
   | { readonly state: 'ready' }
   | { readonly state: 'unknown' };
 
-const EXACT_STILL_WORKS = 'Keyword search keeps working without it.';
-
 function mebibytes(bytes: number): string {
   const value = bytes / (1024 * 1024);
   return value >= 10 ? Math.round(value).toString() : value.toFixed(1);
@@ -110,15 +108,6 @@ export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndex
         title: 'Preparing files for search by meaning…',
         tone: 'neutral',
       };
-    case 'not-set-up':
-      return {
-        actions: ['open-settings'],
-        detail: EXACT_STILL_WORKS,
-        persistent: false,
-        prominent: false,
-        title: 'To search by meaning, set it up in StashBase Settings.',
-        tone: 'neutral',
-      };
     case 'paused':
       return {
         actions: ['resume', 'not-now'],
@@ -137,6 +126,9 @@ export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndex
         title: 'Your hosted credits for search by meaning are used up.',
         tone: 'attention',
       };
+    // Not set up has nothing to say: the mode is not offered until it is
+    // turned on in Settings, and the search surface never names it before.
+    case 'not-set-up':
     case 'ready':
     case 'unknown':
       return null;

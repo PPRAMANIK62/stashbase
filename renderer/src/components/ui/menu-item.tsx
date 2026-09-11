@@ -71,6 +71,14 @@ interface MenuItemProps extends HTMLAttributes<HTMLDivElement> {
   /** A compact secondary action at the row's trailing edge. The focused row
    *  also exposes the action through the Delete key. */
   trailingAction?: MenuItemTrailingAction;
+  /** A decorative glyph at the trailing edge for a row that leads somewhere
+   *  rather than choosing something. It sits where a chosen row draws its
+   *  check, so the two never appear together. */
+  trailingIcon?: IconComponent;
+  /** Whether activating the row closes the surface. The primitive's default
+   *  (closing) is right for a choice and an action; a row that swaps the
+   *  surface's own content for a deeper list passes false. */
+  closeOnClick?: boolean;
 }
 
 const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
@@ -84,6 +92,8 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       onSelect,
       disabled,
       trailingAction,
+      trailingIcon: TrailingIcon,
+      closeOnClick,
       className,
       onClick,
       onKeyDown,
@@ -173,7 +183,7 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
           <WeightedLabel
             className="min-w-0 flex-1"
             data-menu-item-label
-            emphasized={checked === true}
+            emphasized={false}
             lit={isActive || checked === true}
             overflow={wrapsLabel ? 'wrap' : 'truncate'}
           >
@@ -216,6 +226,14 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
           size={sizeClasses.icon}
           skipAnimation={skipAnimation}
         />
+        {TrailingIcon && checked !== true && (
+          <TrailingIcon
+            aria-hidden="true"
+            className="shrink-0 text-muted-foreground"
+            size={sizeClasses.icon}
+            strokeWidth={1.5}
+          />
+        )}
       </>
     );
 
@@ -243,6 +261,7 @@ const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(
       radio: typeof checked === 'boolean',
       value: index,
       disabled,
+      closeOnClick,
       label: accessibleLabel,
       element:
         typeof checked === 'boolean' ? (

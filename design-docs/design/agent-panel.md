@@ -23,27 +23,51 @@ and uses a hosted service only as its metered model provider.
 - Chat begins expanded in a folder window. With no document it is the primary
   work surface; opening a source docks the same mounted session beside it, and
   closing the last source expands an open Chat again.
-- A blank Chat keeps the durable greeting **Your Wiki is here.** and offers at
-  most three starters below the composer, **Build my wiki** first. The
-  greeting, composer, and starters remain one vertically centered action
-  group, and the first sent turn replaces them with the transcript. Starting a
-  wiki over the user's own files is a plain conversation. The user asks in the
-  composer, and the durable Wiki behavior lives in Agent Instructions, so the
-  visible request is exactly what the Agent receives. A starter fills the
-  composer and never sends, and so does **Copy prompt** on a Gallery entry's
-  detail page.
+- The Chat pane names itself. A row at the top of the pane, in both layouts,
+  carries the Agent's mark and the conversation's title, left-aligned where
+  the reader looks first, so the name never depends on whether the titlebar
+  is busy with document tabs. Docked, the row shares one line with the
+  Markdown viewer's Writer/Reading control across the seam. The row draws no
+  rule of its own; the transcript fades out beneath it, the same way it fades
+  in above the composer. A Chat no turn has started yet shows its default
+  name as quiet plain text, since there is no conversation to name and the
+  greeting stays the empty state's one anchor. The name is set in the same
+  voice as a sidebar file row. Once the Chat has started, or was resumed
+  from history, the title renames in place from a click or F2, the same
+  rename the Chats panel
+  offers its rows, with a pencil surfacing beside the name on hover to say
+  so; a Chat the runtime has already identified keeps the new name on
+  record, so it outlives the tab. A refused rename hands the old name back
+  and says why beside it.
+- A blank Chat keeps the durable greeting **From wiki to words.**, which names
+  the direction this space works in, a wiki built from the folder and the
+  writing drawn from it, without claiming the words as anyone's or ordering
+  what comes first. Beneath it the composer's placeholder cycles through three
+  requests, one for each thing the space does and none ahead of the others:
+  **Build a wiki for docs**, **What's in docs?**, and **Write a blog post
+  about docs**, each naming the folder. The cycle holds still while the
+  composer is focused, never runs under reduced motion, and yields to an
+  armed skill's own hint; a conversation under way shows a plain **Ask or
+  write…** instead. **Tab** on the empty composer takes the request showing
+  as the draft, and never sends it. There are no starter chips: the greeting
+  and composer are the whole empty state, and the first sent turn replaces
+  them with the transcript. Starting a wiki over the user's own files is a
+  plain conversation. The user asks in the composer, and the durable Wiki
+  behavior lives in Agent Instructions, so the visible request is exactly
+  what the Agent receives; **Copy prompt** on a Gallery entry's detail page
+  likewise fills and never sends.
 - A runtime gate is a notice beneath the composer naming each runtime that
   cannot carry a turn by its own stage, never a screen in place of the
   request. A gated Chat keeps its composer, holds whatever is written into it,
-  and carries that request onto the runtime that arrives, while the starters
-  give their row to the gate's own recovery. Nothing is sent for the user, so
+  and carries that request onto the runtime that arrives, with the gate's own
+  recovery beneath the composer. Nothing is sent for the user, so
   the gate lifting leaves the request in the composer to read and send.
 - The Gallery is not part of Chat. It is the band on the welcome screen a
   window with no folder open shows, and the overlay the sidebar's **Gallery**
   row raises inside a folder window. See [Workspace](workspace.md) for the
   shop's two forms and the no-folder contract.
 - Agent retrieval adds meaning-based evidence on top of text matching whenever
-  a source for search by meaning is configured, and uses text matching alone
+  an embedding key for search by meaning is on, and uses text matching alone
   when none is. The Agent chooses the strategy for each lookup rather than
   being told once, and either strategy keeps direct and prepared document text
   reachable.
@@ -66,16 +90,19 @@ and uses a hosted service only as its metered model provider.
   `CLAUDE.md` files remain separate user-owned runtime inputs and are never
   changed.
 - New users start with **OpenQuill** selected. The Agent is chosen in the
-  composer, from a control that names the current provider, beside the model
-  and thinking controls for the same Agent. Choosing a different provider
-  starts a new Chat rather than repointing the current one, and all three
+  composer's left cluster, from a control that names the current provider,
+  with the permission mode and Instructions beside it; the model-and-thinking
+  control for the same Agent sits at the right edge beside Send, where the
+  reader looks last. Choosing a different provider starts a new Chat rather
+  than repointing the current one, and the provider and model-and-thinking
   controls stop taking input while a turn streams. OpenQuill's pinned
   OpenCode runtime is included with the app, requires no Agent installation or
-  model API key, and becomes ready after StashBase account sign-in. Settings
-  shows the remaining percent and reset time for the current fixed seven-day
-  allowance window, with token detail available on demand, and keeps Codex and
-  Claude Code as explicit alternatives. It never exposes the allowance's
-  dollar value.
+  model API key, and becomes ready after StashBase account sign-in, which
+  starts from the sidebar's account row or from the Agents section of
+  Settings. Settings shows the free credits as the remaining percent and
+  refill time of the current fixed seven-day window, with token detail
+  available on demand, and keeps Codex and Claude Code as explicit
+  alternatives. It never exposes the credits' dollar value.
 - **New chat** is the deliberate creation entry and reuses a completely blank
   tab. It sits at the top of the sidebar's Chats panel, where it becomes
   **Set up an Agent** while no runtime is ready, and as a button beside the
@@ -101,20 +128,43 @@ and uses a hosted service only as its metered model provider.
   removed and the transcript is preserved, and reports how many queued
   messages were cancelled with it.
 - Runtime capabilities determine model, permission, and effort controls without
-  rewriting global CLI defaults. New sessions start in Auto, where the agent
-  decides when an action needs approval. Ask, Plan, and Edit are explicit
-  per-session picks.
-  A fresh Codex chat shows Default until its native thread reports the model it
-  actually started with; the catalog's suggested default is not presented as
-  live session state.
+  rewriting global CLI defaults. The four permission modes are StashBase's own
+  promises about what a turn may do unasked, worded the same for every Agent:
+  **Ask** asks before every change and command; **Plan** reads and explores
+  and changes nothing; **Edit** edits inside the folder and asks for anything
+  else; **Auto** lets the runtime's own reviewer pass routine actions and
+  pause for risky ones. Each runtime declares which of the four it can honor,
+  the control lists only those, and a Chat that finds itself in a mode its
+  runtime cannot honor moves to Auto, or to Ask when Auto is not offered,
+  before its next turn. New sessions start in Auto. Ask, Plan, and Edit are
+  explicit per-session picks.
+  Model and thinking level are one control. Its trigger reads the model the
+  next turn runs on and, after it, the level. Opening it shows the levels that
+  model accepts, and the model list waits one layer deeper behind a **Model**
+  row, because the level changes turn to turn while the model is chosen once.
+  Picking a level keeps the menu open; picking a model closes it. As the pane
+  narrows the model's name folds away first and the level stays, then both go
+  and the trigger's title still names them; while no level is known yet, the
+  name stays in its place. The catalog is a property of the runtime, which
+  StashBase reads and remembers on its own, so a fresh Chat names the model
+  and level before any session starts; only the very first Chat on a runtime
+  that has never been read shows **Default**.
+  A new Chat runs on the runtime's own default model, which Codex lists newest
+  first and flags, at that model's declared default level, so the control
+  names both before anything is chosen instead of reading Default twice. A
+  runtime that names no default of its own reads **Default** until it reports
+  the model it is running, and keeps a Default row in the list, so the
+  catalog's order is never presented as live session state.
   An idle Codex conversation can change the model used by its next turn without
-  replacing its native thread; the picker pauses while a turn is active. Claude
-  keeps its selected model fixed after the conversation has content.
+  replacing its native thread; the control pauses while a turn is active.
+  Claude keeps its selected model fixed after the conversation has content,
+  while its level stays open.
 - Streaming, tool activity, permissions, runtime-supported attachments, skills, recovery, and
   file artifacts remain inspectable. Collapsed tool summaries omit exact
-  counts while using grammatical singular or plural category labels. Editing
-  and resending an earlier prompt stops conflicting active work before
-  beginning the new turn.
+  counts while using grammatical singular or plural category labels. The
+  latest prompt can be taken back into the composer once its turn has
+  settled: its text, bound context, and armed skill return as the draft, the
+  sent prompt stays in the transcript, and sending starts a new turn.
 - A follow-up submitted during an active turn waits visibly. The user may
   delete one waiting follow-up before it is sent without interrupting the
   active turn or removing its queued siblings; runtimes that support steering
@@ -145,16 +195,22 @@ and uses a hosted service only as its metered model provider.
 - Responses support GFM and local math rendering while preserving original
   Markdown for history and copy. Raw HTML, remote images, unsafe links, and
   invalid formulas remain inert or visibly recoverable.
-- Hovering a turn reveals when its messages happened — beside the user
-  message's copy/edit cluster and the reply's standing copy control. Times
-  appear only when genuinely recorded (live sends and settles, or history
-  whose source kept them); nothing is invented for restored transcripts.
+- Hovering a message reveals a quiet row beneath it. Under a prompt: when it
+  was sent, copy, and edit on the latest prompt. Under a settled reply: copy,
+  when the turn finished, and how long it took. The row's controls are icons
+  that line up with the message's own edge, so nothing sits ragged against
+  the reply text or the tool groups between turns. Times appear only when
+  genuinely recorded (live sends and settles, or history whose source kept
+  them); nothing is invented for restored transcripts.
 
 ## Experience Contract
 
 - Chat-primary and docked layouts are two presentations of the same mounted
   session. Transcript, streaming, draft, attachments, scroll, and remembered
   width survive the transition.
+- The Chat pane names its own conversation. The titlebar carries only
+  window-level chrome, so opening a document never takes the name away and
+  hiding the pane takes the name with it.
 - Respect explicit visibility. Initialization opens Chat; later automatic
   layout changes do not override a user hide or reveal.
 - Opening, switching, or resuming an Agent tab is not installation consent.
@@ -197,7 +253,7 @@ and uses a hosted service only as its metered model provider.
   from an abandoned generation cannot enter a newer turn.
 - A failed turn explains itself in the conversation and never blocks the
   panel: transient rate or network failures offer an in-place Try again. An
-  exhausted OpenQuill allowance opens Agent Settings to review usage or
+  exhausted OpenQuill credit balance opens Agent Settings to review usage or
   switch runtimes; an expired sign-in offers Codex's in-app sign-in or, for
   Claude, terminal sign-in steps with an in-place Reconnect. Either
   way the same conversation continues without restarting StashBase: acting
@@ -270,6 +326,14 @@ The contract above treats a Chat's use of meaning-based evidence as live
 session policy the user owns. Nothing offers that choice. Every Chat keeps
 meaning-based retrieval on whenever a source is configured, so the only way to
 constrain a lookup to text matching is for the Agent to ask for it.
+
+### OpenQuill sign-in from the composer gate
+
+The composer's setup gate offers **Set up OpenQuill** while no runtime is
+ready, but OpenQuill needs an account rather than a setup step, and the gate
+cannot start the sign-in. **Agent settings** beside it is the route: the
+Agents section signs in, and so does the account row at the foot of the
+sidebar.
 
 ### OpenQuill project rebind
 

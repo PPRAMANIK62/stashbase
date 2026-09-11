@@ -1,9 +1,16 @@
+/** The Chat transcript's message primitive. `ChatMessage` draws the reader's
+ *  prompt as a right-aligned accent bubble and the Agent's reply as plain
+ *  left-aligned text, with an optional row of attachment thumbnails above
+ *  either; `ChatMessageAction` is the quiet button (copy, edit) that hovers
+ *  beside a settled message on the bubble's own edge. */
 'use client';
 
 import { motion, type HTMLMotionProps } from 'framer-motion';
-import { forwardRef, type ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 import { FileThumbnail } from '@/components/ui/file-thumbnail';
+import { focusRing } from '@/lib/focus-ring';
 import { keyedByContent } from '@/lib/local/keyed-by-content';
 import { useShape } from '@/lib/shape-context';
 import { useSize, type SizeVariant } from '@/lib/size-context';
@@ -13,13 +20,20 @@ import { useTouchPrimary } from '@/lib/use-touch-primary';
 import { cn } from '@/lib/utils';
 import { fileFingerprint } from '@/shared/utils/file-identity';
 
-interface ChatMessageBaseProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
+interface ChatMessageProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
+  /** `user` is a right-aligned accent bubble; `assistant` is left-aligned
+   *  plain text with no bubble. */
+  from: 'user' | 'assistant';
   /** Optional attachments rendered as square thumbnails above the bubble. */
   files?: File[];
   /** Side length of each attachment thumbnail in pixels. Defaults to 64. */
   thumbnailSize?: number;
-  /** Icon-only action buttons shown in the hover-revealed meta row (e.g. copy,
-   *  edit, regenerate). Rendered next to the timestamp. */
+  /** When the message happened, shown in the hover-revealed meta row. The
+   *  caller pre-formats it (e.g. `"Wednesday 6:08 PM"`, `"3:31 PM · 12s"`). */
+  time?: ReactNode;
+  /** `ChatMessageAction`s for the meta row (copy, edit, regenerate). They sit
+   *  at the message's outer edge: after the time on a user row, before it on
+   *  an assistant row. */
   actions?: ReactNode;
   /** Message body. When omitted the text bubble is dropped (attachment-only message). */
   children?: ReactNode;
@@ -29,25 +43,11 @@ interface ChatMessageBaseProps extends Omit<HTMLMotionProps<'div'>, 'children'> 
   size?: SizeVariant;
 }
 
-/** A timestamp is a user-message affordance. The meta row on an assistant
- *  reply carries its actions and nothing else — so rather than accepting a
- *  `time` there and quietly dropping it, the two roles carry different props
- *  and passing one is a type error. */
-interface UserMessageProps extends ChatMessageBaseProps {
-  /** Right-aligned accent bubble. */
-  from: 'user';
-  /** Timestamp shown in the hover-revealed meta row, before the actions.
-   *  Caller pre-formats it (e.g. `"Wednesday 6:08 PM"`). */
-  time?: ReactNode;
-}
-
-interface AssistantMessageProps extends ChatMessageBaseProps {
-  /** Left-aligned plain text, no bubble. */
-  from: 'assistant';
-  time?: never;
-}
-
-type ChatMessageProps = UserMessageProps | AssistantMessageProps;
+/** An action's box is a 20px square around a 14px glyph, so the glyph sits
+ *  3px inside it. The cluster overhangs the message's outer edge by that
+ *  inset so the glyph — not its hover box — lines up with the bubble's edge
+ *  on a user row and with the text on an assistant row. */
+const ACTION_OVERHANG = { assistant: '-ml-[3px]', user: '-mr-[3px]' } as const;
 
 // ─── ChatMessage ──────────────────────────────────────────────────────────
 // A single transcript entry with baked-in entrance + layout motion. Pairs with
@@ -64,6 +64,7 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
     // Hover-reveal is unreachable on touch — keep the meta row visible there.
     const isTouch = useTouchPrimary();
     const showTime = time != null;
+    const timeLabel = showTime && <span className="tabular-nums">{time}</span>;
 
     return (
       <motion.div
@@ -117,25 +118,29 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
           </div>
         )}
         {(showTime || actions != null) && (
-          // Meta row: timestamp + icon-only actions. Always rendered (so it
-          // reserves its height and the gap between bubbles never shifts) but
-          // hidden until the message is hovered or an action is focused.
-          // Only a user row can carry a timestamp (see the props above), and
-          // it reads date → icons left-to-right.
+          // Meta row: time + icon-only actions. Always rendered (so it
+          // reserves its height and the gap between messages never shifts)
+          // but hidden until the message is hovered or an action is focused.
+          // Actions keep to the outer edge, so a user row reads time → icons
+          // and an assistant row reads icons → time.
           <div
             className={cn(
-              'flex items-center gap-2 px-1 leading-none text-muted-foreground select-none',
+              'flex items-center gap-1.5 leading-none text-muted-foreground select-none',
               compact ? 'text-[11px]' : 'text-[12px]',
-              !isTouch &&
-                isUser && [
-                  'pointer-events-none opacity-0 transition-opacity duration-base',
-                  'group-hover:pointer-events-auto group-hover:opacity-100',
-                  'group-focus-within:pointer-events-auto group-focus-within:opacity-100',
-                ],
+              !isTouch && [
+                'pointer-events-none opacity-0 transition-opacity duration-base',
+                'group-hover:pointer-events-auto group-hover:opacity-100',
+                'group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+              ],
             )}
           >
-            {showTime && <span className="tabular-nums">{time}</span>}
-            {actions != null && <span className="flex items-center gap-0.5">{actions}</span>}
+            {isUser && timeLabel}
+            {actions != null && (
+              <span className={cn('flex items-center gap-0.5', ACTION_OVERHANG[from])}>
+                {actions}
+              </span>
+            )}
+            {!isUser && timeLabel}
           </div>
         )}
       </motion.div>
@@ -145,4 +150,36 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
 
 ChatMessage.displayName = 'ChatMessage';
 
-export { ChatMessage };
+// ─── ChatMessageAction ────────────────────────────────────────────────────
+
+interface ChatMessageActionProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+  icon: LucideIcon;
+  /** The accessible name, also shown as the tooltip. */
+  label: string;
+}
+
+/** One icon-only control for the meta row: a 20px square around a 14px
+ *  glyph, quiet until hovered, ringed on keyboard focus. The geometry is
+ *  fixed here so the row's overhang can line the glyph up with the message. */
+const ChatMessageAction = forwardRef<HTMLButtonElement, ChatMessageActionProps>(
+  ({ icon: Icon, label, className, ...props }, ref) => (
+    <button
+      aria-label={label}
+      className={cn(
+        'inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast outline-none hover:bg-hover hover:text-foreground',
+        focusRing('focus-visible:ring-offset-0'),
+        className,
+      )}
+      ref={ref}
+      title={label}
+      type="button"
+      {...props}
+    >
+      <Icon aria-hidden size={14} strokeWidth={1.5} />
+    </button>
+  ),
+);
+
+ChatMessageAction.displayName = 'ChatMessageAction';
+
+export { ChatMessage, ChatMessageAction };

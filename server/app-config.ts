@@ -37,6 +37,7 @@ export type {
   WorkspacePreferences,
 } from '../shared/preferences.ts';
 export type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
+import type { AgentModelCatalog } from '../shared/agent-runtime.ts';
 
 const log = logger('app-config');
 
@@ -182,6 +183,11 @@ export interface AppConfigFile {
     folders?: Array<{ path: string; text: string }>;
     library?: string;
   };
+  /** Each native runtime's last-read model catalog and the model it last ran
+   * with nothing chosen. A memory rather than a preference: losing it costs
+   * one runtime-level read, and no route accepts it from a request body. See
+   * `agent-model-catalog.ts`. */
+  agentModelCatalogs?: Partial<Record<'claude' | 'codex', AgentModelCatalog>>;
 }
 
 export function readAppConfigStrict(): AppConfigFile {

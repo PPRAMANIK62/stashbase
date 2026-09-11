@@ -114,6 +114,11 @@ export const delayMs = {
 export const ambient = {
   /** How long each word of a waiting label holds before the next arrives. */
   labelCycleMs: 4000,
+  /** An ambient text swap, slower than any interaction step because nobody is
+   *  waiting on it: the outgoing text dissolves, then the incoming one eases
+   *  in over longer still, so the swap reads as a breath rather than a cut. */
+  crossfadeOutMs: 400,
+  crossfadeInMs: 600,
   /** One full circle ⇄ infinity ⇄ circle morph of the thinking glyph. */
   glyphMorphSeconds: 6,
 } as const;

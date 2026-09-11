@@ -40,6 +40,7 @@ export function WorkspaceDialogs({
         />
       )}
       <Settings
+        accountApi={dependencies.settings.accountApi}
         agentRuntimeApi={dependencies.settings.agentRuntimeApi}
         applyCaptureWatch={(expected) => applyCaptureWatch(dependencies.capture, expected)}
         appearanceApi={dependencies.settings.appearanceApi}

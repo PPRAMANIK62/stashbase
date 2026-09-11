@@ -11,7 +11,7 @@ import type {
   SemanticReadiness,
 } from '@/features/retrieval/domain/semantic-readiness';
 
-import { searchBackends } from './search/backends';
+import { offeredBackends, searchBackends } from './search/backends';
 import { SearchSurface } from './search/surface';
 
 export interface LibrarySearchProps {
@@ -30,7 +30,9 @@ export interface LibrarySearchProps {
 }
 
 /** Search over the selected workspace folder, with the shipped set of search
- *  backends bound to their transports. */
+ *  backends bound to their transports. A backend the index gates is offered
+ *  only once search by meaning is set up: until then the surface is keyword
+ *  search alone, with no tab naming a mode the reader has not turned on. */
 export function LibrarySearch({
   activeFolderPath,
   exactApi,
@@ -41,5 +43,9 @@ export function LibrarySearch({
     () => searchBackends({ exactApi, semanticApi }),
     [exactApi, semanticApi],
   );
-  return <SearchSurface {...props} backends={backends} folderPath={activeFolderPath} />;
+  const offered = useMemo(
+    () => offeredBackends(backends, props.readiness),
+    [backends, props.readiness],
+  );
+  return <SearchSurface {...props} backends={offered} folderPath={activeFolderPath} />;
 }

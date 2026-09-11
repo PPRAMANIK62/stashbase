@@ -47,12 +47,14 @@ function useRowWidth(ref: React.RefObject<HTMLDivElement | null>): number | null
  */
 export function AgentDocumentWorkspace({
   agent,
+  chatPaneOpen = true,
   document,
   onPaneWidthChange,
   paneWidth,
   runtime,
 }: {
   agent: ReactNode;
+  chatPaneOpen?: boolean;
   document: ReactNode;
   onPaneWidthChange(width: number): void;
   paneWidth: number;
@@ -78,8 +80,9 @@ export function AgentDocumentWorkspace({
       ? paneWidth
       : Math.min(paneWidth, Math.max(AGENT_PANE_WIDTH.min, rowWidth - MIN_DOCUMENT_WIDTH))
     : null;
-  const documentWidth =
-    agentWidth === null
+  const documentWidth = !chatPaneOpen
+    ? (rowWidth ?? '100%')
+    : agentWidth === null
       ? 0
       : rowWidth === null
         ? `calc(100% - ${agentWidth}px)`
@@ -114,8 +117,12 @@ export function AgentDocumentWorkspace({
           {document}
         </motion.div>
       </motion.div>
-      <div className="relative h-full min-w-0 flex-1 overflow-hidden">
-        {hasDocuments && (
+      <div
+        aria-hidden={!chatPaneOpen}
+        className="relative h-full min-w-0 flex-1 overflow-hidden"
+        inert={!chatPaneOpen}
+      >
+        {hasDocuments && chatPaneOpen && (
           <SplitHandle
             className="left-0 -translate-x-1/2"
             defaultWidth={AGENT_PANE_WIDTH.default}

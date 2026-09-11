@@ -9,12 +9,16 @@ import type { SettingsProps } from './settings-types';
 import { SettingsShell, type SettingsSectionDef } from './shell';
 import { TranscriptionPanel } from './transcription/transcription-panel';
 
-/** The section registry. Each panel owns its own data, so a section is the
- *  one place a capability's absence is decided: no port, no section. */
+/** The section registry, in nav order: what everyone touches first, then the
+ *  Agents section that owns the account, then the capabilities a reader turns
+ *  on by bringing something of their own. Each panel owns its own data, so a
+ *  section is the one place a capability's absence is decided: no port, no
+ *  section. */
 const alwaysApplied = async () => true;
 const ignoreExternal = () => undefined;
 
 export default function ManagedSettings({
+  accountApi,
   agentRuntimeApi,
   applyCaptureWatch = alwaysApplied,
   appearanceApi,
@@ -63,20 +67,12 @@ export default function ManagedSettings({
       label: 'Agents',
       render: () => (
         <AgentRuntimesPanel
+          accountApi={accountApi}
           agentRuntimeApi={agentRuntimeApi}
-          onOpenAccount={() => onSectionChange('ai-index')}
+          onOpenExternal={onOpenExternal}
         />
       ),
     },
-    embedderApi
-      ? {
-          available: true,
-          icon: Search,
-          id: 'ai-index',
-          label: 'Search by Meaning',
-          render: () => <AiIndexPanel embedderApi={embedderApi} onOpenExternal={onOpenExternal} />,
-        }
-      : { available: false, icon: Search, id: 'ai-index', label: 'Search by Meaning' },
     transcriptionApi
       ? {
           available: true,
@@ -86,6 +82,15 @@ export default function ManagedSettings({
           render: () => <TranscriptionPanel transcriptionApi={transcriptionApi} />,
         }
       : { available: false, icon: Mic, id: 'transcription', label: 'Transcription' },
+    embedderApi
+      ? {
+          available: true,
+          icon: Search,
+          id: 'ai-index',
+          label: 'Search by Meaning',
+          render: () => <AiIndexPanel embedderApi={embedderApi} />,
+        }
+      : { available: false, icon: Search, id: 'ai-index', label: 'Search by Meaning' },
     mcpAccessApi
       ? {
           available: true,

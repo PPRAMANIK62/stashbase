@@ -5,7 +5,7 @@
  * contract testable without creating an HTTP server or native process.
  */
 import { attachAgentWebSocket, killActiveAgent, killAgentSessionsForFolder } from './agent.ts';
-import type { AgentAdapter } from './agent-contract.ts';
+import { AGENT_ACCESS_MODES, type AgentAdapter } from './agent-contract.ts';
 import { attachCodexWebSocket, killActiveCodex, killCodexSessionsForFolder } from './codex-agent.ts';
 import { claudeHistoryActions } from './routes/sessions.ts';
 import { codexHistoryActions } from './routes/codex-sessions.ts';
@@ -25,7 +25,7 @@ const SHARED_PANEL_CAPABILITIES = {
   approvals: true,
   history: true,
   attachments: true,
-  modes: true,
+  modes: AGENT_ACCESS_MODES,
   effort: true,
   models: true,
   skills: true,
@@ -53,7 +53,8 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
       attachments: false,
-      modes: false,
+      // OpenQuill's permissions are fixed to ask, so it honors no mode.
+      modes: [],
       effort: false,
       models: false,
       skills: false,

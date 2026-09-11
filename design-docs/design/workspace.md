@@ -28,14 +28,21 @@ manager, or a primary graph-navigation tool.
   its own button: open a folder as a project, create a new project, or import
   a project from GitHub. **Recent**,
   on the right, lists the library's members newest first; a row opens its
-  folder, and its **···** menu offers **Remove from Library**. Folders under
+  folder, and a hover **×** on the row asks to remove the project, confirmed
+  before anything is forgotten (the project/library naming split is the
+  glossary's). Folders under
   the system's temporary directory stay members but are left out of the
   list. A pane too narrow for both stacks the card above the list. The
-  Gallery band follows under its own heading. The window never silently
-  restores a folder, installs an Agent runtime, or opens account sign-in or
-  setup for search by meaning. A relaunch and a new window land here too; a
+  Gallery band follows under its own heading, with the same invitation to find
+  inspiration and build on a copy as the Gallery overlay. The window never silently
+  restores a folder, installs an Agent runtime, or opens account sign-in. A
+  relaunch and a new window land here too; a
   folder opened from **Recent** comes back with the tabs and tree state it
-  had.
+  had. However the window got here, at launch, as a new window, or because
+  its folder left the library, the sidebar arrives collapsed: the bare column
+  offers nothing this screen lacks. Its corner toggle brings the footer back
+  while here, and the first folder opened brings the column back with its
+  tree.
 - On first launch with a brand-new empty default folder home, StashBase seeds
   the ordinary local **👋 Start Here** folder and adds it to the library
   without automatically opening it. Its `00 Welcome.html` is the human entry;
@@ -46,32 +53,53 @@ manager, or a primary graph-navigation tool.
   modified,
   deleting the seeded folder does not recreate it, and application updates
   never overwrite the user's copy.
-- The sidebar is the window's left column. It always carries the product mark
-  and a footer of standing **Gallery** and **Settings** rows. On macOS the
-  window's traffic lights sit in that top-left corner and the mark starts to
-  their right; with the sidebar collapsed the titlebar's toggle keeps the same
-  room, and native fullscreen, which hides the lights, gives it back. With a
+- The sidebar is the window's left column. Its titlebar band carries its own
+  collapse toggle and, while a folder is open, back and forward arrows beside
+  it that step through the window's open Chats in tab order — at either end
+  of the order the unavailable step waits disabled — with the **New chat**
+  button at the band's right end. With no folder open the band holds the
+  toggle alone. The band carries no
+  wordmark: the welcome screen owns the brand, and a folder window's first
+  row beneath the band is the folder itself. The column ends in a footer set
+  off by rules: a standing **Gallery** row, then the account row; **Settings**
+  lives inside the signed-in account menu rather than as a standing row, and
+  signed out — where there is no menu — it stays a standing row above **Sign
+  in**, because signed out is a complete local-workspace state.
+  On macOS the window's traffic lights sit in that top-left corner and the
+  toggle starts to their right; with the sidebar collapsed the workspace
+  titlebar shows the reopening toggle in the same corner room, and native
+  fullscreen, which hides the lights, gives it back. With a
   folder
-  open it adds the active-folder picker and a navigator of
-  four icon tabs, in order Files, Document outline, Search, and Chats. Files
+  open it adds the active-folder picker and, centred beneath it as one
+  control, a navigator of four icon tabs, in order Files, Document outline,
+  Search, and Chats. Files
   and Document outline share the scrolling tree region; Search and Chats take
   the whole column instead. The column resizes by dragging its inner edge and
-  collapses by clicking the same edge.
+  collapses by clicking the same edge; it never goes narrower than its
+  titlebar controls — dragged past that floor it collapses instead of
+  clipping them.
+- While a folder is open, the top-right titlebar icon mirrors the left
+  sidebar toggle and hides or shows the Chat panel. Hiding it preserves the
+  conversation and composer draft, and gives open documents the full width.
+  The same icon remains available to reopen Chat. A hidden Chat is not named
+  in the titlebar: with no document open, the shared slot stays empty until
+  the panel is shown again, because the chat it would name is off screen.
 - With no folder open the picker and the navigator are absent, so the bare
-  sidebar is the mark and the footer. Browsing members, creating a folder, and
+  sidebar is the titlebar band and the footer. Browsing members, creating a folder, and
   importing a repository belong to the welcome screen there, and no folder is
   required to browse or download a Gallery entry.
 - The **Gallery** row raises the shop as a near-fullscreen overlay over a
   folder window. It is the same shop the welcome screen carries as a band, and
-  it never takes a chat tab. The entries and their downloads are the Gallery's
+  it never takes a chat tab. Its subtitle invites people to find inspiration,
+  make a copy, and build on it. The entries and their downloads are the Gallery's
   own contract (see [Agent Panel](agent-panel.md)).
 - The Document Outline is one of the navigator's tabs rather than a second
   dock beside the tree. A format that publishes no headings says so instead of
   reading as an outline that has not arrived yet.
 - A strip between the titlebar and the workspace carries what the window has
-  to say about work the reader did not ask for directly. Refusals come first
-  and the one-time offer to set up search by meaning comes last, because a
-  refusal of something attempted outranks an offer of something not asked for.
+  to say about work the reader did not ask for directly: refusals of the
+  reader's own requests and capabilities that could not answer. It never
+  carries an offer; nothing in the workspace invites setup of anything.
   With a folder open, a second strip below it offers the unsaved drafts a
   previous session left for that folder, which [Documents](documents.md) owns.
 - Packaged builds check the official stable release channel on a schedule when
@@ -81,12 +109,19 @@ manager, or a primary graph-navigation tool.
   explanation when the desktop bridge is absent. The native Help menu carries
   the same report entry alongside the product website, the community Discord,
   and the external issue tracker.
-- A signed-in account is recognizable inside Settings, in the section that
-  owns search by meaning. It names the connected person and retains the full
-  email, and missing profile display data falls back to a stable label without
-  changing the controls beside it. **Sign in to StashBase** names the complete
-  signed-out local-workspace state and its optional route to OpenQuill and
-  search by meaning.
+- The account row at the foot of the sidebar is where a person signs in and
+  where a signed-in person is recognizable. Signed out it reads **Sign in**
+  and one click starts the browser sign-in; signed in the row and its menu
+  wear the same initials disc — the theme's ink around the display name's
+  first letters, never a provider picture — beside the name and email, and
+  the menu shows OpenQuill's free credits as one line and a bar, opens
+  Settings, and signs out. The
+  same person is named again under
+  **Settings → Agents** with
+  the full email, and missing profile display data falls back to a stable
+  label without changing the controls beside it. Signing in exists for
+  OpenQuill and changes nothing else; signed out is a complete
+  local-workspace state.
 - Users can open or create a local folder, import a public GitHub repository
   directly into the default folder home, switch folders in place, or remove a
   folder from the library. A created folder or imported repository is an
@@ -95,14 +130,20 @@ manager, or a primary graph-navigation tool.
   as part of ordinary refresh rather than as a per-member action.
 - The sidebar's active-folder row keeps the window's folder identity visible
   and opens the full library membership, with pinned **Open folder**, **Create
-  folder**, and **Import from GitHub…** actions beneath it. A member sharing a
+  folder**, and **Import from GitHub…** actions beneath it. It is drawn as
+  the column's head with the selected-row treatment: the standing fill and
+  the heavier weight beside a chevron, one block with the navigator beneath
+  it, and hovering it changes nothing. It is a switcher, not a place the
+  reader is at, so it carries no current-page semantics. A member sharing a
   basename with another is qualified by its path so the two stay tellable
   apart, and the row shows an attention mark when preparation needs the user.
-  A name wider than the sidebar column truncates within that column. The
-  titlebar carries the sidebar toggle, a **New chat** button beside it while a
-  folder is open, and one shared slot holding either the open document tabs or
-  the active Chat's title; with no folder open the button is absent and the
-  slot says **Welcome**, because the Chat it would name is not on screen.
+  A name wider than the sidebar column truncates within that column. Only
+  while the sidebar is collapsed does the titlebar carry the sidebar's
+  reopening toggle and, while a folder is open, the **New chat** button
+  beside it; its one shared slot holds the open document tabs. With no
+  folder open the slot says **Welcome**, because that is what is on screen,
+  and otherwise it stays empty, since the Chat pane names its own
+  conversation in its header.
   Folder-level actions remain attributable to the active folder.
 - Multiple windows share one library and runtime services while retaining
   independent active folders, tabs, search presentation, and Chat tabs.
@@ -234,10 +275,6 @@ manager, or a primary graph-navigation tool.
   discovered update reaches nobody and
   [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-value)'s
   return step cannot be completed in the app.
-- Account identity is recognizable only inside Settings, in the section that
-  owns search by meaning. The sidebar carries no identity and there is no
-  account menu, so nothing in the workspace itself tells a signed-in person
-  which account is connected.
 - Favoriting a member and opening one in a second window from the library have
   no control. The membership row offers removal only.
 

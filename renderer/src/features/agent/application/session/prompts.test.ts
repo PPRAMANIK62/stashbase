@@ -36,10 +36,14 @@ describe('prompt ledger', () => {
 
   it('remembers what went out per block and consumes a stashed snapshot once', () => {
     const ledger = createPromptLedger();
-    ledger.recordTurn('user-1', { skill: 'review', wire: 'Review this' });
+    ledger.recordTurn('user-1', { display: 'Review this', skill: 'review', wire: 'Review this' });
     ledger.stash('queued-1', { context: [source], skill: null, text: 'Later' });
 
-    expect(ledger.turnFor('user-1')).toEqual({ skill: 'review', wire: 'Review this' });
+    expect(ledger.turnFor('user-1')).toEqual({
+      display: 'Review this',
+      skill: 'review',
+      wire: 'Review this',
+    });
     expect(ledger.turnFor('user-2')).toBeUndefined();
     expect(ledger.takeStashed('queued-1')?.context).toEqual([source]);
     expect(ledger.takeStashed('queued-1')).toBeUndefined();

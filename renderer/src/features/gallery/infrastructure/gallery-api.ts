@@ -29,6 +29,7 @@ function proxied(url: string): string {
 
 function toEntry(wire: GalleryEntryWire): GalleryEntry {
   return {
+    about: wire.about ?? null,
     category: wire.category,
     contents: wire.contents,
     description: wire.description,

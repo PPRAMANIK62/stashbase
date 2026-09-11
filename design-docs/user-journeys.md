@@ -21,8 +21,8 @@ other journeys own the capabilities and recovery paths they compose.
 ### Outcome
 
 A first-time user understands StashBase's local-file model, authorizes useful
-context, makes an informed optional choice about search by meaning, and
-reaches a concrete first result without completing unnecessary setup. On the
+context, and reaches a concrete first result without completing unnecessary
+setup or being introduced to an optional capability first. On the
 next launch, completed choices and authorized content remain recognizable
 without replaying onboarding.
 
@@ -49,14 +49,15 @@ Agent runtime is assumed.
 4. **Reach first value.** Open a real source and complete at least one useful
    action: inspect the document, retrieve source evidence, or explicitly set up
    a scoped Agent Chat. The next useful action stays visible without requiring
-   every optional capability first. No setup step stands in this path; the
-   one-time offer to set up search by meaning arrives beside the workspace the
-   user has already reached.
+   every optional capability first. No setup step stands in this path, and
+   nothing offers one: search by meaning is not introduced until a person
+   turns it on under Settings.
 5. **Return.** Close and relaunch StashBase. The library, durable settings, and
    completed setup remain available; the handled onboarding choice is not
    replayed. The window lands on the welcome screen again rather than in the
    last folder, which is one click away in **Recent** and comes back with the
-   tabs and tree state it had. A
+   tabs and tree state it had. The sidebar is collapsed there, as it is in
+   any window arriving at the welcome screen. A
    packaged build may quietly check the stable release channel when the saved
    default-on preference permits it. One deliberate Update action may then
    download, install, and relaunch after open edits are saved; Linux package
@@ -64,9 +65,9 @@ Agent runtime is assumed.
 
 ### Required Observable Results
 
-- Before granting access or setting up search by meaning, the user can
-  distinguish Sources, StashBase-derived data, and optional hosted processing
-  well enough to make the next decision deliberately.
+- Before granting access, the user can distinguish Sources,
+  StashBase-derived data, and optional hosted processing well enough to make
+  the next decision deliberately.
 - The shortest path to first value is authorizing or selecting useful content,
   not creating an account, installing an Agent, or waiting for all background
   work.
@@ -78,26 +79,22 @@ Agent runtime is assumed.
   available to Agents, remains an ordinary user-owned folder, is not
   overwritten by app updates, and is never recreated after deletion.
 - A fresh window does not silently select another folder, send a prompt,
-  install an Agent runtime, or open setup for search by meaning. A window with
-  no folder open never carries the offer at all.
-- The offer to set up search by meaning is a non-blocking notice above the
-  workspace, not a dialog, and it appears only after a folder has resolved.
-  **Choose a source** opens the Settings section that owns the hosted and
-  bring-your-own-key sources; declining reads **Not now**. Either answer is
-  durable, so no later folder and no relaunch repeats it. A folder whose
-  source is already configured never shows the offer, not even briefly.
-- Deliberately declining search by meaning costs no local capability, leaves
-  the **By meaning** mode and Settings as the routes back, and does not
-  prevent pending Wiki Pages from being built.
+  install an Agent runtime, or open account sign-in.
+- No surface offers search by meaning. The sidebar's search panel is keyword
+  search alone until an embedding key is added under Settings, and no notice,
+  tab, or explanation names the mode before then.
+- Leaving search by meaning off costs no local capability and does not
+  prevent Wiki Pages from being built.
 - Reaching first value leaves a clear route into Search, scoped Chat, or the
   J10 durable core loop without forcing one universal workflow.
 - Returning users recognize their library and completed durable setup without
   replaying first-use explanation or losing access when an optional online
   capability is unavailable.
-- When a user chooses Google sign-in for hosted search by meaning, every
-  surface that names the connected account identifies the same person by
-  optional provider profile data plus the full email, without making profile
-  loading a prerequisite for local or hosted work.
+- When a user signs in to the StashBase account for OpenQuill, every surface
+  that names the connected account, the sidebar's account row and the Agents
+  section of Settings, identifies the same person by optional provider
+  profile data plus the full email, without making profile loading a
+  prerequisite for local or hosted work.
 
 ### Degradation and Recovery
 
@@ -316,8 +313,9 @@ unavailable.
 ### Primary Flow
 
 1. Enter one query in the sidebar's search panel.
-2. Use keyword search without additional setup, or search by meaning with an
-   explicitly selected hosted or bring-your-own-key provider.
+2. Use keyword search without additional setup, or search by meaning once an
+   OpenAI or OpenRouter key has been added under **Settings → Search by
+   Meaning**; the **By meaning** mode appears only then.
 3. Review ranked evidence and readiness guidance.
 4. Open a result in its visible source context.
 
@@ -327,8 +325,8 @@ unavailable.
 - Every result identifies a user-visible source rather than derived storage.
 - Retrieval uses direct source text or current prepared text according to the
   source format; it never treats previewability alone as searchable text.
-- Missing results are distinguishable from preparation, indexing, provider, or
-  quota state.
+- Missing results are distinguishable from preparation, indexing, or provider
+  state.
 - Keyword search remains usable when semantic work cannot continue.
 - Representative meaning-based queries retrieve relevant source evidence even
   when the query and source use different wording.
@@ -336,9 +334,9 @@ unavailable.
 ### Degradation and Recovery
 
 Known-stale semantic evidence becomes unavailable before paused or failed work
-is presented. Current indexed files may remain partially useful, and switching
-to an available source or waiting for quota refresh resumes pending work
-without blocking local-file workflows.
+is presented. Current indexed files may remain partially useful, and
+replacing the key resumes pending work without blocking local-file
+workflows.
 
 ### Evidence
 
@@ -362,9 +360,10 @@ may be ready, missing, disconnected, or recoverable.
 
 1. Use New chat with OpenQuill, or choose another Agent in the composer. A
    Chat takes the open folder as its scope.
-2. For OpenQuill, sign in to the StashBase account when needed; no Agent
-   install, model API key, or separate recharge is required within the fixed
-   seven-day included allowance.
+2. For OpenQuill, sign in to the StashBase account when needed, from the
+   account row at the foot of the sidebar or from the Agents section of
+   Settings; no Agent install, model API key, or separate recharge is
+   required within the free credits' fixed seven-day window.
 3. When a bring-your-own runtime is missing, explicitly choose **Install and
    continue**. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
    finish the provider-owned browser flow started by that same runtime.
@@ -375,22 +374,25 @@ may be ready, missing, disconnected, or recoverable.
 6. Inspect streaming output, tool activity, permissions, runtime-supported
    attachments, failures, and file artifacts.
 7. Continue, edit and resend, or open a source beside the same mounted Chat.
+   Use the top-right panel icon to hide Chat for more reading space and reopen
+   it with the conversation and draft intact.
 8. Switch workspace folders without silently rebinding started work.
 
 ### Required Observable Results
 
 - Opening the app, a folder, a tab, or history is never runtime-installation
   consent.
-- OpenQuill uses only its included pinned runtime and account allowance;
-  its account token is absent from the renderer and OpenCode state.
-- Signing in for OpenQuill establishes account identity without silently
-  activating hosted search by meaning; that source remains an explicit setup
-  or Settings choice.
+- OpenQuill uses only its included pinned runtime and the account's free
+  credits; its account token is absent from the renderer and OpenCode state.
+- Signing in for OpenQuill establishes account identity and nothing else.
+  Search by meaning has no account path and is turned on only by a key under
+  Settings.
 - OpenQuill does not offer transient attachments until its isolated
   runtime can read their bytes through an authorized scope. Bring-your-own
   runtimes retain attachment support.
-- Settings reports the current seven-day window as a remaining percentage and
-  reset time, with optional token detail but no monetary balance. A submitted
+- Settings reports the free credits' current seven-day window as a remaining
+  percentage and refill time, with optional token detail but no monetary
+  balance. A submitted
   prompt and its auxiliary model calls share one server-enforced turn limit.
 - Codex authentication uses the executable StashBase already discovered or
   installed. StashBase neither installs a second copy nor receives the
@@ -434,9 +436,9 @@ may be ready, missing, disconnected, or recoverable.
 
 ### Degradation and Recovery
 
-Account sign-in, allowance exhaustion, runtime installation, authentication,
+Account sign-in, exhausted credits, runtime installation, authentication,
 MCP connection, transport, and turn failures remain distinguishable and
-preserve the transcript. Exhausted included allowance leads to Agent Settings
+preserve the transcript. Exhausted free credits lead to Agent Settings
 and the bring-your-own choices. An installation
 failure retains a no-download recheck so a CLI installed or repaired outside
 StashBase can resume preparation without repeating the managed install. The
@@ -721,15 +723,16 @@ same Sources and Wiki Pages retrievable even when the wording differs.
 
 The user has opened a Library folder and is in a blank folder-scoped Chat. The
 folder may contain no Wiki Pages, or it may already have pages under `wiki/`.
-Setup for search by meaning may have been completed or declined
-independently; selected Agent readiness may be absent.
+Search by meaning may or may not have been turned on; selected Agent
+readiness may be absent.
 
 ### Primary Flow
 
 1. In the blank folder-scoped Chat, write the Build Wiki request — typed
-   directly, filled from the **Build my wiki** starter below the composer, or
-   reused from a Gallery entry's **How it's built** tab via **Copy prompt**.
-   Neither the starter nor the Gallery sends what it places.
+   directly, taken with **Tab** from the composer's placeholder while it shows
+   **Build a wiki for docs**, or reused from a Gallery entry's **Agent
+   Instructions** via its **Copy**. Neither Tab nor the Gallery sends what it
+   places.
 2. Send it. The visible request is exactly what the Agent receives; the
    durable Wiki Pages contract (write scope, linking, maintenance) comes
    from Agent Instructions. Setup for search by meaning neither opens nor
@@ -758,9 +761,9 @@ independently; selected Agent readiness may be absent.
   keyword search, semantic indexing, and future Agent work. Machine-derived
   text, chunks, and vectors remain invisible AppData.
 - The first release does not claim persistent built, ready, or stale Wiki
-  state. A folder that already has pages under `wiki/` offers the same starter
-  with the same wording — it never becomes Update Wiki Pages — and nothing
-  schedules background Wiki Page rewriting.
+  state. A folder that already has pages under `wiki/` cycles the same
+  request in the same wording — it never becomes Update Wiki Pages — and
+  nothing schedules background Wiki Page rewriting.
 
 ### Degradation and Recovery
 
@@ -801,11 +804,11 @@ unavailable.
 1. **Browse.** The Gallery renders immediately from the app's bundled
    snapshot; the published index replaces it when the network answers.
    Every entry is a real public folder with a wiki built from it.
-2. **Inspect.** A card opens the entry's detail page: **What's inside**
-   lists the copy's files (the entry's inventory line stands in until the
-   list is published), **How it's built** shows the exact request that
-   produced the wiki with **Copy prompt**, and published screenshots
-   preview the result.
+2. **Inspect.** A card opens the entry's detail page: **About** is the
+   publisher's own introduction, why the wiki was made, what it holds, and
+   who it is for; **Agent Instructions**, folded beneath it, unfolds to the
+   exact request the wiki was built with, with a **Copy** glyph on it;
+   published screenshots preview the result.
 3. **Take a copy.** **Make a copy** downloads the entry's public repository
    into the folder home through the existing public-GitHub import and opens
    the copy in a new window. The shop window stays put for the next entry.

@@ -7,6 +7,7 @@ import type { HttpClient } from '@/platform/http/client';
 import { createGalleryIndexAdapter } from './gallery-api';
 
 const ENTRY = {
+  about: 'Why I made this.',
   category: 'course',
   contents: '20 transcripts',
   description: 'A course.',
@@ -32,6 +33,7 @@ describe('gallery index adapter', () => {
     const entries = await load(client({ body: { schemaVersion: 1, wikis: [ENTRY] } }));
     expect(entries).toEqual([
       {
+        about: 'Why I made this.',
         category: 'course',
         contents: '20 transcripts',
         description: 'A course.',

@@ -61,6 +61,13 @@ export function LibrarySidebar({
   const removal = useRemoveFolder(api, lifecycle);
   const [chooserOpen, setChooserOpen] = useState(false);
   const importDialog = useGitHubImportDialog(githubImport, folders.select);
+  /** Every chooser action closes the menu first: MenuItem is a plain row
+   *  with no close-on-select of its own, and the switch happens in place, so
+   *  a menu left standing would outlive the choice it existed for. */
+  const pick = (action: () => void) => () => {
+    setChooserOpen(false);
+    action();
+  };
 
   if (library.isPending) return null;
 
@@ -92,7 +99,11 @@ export function LibrarySidebar({
 
     return (
       <>
-        <div className="px-2">
+        {/* No extra horizontal wrap: the group's own p-2 already gives the
+         *  8px pill inset every other sidebar row uses (footer, tree), and
+         *  the row's stock padding then lands the folder glyph on the
+         *  sidebar's shared 16px glyph column, same as the footer rows. */}
+        <div>
           <SidebarMenu aria-label="Active library folder">
             <SidebarMenuItem>
               <DropdownMenu
@@ -102,7 +113,18 @@ export function LibrarySidebar({
               >
                 <DropdownTrigger
                   render={
-                    <SidebarMenuButton icon={Folder} isActive label={activeFolder.name}>
+                    // The column's head takes the active-row treatment: the
+                    // standing fill and weight say "this folder", as one block
+                    // with the tab strip beneath it, and a hover on it paints
+                    // nothing extra. It is a switcher rather than a place the
+                    // reader is at, so the current-page claim the active row
+                    // would make is withheld.
+                    <SidebarMenuButton
+                      aria-current={undefined}
+                      icon={Folder}
+                      isActive
+                      label={activeFolder.name}
+                    >
                       {attention && (
                         <span
                           className="ml-1.5 inline-flex size-1.5 shrink-0 rounded-full bg-destructive"
@@ -128,33 +150,27 @@ export function LibrarySidebar({
                         label={duplicate ? `${name} — ${path}` : name}
                         {...(member.path === activeFolder.path
                           ? {}
-                          : { onSelect: () => folders.select(member.path) })}
+                          : { onSelect: pick(() => folders.select(member.path)) })}
                         trailingAction={{
                           icon: FolderMinus,
-                          label: `Remove ${name} from Library`,
-                          onSelect: () => {
-                            setChooserOpen(false);
-                            removal.request(member.path);
-                          },
+                          label: `Remove ${name}`,
+                          onSelect: pick(() => removal.request(member.path)),
                         }}
                         title={path}
                       />
                     );
                   })}
                   <DropdownSeparator />
-                  <MenuItem icon={FolderOpen} label="Open folder" onSelect={folders.open} />
+                  <MenuItem icon={FolderOpen} label="Open folder" onSelect={pick(folders.open)} />
                   <MenuItem
                     icon={FolderPlus}
                     label="Create folder"
-                    onSelect={() => folders.create(library.data.homeDirectory)}
+                    onSelect={pick(() => folders.create(library.data.homeDirectory))}
                   />
                   <MenuItem
                     icon={GitFork}
                     label="Import from GitHub…"
-                    onSelect={() => {
-                      setChooserOpen(false);
-                      importDialog.start();
-                    }}
+                    onSelect={pick(importDialog.start)}
                   />
                 </DropdownContent>
               </DropdownMenu>

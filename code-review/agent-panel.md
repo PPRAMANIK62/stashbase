@@ -64,10 +64,17 @@ import a sibling feature.
   frame, the transition runs only when a document opens or the last one closes,
   and reduced motion lands every change at once. The splitter exposes
   keyboard-accessible value semantics.
-- The titlebar carries document tabs while any document is open and hands the
-  row back to the Agent's own header when the last one closes. Its new-chat
-  button is the feature's own `NewChatButton`, so the titlebar and the Chats
-  panel share one preferred-Agent rule and one `newChat` call.
+- The Chat pane names its own conversation. `ChatHeader` at the top of the
+  workspace reads the mounted session's title and Agent, renames it in place
+  once the session has started (`agentSessionIsUnstarted` decides; an
+  unstarted Chat's name is static text), and, once the session has a native
+  identity, keeps the name on record
+  through the same `renameHistory` mutation the Chats panel's rows use,
+  rewriting the cached listing rather than refetching it; a refusal restores
+  the previous title. The titlebar carries document tabs while any document
+  is open and is otherwise empty for a folder window. Its new-chat button is
+  the feature's own `NewChatButton`, so the titlebar and the Chats panel
+  share one preferred-Agent rule and one `newChat` call.
 - Both Agent surfaces load behind one lazy boundary with a retry, so a chunk
   that fails offers to reload itself instead of taking the window down.
 
@@ -78,7 +85,7 @@ import a sibling feature.
   whether or not a runtime can carry a turn.
 - A window with no ready runtime shows the same canvas with every
   runtime-specific control absent, a send control that cannot fire, and the
-  setup notice in the row the starters would occupy. The gate is a notice
+  setup notice beneath the composer. The gate is a notice
   beneath the composer, never a screen in place of it, and it advertises no
   ability a bound runtime has not reported.
 - The gate has three states and is decided from the session's own bound
@@ -91,16 +98,49 @@ import a sibling feature.
   `@path` in its place. An armed skill is a token at the head of the document
   that serializes to nothing, because the server composes the skill into the
   wire prompt.
-- Which runtime runs the next turn, which model, and how hard it thinks are
-  three menus in the composer's left cluster. All three go inert while a turn
-  streams, because the runtime binds all three when the turn starts. Model and
-  effort appear only when the runtime advertises them, Default is an omitted
-  override, and a populated Claude conversation keeps its model fixed. Picking
-  another runtime opens a new chat on the same scope rather than rebinding the
-  conversation to a runtime its transcript did not come from.
-- Permission mode is its own control on the right, so the state reads without
-  opening a menu. It offers Ask, Plan, Edit, and Auto, and renders only when
-  the runtime advertises modes.
+- The composer's left cluster is who runs the turn and under what rules: the
+  runtime, its permission mode, and Instructions. The right edge, beside Send,
+  is what it runs on: one model-and-thinking control whose menu opens on the
+  level and keeps the model list one layer deeper, behind a row that swaps the
+  popup's content without closing it. The runtime and the model-and-thinking
+  controls go inert while a turn streams, because the runtime binds them when
+  the turn starts. The control renders only when the runtime advertises a
+  model or a level choice, and opens straight on the model list when it
+  advertises no level. Picking another runtime opens a new chat on the same
+  scope rather than rebinding the conversation to a runtime its transcript
+  did not come from.
+- What the next turn runs on is one derivation, `modelChoice`, shared by the
+  control and the session's effort verb: the explicit pick, else the model the
+  runtime reported running, else the catalog entry it flags as its default;
+  the level is the explicit pick, else that model's declared default. A row
+  sends its own id. The untouched state is the omitted override, named by the
+  runtime's own declaration and never guessed from catalog order; a runtime
+  that declares no default keeps a Default row in each list. A model pick
+  closes the menu and a level pick keeps it open, which is the primitive's
+  radio default every choice menu here rides. A populated Claude conversation
+  keeps its model fixed while its level stays changeable.
+- The cluster gives ground as the pane narrows, read from the composer's own
+  container: at the narrow step the provider's name, the mode's name, the
+  Instructions label, and the model's name go, so the right control reads as
+  its level, or as the name while no level is known; at the narrowest the
+  level goes too, and every trigger's title still names its selection.
+- A fresh chat names what it will run on before any session exists. The
+  runtime listing carries the catalog the service remembers for each runtime
+  (`Agent.models`, with the last-observed default marked when the catalog
+  flags none), and the workspace hands it to the session through
+  `seedModels`, which the session refuses once its connection has left the
+  draft state, because from then on the socket's own catalog event owns the
+  list. Opening the control still requests the live catalog, and a runtime
+  nothing has ever read reads Default until it is.
+- Permission mode is its own control in the left cluster, so the state reads
+  without opening a menu. The four modes are product promises, not runtime
+  settings: `domain/access.ts` owns their order and the settling rule, the
+  menu offers only the promises the runtime's catalog entry lists in `modes`,
+  and the workspace settles a session off a promise its runtime cannot keep
+  through `honoredAccessMode` (Auto first, then Ask) before the next turn
+  binds it. The control renders only when the runtime lists at least one
+  mode. Each row describes the promise and never one runtime's behavior, and
+  Plan's glyph is not the Instructions scroll.
 - Bound context is explicit. A mention, a dropped source, and an upload are the
   three ways a file enters a prompt; the open document is never implicit
   context. Uploads are offered only when the runtime advertises that it can
@@ -120,10 +160,16 @@ import a sibling feature.
   message back into the composer restores the context it was queued with, and
   the prompt ledger keeps one snapshot per queued id so one dispatch consumes
   one snapshot.
-- An empty conversation shows one greeting and at most three starter chips
-  derived from the scoped folder's top level. A chip prefills the composer and
-  focuses it; it never sends, so the visible request stays the reader's to edit
-  before it becomes the one the Agent gets. The user's visible request is
+- An empty conversation shows one greeting and a composer whose placeholder
+  cycles through the three requests `emptyChatPrompts` derives for the scoped
+  folder, at the ambient label cadence, paused while the composer is focused
+  and static under reduced motion. The composer passes `placeholderIsPrompt`
+  down only while one of those is showing, and the editor's Tab keymap then
+  fills the empty field with it; it never sends, so the visible request stays
+  the reader's to edit before it becomes the one the Agent gets. A placeholder
+  change crossfades in the editor at the ambient crossfade pace from
+  `lib/springs.ts`, slower than any interaction step. The user's visible
+  request is
   exactly what the Agent receives, and no surface carries a second hidden
   prompt.
 
@@ -155,8 +201,9 @@ Wiki Pages,
 are not a staged machine of their own. Building a wiki is an ordinary visible
 request against the active folder, sent through the same composer, answered
 through the same permission surface, and applied through the same server-side
-write path as any other request. Its one entry point is the **Build my wiki**
-starter chip, and its durable half is the folder's Agent Instructions.
+write path as any other request. Its one entry point is the composer's
+cycling **Build a wiki for docs** request, and its durable half is the
+folder's Agent Instructions.
 
 ## Transcript and Turn Lifecycle
 
@@ -170,10 +217,22 @@ starter chip, and its durable half is the folder's Agent Instructions.
 - The one in-flight turn is `aria-busy` until it settles, so token streaming
   does not re-announce the live tail. Each turn states its speaker for
   linearized reading; bubble alignment alone is not attribution.
-- Every settled reply that closes a turn exposes one standing copy control
-  carrying the untouched assistant source. It is always visible, never
-  hover-gated and never behind a menu.
-- A hover message time renders only when a real clock recorded one. Restored
+- Every prompt, and every settled reply that closes a turn, carries one
+  hover-revealed meta row of icon-only actions beside its time. Copy is on
+  both and carries the untouched source text; edit is on the latest prompt
+  only, and only while no turn is active. The row is never behind a menu, is
+  reachable by keyboard focus, and stays visible where hover does not exist.
+  The one icon geometry is owned by the message primitive, and the row
+  overhangs the message's outer edge by the glyph's inset so a reply's copy
+  glyph sits on the same left line as the reply text and the tool groups.
+- Edit takes the prompt back as the draft: the text as typed, the bound
+  context, and the skill it ran under, from the prompt ledger when the send
+  was live and from the transcript's own text otherwise. The sent prompt
+  stays in the transcript and the edited text goes out as a new turn on the
+  same native session; nothing is forked or truncated.
+- A hover message time renders only when a real clock recorded one: a
+  prompt's is its send, a reply's is when its turn settled, and the reply
+  shows the turn's duration only when both ends were recorded. Restored
   history invents no duration and no timestamp.
 - A tool row is compact and inspectable, and one payload ladder serves both the
   row and the permission card so the two cannot drift: the diff when the call
@@ -212,7 +271,8 @@ starter chip, and its durable half is the folder's Agent Instructions.
   editor that raises them and the panel that answers them, and the active row
   is named through `aria-activedescendant`.
 - The chats list is a sidebar tree of recency groups. A row opens on a click,
-  renames in place on a slow second click or F2, and deletion is a confirming
+  renames in place on a slow second click or F2 (the Chat pane's header
+  renames the open conversation the same way), and deletion is a confirming
   dialog that stays open on a refusal so the reason stays in front of the
   reader who asked for it.
 - Managed primitives own focus trapping, Escape, outside press, collision, and
@@ -272,26 +332,28 @@ gap below is observed in Shipping.
   finishing
   [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project)
   reaches the new project through the folder switcher.
-- **Two reading affordances are absent.** There is no jump-to-latest control;
-  the log pins and unpins from the reader's own scroll position. A sent user
-  message offers neither copy nor edit-and-resend.
+- **There is no jump-to-latest control.** The log pins and unpins from the
+  reader's own scroll position.
+- **A restored prompt's attachments do not follow an edit.** The renderer
+  never held their bytes, so edit on a prompt replayed from native history
+  returns its text alone; a live send's uploads come back as tiles.
 
 ## Implementation Map
 
 | Role | Stable entry points |
 |---|---|
-| Feature boundary | `renderer/src/features/agent/public.ts` re-exports the Ports and their Adapter factories, the two lazy surfaces and the titlebar, the window runtime hook, the instructions editor hook, and the composer-focus marker. Only modules under `renderer/src/app/` may read it |
+| Feature boundary | `renderer/src/features/agent/public.ts` re-exports the Ports and their Adapter factories, the two lazy surfaces, the titlebar's chat-navigation and new-chat buttons, the window runtime hook, the instructions editor hook, and the composer-focus marker. Only modules under `renderer/src/app/` may read it |
 | Window runtime Interface | `renderer/src/features/agent/application/workspace-runtime.ts` owns tabs, mounting, the window-folder rule, retirement, and the history verbs; `renderer/src/features/agent/hooks/use-agent-workspace-runtime.ts` is its React lifetime |
 | Conversation Interface | `renderer/src/features/agent/application/session/runtime-contract.ts` declares the verbs a composer and a transcript call; `renderer/src/features/agent/application/session-runtime.ts` assembles them over the transport, dispatch, event, prompt-ledger, and files-changed Modules in `renderer/src/features/agent/application/session/` |
-| State Modules | `renderer/src/features/agent/domain/session.ts` is the one reducer and the selectors that read it, over the shapes in `session-state.ts` and the transcript edits in `session-transcript.ts`; tabs are `renderer/src/features/agent/domain/workspace.ts`; the runtime registry, capability resolution, and readiness gate are `renderer/src/features/agent/domain/agent-catalog.ts` |
+| State Modules | `renderer/src/features/agent/domain/session.ts` is the one reducer and the selectors that read it, over the shapes in `session-state.ts` and the transcript edits in `session-transcript.ts`; tabs are `renderer/src/features/agent/domain/workspace.ts`; the runtime registry, capability resolution, and readiness gate are `renderer/src/features/agent/domain/agent-catalog.ts`; `model-choice.ts` beside them derives what the next turn runs on |
 | Bound context Module | `renderer/src/features/agent/domain/context.ts` owns mention ranking and text editing, validation against the published folder snapshot, wire-prompt rendering, and transcript segmentation |
-| Starters Module | `renderer/src/features/agent/domain/starters.ts` owns the Build Wiki chip and the rest of the empty-chat starters |
+| Empty-chat prompts | `renderer/src/features/agent/domain/starters.ts` owns the three requests, `renderer/src/features/agent/hooks/use-rotating-prompt.ts` cycles them, the Tab-accept lives in the editor's keymap in `renderer/src/features/agent/ui/composer/mention-editor.tsx`, and `placeholder-crossfade.ts` beside it owns the swap's timing |
 | Ports | `renderer/src/features/agent/application/ports.ts` |
 | Adapters | `renderer/src/features/agent/infrastructure/session-api.ts` for the socket and history HTTP, plus `catalog-api.ts`, `context-api.ts`, and `agent-instructions-api.ts` beside it |
 | Wire schemas | `shared/protocols/websocket/agent-session.ts` with `shared/protocols/http/agent-sessions.ts`, `shared/protocols/http/agent-runtime.ts`, `shared/protocols/http/agent-context.ts`, and `shared/protocols/http/agent-instructions.ts` |
 | Conversation surface | `renderer/src/features/agent/ui/workspace.tsx`, behind `renderer/src/features/agent/ui/workspace-lazy.tsx`, places the transcript, the connection strip, the composer, the starters, and the setup notice in `renderer/src/features/agent/ui/setup.tsx` |
 | Transcript Modules | `renderer/src/features/agent/ui/transcript/transcript.tsx` owns the block list and turn layout; `activity.tsx` owns tool groups and permission cards over `tool-presentation.ts`; `file-change.tsx` owns diffs; `markdown.tsx` is the reply renderer |
-| Composer Modules | `renderer/src/features/agent/ui/composer/context-composer.tsx` owns the card, the drops, the pastes, and the send predicate; `mention-editor.tsx` with `mention-document.ts`, `mention-markers.ts`, and `mention-widgets.ts` owns the text field; `context-rows.tsx` and `mention-listbox.tsx` own the suggestion panel; `context-tiles.tsx` owns bound tiles and chips; `settings.tsx` and `permission-mode.tsx` own the control cluster |
+| Composer Modules | `renderer/src/features/agent/ui/composer/context-composer.tsx` owns the card, the drops, the pastes, and the send predicate; `mention-editor.tsx` with `mention-document.ts`, `mention-markers.ts`, and `mention-widgets.ts` owns the text field; `context-rows.tsx` and `mention-listbox.tsx` own the suggestion panel; `context-tiles.tsx` owns bound tiles and chips; `provider.tsx`, `permission-mode.tsx`, and `thinking.tsx` own the control cluster over the breakpoints in `narrow.ts` |
 | Agent Instructions | `renderer/src/features/agent/hooks/use-agent-instructions.ts` owns the per-scope read, the local draft, and the save; `renderer/src/features/agent/ui/instructions/agent-instructions-control.tsx` and `agent-instructions-dialog.tsx` own the surface |
 | Chats list | `renderer/src/features/agent/ui/chats/chats.tsx` behind the same lazy boundary, over `conversation-tree.tsx`, `delete-conversation-dialog.tsx`, and the grouping in `renderer/src/features/agent/domain/conversation-history.ts` |
 | Composition | `renderer/src/app/composition/layout/workspace-panes.tsx` binds the conversation surface, `workspace-sidebar.tsx` places the chats list and the Gallery row, `agent-document-workspace.tsx` owns the split, and `workspace-layout.tsx` stamps the feature's own surface marker so the paste rule needs no Agent selector in the shell. `renderer/src/app/composition/folder/use-agent-environment.ts` publishes the folder snapshot the Agent validates against, and `renderer/src/app/composition/folder/use-folder-refresh.ts` consumes the settled-write report |

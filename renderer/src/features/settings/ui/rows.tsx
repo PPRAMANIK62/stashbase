@@ -92,8 +92,6 @@ export interface SettingsRowProps extends Omit<HTMLAttributes<HTMLElement>, 'tit
   lead?: ReactNode;
   title: ReactNode;
   titleTone?: 'default' | 'error';
-  /** The checked option in a choice list reads one weight heavier. */
-  titleWeight?: 'medium' | 'semibold';
   /** Trailing slot: the row's control or actions. */
   trail?: ReactNode;
 }
@@ -107,7 +105,6 @@ export function SettingsRow({
   lead,
   title,
   titleTone = 'default',
-  titleWeight = 'medium',
   trail,
   ...props
 }: SettingsRowProps) {
@@ -126,8 +123,7 @@ export function SettingsRow({
       <div className="min-w-0">
         <div
           className={cn(
-            'flex flex-wrap items-center gap-x-2 gap-y-0.5 text-body',
-            titleWeight === 'semibold' ? 'font-semibold' : 'font-medium',
+            'flex flex-wrap items-center gap-x-2 gap-y-0.5 text-body font-medium',
             titleTone === 'error' ? 'text-destructive' : 'text-foreground',
           )}
         >
@@ -263,7 +259,6 @@ export function ChoiceRow({
       role="radio"
       tabIndex={checked || firstTabStop ? 0 : -1}
       title={title ?? label}
-      titleWeight={checked ? 'semibold' : 'medium'}
       trail={trail}
     >
       {children}

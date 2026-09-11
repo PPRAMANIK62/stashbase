@@ -7,6 +7,8 @@
  * Adding a runtime is one entry, so nothing else in the feature spells an
  * agent id out by hand.
  */
+import type { AgentAccessMode } from '@/features/agent/domain/access';
+import type { AgentModel } from '@/features/agent/domain/runtime-catalog';
 import type { AgentId } from '@/features/agent/domain/session';
 
 /** What a turn on this runtime may use. The service advertises capabilities it
@@ -21,7 +23,9 @@ export interface AgentAbilities {
   readonly attachments: boolean;
   readonly effort: boolean;
   readonly models: boolean;
-  readonly modes: boolean;
+  /** The permission promises this runtime can honor, in the composer's
+   *  order; empty means the mode control is not shown for it. */
+  readonly modes: readonly AgentAccessMode[];
   readonly skills: boolean;
 }
 
@@ -41,6 +45,10 @@ export interface Agent {
   /** Whether the one thing between it and ready is the user signing in. */
   readonly needsSignIn: boolean;
   readonly abilities: AgentAbilities;
+  /** The catalog the service remembers for this runtime, so a fresh chat can
+   *  name the model and level it will run on before a session exists. Empty
+   *  until the runtime has been read once. */
+  readonly models: readonly AgentModel[];
 }
 
 /** What the Agent service says it can run right now. `agents` — never the

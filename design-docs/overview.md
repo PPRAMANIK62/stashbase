@@ -12,9 +12,9 @@ Wiki Pages, Search, and Agent work. It turns ordinary folders into reusable
 knowledge without replacing the files themselves. StashBase keeps Sources in
 local files, prepares the formats that need help, and exposes authorized
 context through MCP. Local browsing, editing, preview, and keyword search do
-not require a cloud account. When a user explicitly sets up hosted search by
-meaning, extracted text may be sent to that provider for indexing or
-retrieval.
+not require a cloud account. When a user adds their own embedding key for
+search by meaning, extracted text may be sent to that provider for indexing
+or retrieval.
 The included OpenQuill runs locally and sends only prompts and necessary
 model context through its hosted model gateway. In both cases the Sources
 remain locally owned.

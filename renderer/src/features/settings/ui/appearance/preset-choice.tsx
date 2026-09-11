@@ -3,7 +3,7 @@ import { useId } from 'react';
 import { FOCUS_RING_TINT } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
 import { useSize } from '@/lib/size-context';
-import { surfaceClasses } from '@/lib/surface-classes';
+import { surfaceBackground } from '@/lib/surface-classes';
 import { useSurface } from '@/lib/surface-context';
 import { cn } from '@/lib/utils';
 
@@ -23,7 +23,8 @@ export interface PresetChoiceProps {
 
 /**
  * A segmented preset picker: one bordered track with the chosen preset drawn
- * as a raised pill.
+ * as a lifted pill: the surface three steps up and no shadow, the same lift
+ * the segmented tabs use, so one idiom draws both.
  *
  * Native radios rather than a tablist, so arrow-key navigation, the single
  * roving tab stop and the group semantics come from the platform. They are
@@ -44,7 +45,7 @@ export function PresetChoice({
   const name = useId();
   const shape = useShape();
   const size = useSize();
-  const pill = surfaceClasses(Math.min(useSurface() + 3, 8));
+  const pill = surfaceBackground(Math.min(useSurface() + 3, 8));
 
   return (
     <fieldset

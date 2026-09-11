@@ -12,44 +12,22 @@ function Queries({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
-const signedIn: EmbedderState = {
-  account: {
-    active: true,
-    displayName: 'Ada Lovelace',
-    email: 'ada@example.com',
-    quota: {
-      grantedTokens: 5_000_000,
-      periodEndsAt: '2026-09-16T00:00:00.000Z',
-      periodStartedAt: '2026-08-16T00:00:00.000Z',
-      plan: 'free',
-      remainingTokens: 3_972_764,
-      reservedTokens: 0,
-      usedTokens: 1_027_236,
-    },
-    quotaUnavailable: false,
-    signedIn: true,
-  },
+const keyed: EmbedderState = {
   authorized: true,
-  hasKey: false,
-  model: 'hosted',
+  hasKey: true,
+  model: 'text-embedding-3-small',
   provider: 'openai',
-  source: 'stashbase-account',
+  source: 'openai',
 };
 
-const embedderPort: EmbedderPort = {
-  load: async () => signedIn,
-  refreshAccount: async () => signedIn.account,
-  removeKey: async () => signedIn,
-  saveKey: async () => ({ warning: null }),
-  selectProvider: async () => signedIn,
-  signInStatus: async () => ({ state: 'pending' }),
-  signOut: async () => undefined,
-  startSignIn: async () => ({ flowId: 'flow', url: 'https://accounts.example/sign-in' }),
-  useAccount: async () => signedIn.account,
-};
+const notSetUp: EmbedderState = { ...keyed, authorized: false, hasKey: false };
 
-function AiIndexHarness() {
-  return <AiIndexPanel embedderApi={embedderPort} onOpenExternal={() => undefined} />;
+function port(state: EmbedderState): EmbedderPort {
+  return {
+    load: async () => state,
+    removeKey: async () => notSetUp,
+    saveKey: async () => ({ warning: null }),
+  };
 }
 
 const meta = {
@@ -67,4 +45,9 @@ const meta = {
 export default meta;
 type Story = StoryObj;
 
-export const SignedIn: Story = { render: () => <AiIndexHarness /> };
+/** A key stored and answering: the one state in which search by meaning is on. */
+export const KeyActive: Story = { render: () => <AiIndexPanel embedderApi={port(keyed)} /> };
+
+/** The default: nothing configured, and the editor open because there is
+ *  nothing else on the row to do. */
+export const NotSetUp: Story = { render: () => <AiIndexPanel embedderApi={port(notSetUp)} /> };

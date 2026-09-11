@@ -33,6 +33,7 @@ import type {
   AgentSessionRuntimeOptions,
 } from '@/features/agent/application/session/runtime-contract';
 import { addContextItem, removeContextItem } from '@/features/agent/domain/context';
+import { modelChoice } from '@/features/agent/domain/model-choice';
 import {
   agentScopesEqual,
   agentSessionIsBlank,
@@ -96,7 +97,11 @@ export function createAgentSessionRuntime({
     });
     if (!sent) return false;
     const blockId = nextBlockId('user');
-    ledger.recordTurn(blockId, { skill: prompt.skill?.id ?? null, wire: prompt.wire });
+    ledger.recordTurn(blockId, {
+      display: prompt.display,
+      skill: prompt.skill?.id ?? null,
+      wire: prompt.wire,
+    });
     transition({
       at: Date.now(),
       context: prompt.context,
@@ -206,6 +211,22 @@ export function createAgentSessionRuntime({
       }
       return sent;
     },
+    editPrompt(blockId) {
+      const current = state();
+      if (disposed || agentTurnIsActive(current.connection)) return false;
+      const prompt = current.transcript.find(
+        (block) => block.kind === 'user' && block.id === blockId,
+      );
+      if (prompt?.kind !== 'user') return false;
+      // A live send remembers the text as typed and the skill it ran under;
+      // restored history has only the transcript's own text, and never the
+      // bytes behind its attachments, so those do not come back.
+      const turn = ledger.turnFor(blockId);
+      transition({ draft: turn?.display ?? prompt.text, kind: 'set-draft' });
+      transition({ context: prompt.context ?? [], kind: 'set-context' });
+      transition({ skill: turn?.skill ?? null, kind: 'set-skill' });
+      return true;
+    },
     addContext(item) {
       if (disposed) return;
       transition({ context: addContextItem(state().context, item), kind: 'set-context' });
@@ -231,10 +252,7 @@ export function createAgentSessionRuntime({
     setEffort(effort) {
       const current = state();
       if (disposed || agentTurnIsActive(current.connection) || current.effort === effort) return;
-      const selectedModel = current.models.find(
-        (model) => model.id === (current.model ?? current.activeModel),
-      );
-      if (effort && !selectedModel?.supportedEfforts?.includes(effort)) return;
+      if (effort && !modelChoice(current).efforts.includes(effort)) return;
       transition({ effort, kind: 'set-effort' });
       if (started) transport.open({ resume: current.nativeSessionId ?? undefined });
     },
@@ -264,6 +282,12 @@ export function createAgentSessionRuntime({
     refreshSkills() {
       if (disposed || state().connection.kind !== 'live') return;
       transport.send({ kind: 'refresh-skills' });
+    },
+    seedModels(models) {
+      const current = state();
+      if (disposed || current.connection.kind !== 'draft') return;
+      if (JSON.stringify(current.models) === JSON.stringify(models)) return;
+      transition({ activeModel: null, fallback: null, kind: 'models', models: [...models] });
     },
     setDraft(draft) {
       if (!disposed) transition({ draft, kind: 'set-draft' });

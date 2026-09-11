@@ -81,7 +81,7 @@ describe('AgentWorkspace composer skills', () => {
   async function skillWorkspace() {
     const test = agentSessionPort();
     const { runtime } = renderWorkspace(test.port, undefined, agentContextPort());
-    await screen.findByText('Your Wiki is here.');
+    await screen.findByText('From wiki to words.');
     await agentGateLifted();
     await userEvent.click(screen.getByRole('button', { name: 'Provider: OpenQuill' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
@@ -126,7 +126,7 @@ describe('AgentWorkspace composer skills', () => {
   it('leaves / as plain text for a runtime that runs no skills', async () => {
     const test = agentSessionPort();
     const { runtime } = renderWorkspace(test.port, undefined, agentContextPort());
-    await screen.findByText('Your Wiki is here.');
+    await screen.findByText('From wiki to words.');
     await agentGateLifted();
     act(() => runtime.activeSession().start());
 

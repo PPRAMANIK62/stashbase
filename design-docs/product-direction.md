@@ -56,8 +56,8 @@ moving, renaming, deletion, and broad source rewrites require a separate
 explicit user decision.
 
 OpenQuill is the included path: a pinned local OpenCode runtime uses the
-signed-in account's included model allowance without asking the user to install
-an Agent or configure a model key. It remains the initial selection while the
+signed-in account's free credits without asking the user to install an Agent
+or configure a model key. It remains the initial selection while the
 picker lists Codex and Claude Code before it as first-class bring-your-own
 alternatives. Sessions, file access, commands, MCP, permissions,
 and Diff handling stay local whichever path is selected; the included path
@@ -83,24 +83,28 @@ evidence may span long-form files, OCR, or transcripts. StashBase therefore
 treats preparation, a persistent meaning-based index, and source-grounded
 retrieval as one first-class RAG layer instead of relying on exact terms alone.
 
-### Activating search by meaning
+### Search by meaning is opt-in
 
-StashBase should strongly recommend setting up search by meaning because
-document libraries often need meaning-based retrieval, while keeping keyword
-search as a supported local state.
-Launch into an empty Library remains quiet. The first folder to resolve offers
-setup once, as a notice rather than a gate; answering it either way prevents
-automatic replays across folders and relaunches. Because nothing prompts a
-second time, a deliberate route back into setup has to stay discoverable.
-Activating search by meaning automatically prepares Library folders and keeps
-eligible files synchronized; Build Wiki remains an independent visible-file
-action.
-Hosted service and bring-your-own-key sources are choices, not gates to local
-files. Browsing, editing, preview, exact retrieval, and an existing local index
-must remain usable through authentication, provider, network, or quota failure.
+Keyword search is the search StashBase ships with, and it is complete on its
+own. Search by meaning is an optional capability a person turns on
+deliberately, by adding an embedding key of their own under Settings; nothing
+in the product introduces it first. No launch, folder, or window offers it,
+no notice invites setup, and no surface names the mode before it is on. This
+is a choice about attention: a person arriving with a folder should reach
+their files and their Agent without being asked to learn a second retrieval
+concept, and the people who want meaning-based retrieval already know what an
+embedding key is.
+The StashBase account is not part of this. Signing in exists for OpenQuill's
+free credits and buys nothing for search, so sign-in never turns search by
+meaning on and never carries a search quota.
+Turning search by meaning on prepares Library folders and keeps eligible
+files synchronized; Build Wiki remains an independent visible-file action.
+A bring-your-own key is a choice, not a gate to local files. Browsing,
+editing, preview, exact retrieval, and an existing local index must remain
+usable through provider, network, or key failure.
 
-This document owns that durable choice. Shipping setup timing and recovery live
-in [Search and Retrieval](design/search.md),
+This document owns that durable choice. Shipping behavior lives in
+[Search and Retrieval](design/search.md),
 [J01](user-journeys.md#j01-complete-onboarding-and-reach-first-value), and
 [J05](user-journeys.md#j05-search-and-open-source-evidence). Credential and
 runtime invariants live in

@@ -111,10 +111,14 @@ function TranscriptRows({
           return (
             <li key={segment.id}>
               <Button
+                // The forced-active ghost fill is the hover tint and adds
+                // nothing on hover, so the current segment never darkens
+                // under the pointer.
+                active={current || found}
                 aria-current={current || undefined}
                 className={cn(
                   'h-auto w-full px-2 py-2 text-left [&>span:last-child]:w-full',
-                  (current || found) && 'bg-hover text-foreground',
+                  (current || found) && 'text-foreground',
                 )}
                 onClick={() => onSeek(segment)}
                 data-media-segment={segment.id}

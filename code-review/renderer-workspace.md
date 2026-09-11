@@ -77,7 +77,17 @@ untrusted input on the way back in.
   for this window, then the folder the desktop created the window for, then
   nothing. The saved session is not a source: it restores a folder's tree
   state and tabs once that folder is open and never chooses the folder, so a
-  relaunch and a new window both land on the welcome screen. The desktop's
+  relaunch and a new window both land on the welcome screen. Arriving there
+  collapses the sidebar in the session domain, once per arrival:
+  `arriveAtWelcome` in `domain/session.ts` is reached from a restored
+  snapshot that names no folder, from `setSessionActiveFolder(null)`, and
+  from `reconcileSessionMembership` dropping the active folder, and a repeat
+  of the same "no folder" state is a no-op, so a reader's toggle on the
+  welcome screen survives a later library refetch. `use-workspace-session.ts`
+  reports the column collapsed during the render before that transition
+  lands, so a relaunch never paints it open first. A snapshot that still
+  names its folder keeps the reader's answer, which is what a reload lands
+  back in. The desktop's
   claim is a distinct pending state between the first two rows, so the race is
   settled by the ordering rather than by a guard beside it, and the welcome
   screen never flashes while a claim is outstanding. Reading the server's
@@ -142,7 +152,13 @@ untrusted input on the way back in.
   `renderer/src/features/retrieval/ui/search/backends.ts` is the whole list in
   tab order. A backend that search by meaning gates declares an index gate; the
   absence of one is the statement that the backend answers from the folder
-  itself and is never held back.
+  itself and is never held back. `offeredBackends` in the same module
+  withholds every gated backend while the folder reads as not set up or
+  unknown, so the surface is keyword search alone, with no tab strip, until
+  search by meaning is on. What not set up means is the window's decision:
+  `renderer/src/app/composition/folder/use-folder-readiness.ts` projects every
+  folder through the reader's own key, so the daemon's background state never
+  makes the mode appear on its own.
 - One source identity owns at most one document tab in a window. Tab
   transitions are queued and each re-reads the open set after the save it
   awaited, so an asynchronous caller's earlier duplicate check is never the
@@ -185,6 +201,12 @@ untrusted input on the way back in.
   the split is a width rather than a route. The document pane keeps a floor and
   the Agent pane yields, which is what makes a narrow window collapse the chat
   instead of crushing the page being read.
+- The titlebar's right-hand Chat toggle owns window-local visibility in app
+  composition. A hidden Chat stays mounted and inert, its resize handle is
+  absent, and reopening retains the remembered pane width and composer draft.
+  The Chat pane names its own conversation in its header, so a hidden pane
+  takes the name with it; the titlebar's shared slot carries document tabs
+  only, and stays empty otherwise.
 - Pane geometry is durable, held in the session snapshot and clamped by the
   same bounds in both directions. The Agent seam is a named ARIA separator with
   arrow-key steps and a double-click reset, and every path reports a width
@@ -195,7 +217,8 @@ untrusted input on the way back in.
   decides what the Agent may read; the same source reaches the composer through
   its keyboard mention path, which [Agent Panel](agent-panel.md) contracts.
   **Known Gap.** The sidebar rail is the exception. It resizes by pointer only
-  and is not in the tab order, so collapsing has a chord and a titlebar control
+  and is not in the tab order, so collapsing has a chord and a chrome control
+  (the sidebar header's toggle while open, the titlebar's once collapsed)
   while resizing has no keyboard equivalent.
 - Tree row order, visibility, and keyboard order all come from one model.
   Collapsed descendants create no DOM, and the whole keyboard contract is a
@@ -218,11 +241,11 @@ untrusted input on the way back in.
   names the home-shortened member path, and entry deletion names the
   folder-relative path, both in a copyable monospace block beside the sentence.
 - The strip above the workspace carries only things the reader did not ask
-  about directly. A refusal of their own request is said as an alert, a
-  capability StashBase could not reach as a quiet status, and an optional offer
-  as an offer with the thing to take up beside the dismissal. Order is by
-  urgency, so a refusal of something the reader did try precedes an offer of
-  something they have not asked for.
+  about directly. A refusal of their own request is said as an alert and a
+  capability StashBase could not reach as a quiet status. It carries no
+  offers and never invites setup of anything. Order is by urgency, so a
+  refusal of something the reader did try precedes a capability that could
+  not answer.
 - The open folder's cached views are re-read through one composer
   (`renderer/src/app/composition/folder/refresh-folder.ts`). Each feature owns
   the invalidation of its own keys and a caller names what changed rather than a

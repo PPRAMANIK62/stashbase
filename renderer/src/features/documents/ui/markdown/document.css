@@ -17,7 +17,9 @@
 .markdown-mode-control {
   position: absolute;
   z-index: 2;
-  top: 16px;
+  /* 6px puts the 28px control's centre 20px below the pane top, the same
+     line the Chat pane's header control sits on across the seam. */
+  top: 6px;
   right: 20px;
 }
 

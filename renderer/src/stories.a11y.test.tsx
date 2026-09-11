@@ -157,13 +157,16 @@ describe('story accessibility', () => {
 
   for (const { name, stories } of composedByModule) {
     for (const [storyName, Story] of stories) {
+      // Three axe environments per story under a fully parallel suite run
+      // regularly overrun the default 5s on the heaviest workspace stories;
+      // the timeout margin absorbs scheduler load, not slow scoring.
       it(`${name} · ${storyName} has no accessibility violations`, async () => {
         for (const environment of ENVIRONMENTS) {
           const violations = await scoreStory(Story, environment);
           expect(violations, `${name} · ${storyName} (${environment.label})`).toEqual([]);
           cleanup();
         }
-      });
+      }, 20_000);
     }
   }
 });

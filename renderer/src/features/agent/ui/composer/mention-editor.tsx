@@ -28,6 +28,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { InputMessageEditorContext } from '@/components/ui/input-message';
 import type { ContextStatus, MentionQuery } from '@/features/agent/domain/context';
 import { fontWeights } from '@/lib/font-weight';
+import { ambient } from '@/lib/springs';
 
 import {
   chipInPlace,
@@ -50,6 +51,7 @@ import {
   statusField,
 } from './mention-markers';
 import { mentionDecorations } from './mention-widgets';
+import { crossfadePlaceholder } from './placeholder-crossfade';
 
 export { chipRuns, serialize };
 
@@ -110,6 +112,7 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
     const dismissedRef = useRef(false);
     const editable = useRef(new Compartment());
     const placeholderCompartment = useRef(new Compartment());
+    const placeholderFade = useRef(new Compartment());
     const attributes = useRef(new Compartment());
     const theme = useRef(new Compartment());
     ctxRef.current = ctx;
@@ -179,6 +182,17 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
         }
         return false;
       };
+      // Tab on an empty field takes the placeholder as the draft when the
+      // composer says it is a request, and only then: a hint is not a draft.
+      const acceptPlaceholder = (target: EditorView) => {
+        const field = ctxRef.current;
+        if (!field.acceptPlaceholder || field.disabled || target.state.doc.length > 0) return false;
+        target.dispatch({
+          changes: { from: 0, insert: field.placeholder },
+          selection: { anchor: field.placeholder.length },
+        });
+        return true;
+      };
       const view = new EditorView({
         parent: host,
         state: EditorState.create({
@@ -196,6 +210,7 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
             mentionDecorations,
             EditorView.lineWrapping,
             placeholderCompartment.current.of(placeholder(ctxRef.current.placeholder)),
+            placeholderFade.current.of([]),
             editable.current.of(EditorView.editable.of(!ctxRef.current.disabled)),
             attributes.current.of(EditorView.contentAttributes.of({})),
             theme.current.of([]),
@@ -211,7 +226,7 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
                 },
               },
               { key: 'Shift-Enter', run: insertNewline },
-              { key: 'Tab', run: () => runListboxKey('Tab') },
+              { key: 'Tab', run: (target) => runListboxKey('Tab') || acceptPlaceholder(target) },
               { key: 'Escape', run: () => runListboxKey('Escape') },
               { key: 'Backspace', run: (target) => deleteMentionSelection(target, true) },
               { key: 'Delete', run: (target) => deleteMentionSelection(target, false) },
@@ -263,10 +278,17 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
       });
     }, [ctx.disabled]);
 
+    // The first placeholder is set with the state; later ones crossfade in.
+    const shownPlaceholder = useRef(ctxRef.current.placeholder);
     useEffect(() => {
-      viewRef.current?.dispatch({
-        effects: placeholderCompartment.current.reconfigure(placeholder(ctx.placeholder)),
-      });
+      const view = viewRef.current;
+      if (!view || shownPlaceholder.current === ctx.placeholder) return;
+      shownPlaceholder.current = ctx.placeholder;
+      return crossfadePlaceholder(
+        view,
+        { fade: placeholderFade.current, placeholder: placeholderCompartment.current },
+        ctx.placeholder,
+      );
     }, [ctx.placeholder]);
 
     const { fontSize, lineHeight, paddingX, paddingY } = ctx.metrics;
@@ -287,7 +309,14 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
             },
             '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--foreground)' },
             '.cm-line': { padding: '0' },
-            '.cm-placeholder': { color: 'var(--muted-foreground)' },
+            '.cm-placeholder': {
+              color: 'var(--muted-foreground)',
+              transition: `opacity ${ambient.crossfadeInMs}ms cubic-bezier(0.4, 0, 0.2, 1)`,
+            },
+            '.cm-content[data-placeholder-fading] .cm-placeholder': {
+              opacity: '0',
+              transitionDuration: `${ambient.crossfadeOutMs}ms`,
+            },
             '.cm-scroller': {
               fontFamily: 'inherit',
               lineHeight: 'inherit',

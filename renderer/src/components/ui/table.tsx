@@ -40,6 +40,10 @@ const TableContext = createContext<TableContextValue | null>(null);
 
 interface TableProps extends HTMLAttributes<HTMLTableElement> {
   children: ReactNode;
+  /** The body row that already wears the row tint as its selection, by its
+   *  `TableRow` index. The hover highlight skips it, so hovering the selected
+   *  row does not stack a second tint on it. */
+  selectedIndex?: number | null;
   /** Pins the table's rows to one step of the size ladder (default 36px,
    *  compact 28px — see /docs/sizes). Omitted, it follows the surrounding
    *  SizeProvider. */
@@ -47,7 +51,7 @@ interface TableProps extends HTMLAttributes<HTMLTableElement> {
 }
 
 const Table = forwardRef<HTMLTableElement, TableProps>(
-  ({ children, size, className, ...props }, ref) => {
+  ({ children, selectedIndex = null, size, className, ...props }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const sizeClasses = useSize(size);
 
@@ -58,7 +62,8 @@ const Table = forwardRef<HTMLTableElement, TableProps>(
       measureItems();
     }, [measureItems, children]);
 
-    const activeRect = activeIndex !== null ? itemRects[activeIndex] : null;
+    const activeRect =
+      activeIndex !== null && activeIndex !== selectedIndex ? itemRects[activeIndex] : null;
 
     const contextValue = useMemo(
       () => ({ registerItem, activeIndex }),

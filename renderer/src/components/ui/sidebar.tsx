@@ -190,6 +190,7 @@ export {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
+  useSidebar,
 } from '@/components/ui/sidebar-core';
 export {
   SidebarMenu,

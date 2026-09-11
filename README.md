@@ -33,9 +33,10 @@ scan or recording. StashBase helps turn that material into reusable context:
 - **Build a Wiki from your sources.** Ask an Agent to create a linked overview
   and focused pages that explain what's inside, with links back to the original
   files. Those pages become context for later work.
-- **Find the material that matters.** Search by meaning alongside keyword
-  search, with text extracted from PDFs, DOCX files, images, and recordings.
-  Results lead back to the source files.
+- **Find the material that matters.** Keyword search over everything, with
+  text extracted from PDFs, DOCX files, images, and recordings, and search by
+  meaning once you add your own embedding key. Results lead back to the
+  source files.
 - **Work with your agents.** Use the included OpenQuill, bring Claude Code or
   Codex into Chat, or connect an external MCP client to the same library.
 - **Keep your files yours.** Browse, read, and edit supported files alongside
@@ -69,7 +70,7 @@ troubleshooting.
 1. **Choose your material.** Open your own folder, or explore the Gallery in
    the app and choose **Make a copy** to download and open a ready-made Wiki.
 2. **Choose an Agent.** OpenQuill is included and selected initially; sign in
-   to StashBase to use its included model allowance. You can also select
+   to StashBase to use its free credits. You can also select
    Claude Code or Codex and use your own provider account.
 3. **Build and use the Wiki.** In a Chat scoped to your folder, try:
 
@@ -84,10 +85,9 @@ pages beside it, preserving Sources outside `wiki/`. Building or updating
 these pages is an explicit Agent request; opening a folder does not
 schedule automatic Wiki maintenance.
 
-The first folder offers setup for **search by meaning**. You can use StashBase
-sign-in with included monthly credits or your own OpenAI/OpenRouter key.
-Choose **Not now** to continue with keyword search. This setup is independent
-of building Wiki Pages and can be completed later in Settings.
+**Search by meaning** is off until you add your own OpenAI or OpenRouter key
+under **Settings → Search by Meaning**. Keyword search works without it, and
+turning it on is independent of building Wiki Pages.
 
 See [Using StashBase](docs/using-stashbase.md) for search, transcription, and
 everyday file workflows. You can also ask Chat **“How do I use StashBase?”**
@@ -115,9 +115,9 @@ search indexes are app-managed data. Removing a folder from the Library clears
 StashBase's state for it without deleting your files.
 
 Local browsing, editing, preview, and keyword search need no cloud account.
-OCR and optional audio/video transcription run locally. Hosted search by
-meaning sends relevant text to the selected embedding provider for indexing
-and queries for retrieval.
+OCR and optional audio/video transcription run locally. With your own
+embedding key added, search by meaning sends relevant text to that provider
+for indexing and queries for retrieval.
 
 OpenQuill runs locally, with prompts and necessary model context sent through
 StashBase's hosted model gateway. Claude Code and Codex use their own provider

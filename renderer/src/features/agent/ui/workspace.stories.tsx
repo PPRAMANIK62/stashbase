@@ -8,7 +8,6 @@ import { createAgentWorkspaceRuntime } from '@/features/agent/application/worksp
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { cn } from '@/lib/utils';
 
-import { AgentTitlebar } from './titlebar';
 import ManagedAgentWorkspace from './workspace';
 
 const storyInstructions = {
@@ -20,14 +19,14 @@ const abilities: Agent['abilities'] = {
   attachments: true,
   effort: true,
   models: true,
-  modes: true,
+  modes: ['default', 'plan', 'acceptEdits', 'auto'],
   skills: true,
 };
 
 const agents: Agent[] = [
-  { abilities, id: 'codex', label: 'Codex', needsSignIn: false, ready: true },
-  { abilities, id: 'claude', label: 'Claude Code', needsSignIn: false, ready: true },
-  { abilities, id: 'stashbase', label: 'OpenQuill', needsSignIn: false, ready: true },
+  { abilities, id: 'codex', label: 'Codex', models: [], needsSignIn: false, ready: true },
+  { abilities, id: 'claude', label: 'Claude Code', models: [], needsSignIn: false, ready: true },
+  { abilities, id: 'stashbase', label: 'OpenQuill', models: [], needsSignIn: false, ready: true },
 ];
 
 /** The same runtimes before any of them can carry a turn: one waiting on
@@ -223,10 +222,7 @@ function WorkspacePreview({
   return (
     <QueryClientProvider client={queryClient}>
       <div className={cn('h-[46rem]', docked ? 'w-[36rem] border-l border-border' : 'w-[64rem]')}>
-        <div className="flex h-11 items-center border-b border-border px-3">
-          <AgentTitlebar runtime={runtime} />
-        </div>
-        <div className="h-[calc(100%-2.75rem)]">
+        <div className="h-full">
           <ManagedAgentWorkspace
             catalog={{
               listAgents: async () => ({ agents: ready ? agents : pendingAgents }),

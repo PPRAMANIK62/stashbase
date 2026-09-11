@@ -95,7 +95,15 @@ interface MenuSurfaceOverlaysProps {
   mounted?: boolean;
 }
 
-/** The selected, hover, and focus overlays of one menu surface. */
+function sameRect(a: ItemRect, b: ItemRect): boolean {
+  return a.top === b.top && a.height === b.height && a.left === b.left && a.width === b.width;
+}
+
+/** The selected, hover, and focus overlays of one menu surface. The selected
+ *  and hover fills share one tint, so the current choice reads like a row
+ *  the pointer is resting on rather than a darker step, and hovering the
+ *  current choice paints nothing extra: stacking the two would darken the
+ *  very row that should stay put. */
 export function MenuSurfaceOverlays({
   activeRect,
   checkedRect,
@@ -106,6 +114,8 @@ export function MenuSurfaceOverlays({
 }: MenuSurfaceOverlaysProps) {
   const shape = useShape();
   if (!mounted) return null;
+  const hoverOnChecked =
+    activeRect !== null && checkedRect !== null && sameRect(activeRect, checkedRect);
 
   return (
     <>
@@ -113,7 +123,7 @@ export function MenuSurfaceOverlays({
       <AnimatePresence>
         {checkedRect && (
           <RowOverlay
-            className={`absolute ${shape.bg} pointer-events-none bg-active`}
+            className={`absolute ${shape.bg} pointer-events-none bg-hover`}
             from={false}
             tier={spring.moderate}
             to={{ ...overlayBox(checkedRect), opacity: 1 }}
@@ -123,7 +133,7 @@ export function MenuSurfaceOverlays({
 
       {/* Hover background */}
       <AnimatePresence>
-        {activeRect && (
+        {activeRect && !hoverOnChecked && (
           <RowOverlay
             className={`absolute ${shape.bg} pointer-events-none bg-hover`}
             from={{ opacity: 0, ...overlayBox(hoverOrigin ?? activeRect) }}

@@ -98,7 +98,7 @@ describe('AgentChats', () => {
     );
     const port = idleAgentSessionPort({ list, replay });
     renderWorkspace(port);
-    await screen.findByText('Your Wiki is here.');
+    await screen.findByText('From wiki to words.');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Planning notes' }));
 

@@ -1,10 +1,11 @@
 /** What the shop knows about an entry that the published index has not said
- *  yet, and how What's inside states its two shapes. */
+ *  yet, and which name a copy takes. */
 import { describe, expect, it } from 'vite-plus/test';
 
-import { copyFolderName, enrichedFromSnapshot, galleryContents, type GalleryEntry } from './entry';
+import { copyFolderName, enrichedFromSnapshot, type GalleryEntry } from './entry';
 
 const published: GalleryEntry = {
+  about: null,
   category: 'course',
   contents: '20 transcripts',
   description: 'A course.',
@@ -20,6 +21,7 @@ const published: GalleryEntry = {
 
 const bundled: GalleryEntry = {
   ...published,
+  about: 'Why it was made.',
   files: ['README.md'],
   screenshots: ['/api/gallery/image?src=bundled'],
   wikiPrompt: 'Build the wiki.',
@@ -28,6 +30,7 @@ const bundled: GalleryEntry = {
 describe('enrichedFromSnapshot', () => {
   it('fills only the slots the published entry left empty', () => {
     expect(enrichedFromSnapshot(published, [bundled])).toMatchObject({
+      about: 'Why it was made.',
       files: ['README.md'],
       screenshots: ['/api/gallery/image?src=bundled'],
       wikiPrompt: 'Build the wiki.',
@@ -43,19 +46,6 @@ describe('enrichedFromSnapshot', () => {
 
   it('leaves an entry the snapshot has never heard of alone', () => {
     expect(enrichedFromSnapshot({ ...published, id: 'new-entry' }, [bundled]).files).toBeNull();
-  });
-});
-
-describe('galleryContents', () => {
-  it('lists the published files, and stands in with the inventory line until then', () => {
-    expect(galleryContents(bundled)).toEqual({ files: ['README.md'], kind: 'files' });
-    expect(galleryContents(published)).toEqual({ kind: 'summary', line: '20 transcripts' });
-    // An entry that published an empty list has published nothing usable, so
-    // the stand-in answers rather than an empty tree.
-    expect(galleryContents({ ...published, files: [] })).toEqual({
-      kind: 'summary',
-      line: '20 transcripts',
-    });
   });
 });
 

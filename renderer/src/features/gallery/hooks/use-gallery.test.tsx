@@ -12,6 +12,7 @@ const bundledId = GALLERY_SNAPSHOT[0]?.id ?? '';
 
 function published(overrides: Partial<GalleryEntry> = {}): GalleryEntry {
   return {
+    about: null,
     category: 'course',
     contents: 'Published inventory',
     description: 'A course.',

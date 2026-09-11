@@ -68,13 +68,7 @@ const SidebarMenuSubButton = forwardRef<HTMLAnchorElement, SidebarMenuSubButtonP
         {Icon && <RowIcon icon={Icon} lit={lit} size={iconSize} />}
         {/* Sub-rows keep the parent rows' type size — only the row height
             steps down. */}
-        <MenuRowLabel
-          emphasized={isActive}
-          extras={content}
-          label={label}
-          lit={lit}
-          textClass={textClass}
-        />
+        <MenuRowLabel extras={content} label={label} lit={lit} textClass={textClass} />
       </>,
     );
   },

@@ -11,7 +11,9 @@ import { resolveAgentCli } from './agent-cli.ts';
 import { agentExecutableSource } from './agent-runtime-paths.ts';
 import { agentBootstrapStatus } from './agent-runtime-installer.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
+import { rememberedCatalogFor } from './agent-model-catalog.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import type { AgentModelCatalog } from '../shared/agent-runtime.ts';
 
 /** The renderer↔server wire vocabulary lives in `shared/agent-protocol.ts` so
  * the renderer can import it without pulling this module's server-only graph
@@ -28,8 +30,9 @@ export type {
 import type { AgentId } from '../shared/agent-protocol.ts';
 
 export type AgentRuntimeState = 'available' | 'unavailable' | 'failed';
-export const AGENT_ACCESS_MODES = ['default', 'acceptEdits', 'plan', 'auto'] as const;
-export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
+import { AGENT_ACCESS_MODES, type AgentAccessMode } from '../shared/agent-runtime.ts';
+
+export { AGENT_ACCESS_MODES, type AgentAccessMode };
 
 export function isAgentAccessMode(value: unknown): value is AgentAccessMode {
   return typeof value === 'string' && (AGENT_ACCESS_MODES as readonly string[]).includes(value);
@@ -56,7 +59,8 @@ export interface AgentCapabilities {
   approvals: true;
   history: true;
   attachments: boolean;
-  modes: boolean;
+  /** The permission promises this runtime can honor; empty hides the control. */
+  modes: readonly AgentAccessMode[];
   effort: boolean;
   /** The runtime can enumerate native models and accept an explicit choice;
    * the adapter owns whether that choice begins a session or a later turn. */
@@ -236,6 +240,8 @@ export interface AgentRuntimeDescriptor {
   bootstrap: ReturnType<typeof agentBootstrapStatus>;
   error?: string;
   capabilities: AgentCapabilities;
+  /** The runtime's remembered model catalog, once one has been read. */
+  catalog?: AgentModelCatalog;
 }
 
 const adapters = new Map<AgentId, AgentAdapter>();
@@ -296,7 +302,11 @@ export function agentAdapter(id: string): AgentAdapter | null {
  * upgraded while StashBase is open is reflected without a bundled-version
  * assumption. */
 export function discoverAgentRuntimes(): AgentRuntimeDescriptor[] {
-  return [...adapters.values()].map((adapter) => runtimeDescriptorFor(adapter));
+  return [...adapters.values()].map((adapter) => {
+    const descriptor = runtimeDescriptorFor(adapter);
+    const catalog = rememberedCatalogFor(descriptor);
+    return catalog ? { ...descriptor, catalog } : descriptor;
+  });
 }
 
 export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConnectionOptions): void {

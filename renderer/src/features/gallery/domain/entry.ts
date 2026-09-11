@@ -11,12 +11,18 @@ export interface GalleryEntry {
   readonly name: string;
   readonly category: string;
   readonly description: string;
-  /** Short inventory line, standing in for What's inside until `files` lands. */
+  /** The introduction the page opens with: why the wiki was made, what it
+   *  holds, who it is for. Plain text, paragraphs separated by a blank line. */
+  readonly about: string | null;
+  /** Published for the site; the app renders no surface for it. */
   readonly contents: string;
   readonly repo: string;
   readonly learnMore: string | null;
+  /** Published for the site; the app renders no surface for them. */
   readonly starterPrompts: readonly string[];
+  /** Published for the site; the app renders no surface for it. */
   readonly files: readonly string[] | null;
+  /** The request the wiki was built with, shown as its Agent Instructions. */
   readonly wikiPrompt: string | null;
   /** Already pointed at the daemon's proxy; the renderer may not reach the CDN. */
   readonly screenshots: readonly string[] | null;
@@ -44,23 +50,11 @@ export function enrichedFromSnapshot(
   if (!bundled) return entry;
   return {
     ...entry,
+    about: entry.about ?? bundled.about,
     files: entry.files ?? bundled.files,
     screenshots: entry.screenshots ?? bundled.screenshots,
     wikiPrompt: entry.wikiPrompt ?? bundled.wikiPrompt,
   };
-}
-
-/** What the detail page lists under What's inside: the published file list, or
- *  the inventory line standing in for it. Naming the two states here keeps the
- *  page from inventing a third. */
-export type GalleryContents =
-  | { readonly kind: 'files'; readonly files: readonly string[] }
-  | { readonly kind: 'summary'; readonly line: string };
-
-export function galleryContents(entry: GalleryEntry): GalleryContents {
-  return entry.files && entry.files.length > 0
-    ? { files: entry.files, kind: 'files' }
-    : { kind: 'summary', line: entry.contents };
 }
 
 /**

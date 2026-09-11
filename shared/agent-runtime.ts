@@ -11,6 +11,13 @@
 
 export type AgentBootstrapPhase = 'idle' | 'installing' | 'authenticating' | 'configuring' | 'ready' | 'failed';
 
+/** The product's four permission promises, in the order the composer offers
+ * them: Ask, Edit, Plan, Auto. A runtime declares which of them it can honor
+ * in its `modes` capability; the wording of each promise is the product's,
+ * and each adapter owns how its native policy fulfils it. */
+export const AGENT_ACCESS_MODES = ['default', 'acceptEdits', 'plan', 'auto'] as const;
+export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
+
 export type AgentBootstrapFailureStage = 'discovery' | 'installation' | 'authentication' | 'mcp';
 
 export type AgentBootstrapFailureCode =
@@ -61,6 +68,15 @@ export interface AgentRuntimeDebugState {
   nextTurnFailure: AgentTurnFailureSimulation;
 }
 
+/** What a runtime was last seen offering: its models in its own order, the
+ * model it ran when nothing was chosen, and when that was read. A property
+ * of the runtime rather than of any chat, remembered by the server. */
+export interface AgentModelCatalog {
+  models: import('./agent-protocol.ts').AgentModel[];
+  defaultModel?: string;
+  readAt: string;
+}
+
 export interface Agent {
   id: import('./agent-protocol.ts').AgentId;
   label: string;
@@ -88,13 +104,16 @@ export interface Agent {
     approvals: true;
     history: true;
     attachments: boolean;
-    modes: boolean;
+    /** The permission promises this runtime can honor; empty hides the control. */
+    modes: readonly AgentAccessMode[];
     effort: boolean;
     models: boolean;
     skills: boolean;
     steering: boolean;
     titleHint: boolean;
   };
+  /** Present once the runtime's catalog has been read at least once. */
+  catalog?: AgentModelCatalog;
 }
 
 export interface AgentsResponse {

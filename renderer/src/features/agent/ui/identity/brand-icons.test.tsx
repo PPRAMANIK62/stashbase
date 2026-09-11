@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vite-plus/test';
 
-import { CodexIcon } from './brand-icons';
+import { CodexIcon, OpenQuillIcon } from './brand-icons';
 
 describe('Agent brand icons', () => {
   it('gives every inlined mark gradient ids of its own', () => {
@@ -22,5 +22,15 @@ describe('Agent brand icons', () => {
       expect(id).toMatch(/^lobe-icons-codex-/u);
       expect(svg.innerHTML).toContain(`url(#${id})`);
     }
+  });
+
+  it("paints the OpenQuill feather at the vendor marks' footprint", () => {
+    const { container } = render(<OpenQuillIcon size={16} />);
+    // The feather is lucide's own svg; the widened box is the whole fix, so
+    // the attribute is the fact under test.
+    const svg = container.querySelector('svg'); // dom-contract: lucide renders one svg root
+    expect(svg?.getAttribute('viewBox')).toBe('-4 -4 32 32');
+    expect(svg?.getAttribute('width')).toBe('16');
+    expect(svg?.getAttribute('stroke-width')).toBe('2.5');
   });
 });

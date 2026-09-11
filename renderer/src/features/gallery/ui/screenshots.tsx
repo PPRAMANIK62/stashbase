@@ -1,3 +1,7 @@
+/** A Gallery entry's published screenshots: one 16:9 hero and a strip of
+ *  thumbnails beneath it that picks which shot the hero shows. The frame and
+ *  the strip keep their geometry whether an entry published ten shots, one,
+ *  or none, so the page never reshapes around what is missing. */
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -5,10 +9,19 @@ import { Button } from '@/components/ui/button';
 import { focusRing } from '@/lib/focus-ring';
 import { cn } from '@/lib/utils';
 
-/** The hero keeps a landscape frame but stops growing on a wide window: a
- *  screenshot tall enough to push the rest of the page below the fold has
- *  stopped being an introduction. */
-const HERO_FRAME = { aspectRatio: '16 / 10', maxHeight: '22rem' } as const;
+/** The hero is a 16:9 frame, full stop. It never trades its ratio for the
+ *  column's width: a wide window gives the frame a wider column only up to
+ *  the cap the entry page sets on that column, and the width past it goes to
+ *  the text. A frame that stretched into a banner cropped every screenshot
+ *  to a strip. */
+const HERO_FRAME = { aspectRatio: '16 / 9' } as const;
+
+/** A thumbnail is a picture to recognize, not a dot to count: wide enough
+ *  that a page's layout reads at a glance, three to a row under the hero at
+ *  the column's full width, the rest one nudge away. `THUMB_STEP` is that
+ *  width plus the strip's gap, so one arrow press moves exactly one. */
+const THUMB_WIDTH = 'w-40';
+const THUMB_STEP = 168;
 
 /**
  * The curated screenshots: one hero across the page's full width, and a strip
@@ -50,7 +63,7 @@ export function GalleryScreenshots({
   /** One thumbnail plus its gap. The native scroller supplies the easing; the
    *  arrow only picks the destination. */
   const nudge = (direction: 1 | -1) => {
-    stripRef.current?.scrollBy({ behavior: 'smooth', left: direction * 208 });
+    stripRef.current?.scrollBy({ behavior: 'smooth', left: direction * THUMB_STEP });
   };
 
   const hero = screenshots[shot];
@@ -92,7 +105,7 @@ export function GalleryScreenshots({
                 aria-label={`Screenshot ${index + 1}`}
                 className={focusRing(
                   cn(
-                    'block w-24 shrink-0 cursor-pointer snap-start overflow-hidden rounded-md border bg-surface-3 p-0 transition-colors duration-fast outline-none',
+                    `block ${THUMB_WIDTH} shrink-0 cursor-pointer snap-start overflow-hidden rounded-md border bg-surface-3 p-0 transition-colors duration-fast outline-none`,
                     // Selected reads as ink, not accent: the accent is reserved
                     // for the page's one action, and these repeat.
                     index === shot
@@ -106,7 +119,7 @@ export function GalleryScreenshots({
               >
                 <img
                   alt=""
-                  className="block aspect-[16/10] w-full object-cover object-top"
+                  className="block aspect-video w-full object-cover object-top"
                   src={url}
                 />
               </button>

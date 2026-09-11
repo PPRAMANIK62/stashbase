@@ -59,13 +59,23 @@ describe('workspace session restore', () => {
       }),
     });
 
+    const sidebarFrames: boolean[] = [];
     const hook = renderHook(
-      () =>
-        useWorkspaceSession(
+      () => {
+        const controller = useWorkspaceSession(
           api,
-          sessionPersistence({ load: async () => savedSession(member.path, remembered) }),
+          sessionPersistence({
+            load: async () => ({
+              ...savedSession(member.path, remembered),
+              // Written while working in the folder with the column open.
+              shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 240 },
+            }),
+          }),
           libraryLifecycle(),
-        ),
+        );
+        sidebarFrames.push(controller.shell.sidebarOpen);
+        return controller;
+      },
       { wrapper: queryWrapper(queryClient) },
     );
 
@@ -73,6 +83,10 @@ describe('workspace session restore', () => {
       expect(hook.result.current.status).toEqual({ kind: 'ready', restoredFolder: null }),
     );
     expect(api.openFolder).not.toHaveBeenCalled();
+    // Arriving at the welcome screen collapses the bare sidebar, and no render
+    // on the way there shows it open first.
+    expect(hook.result.current.shell.sidebarOpen).toBe(false);
+    expect(sidebarFrames).not.toContain(true);
   });
 
   it('restores the saved folder session once that folder is open', async () => {
@@ -109,6 +123,9 @@ describe('workspace session restore', () => {
       }),
     );
     expect(api.openFolder).not.toHaveBeenCalled();
+    // Landing back in the folder is not an arrival at the welcome screen, so
+    // the column the reader had collapsed there stays collapsed.
+    expect(hook.result.current.shell.sidebarOpen).toBe(false);
   });
 
   it('drops a persisted folder that is no longer a library member', async () => {
@@ -130,7 +147,13 @@ describe('workspace session restore', () => {
       () =>
         useWorkspaceSession(
           api,
-          sessionPersistence({ load: async () => savedSession(member.path), save }),
+          sessionPersistence({
+            load: async () => ({
+              ...savedSession(member.path),
+              shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 240 },
+            }),
+            save,
+          }),
           libraryLifecycle(),
         ),
       { wrapper: queryWrapper(queryClient) },
@@ -139,9 +162,12 @@ describe('workspace session restore', () => {
     await waitFor(() => expect(hook.result.current.status.kind).toBe('ready'));
     await act(async () => hook.result.current.runtime.flush());
     expect(api.openFolder).not.toHaveBeenCalled();
+    // Its folder gone, the window is on the welcome screen, and arrives there
+    // with the sidebar collapsed like any other.
     expect(save.mock.calls.at(-1)?.[0]).toMatchObject({
       activeFolderPath: null,
       folders: [],
+      shell: { sidebarOpen: false },
     });
   });
 

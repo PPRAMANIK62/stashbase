@@ -132,8 +132,9 @@
      The mark's own colours, used nowhere but the logo. The mark has no
      ground of its own — it sits transparent on the hosting surface. The S
      edge is the same ink pair as --foreground; the frame gray stays fixed,
-     so the mark is always gray + ink in either scheme. */
-  --brand-frame: #6b7280;
+     so the mark is always gray + ink in either scheme. It sits on the same
+     neutral ramp as the ink, a step back rather than a different hue. */
+  --brand-frame: #a3a3a3;
   --brand-accent: light-dark(#171717, #f5f5f5);
 
   /* ── Badge palette ──
@@ -718,9 +719,14 @@ html[data-reading-text-size='large'] {
   }
 }
 
-.scroll-fade,
-.scroll-fade-x {
-  --scroll-fade-size: 48px;
+/* The default size lives in @layer base so a utility such as
+   `[--scroll-fade-size:1rem]` can still win: unlayered, this declaration
+   would outrank every Tailwind layer and the override would be dead. */
+@layer base {
+  .scroll-fade,
+  .scroll-fade-x {
+    --scroll-fade-size: 48px;
+  }
 }
 
 /* Static fallback: fade both edges. */

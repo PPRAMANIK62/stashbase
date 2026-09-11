@@ -2,12 +2,10 @@
  *  folders, the three ways to add one, and the Gallery band the caller
  *  composes in. */
 import { useQuery } from '@tanstack/react-query';
-import { Folder, FolderMinus, LoaderCircle, MoreHorizontal } from 'lucide-react';
+import { LoaderCircle, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { DropdownContent, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
-import { MenuItem } from '@/components/ui/menu-item';
 import type {
   GitHubImportPort,
   LibraryFolderPickerPort,
@@ -42,9 +40,13 @@ export interface LibraryWelcomeProps {
   lifecycle: LibraryLifecyclePort;
 }
 
-/** The menu a recent row shows on hover. It is a sibling of the row rather
- *  than a child, because the row is itself a button and a button cannot hold
- *  another. */
+/** The row's one action, shown on hover: a direct ✕ that asks the remove
+ *  dialog, the way an editor clears a recents row — one action needs no
+ *  menu. It is a sibling of the row rather than a child, because the row is
+ *  itself a button and a button cannot hold another. A bare button rather
+ *  than the kit's ghost: its hover fill would nest a second gray box inside
+ *  the row's own tint, so the hover feedback here is ink weight alone, and
+ *  only the press paints a fill. */
 function RecentFolderActions({
   disabled,
   name,
@@ -55,28 +57,21 @@ function RecentFolderActions({
   onRemove(): void;
 }) {
   return (
-    <DropdownMenu disabled={disabled}>
-      <DropdownTrigger
-        render={
-          <Button
-            aria-label={`Actions for ${name}`}
-            className="absolute top-1/2 right-2 -translate-y-1/2 opacity-0 transition-opacity duration-fast group-focus-within:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100"
-            size="icon-compact"
-            variant="ghost"
-          >
-            <MoreHorizontal aria-hidden="true" />
-          </Button>
-        }
-      />
-      <DropdownContent align="end" className="w-52">
-        <MenuItem
-          className="text-destructive"
-          icon={FolderMinus}
-          label="Remove from Library"
-          onSelect={onRemove}
-        />
-      </DropdownContent>
-    </DropdownMenu>
+    <button
+      aria-label={`Remove ${name}`}
+      className={cn(
+        'absolute top-1/2 right-2 flex size-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[color,opacity] duration-fast outline-none',
+        'group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100',
+        'hover:text-foreground active:bg-hover disabled:pointer-events-none',
+        '[&_svg]:size-4 [&_svg]:stroke-[1.5] [&_svg]:transition-[stroke-width] [&_svg]:duration-fast hover:[&_svg]:stroke-2',
+        focusRing(),
+      )}
+      disabled={disabled}
+      onClick={onRemove}
+      type="button"
+    >
+      <X aria-hidden="true" />
+    </button>
   );
 }
 
@@ -188,23 +183,25 @@ export function LibraryWelcome({
         <section aria-label="Choose a folder" className="mt-10 w-full max-w-5xl">
           <div className="grid grid-cols-1 gap-6 @min-[44rem]:grid-cols-2">
             {/* Rules run edge to edge, as they do in every framed list in the
-             * app, so the inset lives on the rows rather than the frame. */}
-            <ul
-              aria-label="Add a folder"
-              className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface-2 shadow-surface-2"
-            >
-              {ways.map((way) => (
-                <li className="flex flex-1 items-center gap-4 px-4 py-3.5" key={way.title}>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-body font-medium">{way.title}</p>
-                    <p className="mt-0.5 text-caption leading-snug text-muted-foreground">
-                      {way.detail}
-                    </p>
-                  </div>
-                  {way.action}
-                </li>
-              ))}
-            </ul>
+             * app, so the inset lives on the rows rather than the frame. The
+             * header mirrors Recent's, so the two framed columns read as one
+             * titled pair. */}
+            <div className="flex min-w-0 flex-col rounded-xl border border-border bg-surface-2 shadow-surface-2">
+              <h2 className="border-b border-border px-4 py-3 text-body font-medium">Start</h2>
+              <ul aria-label="Add a folder" className="flex flex-1 flex-col divide-y divide-border">
+                {ways.map((way) => (
+                  <li className="flex flex-1 items-center gap-4 px-4 py-3.5" key={way.title}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-body font-medium">{way.title}</p>
+                      <p className="mt-0.5 text-caption leading-snug text-muted-foreground">
+                        {way.detail}
+                      </p>
+                    </div>
+                    {way.action}
+                  </li>
+                ))}
+              </ul>
+            </div>
 
             {/* The list gets a frame of its own, the same paper and hairline
              * as the card beside it, so the column's weight is the box and
@@ -214,12 +211,13 @@ export function LibraryWelcome({
             <div className="flex min-w-0 flex-col rounded-xl border border-border bg-surface-2 shadow-surface-2">
               <h2 className="border-b border-border px-4 py-3 text-body font-medium">Recent</h2>
               {recent.length > 0 ? (
-                /* Five 3rem rows plus the ring padding, so the list ends on a
-                 * whole row, and a half-row fade at its foot says the rest
-                 * scrolls without smudging the last row the reader can see. */
+                /* Five 2.75rem rows plus the ring padding, so the list ends on
+                 * a whole row: the fade at its foot then sits in the blank
+                 * below the fifth row's text, never across a sliver of the
+                 * sixth. Keep this sum in step with the row height below. */
                 <ul
                   aria-label="Recent folders"
-                  className="scroll-fade max-h-[15.5rem] overflow-y-auto p-1 [--scroll-fade-size:1.5rem]"
+                  className="scroll-fade max-h-[14.25rem] overflow-y-auto p-1 [--scroll-fade-size:1rem]"
                 >
                   {recent.map((member) => {
                     const name = folderName(member.path);
@@ -230,7 +228,12 @@ export function LibraryWelcome({
                       <li className="group relative" key={member.path}>
                         <button
                           className={cn(
-                            'flex h-12 w-full cursor-pointer items-center gap-3 rounded-lg pr-12 pl-3 text-left transition-colors duration-fast outline-none hover:bg-hover disabled:pointer-events-none disabled:opacity-50',
+                            // One line, no leading glyph: every row here is
+                            // a folder, so the name carries the row and the
+                            // path sits at the far edge in the caption
+                            // voice — the two-line stack read as a dense
+                            // text block against the card's empty right.
+                            'flex h-11 w-full cursor-pointer items-center gap-3 rounded-lg pr-12 pl-4 text-left transition-colors duration-fast outline-none hover:bg-hover disabled:pointer-events-none disabled:opacity-50',
                             focusRing(),
                           )}
                           disabled={folders.isPending}
@@ -238,18 +241,8 @@ export function LibraryWelcome({
                           title={member.path}
                           type="button"
                         >
-                          <Folder
-                            aria-hidden="true"
-                            className="size-4 shrink-0 text-muted-foreground transition-[color,stroke-width] duration-fast group-hover:stroke-2 group-hover:text-foreground"
-                            strokeWidth={1.5}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-body font-medium">{name}</span>
-                            {/* The row already says the folder's name, so the
-                             * path stops at the directory it sits in. */}
-                            <span className="mt-0.5 block truncate text-caption text-muted-foreground">
-                              {displayFolderPath(parentFolderPath(member.path), homeDirectory)}
-                            </span>
+                          <span className="max-w-[70%] shrink-0 truncate text-body font-medium">
+                            {name}
                           </span>
                           {isOpening && (
                             <LoaderCircle
@@ -257,6 +250,14 @@ export function LibraryWelcome({
                               className="size-3.5 shrink-0 motion-safe:animate-spin"
                             />
                           )}
+                          {/* The path trails the name in the caption voice —
+                           * one left-anchored phrase, because pushing it to
+                           * the card's far edge leaves a dead gap this wide
+                           * card cannot close. It stops at the directory the
+                           * folder sits in; the name is already the row. */}
+                          <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground">
+                            {displayFolderPath(parentFolderPath(member.path), homeDirectory)}
+                          </span>
                         </button>
                         <RecentFolderActions
                           disabled={folders.isPending || removal.isPending}
@@ -290,7 +291,7 @@ export function LibraryWelcome({
           <section className="mt-10 w-full max-w-5xl">
             <h2 className="text-title font-medium">Or start from a project in the Gallery</h2>
             <p className="mt-1 max-w-lg text-body leading-relaxed text-muted-foreground">
-              Real folders, already organized into a wiki. Make a copy and build on it.
+              Find something that inspires you. Make a copy and build on it.
             </p>
             <div className="mt-4">{gallery}</div>
           </section>

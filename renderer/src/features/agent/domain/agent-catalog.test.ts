@@ -11,6 +11,7 @@ const PENDING_CODEX = agentDefinition({ id: 'codex', label: 'Codex', ready: fals
 const SIGN_IN_CLAUDE = agentDefinition({
   id: 'claude',
   label: 'Claude Code',
+  models: [],
   needsSignIn: true,
   ready: false,
 });

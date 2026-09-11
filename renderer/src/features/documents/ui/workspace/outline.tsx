@@ -80,8 +80,11 @@ function OutlineNodeItem({ collapsed, depth, node, runtime, toggle }: OutlineNod
           {isCollapsed ? <ChevronRight aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
         </SidebarMenuAction>
       )}
+      {/* pl-0: every outline row already reserves the 32px chevron slot
+          (pl-8), so the sub's own text inset would deepen each level to
+          24px. Rail + margin alone give an even 16px step per level. */}
       {hasChildren && (
-        <SidebarMenuSub id={subtreeId} open={!isCollapsed}>
+        <SidebarMenuSub className="pl-0" id={subtreeId} open={!isCollapsed}>
           {node.children.map((child) => (
             <OutlineNodeItem
               collapsed={collapsed}

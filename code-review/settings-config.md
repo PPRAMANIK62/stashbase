@@ -47,12 +47,12 @@ read-only access surface external clients copy from.
   Environment variables may isolate automated tests or select runtime plumbing,
   but are never the product credential source of truth.
 - Every credential a Settings section touches arrives through a Settings-owned
-  Port and no other route. Embedding and the hosted account go through
-  `EmbedderPort` in
-  `renderer/src/features/settings/application/embedder-port.ts`, transcription
-  through `TranscriptionPort`, Agent runtime readiness and the hosted allowance
-  through `AgentRuntimePort`, and MCP access through `McpAccessPort`, all
-  declared in `renderer/src/features/settings/application/ports.ts`. A sibling
+  Port and no other route. The embedding key goes through `EmbedderPort` in
+  `renderer/src/features/settings/application/embedder-port.ts`; the hosted
+  account through `AccountPort`, Agent runtime readiness and OpenQuill's
+  credits through `AgentRuntimePort`, transcription through
+  `TranscriptionPort`, and MCP access through `McpAccessPort`, all declared in
+  `renderer/src/features/settings/application/ports.ts`. A sibling
   feature cannot reach any of them, because a feature imports only
   `renderer/src/features/settings/public.ts`.
 - A key the reader types is held in the panel's own field, submitted as a
@@ -65,17 +65,26 @@ read-only access surface external clients copy from.
   per-view toggle that the renderer never persists. The token reaches the
   renderer only as part of a read the reader asked for, and rotation answers
   with the whole listener state so the page never guesses what took effect.
-- Account OAuth starts from one place in this renderer, the search-by-meaning
-  Settings panel, and only the Node server persists its session. A window
-  polls the flow it started and never holds the session itself.
+- Account OAuth starts from two places in this renderer, the account row at
+  the foot of the sidebar and the Agents section of Settings, through one
+  `AccountPort` and always with purpose `account`; the renderer never starts
+  an embedding-purpose flow and never selects the hosted embedding source.
+  Only the Node server persists the session. A window polls the flow it
+  started and never holds the session itself.
 - The Agent runtime rows expose readiness, installation, sign-in, and reset for
-  a runtime, never that runtime's own credentials.
+  a runtime, never that runtime's own credentials. OpenQuill's **Sign in** is
+  the account sign-in, run through the same Port as the account row.
 
 ## Persistence Invariants
 
 - The config path is `~/.stashbase/config.json`. Successful writes are atomic
   and restrict POSIX modes to the owning user; readers validate and normalize
   domain values before exposing them.
+- `agentModelCatalogs` is a memory, not a preference: each native runtime's
+  last-read model catalog and the model it last ran with nothing chosen, kept
+  so a fresh Chat can name them before a session exists. Losing it costs one
+  runtime-level read, no route accepts it from a request body, and its owner
+  is [Agent Runtime](agent-runtime.md).
 - A strict read or write reports malformed, inaccessible, or unwritable state.
   A fallback read may preserve app availability but must not pretend a failed
   write persisted. Folder membership, recents, favorites, and seed-state
@@ -272,65 +281,57 @@ The Updates feature owns every sentence about updating and Settings may not
 import it, so the row it renders is named in
 `renderer/src/shared/domain/software-update.ts` and filled in by composition.
 
-## Search Setup Invitation
+## Account
 
-The invitation to set up search by meaning is one-time and application-wide,
-never per folder. The offer appears once, at the first folder a reader
-activates, and a completed or declined choice is remembered across every later
-folder and every relaunch. Declining costs no local functionality. Keyword
-search, reading, editing, preparation, and Wiki Pages are all independent of
-embedding authorization, and Build Wiki has no setup request or correlated
-result.
+The StashBase account exists for OpenQuill's free credits and for nothing
+else. Signing in never turns search by meaning on, and no search surface
+reads the account.
 
-- The answer is a durable server-side preference. `OnboardingPreferences` in
-  `shared/preferences.ts` stores the notice revision the reader answered, over
-  `/api/onboarding`. Storing the revision rather than a boolean is what lets a
-  materially changed invitation be re-offered deliberately by raising the
-  revision this build sends; the server only stores the number it is given, so
-  the current revision is app policy rather than wire vocabulary.
-- It is deliberately not browser storage. A decline has to survive a relaunch
-  and reach every window, and this renderer writes no browser storage anywhere.
-  A folder-scoped skip left over from the retired per-folder model is not
-  migrated. It is ignored, and the reader is offered the application-wide
-  invitation once.
-- The decision is a pure function in
-  `renderer/src/features/settings/domain/search-setup-invitation.ts`, which
-  answers `offer` only when the stored answer has loaded, the active folder's
-  readiness has said an embedding source is not configured, the stored revision
-  is older than this build's, and a folder is active. Both unknowns are
-  modelled as unknown rather than false, so a reader who is already set up
-  never sees the offer flash while the answers are still in flight.
-- Answering is recorded on either path, because a reader who was shown the
-  invitation has answered it whether they took it up or declined. Closing is
-  local state rather than a read of that write, so nobody watches a round trip
-  to dismiss a notice. A failed write leaves the stored answer alone and the
-  invitation returns on a later launch, which is the safe direction to fail.
-- The invitation is a non-blocking notice in the strip above the workspace and
-  deliberately not a dialog. Onboarding must not gate first value behind a
-  retrieval choice, and a modal between the reader and the files they just
-  opened is exactly that gate. It is last in the strip, because a refusal of
-  something the reader did try is more urgent than an offer of something they
-  have not asked for.
-- Taking it up records the answer and opens the search-by-meaning Settings
-  section, which is why the offer is composed where the Settings command lives
-  (`renderer/src/app/composition/commands/use-workspace-commands.ts`) and
-  presented by `renderer/src/app/composition/folder/use-workspace-notices.ts`.
-- Two manual routes back remain. The **By meaning** search mode says that
-  search by meaning needs setting up and offers **Open Settings** whenever it
-  is the selected mode, and the sidebar's own Settings entry opens the section
-  directly. **Known Gap.** There is no persistent Files-panel setup action in
-  this renderer. The Files surface signals that the folder needs attention but
-  carries no route into setup, so a reader who declined and never selects the
-  By meaning mode reaches it only through Settings.
+- `AccountPort` reads `/api/account`, starts and polls the account-purpose
+  OAuth flow, signs out, and fetches the provider's picture as bytes;
+  `renderer/src/features/settings/infrastructure/account-api.ts` maps the
+  wire, leaves the search-credit fields the server still sends unread, and
+  speaks to the server origin directly for the picture, because the page may
+  only paint an image it holds as a blob. `hooks/use-account.ts` owns the
+  browser round trip as one pending state and, when the account changes,
+  invalidates the Agent catalog, the credits, and the embedding source,
+  because the server still resolves the source from the session (see Known
+  Gaps); its `useAccountAvatar` turns the bytes into an object URL and
+  revokes it when replaced. A missing picture is an initial, never a failure.
+- Two views, one command. `ui/account/sidebar-account-row.tsx` is the row at
+  the foot of the sidebar: **Sign in** in one click while signed out, and the
+  person's name behind the same plain glyph once signed in, with a menu that
+  opens on their picture, name, and email, then one **OpenQuill credits**
+  line with its bar, then **Sign out**. The picture stays inside the menu on purpose, so
+  the sidebar's foot remains one quiet column of glyphs. The Agents panel names the same
+  person under **Account** and starts the same sign-in from a runtime row
+  that reports `account-required`.
+
+## Search by Meaning
+
+Search by meaning exists in a window only while the reader's own key answers
+embeddings. `hooks/use-embedder.ts` publishes that as `useSearchKeyConfigured`,
+true once `keyIsActive` holds for the source the server reports, false for
+any other source the server may resolve, and null until the source is read.
+The window projects every folder through it
+(`renderer/src/app/composition/folder/use-folder-readiness.ts`), so a folder
+reads as not set up whatever the daemon is doing in the background, and the
+search surface withholds its meaning-based mode, its tab strip, and every
+explanation of the mode on not-set-up and unknown. Nothing offers the setup:
+no notice, no strip entry, and no route out of the search panel. The
+Search by Meaning section holds one row, the key, and turning search by
+meaning off is removing it.
 
 ## Product Vocabulary
 
 The product says search by meaning, never AI Index. The Settings section is
-labeled Search by Meaning and its source group is **Source**, not Source file.
-Hosted search credits are separate from OpenQuill's seven-day allowance,
-and the two are said in different places. The search-by-meaning panel describes
-included monthly credits for embeddings, and the Agents panel describes the
-standing 7-day Agent allowance. Do not merge them into one quota sentence.
+labeled Search by Meaning, sits after Transcription with the other
+bring-your-own capabilities, and its one group is **Embedding key**. Search
+has no quota sentence at all. **Credits** names OpenQuill's free seven-day
+quota, said as **Free credits** in the Agents panel, whose lede names
+OpenQuill, and as **OpenQuill credits** in the sidebar's account menu, which
+has no such context; `allowance` is the wire and type name behind it and
+never appears in copy.
 
 The directory `renderer/src/features/settings/ui/ai-index/` still carries the
 retired name on disk, and so do the section id every caller passes and the
@@ -345,12 +346,23 @@ path. Renaming them is a separate change.
   size. A strict Content Security Policy rules out an inline script in the
   entry document, so closing this means handing the snapshot to the window from
   the host before it loads.
-- Hosted account identity has no section of its own. Signing in lives on the
-  embedder Port behind the Search by Meaning section, because that section was
-  the first to need it, so a runtime row that needs an account hands the reader
-  to Search by Meaning rather than to an account surface. The hand-off works
-  and is tested; the placement is what remains wrong, and it stays that way
-  until account earns its own lifecycle inside Settings.
+- The server has not followed the renderer yet. `getEmbeddingSource` in
+  `server/app-config.ts` still resolves a signed-in session to
+  `stashbase-account` when no key is stored, and the retired-local migration
+  and key removal fall back to it too, so a sign-in for OpenQuill still makes
+  hosted indexing bind on the next start and spend the account's search
+  quota; the renderer projects that source as not set up and never shows it.
+  `PUT /api/account/source`, the `embedding` OAuth purpose, the quota fields
+  on `GET /api/account`, `stashbase-account` in
+  `shared/protocols/http/embedder.ts`, and the `quota-exhausted` index state
+  remain on the wire with no renderer path that reaches them. `DELETE
+  /api/account` still resets the indexer when the hosted source was active.
+  `searchSetupInvitationVersion` in `shared/protocols/http/onboarding.ts` and
+  its route have no renderer reader. Retiring all of that is the server side
+  of the same change.
+- The composer's setup gate cannot sign in. It offers **Set up OpenQuill**,
+  which bootstraps and fails with `account-required`; the route is **Agent
+  settings** beside it, where the Agents section signs in.
 
 ## Implementation Map
 
@@ -363,15 +375,16 @@ path. Renaming them is a separate change.
 | Renderer Interface | `renderer/src/features/settings/public.ts`, bound once in `renderer/src/app/dependencies.ts` |
 | Software updates | `renderer/src/features/updates/`, whose phase table owns every sentence, with the Settings row shape in `renderer/src/shared/domain/software-update.ts` |
 | Renderer Ports | `renderer/src/features/settings/application/ports.ts` and `application/embedder-port.ts`, with the shared read keys in `application/queries.ts` and the sentence maps in `application/failure-messages.ts` |
-| Renderer Adapters | `renderer/src/features/settings/infrastructure/agent-runtime-api.ts`, `appearance-api.ts`, `capture-api.ts`, `embedder-api.ts`, `mcp-access-api.ts`, `onboarding-api.ts`, `transcription-api.ts`, each built over the one Settings refusal ladder in `infrastructure/settings-request.ts` |
-| Panel controllers | `renderer/src/features/settings/hooks/use-settings-command.ts` plus one hook per capability in `hooks/use-appearance.ts`, `hooks/use-capture.ts`, `use-embedder.ts`, `use-mcp-access.ts`, `use-transcription.ts`, `use-agent-runtimes.ts`, `use-search-setup-invitation.ts` |
+| Renderer Adapters | `renderer/src/features/settings/infrastructure/account-api.ts`, `agent-runtime-api.ts`, `appearance-api.ts`, `capture-api.ts`, `embedder-api.ts`, `mcp-access-api.ts`, `transcription-api.ts`, each built over the one Settings refusal ladder in `infrastructure/settings-request.ts` |
+| Panel controllers | `renderer/src/features/settings/hooks/use-settings-command.ts` plus one hook per capability in `hooks/use-account.ts`, `hooks/use-appearance.ts`, `hooks/use-capture.ts`, `use-embedder.ts` (which also publishes `useSearchKeyConfigured`), `use-mcp-access.ts`, `use-transcription.ts`, `use-agent-runtimes.ts` |
 | Settings views | `renderer/src/features/settings/ui/settings.tsx`, `ui/settings-types.ts`, `ui/managed-settings.tsx`, `ui/shell.tsx`, `ui/rows.tsx`, and the panels `ui/general/general-panel.tsx`, `ui/appearance/appearance-panel.tsx` over its `ui/appearance/preset-choice.tsx`, `ui/agents/agents-panel.tsx`, `ui/ai-index/ai-index-panel.tsx`, `ui/transcription/transcription-panel.tsx`, `ui/mcp/mcp-access-panel.tsx` |
-| Setup invitation | `renderer/src/features/settings/domain/search-setup-invitation.ts`, `hooks/use-search-setup-invitation.ts`, `infrastructure/onboarding-api.ts`, composed by `renderer/src/app/shell.tsx` and `renderer/src/app/composition/commands/use-workspace-commands.ts`, presented by `renderer/src/app/composition/folder/use-workspace-notices.ts` and `renderer/src/app/composition/layout/workspace-notices.tsx` |
+| Account row | `renderer/src/features/settings/ui/account/sidebar-account-row.tsx` over `ui/account/account-avatar.tsx`, composed into the sidebar's footer by `renderer/src/app/composition/layout/workspace-sidebar.tsx` |
+| Search-by-meaning gate | `useSearchKeyConfigured` read once by `renderer/src/app/shell.tsx` and applied in `renderer/src/app/composition/folder/use-folder-readiness.ts` |
 | Appearance | the row table and surface mapping in `renderer/src/features/settings/domain/appearance.ts`, the surface type in `renderer/src/shared/domain/appearance.ts`, the document applier and broadcast in `renderer/src/shared/runtime/appearance-surface.ts`, applied for the window by `renderer/src/app/composition/use-appearance-surface.ts`, with the token scopes in `renderer/src/globals.css` |
-| Settings domain | `renderer/src/features/settings/domain/embedder.ts`, `domain/mcp-access.ts`, `domain/agent-catalog.ts`, `domain/agent-runtime-status.ts`, `domain/transcription.ts`, `domain/transcription-status.ts` |
+| Settings domain | `renderer/src/features/settings/domain/account.ts`, `domain/embedder.ts`, `domain/mcp-access.ts`, `domain/agent-catalog.ts`, `domain/agent-runtime-status.ts`, `domain/transcription.ts`, `domain/transcription-status.ts` |
 | Capture runtime Adapter | `renderer/src/platform/electron/capture.ts` and the clipboard boundary in `electron/main.cjs` over `electron/clipboard-watch-policy.cjs` |
 | Update runtime Adapter | `electron/update-manager.cjs`, `electron/update-install-strategy.cjs`, `electron/update-window-barrier.cjs`, and `electron/main.cjs` |
-| Focused evidence | `server/app-config.test.ts`, `server/agent-instructions.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/hosted-agent-broker.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `server/routes/onboarding.test.ts`, `server/routes/workspace-preferences.test.ts`, `server/routes/appearance.test.ts`, `shared/protocols/http/appearance.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, `renderer/src/features/settings/domain/appearance.test.ts`, `renderer/src/features/settings/domain/search-setup-invitation.test.ts`, `renderer/src/features/settings/hooks/use-search-setup-invitation.test.ts`, `hooks/use-appearance.test.ts`, `hooks/use-embedder.test.ts`, `hooks/use-mcp-access.test.ts`, `hooks/use-capture.test.ts`, `hooks/use-transcription.test.ts`, `hooks/use-agent-runtimes.test.ts`, `hooks/use-settings-command.test.ts`, `renderer/src/features/settings/infrastructure/embedder-api.test.ts`, `infrastructure/mcp-access-api.test.ts`, `infrastructure/agent-runtime-api.test.ts`, `infrastructure/capture-api.test.ts`, `infrastructure/transcription-api.test.ts`, `renderer/src/shared/runtime/appearance-surface.test.ts`, `renderer/src/app/composition/use-appearance-surface.test.ts`, `renderer/src/features/updates/domain/update-offer.test.ts`, `renderer/src/features/updates/infrastructure/updates-bridge.test.ts`, `renderer/src/features/updates/hooks/use-update-notice.test.ts`, `renderer/src/features/updates/hooks/use-software-update.test.ts`, and the panel suites `renderer/src/features/settings/ui/shell.test.tsx`, `ui/general/general-panel.test.tsx`, `ui/appearance/appearance-panel.test.tsx`, `ui/agents/agents-panel.test.tsx`, `ui/ai-index/ai-index-panel.test.tsx`, `ui/transcription/transcription-panel.test.tsx`, `ui/mcp/mcp-access-panel.test.tsx` |
+| Focused evidence | `server/app-config.test.ts`, `server/agent-instructions.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/hosted-agent-broker.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `server/routes/onboarding.test.ts`, `server/routes/workspace-preferences.test.ts`, `server/routes/appearance.test.ts`, `shared/protocols/http/appearance.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, `renderer/src/features/settings/domain/appearance.test.ts`, `domain/embedder.test.ts`, `renderer/src/features/settings/hooks/use-account.test.ts`, `hooks/use-appearance.test.ts`, `hooks/use-embedder.test.ts`, `hooks/use-mcp-access.test.ts`, `hooks/use-capture.test.ts`, `hooks/use-transcription.test.ts`, `hooks/use-agent-runtimes.test.ts`, `hooks/use-settings-command.test.ts`, `renderer/src/features/settings/infrastructure/account-api.test.ts`, `infrastructure/embedder-api.test.ts`, `infrastructure/mcp-access-api.test.ts`, `infrastructure/agent-runtime-api.test.ts`, `infrastructure/capture-api.test.ts`, `infrastructure/transcription-api.test.ts`, `renderer/src/shared/runtime/appearance-surface.test.ts`, `renderer/src/app/composition/use-appearance-surface.test.ts`, `renderer/src/features/updates/domain/update-offer.test.ts`, `renderer/src/features/updates/infrastructure/updates-bridge.test.ts`, `renderer/src/features/updates/hooks/use-update-notice.test.ts`, `renderer/src/features/updates/hooks/use-software-update.test.ts`, and the panel suites `renderer/src/features/settings/ui/shell.test.tsx`, `ui/general/general-panel.test.tsx`, `ui/appearance/appearance-panel.test.tsx`, `ui/agents/agents-panel.test.tsx`, `ui/ai-index/ai-index-panel.test.tsx`, `ui/transcription/transcription-panel.test.tsx`, `ui/mcp/mcp-access-panel.test.tsx`, with the account row and the search gate proven through `renderer/src/app/composition/layout/workspace-sidebar.test.tsx`, `renderer/src/app/composition/folder/use-folder-readiness.test.tsx`, and `renderer/src/features/retrieval/ui/library-search.test.tsx` |
 
 ## Validation
 

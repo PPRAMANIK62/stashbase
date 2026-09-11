@@ -10,16 +10,17 @@ import { vi } from 'vite-plus/test';
 
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import type {
+  AccountPort,
   AgentRuntimePort,
   AppearancePort,
   CapturePort,
   McpAccessPort,
-  OnboardingPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
+import type { HostedAccount } from '@/features/settings/domain/account';
 import type { AgentAllowance, AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import type { AppearancePreferences } from '@/features/settings/domain/appearance';
-import type { EmbedderState, HostedAccount } from '@/features/settings/domain/embedder';
+import type { EmbedderState } from '@/features/settings/domain/embedder';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
 import type {
   TranscriptionModel,
@@ -28,17 +29,41 @@ import type {
 } from '@/features/settings/domain/transcription';
 
 export const SIGNED_OUT_ACCOUNT: HostedAccount = {
-  active: false,
+  avatarUrl: null,
   displayName: null,
   email: null,
-  quota: null,
-  quotaUnavailable: false,
   signedIn: false,
 };
 
+/** A signed-in account with the profile Google reported. */
+export const SIGNED_IN_ACCOUNT: HostedAccount = {
+  avatarUrl: null,
+  displayName: 'Ada Lovelace',
+  email: 'ada@example.com',
+  signedIn: true,
+};
+
+/** Signed out by default, the quiet state: a composition test that is not
+ *  about the account should see a plain Sign in row and nothing else. */
+export function accountPort(
+  account: HostedAccount = SIGNED_OUT_ACCOUNT,
+  overrides: Partial<AccountPort> = {},
+): AccountPort {
+  return {
+    avatar: vi.fn(async () => null),
+    load: vi.fn(async () => account),
+    signInStatus: vi.fn(async () => ({ state: 'pending' as const })),
+    signOut: vi.fn(async () => SIGNED_OUT_ACCOUNT),
+    startSignIn: vi.fn(async () => ({
+      flowId: 'flow-1',
+      url: 'https://accounts.example/sign-in',
+    })),
+    ...overrides,
+  };
+}
+
 export function embedderState(overrides: Partial<EmbedderState> = {}): EmbedderState {
   return {
-    account: SIGNED_OUT_ACCOUNT,
     authorized: false,
     hasKey: false,
     model: 'text-embedding-3-small',
@@ -48,23 +73,10 @@ export function embedderState(overrides: Partial<EmbedderState> = {}): EmbedderS
   };
 }
 
-/** A signed-in hosted account with a partly spent quota. */
-export const SIGNED_IN_ACCOUNT: HostedAccount = {
-  active: true,
-  displayName: 'Ada Lovelace',
-  email: 'ada@example.com',
-  quota: {
-    grantedTokens: 1000,
-    periodEndsAt: '2026-10-01T00:00:00.000Z',
-    periodStartedAt: '2026-09-01T00:00:00.000Z',
-    plan: 'free',
-    remainingTokens: 250,
-    reservedTokens: 0,
-    usedTokens: 750,
-  },
-  quotaUnavailable: false,
-  signedIn: true,
-};
+/** The reader's own key stored and answering embeddings. */
+export function keyedEmbedderState(overrides: Partial<EmbedderState> = {}): EmbedderState {
+  return embedderState({ authorized: true, hasKey: true, ...overrides });
+}
 
 export function embedderPort(
   state: EmbedderState = embedderState(),
@@ -72,17 +84,8 @@ export function embedderPort(
 ): EmbedderPort {
   return {
     load: vi.fn(async () => state),
-    refreshAccount: vi.fn(async () => state.account),
     removeKey: vi.fn(async () => embedderState()),
     saveKey: vi.fn(async () => ({ warning: null })),
-    selectProvider: vi.fn(async () => state),
-    signInStatus: vi.fn(async () => ({ state: 'pending' as const })),
-    signOut: vi.fn(async () => undefined),
-    startSignIn: vi.fn(async () => ({
-      flowId: 'flow-1',
-      url: 'https://accounts.example/sign-in',
-    })),
-    useAccount: vi.fn(async () => state.account),
     ...overrides,
   };
 }
@@ -203,26 +206,6 @@ export function mcpAccessPort(overrides: Partial<McpAccessPort> = {}): McpAccess
     setDockerAccess: vi.fn(async (enabled: boolean) => ({ ...access.http, dockerAccess: enabled })),
     setDockerPort: vi.fn(async (port: number) => ({ ...access.http, dockerPort: port })),
     status: vi.fn(async () => access),
-    ...overrides,
-  };
-}
-
-/** The invitation revision the fakes treat as already answered. A fake cannot
- *  import a feature's runtime value, so this literal is kept in step with
- *  `SEARCH_SETUP_INVITATION_VERSION` by the hook test that pins them equal. */
-export const ANSWERED_SEARCH_SETUP_VERSION = 1;
-
-/** Answered by default, the quiet state: an unrelated composition test should
- *  not have to dismiss a one-time invitation to reach the workspace. Override
- *  `load` with a null revision to exercise the offer itself. */
-export function onboardingPort(overrides: Partial<OnboardingPort> = {}): OnboardingPort {
-  return {
-    answerSearchSetup: vi.fn(async (version: number) => ({
-      searchSetupInvitationVersion: version,
-    })),
-    load: vi.fn(async () => ({
-      searchSetupInvitationVersion: ANSWERED_SEARCH_SETUP_VERSION,
-    })),
     ...overrides,
   };
 }

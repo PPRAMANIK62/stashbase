@@ -140,11 +140,9 @@ function ConversationRow({
             onCancel={cancelEdit}
             onChange={setTitle}
             onCommit={submitEdit}
-            style={{
-              fontVariationSettings: conversation.active
-                ? fontWeights.semibold
-                : fontWeights.normal,
-            }}
+            // The editor keeps the row's own weight, which is the same
+            // whether the conversation is current or not.
+            style={{ fontVariationSettings: fontWeights.normal }}
             value={title}
           />
         </SidebarMenuButton>

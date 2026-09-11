@@ -3,9 +3,14 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { failureMessage } from '@/features/settings/application/failure-messages';
-import type { AgentRuntimePort } from '@/features/settings/application/ports';
+import type { AccountPort, AgentRuntimePort } from '@/features/settings/application/ports';
 import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
-import { agentRuntime, agentRuntimePort } from '@/test/fakes/settings';
+import {
+  accountPort,
+  agentRuntime,
+  agentRuntimePort,
+  SIGNED_IN_ACCOUNT,
+} from '@/test/fakes/settings';
 import { withQueryClient } from '@/test/query';
 
 import { AgentRuntimesPanel } from './agents-panel';
@@ -19,24 +24,22 @@ function uninstalled(runtime: AgentRuntime): AgentRuntime {
   return { ...runtime, installed: false, preparation: { kind: 'idle' } };
 }
 
-/** Recorded per render so a case can assert the hand-off happened. */
-let openedAccount = 0;
-
-function renderPanel(port: AgentRuntimePort) {
-  return withQueryClient(
+function renderPanel(
+  port: AgentRuntimePort,
+  account: AccountPort = accountPort(),
+  onOpenExternal = vi.fn(),
+) {
+  const rendered = withQueryClient(
     <AgentRuntimesPanel
+      accountApi={account}
       agentRuntimeApi={port}
-      onOpenAccount={() => {
-        openedAccount += 1;
-      }}
+      onOpenExternal={onOpenExternal}
     />,
   );
+  return { ...rendered, onOpenExternal };
 }
 
-afterEach(() => {
-  openedAccount = 0;
-  cleanup();
-});
+afterEach(cleanup);
 
 const codex = agentRuntime({
   id: 'codex',
@@ -76,9 +79,9 @@ describe('AgentRuntimesPanel', () => {
     expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
   });
 
-  it('hands a runtime that needs an account off to the section that owns sign-in', async () => {
-    // The button used to render and do nothing. Whether it is the right home
-    // for account identity is a separate question; a dead control is not.
+  it('starts the browser sign-in from a runtime that needs an account', async () => {
+    // The row's Sign in and the account row's Sign in are one command over one
+    // port, so the runtime can never send the reader somewhere else to do it.
     const port = agentRuntimePort({
       listAgents: vi.fn(async () =>
         catalog([
@@ -98,11 +101,33 @@ describe('AgentRuntimesPanel', () => {
         ]),
       ),
     });
-    renderPanel(port);
+    const account = accountPort();
+    const rendered = renderPanel(port, account);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: 'Sign in' }));
-    expect(openedAccount).toBe(1);
+    // Two Sign in buttons once the catalog has answered: the account row's
+    // and the runtime row's. The runtime's is the one under test.
+    await screen.findByText('An account is required to use OpenQuill.');
+    const buttons = screen.getAllByRole('button', { name: 'Sign in' });
+    expect(buttons).toHaveLength(2);
+    await user.click(buttons[1] as HTMLElement);
+    await waitFor(() => expect(account.startSignIn).toHaveBeenCalledOnce());
+    expect(rendered.onOpenExternal).toHaveBeenCalledWith('https://accounts.example/sign-in');
+    expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
+  });
+
+  it('names the signed-in person under Account and signs out from there', async () => {
+    const account = accountPort(SIGNED_IN_ACCOUNT);
+    renderPanel(agentRuntimePort(), account);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText('Ada Lovelace · ada@example.com')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+    expect(await screen.findByText('Free credits')).not.toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    await waitFor(() => expect(account.signOut).toHaveBeenCalledOnce());
+    expect(await screen.findByRole('button', { name: 'Sign in' })).not.toBeNull();
   });
 
   it('installs a not-yet-installed runtime and writes the response into the catalog', async () => {
@@ -149,7 +174,7 @@ describe('AgentRuntimesPanel', () => {
     });
     renderPanel(port);
 
-    expect(await screen.findByText('Agent usage is temporarily unavailable.')).not.toBeNull();
+    expect(await screen.findByText('Credits are temporarily unavailable.')).not.toBeNull();
     expect(screen.queryByText(/remaining/)).toBeNull();
   });
 

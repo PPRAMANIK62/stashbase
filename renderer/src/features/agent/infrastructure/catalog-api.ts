@@ -9,7 +9,10 @@
  * repeats a `?? true` of its own.
  */
 import { AgentSessionError, type AgentCatalogPort } from '@/features/agent/application/ports';
+import { AGENT_ACCESS_MODES } from '@/features/agent/domain/access';
 import type { Agent, AgentAbilities, AgentCatalog } from '@/features/agent/domain/agent-catalog';
+import type { AgentModel } from '@/features/agent/domain/runtime-catalog';
+import { toModel } from '@/features/agent/infrastructure/model-wire';
 import { request, type TransportRequest } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
@@ -20,15 +23,38 @@ import {
 } from '@/protocols/http/agent-runtime';
 
 /** A runtime that advertises nothing runs plain prompts. `modes` is the one
- *  capability every runtime has unless it says otherwise. */
+ *  capability every runtime has unless it says otherwise: a service that
+ *  omits capabilities honors every promise, and one that lists them is taken
+ *  at its word, in the composer's order rather than the wire's. */
 function toAbilities(wire: AgentWire['capabilities']): AgentAbilities {
+  const honored = wire?.modes;
   return {
     attachments: wire?.attachments === true,
     effort: wire?.effort === true,
     models: wire?.models === true,
-    modes: wire?.modes !== false,
+    modes:
+      honored === undefined
+        ? AGENT_ACCESS_MODES
+        : AGENT_ACCESS_MODES.filter((mode) => honored.includes(mode)),
     skills: wire?.skills === true,
   };
+}
+
+/** The catalog the service remembers for a runtime. A runtime that flags no
+ *  default of its own gets the model it last ran with nothing chosen marked
+ *  as one, so the composer names it the same way. */
+function markedDefault(model: AgentModel): AgentModel {
+  return { ...model, isDefault: true };
+}
+
+function toRememberedModels(remembered: AgentWire['catalog']): readonly AgentModel[] {
+  if (!remembered) return [];
+  const models = remembered.models.map(toModel);
+  const flagged = models.some((model) => model.isDefault === true);
+  if (flagged || remembered.defaultModel === undefined) return models;
+  return models.map((model) =>
+    model.id === remembered.defaultModel ? markedDefault(model) : model,
+  );
 }
 
 function toAgent(wire: AgentWire): Agent {
@@ -36,6 +62,7 @@ function toAgent(wire: AgentWire): Agent {
     id: wire.id,
     abilities: toAbilities(wire.capabilities),
     label: wire.label,
+    models: toRememberedModels(wire.catalog),
     needsSignIn: wire.bootstrap?.failure?.code === 'authentication-required',
     ready: wire.bootstrap?.phase === 'ready' && wire.state !== 'failed',
   };

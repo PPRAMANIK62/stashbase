@@ -5,6 +5,7 @@
  */
 import express from 'express';
 import { discoverAgentRuntimes, stopAgentRuntime } from '../agent-contract.ts';
+import { ensureAgentModelCatalog } from '../agent-model-catalog.ts';
 import { sendError } from '../http.ts';
 import {
   getAgentRuntimeDebugState,
@@ -32,10 +33,25 @@ function agentCatalogResponse() {
   return { clis: discoverAgentRuntimes(), debug: getAgentRuntimeDebugState() };
 }
 
+/** A runtime that can run a turn gets its catalog memory completed before
+ * the listing answers: one runtime-level read when nothing is remembered, or
+ * when what is remembered names no default, so the first Chat on a fresh
+ * install can name its model. The memory decides whether a read is due, and
+ * a read that fails is not retried until its pause has passed, so a runtime
+ * that cannot answer never slows the listing twice in a row. */
+async function primeAgentModelCatalogs(): Promise<void> {
+  await Promise.all(
+    discoverAgentRuntimes()
+      .filter((runtime) => runtime.capabilities.models && runtime.installed && runtime.state === 'available')
+      .map((runtime) => ensureAgentModelCatalog(runtime.id)),
+  );
+}
+
 export function mount(app: express.Express): void {
   // Agent CLI registry. The renderer reads this to populate the launchers
   // and know each CLI's installed-state.
-  app.get('/api/terminal/clis', (_req, res) => {
+  app.get('/api/terminal/clis', async (_req, res) => {
+    await primeAgentModelCatalogs();
     res.json(agentCatalogResponse());
   });
 

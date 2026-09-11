@@ -12,7 +12,7 @@ describe('AllowanceRow', () => {
   it('says the window has not started when the server reports no end date', () => {
     render(<AllowanceRow allowance={IDLE_ALLOWANCE} onRefresh={vi.fn()} />);
 
-    expect(screen.getByText('100% remaining · Starts on first use')).not.toBeNull();
+    expect(screen.getByText('100% left · The 7-day window starts on first use')).not.toBeNull();
   });
 
   it('clamps a nonsensical percentage into the bar it can actually draw', () => {
@@ -23,10 +23,10 @@ describe('AllowanceRow', () => {
       />,
     );
 
-    expect(screen.getByText(/^100% remaining/u)).not.toBeNull();
+    expect(screen.getByText(/^100% left/u)).not.toBeNull();
   });
 
-  it('names the reset moment once the window has one', () => {
+  it('names the refill moment once the window has one', () => {
     render(
       <AllowanceRow
         allowance={{ ...IDLE_ALLOWANCE, windowEndsAt: '2026-09-08T00:00:00.000Z' }}
@@ -34,7 +34,7 @@ describe('AllowanceRow', () => {
       />,
     );
 
-    expect(screen.getByText(/Resets /u)).not.toBeNull();
+    expect(screen.getByText(/Refills /u)).not.toBeNull();
   });
 
   it('refreshes on request and keeps the token breakdown behind a disclosure', async () => {

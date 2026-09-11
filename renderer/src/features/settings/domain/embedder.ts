@@ -1,7 +1,6 @@
 /**
- * The search-by-meaning source as the renderer reasons about it: which provider or
- * account currently answers embeddings, what the reader is told about the
- * hosted credits, and how a sign-in flow ends.
+ * The search-by-meaning source as the renderer reasons about it: whether a key
+ * the reader brought is answering embeddings.
  *
  * These are the feature's own types, not the wire's. Absence is a `null`
  * field rather than a missing key, so a view never has to tell "the server
@@ -11,13 +10,10 @@
 
 export type EmbedderProvider = 'openai' | 'openrouter';
 
-/** Every source an index can be authorized against. `local` is server-owned:
- *  it can be active, but the renderer never selects it. */
+/** Every source the server may report. Only a provider key is one the
+ *  renderer offers; `local` and `stashbase-account` are server-owned values it
+ *  never selects and treats as no key. */
 export type EmbeddingSource = EmbedderProvider | 'local' | 'stashbase-account';
-
-/** The hosted account, spelled as a source so one radio group can offer it
- *  beside the bring-your-own-key providers. */
-export const ACCOUNT_SOURCE: EmbeddingSource = 'stashbase-account';
 
 /** The providers a reader may choose between, in offer order. */
 export const EMBEDDER_PROVIDERS: readonly EmbedderProvider[] = ['openai', 'openrouter'];
@@ -27,29 +23,7 @@ export const EMBEDDER_PROVIDER_LABELS: Record<EmbedderProvider, string> = {
   openrouter: 'OpenRouter',
 };
 
-export interface HostedQuota {
-  readonly grantedTokens: number;
-  readonly periodEndsAt: string | null;
-  readonly periodStartedAt: string | null;
-  readonly plan: string;
-  readonly remainingTokens: number;
-  readonly reservedTokens: number;
-  readonly usedTokens: number;
-}
-
-export interface HostedAccount {
-  /** The account is the authorized embedding source right now. */
-  readonly active: boolean;
-  readonly displayName: string | null;
-  readonly email: string | null;
-  readonly quota: HostedQuota | null;
-  /** The server holds an account but could not report its usage this time. */
-  readonly quotaUnavailable: boolean;
-  readonly signedIn: boolean;
-}
-
 export interface EmbedderState {
-  readonly account: HostedAccount;
   readonly authorized: boolean;
   readonly hasKey: boolean;
   readonly model: string;
@@ -63,55 +37,21 @@ export interface EmbedderKeySave {
   readonly warning: string | null;
 }
 
-export interface HostedSignIn {
-  readonly flowId: string;
-  readonly url: string;
-}
-
-/** A browser sign-in ends exactly three ways, and only the failure carries a
- *  sentence, so the poll result cannot report an error without one. */
-export type HostedSignInStatus =
-  | { readonly state: 'pending' }
-  | { readonly state: 'complete' }
-  | { readonly state: 'error'; readonly error: string };
-
 /** The source answering embeddings, or `null` while nothing is authorized. */
 export function activeEmbeddingSource(state: EmbedderState): EmbeddingSource | null {
   return state.authorized ? state.source : null;
 }
 
-export function quotaRemainingPercent(account: HostedAccount): number {
-  const quota = account.quota;
-  if (!quota || quota.grantedTokens <= 0) return 0;
-  return Math.max(
-    0,
-    Math.min(100, Math.round((quota.remainingTokens / quota.grantedTokens) * 100)),
-  );
-}
-
-/** One sentence of standing usage. A missing quota reads as not-yet-reported
- *  rather than as zero, so empty credits never look like spent ones. */
-export function describeQuota(account: HostedAccount): string {
-  if (account.quotaUnavailable) return 'Usage is temporarily unavailable.';
-  const quota = account.quota;
-  if (!quota) return 'Usage not reported yet.';
-  const reset = quota.periodEndsAt
-    ? new Date(quota.periodEndsAt).toLocaleDateString([], { dateStyle: 'medium' })
-    : null;
-  const remaining = quota.remainingTokens.toLocaleString();
-  return `${quotaRemainingPercent(account)}% remaining · ${remaining} tokens left${
-    reset ? ` · Resets ${reset}` : ''
-  }`;
+/** Whether the reader's own key is what answers embeddings right now, which
+ *  is the one state in which search by meaning exists for this renderer. */
+export function keyIsActive(state: EmbedderState): boolean {
+  return state.hasKey && activeEmbeddingSource(state) === state.provider;
 }
 
 /** What the current source means for search, said once under the group. */
 export function describeEmbedderSource(state: EmbedderState): string {
-  const active = activeEmbeddingSource(state);
-  if (active === ACCOUNT_SOURCE) {
-    return 'Meaning-based search and indexing use your StashBase account.';
-  }
-  if (active !== null) {
+  if (keyIsActive(state)) {
     return `Meaning-based search and indexing use your ${EMBEDDER_PROVIDER_LABELS[state.provider]} key.`;
   }
-  return 'Searching by meaning isn’t set up. Sign in or add a key. Keyword search keeps working.';
+  return 'Searching by meaning isn’t set up. Add a key to turn it on. Keyword search keeps working.';
 }

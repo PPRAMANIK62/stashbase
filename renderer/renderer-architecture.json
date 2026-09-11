@@ -47,6 +47,7 @@
     "shared/html-sanitization.ts"
   ],
   "wireSchemaModules": [
+    "shared/protocols/agent-model.ts",
     "shared/protocols/electron/bug-report-review.ts",
     "shared/protocols/electron/bug-report.ts",
     "shared/protocols/electron/capture.ts",

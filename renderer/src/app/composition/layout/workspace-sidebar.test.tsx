@@ -1,10 +1,11 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
 import { appDependencies } from '@/test/fakes/app';
+import { accountPort, SIGNED_IN_ACCOUNT } from '@/test/fakes/settings';
 
 afterEach(cleanup);
 
@@ -44,5 +45,60 @@ describe('bug-report entry', () => {
     const entry = await screen.findByRole('button', { name: 'Report a bug' }, LAZY);
     expect(entry.hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Available in the desktop app.')).not.toBeNull();
+  });
+});
+
+describe('account row', () => {
+  it('sits at the foot of the sidebar and starts the browser sign-in in one click', async () => {
+    const account = accountPort();
+    const openExternal = vi.fn(async () => true);
+    const base = appDependencies();
+    render(
+      <Providers>
+        <App
+          dependencies={appDependencies({
+            documents: { ...base.documents, openExternal },
+            settings: { ...base.settings, accountApi: account },
+          })}
+        />
+      </Providers>,
+    );
+
+    const signIn = await screen.findByRole('button', { name: 'Sign in' });
+    await userEvent.setup().click(signIn);
+
+    await waitFor(() => expect(account.startSignIn).toHaveBeenCalledOnce());
+    expect(openExternal).toHaveBeenCalledWith('https://accounts.example/sign-in');
+    expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
+  });
+
+  it('names the signed-in person and offers the credits and sign-out from a menu', async () => {
+    const account = accountPort(SIGNED_IN_ACCOUNT);
+    const base = appDependencies();
+    render(
+      <Providers>
+        <App
+          dependencies={appDependencies({ settings: { ...base.settings, accountApi: account } })}
+        />
+      </Providers>,
+    );
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Account: Ada Lovelace' }));
+    const menu = await screen.findByRole('menu');
+    // The menu opens with the person as the initials disc — never a
+    // provider picture — beside the name and email.
+    expect(within(menu).getByText('AL')).not.toBeNull();
+    expect(within(menu).getByText('ada@example.com')).not.toBeNull();
+    expect(within(menu).getByText('OpenQuill credits')).not.toBeNull();
+    expect(await within(menu).findByText('100%')).not.toBeNull();
+    // Settings and sign-out are the only actions in the menu.
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(2);
+    expect(within(menu).getByRole('menuitem', { name: 'Settings' })).not.toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: 'Sign out' })).not.toBeNull();
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Sign out' }));
+    await waitFor(() => expect(account.signOut).toHaveBeenCalledOnce());
+    expect(await screen.findByRole('button', { name: 'Sign in' })).not.toBeNull();
   });
 });

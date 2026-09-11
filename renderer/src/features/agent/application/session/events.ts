@@ -114,6 +114,9 @@ export function applyAgentSessionEvent(context: AgentEventContext, event: AgentS
     case 'failed':
       applyFailure(context, event);
       return;
+    case 'turn-ended':
+      transition({ at: Date.now(), isError: event.isError, kind: 'settle-turn' });
+      return;
     case 'exited':
       transport.expectClose();
       transition({ kind: 'close', message: event.message });

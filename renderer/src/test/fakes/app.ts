@@ -14,12 +14,12 @@ import { documentsApi } from './documents';
 import { preparationControlApi, preparationStatusApi } from './preparation';
 import { exactSearchApi, indexDecisionApi, semanticSearchApi } from './retrieval';
 import {
+  accountPort,
   agentRuntimePort,
   appearancePort,
   capturePort,
   embedderPort,
   mcpAccessPort,
-  onboardingPort,
   transcriptionPort,
 } from './settings';
 import { folderPicker, workspaceAdapters } from './workspace';
@@ -72,12 +72,12 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       semanticSearchApi: semanticSearchApi(),
     },
     settings: {
+      accountApi: accountPort(),
       agentRuntimeApi: agentRuntimePort(),
       appearanceApi: appearancePort(),
       captureApi: capturePort(),
       embedderApi: embedderPort(),
       mcpAccessApi: mcpAccessPort(),
-      onboardingApi: onboardingPort(),
       transcriptionApi: transcriptionPort(),
     },
     // Outside Electron, so there is no updater to reach.

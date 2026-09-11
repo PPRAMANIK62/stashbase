@@ -1,19 +1,21 @@
 /** The conversation as it reads: prompts, replies, thinking, notices and
- *  activity groups in order, with day breaks between prompts and a copy
- *  affordance on the last settled reply. Blocks arrive already shaped by the
+ *  activity groups in order, with day breaks between prompts and a quiet
+ *  hover row under each prompt and each settled reply — when it happened,
+ *  copy, and edit on the latest prompt. Blocks arrive already shaped by the
  *  session domain; this module only decides how each one is presented. */
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Pencil } from 'lucide-react';
 import { Fragment, memo, useCallback, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { ChatMessage } from '@/components/ui/chat-message';
+import { ChatMessage, ChatMessageAction } from '@/components/ui/chat-message';
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import { ThinkingIndicator } from '@/components/ui/thinking-indicator';
 import { segmentFileMentions, type AgentContextItem } from '@/features/agent/domain/context';
-import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
+import { latestUserBlock, type AgentTranscriptBlock } from '@/features/agent/domain/session';
 import {
   dayLabel,
   promptTimeLabel,
+  replyTimeLabel,
   startOfLocalDay,
   transcriptDayBreaks,
 } from '@/features/agent/domain/time';
@@ -27,7 +29,8 @@ const TRANSCRIPT_PAGE_SIZE = 200;
 
 type TranscriptGroup = AgentTranscriptBlock | Extract<AgentTranscriptBlock, { kind: 'tool' }>[];
 
-function CopyReply({ text }: { text: string }) {
+/** Copies the untouched source text; the glyph confirms for a moment. */
+function CopyAction({ label, text }: { label: string; text: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
     void navigator.clipboard?.writeText(text).then(() => {
@@ -36,34 +39,36 @@ function CopyReply({ text }: { text: string }) {
     });
   };
   return (
-    <Button
-      aria-label={copied ? 'Response copied' : 'Copy response'}
-      className="-ml-4"
-      leadingIcon={copied ? Check : Copy}
+    <ChatMessageAction
+      icon={copied ? Check : Copy}
+      label={copied ? 'Copied' : label}
       onClick={copy}
-      size="compact"
-      variant="ghost"
-    >
-      {copied ? 'Copied' : 'Copy'}
-    </Button>
+    />
   );
 }
 
-/** Ids of the reply that closes each settled turn: the last assistant block
- *  before the next user prompt. The turn still streaming has none. */
-export function copyableReplyIds(blocks: AgentTranscriptBlock[], activeTurn: boolean): Set<string> {
-  const ids = new Set<string>();
+/** The reply that closes each settled turn — the last assistant block before
+ *  the next prompt — mapped to when that turn's prompt was sent, so the row
+ *  under it can say how long the turn took. The turn still streaming has
+ *  none. */
+export function closingReplies(
+  blocks: AgentTranscriptBlock[],
+  activeTurn: boolean,
+): Map<string, number | undefined> {
+  const replies = new Map<string, number | undefined>();
+  let promptAt: number | undefined;
   let lastReply: string | null = null;
   for (const block of blocks) {
     if (block.kind === 'user') {
-      if (lastReply) ids.add(lastReply);
+      if (lastReply) replies.set(lastReply, promptAt);
       lastReply = null;
+      promptAt = block.at;
     } else if (block.kind === 'assistant') {
       lastReply = block.id;
     }
   }
-  if (lastReply && !activeTurn) ids.add(lastReply);
-  return ids;
+  if (lastReply && !activeTurn) replies.set(lastReply, promptAt);
+  return replies;
 }
 
 function DayDivider({ at, now }: { at: number; now: number }) {
@@ -117,19 +122,29 @@ function sentContext(block: Extract<AgentTranscriptBlock, { kind: 'user' }>): Ag
 
 const TranscriptBlock = memo(function TranscriptBlock({
   block,
-  copyable,
+  closing,
+  editable,
   now,
+  onEditPrompt,
   onOpenExternal,
   onPermission,
   onRetry,
+  promptAt,
   transientFile,
 }: {
   block: AgentTranscriptBlock;
-  copyable: boolean;
+  /** This reply closes a settled turn, so it carries the copy and time row. */
+  closing: boolean;
+  /** This prompt is the latest and its turn has settled, so it can be taken
+   *  back into the composer. */
+  editable: boolean;
   now: number;
+  onEditPrompt?: ((blockId: string) => void) | undefined;
   onOpenExternal(href: string): void;
   onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
   onRetry(errorBlockId: string): boolean;
+  /** When the prompt a closing reply answers was sent, for the duration. */
+  promptAt: number | undefined;
   transientFile?: ((path: string) => File | undefined) | undefined;
 }) {
   if (block.kind === 'user') {
@@ -150,6 +165,18 @@ const TranscriptBlock = memo(function TranscriptBlock({
       <div className="flex max-w-[72%] flex-col items-end gap-1.5 self-end not-first:mt-4">
         <SentContextTiles fileFor={transientFile} items={tiles} />
         <ChatMessage
+          actions={
+            <>
+              <CopyAction label="Copy message" text={block.text} />
+              {editable && onEditPrompt && (
+                <ChatMessageAction
+                  icon={Pencil}
+                  label="Edit message"
+                  onClick={() => onEditPrompt(block.id)}
+                />
+              )}
+            </>
+          }
           className="max-w-full"
           from="user"
           time={block.at === undefined ? undefined : promptTimeLabel(block.at, now)}
@@ -184,8 +211,11 @@ const TranscriptBlock = memo(function TranscriptBlock({
   if (block.kind === 'assistant') {
     return (
       <ChatMessage
-        actions={copyable ? <CopyReply text={block.text} /> : undefined}
+        actions={closing ? <CopyAction label="Copy response" text={block.text} /> : undefined}
         from="assistant"
+        time={
+          closing && block.at !== undefined ? replyTimeLabel(block.at, promptAt, now) : undefined
+        }
       >
         <span className="sr-only">Agent: </span>
         <AgentMarkdown markdown={block.text} onOpenExternal={onOpenExternal} />
@@ -224,6 +254,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
 export const AgentTranscript = memo(function AgentTranscript({
   activeTurn,
   blocks,
+  onEditPrompt,
   onOpenExternal,
   onOpenSource,
   onPermission,
@@ -233,6 +264,9 @@ export const AgentTranscript = memo(function AgentTranscript({
 }: {
   activeTurn: boolean;
   blocks: AgentTranscriptBlock[];
+  /** Takes a sent prompt back into the composer. Absent when there is no
+   *  composer to take it, so no edit control renders. */
+  onEditPrompt?: ((blockId: string) => void) | undefined;
   onOpenExternal(href: string): void;
   /** Opens a file the Agent changed beside the chat, without selecting it
    *  on the Agent's behalf. */
@@ -259,7 +293,10 @@ export const AgentTranscript = memo(function AgentTranscript({
   const hiddenCount = Math.max(0, blocks.length - visibleCount);
   const visibleBlocks = blocks.slice(hiddenCount);
   const groups = useMemo(() => transcriptGroups(visibleBlocks), [visibleBlocks]);
-  const copyable = useMemo(() => copyableReplyIds(blocks, activeTurn), [activeTurn, blocks]);
+  const closing = useMemo(() => closingReplies(blocks, activeTurn), [activeTurn, blocks]);
+  // Only the latest prompt can be edited, and only once its turn has settled;
+  // an earlier one would resend into a conversation that has moved on.
+  const editableId = onEditPrompt && !activeTurn ? latestUserBlock(blocks)?.id : undefined;
   // Time labels refresh with the transcript, not with every render above it.
   const { dayBreaks, now } = useMemo(
     () => ({ dayBreaks: transcriptDayBreaks(visibleBlocks), now: Date.now() }),
@@ -296,11 +333,14 @@ export const AgentTranscript = memo(function AgentTranscript({
             )}
             <TranscriptBlock
               block={group}
-              copyable={copyable.has(group.id)}
+              closing={closing.has(group.id)}
+              editable={group.id === editableId}
               now={now}
+              onEditPrompt={onEditPrompt}
               onOpenExternal={onOpenExternal}
               onPermission={decide}
               onRetry={onRetry}
+              promptAt={closing.get(group.id)}
               transientFile={transientFile}
             />
           </Fragment>

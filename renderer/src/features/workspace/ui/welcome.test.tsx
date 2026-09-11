@@ -204,15 +204,9 @@ describe('library welcome', () => {
     });
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Actions for Notes' }));
-    await user.click(
-      await screen.findByRole('menuitem', {
-        hidden: true,
-        name: 'Remove from Library',
-      }),
-    );
+    await user.click(await screen.findByRole('button', { name: 'Remove Notes' }));
 
-    expect(await screen.findByRole('heading', { name: 'Remove from Library?' })).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: 'Remove this project?' })).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'Remove' }));
 
     await waitFor(() =>

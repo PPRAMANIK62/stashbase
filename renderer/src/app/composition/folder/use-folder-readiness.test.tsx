@@ -15,7 +15,7 @@ const folderListing = listing([
 
 describe('useFolderReadiness', () => {
   it('marks nothing before the status has answered', () => {
-    const { result } = renderHook(() => useFolderReadiness(folderListing, null));
+    const { result } = renderHook(() => useFolderReadiness(folderListing, null, true));
 
     expect(result.current.rowMarkers).toEqual({});
     expect(result.current.search.counts.needsAttention).toBe(false);
@@ -29,7 +29,7 @@ describe('useFolderReadiness', () => {
         { attempts: 1, lastError: 'unreadable', path: 'study.pdf', status: 'failed' as const },
       ],
     });
-    const { result } = renderHook(() => useFolderReadiness(folderListing, status));
+    const { result } = renderHook(() => useFolderReadiness(folderListing, status, true));
 
     expect(Object.keys(result.current.rowMarkers)).toEqual(['study.pdf']);
     expect(result.current.rowMarkers['study.pdf']?.kind).toBe('failed');
@@ -41,7 +41,7 @@ describe('useFolderReadiness', () => {
         { attempts: 1, lastError: 'unreadable', path: 'study.pdf', status: 'failed' as const },
       ],
     });
-    const { result } = renderHook(() => useFolderReadiness(folderListing, status));
+    const { result } = renderHook(() => useFolderReadiness(folderListing, status, true));
 
     expect(result.current.search.counts.needsAttention).toBe(true);
   });
@@ -52,11 +52,25 @@ describe('useFolderReadiness', () => {
         { attempts: 1, lastError: 'unreadable', path: 'study.pdf', status: 'failed' as const },
       ],
     });
-    const { rerender, result } = renderHook(() => useFolderReadiness(folderListing, status));
+    const { rerender, result } = renderHook(() => useFolderReadiness(folderListing, status, true));
     const first = result.current.rowMarkers;
 
     rerender();
 
     expect(result.current.rowMarkers).toBe(first);
+  });
+
+  it('reads the folder as not set up for search by meaning until the reader’s key is on', () => {
+    // The daemon may well be indexing in the background; without a key the
+    // window does not offer the mode, so the projection says not set up.
+    const status = folderIndexStatus({ semantic: { state: 'ready' } });
+    const unknown = renderHook(() => useFolderReadiness(folderListing, status, null));
+    expect(unknown.result.current.search.semantic).toEqual({ state: 'not-set-up' });
+
+    const off = renderHook(() => useFolderReadiness(folderListing, status, false));
+    expect(off.result.current.search.semantic).toEqual({ state: 'not-set-up' });
+
+    const on = renderHook(() => useFolderReadiness(folderListing, status, true));
+    expect(on.result.current.search.semantic).toEqual({ state: 'ready' });
   });
 });

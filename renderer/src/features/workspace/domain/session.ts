@@ -8,7 +8,10 @@ import type { WorkspaceState } from './workspace';
 
 const WORKSPACE_SESSION_VERSION = 1 as const;
 const DEFAULT_SIDEBAR_WIDTH = 240;
-const MIN_SIDEBAR_WIDTH = 160;
+/** Mirrors the rail's drag floor (components/ui/sidebar-rail.tsx): the
+ *  narrowest width that still shows the titlebar band's whole control trio.
+ *  A restored snapshot below it would clip the band the rail refuses to. */
+const MIN_SIDEBAR_WIDTH = 192;
 const MAX_SIDEBAR_WIDTH = 360;
 /** The Agent pane's remembered width and the bounds it is clamped to. One
  *  record, because a caller that reads one of these always reads the others. */
@@ -58,7 +61,9 @@ export function createWorkspaceSessionSnapshot(): WorkspaceSessionSnapshot {
     folders: [],
     shell: {
       agentPaneWidth: AGENT_PANE_WIDTH.default,
-      sidebarOpen: true,
+      // A fresh window lands on the welcome screen with the bare sidebar
+      // away, the same way every other arrival there does (`arriveAtWelcome`).
+      sidebarOpen: false,
       sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
     },
     version: WORKSPACE_SESSION_VERSION,
@@ -67,6 +72,24 @@ export function createWorkspaceSessionSnapshot(): WorkspaceSessionSnapshot {
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
+}
+
+/**
+ * No folder is the welcome screen, and the welcome screen is arrived at with
+ * the bare sidebar put away: its column holds nothing the screen does not
+ * already offer, so a relaunch, a new window, and a folder leaving the library
+ * mid-session all show the same collapsed rail. Every route there passes
+ * through this one transition rather than each remembering the rule. Only
+ * arriving collapses it — the corner toggle still brings the footer's rows
+ * back while there — which is why the callers below apply it once, on the
+ * change into "no folder", and treat a repeat of that state as nothing new.
+ */
+function arriveAtWelcome(snapshot: WorkspaceSessionSnapshot): WorkspaceSessionSnapshot {
+  const shell = snapshot.shell.sidebarOpen
+    ? { ...snapshot.shell, sidebarOpen: false }
+    : snapshot.shell;
+  if (snapshot.activeFolderPath === null && shell === snapshot.shell) return snapshot;
+  return { ...snapshot, activeFolderPath: null, shell };
 }
 
 function normalizeFolder(folder: FolderSessionState): FolderSessionState {
@@ -93,7 +116,7 @@ export function normalizeWorkspaceSession(
     seenFolders.add(folder.folderPath);
     return [normalizeFolder(folder)];
   });
-  return {
+  const normalized: WorkspaceSessionSnapshot = {
     ...snapshot,
     activeFolderPath:
       snapshot.activeFolderPath && seenFolders.has(snapshot.activeFolderPath)
@@ -110,6 +133,12 @@ export function normalizeWorkspaceSession(
     },
     version: WORKSPACE_SESSION_VERSION,
   };
+  // A snapshot read back with no folder is restored into a window arriving at
+  // the welcome screen, whatever its sidebar said when it was written. One
+  // that still names its folder keeps the reader's answer for a reload, and
+  // `setSessionActiveFolder(null)` collapses it if the landing turns out to be
+  // the welcome screen after all.
+  return normalized.activeFolderPath === null ? arriveAtWelcome(normalized) : normalized;
 }
 
 export function restoreFolderSession(
@@ -124,20 +153,28 @@ export function setSessionActiveFolder(
   folderPath: string | null,
 ): WorkspaceSessionSnapshot {
   if (snapshot.activeFolderPath === folderPath) return snapshot;
-  const folders =
-    folderPath && !snapshot.folders.some((folder) => folder.folderPath === folderPath)
-      ? [
-          ...snapshot.folders.slice(-(MAX_SESSION_FOLDERS - 1)),
-          {
-            activeTabId: null,
-            expandedPaths: [],
-            folderPath,
-            selectedPath: null,
-            tabs: [],
-          },
-        ]
-      : snapshot.folders;
-  return { ...snapshot, activeFolderPath: folderPath, folders };
+  if (folderPath === null) return arriveAtWelcome(snapshot);
+  const folders = !snapshot.folders.some((folder) => folder.folderPath === folderPath)
+    ? [
+        ...snapshot.folders.slice(-(MAX_SESSION_FOLDERS - 1)),
+        {
+          activeTabId: null,
+          expandedPaths: [],
+          folderPath,
+          selectedPath: null,
+          tabs: [],
+        },
+      ]
+    : snapshot.folders;
+  // A window's first folder brings the sidebar with it, the pair to
+  // `arriveAtWelcome`: the collapsed rail belongs to the welcome screen, and
+  // the folder's tree is the reason the rail exists. A switch between folders
+  // keeps whatever the reader chose while working.
+  const shell =
+    snapshot.activeFolderPath === null && !snapshot.shell.sidebarOpen
+      ? { ...snapshot.shell, sidebarOpen: true }
+      : snapshot.shell;
+  return { ...snapshot, activeFolderPath: folderPath, folders, shell };
 }
 
 export function reconcileSessionMembership(
@@ -146,17 +183,12 @@ export function reconcileSessionMembership(
 ): WorkspaceSessionSnapshot {
   const members = new Set(memberPaths);
   const folders = snapshot.folders.filter((folder) => members.has(folder.folderPath));
-  const activeFolderPath =
-    snapshot.activeFolderPath && members.has(snapshot.activeFolderPath)
-      ? snapshot.activeFolderPath
-      : null;
-  if (
-    activeFolderPath === snapshot.activeFolderPath &&
-    folders.length === snapshot.folders.length
-  ) {
-    return snapshot;
-  }
-  return { ...snapshot, activeFolderPath, folders };
+  const activeKept = snapshot.activeFolderPath === null || members.has(snapshot.activeFolderPath);
+  if (activeKept && folders.length === snapshot.folders.length) return snapshot;
+  const pruned = { ...snapshot, folders };
+  // The active folder leaving the library puts this window on the welcome
+  // screen, so it arrives there the way every other route does.
+  return activeKept ? pruned : arriveAtWelcome(pruned);
 }
 
 export function recordFolderSession(

@@ -178,18 +178,19 @@ type AgentSessionStateEvent =
       name: string;
       title: string | null;
       input: Record<string, unknown>;
-    }
-  | { kind: 'turn-ended'; isError: boolean };
+    };
 
 /** Events the application layer has to interpret before any state moves: a
  *  stream delta that needs a fresh transcript block id, a failure that reads
- *  differently inside and outside a turn, or an ending that also has to
- *  settle the transport. */
+ *  differently inside and outside a turn, a turn's end that is stamped with
+ *  the clock it settled at, or an ending that also has to settle the
+ *  transport. */
 type AgentSessionStreamEvent =
   | { kind: 'text'; delta: string }
   | { kind: 'thinking'; delta: string }
   | { kind: 'notice'; message: string }
   | { kind: 'failed'; failure?: AgentTurnFailureReason | undefined; message: string }
+  | { kind: 'turn-ended'; isError: boolean }
   | { kind: 'exited'; message: string | null }
   | { kind: 'scope-retired'; folderPath: string };
 
@@ -213,6 +214,13 @@ type AgentSessionLocalAction =
   | { kind: 'append-thinking'; id: string; delta: string }
   | { kind: 'reply-permission'; toolUseId: string; allow: boolean }
   | { kind: 'append-notice'; id: string; message: string }
+  | {
+      /** The wire's turn end, stamped with when it settled so the reply that
+       *  closes the turn can say so. */
+      kind: 'settle-turn';
+      isError: boolean;
+      at: number;
+    }
   | {
       kind: 'turn-fail';
       id: string;

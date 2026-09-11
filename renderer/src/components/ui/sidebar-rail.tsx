@@ -18,8 +18,11 @@ import { fontWeights } from '@/lib/font-weight';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
-/** Drag-resize clamp for the rail handle (px). */
-const SIDEBAR_MIN_WIDTH = 160;
+/** Drag-resize clamp for the rail handle (px). The floor is the narrowest
+ *  width that still shows the titlebar band's whole control trio on macOS
+ *  (traffic-light room 80 + toggle 36 + two overlapped arrows 32 each +
+ *  band padding 8); anything narrower collapses instead of clipping. */
+const SIDEBAR_MIN_WIDTH = 192;
 const SIDEBAR_MAX_WIDTH = 360;
 /** Dragging this far past the minimum width collapses the sidebar instead of
  *  bottoming out — the same "throw it at the edge to dismiss" affordance

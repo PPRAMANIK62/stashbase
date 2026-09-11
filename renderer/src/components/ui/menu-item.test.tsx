@@ -1,5 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import userEvent from '@testing-library/user-event';
+import { ChevronRight } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vite-plus/test';
 
 import { expectNoA11yViolations } from '@/test/axe';
@@ -112,5 +114,40 @@ describe('MenuItem row numbering', () => {
     // derived indices the rows above are numbered by.
     expect(rows.map((row) => row.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
     expect(indices()).toEqual(['0', '1', '2']);
+  });
+});
+
+describe('MenuItem rows that lead somewhere', () => {
+  /** Two layers in one surface: the first row swaps the list under the
+   *  pointer instead of closing the menu, the way a level list keeps its
+   *  model list one layer deeper. */
+  function Layers() {
+    const [deep, setDeep] = useState(false);
+    return openMenu(
+      deep ? (
+        <MenuItem checked label="Deeper choice" />
+      ) : (
+        <MenuItem
+          closeOnClick={false}
+          label="Go deeper"
+          onSelect={() => setDeep(true)}
+          trailingIcon={ChevronRight}
+        />
+      ),
+    );
+  }
+
+  it('keeps the surface open when a row asks to, and wears its glyph where a check would go', async () => {
+    const user = userEvent.setup();
+    render(<Layers />);
+
+    const row = screen.getByRole('menuitem', { name: 'Go deeper' });
+    expect(row.querySelector('svg')).not.toBeNull();
+    await expectNoA11yViolations(screen.getByRole('menu'));
+
+    await user.click(row);
+    expect(screen.getByRole('menu')).not.toBeNull();
+    expect(screen.getByRole('menuitemradio', { name: 'Deeper choice' })).not.toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Go deeper' })).toBeNull();
   });
 });

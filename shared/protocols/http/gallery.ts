@@ -31,8 +31,12 @@ export const galleryEntrySchema = z
     category: line(80),
     /** One sentence: source, then what is inside. */
     description: line(1_000),
-    /** Short inventory line, standing in for What's inside until the entry
-     *  publishes its `files` list. */
+    /** The introduction the entry page opens with, in the publisher's own
+     *  words: why the wiki was made, what it holds, who it is for. Plain
+     *  text; a blank line separates paragraphs. */
+    about: line(8_000).optional(),
+    /** One line of inventory. Published for the site; the app renders no
+     *  surface for it. */
     contents: line(1_000),
     /** Public repository holding the whole wiki, copied by the same import
      *  the Library switcher uses. */
@@ -44,9 +48,11 @@ export const galleryEntrySchema = z
      *  the app carries them without a surface of its own. */
     starterPrompts: z.array(line(1_000)).max(50).default([]),
     /** Folder-relative paths of the copy's visible files. Dot-entries stay
-     *  out, matching what the app's own tree would show. */
+     *  out. Carried so a published entry round-trips whole; the app renders
+     *  no surface for it. */
     files: z.array(line(1_024)).max(2_000).optional(),
-    /** The Build Wiki request that produced this wiki. */
+    /** The Build Wiki request that produced this wiki; the entry page shows
+     *  it as the copy's Agent Instructions. */
     wikiPrompt: line(4_000).optional(),
     /** Absolute CDN URLs, gallery order, the first one the hero. */
     screenshots: z.array(line(2_048)).max(20).optional(),

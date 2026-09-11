@@ -50,6 +50,31 @@ describe('Agent document workspace row', () => {
     runtime.dispose();
   });
 
+  it('keeps a hidden Agent mounted but inert and gives the document the row', async () => {
+    const runtime = createDocumentTabsRuntime(documentTabsRuntimeOptions());
+    render(
+      <AgentDocumentWorkspace
+        agent={<div data-testid="agent" />}
+        chatPaneOpen={false}
+        document={<div data-testid="document">Plan</div>}
+        onPaneWidthChange={vi.fn()}
+        paneWidth={576}
+        runtime={runtime}
+      />,
+    );
+    await act(async () => void (await runtime.open(PLAN)));
+
+    // No seam to drag while the document has the whole row, and the Agent's
+    // transcript is still in the tree for when the panel comes back.
+    expect(screen.queryByRole('separator', { name: 'Resize Agent pane' })).toBeNull();
+    expect(screen.getByTestId('agent')).not.toBeNull();
+    const shelf = screen.getByTestId('agent-pane').parentElement;
+    expect(shelf?.getAttribute('aria-hidden')).toBe('true');
+    expect(shelf?.hasAttribute('inert')).toBe(true);
+    expect(screen.getByTestId('document-slot').getAttribute('aria-hidden')).toBe('false');
+    runtime.dispose();
+  });
+
   it('gives the Agent the whole row without a documents runtime', () => {
     render(
       <AgentDocumentWorkspace

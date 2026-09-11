@@ -211,8 +211,9 @@ export function FileTreeRow({
           'w-full justify-start',
           '[&>span:last-child]:w-full [&>span:last-child]:min-w-0 [&>span:last-child]:justify-start',
           '[&>span:last-child>span]:min-w-0 [&>span:last-child>span]:flex-1 [&>span:last-child>span]:truncate [&>span:last-child>span]:text-left [&>span:last-child>span]:[text-box:normal]',
-          proximityActive && 'text-foreground [&_svg]:stroke-2',
-          selected && 'text-foreground',
+          // Hovered and selected are one treatment: ink and the heavier
+          // glyph stroke, over the one row tint.
+          (proximityActive || selected) && 'text-foreground [&_svg]:stroke-2',
         )}
         data-path={row.node.path}
         data-proximity-index={index}

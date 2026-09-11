@@ -1495,3 +1495,28 @@ test('Codex Session keeps other interrupt rejections visible', async (t) => {
   assert.equal((session as unknown as { busy: boolean }).busy, true);
   session.dispose();
 });
+
+test('Codex forwards which model and level run by default and drops hidden entries', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-catalog-default-'));
+  runWithWindowId('catalog-default-window', () => setCurrentFolder(folder));
+  t.after(() => { runWithWindowId('catalog-default-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  const native = catalogProcess([
+    { id: 'newest', displayName: 'Newest', isDefault: true, defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'medium' }] },
+    // A declared default the model cannot run is not repeated as one.
+    { id: 'odd', displayName: 'Odd', isDefault: false, defaultReasoningEffort: 'max', supportedReasoningEfforts: [{ reasoningEffort: 'low' }] },
+    { id: 'retired', displayName: 'Retired', hidden: true },
+  ]);
+  const session = new CodexSession(ws as unknown as WebSocket, 'catalog-default-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+
+  const models = ws.sent
+    .map((item) => JSON.parse(item) as { t: string; models?: Array<Record<string, unknown>> })
+    .find((event) => event.t === 'models')?.models;
+  assert.deepEqual(models, [
+    { id: 'newest', label: 'Newest', supportedEfforts: ['low', 'medium'], defaultEffort: 'medium', isDefault: true },
+    { id: 'odd', label: 'Odd', supportedEfforts: ['low'] },
+  ]);
+  session.dispose();
+});

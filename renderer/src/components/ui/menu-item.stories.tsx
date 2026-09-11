@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Copy, Pencil, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { Button } from './button';
@@ -84,4 +84,42 @@ export const WithTrailingAction: Story = {
       />
     </OpenMenu>
   ),
+};
+
+/** A row that leads to a deeper list keeps the surface open and wears a
+ *  chevron where a chosen row would draw its check; the deeper list offers
+ *  the way back the same way. */
+export const LeadsDeeper: Story = {
+  render: function LeadsDeeper() {
+    const [layer, setLayer] = useState<'level' | 'model'>('level');
+    return (
+      <OpenMenu label="Thinking">
+        {layer === 'level' ? (
+          <>
+            <MenuItem checked description="Balanced" label="Medium" layout="inline" />
+            <MenuItem checked={false} description="Deeper reasoning" label="High" layout="inline" />
+            <MenuItem
+              closeOnClick={false}
+              description="GPT-6"
+              label="Model"
+              layout="inline"
+              onSelect={() => setLayer('model')}
+              trailingIcon={ChevronRight}
+            />
+          </>
+        ) : (
+          <>
+            <MenuItem
+              closeOnClick={false}
+              icon={ChevronLeft}
+              label="Back"
+              onSelect={() => setLayer('level')}
+            />
+            <MenuItem checked label="GPT-6" />
+            <MenuItem checked={false} label="GPT-5" />
+          </>
+        )}
+      </OpenMenu>
+    );
+  },
 };

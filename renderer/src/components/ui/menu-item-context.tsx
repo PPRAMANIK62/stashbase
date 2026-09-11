@@ -29,6 +29,10 @@ export interface MenuItemRenderOptions {
   /** The item's index — doubles as the radio value. */
   value: number;
   disabled?: boolean | undefined;
+  /** Whether activating the row closes the surface; undefined takes the
+   *  primitive's default. A row that swaps the surface's own content passes
+   *  false. */
+  closeOnClick?: boolean | undefined;
   label: string;
   element: ReactElement;
   children: ReactNode;

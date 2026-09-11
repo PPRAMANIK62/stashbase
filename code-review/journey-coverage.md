@@ -73,22 +73,29 @@ aliases, and a driven runtime pass owns representative composition.
 - **Contract Test:** renderer initialization, Settings state, workspace
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
   `pnpm test:config`, `pnpm test:updates`, and `pnpm test:electron:smoke`.
-  The Settings and config suites cover hosted and BYOK choices for search by
-  meaning, rejection of new local selection, deterministic retirement of
-  persisted local selection before daemon startup, and transactional source
-  activation that keeps the prior source selected when runtime reset or
-  binding fails.
+  The renderer Settings suites cover the bring-your-own key for search by
+  meaning, the only source the renderer offers; the server config suites still
+  cover the hosted source the server retains, rejection of new local
+  selection, deterministic retirement of persisted local selection before
+  daemon startup, and transactional source activation that keeps the prior
+  source selected when runtime reset or binding fails.
   Account identity fixtures cover profile normalization, migration, privacy,
   and UI fallbacks.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
   library membership, so a failed or pending membership load cannot claim the
   library is empty.
-  The setup invitation for search by meaning is proven at three layers: a pure
-  decision covering never-offered, answered, already-configured, bare-window,
-  and raised-revision states; a hook covering the offer, the single durable
-  answer however many times the reader clicks, and the refusal to offer before
-  the stored answer has loaded; and a route test proving an unknown or
-  malformed preference is refused rather than written into durable config.
+  Search by meaning being opt-in is proven at three layers: a domain test
+  that only the reader's own key counts as on; a composition test that every
+  folder reads as not set up until that key is on, whatever the daemon
+  reports; and a surface test that the search panel is keyword search alone,
+  with no tab strip and no explanation, while it is not set up or unknown.
+  The account row is proven through the shell: a signed-out sidebar starts
+  the browser sign-in in one click and holds one pending state through the
+  round trip, and a signed-in one names the person and opens a menu that
+  shows their initial where no picture arrived, their email, the credits, and
+  sign-out. The Agents panel suite
+  proves a runtime that needs an account starts that same sign-in rather than
+  sending the reader elsewhere.
   The update surface is proven at three layers: a wire contract that refuses a
   snapshot carrying a field its phase does not allow; an Electron boundary
   suite covering an authorized call, a foreign sender, a window without the
@@ -104,12 +111,18 @@ aliases, and a driven runtime pass owns representative composition.
   names the members newest first without the temporary one, a row's menu
   opens on hover, and a pane too narrow for both columns stacks the card
   above the list. The return step is driven the same way: a relaunch whose
-  session file names a folder lands on the welcome screen with that folder's
-  session intact, and opening it from Recent brings its tree back. On macOS
-  the same pass checks the mark and the collapsed sidebar's toggle sit clear
+  session file names a folder and recorded its sidebar open lands on the
+  welcome screen with the sidebar collapsed and that folder's session intact,
+  and opening it from Recent brings its tree back with the column. On macOS
+  the same pass checks the sidebar's toggle, open and collapsed, sits clear
   of the traffic lights, and return to the edge in native fullscreen. The
-  later steps of this journey are not driven; journey automation retired
-  with the Playwright suites.
+  same scratch-profile pass checks the account row: a signed-out sidebar's
+  foot reads Gallery, Settings, and **Sign in**, and Settings opens on an
+  Agents section whose first group is the account with its own **Sign in**,
+  ahead of the runtimes; the signed-in row and its menu are proven by the
+  shell test rather than driven, because the hosted service cannot be reached
+  with a seeded session. The later steps of this journey are not driven;
+  journey automation retired with the Playwright suites.
 - **AI Eval:** onboarding mechanics are deterministic. If first value uses
   semantic retrieval or a real Agent, its quality evidence comes from J05 or
   J10 rather than being duplicated here.
@@ -214,9 +227,12 @@ aliases, and a driven runtime pass owns representative composition.
   Python daemon tests additionally lock the fixed ONNX model identity,
   provider/dimension collection separation, and cross-collection cleanup for
   renamed or deleted sources; keyword search remains provider-independent.
-- **Driven Runtime Pass:** none recorded. Journey automation retired with
-  the Playwright suites; this journey has no end-to-end proof until one is
-  driven and recorded.
+- **Driven Runtime Pass:** only the opt-in gate is driven. Against a scratch
+  profile with no embedding key, opening a folder and its search panel shows
+  one field with no mode strip and no mention of search by meaning, and
+  Settings shows the Search by Meaning section after Transcription as a
+  single key row. The search flow itself is not driven; journey automation
+  retired with the Playwright suites.
 - **AI Eval:** `pnpm eval:semantic-retrieval` runs the versioned, synthetic
   [semantic retrieval dataset](../evals/semantic-retrieval/README.md) through
   the production index and Retrieval interfaces. It reports provider, model,
@@ -245,8 +261,10 @@ aliases, and a driven runtime pass owns representative composition.
   permissions, failed-install external recheck without another download,
   managed Codex PowerShell path ownership and missing-output diagnostics,
   installed-but-signed-out Codex detection, same-executable browser login,
-  recovery, transcript, individually deletable waiting follow-ups, layout state,
-  and structured folder-scope retirement
+  recovery, transcript, the hover rows under prompts and settled replies
+  (copy on both, edit on the latest settled prompt, send and settle times
+  with the turn's duration), individually deletable waiting follow-ups,
+  layout state, and structured folder-scope retirement
   for blank, draft-only, queued, and active-tool Chats. Workspace reset tests
   pin Chat preservation through both direct folder loss and 412 recovery.
   Library-operation, route, keyword-search, and renderer composition tests pin
@@ -265,9 +283,17 @@ aliases, and a driven runtime pass owns representative composition.
   attribution across retries, stable model profile routing, and allowance
   classification. Config tests also prove that ambient credentials and process
   injection flags do not enter the bundled runtime.
-- **Driven Runtime Pass:** none recorded. Journey automation retired with
-  the Playwright suites; this journey has no end-to-end proof until one is
-  driven and recorded.
+- **Driven Runtime Pass:** 2026-09-11, built app launched in isolation
+  (own user data, own port, scratch home, mock keychain) over a seeded
+  Claude history session for a member folder. Restored the conversation from
+  Chats, hovered the latest prompt and both closing replies, and measured the
+  rows: the reply text, the collapsed tool group's header, and the reply's
+  copy glyph shared one left edge; the prompt's edit glyph shared the
+  bubble's right edge; the reply rows read the settle time with the turn's
+  duration from the native timestamps; exactly one edit control rendered,
+  and pressing it put the prompt back into the focused composer. A live
+  turn's settle stamp is covered by the runtime test; no runtime was signed
+  in under the scratch home, so no live turn was driven.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
 - **Release Check:** packaged OpenCode version/executability plus a fake-gateway
@@ -390,11 +416,13 @@ aliases, and a driven runtime pass owns representative composition.
 **Status:** Partial and release-dependent.
 
 - **Contract Test:** renderer domain tests cover the three runtime-gate states
-  and the starter row, including that a folder with existing pages is offered
-  the same wording. Workspace tests cover the gated composer holding a request
-  with Send unavailable and no runtime ability advertised, the stage-specific
-  offer, the request surviving onto the runtime the reader sets up, and the
-  starter filling the composer without sending. Runtime tests cover a Chat no
+  and the empty-chat requests, including that a folder with existing pages
+  cycles the same wording; the rotation hook's cadence, pause, and wrap; and
+  the editor taking a request placeholder on Tab and leaving a hint alone.
+  Workspace tests cover the gated composer holding a request with Send
+  unavailable and no runtime ability advertised, the stage-specific offer, the
+  request surviving onto the runtime the reader sets up, and Tab filling the
+  composer with the showing request without sending. Runtime tests cover a Chat no
   turn has left following an arriving runtime with its draft and bound sources,
   and a Chat that has spoken staying where it is. A composition test covers a
   request sending while the whole folder is still being prepared; the Agent
@@ -448,8 +476,8 @@ aliases, and a driven runtime pass owns representative composition.
   real application on a clean profile. With no folder open and no click, the
   shelf derives on the welcome screen a bare window shows, from the bundled
   snapshot, with no account and no Agent runtime present. Clicking a card opens
-  that entry's page carrying its file tree and the request that produced the
-  wiki. **Make a copy** is not pressed in this pass: it downloads a real public
+  that entry's page carrying its introduction and, folded beneath it as its
+  Agent Instructions, the request that produced the wiki. **Make a copy** is not pressed in this pass: it downloads a real public
   repository and registers a real Library folder, so it stays release evidence
   below.
 - **AI Eval:** none needed — the journey is deterministic acquisition and
@@ -458,8 +486,9 @@ aliases, and a driven runtime pass owns representative composition.
   end-to-end (published index, CDN screenshots, GitHub acquisition, new
   window on the copy).
 - **Gap:** no automated evidence exercises a real download or the
-  published index; both stay release sanity. `learnMore` and
-  `starterPrompts` ride the index contract but have no app surface yet.
+  published index; both stay release sanity. `learnMore`,
+  `starterPrompts`, `contents`, and `files` ride the index contract but have
+  no app surface.
 
 ## Maintenance Rule
 

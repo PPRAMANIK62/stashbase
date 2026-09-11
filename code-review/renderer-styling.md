@@ -43,7 +43,14 @@ and `shadow-surface-1..8` utilities. Semantic roles sit on top of the ladder:
 background, foreground, card, muted, accent, selected, border, destructive, the
 status voices `--working` and `--decision`, the diff pair, and a five-hue badge
 palette. `--working` is plain ink (an alias of `--foreground`); only
-`--decision` keeps a hue. The badge hues are theme-independent on purpose,
+`--decision` keeps a hue. Of the two overlay tints, `--hover` is the one a
+row wears for hovered, selected, current, and keyboard-highlighted alike, so
+one gray carries one meaning; `--active` is the pressed step only. Hovered
+and selected are one treatment throughout: the same tint, the same ink, the
+same glyph stroke, and the same weight, since selection never bolds a label.
+A hover on a row that already wears the tint paints nothing extra, which the
+sidebar overlays, the menu overlays, the file tree's glided highlight, and
+the table's highlight each enforce for their own selected row. The badge hues are theme-independent on purpose,
 because a badge hue is a label. The brand mark is transparent-backed and
 rides the theme's ink (`--brand-accent` carries a light-dark() pair); only
 its frame gray is fixed.
@@ -183,7 +190,12 @@ Elevation is a number. `renderer/src/lib/surface-context.tsx` publishes a level
 clamped to 1 through 8, `renderer/src/components/ui/elevated.tsx` adds an offset
 and re-provides the result so nesting walks the ladder automatically, and
 `renderer/src/lib/surface-classes.ts` maps a level to its background and shadow
-pair.
+pair, and to the background alone for a selection pill that rides inside a
+muted track. The Settings preset picker lifts its pill three steps with no
+shadow: the track already draws the edge, and the light ladder's hairline ring
+outlined the pill as a stroke while the dark ring vanished, so the two themes
+disagreed about what the pill was. The document tab strip draws no track at
+all; its selected tab wears `--hover`, so both themes show one flat lift.
 
 Desktop panes adapt with container queries and the density ladder rather than
 with viewport assumptions. `renderer/src/features/documents/ui/markdown/document.css`
@@ -198,7 +210,10 @@ drives the ambient size context off real window width and the Settings shell has
 to choose between a nav rail and a drawer.
 
 Four stylesheets exist, and each owns a boundary Tailwind utilities cannot.
-`renderer/src/globals.css` is the token and global-rule surface.
+`renderer/src/globals.css` is the token and global-rule surface. A global
+default that a utility class is meant to override, such as the focus ring or
+`--scroll-fade-size`, sits in `@layer base`, because an unlayered declaration
+outranks every Tailwind layer and would leave the override dead.
 `renderer/src/app/shell.css` owns the Electron window surface, where the
 titlebar accepts window drag and its control island opts back out, and where
 the room for macOS's traffic lights lives: the preload stamps the platform on

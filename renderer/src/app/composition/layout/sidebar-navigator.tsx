@@ -36,6 +36,8 @@ export function SidebarNavigator({ onSelect, panels, selected }: SidebarNavigato
 
   return (
     <>
+      {/* Centred as one control, not aligned to the rows: the strip is a
+       *  segmented switcher, and reads as a unit rather than as a row. */}
       <div className="flex shrink-0 justify-center px-4 pt-2 pb-1">
         <TabsSubtle
           aria-label="Sidebar navigator"
@@ -66,7 +68,10 @@ export function SidebarNavigator({ onSelect, panels, selected }: SidebarNavigato
           tabs. */}
       <div className={hidesTree ? 'hidden' : 'flex min-h-0 flex-1 flex-col'} hidden={hidesTree}>
         <SidebarContent>
-          <SidebarGroup>
+          {/* px-0: the tree and outline panels carry their own 8px inset, so
+              the group's default horizontal padding would double it and push
+              their glyphs off the sidebar's shared 16px glyph column. */}
+          <SidebarGroup className="px-0">
             {panels.map((panel, index) => (panel.hidesTree ? null : pane(panel, index)))}
           </SidebarGroup>
         </SidebarContent>

@@ -28,8 +28,10 @@ interface DequeuedPrompt {
   text: string;
 }
 
-/** What went out for one user turn, so a retry resends exactly that. */
+/** What went out for one user turn: the wire text a retry resends exactly,
+ *  and the text as typed, which an edit hands back to the composer. */
 interface SentTurn {
+  display: string;
   skill: string | null;
   wire: string;
 }

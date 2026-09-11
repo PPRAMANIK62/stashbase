@@ -1,5 +1,6 @@
 import claudeCodeMark from '@lobehub/icons-static-svg/icons/claudecode-color.svg?raw';
 import codexMark from '@lobehub/icons-static-svg/icons/codex-color.svg?raw';
+import { Feather } from 'lucide-react';
 import { useId, useMemo } from 'react';
 
 import type { IconComponentProps } from '@/lib/icon-context';
@@ -45,3 +46,13 @@ function brandIcon(source: string, displayName: string) {
 
 export const ClaudeCodeIcon = brandIcon(claudeCodeMark, 'ClaudeCodeIcon');
 export const CodexIcon = brandIcon(codexMark, 'CodexIcon');
+
+/** OpenQuill's mark is lucide's feather. Its strokes run corner to corner
+ *  of the 24-unit box, so beside the vendor marks it painted almost twice
+ *  their area (14.7px of a 16px icon against Codex's 10.3px square and Claude
+ *  Code's 13.7 by 8.6px wordmark). Widening its box to 32 units brings it to
+ *  about 11px, between the two, and the stroke thickens to keep its weight
+ *  at that scale. */
+export function OpenQuillIcon({ strokeWidth = 2.5, ...props }: IconComponentProps) {
+  return <Feather {...props} strokeWidth={strokeWidth} viewBox="-4 -4 32 32" />;
+}

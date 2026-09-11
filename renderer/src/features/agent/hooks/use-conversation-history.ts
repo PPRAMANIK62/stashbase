@@ -1,3 +1,8 @@
+/** The folder's conversation history as the Chats panel and the Chat pane's
+ *  header read and change it: one listing per Agent under one query root,
+ *  and the rename and removal mutations that rewrite that cache in place.
+ *  A rename can start from a sidebar row or from the open Chat's own header,
+ *  so the mutation is shared and only the caller's failure surface differs. */
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
@@ -6,10 +11,11 @@ import {
   failureKind,
   type AgentContextErrorKind,
 } from '@/features/agent/application/failure-messages';
+import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import { agentLabel, AGENT_ORDER } from '@/features/agent/domain/agent-catalog';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
-import type { AgentId, AgentScope } from '@/features/agent/domain/session';
+import type { AgentId, AgentScope, AgentSessionState } from '@/features/agent/domain/session';
 import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 const HISTORY_QUERY_ROOT = ['agent', 'history'] as const;
@@ -28,6 +34,69 @@ function scopeKey(scope: AgentScope): string {
 
 function historyQueryKey(agent: AgentId, scope: AgentScope) {
   return [...HISTORY_QUERY_ROOT, agent, scopeKey(scope)] as const;
+}
+
+/** The history row a mounted session stands for once the runtime has
+ *  identified it, or null before then, when there is nothing on record. */
+function historyEntryOf(state: AgentSessionState): AgentHistoryEntry | null {
+  if (state.nativeSessionId === null) return null;
+  return {
+    agent: state.agent,
+    hasContent: state.transcript.length > 0,
+    id: state.nativeSessionId,
+    lastModified: state.lastModified,
+    scope: state.scope,
+    title: state.title,
+  };
+}
+
+/** The one rename-on-record mutation both surfaces run: the Chats panel's
+ *  rows and the Chat pane's own header. A success rewrites the cached
+ *  listing in place, so the row reads the new name without a refetch. */
+function useRenameHistoryMutation(
+  runtime: AgentWorkspaceRuntime,
+  signal: () => AbortSignal,
+  onFailure: (message: string | null) => void,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entry, title }: { entry: AgentHistoryEntry; title: string }) =>
+      runtime.renameHistory(entry, title, signal()),
+    onMutate: () => onFailure(null),
+    onError: (error) => onFailure(agentFailure(error).message),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<AgentHistoryEntry[]>(
+        historyQueryKey(updated.agent, updated.scope),
+        (entries = []) => entries.map((entry) => (entry.id === updated.id ? updated : entry)),
+      );
+    },
+  });
+}
+
+/** Renames the Chat behind a mounted session from wherever it is shown. The
+ *  session takes the name at once; one the runtime has already identified is
+ *  renamed on record as well, so the name outlives the tab, and a refusal
+ *  hands the old name back. */
+export function useRenameConversation(runtime: AgentWorkspaceRuntime) {
+  const signalFor = useRequestSignals<'rename'>();
+  const [failure, setFailure] = useState<string | null>(null);
+  const mutation = useRenameHistoryMutation(runtime, () => signalFor('rename'), setFailure);
+  return {
+    failure,
+    rename: async (session: AgentSessionRuntime, title: string): Promise<AgentHistoryMutation> => {
+      const state = session.store.getState();
+      const entry = historyEntryOf(state);
+      session.rename(title);
+      if (entry === null) return { kind: 'done' };
+      try {
+        await mutation.mutateAsync({ entry, title });
+        return { kind: 'done' };
+      } catch (error) {
+        session.rename(state.title);
+        return { kind: 'refused', reason: failureKind(error) };
+      }
+    },
+  };
 }
 
 export function useConversationHistory(runtime: AgentWorkspaceRuntime, scope: AgentScope) {
@@ -50,18 +119,7 @@ export function useConversationHistory(runtime: AgentWorkspaceRuntime, scope: Ag
       ? `Chats unavailable for ${failedAgents.map(agentLabel).join(', ')}.`
       : null;
 
-  const rename = useMutation({
-    mutationFn: ({ entry, title }: { entry: AgentHistoryEntry; title: string }) =>
-      runtime.renameHistory(entry, title, signalFor('rename')),
-    onMutate: () => setMutationFailure(null),
-    onError: (error) => setMutationFailure(agentFailure(error).message),
-    onSuccess: (updated) => {
-      queryClient.setQueryData<AgentHistoryEntry[]>(
-        historyQueryKey(updated.agent, updated.scope),
-        (entries = []) => entries.map((entry) => (entry.id === updated.id ? updated : entry)),
-      );
-    },
-  });
+  const rename = useRenameHistoryMutation(runtime, () => signalFor('rename'), setMutationFailure);
   const remove = useMutation({
     mutationFn: async (entry: AgentHistoryEntry) => {
       await runtime.removeHistory(entry, signalFor('remove'));

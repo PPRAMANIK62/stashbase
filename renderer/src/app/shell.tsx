@@ -5,7 +5,7 @@
  * that belongs to a feature belongs in that feature, and a rule about the
  * window belongs in a hook under `./composition`.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useAgentComposerFocused, useAgentWorkspaceRuntime } from '@/features/agent/public';
 import {
@@ -14,7 +14,7 @@ import {
   useDocumentSaveBarrier,
 } from '@/features/documents/public';
 import { useFolderStatus } from '@/features/preparation/public';
-import { useSearchSetupInvitation } from '@/features/settings/public';
+import { useSearchKeyConfigured } from '@/features/settings/public';
 import { UpdateNotice, useUpdateNotice } from '@/features/updates/public';
 import {
   LibraryWelcome,
@@ -64,6 +64,7 @@ export function App({ dependencies }: { dependencies: AppDependencies }) {
  *  `./composition` and every port in a binder beside it; this function only
  *  decides what each one is given. */
 function WorkspaceWindow() {
+  const [chatPaneOpen, setChatPaneOpen] = useState(true);
   const dependencies = useDependencies();
   // Two adapter records this function hands on more than once.
   const { documents: docs, workspace: workspaceDeps } = dependencies;
@@ -92,7 +93,11 @@ function WorkspaceWindow() {
   const folderPath = workspace?.scope.folder.path ?? null;
   const listing = useFiles(workspace, workspaceDeps.adapters.files).data;
   const status = useFolderStatus(dependencies.preparation.statusApi, folderPath).data ?? null;
-  const folder = useFolderReadiness(listing, status);
+  // Search by meaning exists only once the reader's own key is on. The
+  // window reads that once, and every folder's readiness is projected through
+  // it, so no folder shows the mode before the key is there.
+  const searchKey = useSearchKeyConfigured(dependencies.settings.embedderApi);
+  const folder = useFolderReadiness(listing, status, searchKey);
   // The visibility the listing on screen was built with, so the menu and the
   // rows beside it can never disagree.
   const hiddenFiles = useHiddenFiles(
@@ -120,20 +125,11 @@ function WorkspaceWindow() {
   useEffect(() => runtime.setScopeEnvironment(agent.environment), [agent.environment, runtime]);
   useComposerFocusSignal(dependencies.capture, useAgentComposerFocused());
 
-  // `not-set-up` is the one semantic state that means no source is configured;
-  // until the folder's status answers at all, the question is unanswered
-  // rather than false, so the offer holds instead of flashing.
-  const searchSetup = useSearchSetupInvitation(dependencies.settings.onboardingApi, {
-    configured: status === null ? null : status.semantic.state !== 'not-set-up',
-    folderActive: folderPath !== null,
-  });
-
   const chrome = useWorkspaceCommands({
     documents,
     hostFailure: sources.hostFailure,
     library,
     preparation,
-    searchSetup: searchSetup.open ? searchSetup : null,
     session,
     workspace,
   });
@@ -161,6 +157,7 @@ function WorkspaceWindow() {
       recovery={recovery ? <RecoveryDrafts runtime={recovery} /> : null}
       panes={
         <WorkspacePanes
+          chatPaneOpen={chatPaneOpen}
           agent={{ outline: agent.outline, runtime }}
           documents={documents}
           onPrepare={preparation.prepare}
@@ -198,6 +195,8 @@ function WorkspaceWindow() {
       started={chrome.started}
       titlebar={
         <WorkspaceTitlebar
+          chatPaneOpen={chatPaneOpen}
+          onToggleChatPane={() => setChatPaneOpen((open) => !open)}
           agent={runtime}
           documents={documents}
           hasActiveFolder={activeFolder !== null}

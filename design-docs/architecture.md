@@ -42,10 +42,10 @@ operate as one local library per installation.
 
 Credentials and optional hosted-account sessions are owned by the local Node
 service. Provider and account tokens do not cross into renderer responses,
-OpenCode configuration/history, or the indexing daemon. When the user selects
-hosted search by meaning, Node may send extracted text through the hosted
-Adapter. When
-the user runs OpenQuill, the Node broker sends prompts and necessary model
+OpenCode configuration/history, or the indexing daemon. When the user adds an
+embedding key for search by meaning, Node sends extracted text to that
+provider; no renderer path selects the hosted embedding Adapter. When the
+user runs OpenQuill, the Node broker sends prompts and necessary model
 context through the hosted model Adapter; sessions, tool execution, permissions,
 Diffs, and files remain local. The hosted service owns model routing and usage
 accounting, not Agent execution or session storage. Agent accounting is a

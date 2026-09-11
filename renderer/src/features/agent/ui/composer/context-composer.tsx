@@ -61,6 +61,8 @@ export interface AgentContextComposerProps {
   onSkillChange: (skill: string | null) => void;
   onStop: () => void;
   placeholder: string;
+  /** The placeholder is one of the blank Chat's requests: Tab takes it. */
+  placeholderIsPrompt?: boolean;
   queue: QueuedMessage[];
   rightSlot?: ReactNode;
   /** When false the composer still takes and keeps a draft but cannot send
@@ -126,6 +128,7 @@ export function AgentContextComposer({
   onSkillChange,
   onStop,
   placeholder,
+  placeholderIsPrompt = false,
   queue,
   rightSlot,
   sendable = true,
@@ -344,6 +347,7 @@ export function AgentContextComposer({
         onStop={onStop}
         onValueChange={session.setDraft}
         placeholder={placeholder}
+        placeholderIsPrompt={placeholderIsPrompt}
         previewSlot={
           tileValidations.length > 0 ? (
             <div aria-label="Attached context" className="contents" role="list">

@@ -8,6 +8,31 @@ import {
   hostedAgentAllowanceSchema,
 } from './agent-runtime.ts';
 
+test('a runtime entry carries the catalog the service remembers for it, and nothing else inside it', () => {
+  const entry = {
+    id: 'codex',
+    label: 'Codex',
+    vendor: 'OpenAI',
+    installHint: '',
+    installed: true,
+    source: 'system',
+    bootstrap: { phase: 'ready' },
+    launchCommand: 'codex',
+    state: 'available',
+    catalog: {
+      models: [
+        { id: 'gpt-6', label: 'GPT-6', supportedEfforts: ['low', 'medium'], defaultEffort: 'medium', isDefault: true },
+        { id: 'gpt-5', label: 'GPT-5' },
+      ],
+      defaultModel: 'gpt-6',
+      readAt: '2026-09-11T00:00:00.000Z',
+    },
+  };
+  const parsed = agentsResponseSchema.parse({ clis: [entry] });
+  assert.deepEqual(parsed.clis[0]?.catalog, entry.catalog);
+  assert.throws(() => agentsResponseSchema.parse({ clis: [{ ...entry, catalog: { ...entry.catalog, stale: true } }] }));
+});
+
 test('agents response accepts a mixed catalog of installed, mid-bootstrap, and failed runtimes', () => {
   const result = agentsResponseSchema.parse({
     clis: [

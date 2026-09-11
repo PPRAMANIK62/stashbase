@@ -60,7 +60,10 @@ export default function AgentChats({
         {defaultAgent ? (
           <Button
             aria-label="Start new chat"
-            className="w-full justify-start"
+            // pl-2 over the wrapper's px-2 puts the glyph box at 16px — the
+            // sidebar's shared icon column, where the group chevrons and the
+            // footer rows below keep theirs.
+            className="w-full justify-start pl-2"
             leadingIcon={SquarePen}
             onClick={() => runtime.newChat(defaultAgent.id, scope)}
             size="default"

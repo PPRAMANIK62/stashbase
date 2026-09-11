@@ -170,14 +170,16 @@ export function SearchSurface({
             value={query}
           />
         </InputGroup>
-        <div className="flex items-center pt-1.5">
-          <SearchTabStrip
-            backends={backends}
-            onSelect={setBackendId}
-            readiness={readiness}
-            selectedId={backend.id}
-          />
-        </div>
+        {backends.length > 1 && (
+          <div className="flex items-center pt-1.5">
+            <SearchTabStrip
+              backends={backends}
+              onSelect={setBackendId}
+              readiness={readiness}
+              selectedId={backend.id}
+            />
+          </div>
+        )}
       </div>
 
       {notice && (notice.persistent || backend.indexGate !== undefined) && (

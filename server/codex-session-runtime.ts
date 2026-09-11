@@ -37,7 +37,9 @@ import {
   mcpToolApprovalFromElicitation,
   requestedPermissions,
 } from './codex-approval.ts';
+import { rememberAgentDefaultModel, rememberAgentModels } from './agent-model-catalog.ts';
 import { appVersion, spawnCodexAppServerProcess } from './codex-app-server-process.ts';
+import { loadCodexModelCatalog } from './codex-model-catalog.ts';
 import {
   codexTurnStatus,
   stringValue,
@@ -540,29 +542,13 @@ export class CodexSession implements AttributedAgentSession {
     this.selectedModel = requested;
   }
 
-  /** Model catalogs are paginated by the native app-server. A valid selected
-   * model can appear on a later page, so validate only after collecting all
-   * pages. */
+  /** One reading of the catalog, shared with the runtime-level read that
+   * needs no thread (`codex-model-catalog.ts`). What this session reads is
+   * remembered for the runtime listing, so the next fresh Chat names its
+   * default at once. */
   private async loadModelCatalog(): Promise<AgentModel[]> {
-    const models: AgentModel[] = [];
-    const seenModels = new Set<string>();
-    const seenCursors = new Set<string>();
-    let cursor: string | undefined;
-    while (true) {
-      const result = await this.request('model/list', cursor ? { cursor } : {}) as JsonObject;
-      const entries = Array.isArray(result.data) ? result.data : Array.isArray(result.models) ? result.models : [];
-      for (const entry of entries) {
-        const model = codexCatalogModel(entry);
-        if (model && !seenModels.has(model.id)) {
-          seenModels.add(model.id);
-          models.push(model);
-        }
-      }
-      const nextCursor = stringValue(result.nextCursor);
-      if (!nextCursor || seenCursors.has(nextCursor)) break;
-      seenCursors.add(nextCursor);
-      cursor = nextCursor;
-    }
+    const models = await loadCodexModelCatalog((method, params) => this.request(method, params));
+    rememberAgentModels('codex', models);
     return models;
   }
 
@@ -622,6 +608,8 @@ export class CodexSession implements AttributedAgentSession {
     const activeModel = codexThreadModel(thread, result);
     if (activeModel) {
       this.activeModel = activeModel;
+      // With nothing chosen, the thread's model is the runtime's own default.
+      if (!this.selectedModel) rememberAgentDefaultModel('codex', activeModel);
       if (!this.models.some((entry) => entry.id === activeModel)) {
         this.models = [...this.models, { id: activeModel, label: activeModel }];
       }
@@ -1135,29 +1123,6 @@ function codexThreadModel(thread: JsonObject | undefined, response?: JsonObject)
   if (!thread) return stringValue(response?.model);
   const config = thread.config && typeof thread.config === 'object' ? thread.config as JsonObject : undefined;
   return stringValue(response?.model) || stringValue(thread.model) || stringValue(thread.modelId) || stringValue(config?.model) || undefined;
-}
-
-/** Normalize the app-server catalog while retaining its advertised effort
- * order. Codex returns effort entries as objects, unlike the Claude SDK. */
-function codexCatalogModel(entry: unknown): AgentModel | null {
-  if (!entry || typeof entry !== 'object') return null;
-  const value = entry as JsonObject;
-  const id = stringValue(value.id) ?? stringValue(value.model);
-  if (!id) return null;
-  const supportedEfforts = Array.isArray(value.supportedReasoningEfforts)
-    ? value.supportedReasoningEfforts.flatMap((effort): string[] => {
-      if (typeof effort === 'string') return [effort];
-      if (!effort || typeof effort !== 'object') return [];
-      const id = stringValue((effort as JsonObject).reasoningEffort);
-      return id ? [id] : [];
-    })
-    : [];
-  return {
-    id,
-    label: stringValue(value.displayName) ?? stringValue(value.name) ?? id,
-    ...(typeof value.description === 'string' ? { description: value.description } : {}),
-    ...(supportedEfforts.length ? { supportedEfforts } : {}),
-  };
 }
 
 function codexEffortOption(effort: string | undefined): { effort?: string } {

@@ -1,5 +1,7 @@
-/** The segmented control: a bordered track with the selected tab drawn as a
- *  raised pill. It wraps Base UI's Tabs primitive, which owns role/tabindex and
+/** The value-driven tab strip: standalone pills on whatever substrate they
+ *  land on, with no track drawn around them. The selected tab wears the hover
+ *  tint, the one gray hovered and selected share, so light and dark show the
+ *  same flat lift. It wraps Base UI's Tabs primitive, which owns role/tabindex and
  *  arrow-key navigation, and adds the Fluid layer — an optimistic pill jump on
  *  click and the ladder-aligned sizing. The measured indicator layers and the
  *  tab label live in `components/internal/tabs-strip`, shared with the
@@ -36,8 +38,6 @@ import {
 import type { IconComponent } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
 import { SizeProvider, useSize, type SizeVariant } from '@/lib/size-context';
-import { surfaceClasses } from '@/lib/surface-classes';
-import { useSurface } from '@/lib/surface-context';
 import {
   useDomOrderRegistry,
   useMarkedIndex,
@@ -150,8 +150,6 @@ const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
   ({ children, className, ...props }, ref) => {
     const shape = useShape();
     const sizeClasses = useSize();
-    const substrate = useSurface();
-    const indicatorLevel = Math.min(substrate + 3, 8);
     const rootCtx = useContext(TabsRootContext);
     const [optimisticIdx, setOptimisticIdx] = useState<number | null>(null);
 
@@ -195,23 +193,25 @@ const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
           {...strip.listHandlers}
           className={cn(
             // segmentPad + segmentItem add up to the ladder's control height
-            // (36px default, 28px compact) so the segmented control's outer
-            // box lines up with buttons, selects, and inputs beside it.
-            'relative inline-flex items-center gap-0.5 bg-muted select-none',
+            // (36px default, 28px compact) so the strip's outer box lines up
+            // with buttons, selects, and inputs beside it. No background: the
+            // strip draws no track, only its pills.
+            'relative inline-flex items-center gap-0.5 select-none',
             sizeClasses.segmentPad,
             shape.container,
             className,
           )}
           {...props}
         >
-          {/* The raised pill sits three surface levels above the track it
-              rides in, so the segmented control reads the same on any
-              substrate; hover previews the move at a lower opacity. */}
+          {/* Borderless pills: the selection and the hover preview wear the
+              one tint, and the selection holds still while another tab is
+              hovered. A surface-ladder lift would vanish in light, where the
+              ladder has nothing whiter than the paper the strip sits on. */}
           <TabsStripIndicators
             strip={strip}
             selectedIndex={optimisticIdx}
-            selectedSurface={surfaceClasses(indicatorLevel)}
-            selectedHoverOpacity={0.85}
+            selectedSurface="bg-hover"
+            selectedHoverOpacity={1}
             hoverSurface="bg-hover"
           />
 
@@ -314,7 +314,7 @@ const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
             )}
           />
         )}
-        <TabsStripLabel label={label} isActive={isActive} isSelected={isSelected} />
+        <TabsStripLabel label={label} isActive={isActive} />
         {TrailingIcon && (
           <span
             aria-hidden="true"

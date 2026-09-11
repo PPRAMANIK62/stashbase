@@ -38,18 +38,20 @@ them, and does not call those files Agent Instructions in product UI.
 ## OpenQuill
 
 The included zero-install Agent shown as **OpenQuill** in Agent pickers and Chat
-chrome, with **Sign in for free credits** under its picker label while signed
-out and **Free credits included** after sign-in. It uses
-StashBase's pinned local OpenCode runtime and the signed-in account allowance.
-`stashbase` remains its implementation identifier.
+chrome. It uses StashBase's pinned local OpenCode runtime and the signed-in
+account's **free credits**, which refill on a fixed seven-day window. Sign-in
+lives in the account row at the foot of the sidebar and in the Agents section
+of Settings, and exists for OpenQuill alone. `stashbase` remains its
+implementation identifier.
 
 ## Search by meaning
 
 The user-facing name for optional meaning-based retrieval across the Wiki.
-When an embedding source is configured, it combines vector similarity with
-text matching and always returns evidence through a visible Source. Keyword
-search — always-available exact text matching — works without it; the search
-popup's mode toggle pairs **By meaning** with **By keyword**.
+When an embedding key is added under Settings, it combines vector similarity
+with text matching and always returns evidence through a visible Source. It
+is off until then, and no surface names it before it is on. Keyword search,
+always-available exact text matching, works without it; once a key is on, the
+search panel's mode toggle pairs **By meaning** with **By keyword**.
 
 Write the name as a plain phrase: lowercase in running copy ("set up search
 by meaning", "preparation for search by meaning"), and title-cased **Search
@@ -60,10 +62,13 @@ meaning isn't…" reads as an imperative. Recast such sentences as an action
 ("Set up search by meaning") or use the gerund ("Searching by meaning stops
 until a key is added").
 
-Hosted usage draws on the signed-in account's included monthly **credits**
-("Free monthly credits", "Remaining credits for search by meaning"). Reserve
-**allowance** for OpenQuill's seven-day quota; the two quotas never
-share a noun, so neither surface can be mistaken for the other.
+Search by meaning has no hosted quota: the key's provider bills the person
+who added it, and StashBase shows no credits for search. **Credits** names
+OpenQuill's free seven-day quota only: **Free credits** under the Agents
+section, where the section already says whose they are, and **OpenQuill
+credits** in the sidebar's account menu, where nothing around the line does.
+`allowance` survives as the wire and type name behind it, never in product
+copy.
 
 Whether a Chat may add meaning-based evidence is that Chat's own retrieval
 policy. Without it, retrieval stays text-only; it does not pause or
@@ -96,9 +101,9 @@ real folder with a wiki built from it, downloadable as a copy that opens in
 its own window. The welcome screen a window with no folder open shows
 carries the Gallery band under its folder choices; the sidebar's Gallery row
 raises the same shop as an overlay inside a folder window. An entry's detail
-page shows what is inside the copy and the request that built it. **Copy
-prompt** is its one prompt affordance, and the Gallery never places or sends
-composer text.
+page carries the publisher's introduction to the wiki and, as its Agent
+Instructions, the request that built it. The **Copy** glyph on those instructions is its one prompt affordance,
+and the Gallery never places or sends composer text.
 
 ## Canvas
 
@@ -164,7 +169,9 @@ visible, user-owned Wiki Pages.
 
 The set of local folders the user has authorized in one StashBase
 installation. Search and MCP retrieval default to the library and may narrow
-to a member folder or path.
+to a member folder or path. The word belongs to retrieval: management
+surfaces name the members **projects** and never say Library — a person
+removes or opens a project, and searches the library.
 
 ## Local RAG layer
 

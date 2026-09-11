@@ -160,15 +160,15 @@ const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
               )}
               {...props}
             >
-              {/* Borderless pills: the selection carries the hover tint, and
-                  the hover preview uses the darker step at 0.4 opacity so it
-                  still reads while staying lighter than the selection. */}
+              {/* Borderless pills: the selection and the hover preview wear
+                  the one tint, and the selection holds still while another
+                  tab is hovered. */}
               <TabsStripIndicators
                 strip={strip}
                 selectedIndex={selectedIndex}
                 selectedSurface="bg-hover"
-                selectedHoverOpacity={0.8}
-                hoverSurface="bg-active"
+                selectedHoverOpacity={1}
+                hoverSurface="bg-hover"
               />
 
               {children}
@@ -250,14 +250,9 @@ const TabsSubtleItem = forwardRef<HTMLButtonElement, TabsSubtleItemProps>(
           />
         )}
         {collapseLabel ? (
-          <TabsStripCollapsingLabel
-            isActive={isActive}
-            isSelected={isSelected}
-            label={label}
-            show={showLabel}
-          />
+          <TabsStripCollapsingLabel isActive={isActive} label={label} show={showLabel} />
         ) : (
-          <TabsStripLabel label={label} isActive={isActive} isSelected={isSelected} />
+          <TabsStripLabel label={label} isActive={isActive} />
         )}
       </Tabs.Tab>
     );

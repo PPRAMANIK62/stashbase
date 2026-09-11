@@ -41,19 +41,19 @@ import {
   type SemanticSearchPort,
 } from '@/features/retrieval/public';
 import {
+  createAccountAdapter,
   createAgentRuntimeAdapter,
   createAppearanceAdapter,
   createCaptureAdapter,
   createEmbedderAdapter,
   createMcpAccessAdapter,
-  createOnboardingAdapter,
   createTranscriptionAdapter,
+  type AccountPort,
   type AgentRuntimePort,
   type AppearancePort,
   type CapturePort,
   type EmbedderPort,
   type McpAccessPort,
-  type OnboardingPort,
   type TranscriptionPort,
 } from '@/features/settings/public';
 import { createUpdatesAdapter, type UpdatesPort } from '@/features/updates/public';
@@ -110,12 +110,12 @@ export interface AppDependencies {
     semanticSearchApi: SemanticSearchPort;
   };
   settings: {
+    accountApi: AccountPort;
     agentRuntimeApi: AgentRuntimePort;
     appearanceApi: AppearancePort;
     captureApi: CapturePort;
     embedderApi: EmbedderPort;
     mcpAccessApi: McpAccessPort;
-    onboardingApi: OnboardingPort;
     transcriptionApi: TranscriptionPort;
   };
   /** Keeping this build current; null outside Electron or when the build has no updater. */
@@ -192,12 +192,12 @@ export function createDependencies(): AppDependencies {
       semanticSearchApi: createSemanticSearchAdapter(http),
     },
     settings: {
+      accountApi: createAccountAdapter(http, bridge.runtime.serverOrigin),
       agentRuntimeApi: createAgentRuntimeAdapter(http),
       appearanceApi: createAppearanceAdapter(http),
       captureApi: createCaptureAdapter(http),
       embedderApi: createEmbedderAdapter(http),
       mcpAccessApi: createMcpAccessAdapter(http),
-      onboardingApi: createOnboardingAdapter(http),
       transcriptionApi: createTranscriptionAdapter(http),
     },
     updates: bridge.updates ? createUpdatesAdapter(bridge.updates) : null,

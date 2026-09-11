@@ -3,20 +3,20 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { EmbedderError } from '@/features/settings/application/embedder-port';
 import { failureMessage } from '@/features/settings/application/failure-messages';
-import { embedderPort, embedderState } from '@/test/fakes/settings';
+import { embedderPort, embedderState, keyedEmbedderState } from '@/test/fakes/settings';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
 
-import { useEmbedder } from './use-embedder';
+import { useEmbedder, useSearchKeyConfigured } from './use-embedder';
 
 const initial = embedderState({ model: 'm' });
 
 afterEach(cleanup);
 
-function mount(port = embedderPort(initial), openExternal = vi.fn()) {
-  const hook = renderHook(() => useEmbedder(port, openExternal), {
+function mount(port = embedderPort(initial)) {
+  const hook = renderHook(() => useEmbedder(port), {
     wrapper: queryWrapper(createTestQueryClient()),
   });
-  return { hook, openExternal, port };
+  return { hook, port };
 }
 
 describe('useEmbedder', () => {
@@ -32,34 +32,16 @@ describe('useEmbedder', () => {
     await waitFor(() => expect(port.load).toHaveBeenCalledTimes(2));
   });
 
-  it('opens the browser for a sign-in and tracks the flow until it completes', async () => {
-    const port = embedderPort(initial, {
-      signInStatus: vi.fn(async () => ({ state: 'complete' as const })),
-    });
-    const { hook, openExternal } = mount(port);
-    await waitFor(() => expect(hook.result.current.state).toEqual(initial));
-
-    act(() => hook.result.current.signIn());
-
-    await waitFor(() =>
-      expect(openExternal).toHaveBeenCalledWith('https://accounts.example/sign-in'),
-    );
-    await waitFor(() => expect(hook.result.current.signInPending).toBe(false));
-    expect(port.signInStatus).toHaveBeenCalledWith('flow-1', expect.any(AbortSignal));
-    await waitFor(() => expect(port.load).toHaveBeenCalledTimes(2));
-  });
-
-  it('keeps a failed sign-in visible as something the reader must act on', async () => {
-    const port = embedderPort(initial, {
-      signInStatus: vi.fn(async () => ({ error: 'Denied', state: 'error' as const })),
-    });
+  it('writes the state a removal answers with instead of reading again', async () => {
+    const cleared = embedderState({ model: 'cleared' });
+    const port = embedderPort(keyedEmbedderState(), { removeKey: vi.fn(async () => cleared) });
     const { hook } = mount(port);
+    await waitFor(() => expect(hook.result.current.state?.hasKey).toBe(true));
 
-    act(() => hook.result.current.signIn());
+    act(() => hook.result.current.removeKey());
 
-    await waitFor(() =>
-      expect(hook.result.current.accountFailure).toEqual({ message: 'Denied', tone: 'input' }),
-    );
+    await waitFor(() => expect(hook.result.current.state).toEqual(cleared));
+    expect(port.load).toHaveBeenCalledTimes(1);
   });
 
   it('separates a rejected key from an unreachable one when reporting it', async () => {
@@ -95,21 +77,40 @@ describe('useEmbedder', () => {
   it('gives each command its own abort lane, so one command cannot cancel another', async () => {
     const seen = new Map<string, AbortSignal>();
     const port = embedderPort(initial, {
-      refreshAccount: vi.fn(async (signal: AbortSignal) => {
-        seen.set('refreshAccount', signal);
-        return initial.account;
-      }),
       removeKey: vi.fn(async (signal: AbortSignal) => {
         seen.set('removeKey', signal);
         return initial;
       }),
+      saveKey: vi.fn(async (_provider, _key, signal: AbortSignal) => {
+        seen.set('saveKey', signal);
+        return { warning: null };
+      }),
     });
     const { hook } = mount(port);
 
-    act(() => hook.result.current.refreshAccount());
+    act(() => hook.result.current.saveKey({ key: 'sk', provider: 'openai' }, vi.fn()));
     act(() => hook.result.current.removeKey());
 
     await waitFor(() => expect(seen.size).toBe(2));
-    expect(seen.get('refreshAccount')?.aborted).toBe(false);
+    expect(seen.get('saveKey')?.aborted).toBe(false);
+  });
+});
+
+describe('useSearchKeyConfigured', () => {
+  it('is unknown until the source is read, then true only for the reader’s own key', async () => {
+    const keyed = renderHook(() => useSearchKeyConfigured(embedderPort(keyedEmbedderState())), {
+      wrapper: queryWrapper(createTestQueryClient()),
+    });
+    expect(keyed.result.current).toBeNull();
+    await waitFor(() => expect(keyed.result.current).toBe(true));
+
+    const hosted = renderHook(
+      () =>
+        useSearchKeyConfigured(
+          embedderPort(embedderState({ authorized: true, source: 'stashbase-account' })),
+        ),
+      { wrapper: queryWrapper(createTestQueryClient()) },
+    );
+    await waitFor(() => expect(hosted.result.current).toBe(false));
   });
 });

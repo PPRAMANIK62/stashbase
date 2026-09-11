@@ -2,7 +2,7 @@ export { createAgentCatalogAdapter } from './infrastructure/catalog-api';
 export { createAgentContextAdapter } from './infrastructure/context-api';
 export { createAgentSessionAdapter } from './infrastructure/session-api';
 export { AgentChats, AgentWorkspace } from './ui/workspace-lazy';
-export { AgentTitlebar } from './ui/titlebar';
+export { ChatNavButtons } from './ui/chat-nav-buttons';
 export { NewChatButton } from './ui/new-chat-button';
 export { useAgentWorkspaceRuntime } from './hooks/use-agent-workspace-runtime';
 export { agentSurfaceProps, useAgentComposerFocused } from './ui/composer/focus';

@@ -7,8 +7,9 @@ import type { AgentAllowance } from '@/features/settings/domain/agent-catalog';
 import { ProgressBar, SettingsRow } from '@/features/settings/ui/rows';
 import { useIcon } from '@/lib/icon-context';
 
-/** The standing 7-day allowance: one bar and one sentence, with the token
- *  breakdown behind a disclosure most readers never open. */
+/** OpenQuill's free credits, which refill on a fixed 7-day window: one bar
+ *  and one sentence, with the token breakdown behind a disclosure most
+ *  readers never open. */
 export function AllowanceRow({
   allowance,
   onRefresh,
@@ -30,8 +31,8 @@ export function AllowanceRow({
 
   return (
     <SettingsRow
-      detail={`${percent}% remaining${reset ? ` · Resets ${reset}` : ' · Starts on first use'}`}
-      title="7-day Agent allowance"
+      detail={`${percent}% left${reset ? ` · Refills ${reset}` : ' · The 7-day window starts on first use'}`}
+      title="Free credits"
       trail={
         <Button leadingIcon={RefreshCw} onClick={onRefresh} size="compact" variant="ghost">
           Refresh

@@ -31,7 +31,12 @@ function applicationWindowChromeOptions(platform = process.platform) {
     // the platform reveal it temporarily with Alt when it is needed.
     autoHideMenuBar: platform === 'linux',
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 12 },
+    // The inset shell starts every column 8px below the window top (the
+    // sidebar's py-2, the inset's m-2), so the 44px (h-11) titlebar band is
+    // centered at window y 30. The light group renders ~14px tall, so y
+    // puts its center on that axis, level with the sidebar toggle beside
+    // it.
+    trafficLightPosition: { x: 14, y: 23 },
   };
 }
 

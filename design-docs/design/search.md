@@ -25,21 +25,20 @@ user-managed results.
   rather than decoded lossily. Whole-token search applies its result cap
   after token filtering, so substring-heavy files do not hide later eligible
   evidence.
-- With an embedding source configured, retrieval can also search by meaning.
-  Product copy keeps the phrase lowercase; engineering terms such as semantic
-  indexing and embeddings appear only where technically necessary.
+- With an embedding key added under Settings, retrieval can also search by
+  meaning. It is off until then, and nothing outside Settings names it before
+  it is on. Product copy keeps the phrase lowercase; engineering terms such as
+  semantic indexing and embeddings appear only where technically necessary.
 - Agent retrieval combines meaning-based similarity with text matching for
-  every Chat whose folder has a source configured, and uses text matching
-  alone otherwise, including current prepared PDF, DOCX, image, and media
+  every Chat whose folder has a key on, and uses text matching alone
+  otherwise, including current prepared PDF, DOCX, image, and media
   text. The strategy is per lookup and never pauses background Preparation or
   semantic indexing.
-- Setting up search by meaning offers hosted account access as the primary
-  path and OpenAI/OpenRouter keys as an advanced path. The active source
-  remains explicit, and browser sign-in returns to the initiating window or
-  offers a deliberate app-return action. Upgrades retire a previously selected
-  local source before indexing starts: a signed-in account takes priority,
-  then a stored BYOK credential, otherwise searching by meaning returns to
-  not set up.
+- Turning search by meaning on is one action: adding an OpenAI or OpenRouter
+  key under **Settings → Search by Meaning**, billed to the person who adds
+  it. There is no hosted source and no account path; the StashBase account
+  buys OpenQuill's credits and nothing for search. Removing the key turns
+  search by meaning off again and keeps keyword search.
 - Library search is a panel in the sidebar, reached from its navigator tab or
   a keyboard shortcut. Both modes are folder-explicit. They search the active
   folder, and a match outside it is not offered. The panel keeps its query and
@@ -54,51 +53,32 @@ user-managed results.
   file-type categories. An attributed panel Chat's own retrieval policy
   resolves the operation's strategy without asking the Agent to select a
   different tool.
-- The **By keyword** and **By meaning** modes share one query surface. Results
+- Search is keyword search alone until a key is on: one field, no mode
+  chooser, and nothing that names the other mode. Once a key is on, the **By
+  keyword** and **By meaning** modes share one query surface. Results
   preserve rank while grouping evidence by folder when needed.
 - A result always identifies a source file. Evidence may come from PDF, DOCX,
   OCR, or transcript text, but opening it never exposes AppData, and opening
   one never switches the active folder.
-- Readiness distinguishes disabled, preparing, partial, paused, failed, and
-  ready states. Keyword search remains usable while searching by meaning is
-  not set up or deferred.
-- Setting up search by meaning is strongly recommended but never gates local
-  browsing, editing, preview, keyword search, or building Wiki Pages. A window
-  with no folder open stays quiet. Once a folder resolves, a non-blocking
-  notice in the strip above the workspace offers the hosted account or a
-  bring-your-own key. It is a notice and not a dialog on purpose, because
-  onboarding must not stand between a reader and the files just opened. **Choose
-  a source** opens the Search by Meaning section of Settings; declining reads
-  **Not now**.
-- Either answer is recorded the moment it is given, as one durable
-  application-level preference, so no later folder and no relaunch repeats the
-  offer. A folder that already has a source configured never carries the
-  notice, and the notice waits until both the stored answer and that folder's
-  readiness are known, so someone already set up never sees it flash. The
-  offer records which revision it answered, so a materially rewritten
-  invitation can be shown again deliberately rather than by accident. Build
-  Wiki never opens or waits for the setup. The observable activation paths
-  live in
-  [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-value)
-  and [J12](../user-journeys.md#j12-build-wiki-pages-from-a-local-folder).
-- After declining, the **By meaning** mode is the route back. Selecting it
-  while no source is configured explains the state and opens the owning
-  Settings section. Settings reaches the same section directly.
-- Deferring a large first index build for one folder is a different decision
-  from declining setup, even though both offer **Not now**. Deferring leaves
-  the configured source in place and shows that folder as paused.
-- Semantic runtime refreshes after account, quota, or key changes remain
-  background work. Overlapping refresh and folder-removal activity does not
-  interrupt local browsing or surface native process errors as user actions.
-- Hosted indexing and meaning-based queries draw from one pool of included
-  monthly credits. User-facing copy calls this quota **credits**; `allowance`
-  names only OpenQuill's seven-day quota, so the two never share a word.
-  The Search by Meaning panel in Settings shows the provider display name when
-  available, retains the full email for account identification, falls back to a
-  stable label otherwise, and shows the remaining percentage and reset date. When the credits are exhausted, hosted
-  semantic work stops while keyword search and every local-file workflow
-  remain available. Pending semantic work resumes after the credits
-  refresh or an available BYOK source is selected.
+- Readiness distinguishes preparing, partial, paused, failed, and ready
+  states once a key is on; before that the search panel says nothing about
+  search by meaning at all. Keyword search remains usable throughout.
+- Nothing offers the setup. A window with no folder open stays quiet, a
+  folder that resolves stays quiet, and the search panel carries no route into
+  Settings for a mode it does not show. Settings is the one place search by
+  meaning is turned on, and Build Wiki
+  ([J12](../user-journeys.md#j12-build-wiki-pages-from-a-local-folder)) never
+  opens or waits for it. The observable path lives in
+  [J05](../user-journeys.md#j05-search-and-open-source-evidence).
+- Deferring a large first index build for one folder leaves the key in place
+  and shows that folder as paused; **Not now** there is about that folder's
+  build, never about the key.
+- Semantic runtime refreshes after key changes remain background work.
+  Overlapping refresh and folder-removal activity does not interrupt local
+  browsing or surface native process errors as user actions.
+- Meaning-based indexing and queries are billed by the key's provider to the
+  person who added the key. StashBase shows no quota for search; **credits**
+  names OpenQuill's free quota and nothing about search.
 - In-app and MCP retrieval share source identity and access rules. MCP also
   supports validated source-type categories.
 - Representative semantic retrieval quality is measured by a versioned,
@@ -119,14 +99,14 @@ user-managed results.
 - Searching by meaning is a use-time retrieval choice. Turning it off must
   neither make prepared documents unreadable nor stop, remove, or foreground
   the background semantic-index lifecycle.
-- BYOK credentials and account source selection are managed through Settings.
-  Account login starts only from an explicit Sign in action in the setup
-  invitation or the Search by Meaning section of Settings.
+- The embedding key is managed only through Settings. Signing in to the
+  StashBase account is not a search action and never changes the source.
   Browsing local files and serving an existing local index never depends on
   online authentication.
-- The offer is answered once and never re-asked on its own. A route back into
-  setup must stay reachable without one, because a person who declined early
-  gets no second prompt.
+- No surface outside Settings offers, names, or explains search by meaning
+  while it is off. A person who wants it finds it where the other
+  bring-your-own capabilities live, and the mode appears the moment the key
+  is on.
 - Account and credential ownership remains outside renderer and indexing
   presentation. Persistence and process-boundary invariants live in
   [Settings and Config](../../code-review/settings-config.md).
@@ -142,13 +122,14 @@ user-managed results.
   core loop describe finding evidence across authorized folders. MCP retrieval
   still defaults to the whole library, so a person's reach is now narrower
   than an Agent's.
-- The durable choice in
-  [Product Direction](../product-direction.md#activating-search-by-meaning)
-  expects standing routes back into setup after a decline. Two ship: the **By
-  meaning** mode and Settings. The Files panel carries no standing setup
-  action, and the mode's explanation appears only while that mode is selected,
-  so the recovery is thinner than the decision assumed. Section and credential
-  ownership is [Settings and Config](../../code-review/settings-config.md).
+- The server still resolves a signed-in account session to a hosted
+  embedding source of its own when no key is stored, may index with it in the
+  background, and still accepts that source and an embedding-purpose sign-in
+  on its routes. The renderer treats that source as not set up, so nothing on
+  screen offers or names it, but hosted indexing can still run and spend the
+  account's search quota until the server side of this change lands.
+  [Settings and Config](../../code-review/settings-config.md) records the
+  server follow-ups.
 
 ## Cross-area Seams
 
@@ -174,6 +155,8 @@ user-managed results.
 ### Not Planned
 
 - Requiring search by meaning for the basic local workflow.
+- A hosted source for search by meaning, or a sign-in that turns it on.
+- Offering search by meaning unprompted, on any surface.
 - A chunk or vector administration surface for ordinary users.
 - Generated artifacts as normal files or result identities.
 

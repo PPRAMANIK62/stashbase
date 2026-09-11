@@ -131,6 +131,13 @@ toolchain rather than the linter any gate runs.
   verifies the Tiny speech model, transcodes media, runs local inference,
   validates transcript output, and serves the compatible preview before
   upload.
+- The application icon is generated, never hand-edited. `build/icon.svg` is
+  the only source; `pnpm build:icons` renders it through Electron's own
+  Chromium into `build/icon.png`, the `build/icons/` set, `build/icon.ico`,
+  and `build/icon.icns`, drawing the 16, 32, and 48 px rasters with heavier
+  strokes so the mark survives those sizes. Regenerate after any change to the
+  SVG and commit the rasters with it; the packagers read the rasters, not the
+  SVG.
 
 ## macOS Developer ID Distribution
 
@@ -201,8 +208,9 @@ credential-free and does not run this probabilistic check.
 | Publication coordinator | `.github/workflows/release.yml` |
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
 | Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
+| Application icon | `scripts/icons/build.mjs` behind `pnpm build:icons`, rendering `build/icon.svg` in `scripts/icons/render.mjs` with the size table and containers in `scripts/icons/encode.mjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs` (including the explicit OpenCode resource version probe) and platform release verifiers |
-| Focused evidence | `scripts/packaging/inputs.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
+| Focused evidence | `scripts/packaging/inputs.test.mjs`, `scripts/icons/encode.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |
 
 ## Release Runbook
 

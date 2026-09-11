@@ -85,6 +85,46 @@ describe('AgentSessionRuntime turns', () => {
     ]);
   });
 
+  it('takes the latest prompt back into the composer once its turn has settled', async () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'codex',
+      autostart: false,
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'library' },
+    });
+    runtime.setDraft('Inspect the project');
+    await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    test.listeners[0]?.onEvent({ kind: 'turn-started' });
+    const prompt = runtime.store.getState().transcript[0];
+    if (prompt?.kind !== 'user') throw new Error('The prompt did not reach the transcript.');
+
+    // Streaming: the prompt stays where it is and the draft stays empty.
+    expect(runtime.editPrompt(prompt.id)).toBe(false);
+    expect(runtime.store.getState().draft).toBe('');
+
+    test.listeners[0]?.onEvent({ delta: 'A small library.', kind: 'text' });
+    test.listeners[0]?.onEvent({ isError: false, kind: 'turn-ended' });
+    expect(runtime.store.getState().transcript.at(-1)).toMatchObject({
+      at: expect.any(Number),
+      kind: 'assistant',
+      text: 'A small library.',
+    });
+
+    expect(runtime.editPrompt('not-a-prompt')).toBe(false);
+    expect(runtime.editPrompt(prompt.id)).toBe(true);
+    expect(runtime.store.getState()).toMatchObject({
+      context: [],
+      draft: 'Inspect the project',
+      skill: null,
+    });
+    // The transcript keeps the sent prompt; the edit is a new turn's draft.
+    expect(runtime.store.getState().transcript[0]).toBe(prompt);
+  });
+
   it('reports files only after a write settles successfully or a native diff arrives', () => {
     const test = harness();
     const onFilesChanged = vi.fn();

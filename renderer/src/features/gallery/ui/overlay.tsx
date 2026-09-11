@@ -19,7 +19,9 @@ import { GalleryShop } from './shop';
  * the next entry, which is why nothing here closes when a copy succeeds.
  *
  * The entry page replaces the shelf rather than stacking a second modal over
- * it: one dismiss target for one decision, and Back is the honest way home.
+ * it: one dismiss target for one decision, and one way home, which the page
+ * draws on its own action row so this header reads the same over the shelf
+ * and over a page.
  */
 export function GalleryOverlay({
   copying,
@@ -58,8 +60,7 @@ export function GalleryOverlay({
         <DialogHeader className="shrink-0">
           <DialogTitle>Gallery</DialogTitle>
           <DialogDescription>
-            Ready-made Wikis, each a real folder with a wiki built from it. A copy opens in its own
-            window.
+            Find something that inspires you. Make a copy and build on it.
           </DialogDescription>
         </DialogHeader>
         {entry ? (

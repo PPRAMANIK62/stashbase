@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { dayLabel, promptTimeLabel, startOfLocalDay, transcriptDayBreaks } from './time';
+import {
+  dayLabel,
+  durationLabel,
+  promptTimeLabel,
+  replyTimeLabel,
+  startOfLocalDay,
+  transcriptDayBreaks,
+} from './time';
 
 const DAY = 86_400_000;
 /** A pinned Wednesday afternoon, so every label below is a fixed string
@@ -54,5 +61,25 @@ describe('transcriptDayBreaks', () => {
       { id: 'u4', kind: 'user', text: 'untimed' },
     ]);
     expect([...breaks]).toEqual(['u3']);
+  });
+});
+
+describe('durationLabel', () => {
+  it('reads as seconds, then minutes and seconds, then hours and minutes', () => {
+    expect(durationLabel(300)).toBe('<1s');
+    expect(durationLabel(12_400)).toBe('12s');
+    expect(durationLabel(125_000)).toBe('2m 5s');
+    expect(durationLabel(3_720_000)).toBe('1h 2m');
+    expect(durationLabel(-5)).toBe('<1s');
+  });
+});
+
+describe('replyTimeLabel', () => {
+  it('says when the reply settled, and how long the turn took when the prompt was timed', () => {
+    expect(plain(replyTimeLabel(now, now - 12_000, now, EN))).toBe('3:30 PM · 12s');
+    expect(plain(replyTimeLabel(now, undefined, now, EN))).toBe('3:30 PM');
+    expect(plain(replyTimeLabel(now - DAY, now - DAY - 65_000, now, EN))).toBe(
+      'Tue 3:30 PM · 1m 5s',
+    );
   });
 });

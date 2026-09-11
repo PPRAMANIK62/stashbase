@@ -3,12 +3,13 @@
  *  only reads session state and hands verbs back to the runtime; every
  *  decision about what a connection means is a domain selector. */
 import { RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
 import type { QueuedMessage } from '@/components/ui/input-message';
+import { honoredAccessMode } from '@/features/agent/domain/access';
 import { agentGate, type Agent } from '@/features/agent/domain/agent-catalog';
 import { changedSource } from '@/features/agent/domain/file-change';
 import {
@@ -18,16 +19,20 @@ import {
   type AgentConnection,
   type AgentId,
 } from '@/features/agent/domain/session';
-import { suggestStarters } from '@/features/agent/domain/starters';
+import { emptyChatPrompts } from '@/features/agent/domain/starters';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
 import { useAgentInstructions } from '@/features/agent/hooks/use-agent-instructions';
-import { focusRing } from '@/lib/focus-ring';
+import { useRenameConversation } from '@/features/agent/hooks/use-conversation-history';
+import { useRotatingPrompt } from '@/features/agent/hooks/use-rotating-prompt';
 import { cn } from '@/lib/utils';
 import { useStickToBottom } from '@/shared/runtime/use-stick-to-bottom';
 
+import { ChatHeader } from './chat-header';
 import { AgentContextComposer } from './composer/context-composer';
+import { useAgentComposerFocused } from './composer/focus';
 import { AgentPermissionMode } from './composer/permission-mode';
-import { AgentComposerSettings } from './composer/settings';
+import { AgentProviderControl } from './composer/provider';
+import { AgentThinkingControl } from './composer/thinking';
 import { AgentInstructionsControl } from './instructions/agent-instructions-control';
 import { AgentSetupNotice } from './setup';
 import { AgentTranscript } from './transcript/transcript';
@@ -72,8 +77,8 @@ function connectionNotice(connection: AgentConnection): { settled: boolean; text
 
 /** The conversation surface, whether or not a runtime can carry a turn yet.
  *  A gated window is the same canvas with the agent-specific controls absent,
- *  an unsendable composer, and the setup notice where the starters sit — not
- *  a second screen that replaces the draft. */
+ *  an unsendable composer, and the setup notice beneath it — not a second
+ *  screen that replaces the draft. */
 function ChatWorkspace({
   catalog,
   instructions: instructionsApi,
@@ -123,22 +128,62 @@ function ChatWorkspace({
   const empty = state.transcript.length === 0;
   const scopeName = scopeLabel(state.scope);
   const instructions = useAgentInstructions(instructionsApi, state.scope);
-  const starters = useMemo(
-    () => (scopeOutline ? suggestStarters(scopeName, scopeOutline) : []),
+  // A mode is a promise the runtime must be able to keep. A session that
+  // lands on a runtime honoring a different set settles on one it does
+  // honor before the next turn binds it; a runtime honoring none takes no
+  // mode, so nothing is sent for it.
+  const honoredModes = readyAgent?.abilities.modes;
+  useEffect(() => {
+    if (!honoredModes || honoredModes.length === 0) return;
+    const settled = honoredAccessMode(honoredModes, state.accessMode);
+    if (settled !== state.accessMode) active.setAccessMode(settled);
+  }, [active, honoredModes, state.accessMode]);
+  // A fresh chat names what it will run on from the catalog the service
+  // remembers for its runtime; once the session starts, the socket's own
+  // catalog takes over and the seed is refused.
+  const rememberedModels = readyAgent?.models;
+  const unstarted = state.connection.kind === 'draft';
+  useEffect(() => {
+    if (unstarted && rememberedModels && rememberedModels.length > 0) {
+      active.seedModels(rememberedModels);
+    }
+  }, [active, rememberedModels, unstarted]);
+  const prompts = useMemo(
+    () => (scopeOutline ? emptyChatPrompts(scopeName, scopeOutline) : []),
     [scopeName, scopeOutline],
   );
+  // The blank Chat's placeholder cycles through the three requests, holding
+  // still while the reader is on the field. An armed skill's own hint and a
+  // conversation already under way take the field back.
+  const composerFocused = useAgentComposerFocused();
+  const rotatingPrompt = useRotatingPrompt(prompts, composerFocused || !empty);
+  const promptPlaceholder = empty && armedSkill === undefined ? rotatingPrompt : null;
   const scope = state.scope;
   const sourceFor = useMemo(() => (path: string) => changedSource(scope, path), [scope]);
   const composerRef = useRef<HTMLDivElement>(null);
+  const composerShown = state.connection.kind !== 'retired' && state.connection.kind !== 'disposed';
+  // The editor takes the returned text on its next render, so focus follows
+  // a frame later and the caret lands after it.
+  const editPrompt = useCallback(
+    (blockId: string) => {
+      if (!active.editPrompt(blockId)) return;
+      requestAnimationFrame(() => {
+        composerRef.current?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+      });
+    },
+    [active],
+  );
   const logRef = useRef<HTMLDivElement>(null);
   useStickToBottom(logRef, activeId);
-  const prefill = (prompt: string) => {
-    active.setDraft(prompt);
-    composerRef.current?.querySelector<HTMLElement>('textarea, [contenteditable="true"]')?.focus();
-  };
+  const renaming = useRenameConversation(runtime);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-surface-2">
+      <ChatHeader
+        failure={renaming.failure}
+        onRename={(session, title) => void renaming.rename(session, title)}
+        session={active}
+      />
       {empty && <div aria-hidden className="min-h-0 grow basis-0" />}
       <div
         aria-busy={activeTurn}
@@ -151,22 +196,24 @@ function ChatWorkspace({
         <div
           className={cn(
             'mx-auto flex min-h-full w-full max-w-[46rem] flex-col gap-3',
-            empty ? 'px-4 pt-8 pb-7 max-sm:px-3' : 'px-5 pt-8 pb-6 max-sm:px-4',
+            empty ? 'px-4 pt-8 pb-7 max-sm:px-3' : 'px-5 pt-4 pb-6 max-sm:px-4',
           )}
         >
           {empty ? (
-            // The one line that says what this space is for. `design-docs`
-            // calls it durable, so it is not a generic chat prompt to be
-            // reworded: it is the first-time reader's only hint that a folder
-            // can gain a wiki at all.
-            <h2 className="text-[28px] leading-none font-semibold tracking-[-0.03em] text-foreground max-sm:text-[24px]">
-              Your Wiki is here.
+            // The one line that says what this space is for, and in which
+            // order: a wiki is built from the folder first, and the writing
+            // comes from it. `design-docs` calls it durable, so it is not a
+            // generic chat prompt to be reworded, and it claims nothing about
+            // whose the words are.
+            <h2 className="text-center text-[28px] leading-none font-semibold tracking-[-0.03em] text-foreground max-sm:text-[24px]">
+              From wiki to words.
             </h2>
           ) : (
             <AgentTranscript
               activeTurn={activeTurn}
               blocks={state.transcript}
               key={activeId}
+              onEditPrompt={composerShown ? editPrompt : undefined}
               onOpenExternal={onOpenExternal}
               onOpenSource={onOpenSource}
               onPermission={active.replyPermission}
@@ -201,7 +248,7 @@ function ChatWorkspace({
         </div>
       )}
 
-      {state.connection.kind !== 'retired' && state.connection.kind !== 'disposed' && (
+      {composerShown && (
         <div className="relative shrink-0 px-4 pb-3 max-sm:px-3">
           <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-surface-2 to-transparent" />
           <div className="@container relative mx-auto w-full max-w-[46rem]" ref={composerRef}>
@@ -218,8 +265,10 @@ function ChatWorkspace({
               onSkillChange={active.setSkill}
               onStop={active.interrupt}
               // An armed skill says what it wants next, so its hint replaces
-              // the scope prompt.
-              placeholder={armedSkill?.argumentHint ?? `Ask about ${scopeName}…`}
+              // the cycling request; a conversation under way gets the plain
+              // prompt.
+              placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Ask or write…'}
+              placeholderIsPrompt={promptPlaceholder !== null}
               queue={state.queuedPrompts.map(({ context, id, text }) => ({
                 files: context.flatMap((item) =>
                   item.kind === 'transient' ? (active.fileForTransient(item.path) ?? []) : [],
@@ -227,27 +276,39 @@ function ChatWorkspace({
                 id,
                 text,
               }))}
+              // The left cluster is who runs the turn and under what rules;
+              // the right is what it runs on, read last before Send.
               leftSlot={
                 <>
                   {readyAgent && (
-                    <AgentComposerSettings
+                    <AgentProviderControl
                       activeAgent={readyAgent}
                       agents={catalog.readyAgents}
+                      disabled={activeTurn}
                       onAgentChange={(agent) => {
                         if (agent !== state.agent) runtime.newChat(agent, state.scope);
                       }}
-                      onEffortChange={active.setEffort}
-                      onModelChange={active.setModel}
-                      onRequestCatalog={active.start}
-                      state={{ ...state, activeTurn }}
+                    />
+                  )}
+                  {readyAgent && readyAgent.abilities.modes.length > 0 && (
+                    <AgentPermissionMode
+                      mode={state.accessMode}
+                      modes={readyAgent.abilities.modes}
+                      onChange={active.setAccessMode}
                     />
                   )}
                   <AgentInstructionsControl editor={instructions} scopeName={scopeName} />
                 </>
               }
               rightSlot={
-                readyAgent?.abilities.modes ? (
-                  <AgentPermissionMode mode={state.accessMode} onChange={active.setAccessMode} />
+                readyAgent ? (
+                  <AgentThinkingControl
+                    activeAgent={readyAgent}
+                    onEffortChange={active.setEffort}
+                    onModelChange={active.setModel}
+                    onRequestCatalog={active.start}
+                    state={{ ...state, activeTurn }}
+                  />
                 ) : null
               }
               sendable={readyAgent !== null}
@@ -258,28 +319,10 @@ function ChatWorkspace({
           </div>
         </div>
       )}
-      {gate.kind === 'ready' ? (
-        empty &&
-        starters.length > 0 && (
-          <div className="mx-auto flex w-full max-w-[46rem] shrink-0 flex-wrap gap-2 px-4 pb-3 max-sm:px-3">
-            {starters.map((starter) => (
-              <button
-                className={cn(
-                  'h-7 cursor-pointer rounded-full border border-border px-3 text-[13px] text-muted-foreground transition-colors duration-fast outline-none hover:bg-surface-3 hover:text-foreground',
-                  focusRing(),
-                )}
-                key={starter.id}
-                onClick={() => prefill(starter.prompt)}
-                type="button"
-              >
-                {starter.label}
-              </button>
-            ))}
-          </div>
-        )
-      ) : (
-        // One call to action at a time: a starter prefills a draft that cannot
-        // be sent yet, so the gate takes the row until it lifts.
+      {gate.kind !== 'ready' && (
+        // One call to action at a time: while no runtime can carry a turn,
+        // the gate sits where the composer's own requests would otherwise be
+        // the only thing on offer.
         <AgentSetupNotice
           checking={gate.kind === 'checking'}
           error={catalog.error}

@@ -7,6 +7,8 @@ import { GalleryOverlay } from './overlay';
 
 const ENTRIES: GalleryEntry[] = [
   {
+    about:
+      'I took this course as a founder and kept losing the thread between lectures. This wiki is the version I wanted: one page per lecture, and a playbook that connects them.\n\nInside are the twenty lecture transcripts, each distilled to what it actually argues, and a founder playbook built across all of them.\n\nFor anyone starting a company, or deciding whether to.',
     category: 'course',
     contents: '20 lecture transcripts · distilled founder playbook',
     description: "Sam Altman's Stanford CS183B course with YC.",
@@ -24,6 +26,7 @@ const ENTRIES: GalleryEntry[] = [
       'Build or update Wiki Pages from these lecture transcripts: one page per lecture with its key ideas, and a founder playbook that connects them.',
   },
   {
+    about: null,
     category: 'reference',
     contents: 'Eight reference sheets · one index',
     description: 'A working reference for typographic detail.',
@@ -75,10 +78,11 @@ type Story = StoryObj<typeof meta>;
 export const Shelf: Story = {};
 
 /** One entry's page, read top to bottom: the screenshot leads, then what it
- *  is, then the two artifacts side by side, then the one action. */
+ *  is, the introduction, then the one action, with the Agent Instructions
+ *  folded beneath the introduction. */
 export const EntryPage: Story = { args: { opened: true } };
 
-/** The same page for an entry that has published neither a file list nor a
- *  build prompt nor screenshots. Every slot states itself; none reshapes the
- *  page. This is also what the shop looks like offline. */
+/** The same page for an entry that has published no introduction,
+ *  instructions, or screenshots. Every slot states itself; none reshapes the page. This is
+ *  also what the shop looks like offline. */
 export const UnpublishedEntry: Story = { args: { opened: true, unpublished: true } };

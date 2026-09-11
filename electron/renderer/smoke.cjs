@@ -348,7 +348,9 @@ app
       inlineScriptDenied: true,
       welcomeActions: ['Create a new project', 'Open folder as a project'],
       welcomeTitle: 'StashBase',
-      workspaceMarginLeft: '0px',
+      // A window arrives on the welcome screen with the sidebar collapsed,
+      // and the collapsed rail leaves the inset its 8px margin.
+      workspaceMarginLeft: '8px',
       url: APP_URL,
       libraryKeys: [
         'chooseFolder',

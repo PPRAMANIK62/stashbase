@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { AgentInstructionsEditor } from '@/features/agent/hooks/use-agent-instructions';
+import { NARROW_LABEL, NARROW_TRIGGER } from '@/features/agent/ui/composer/narrow';
 
 import { AgentInstructionsDialog } from './agent-instructions-dialog';
 
@@ -30,13 +31,14 @@ export function AgentInstructionsControl({ editor, scopeName }: AgentInstruction
             ? `Instructions for ${scopeName}, customized`
             : `Instructions for ${scopeName}`
         }
+        className={NARROW_TRIGGER}
         leadingIcon={ScrollText}
         onClick={() => setOpen(true)}
         size="compact"
         title="Standing instructions for every Chat in this scope"
         variant="ghost"
       >
-        Instructions
+        <span className={NARROW_LABEL}>Instructions</span>
         {editor.customized && (
           <span
             aria-hidden="true"

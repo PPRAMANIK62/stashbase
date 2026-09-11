@@ -181,6 +181,7 @@ export function JsonTree({
             aria-label="JSON values"
             className="table-fixed font-mono"
             role="treegrid"
+            selectedIndex={selectedIndex}
             size="compact"
           >
             <colgroup>
