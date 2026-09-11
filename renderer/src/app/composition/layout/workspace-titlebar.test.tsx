@@ -7,6 +7,10 @@ import { App } from '@/app/shell';
 import { appDependencies } from '@/test/fakes/app';
 import { libraryApi, librarySnapshot, workspaceAdapters } from '@/test/fakes/workspace';
 
+/** Waits that follow the library and runtime catalog settling: a slow CI
+ *  runner under coverage needs more than the one-second default. */
+const SLOW = { timeout: 5_000 };
+
 afterEach(cleanup);
 
 describe('workspace titlebar', () => {
@@ -39,11 +43,13 @@ describe('workspace titlebar', () => {
 
     // The Chat pane's own header labels itself "<title>, <runtime>"; the
     // new-chat button's label has no comma, so the pattern reaches only it.
-    // A blank chat's name is a heading, not yet a rename control.
-    expect(await screen.findByRole('heading', { name: /^New chat, / })).not.toBeNull();
+    // A blank chat's name is a heading, not yet a rename control. The header
+    // follows the library and the runtime catalog settling, which takes a
+    // slow CI runner under coverage past the one-second default wait.
+    expect(await screen.findByRole('heading', { name: /^New chat, / }, SLOW)).not.toBeNull();
     // The slot starts on Welcome while the library is still loading, and the
     // word leaves through its exit fade rather than in the same frame.
-    await waitFor(() => expect(screen.queryByText('Welcome')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Welcome')).toBeNull(), SLOW);
   });
 
   it("takes the chat's name away with the hidden panel and brings it back with it", async () => {
@@ -55,7 +61,7 @@ describe('workspace titlebar', () => {
     );
 
     const chatName = /^New chat, /;
-    expect(await screen.findByRole('heading', { name: chatName })).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: chatName }, SLOW)).not.toBeNull();
     const hide = screen.getByRole('button', { name: 'Hide chat panel' });
     expect(hide.getAttribute('aria-expanded')).toBe('true');
 
@@ -63,11 +69,11 @@ describe('workspace titlebar', () => {
     const show = screen.getByRole('button', { name: 'Show chat panel' });
     expect(show.getAttribute('aria-expanded')).toBe('false');
     // The name lives in the pane, so hiding the pane hides the name.
-    await waitFor(() => expect(screen.queryByRole('heading', { name: chatName })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: chatName })).toBeNull(), SLOW);
     expect(screen.queryByText('Welcome')).toBeNull();
 
     await user.click(show);
-    expect(await screen.findByRole('heading', { name: chatName })).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: chatName }, SLOW)).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Hide chat panel' })).not.toBeNull();
   });
 });
