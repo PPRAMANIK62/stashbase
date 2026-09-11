@@ -31,7 +31,7 @@ export const Destructive: Story = {
     description: 'The folder and everything inside it will be deleted from disk.',
     destructive: true,
     details: (
-      <div className="max-w-full rounded-md bg-active px-2.5 py-2 font-mono text-caption break-all text-muted-foreground">
+      <div className="max-w-full rounded-md bg-muted px-2.5 py-2 font-mono text-caption break-all text-muted-foreground">
         /library/notes/archive
       </div>
     ),

@@ -160,12 +160,13 @@ const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
               )}
               {...props}
             >
-              {/* Borderless pills: the selection and the hover preview share
-                  one tint, separated only by opacity. */}
+              {/* Borderless pills: the selection carries the hover tint, and
+                  the hover preview uses the darker step at 0.4 opacity so it
+                  still reads while staying lighter than the selection. */}
               <TabsStripIndicators
                 strip={strip}
                 selectedIndex={selectedIndex}
-                selectedSurface="bg-active"
+                selectedSurface="bg-hover"
                 selectedHoverOpacity={0.8}
                 hoverSurface="bg-active"
               />

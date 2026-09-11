@@ -1,4 +1,4 @@
-import { Layers, Sparkles, Terminal } from 'lucide-react';
+import { Feather, Sparkles, Terminal } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import type { AgentRuntime } from '@/features/settings/domain/agent-catalog';
@@ -13,10 +13,10 @@ import { FailureNotice } from '@/shared/ui/failure-notice';
 
 import { StageTrack } from './stage-track';
 
-const AGENT_ICONS: Record<AgentId, typeof Layers> = {
+const AGENT_ICONS: Record<AgentId, typeof Feather> = {
   claude: Sparkles,
   codex: Terminal,
-  stashbase: Layers,
+  stashbase: Feather,
 };
 
 export interface RuntimeRowProps {

@@ -28,7 +28,7 @@ export function GalleryCard({
   return (
     <button
       className={cn(
-        'group relative block aspect-[4/3] w-full cursor-pointer overflow-hidden rounded-xl border border-border bg-surface-2 text-left transition-colors duration-fast outline-none hover:border-foreground/25',
+        'group relative block aspect-[4/3] w-full cursor-pointer overflow-hidden rounded-xl border border-border bg-surface-2 text-left shadow-surface-2 transition-colors duration-fast outline-none hover:border-foreground/25',
         focusRing(),
       )}
       onClick={() => onOpen(entry)}
@@ -42,7 +42,7 @@ export function GalleryCard({
           src={hero}
         />
       )}
-      <span className="absolute inset-x-0 bottom-0 flex flex-col gap-1 bg-surface-3 px-3.5 py-3">
+      <span className="absolute inset-x-0 bottom-0 flex flex-col gap-1 bg-surface-3 px-4 py-3">
         <span className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate text-body font-medium text-foreground">
             {entry.name}

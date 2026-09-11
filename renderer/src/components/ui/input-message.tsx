@@ -122,7 +122,6 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
   ) => {
     const shape = useShape();
     const editorHostRef = useRef<HTMLDivElement>(null);
-    const [focusVisible, setFocusVisible] = useState(false);
     const [hovered, setHovered] = useState(false);
 
     /** The consumer's field, found through the host it renders into. */
@@ -198,16 +197,15 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
     );
 
     // The edge is the box-shadow's 1px ring, recoloured per state (drag >
-    // focus > hover) so the stroke gains contrast without appearing to thicken;
-    // with none active the className's `shadow-surface-2` supplies the resting
-    // edge. Inline, not a `shadow-*` utility, which mangles multi-layer values.
+    // hover) so the stroke gains contrast without appearing to thicken; with
+    // none active the className's `shadow-surface-2` supplies the resting
+    // edge. Holding focus paints nothing — the caret is the focus indicator.
+    // Inline, not a `shadow-*` utility, which mangles multi-layer values.
     const edgeShadow = composerFiles.dragOver
       ? `0 0 0 1px var(--focus-ring), ${EDGE_DROP}`
-      : focusVisible
-        ? `0 0 0 1px color-mix(in oklab, var(--foreground) 20%, transparent), ${EDGE_DROP}`
-        : hovered && clickToFocus && !disabled
-          ? `0 0 0 1px var(--border), ${EDGE_DROP}`
-          : undefined;
+      : hovered && clickToFocus && !disabled
+        ? `0 0 0 1px var(--border), ${EDGE_DROP}`
+        : undefined;
 
     const composer = (
       // Presentational shell: the consumer's editor is the control. This box
@@ -247,7 +245,6 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
               disabled: disabled ?? false,
               maxRows,
               minRows,
-              onFocusChange: setFocusVisible,
               onValueChange,
               placeholder: dropHint ? DROP_HINT : placeholder,
               submit: handleSend,

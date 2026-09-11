@@ -38,7 +38,7 @@ export function agentDefinition(overrides: Partial<Agent> = {}): Agent {
   return {
     abilities: plainAbilities,
     id: 'stashbase',
-    label: 'Wiki Agent',
+    label: 'OpenQuill',
     needsSignIn: false,
     ready: true,
     ...overrides,

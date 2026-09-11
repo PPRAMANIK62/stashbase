@@ -92,7 +92,7 @@ user-managed results.
   interrupt local browsing or surface native process errors as user actions.
 - Hosted indexing and meaning-based queries draw from one pool of included
   monthly credits. User-facing copy calls this quota **credits**; `allowance`
-  names only the Wiki Agent's seven-day quota, so the two never share a word.
+  names only OpenQuill's seven-day quota, so the two never share a word.
   The Search by Meaning panel in Settings shows the provider display name when
   available, retains the full email for account identification, falls back to a
   stable label otherwise, and shows the remaining percentage and reset date. When the credits are exhausted, hosted

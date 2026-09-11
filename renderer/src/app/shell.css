@@ -11,3 +11,40 @@ html:has(.workspace-shell) {
 .workspace-titlebar-controls {
   -webkit-app-region: no-drag;
 }
+
+/* macOS draws its traffic lights over the top-left corner of the frameless
+   window (hiddenInset, at x 14 y 12, ending near x 66). Whatever the shell
+   puts in that corner starts to their right: the sidebar's header while the
+   sidebar is open, and the titlebar's control island once it has collapsed
+   away. The preload stamps the platform on the document root, so a browser
+   or another desktop keeps the row's own padding, and mirrors the window's
+   native fullscreen there, which hides the lights and takes the room with
+   them. */
+html[data-platform='darwin'] .workspace-shell {
+  --traffic-light-room: 68px;
+}
+
+html[data-platform='darwin'][data-fullscreen] .workspace-shell {
+  --traffic-light-room: 0px;
+}
+
+html[data-platform='darwin'] .workspace-shell [data-slot='sidebar'] .workspace-titlebar {
+  padding-left: calc(1rem + var(--traffic-light-room));
+}
+
+/* The inset keeps an 8px margin of its own once the sidebar is collapsed, so
+   the island's padding starts that much later, and falls back to the row's
+   own 8px once fullscreen has taken the room away. It eases at the same pace
+   as the inset's margin, so the toggle rides the sidebar's edge rather than
+   jumping ahead of it. */
+html[data-platform='darwin']
+  .workspace-shell
+  [data-slot='sidebar'][data-state='collapsed']
+  ~ [data-slot='sidebar-inset']
+  > .workspace-titlebar {
+  padding-left: max(0.5rem, var(--traffic-light-room));
+}
+
+html[data-platform='darwin'] .workspace-shell [data-slot='sidebar-inset'] > .workspace-titlebar {
+  transition: padding-left var(--motion-fast);
+}

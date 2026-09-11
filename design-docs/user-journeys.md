@@ -54,7 +54,9 @@ Agent runtime is assumed.
    user has already reached.
 5. **Return.** Close and relaunch StashBase. The library, durable settings, and
    completed setup remain available; the handled onboarding choice is not
-   replayed, while active-folder choice follows its documented scope. A
+   replayed. The window lands on the welcome screen again rather than in the
+   last folder, which is one click away in **Recent** and comes back with the
+   tabs and tree state it had. A
    packaged build may quietly check the stable release channel when the saved
    default-on preference permits it. One deliberate Update action may then
    download, install, and relaunch after open edits are saved; Linux package
@@ -352,15 +354,15 @@ installation, context, tools, and permissions.
 
 ### Entry State
 
-A folder is open and its workspace has a reusable blank Chat. **Wiki Agent**
+A folder is open and its workspace has a reusable blank Chat. **OpenQuill**
 is selected by default and may need account sign-in; a bring-your-own runtime
 may be ready, missing, disconnected, or recoverable.
 
 ### Primary Flow
 
-1. Use New chat with Wiki Agent, or choose another Agent in the composer. A
+1. Use New chat with OpenQuill, or choose another Agent in the composer. A
    Chat takes the open folder as its scope.
-2. For Wiki Agent, sign in to the StashBase account when needed; no Agent
+2. For OpenQuill, sign in to the StashBase account when needed; no Agent
    install, model API key, or separate recharge is required within the fixed
    seven-day included allowance.
 3. When a bring-your-own runtime is missing, explicitly choose **Install and
@@ -379,12 +381,12 @@ may be ready, missing, disconnected, or recoverable.
 
 - Opening the app, a folder, a tab, or history is never runtime-installation
   consent.
-- Wiki Agent uses only its included pinned runtime and account allowance;
+- OpenQuill uses only its included pinned runtime and account allowance;
   its account token is absent from the renderer and OpenCode state.
-- Signing in for Wiki Agent establishes account identity without silently
+- Signing in for OpenQuill establishes account identity without silently
   activating hosted search by meaning; that source remains an explicit setup
   or Settings choice.
-- Wiki Agent does not offer transient attachments until its isolated
+- OpenQuill does not offer transient attachments until its isolated
   runtime can read their bytes through an authorized scope. Bring-your-own
   runtimes retain attachment support.
 - Settings reports the current seven-day window as a remaining percentage and
@@ -427,7 +429,7 @@ may be ready, missing, disconnected, or recoverable.
   lookup may additionally use meaning-based evidence. Neither state controls
   background indexing or exposes derived paths.
 - A source is presented as Agent-readable only when the selected Agent surface
-  can consume that format's source or current prepared representation. Wiki Agent
+  can consume that format's source or current prepared representation. OpenQuill
   attachment behavior must not be implied for an external MCP client.
 
 ### Degradation and Recovery
@@ -492,7 +494,7 @@ See [J07 evidence](../code-review/journey-coverage.md#j07-converge).
 ### Outcome
 
 An MCP-capable client uses the same authorized library operations and visible
-source identity as Wiki Agent.
+source identity as OpenQuill.
 
 ### Entry State
 
@@ -509,7 +511,7 @@ MCP-capable client to configure.
 
 ### Required Observable Results
 
-- Wiki Agent and external Agents use the same operation and source-identity
+- OpenQuill and external Agents use the same operation and source-identity
   rules.
 - `read_file`, `write_file`, and `edit_file` advertise and enforce the format
   capabilities in the
@@ -539,7 +541,7 @@ shared, and remains the only party who submits it.
 
 ### Entry State
 
-The user deliberately opens Report a bug from the sidebar's standing row or
+The user deliberately opens Report a bug from Settings, under General, or from
 the native Help menu. The main workspace renderer may be healthy or impaired.
 
 ### Primary Flow
@@ -694,7 +696,7 @@ state cannot be reached from the product. Project creation still works for an
 attributed MCP caller. The owning gap is
 [No surface for a Library-scoped Chat](design/agent-panel.md#no-surface-for-a-library-scoped-chat).
 
-Known Gap: a Wiki Agent chat updates its live scope and keeps using the
+Known Gap: an OpenQuill chat updates its live scope and keeps using the
 attributed MCP connection, but OpenCode does not yet migrate the same native
 session record and cwd to the project. Its restored history remains under
 Library and native folder commands require a new folder-scoped chat.

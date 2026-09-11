@@ -61,12 +61,12 @@ describe('agent composer provider control', () => {
   it('names the running agent and offers every catalog entry with the current one marked', async () => {
     const { onAgentChange, user } = renderSettings();
 
-    const trigger = screen.getByRole('button', { name: 'Provider: Wiki Agent' });
-    expect(trigger.title).toBe('Provider: Wiki Agent');
+    const trigger = screen.getByRole('button', { name: 'Provider: OpenQuill' });
+    expect(trigger.title).toBe('Provider: OpenQuill');
     await user.click(trigger);
 
     expect(await screen.findAllByRole('menuitemradio')).toHaveLength(3);
-    expect(checkedNames()).toEqual(['Wiki Agent']);
+    expect(checkedNames()).toEqual(['OpenQuill']);
     for (const name of ['Codex', 'Claude Code']) {
       expect(screen.getByRole('menuitemradio', { name })).not.toBeNull();
     }
@@ -77,7 +77,7 @@ describe('agent composer provider control', () => {
   it('offers only the provider for a runtime that advertises no model or effort choice', () => {
     renderSettings();
 
-    expect(screen.getByRole('button', { name: 'Provider: Wiki Agent' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Provider: OpenQuill' })).not.toBeNull();
     expect(screen.queryByRole('button', { name: /^Model:/u })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Thinking:/u })).toBeNull();
   });

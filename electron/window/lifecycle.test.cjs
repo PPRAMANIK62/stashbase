@@ -13,9 +13,13 @@ function harness({ load = true } = {}) {
   const windowHandlers = new Map();
   const webContentsHandlers = new Map();
   const sent = [];
+  // The fullscreen mirror is its own stream, so the barrier tests below can
+  // keep counting their own messages.
+  const fullscreenSent = [];
   const frame = { url: 'app://renderer/' };
   let closeCalls = 0;
   let reloadCalls = 0;
+  let fullscreen = false;
   const webContents = {
     id: 41,
     isDestroyed: () => false,
@@ -24,13 +28,15 @@ function harness({ load = true } = {}) {
     reload: () => {
       reloadCalls += 1;
     },
-    send: (channel, payload) => sent.push([channel, payload]),
+    send: (channel, payload) =>
+      (channel === 'window:fullscreen' ? fullscreenSent : sent).push([channel, payload]),
   };
   const window = {
     close: () => {
       closeCalls += 1;
     },
     isDestroyed: () => false,
+    isFullScreen: () => fullscreen,
     on: (event, handler) => windowHandlers.set(event, handler),
     webContents,
   };
@@ -54,13 +60,33 @@ function harness({ load = true } = {}) {
     closeCalls: () => closeCalls,
     event,
     finishLoad,
+    fullscreenSent,
     handlers,
     lifecycle,
     reloadCalls: () => reloadCalls,
     sent,
+    setFullScreen: (value) => {
+      fullscreen = value;
+      windowHandlers.get(value ? 'enter-full-screen' : 'leave-full-screen')();
+    },
     window,
   };
 }
+
+test('native fullscreen is mirrored to the renderer on load and on every change', () => {
+  const setup = harness({ load: false });
+  assert.deepEqual(setup.fullscreenSent, []);
+  setup.finishLoad();
+  assert.deepEqual(setup.fullscreenSent, [['window:fullscreen', { fullscreen: false }]]);
+  setup.setFullScreen(true);
+  setup.setFullScreen(false);
+  assert.deepEqual(setup.fullscreenSent.slice(1), [
+    ['window:fullscreen', { fullscreen: true }],
+    ['window:fullscreen', { fullscreen: false }],
+  ]);
+  // The barrier's own stream saw none of it.
+  assert.deepEqual(setup.sent, []);
+});
 
 test('native close waits for the renderer barrier and remains open after failure', async () => {
   const setup = harness();

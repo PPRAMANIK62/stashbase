@@ -17,7 +17,7 @@ Avoid: `global store`, `app state` when this narrower meaning is intended.
 The Agent capability for working against an explicit library or
 folder scope. **Chat** is the Agent Panel's visible conversation surface: it
 leads before a document is opened and docks beside the Document Workbench when
-a source is active. The Agent Panel may run Wiki Agent, Claude Code, or
+a source is active. The Agent Panel may run OpenQuill, Claude Code, or
 Codex; it is not itself synonymous with any runtime.
 
 ## Agent Instructions
@@ -35,9 +35,9 @@ from their next message. It is guidance, not a security boundary.
 ordinary user-owned runtime inputs. StashBase neither creates nor rewrites
 them, and does not call those files Agent Instructions in product UI.
 
-## Wiki Agent
+## OpenQuill
 
-The included zero-install Agent shown as **Wiki Agent** in Agent pickers and Chat
+The included zero-install Agent shown as **OpenQuill** in Agent pickers and Chat
 chrome, with **Sign in for free credits** under its picker label while signed
 out and **Free credits included** after sign-in. It uses
 StashBase's pinned local OpenCode runtime and the signed-in account allowance.
@@ -62,7 +62,7 @@ until a key is added").
 
 Hosted usage draws on the signed-in account's included monthly **credits**
 ("Free monthly credits", "Remaining credits for search by meaning"). Reserve
-**allowance** for the Wiki Agent's seven-day quota; the two quotas never
+**allowance** for OpenQuill's seven-day quota; the two quotas never
 share a noun, so neither surface can be mistaken for the other.
 
 Whether a Chat may add meaning-based evidence is that Chat's own retrieval

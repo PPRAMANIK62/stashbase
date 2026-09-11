@@ -19,7 +19,7 @@ export function GalleryShop({
 }) {
   return (
     <div className="@container">
-      <div className="grid grid-cols-1 gap-4 @xs:grid-cols-2 @md:grid-cols-3 @5xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 @xs:grid-cols-2 @md:grid-cols-3 @5xl:grid-cols-4">
         {entries.map((entry) => (
           <GalleryCard entry={entry} key={entry.id} onOpen={onOpen} />
         ))}

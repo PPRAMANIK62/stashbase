@@ -295,7 +295,7 @@ export function AgentContextComposer({
 
   return (
     <div
-      className="relative flex flex-col rounded-2xl bg-surface-3 shadow-surface-3 transition-[box-shadow] duration-fast focus-within:ring-1 focus-within:ring-foreground/20"
+      className="relative flex flex-col rounded-2xl bg-surface-3 shadow-surface-3"
       onDragOverCapture={onDragOverCapture}
       onDropCapture={onDropCapture}
       onPasteCapture={onPasteCapture}

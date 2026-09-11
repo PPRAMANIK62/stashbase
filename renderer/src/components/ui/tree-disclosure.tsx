@@ -35,7 +35,7 @@ export function TreeDisclosure({ children, label }: { children: ReactNode; label
           </button>
         }
       />
-      <Collapsible.Panel className="ml-[15px] border-l border-border/70 pl-1" id={panelId}>
+      <Collapsible.Panel className="ml-[15px] border-l border-border pl-1" id={panelId}>
         {children}
       </Collapsible.Panel>
     </Collapsible.Root>

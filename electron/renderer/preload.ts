@@ -7,7 +7,10 @@ import { createLibraryPreload } from '../library/preload.ts';
 import { createUpdatesPreload } from '../updates/preload.ts';
 import { createWorkspaceSessionPreload } from '../workspace/preload.ts';
 import { createWindowLifecyclePreload } from '../window/preload.ts';
+import { stampDocumentMarks } from './document-marks.ts';
 import { createRuntimeConfig } from './runtime.ts';
+
+stampDocumentMarks(ipcRenderer, document, process.platform);
 
 contextBridge.exposeInMainWorld(
   'stashbase',

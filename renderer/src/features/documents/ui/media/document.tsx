@@ -114,7 +114,7 @@ function TranscriptRows({
                 aria-current={current || undefined}
                 className={cn(
                   'h-auto w-full px-2 py-2 text-left [&>span:last-child]:w-full',
-                  (current || found) && 'bg-active text-foreground',
+                  (current || found) && 'bg-hover text-foreground',
                 )}
                 onClick={() => onSeek(segment)}
                 data-media-segment={segment.id}

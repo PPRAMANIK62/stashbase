@@ -2,7 +2,7 @@
  * StashBase MCP launcher and Agent Panel runtime MCP configuration.
  *
  * Owns the platform launcher script under `~/.stashbase/bin`, the
- * per-process launcher used by Wiki Agent, and idempotent config writes
+ * per-process launcher used by OpenQuill, and idempotent config writes
  * for the bring-your-own Chat runtimes (Claude Code, Codex). Only Agent
  * readiness calls `ensureAgentMcp`; every other
  * MCP-compatible client configures itself from the standard config that

@@ -17,11 +17,13 @@ function renderPanel(
   port: CapturePort,
   applyWatch: (expected: boolean) => Promise<boolean>,
   softwareUpdate: SoftwareUpdateRow | null = null,
+  onReportBug: (() => void) | null = null,
 ) {
   return withQueryClient(
     <GeneralPanel
       applyCaptureWatch={applyWatch}
       captureApi={port}
+      onReportBug={onReportBug}
       softwareUpdate={softwareUpdate}
     />,
   );
@@ -100,6 +102,20 @@ describe('GeneralPanel', () => {
     expect(row.check).toHaveBeenCalledOnce();
     await user.click(auto);
     expect(row.setAutoCheck).toHaveBeenCalledWith(false);
+  });
+
+  it('offers the bug report where the desktop can open it and says why where it cannot', async () => {
+    const onReportBug = vi.fn();
+    const desktop = renderPanel(capturePort(), async () => true, null, onReportBug);
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Report a bug' }));
+    expect(onReportBug).toHaveBeenCalledOnce();
+    expect(screen.queryByText('Available in the desktop app.')).toBeNull();
+    desktop.unmount();
+
+    renderPanel(capturePort(), async () => true);
+    const entry = await screen.findByRole('button', { name: 'Report a bug' });
+    expect(entry.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Available in the desktop app.')).not.toBeNull();
   });
 
   it('locks both controls while the updater is already working', async () => {

@@ -105,12 +105,12 @@ const bgVariants: Record<ButtonVariant, string> = {
     '[--btn-bg:var(--foreground)] group-hover:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
   secondary:
     '[--btn-bg:var(--accent)] group-hover:[--btn-bg:color-mix(in_oklab,var(--accent)_80%,var(--background))] group-active:[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
-  // The border ring is an outer 1px shadow at rest that hands off to an
-  // inset 1px shadow when pressed, so the ring moves inward with the
+  // The border ring is an outer hairline shadow at rest that hands off to an
+  // inset hairline shadow when pressed, so the ring moves inward with the
   // surface. The translucent fill only ever reaches the ring's inner edge
   // (exactly the surface box), so it needs no spread of its own.
   tertiary:
-    'bg-transparent shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-hover:bg-hover group-active:bg-active group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]',
+    'bg-transparent shadow-[0_0_0_var(--hairline)_var(--border),inset_0_0_0_0px_var(--border)] group-hover:bg-hover group-active:bg-active group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_var(--hairline)_var(--border)]',
   // Translucent fill + same-color spread never double up: outer shadows
   // render only outside the surface box.
   ghost:
@@ -125,8 +125,8 @@ const activeBgVariants: Record<ButtonVariant, string> = {
   secondary:
     '[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]',
   tertiary:
-    'bg-active shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]',
-  ghost: 'bg-active shadow-[0_0_0_1px_var(--active)] group-active:shadow-[0_0_0_0px_var(--active)]',
+    'bg-active shadow-[0_0_0_var(--hairline)_var(--border),inset_0_0_0_0px_var(--border)] group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_var(--hairline)_var(--border)]',
+  ghost: 'bg-hover shadow-[0_0_0_1px_var(--hover)] group-active:shadow-[0_0_0_0px_var(--hover)]',
 };
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(

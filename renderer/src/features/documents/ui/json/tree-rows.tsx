@@ -151,7 +151,7 @@ export function JsonValueRow({
       aria-setsize={setSize}
       className={cn(
         'cursor-default outline-none',
-        isSelected && 'bg-active [&>td]:text-foreground',
+        isSelected && 'bg-hover [&>td]:text-foreground',
         focusRing('focus-visible:ring-inset'),
       )}
       data-json-node-row=""
@@ -240,7 +240,7 @@ export function JsonInlineEditRow({
       aria-posinset={position}
       aria-selected="true"
       aria-setsize={setSize}
-      className="bg-active [&>td]:text-foreground"
+      className="bg-hover [&>td]:text-foreground"
       data-json-inline-editor=""
       tabIndex={-1}
     >

@@ -83,7 +83,7 @@ describe('AgentWorkspace composer skills', () => {
     const { runtime } = renderWorkspace(test.port, undefined, agentContextPort());
     await screen.findByText('Your Wiki is here.');
     await agentGateLifted();
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: Wiki Agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: OpenQuill' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     act(() => runtime.activeSession().start());
     return { ...test, runtime };

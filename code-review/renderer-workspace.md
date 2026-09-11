@@ -59,7 +59,7 @@ untrusted input on the way back in.
   whose signal is aborted.
 - The workspace session is explicit. `WorkspaceSessionSnapshot` in
   `renderer/src/features/workspace/domain/session.ts` is one versioned,
-  concept-specific shape carrying the active folder, per-folder expansion,
+  concept-specific shape carrying the folder last active, per-folder expansion,
   selection and tab identities, and the two remembered pane widths. It is not
   whole-store persistence middleware, and no store is serialized wholesale.
   Every bound in that module is a restore-time guard. A snapshot read back from
@@ -74,14 +74,15 @@ untrusted input on the way back in.
 - Which folder a window lands on is one ordered rule, not a chain of
   conditions. `chooseFolderLanding` in
   `renderer/src/features/workspace/domain/landing.ts` reads the server's folder
-  for this window, then the folder the desktop created the window for, then the
-  saved session's folder when it is still a member, then nothing. The
-  desktop's claim is a distinct pending state between the first two, so the
-  race is settled by the ordering rather than by a guard beside it, and the
-  welcome screen never flashes while a claim is outstanding. Reading the
-  server's folder first is what stops a spent claim pulling a reader back to
-  where they started, and it is also what makes a reload correct with no
-  further rule.
+  for this window, then the folder the desktop created the window for, then
+  nothing. The saved session is not a source: it restores a folder's tree
+  state and tabs once that folder is open and never chooses the folder, so a
+  relaunch and a new window both land on the welcome screen. The desktop's
+  claim is a distinct pending state between the first two rows, so the race is
+  settled by the ordering rather than by a guard beside it, and the welcome
+  screen never flashes while a claim is outstanding. Reading the server's
+  folder first is what stops a spent claim pulling a reader back to where they
+  started, and it is also what makes a reload correct with no further rule.
 - Multi-window reconciliation goes through durable owners, never through
   renderer replication. Exactly one window claims the stored snapshot at
   startup (`claimRestore` in `electron/main.cjs` over
@@ -322,7 +323,7 @@ records.
 | Server transport Adapter | `renderer/src/features/workspace/infrastructure/api.ts`, `files-api.ts`, `workspace-preferences-api.ts`, `github-import-api.ts`, `upload-api.ts` over `renderer/src/platform/http/client.ts` and `renderer/src/platform/http/classify.ts`, against `server/routes/files.ts`, `server/routes/workspace-preferences.ts`, and `server/file-listing.ts` |
 | Desktop lifecycle Adapter | `renderer/src/features/workspace/infrastructure/library-lifecycle.ts`, `capture-api.ts`, and `renderer/src/features/documents/infrastructure/window-lifecycle.ts` over `renderer/src/platform/electron/bridge.ts`, `library-lifecycle.ts`, `window-lifecycle.ts`, `folder-picker.ts`, `capture.ts`, `file-manager.ts` |
 | Session store | `renderer/src/features/workspace/infrastructure/session-persistence.ts` over `shared/protocols/electron/workspace-session.ts`, persisted by `electron/workspace/session.ts` and claimed for exactly one window in `electron/main.cjs` |
-| Focused evidence | `renderer/src/features/workspace/application/runtime.test.ts`, `session-runtime.test.ts`, `open-folder.test.ts`, `remove-folder.test.ts`, `queries.test.ts`, `renderer/src/features/workspace/domain/session.test.ts`, `domain/tree.test.ts`, `domain/workspace.test.ts`, `renderer/src/features/workspace/hooks/use-workspace-session.test.ts`, `use-library-lifecycle.test.ts`, `use-hidden-files.test.ts`, `use-github-import.test.ts`, `use-file-operations.test.tsx`, `use-tree.test.ts`, `renderer/src/features/workspace/ui/file-tree.test.tsx`, `file-tree-keyboard.test.ts`, `file-tree-menu.test.tsx`, `sidebar.test.tsx`, `welcome.test.tsx`, `renderer/src/features/documents/application/tabs-runtime.test.ts`, `renderer/src/features/retrieval/ui/search/surface.test.tsx`, `ui/search/exact-backend.test.tsx`, `renderer/src/app/composition/layout/workspace-layout.test.tsx`, `workspace-sidebar.test.tsx`, `workspace-quick-open.test.tsx`, `agent-document-workspace.test.tsx`, `renderer/src/app/composition/commands/use-workspace-commands.test.tsx`, `use-quick-open-command.test.tsx`, `renderer/src/app/workflows/open-document.test.ts`, `retire-documents.test.ts`, `renderer/src/app/bootstrap/startup.test.tsx`, `use-boot-progress.test.tsx`, `server/routes/workspace-preferences.test.ts`, `server/__tests__/github-import.test.ts`, `server/routes/files.test.ts`, and `electron/workspace/session.test.cjs` |
+| Focused evidence | `renderer/src/features/workspace/application/runtime.test.ts`, `session-runtime.test.ts`, `open-folder.test.ts`, `remove-folder.test.ts`, `queries.test.ts`, `renderer/src/features/workspace/domain/session.test.ts`, `domain/tree.test.ts`, `domain/workspace.test.ts`, `renderer/src/features/workspace/hooks/use-workspace-session.test.ts`, `use-library-lifecycle.test.ts`, `use-hidden-files.test.ts`, `use-github-import.test.ts`, `use-file-operations.test.tsx`, `use-tree.test.ts`, `renderer/src/features/workspace/ui/file-tree.test.tsx`, `file-tree-keyboard.test.ts`, `file-tree-menu.test.tsx`, `sidebar.test.tsx`, `welcome.test.tsx`, `renderer/src/features/documents/application/tabs-runtime.test.ts`, `renderer/src/features/retrieval/ui/search/surface.test.tsx`, `ui/search/exact-backend.test.tsx`, `renderer/src/app/composition/layout/workspace-layout.test.tsx`, `workspace-sidebar.test.tsx`, `workspace-titlebar.test.tsx`, `workspace-quick-open.test.tsx`, `agent-document-workspace.test.tsx`, `renderer/src/app/composition/commands/use-workspace-commands.test.tsx`, `use-quick-open-command.test.tsx`, `renderer/src/app/workflows/open-document.test.ts`, `retire-documents.test.ts`, `renderer/src/app/bootstrap/startup.test.tsx`, `use-boot-progress.test.tsx`, `server/routes/workspace-preferences.test.ts`, `server/__tests__/github-import.test.ts`, `server/routes/files.test.ts`, and `electron/workspace/session.test.cjs` |
 
 Only part of the Feature hooks row is public. `use-workspace.ts`,
 `use-workspace-session.ts`, `use-library.ts`, `use-library-lifecycle.ts`,

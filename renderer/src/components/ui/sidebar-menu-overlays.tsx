@@ -96,7 +96,11 @@ export function MenuOverlays({
     committedActives.set(key, row);
     activeRects.push({ key, rect, rowChanged: prevTargetsRef.current.actives.get(key) !== row });
   }
-  const hoverRect = overlayRect(hoveredRowEl);
+  // Hovering a row that is already active paints nothing extra: the hover
+  // fill and the active fill share one tint, so stacking them would darken
+  // the very row that should stay put.
+  const hoverIsOnActiveRow = hoveredRowEl !== null && activeRows.includes(hoveredRowEl);
+  const hoverRect = hoverIsOnActiveRow ? null : overlayRect(hoveredRowEl);
   const focusRect = overlayRect(focusedRowEl);
   const hoverRowChanged = prevTargetsRef.current.hover !== hoveredRowEl;
   const focusRowChanged = prevTargetsRef.current.focus !== focusedRowEl;
@@ -125,7 +129,7 @@ export function MenuOverlays({
         {activeRects.map(({ key, rect, rowChanged }) => (
           <motion.div
             key={key}
-            className={`absolute ${shape.bg} pointer-events-none bg-active`}
+            className={`absolute ${shape.bg} pointer-events-none bg-hover`}
             initial={false}
             animate={{
               top: rect.top,

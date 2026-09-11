@@ -817,11 +817,16 @@ function updateBarrierFixture({ installUpdate = () => {} } = {}) {
       isDestroyed: () => false,
       mainFrame: frame,
       on: (event, handler) => webContentsHandlers.set(`${id}:${event}`, handler),
-      send: (channel, payload) => sent.push({ id, channel, payload }),
+      // The barrier's own messages only: the lifecycle also mirrors native
+      // fullscreen on load, which these tests do not count.
+      send: (channel, payload) => {
+        if (channel !== 'window:fullscreen') sent.push({ id, channel, payload });
+      },
     };
     const win = {
       close: () => {},
       isDestroyed: () => false,
+      isFullScreen: () => false,
       on: (event, handler) => windowHandlers.set(`${id}:${event}`, handler),
       webContents,
     };

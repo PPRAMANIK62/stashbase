@@ -1,4 +1,4 @@
-import { Layers } from 'lucide-react';
+import { Feather } from 'lucide-react';
 
 import type { AgentId } from '@/features/agent/domain/session';
 import type { IconComponent } from '@/lib/icon-context';
@@ -6,7 +6,7 @@ import type { IconComponent } from '@/lib/icon-context';
 import { ClaudeCodeIcon, CodexIcon } from './brand-icons';
 
 export const AGENT_ICONS: Record<AgentId, IconComponent> = {
-  stashbase: Layers,
+  stashbase: Feather,
   codex: CodexIcon,
   claude: ClaudeCodeIcon,
 };

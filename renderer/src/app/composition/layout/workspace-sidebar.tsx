@@ -6,7 +6,7 @@
  * chats list to the agent catalog, search to its retrieval ports — so the
  * navigator itself only decides which of them is on screen.
  */
-import { Bug, Settings as SettingsIcon, Store } from 'lucide-react';
+import { Settings as SettingsIcon, Store } from 'lucide-react';
 
 import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
 import type { SidebarNavigatorState } from '@/app/composition/commands/use-workspace-commands';
@@ -64,12 +64,11 @@ export function WorkspaceSidebar({
   workspace,
 }: WorkspaceSidebarProps) {
   const dependencies = useDependencies();
-  const bugReport = dependencies.bugReport;
   return (
     <Sidebar className="bg-surface-1" variant="inset">
       <SidebarHeader className="workspace-titlebar h-11 flex-row items-center gap-2.5 px-4 py-0">
         <Logo aria-hidden="true" className="size-7 shrink-0" />
-        <span className="text-title font-semibold tracking-tight">StashBase</span>
+        <span className="min-w-0 truncate text-title font-semibold tracking-tight">StashBase</span>
       </SidebarHeader>
       <SidebarGroup className="shrink-0 pb-0">
         <LibrarySidebar
@@ -138,15 +137,6 @@ export function WorkspaceSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton icon={SettingsIcon} onClick={() => settings.openSettings()}>
               Settings
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              disabled={bugReport === null}
-              icon={Bug}
-              onClick={() => void bugReport?.open()}
-            >
-              {bugReport ? 'Report a bug' : 'Report a bug (desktop app only)'}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

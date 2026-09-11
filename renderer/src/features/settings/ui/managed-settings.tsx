@@ -23,6 +23,7 @@ export default function ManagedSettings({
   mcpAccessApi,
   onClose,
   onOpenExternal = ignoreExternal,
+  onReportBug = null,
   onSectionChange,
   open,
   section,
@@ -40,6 +41,7 @@ export default function ManagedSettings({
             <GeneralPanel
               applyCaptureWatch={applyCaptureWatch}
               captureApi={captureApi}
+              onReportBug={onReportBug}
               softwareUpdate={softwareUpdate}
             />
           ),

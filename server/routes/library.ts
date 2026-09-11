@@ -129,7 +129,7 @@ async function removeLibraryFolder(rawPath: string): Promise<void> {
   }
   const finishRemoval = await beginLibraryFolderRemovalAsync(abs);
   try {
-    // Wiki Agent sessions are folder-pinned and survive window folder
+    // OpenQuill sessions are folder-pinned and survive window folder
     // switches, so removal must also end the sessions BOUND to this folder —
     // including ones in windows currently showing another folder. Do this
     // BEFORE releasing window folder contexts so the structured retirement

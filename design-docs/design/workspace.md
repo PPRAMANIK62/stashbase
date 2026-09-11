@@ -22,11 +22,20 @@ manager, or a primary graph-navigation tool.
   naming its source and marking unsaved changes. A tab is a drag source for
   its file, which is how a document is handed to the Agent composer beside it.
 
-- A window with no folder open shows the welcome screen. It offers the
-  library's existing members, **Open folder**, **Create folder**, and **Import
-  from GitHub…**, with the Gallery band below them under its own heading. The
-  window never silently restores a folder, installs an Agent runtime, or opens
-  account sign-in or setup for search by meaning.
+- A window with no folder open shows the welcome screen: the mark and its
+  one-line promise centered at the top, then everything else on one shared
+  left edge. A card on the left explains the three ways in, one row each with
+  its own button: open a folder as a project, create a new project, or import
+  a project from GitHub. **Recent**,
+  on the right, lists the library's members newest first; a row opens its
+  folder, and its **···** menu offers **Remove from Library**. Folders under
+  the system's temporary directory stay members but are left out of the
+  list. A pane too narrow for both stacks the card above the list. The
+  Gallery band follows under its own heading. The window never silently
+  restores a folder, installs an Agent runtime, or opens account sign-in or
+  setup for search by meaning. A relaunch and a new window land here too; a
+  folder opened from **Recent** comes back with the tabs and tree state it
+  had.
 - On first launch with a brand-new empty default folder home, StashBase seeds
   the ordinary local **👋 Start Here** folder and adds it to the library
   without automatically opening it. Its `00 Welcome.html` is the human entry;
@@ -38,8 +47,12 @@ manager, or a primary graph-navigation tool.
   deleting the seeded folder does not recreate it, and application updates
   never overwrite the user's copy.
 - The sidebar is the window's left column. It always carries the product mark
-  and a footer of standing **Gallery**, **Settings**, and **Report a bug**
-  rows. With a folder open it adds the active-folder picker and a navigator of
+  and a footer of standing **Gallery** and **Settings** rows. On macOS the
+  window's traffic lights sit in that top-left corner and the mark starts to
+  their right; with the sidebar collapsed the titlebar's toggle keeps the same
+  room, and native fullscreen, which hides the lights, gives it back. With a
+  folder
+  open it adds the active-folder picker and a navigator of
   four icon tabs, in order Files, Document outline, Search, and Chats. Files
   and Document outline share the scrolling tree region; Search and Chats take
   the whole column instead. The column resizes by dragging its inner edge and
@@ -64,7 +77,7 @@ manager, or a primary graph-navigation tool.
 - Packaged builds check the official stable release channel on a schedule when
   the default-on preference permits it. The check and its installation
   authority belong to the desktop application rather than to any window.
-- **Report a bug** is a standing sidebar row, disabled with a plain
+- **Report a bug** is a row in Settings, under General, disabled with a plain
   explanation when the desktop bridge is absent. The native Help menu carries
   the same report entry alongside the product website, the community Discord,
   and the external issue tracker.
@@ -72,7 +85,7 @@ manager, or a primary graph-navigation tool.
   owns search by meaning. It names the connected person and retains the full
   email, and missing profile display data falls back to a stable label without
   changing the controls beside it. **Sign in to StashBase** names the complete
-  signed-out local-workspace state and its optional route to Wiki Agent and
+  signed-out local-workspace state and its optional route to OpenQuill and
   search by meaning.
 - Users can open or create a local folder, import a public GitHub repository
   directly into the default folder home, switch folders in place, or remove a
@@ -86,9 +99,11 @@ manager, or a primary graph-navigation tool.
   basename with another is qualified by its path so the two stay tellable
   apart, and the row shows an attention mark when preparation needs the user.
   A name wider than the sidebar column truncates within that column. The
-  titlebar carries only the sidebar toggle and one shared slot holding either
-  the open document tabs or the active Chat's title. Folder-level actions
-  remain attributable to the active folder.
+  titlebar carries the sidebar toggle, a **New chat** button beside it while a
+  folder is open, and one shared slot holding either the open document tabs or
+  the active Chat's title; with no folder open the button is absent and the
+  slot says **Welcome**, because the Chat it would name is not on screen.
+  Folder-level actions remain attributable to the active folder.
 - Multiple windows share one library and runtime services while retaining
   independent active folders, tabs, search presentation, and Chat tabs.
 - Folder switches reset folder-scoped documents but preserve library search

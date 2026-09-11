@@ -97,9 +97,19 @@ aliases, and a driven runtime pass owns representative composition.
   renderer suites over the phase table, the adapter's validation, both view
   models, and the notice by role and label. The boundary smoke asserts the
   preload's frozen updates key list.
-- **Driven Runtime Pass:** none recorded. Journey automation retired with
-  the Playwright suites; this journey has no end-to-end proof until one is
-  driven and recorded.
+- **Driven Runtime Pass:** the orient step is driven through the real
+  application against a scratch profile whose library is seeded with several
+  members, one of them under the system's temporary directory. A bare window
+  shows the welcome with the ways-in card beside the recent list, the list
+  names the members newest first without the temporary one, a row's menu
+  opens on hover, and a pane too narrow for both columns stacks the card
+  above the list. The return step is driven the same way: a relaunch whose
+  session file names a folder lands on the welcome screen with that folder's
+  session intact, and opening it from Recent brings its tree back. On macOS
+  the same pass checks the mark and the collapsed sidebar's toggle sit clear
+  of the traffic lights, and return to the edge in native fullscreen. The
+  later steps of this journey are not driven; journey automation retired
+  with the Playwright suites.
 - **AI Eval:** onboarding mechanics are deterministic. If first value uses
   semantic retrieval or a real Agent, its quality evidence comes from J05 or
   J10 rather than being duplicated here.
@@ -261,7 +271,7 @@ aliases, and a driven runtime pass owns representative composition.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
 - **Release Check:** packaged OpenCode version/executability plus a fake-gateway
-  model turn that proves the signed runtime stays alive, a real hosted Wiki Agent
+  model turn that proves the signed runtime stays alive, a real hosted OpenQuill
   turn and allowance response, bring-your-own CLI/account setup,
   and bring-your-own clipboard image behavior remain release evidence.
 
@@ -310,7 +320,7 @@ aliases, and a driven runtime pass owns representative composition.
   [handoff](../electron/bug-report-handoff.test.cjs) prove the app-owned draft,
   privacy, approval, and artifact boundaries.
 - **Driven Runtime Pass:** the review window is driven through the real
-  application, opened from the shell and taken through prepare, back, and
+  application, opened from Settings and taken through prepare, back, and
   cancel. Capture, the Downloads copy, and the browser handoff are not driven;
   they remain the release evidence below.
 - **AI Eval:** not required.
@@ -370,7 +380,7 @@ aliases, and a driven runtime pass owns representative composition.
 - **Gap:** real-Agent intent/tool choice still needs an Eval. Codex
   configuration leaves `create_project` on the default prompt path, but no
   focused test locks that tool allowlist; Claude requires equivalent focused
-  or release evidence. Wiki Agent can rebind the live panel and attributed
+  or release evidence. OpenQuill can rebind the live panel and attributed
   MCP path, but OpenCode cannot yet migrate its native history/cwd; its restored
   row remains under Library and this path needs separate evidence after that
   native limitation is resolved.
@@ -404,7 +414,7 @@ aliases, and a driven runtime pass owns representative composition.
 - **AI Eval:** Gap. The deterministic Agent proves orchestration and safety,
   not whether a real model produces useful, complete, well-linked Wiki Pages
   over representative mixed-format folders.
-- **Release Check:** one packaged Wiki Agent flow should cover independent
+- **Release Check:** one packaged OpenQuill flow should cover independent
   account-required Agent setup, hosted activation/backfill for search by
   meaning, and review of real generated Wiki Pages. Bring-your-own-key plus a
   real external Agent is representative secondary evidence.

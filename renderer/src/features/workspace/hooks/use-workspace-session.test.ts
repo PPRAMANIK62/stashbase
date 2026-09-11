@@ -5,6 +5,7 @@ import { workspaceQueryKeys } from '@/features/workspace/application/queries';
 import type { LibrarySnapshot } from '@/features/workspace/domain/library';
 import {
   createWorkspaceSessionSnapshot,
+  type FolderSessionState,
   type WorkspaceSessionSnapshot,
 } from '@/features/workspace/domain/session';
 import {
@@ -26,52 +27,88 @@ const settled = librarySnapshot({
   members: [member],
 });
 
+/** A saved session naming `folderPath`, which is a current member, and
+ *  remembering whatever `folder` says it had expanded, selected, or open. */
+const savedSession = (folderPath: string, folder: Partial<FolderSessionState> = {}) => ({
+  ...createWorkspaceSessionSnapshot(),
+  activeFolderPath: folderPath,
+  folders: [
+    {
+      activeTabId: null,
+      expandedPaths: [],
+      folderPath,
+      selectedPath: null,
+      tabs: [],
+      ...folder,
+    },
+  ],
+});
+
+const remembered = { expandedPaths: ['drafts'], selectedPath: 'drafts/plan.md' };
+
 describe('workspace session restore', () => {
-  it('reopens a persisted folder only through current authoritative membership', async () => {
+  it('lands on the welcome screen rather than reopening the saved folder', async () => {
+    // A plain relaunch: the desktop names no folder, and the session file
+    // remembers the one that was open. The window lands empty all the same.
     const queryClient = createTestQueryClient();
     queryClient.setQueryData(workspaceQueryKeys.library, settled);
-    const opened = librarySnapshot({
-      ...settled,
-      activeFolder: { name: 'notes', path: member.path },
-    });
     const api = libraryApi({
       load: vi.fn(async () => settled),
-      openFolder: vi.fn(async () => opened),
+      openFolder: vi.fn(async () => {
+        throw new Error('not expected');
+      }),
     });
-    const persisted = {
-      ...createWorkspaceSessionSnapshot(),
-      activeFolderPath: member.path,
-      folders: [
-        {
-          activeTabId: null,
-          expandedPaths: ['drafts'],
-          folderPath: member.path,
-          selectedPath: 'drafts/plan.md',
-          tabs: [],
-        },
-      ],
-    };
 
     const hook = renderHook(
       () =>
         useWorkspaceSession(
           api,
-          sessionPersistence({ load: async () => persisted }),
+          sessionPersistence({ load: async () => savedSession(member.path, remembered) }),
           libraryLifecycle(),
         ),
       { wrapper: queryWrapper(queryClient) },
     );
 
     await waitFor(() =>
-      expect(api.openFolder).toHaveBeenCalledWith(member.path, expect.any(AbortSignal)),
+      expect(hook.result.current.status).toEqual({ kind: 'ready', restoredFolder: null }),
     );
-    await waitFor(() =>
-      expect(queryClient.getQueryData(workspaceQueryKeys.library)).toEqual(opened),
-    );
-    expect(hook.result.current.status).toMatchObject({
-      kind: 'ready',
-      restoredFolder: { expandedPaths: ['drafts'], selectedPath: 'drafts/plan.md' },
+    expect(api.openFolder).not.toHaveBeenCalled();
+  });
+
+  it('restores the saved folder session once that folder is open', async () => {
+    // The server already holds the folder, as it does after a reload or once a
+    // reader's click has landed, so what the session remembered about it comes
+    // back with it.
+    const queryClient = createTestQueryClient();
+    const opened = librarySnapshot({
+      ...settled,
+      activeFolder: { name: 'notes', path: member.path },
     });
+    queryClient.setQueryData(workspaceQueryKeys.library, opened);
+    const api = libraryApi({
+      load: vi.fn(async () => opened),
+      openFolder: vi.fn(async () => {
+        throw new Error('not expected');
+      }),
+    });
+
+    const hook = renderHook(
+      () =>
+        useWorkspaceSession(
+          api,
+          sessionPersistence({ load: async () => savedSession(member.path, remembered) }),
+          libraryLifecycle(),
+        ),
+      { wrapper: queryWrapper(queryClient) },
+    );
+
+    await waitFor(() =>
+      expect(hook.result.current.status).toMatchObject({
+        kind: 'ready',
+        restoredFolder: remembered,
+      }),
+    );
+    expect(api.openFolder).not.toHaveBeenCalled();
   });
 
   it('drops a persisted folder that is no longer a library member', async () => {
@@ -88,25 +125,12 @@ describe('workspace session restore', () => {
         throw new Error('not expected');
       }),
     });
-    const persisted = {
-      ...createWorkspaceSessionSnapshot(),
-      activeFolderPath: member.path,
-      folders: [
-        {
-          activeTabId: null,
-          expandedPaths: [],
-          folderPath: member.path,
-          selectedPath: null,
-          tabs: [],
-        },
-      ],
-    };
 
     const hook = renderHook(
       () =>
         useWorkspaceSession(
           api,
-          sessionPersistence({ load: async () => persisted, save }),
+          sessionPersistence({ load: async () => savedSession(member.path), save }),
           libraryLifecycle(),
         ),
       { wrapper: queryWrapper(queryClient) },
@@ -121,7 +145,7 @@ describe('workspace session restore', () => {
     });
   });
 
-  it('does not let a late restore replace a newer explicit folder selection', async () => {
+  it('does not let a late open replace a newer explicit folder selection', async () => {
     const queryClient = createTestQueryClient();
     queryClient.setQueryData(workspaceQueryKeys.library, settled);
     let finish: ((value: LibrarySnapshot) => void) | undefined;
@@ -137,25 +161,12 @@ describe('workspace session restore', () => {
         throw new Error('not expected');
       }),
     });
-    const persisted = {
-      ...createWorkspaceSessionSnapshot(),
-      activeFolderPath: member.path,
-      folders: [
-        {
-          activeTabId: null,
-          expandedPaths: [],
-          folderPath: member.path,
-          selectedPath: null,
-          tabs: [],
-        },
-      ],
-    };
     renderHook(
       () =>
         useWorkspaceSession(
           api,
-          sessionPersistence({ load: async () => persisted }),
-          libraryLifecycle(),
+          sessionPersistence(),
+          libraryLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
         ),
       { wrapper: queryWrapper(queryClient) },
     );
@@ -172,21 +183,6 @@ describe('workspace session restore', () => {
       expect(queryClient.getQueryData(workspaceQueryKeys.library)).toEqual(writing),
     );
   });
-});
-
-/** A saved session naming `folderPath`, which is a current member. */
-const savedSession = (folderPath: string) => ({
-  ...createWorkspaceSessionSnapshot(),
-  activeFolderPath: folderPath,
-  folders: [
-    {
-      activeTabId: null,
-      expandedPaths: [],
-      folderPath,
-      selectedPath: null,
-      tabs: [],
-    },
-  ],
 });
 
 describe('initial folder landing', () => {
@@ -244,7 +240,7 @@ describe('initial folder landing', () => {
     expect(api.openFolder).not.toHaveBeenCalled();
   });
 
-  it('prefers the folder the window was created for over the saved session', async () => {
+  it('opens the folder the window was created for, not the saved session', async () => {
     const queryClient = createTestQueryClient();
     queryClient.setQueryData(workspaceQueryKeys.library, bothMembers);
     const opened = librarySnapshot({
@@ -267,19 +263,19 @@ describe('initial folder landing', () => {
     );
 
     await waitFor(() => expect(api.openFolder).toHaveBeenCalledOnce());
-    // The person just asked for this folder. The saved session is what a plain
-    // relaunch wants, and it never gets opened here.
+    // The person just asked for this folder. The one the session remembers is
+    // never opened on their behalf.
     expect(api.openFolder).toHaveBeenCalledWith(member.path, expect.any(AbortSignal));
   });
 
-  it('holds the saved session until the desktop has answered', async () => {
+  it('shows nothing until the desktop has answered, then the welcome screen', async () => {
     const queryClient = createTestQueryClient();
     queryClient.setQueryData(workspaceQueryKeys.library, bothMembers);
     const api = libraryApi({
       load: vi.fn(async () => bothMembers),
-      openFolder: vi.fn(async () =>
-        librarySnapshot({ ...bothMembers, activeFolder: { name: 'writing', path: writing.path } }),
-      ),
+      openFolder: vi.fn(async () => {
+        throw new Error('not expected');
+      }),
     });
     let answer: ((folderPath: string | null) => void) | undefined;
     const claimInitialFolder = vi.fn(
@@ -299,16 +295,16 @@ describe('initial folder landing', () => {
       { wrapper: queryWrapper(queryClient) },
     );
 
-    // The race the old shape lost: the session file is local and the claim is
-    // an IPC round trip, so restoring first would bind the wrong folder to this
-    // window before the desktop could name one.
+    // The session file is local and the claim is an IPC round trip. Neither
+    // the welcome screen nor a folder may show before the desktop has said
+    // whether this window was made for one.
     await waitFor(() => expect(claimInitialFolder).toHaveBeenCalled());
-    expect(api.openFolder).not.toHaveBeenCalled();
     expect(hook.result.current.status.kind).toBe('restoring');
 
     await act(async () => answer?.(null));
     await waitFor(() =>
-      expect(api.openFolder).toHaveBeenCalledWith(writing.path, expect.any(AbortSignal)),
+      expect(hook.result.current.status).toEqual({ kind: 'ready', restoredFolder: null }),
     );
+    expect(api.openFolder).not.toHaveBeenCalled();
   });
 });

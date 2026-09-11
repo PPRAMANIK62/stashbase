@@ -63,7 +63,9 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
 
     const colorStyle = isSolid
       ? color === 'gray'
-        ? { backgroundColor: 'var(--accent)', color: 'var(--foreground)' }
+        ? // A gray badge classifies rather than alerts, so it sits on the muted
+          // surface in muted ink and reads a step quieter than a control.
+          { backgroundColor: 'var(--muted)', color: 'var(--muted-foreground)' }
         : {
             color: 'var(--foreground)',
             backgroundColor: `color-mix(in srgb, ${colorValue} 15%, var(--background))`,

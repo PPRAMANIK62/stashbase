@@ -164,11 +164,19 @@ export function GalleryEntryPage({
 
       {/* The page's conclusion, on its own rule beneath everything that argues
        * for it. No ellipsis: nothing further to answer — the copy lands in
-       * the folder home and opens itself. */}
+       * the folder home and opens itself, which the note beside the button
+       * says, since a second window is the one surprise the click holds. */}
       <div className="mt-4 flex shrink-0 items-center justify-between gap-4 border-t border-border pt-4">
-        <p className="m-0 min-w-0 text-caption text-destructive" role="alert">
-          {issue}
-        </p>
+        <div className="min-w-0">
+          <p className="m-0 min-w-0 text-caption text-destructive" role="alert">
+            {issue}
+          </p>
+          {issue === null && (
+            <p className="m-0 text-caption text-muted-foreground">
+              Saved as a folder of your own and opened in a new window.
+            </p>
+          )}
+        </div>
         <Button
           className="shrink-0"
           loading={copying}

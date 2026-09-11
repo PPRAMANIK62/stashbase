@@ -36,7 +36,7 @@ runtime.
 Models, derived data, caches, the pinned OpenCode state, and legacy managed
 Agent runtimes live under AppData and are not app-config fields. Claude Code
 and Codex configuration files are rewritten only by Agent readiness
-(`ensureAgentMcp`). Wiki Agent receives an in-memory OpenCode config and
+(`ensureAgentMcp`). OpenQuill receives an in-memory OpenCode config and
 per-session MCP environment instead of a durable client config. StashBase never
 writes any other client's configuration, so the MCP Settings page is a
 read-only access surface external clients copy from.
@@ -261,6 +261,13 @@ one operation, so a window cannot show the switch one way while the scheduler
 runs the other. Both controls are locked while the updater is already working,
 because one command reaches it at a time.
 
+## Support
+
+General also carries the **Report a bug** row. The renderer only asks the
+desktop bridge to open the review window; where the bridge is absent the row
+stays visible, disabled, and says so. Everything after that click belongs to
+[Bug Reporting](bug-reporting.md).
+
 The Updates feature owns every sentence about updating and Settings may not
 import it, so the row it renders is named in
 `renderer/src/shared/domain/software-update.ts` and filled in by composition.
@@ -320,7 +327,7 @@ result.
 
 The product says search by meaning, never AI Index. The Settings section is
 labeled Search by Meaning and its source group is **Source**, not Source file.
-Hosted search credits are separate from the Wiki Agent's seven-day allowance,
+Hosted search credits are separate from OpenQuill's seven-day allowance,
 and the two are said in different places. The search-by-meaning panel describes
 included monthly credits for embeddings, and the Agents panel describes the
 standing 7-day Agent allowance. Do not merge them into one quota sentence.

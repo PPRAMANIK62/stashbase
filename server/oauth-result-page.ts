@@ -40,10 +40,8 @@ export function oauthResultPage({
   <title>${safeTitle}</title>
   <style>
     /* Standalone HTML cannot consume the renderer's CSS token layer, so
-     * every value below RESTATES the light theme from
-     * the desktop light appearance by hand. This standalone page cannot
-     * consume renderer tokens; coordinate it explicitly when the replacement
-     * palette is approved. */
+     * every value below RESTATES the desktop light appearance by hand:
+     * monochrome ink on paper, with color only on the success/error icon. */
     :root { color-scheme: light; font-family: -apple-system, system-ui, "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif; }
     * { box-sizing: border-box; }
     body { margin: 0; min-width: 280px; min-height: 100vh; color: #202427; background: #f3f5f7; }
@@ -59,9 +57,9 @@ export function oauthResultPage({
     .message { margin: 10px auto 0; max-width: 320px; color: #68737a; font-size: 14px; line-height: 1.6; }
     .return-area { margin-top: 25px; padding-top: 22px; border-top: 1px solid rgba(217, 224, 227, .8); }
     .status { min-height: 20px; margin: 0 0 13px; color: #68737a; font-size: 12px; line-height: 1.5; }
-    .button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 0 18px; border-radius: 10px; color: #ffffff; background: #0891b2; font-size: 14px; font-weight: 600; text-decoration: none; transition: background .15s ease; }
-    .button:hover { background: #0782a0; }
-    .button:focus-visible { outline: 3px solid rgba(8, 145, 178, .35); outline-offset: 3px; }
+    .button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 0 18px; border-radius: 10px; color: #ffffff; background: #202427; font-size: 14px; font-weight: 600; text-decoration: none; transition: background .15s ease; }
+    .button:hover { background: #3a4147; }
+    .button:focus-visible { outline: 3px solid rgba(32, 36, 39, .3); outline-offset: 3px; }
     .button svg { width: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     [hidden] { display: none !important; }
     @media (prefers-reduced-motion: reduce) { .button { transition: none; } }
@@ -70,11 +68,9 @@ export function oauthResultPage({
 <body>
   <main class="shell">
     <div class="stack">
-      <!-- The real product mark (CubeLogoIcon, icons.tsx) with the light
-           tokens baked in: accent front edges, stroke-strong back edges.
-           The previous mark was an indigo gradient tile from no brand of
-           ours. -->
-      <div class="brand"><span class="brand-mark"><svg viewBox="0 0 512 512" fill="none" aria-hidden="true"><g stroke="#aeb9bf" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M92 158 L92 342"/><path d="M92 342 L256 436"/></g><g stroke="#0891b2" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"><path d="M92 158 L256 64 L338 111"/><path d="M92 158 L256 252 L420 158"/><path d="M420 158 L420 342"/><path d="M256 436 L420 342"/><path d="M256 342 L256 436"/></g></svg></span>StashBase</div>
+      <!-- The real product mark with the light tokens baked in: ink front
+           edges, gray back edges. -->
+      <div class="brand"><span class="brand-mark"><svg viewBox="0 0 512 512" fill="none" aria-hidden="true"><g stroke="#aeb9bf" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M92 158 L92 342"/><path d="M92 342 L256 436"/></g><g stroke="#202427" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"><path d="M92 158 L256 64 L338 111"/><path d="M92 158 L256 252 L420 158"/><path d="M420 158 L420 342"/><path d="M256 436 L420 342"/><path d="M256 342 L256 436"/></g></svg></span>StashBase</div>
       <section class="card" data-auto-return="${autoReturn ? 'true' : 'false'}" aria-labelledby="result-title">
         <div class="result-icon">${icon}</div>
         <h1 id="result-title">${safeTitle}</h1>

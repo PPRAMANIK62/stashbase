@@ -27,7 +27,7 @@ const abilities: Agent['abilities'] = {
 const agents: Agent[] = [
   { abilities, id: 'codex', label: 'Codex', needsSignIn: false, ready: true },
   { abilities, id: 'claude', label: 'Claude Code', needsSignIn: false, ready: true },
-  { abilities, id: 'stashbase', label: 'Wiki Agent', needsSignIn: false, ready: true },
+  { abilities, id: 'stashbase', label: 'OpenQuill', needsSignIn: false, ready: true },
 ];
 
 /** The same runtimes before any of them can carry a turn: one waiting on

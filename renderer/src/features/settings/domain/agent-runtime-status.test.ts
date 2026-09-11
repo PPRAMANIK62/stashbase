@@ -74,7 +74,7 @@ describe('describeRuntime', () => {
         preparation: {
           kind: 'failed',
           failure: {
-            note: 'An account is required to use Wiki Agent.',
+            note: 'An account is required to use OpenQuill.',
             refusal: 'account-required',
             stage: 'install',
           },
@@ -83,7 +83,7 @@ describe('describeRuntime', () => {
       false,
     );
     expect(display).toEqual({
-      description: 'An account is required to use Wiki Agent.',
+      description: 'An account is required to use OpenQuill.',
       failed: true,
       stage: 'install',
       action: { kind: 'account', label: 'Sign in' },

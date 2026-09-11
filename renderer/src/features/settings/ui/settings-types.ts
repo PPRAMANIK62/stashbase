@@ -32,6 +32,9 @@ export interface SettingsProps {
   mcpAccessApi?: McpAccessPort;
   onClose: () => void;
   onOpenExternal?: (href: string) => void;
+  /** Asks the desktop to open the bug-report review. Null or absent outside
+   *  the desktop app, and then General shows the row disabled and says why. */
+  onReportBug?: (() => void) | null;
   onSectionChange: (id: SettingsSectionId) => void;
   open: boolean;
   /** The section the app asked for. */

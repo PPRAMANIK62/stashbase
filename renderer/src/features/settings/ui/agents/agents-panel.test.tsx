@@ -85,10 +85,10 @@ describe('AgentRuntimesPanel', () => {
           agentRuntime({
             id: 'stashbase',
             installed: true,
-            label: 'Wiki Agent',
+            label: 'OpenQuill',
             preparation: {
               failure: {
-                note: 'An account is required to use Wiki Agent.',
+                note: 'An account is required to use OpenQuill.',
                 refusal: 'account-required',
                 stage: 'install',
               },

@@ -35,11 +35,12 @@ because something drew it once.
 StashBase has three stable visual voices:
 
 - **Color:** the interface is monochrome. Surfaces, chrome, hover, selection,
-  and the interaction accent are all neutral. Chromatic color is confined to
-  roles that carry meaning: error and destruction, Agent work provenance and
-  decisions, diff evidence, the focus indicator, badge labels, and the brand
-  mark. Those hues are fixed, because a badge's color is a label rather than a
-  surface. A new hue needs an approved direction, not a preference.
+  the interaction accent, Agent work provenance, and the brand mark are all
+  neutral ink and gray. Chromatic color is confined to roles that carry
+  meaning: error and destruction, Agent decisions, diff evidence, the focus
+  indicator, and badge labels. Those hues are fixed, because a badge's color
+  is a label rather than a surface. A new hue needs an approved direction,
+  not a preference.
 - **Typography:** two voices. One sans carries every surface, chrome and
   reading alike. One monospace carries paths, code, and structured data on
   every platform. Documents may carry their own typography, so a styled HTML

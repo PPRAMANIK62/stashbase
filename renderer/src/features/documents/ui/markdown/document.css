@@ -131,6 +131,12 @@
 
 .markdown-crepe .ProseMirror :is(pre, table) {
   border-color: var(--border);
+  border-width: var(--hairline);
+}
+
+/* Crepe writes literal 1px cell borders; thin them to the app hairline. */
+.markdown-crepe .milkdown .milkdown-table-block :is(th, td) {
+  border-width: var(--hairline);
 }
 
 .markdown-crepe .ProseMirror table {
@@ -144,7 +150,7 @@
 }
 
 .markdown-crepe .ProseMirror hr {
-  height: 1px;
+  height: var(--hairline);
   margin: 2em 0;
   border: 0;
   background: var(--border);

@@ -15,7 +15,7 @@ context through MCP. Local browsing, editing, preview, and keyword search do
 not require a cloud account. When a user explicitly sets up hosted search by
 meaning, extracted text may be sent to that provider for indexing or
 retrieval.
-The included Wiki Agent runs locally and sends only prompts and necessary
+The included OpenQuill runs locally and sends only prompts and necessary
 model context through its hosted model gateway. In both cases the Sources
 remain locally owned.
 
@@ -47,7 +47,7 @@ re-explaining it.
   navigating ordinary local files.
 
 * A Codex-like **Agent Panel** whose Chat leads before a document is opened and
-  docks beside active source work, with the zero-install Wiki Agent while
+  docks beside active source work, with the zero-install OpenQuill while
   preserving bring-your-own-agent workflows.
 
 * A **Wiki** that brings together Sources, visible source-linked Wiki Pages,

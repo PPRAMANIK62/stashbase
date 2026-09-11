@@ -13,7 +13,7 @@ reuse context across personal notes, research libraries, project docs, and
 knowledge bases.
 
 Build linked Markdown Wiki Pages from your sources, make difficult formats
-searchable, and work with Wiki Agent, Claude Code, Codex, or other MCP clients.
+searchable, and work with OpenQuill, Claude Code, Codex, or other MCP clients.
 Your original files stay in place, and the Wiki Pages remain ordinary files
 you own.
 
@@ -22,7 +22,7 @@ you own.
 Browse local sources and work with an Agent in the same workspace. This demo
 uses the bundled guides to answer **“How do I use StashBase?”**
 
-![StashBase demo: browsing local guides and asking Wiki Agent how to use StashBase](assets/readme/demo.gif)
+![StashBase demo: browsing local guides and asking OpenQuill how to use StashBase](assets/readme/demo.gif)
 
 ## From Files to Context
 
@@ -36,7 +36,7 @@ scan or recording. StashBase helps turn that material into reusable context:
 - **Find the material that matters.** Search by meaning alongside keyword
   search, with text extracted from PDFs, DOCX files, images, and recordings.
   Results lead back to the source files.
-- **Work with your agents.** Use the included Wiki Agent, bring Claude Code or
+- **Work with your agents.** Use the included OpenQuill, bring Claude Code or
   Codex into Chat, or connect an external MCP client to the same library.
 - **Keep your files yours.** Browse, read, and edit supported files alongside
   the conversation. Sources keep their original layout; Wiki Pages are visible
@@ -68,7 +68,7 @@ troubleshooting.
 
 1. **Choose your material.** Open your own folder, or explore the Gallery in
    the app and choose **Make a copy** to download and open a ready-made Wiki.
-2. **Choose an Agent.** Wiki Agent is included and selected initially; sign in
+2. **Choose an Agent.** OpenQuill is included and selected initially; sign in
    to StashBase to use its included model allowance. You can also select
    Claude Code or Codex and use your own provider account.
 3. **Build and use the Wiki.** In a Chat scoped to your folder, try:
@@ -119,14 +119,14 @@ OCR and optional audio/video transcription run locally. Hosted search by
 meaning sends relevant text to the selected embedding provider for indexing
 and queries for retrieval.
 
-Wiki Agent runs locally, with prompts and necessary model context sent through
+OpenQuill runs locally, with prompts and necessary model context sent through
 StashBase's hosted model gateway. Claude Code and Codex use their own provider
 accounts. Local-first means you retain your files and control which folders
 join the Library; model-backed features can still use cloud services.
 
 ## Connect Your Agents
 
-StashBase configures its MCP connection automatically for Wiki Agent and for
+StashBase configures its MCP connection automatically for OpenQuill and for
 Claude Code or Codex used in the built-in Chat. You can review tool calls and
 file edits in the app.
 

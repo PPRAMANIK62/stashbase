@@ -32,6 +32,7 @@ function GeneralHarness({ updates = null }: { updates?: SoftwareUpdateRow | null
     <GeneralPanel
       applyCaptureWatch={async () => true}
       captureApi={capturePort}
+      onReportBug={() => undefined}
       softwareUpdate={updates}
     />
   );

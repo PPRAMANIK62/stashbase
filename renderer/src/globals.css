@@ -59,9 +59,9 @@
   --muted-foreground: light-dark(#737373, #a3a3a3);
 
   /* ── Interactive states ── */
-  --accent: light-dark(#e5e5e5, #525252);
+  --accent: light-dark(#ececec, #525252);
   --accent-foreground: light-dark(#171717, #f5f5f5);
-  --selected: light-dark(#d4d4d4, #525252);
+  --selected: light-dark(#dedede, #525252);
 
   /* ── Borders ──
      --border mixes from --foreground, so it tracks the theme automatically —
@@ -73,9 +73,10 @@
   --destructive: light-dark(#ef4444, #f87171);
   --destructive-light: light-dark(#fef2f2, #450a0a);
 
-  /* Agent work provenance and decisions. These implement the cyan/amber
-     visual voices already defined by the product style contract. */
-  --working: light-dark(#0e7490, #67e8f9);
+  /* Agent work provenance and decisions. Provenance speaks in plain ink —
+     the monochrome theme keeps no cyan voice — while decisions keep the
+     amber voice defined by the product style contract. */
+  --working: var(--foreground);
   --decision: light-dark(#b45309, #fbbf24);
   --decision-soft: light-dark(#fffbeb, #451a03);
 
@@ -120,13 +121,20 @@
      here; lib/tokens.test.ts holds it equal to `bgRadius` there. */
   --shape-input-radius: 8px;
 
+  /* ── Hairline ──
+     The width every separating line draws at. 1px on standard displays; on
+     hi-DPI panels the section-7 media query thins it to half a logical pixel,
+     which Chromium renders as a single device pixel. Border/divide utilities
+     are re-pointed at it in section 7; shadow ring steps consume it below. */
+  --hairline: 1px;
+
   /* ── Brand ──
-     The mark's own two colours. Fixed, theme-independent, and used nowhere
-     but the logo: a brand mark is an identity, not a surface, so it does not
-     follow the colour scheme the rest of the tokens do. */
-  --brand-ground: #f8fafc;
+     The mark's own colours, used nowhere but the logo. The mark has no
+     ground of its own — it sits transparent on the hosting surface. The S
+     edge is the same ink pair as --foreground; the frame gray stays fixed,
+     so the mark is always gray + ink in either scheme. */
   --brand-frame: #6b7280;
-  --brand-accent: #0891b2;
+  --brand-accent: light-dark(#171717, #f5f5f5);
 
   /* ── Badge palette ──
      Fixed hues, theme-independent by design: a badge's colour is a label
@@ -156,29 +164,29 @@
      --shadow-color is intentionally static: it is also consumed directly by
      components (input-message edge drop) and has never varied by theme. */
   --shadow-color: rgb(0 0 0 / 0.06);
-  --shadow-light-1: 0 0 0 1px var(--shadow-color);
-  --shadow-light-2: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color);
+  --shadow-light-1: 0 0 0 var(--hairline) var(--shadow-color);
+  --shadow-light-2: 0 0 0 var(--hairline) var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color);
   --shadow-light-3:
-    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 0 0 var(--hairline) var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
     0 3px 3px -1.5px var(--shadow-color);
   --shadow-light-4:
-    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 0 0 var(--hairline) var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
     0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color);
   --shadow-light-5:
-    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 0 0 var(--hairline) var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
     0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
     0 12px 12px -6px var(--shadow-color);
   --shadow-light-6:
-    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 0 0 var(--hairline) var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
     0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
     0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color);
   --shadow-light-7:
-    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 0 0 var(--hairline) var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
     0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
     0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color),
     0 48px 48px -24px var(--shadow-color);
   --shadow-light-8:
-    0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 0 0 var(--hairline) var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
     0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
     0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color),
     0 48px 48px -24px var(--shadow-color), 0 96px 96px -48px var(--shadow-color);
@@ -191,32 +199,34 @@
   --dm-ring-mid: rgba(255, 255, 255, 0.04);
   --dm-ring-high: rgba(255, 255, 255, 0.06);
   --dm-drop: rgba(0, 0, 0, 0.18);
-  --shadow-dark-1: inset 0 0 0 1px var(--dm-ring-base);
+  --shadow-dark-1: inset 0 0 0 var(--hairline) var(--dm-ring-base);
   --shadow-dark-2:
-    inset 0 1px 0 0 var(--dm-hi-base), inset 0 0 0 1px var(--dm-ring-base),
+    inset 0 1px 0 0 var(--dm-hi-base), inset 0 0 0 var(--hairline) var(--dm-ring-base),
     0 1px 1px -0.5px var(--dm-drop);
   --shadow-dark-3:
-    inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 1px var(--dm-ring-base),
-    0 0 0 1px rgba(0, 0, 0, 0.12), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop);
+    inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 var(--hairline) var(--dm-ring-base),
+    0 0 0 var(--hairline) rgba(0, 0, 0, 0.12), 0 1px 1px -0.5px var(--dm-drop),
+    0 3px 3px -1.5px var(--dm-drop);
   --shadow-dark-4:
-    inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 1px var(--dm-ring-mid),
-    0 0 0 1px rgba(0, 0, 0, 0.14), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
-    0 6px 6px -3px var(--dm-drop);
+    inset 0 1px 0 0 var(--dm-hi-mid), inset 0 0 0 var(--hairline) var(--dm-ring-mid),
+    0 0 0 var(--hairline) rgba(0, 0, 0, 0.14), 0 1px 1px -0.5px var(--dm-drop),
+    0 3px 3px -1.5px var(--dm-drop), 0 6px 6px -3px var(--dm-drop);
   --shadow-dark-5:
-    inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 1px var(--dm-ring-mid),
-    0 0 0 1px rgba(0, 0, 0, 0.16), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
-    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop);
+    inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 var(--hairline) var(--dm-ring-mid),
+    0 0 0 var(--hairline) rgba(0, 0, 0, 0.16), 0 1px 1px -0.5px var(--dm-drop),
+    0 3px 3px -1.5px var(--dm-drop), 0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop);
   --shadow-dark-6:
-    inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 1px var(--dm-ring-high),
-    0 0 0 1px rgba(0, 0, 0, 0.18), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
-    0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop), 0 24px 24px -12px var(--dm-drop);
+    inset 0 1px 0 0 var(--dm-hi-high), inset 0 0 0 var(--hairline) var(--dm-ring-high),
+    0 0 0 var(--hairline) rgba(0, 0, 0, 0.18), 0 1px 1px -0.5px var(--dm-drop),
+    0 3px 3px -1.5px var(--dm-drop), 0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop),
+    0 24px 24px -12px var(--dm-drop);
   --shadow-dark-7:
-    inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 1px var(--dm-ring-high),
+    inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 var(--hairline) var(--dm-ring-high),
     0 0 0 1px rgba(0, 0, 0, 0.2), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
     0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop),
     0 24px 24px -12px var(--dm-drop), 0 48px 48px -24px var(--dm-drop);
   --shadow-dark-8:
-    inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 1px var(--dm-ring-high),
+    inset 0 1px 0 0 var(--dm-hi-peak), inset 0 0 0 var(--hairline) var(--dm-ring-high),
     0 0 0 1px rgba(0, 0, 0, 0.22), 0 1px 1px -0.5px var(--dm-drop), 0 3px 3px -1.5px var(--dm-drop),
     0 6px 6px -3px var(--dm-drop), 0 12px 12px -6px var(--dm-drop),
     0 24px 24px -12px var(--dm-drop), 0 48px 48px -24px var(--dm-drop),
@@ -861,4 +871,55 @@ html[data-reading-text-size='large'] {
     animation-range-start: 0, calc(100% - var(--scroll-fade-size));
     animation-range-end: var(--scroll-fade-size), 100%;
   }
+}
+
+/* ============================================================================
+   7. HAIRLINES
+   On hi-DPI panels --hairline thins to half a logical pixel — one device
+   pixel, the thinnest line the display can draw. Tailwind's border, divide,
+   and px-separator utilities write literal 1px, so the zero-specificity
+   rules below re-point the default-width ones at the token. Being unlayered
+   they outrank the layered utilities; any explicit width (border-2, h-0.5)
+   uses a different class and is untouched.
+============================================================================ */
+
+@media (min-resolution: 1.5dppx) {
+  :root,
+  .light,
+  .dark {
+    --hairline: 0.5px;
+  }
+}
+
+:where(.border) {
+  border-width: var(--hairline);
+}
+:where(.border-t) {
+  border-top-width: var(--hairline);
+}
+:where(.border-b) {
+  border-bottom-width: var(--hairline);
+}
+:where(.border-l) {
+  border-left-width: var(--hairline);
+}
+:where(.border-r) {
+  border-right-width: var(--hairline);
+}
+:where(.border-x) {
+  border-left-width: var(--hairline);
+  border-right-width: var(--hairline);
+}
+:where(.border-y) {
+  border-top-width: var(--hairline);
+  border-bottom-width: var(--hairline);
+}
+:where(.divide-y > :not(:last-child)) {
+  border-bottom-width: var(--hairline);
+}
+:where(.h-px) {
+  height: var(--hairline);
+}
+:where(.w-px) {
+  width: var(--hairline);
 }

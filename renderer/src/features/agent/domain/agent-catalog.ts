@@ -57,7 +57,7 @@ export interface AgentRuntimeEntry {
 }
 
 /** The runtime a chat opens on when the catalog names nothing ready. */
-const BUILT_IN: AgentRuntimeEntry = { id: 'stashbase', label: 'Wiki Agent' };
+const BUILT_IN: AgentRuntimeEntry = { id: 'stashbase', label: 'OpenQuill' };
 
 /** Every runtime this window can hold a conversation with, in the order
  *  chats and history lists present them. */

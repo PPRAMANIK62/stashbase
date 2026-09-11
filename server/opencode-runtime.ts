@@ -180,12 +180,12 @@ export function buildOpenCodeConfig(
     },
     agent: {
       'stashbase-folder': {
-        description: 'StashBase Wiki Agent for one authorized library folder.',
+        description: 'StashBase OpenQuill for one authorized library folder.',
         mode: 'primary',
         prompt: runtimeInstructions,
       },
       'stashbase-library': {
-        description: 'StashBase Wiki Agent for the authorized library.',
+        description: 'StashBase OpenQuill for the authorized library.',
         mode: 'primary',
         prompt: runtimeInstructions,
         // A Library chat spans a non-contiguous set of registered folders.
@@ -276,7 +276,7 @@ class OpenCodeRuntime {
             retryable: true,
           },
         },
-        error: 'Sign in to StashBase to use Wiki Agent.',
+        error: 'Sign in to StashBase to use OpenQuill.',
       };
     }
     return {
@@ -285,7 +285,7 @@ class OpenCodeRuntime {
       installed: true,
       source: 'bundled',
       state: 'available',
-      bootstrap: { phase: 'ready', progress: 1, message: 'Wiki Agent is ready.' },
+      bootstrap: { phase: 'ready', progress: 1, message: 'OpenQuill is ready.' },
     };
   }
 
@@ -339,7 +339,7 @@ class OpenCodeRuntime {
     const executable = bundledOpenCodeExecutable();
     if (!executable) throw new Error('The bundled OpenCode runtime is missing.');
     if (this.requireAccount && !getHostedAccountSession()) {
-      throw new Error('Sign in to StashBase to use Wiki Agent.');
+      throw new Error('Sign in to StashBase to use OpenQuill.');
     }
     await startHostedAgentBroker();
     if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
@@ -349,7 +349,7 @@ class OpenCodeRuntime {
     const password = cryptoRandomSecret();
     const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
     const model = hostedAgentRuntime(this.agentSessionId);
-    if (!model) throw new Error('The Wiki Agent model broker is not running.');
+    if (!model) throw new Error('The OpenQuill model broker is not running.');
     const child = spawn(executable, [
       'serve',
       '--hostname=127.0.0.1',

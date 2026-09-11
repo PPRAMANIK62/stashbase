@@ -55,7 +55,7 @@ persistent built/stale state or schedule refreshes. It preserves source files:
 moving, renaming, deletion, and broad source rewrites require a separate
 explicit user decision.
 
-Wiki Agent is the included path: a pinned local OpenCode runtime uses the
+OpenQuill is the included path: a pinned local OpenCode runtime uses the
 signed-in account's included model allowance without asking the user to install
 an Agent or configure a model key. It remains the initial selection while the
 picker lists Codex and Claude Code before it as first-class bring-your-own

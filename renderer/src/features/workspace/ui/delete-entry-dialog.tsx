@@ -30,7 +30,7 @@ export function DeleteEntryDialog({
       destructive
       details={
         <div
-          className="max-w-full rounded-md bg-active px-2.5 py-2 font-mono text-caption break-all text-muted-foreground"
+          className="max-w-full rounded-md bg-muted px-2.5 py-2 font-mono text-caption break-all text-muted-foreground"
           title={entry?.path}
         >
           {entry?.path}

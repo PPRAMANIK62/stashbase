@@ -106,7 +106,7 @@ export function DocumentConflict({ conflict, name, resolve }: DocumentConflictPr
               const editorChanged = row.type === 'delete' || row.type === 'modify';
               return (
                 <tr
-                  className="border-b border-border/40 align-top"
+                  className="border-b border-border align-top"
                   key={`${row.diskLineNumber ?? 'none'}:${row.editorLineNumber ?? 'none'}:${row.type}`}
                 >
                   <td className="bg-surface-2/40 px-2 py-0.5 text-right text-muted-foreground select-none">

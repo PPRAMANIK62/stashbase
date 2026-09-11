@@ -97,7 +97,7 @@ describe('Agent workspace', () => {
     // The request is written, and stays written: a gate that took the canvas
     // away to ask for setup would take the request with it.
     expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Set up Wiki Agent' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Set up OpenQuill' })).not.toBeNull();
     // Nothing the runtime cannot do is advertised while it cannot carry a turn.
     expect(screen.queryByRole('button', { name: 'Attach files' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Provider: / })).toBeNull();
@@ -107,8 +107,8 @@ describe('Agent workspace', () => {
     renderWorkspace(idleAgentSessionPort(), [agentDefinition({ needsSignIn: true, ready: false })]);
     await agentGateLifted();
 
-    expect(await screen.findByRole('button', { name: 'Sign in to Wiki Agent' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Set up Wiki Agent' })).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Sign in to OpenQuill' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set up OpenQuill' })).toBeNull();
   });
 
   it('holds the setup offer back until the catalog has answered', async () => {
@@ -130,7 +130,7 @@ describe('Agent workspace', () => {
     });
     await agentGateLifted();
     expect(screen.queryByText('No Agent is ready yet.')).toBeNull();
-    expect(await screen.findByRole('button', { name: 'Provider: Wiki Agent' })).not.toBeNull();
+    expect(await screen.findByRole('button', { name: 'Provider: OpenQuill' })).not.toBeNull();
   });
 
   it('carries a waiting request into the runtime the reader sets up', async () => {
@@ -144,7 +144,7 @@ describe('Agent workspace', () => {
       await screen.findByRole('textbox', { name: 'Message' }),
       'Build wiki pages for this folder',
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Set up Wiki Agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Set up OpenQuill' }));
 
     // The runtime that arrived is not the one this chat opened on, so the chat
     // follows it — and finds the same request waiting.
@@ -191,14 +191,14 @@ describe('Agent workspace', () => {
     expect(port.connect).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Chat scope: Research')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Close conversation' })).toBeNull();
-    expect(screen.getAllByRole('button', { name: 'Provider: Wiki Agent' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Provider: OpenQuill' })).toHaveLength(1);
 
     const newChat = screen.getByRole('button', { name: 'Start new chat' });
     await userEvent.click(newChat);
     expect(port.connect).not.toHaveBeenCalled();
     expect(runtime.activeSession().store.getState().agent).toBe('stashbase');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: Wiki Agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: OpenQuill' }));
     const codexOption = await screen.findByRole('menuitemradio', { name: 'Codex' });
     const claudeOption = screen.getByRole('menuitemradio', { name: 'Claude Code' });
     // The provider marks are aria-hidden, injected third-party SVG markup (`@lobehub/icons-static-svg`);
@@ -220,7 +220,7 @@ describe('Agent workspace', () => {
     const requests = () => vi.mocked(port.connect).mock.calls.map(([request]) => request);
     renderWorkspace(port);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Provider: Wiki Agent' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Provider: OpenQuill' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     await userEvent.click(screen.getByRole('button', { name: 'Model: Default' }));
     expect(requests()).toHaveLength(1);
@@ -265,7 +265,7 @@ describe('Agent workspace', () => {
     const { runtime } = renderWorkspace(port);
     await screen.findByText('Your Wiki is here.');
     await agentGateLifted();
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: Wiki Agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: OpenQuill' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
 
     const composer = screen.getByRole('textbox', { name: 'Message' });

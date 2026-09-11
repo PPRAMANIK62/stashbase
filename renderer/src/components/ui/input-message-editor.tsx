@@ -37,8 +37,6 @@ export interface InputMessageEditorContext {
   metrics: { fontSize: number; lineHeight: number; paddingX: number; paddingY: number };
   ariaLabel: string;
   ariaDescribedBy?: string | undefined;
-  /** Report keyboard-visible focus so the composer can draw its ring. */
-  onFocusChange(focused: boolean): void;
 }
 
 /** The slice of `InputMessage`'s public surface this concern owns. */

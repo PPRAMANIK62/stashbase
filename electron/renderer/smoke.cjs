@@ -258,7 +258,7 @@ app
       const welcomeDeadline = Date.now() + 5000;
       while (
         ![...document.querySelectorAll('button')]
-          .some((button) => button.textContent?.trim() === 'Open folder')
+          .some((button) => button.getAttribute('aria-label') === 'Open folder as a project')
         && Date.now() < welcomeDeadline
       ) {
         await new Promise((resolve) => setTimeout(resolve, 25));
@@ -294,8 +294,8 @@ app
         runtimeFrozen: Object.isFrozen(window.stashbase.runtime),
         inlineScriptDenied: window.__stashbaseInlineScriptRan !== true,
         welcomeActions: [...document.querySelectorAll('button')]
-          .map((button) => button.textContent?.trim())
-          .filter((label) => label === 'Open folder' || label === 'Create folder')
+          .map((button) => button.getAttribute('aria-label'))
+          .filter((label) => label === 'Open folder as a project' || label === 'Create a new project')
           .sort(),
         welcomeTitle: document.querySelector('h1')?.textContent?.trim(),
         workspaceMarginLeft: getComputedStyle(
@@ -346,7 +346,7 @@ app
       runtime: { serverOrigin },
       runtimeFrozen: true,
       inlineScriptDenied: true,
-      welcomeActions: ['Create folder', 'Open folder'],
+      welcomeActions: ['Create a new project', 'Open folder as a project'],
       welcomeTitle: 'StashBase',
       workspaceMarginLeft: '0px',
       url: APP_URL,

@@ -3,6 +3,7 @@ export { createAgentContextAdapter } from './infrastructure/context-api';
 export { createAgentSessionAdapter } from './infrastructure/session-api';
 export { AgentChats, AgentWorkspace } from './ui/workspace-lazy';
 export { AgentTitlebar } from './ui/titlebar';
+export { NewChatButton } from './ui/new-chat-button';
 export { useAgentWorkspaceRuntime } from './hooks/use-agent-workspace-runtime';
 export { agentSurfaceProps, useAgentComposerFocused } from './ui/composer/focus';
 export type { AgentCatalogPort, AgentContextPort, AgentSessionPort } from './application/ports';

@@ -28,6 +28,7 @@ export function WorkspaceDialogs({
 }) {
   const dependencies = useDependencies();
   const softwareUpdate = useSoftwareUpdate(dependencies.updates);
+  const bugReport = dependencies.bugReport;
   return (
     <>
       {workspace && documents && (
@@ -47,6 +48,7 @@ export function WorkspaceDialogs({
         mcpAccessApi={dependencies.settings.mcpAccessApi}
         onClose={settings.close}
         onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
+        onReportBug={bugReport ? () => void bugReport.open() : null}
         onSectionChange={settings.onSectionChange}
         open={settings.open}
         section={settings.section}

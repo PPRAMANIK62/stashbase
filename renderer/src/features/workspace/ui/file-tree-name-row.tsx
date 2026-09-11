@@ -52,7 +52,7 @@ export function FileTreeNameRow({
         aria-level={level}
         aria-selected={false}
         className={cn(
-          'relative flex h-7 items-center gap-1 bg-active pr-3 text-[12px] text-foreground',
+          'relative flex h-7 items-center gap-1 bg-hover pr-3 text-[12px] text-foreground',
           shape.button,
         )}
         data-tree-name-row=""

@@ -2,7 +2,7 @@
  * Where this window lands, and the saved presentation state it lands with.
  *
  * The rule for which folder wins is not here: it is
- * `domain/landing.ts`, one total function over the three sources that can name
+ * `domain/landing.ts`, one total function over the two sources that can name
  * one. This hook owns the mechanics of carrying that answer out — asking the
  * desktop once, holding one open request in flight, publishing the snapshot
  * the request answers with, and reporting whether the window has settled.
@@ -39,7 +39,7 @@ import { useRetainedRuntime } from '@/shared/runtime/use-retained-runtime';
  * session had even been read. Only `ready` carries the folder to restore,
  * because only `ready` has one. `restoring` covers three waits: the stored
  * session being read, the desktop being asked which folder this window was
- * created for, and the winning folder being opened.
+ * created for, and that folder, if it named one, being opened.
  */
 type WorkspaceSessionStatus =
   | { kind: 'restoring' }
@@ -102,21 +102,16 @@ export function useWorkspaceSession(
     () => library?.members.map((member) => member.path) ?? [],
     [library?.members],
   );
-  const restorablePath =
-    state.restoreStatus === 'ready' &&
-    state.snapshot.activeFolderPath &&
-    memberPaths.includes(state.snapshot.activeFolderPath)
-      ? state.snapshot.activeFolderPath
-      : null;
 
+  // The saved session is not consulted here. It carries each folder's tabs and
+  // tree state for when that folder is opened, and nothing about where to land.
   const landing = useMemo(
     () =>
       chooseFolderLanding({
         activeFolder: library?.activeFolder?.path ?? null,
         initialFolder,
-        sessionFolder: restorablePath,
       }),
-    [initialFolder, library?.activeFolder?.path, restorablePath],
+    [initialFolder, library?.activeFolder?.path],
   );
   // A landing that still owes an open request, for the status below.
   const unopened = landingToOpen(landing);
@@ -140,8 +135,9 @@ export function useWorkspaceSession(
       return;
     }
 
-    // Whichever source won, it is opened exactly the way a reader's own click
-    // would open it, so the server learns this window's folder the one way.
+    // The folder the window was made for is opened exactly the way a reader's
+    // own click would open it, so the server learns this window's folder the
+    // one way.
     const wanted = landing.path;
     if (attemptedRestore.current === wanted) return;
     attemptedRestore.current = wanted;

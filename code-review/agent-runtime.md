@@ -3,9 +3,9 @@
 > Review contract for supported CLI discovery, managed installation, MCP
 > preparation, native session ownership, history, and protocol normalization.
 
-## Included Wiki Agent
+## Included OpenQuill
 
-- Wiki Agent is the included `stashbase` adapter and the runtime a new chat
+- OpenQuill is the included `stashbase` adapter and the runtime a new chat
   opens on whenever it is ready. It uses exact-version
   `opencode-ai@1.18.19` and `@opencode-ai/sdk@1.18.19` dependencies; packaging
   copies the dependency's platform-specific postinstall target to a stable
@@ -26,7 +26,7 @@
   final signed binary and observe it still running; `--version` alone is not a
   runtime proof.
 - Readiness is a cheap packaged-binary and StashBase-account check. It never
-  installs a runtime or asks for a model key. Sign-out ends Wiki Agent
+  installs a runtime or asks for a model key. Sign-out ends OpenQuill
   sessions and processes before clearing the Node-owned account session.
 - Each live panel session owns a loopback-only OpenCode server with random
   Basic authentication. Its MCP child receives the exact window id and a
@@ -228,7 +228,7 @@ it is not a third scope.
   search; server-side defaults belong to [MCP Access](mcp-access.md). It avoids a
   redundant parser unless original-source analysis was explicitly requested or
   prepared text is unavailable. Codex receives the composition as
-  `developerInstructions`, Claude as the native preset append, and Wiki Agent
+  `developerInstructions`, Claude as the native preset append, and OpenQuill
   as its OpenCode Agent prompt. MCP advertises tools without a second top-level
   instruction prompt. No Adapter mutates a started native session's prompt in
   place or grows a live setter, so a saved edit reaches the next session that
@@ -256,7 +256,7 @@ it is not a third scope.
 
 ## Native Process Ownership
 
-- Each live Wiki Agent chat owns one authenticated OpenCode server. The
+- Each live OpenQuill chat owns one authenticated OpenCode server. The
   per-session process boundary keeps MCP attribution exact when turns run
   concurrently. All servers may share OpenCode's native history store, while
   their injected config and credentials remain process-local.
@@ -351,7 +351,7 @@ assumed CLI versions.
 Required behavior is stricter than Current behavior in each of these. Every
 gap below is observed in Shipping.
 
-- **OpenCode directory rebind.** An attributed Wiki Agent Library chat
+- **OpenCode directory rebind.** An attributed OpenQuill Library chat
   participates in `create_project`. The live panel scope changes and subsequent
   MCP operations remain attached to that session and window. OpenCode 1.18.19
   has no supported operation for moving the same native session between

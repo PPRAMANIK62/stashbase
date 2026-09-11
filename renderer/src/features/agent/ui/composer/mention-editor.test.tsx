@@ -46,7 +46,6 @@ function harness(options: Harness = {}) {
       maxRows: 6,
       metrics,
       minRows: 3,
-      onFocusChange: vi.fn(),
       onValueChange: spies.onValueChange,
       placeholder: 'Ask',
       submit: spies.submit,

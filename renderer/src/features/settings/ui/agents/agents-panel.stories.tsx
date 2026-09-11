@@ -28,7 +28,7 @@ const claude: AgentRuntime = {
 
 const stashbase: AgentRuntime = {
   id: 'stashbase',
-  label: 'Wiki Agent',
+  label: 'OpenQuill',
   installed: true,
   ownership: 'bundled',
   preparation: { kind: 'ready' },

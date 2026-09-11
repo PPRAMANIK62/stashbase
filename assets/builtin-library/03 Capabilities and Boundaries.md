@@ -153,7 +153,7 @@ Keep these separate when explaining setup or recovery:
 |---|---|
 | Hosted search by meaning | StashBase account session |
 | Bring-your-own provider for search by meaning | OpenAI or OpenRouter key stored through StashBase Settings |
-| Build Wiki | The selected Wiki Agent, Claude Code, or Codex Agent; no separate credential |
+| Build Wiki | The selected OpenQuill, Claude Code, or Codex Agent; no separate credential |
 | Agent Panel Claude Code | Claude runtime/provider authentication |
 | Agent Panel Codex | Codex runtime/provider authentication, including the runtime's ChatGPT sign-in flow |
 | External MCP client | That client's account plus the StashBase MCP connection configuration |

@@ -196,7 +196,14 @@ function WorkspaceWindow() {
         />
       }
       started={chrome.started}
-      titlebar={<WorkspaceTitlebar agent={runtime} documents={documents} />}
+      titlebar={
+        <WorkspaceTitlebar
+          agent={runtime}
+          documents={documents}
+          hasActiveFolder={activeFolder !== null}
+          scope={agent.scope}
+        />
+      }
       updateNotice={<UpdateNotice notice={updateNotice} />}
       welcome={
         <LibraryWelcome

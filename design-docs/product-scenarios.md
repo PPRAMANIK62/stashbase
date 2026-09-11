@@ -40,7 +40,7 @@ Related journeys: [J03](user-journeys.md#j03-read-and-edit-source-documents),
 A user already has years of notes, PDFs, images, recordings, and earlier Agent
 output. StashBase can first build visible, source-linked Wiki Pages from
 selected folders, keep machine-derived representations invisible, and let
-Wiki Agent or external Agents retrieve the visible Sources by meaning and
+OpenQuill or external Agents retrieve the visible Sources by meaning and
 write useful new files back.
 
 The outcome is a local archive that becomes more useful over time while the

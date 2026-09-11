@@ -195,22 +195,6 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
             statusField,
             mentionDecorations,
             EditorView.lineWrapping,
-            EditorView.domEventHandlers({
-              blur: () => {
-                ctxRef.current.onFocusChange(false);
-                return false;
-              },
-              focus: (_event, focused) => {
-                let visible = true;
-                try {
-                  visible = focused.contentDOM.matches(':focus-visible');
-                } catch {
-                  visible = true;
-                }
-                ctxRef.current.onFocusChange(visible);
-                return false;
-              },
-            }),
             placeholderCompartment.current.of(placeholder(ctxRef.current.placeholder)),
             editable.current.of(EditorView.editable.of(!ctxRef.current.disabled)),
             attributes.current.of(EditorView.contentAttributes.of({})),
@@ -265,7 +249,6 @@ export const MentionEditor = forwardRef<MentionEditorHandle, MentionEditorProps>
         projectSkill(view, skillRef.current);
       }
       return () => {
-        ctxRef.current.onFocusChange(false);
         view.destroy();
         viewRef.current = null;
       };

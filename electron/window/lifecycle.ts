@@ -3,11 +3,13 @@ import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 
 import {
   WINDOW_CONTEXT_RELEASE_READY_CHANNEL,
+  WINDOW_FULLSCREEN_CHANNEL,
   WINDOW_LIFECYCLE_CAPABILITY,
   WINDOW_PREPARE_CONTEXT_RELEASE_CHANNEL,
   WINDOW_SAFE_RELOAD_CHANNEL,
   type WindowContextReleaseReason,
   windowContextReleaseReadySchema,
+  windowFullScreenSchema,
   windowLifecycleResponseSchema,
 } from '../../shared/protocols/electron/window-lifecycle.ts';
 import { authorizeSender, type SenderAuthorization } from '../library/dialog.ts';
@@ -127,7 +129,22 @@ export function registerWindowLifecycle(
   return {
     attach(window: LifecycleWindow) {
       const webContentsId = window.webContents.id;
-      window.webContents.on('did-finish-load', () => loaded.add(window));
+      // Native fullscreen hides the platform's own chrome, and the shell lays
+      // itself out around that chrome, so the state is pushed on every change
+      // and once more when a document has loaded and can hear it.
+      const pushFullScreen = () => {
+        if (window.isDestroyed() || window.webContents.isDestroyed()) return;
+        window.webContents.send(
+          WINDOW_FULLSCREEN_CHANNEL,
+          windowFullScreenSchema.parse({ fullscreen: window.isFullScreen() }),
+        );
+      };
+      window.on('enter-full-screen', pushFullScreen);
+      window.on('leave-full-screen', pushFullScreen);
+      window.webContents.on('did-finish-load', () => {
+        loaded.add(window);
+        pushFullScreen();
+      });
       window.on('close', (event) => {
         if (approvedClose.has(window) || !loaded.has(window)) return;
         event.preventDefault();

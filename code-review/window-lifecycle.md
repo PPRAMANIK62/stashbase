@@ -152,7 +152,13 @@ after readiness, a save failure or timeout keeps the window open.
   travels in the window's URL, so development and packaged windows load the
   same document.
 - Frameless chrome remains draggable on every desktop platform; macOS
-  traffic-light layout is selected only by the exact Darwin platform marker.
+  traffic-light layout is selected only by the exact Darwin platform marker,
+  in the window options and in the renderer alike: the preload stamps the
+  platform on the document root and mirrors the window's native fullscreen
+  there, which the lifecycle pushes on every change and once the document has
+  loaded, and the shell stylesheet keeps the corner under the lights clear
+  only for that marker while the lights are showing (see
+  [Renderer Styling](renderer-styling.md)).
 
 **Known gap — no driven runtime pass proves an install.** A window can now
 request Install, so the all-window save barrier has a caller, but the evidence

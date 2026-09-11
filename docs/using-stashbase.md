@@ -10,7 +10,7 @@ Choose **Make a copy** in an entry to download its folder and open it in a new
 window, or use **Open Folder…** for your own material. When an entry includes
 its build request, **Copy prompt** lets you reuse it on another folder.
 
-**Wiki Agent** is selected initially. Sign in to StashBase to use its included
+**OpenQuill** is selected initially. Sign in to StashBase to use its included
 model allowance, which has a seven-day window; no separate Agent installation
 or model API key is required. You can instead select Claude Code or Codex.
 Those runtimes use their own provider login; a missing runtime waits for
@@ -74,7 +74,7 @@ does not pause background preparation or indexing.
 Hosted indexing and meaning-based queries share monthly credits. Check the
 account menu or Settings for the remaining percentage and reset date. When
 credits run out, keyword search and local file workflows remain available.
-Wiki Agent's model allowance is separate from these search credits.
+OpenQuill's model allowance is separate from these search credits.
 
 ## Prepare Recordings
 

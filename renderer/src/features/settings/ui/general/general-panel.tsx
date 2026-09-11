@@ -14,11 +14,19 @@ import { FailureNotice } from '@/shared/ui/failure-notice';
 export interface GeneralPanelProps {
   applyCaptureWatch: CaptureWatchApplier;
   captureApi: CapturePort;
+  /** Null outside the desktop app, where there is no review window to open;
+   *  the row then stays, disabled, and says so. */
+  onReportBug: (() => void) | null;
   /** Null where the build has no updater, and then the group is not shown. */
   softwareUpdate: SoftwareUpdateRow | null;
 }
 
-export function GeneralPanel({ applyCaptureWatch, captureApi, softwareUpdate }: GeneralPanelProps) {
+export function GeneralPanel({
+  applyCaptureWatch,
+  captureApi,
+  onReportBug,
+  softwareUpdate,
+}: GeneralPanelProps) {
   const capture = useCapture(captureApi, applyCaptureWatch);
   const enabled = capture.clipboardImageImport;
 
@@ -90,6 +98,28 @@ export function GeneralPanel({ applyCaptureWatch, captureApi, softwareUpdate }: 
           </SettingsList>
         </SettingsGroup>
       )}
+      <SettingsGroup title="Support">
+        <SettingsList>
+          <SettingsRow
+            detail={
+              onReportBug
+                ? 'Review what StashBase collected, then hand the report off yourself. Nothing is sent without you.'
+                : 'Available in the desktop app.'
+            }
+            title="Report a bug"
+            trail={
+              <Button
+                disabled={onReportBug === null}
+                onClick={onReportBug ?? undefined}
+                size="compact"
+                variant="secondary"
+              >
+                Report a bug
+              </Button>
+            }
+          />
+        </SettingsList>
+      </SettingsGroup>
     </SettingsPane>
   );
 }

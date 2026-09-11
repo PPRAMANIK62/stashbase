@@ -54,7 +54,7 @@ export function AgentRuntimesPanel({ agentRuntimeApi, onOpenAccount }: AgentRunt
 
   return (
     <SettingsPane
-      lede="Wiki Agent includes free credits through your fixed 7-day account allowance. Codex and Claude Code remain available as bring-your-own runtimes."
+      lede="OpenQuill includes free credits through your fixed 7-day account allowance. Codex and Claude Code remain available as bring-your-own runtimes."
       title="Agents"
     >
       {(allowance.allowance || allowance.failed) && (

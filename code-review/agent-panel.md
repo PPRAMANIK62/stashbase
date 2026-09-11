@@ -65,7 +65,9 @@ import a sibling feature.
   and reduced motion lands every change at once. The splitter exposes
   keyboard-accessible value semantics.
 - The titlebar carries document tabs while any document is open and hands the
-  row back to the Agent's own header when the last one closes.
+  row back to the Agent's own header when the last one closes. Its new-chat
+  button is the feature's own `NewChatButton`, so the titlebar and the Chats
+  panel share one preferred-Agent rule and one `newChat` call.
 - Both Agent surfaces load behind one lazy boundary with a retry, so a chunk
   that fails offers to reload itself instead of taking the window down.
 

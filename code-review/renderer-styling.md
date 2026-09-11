@@ -42,9 +42,11 @@ with a shadow recipe. `@theme inline` publishes both as the `bg-surface-1..8`
 and `shadow-surface-1..8` utilities. Semantic roles sit on top of the ladder:
 background, foreground, card, muted, accent, selected, border, destructive, the
 status voices `--working` and `--decision`, the diff pair, and a five-hue badge
-palette. The badge hues and the brand mark colors are theme-independent on
-purpose, because a badge hue is a label and a mark is an identity rather than a
-surface.
+palette. `--working` is plain ink (an alias of `--foreground`); only
+`--decision` keeps a hue. The badge hues are theme-independent on purpose,
+because a badge hue is a label. The brand mark is transparent-backed and
+rides the theme's ink (`--brand-accent` carries a light-dark() pair); only
+its frame gray is fixed.
 
 `--focus-ring` is the single theming point for focus. Every component ring reads
 `var(--focus-ring, …)`, and the literal fallback is written only in
@@ -52,6 +54,13 @@ surface.
 the kit still draws a ring in a project without the token. `--shape-input-radius`
 is the one radius published to plain CSS, for the rules that cannot read the
 class map.
+
+`--hairline` is the width every separating line draws at: 1px on standard
+displays, half a logical pixel (one device pixel) on hi-DPI panels. The
+hairline section at the end of `globals.css` re-points the default-width
+border, divide, and px-separator utilities at it, and the shadow ladders'
+ring steps consume it directly. A new 1px rule or ring should read the token
+rather than write a literal width.
 
 Type scale is five roles, `--fs-display` through `--fs-caption`, exposed as the
 `text-display` through `text-caption` utilities and keyed off `html[data-size]`.
@@ -134,7 +143,10 @@ every measurement from the size and shape contexts rather than from a local map.
 and no `color` prop, keeps its fill recipes in two maps keyed by the variant type
 rather than by `string`, and reads height, type step, padding, gap, glyph size,
 and radius out of `useSize()` and `useShape()`. `renderer/src/components/ui/badge.tsx`
-is the same shape at smaller scale, with one hue per thing a badge says.
+is the same shape at smaller scale, with one hue per thing a badge says. Its
+gray, the badge that classifies rather than alerts, sits on `--muted` in
+`--muted-foreground` ink rather than on the control tint, so a category label
+reads a step quieter than a button beside it.
 
 A consumer picks behavior with props. `className` carries layout and never a
 restyle, and a caller asking for a fifth fill is asking for a token rather than
@@ -188,7 +200,12 @@ to choose between a nav rail and a drawer.
 Four stylesheets exist, and each owns a boundary Tailwind utilities cannot.
 `renderer/src/globals.css` is the token and global-rule surface.
 `renderer/src/app/shell.css` owns the Electron window surface, where the
-titlebar accepts window drag and its control island opts back out.
+titlebar accepts window drag and its control island opts back out, and where
+the room for macOS's traffic lights lives: the preload stamps the platform on
+the document root and mirrors the window's native fullscreen there as the
+desktop reports it, and only the exact `darwin` marker pads the sidebar's
+header and, once the sidebar is collapsed, the titlebar's island, with
+fullscreen taking the room back.
 `renderer/src/features/documents/ui/markdown/document.css` and
 `renderer/src/features/documents/ui/pdf/document.css` are the two per-viewer
 exceptions, and each maps a third party's anatomy onto the semantic roles. The

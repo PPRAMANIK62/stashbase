@@ -33,8 +33,6 @@ const editorSlot = (context: InputMessageEditorContext) => (
     aria-label={context.ariaLabel}
     className="outline-none"
     contentEditable={!context.disabled}
-    onBlur={() => context.onFocusChange(false)}
-    onFocus={() => context.onFocusChange(true)}
     onInput={(event) => context.onValueChange(event.currentTarget.textContent ?? '')}
     onKeyDown={(event) => {
       if (event.key !== 'Enter' || event.shiftKey) return;

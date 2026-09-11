@@ -15,7 +15,7 @@ Runtime installation, native process ownership, MCP access, and indexing have
 separate engineering contracts.
 
 The panel is not a remote Agent host, a separate AI workspace, or a
-transcript-centered file manager. **Wiki Agent**, the included Agent, runs locally
+transcript-centered file manager. **OpenQuill**, the included Agent, runs locally
 and uses a hosted service only as its metered model provider.
 
 ## Current Experience
@@ -65,11 +65,11 @@ and uses a hosted service only as its metered model provider.
   Clearing and saving restores that default. Existing `AGENTS.md` and
   `CLAUDE.md` files remain separate user-owned runtime inputs and are never
   changed.
-- New users start with **Wiki Agent** selected. The Agent is chosen in the
+- New users start with **OpenQuill** selected. The Agent is chosen in the
   composer, from a control that names the current provider, beside the model
   and thinking controls for the same Agent. Choosing a different provider
   starts a new Chat rather than repointing the current one, and all three
-  controls stop taking input while a turn streams. Wiki Agent's pinned
+  controls stop taking input while a turn streams. OpenQuill's pinned
   OpenCode runtime is included with the app, requires no Agent installation or
   model API key, and becomes ready after StashBase account sign-in. Settings
   shows the remaining percent and reset time for the current fixed seven-day
@@ -77,8 +77,10 @@ and uses a hosted service only as its metered model provider.
   Claude Code as explicit alternatives. It never exposes the allowance's
   dollar value.
 - **New chat** is the deliberate creation entry and reuses a completely blank
-  tab. It sits at the top of the sidebar's Chats panel, and becomes **Set up
-  an Agent** while no runtime is ready. The panel below it groups the folder's
+  tab. It sits at the top of the sidebar's Chats panel, where it becomes
+  **Set up an Agent** while no runtime is ready, and as a button beside the
+  sidebar toggle in the titlebar, which starts the same chat and waits,
+  disabled, while no runtime is ready. The panel below it groups the folder's
   conversations by day, newest first, merging restored history with open tabs
   and omitting allocations that hold no work. A row renames in place and its
   menu offers deletion. Opening the app, a folder, a tab, or history never
@@ -117,7 +119,7 @@ and uses a hosted service only as its metered model provider.
   delete one waiting follow-up before it is sent without interrupting the
   active turn or removing its queued siblings; runtimes that support steering
   also offer **Steer** for that waiting item.
-- Wiki Agent normalizes OpenCode streaming, tools, permission requests,
+- OpenQuill normalizes OpenCode streaming, tools, permission requests,
   native session history, and file Diffs into the same panel contract. Each
   live panel session has an independently attributed local runtime and MCP
   connection. Each user-submitted prompt also establishes one turn identity;
@@ -130,11 +132,11 @@ and uses a hosted service only as its metered model provider.
   recovery-requiring errors.
 - Bring-your-own Agents preserve user-visible Unicode attachment filenames
   from selection or drop through the sent transcript and restored history.
-  Wiki Agent does not advertise transient attachments until its isolated
+  OpenQuill does not advertise transient attachments until its isolated
   OpenCode runtime has a scoped byte-reading path; Library mentions and MCP
   context remain available.
 - Source and attachment access follows the
-  [Documents format matrix](documents.md#format-capability-matrix). Wiki Agent
+  [Documents format matrix](documents.md#format-capability-matrix). OpenQuill
   image attachment behavior does not imply that every external MCP client can
   read image bytes, and previewability does not imply content-write access.
 - Document context is explicit. Agent-created files refresh the workspace but
@@ -195,7 +197,7 @@ and uses a hosted service only as its metered model provider.
   from an abandoned generation cannot enter a newer turn.
 - A failed turn explains itself in the conversation and never blocks the
   panel: transient rate or network failures offer an in-place Try again. An
-  exhausted Wiki Agent allowance opens Agent Settings to review usage or
+  exhausted OpenQuill allowance opens Agent Settings to review usage or
   switch runtimes; an expired sign-in offers Codex's in-app sign-in or, for
   Claude, terminal sign-in steps with an in-place Reconnect. Either
   way the same conversation continues without restarting StashBase: acting
@@ -210,7 +212,7 @@ and uses a hosted service only as its metered model provider.
   automatic approval is routine activity rather than a notice; other notices
   use a polite warning presentation and stay visible when no final answer
   follows. Only failures enter startup, turn, or session recovery.
-- Wiki Agent uses a service-owned model profile. The first release hides
+- OpenQuill uses a service-owned model profile. The first release hides
   model selection, while the stable profile alias keeps later model choice and
   provider changes compatible with existing desktop builds.
 - Folder-scope retirement never offers Retry or reconnects user work into a
@@ -221,7 +223,7 @@ and uses a hosted service only as its metered model provider.
   its own. Every approval it surfaces — permission, deletion, command, network,
   or broader filesystem — is an explicit user decision; the panel never answers
   one itself. Tool payloads render in a human-readable form.
-- Library-wide Wiki Agent sessions reach files only through the authorized
+- Library-wide OpenQuill sessions reach files only through the authorized
   StashBase MCP operation layer. Folder-scoped sessions may use OpenCode's
   native local tools inside that folder; commands, edits, network, and any
   broader access retain their configured approval or denial.
@@ -269,9 +271,9 @@ session policy the user owns. Nothing offers that choice. Every Chat keeps
 meaning-based retrieval on whenever a source is configured, so the only way to
 constrain a lookup to text matching is for the Agent to ask for it.
 
-### Wiki Agent project rebind
+### OpenQuill project rebind
 
-An attributed Wiki Agent Library chat can create a project and move its
+An attributed OpenQuill Library chat can create a project and move its
 live panel scope to that folder. OpenCode cannot yet move the same native
 session record to a different directory project, so the restored history row
 remains under Library and that continued chat stays on MCP-only file access.
