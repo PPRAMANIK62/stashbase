@@ -23,7 +23,9 @@ export interface DocumentSources {
   /** Opens the document behind a search hit and lands on the match. Answers
    *  whether the document opened. */
   navigateToMatch(intent: SearchNavigationIntent): Promise<boolean>;
-  open(source: SourceReference): void;
+  /** Opens a source. Browsing is the default and opens a preview, the one
+   *  tab the next browse reuses; `keep` asks for a tab that stays. */
+  open(source: SourceReference, options?: { keep?: boolean }): void;
   /** Reconciles a scope this window lost with the library the host reports. */
   recoverLostScope(scope: WorkspaceScope): void;
   /** Settles the open documents under an entry before it is renamed or
@@ -43,6 +45,9 @@ export interface DocumentSources {
  * the reason this is not just a bag of callbacks: the library lifecycle has to
  * be able to stop a folder change until the folder's own documents have been
  * flushed, and only the folder that owns a document may answer for it.
+ *
+ * Every route in here is a reader browsing — a tree row, a link, a search
+ * hit — so each opens a preview unless the caller says the tab should stay.
  */
 export function useDocumentSources(
   adapters: WorkspaceAdapters,
@@ -63,8 +68,9 @@ export function useDocumentSources(
   );
 
   const open = useCallback(
-    (source: SourceReference) => {
-      if (workspace && documents) void openDocument(workspace, documents, source);
+    (source: SourceReference, options: { keep?: boolean } = {}) => {
+      if (!workspace || !documents) return;
+      void openDocument(workspace, documents, source, { preview: options.keep !== true });
     },
     [documents, workspace],
   );
@@ -72,12 +78,10 @@ export function useDocumentSources(
   const navigate = useCallback(
     (target: DocumentNavigationTarget) => {
       if (!workspace || !documents) return;
-      void openDocument(
-        workspace,
-        documents,
-        target.source,
-        target.anchor === undefined ? undefined : { anchor: target.anchor },
-      );
+      void openDocument(workspace, documents, target.source, {
+        preview: true,
+        ...(target.anchor === undefined ? {} : { anchor: target.anchor }),
+      });
     },
     [documents, workspace],
   );
@@ -86,6 +90,7 @@ export function useDocumentSources(
     async (intent: SearchNavigationIntent) => {
       if (!workspace || !documents) return false;
       const opened = await openDocument(workspace, documents, intent.source, {
+        preview: true,
         search: intent.target,
       });
       return opened !== null;

@@ -83,6 +83,38 @@ export function joinTreePath(parent: string, name: string): string {
   return parent ? `${parent}/${name}` : name;
 }
 
+/** The name a new draft takes under `parent`: `Untitled.md`, or the first
+ *  `Untitled N.md` no sibling already uses. Names are compared without case,
+ *  so a case-insensitive disk cannot refuse the one chosen. */
+export function untitledDraftName(listing: WorkspaceListing, parent: string): string {
+  const taken = new Set(
+    listing.files
+      .filter((file) => parentPath(file.path) === parent)
+      .map((file) => basename(file.path).toLowerCase()),
+  );
+  // One more candidate than there are siblings is always enough.
+  for (let ordinal = 1; ordinal <= listing.files.length + 1; ordinal += 1) {
+    if (!taken.has(untitledName(ordinal).toLowerCase())) return untitledName(ordinal);
+  }
+  return untitledName(listing.files.length + 2);
+}
+
+function untitledName(ordinal: number): string {
+  return ordinal === 1 ? 'Untitled.md' : `Untitled ${ordinal}.md`;
+}
+
+/** Where a new entry goes when the reader has not said: the selected folder,
+ *  or the selected file's folder, or the root when nothing is selected. A
+ *  folder the listing only implies, by the entries under it, counts too. */
+export function treeCreationParent(listing: WorkspaceListing, selectedPath: string | null): string {
+  if (selectedPath === null) return '';
+  const inside = (path: string) => path !== selectedPath && treePathWithin(path, selectedPath);
+  const isFolder =
+    listing.folders.some((folder) => folder.path === selectedPath || inside(folder.path)) ||
+    listing.files.some((file) => inside(file.path));
+  return isFolder ? selectedPath : parentPath(selectedPath);
+}
+
 /** The path an entry takes when only its leaf name changes. */
 export function renamedTreePath(entryPath: string, name: string): string {
   return joinTreePath(parentPath(entryPath), name);
@@ -106,7 +138,10 @@ export function entryNameProblem(name: string): string | null {
 
 function compareNodes(left: TreeNode, right: TreeNode): number {
   if (left.type !== right.type) return left.type === 'folder' ? -1 : 1;
-  return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' });
+  return left.name.localeCompare(right.name, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
 }
 
 export function buildTree(listing: WorkspaceListing): TreeNode[] {

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import {
+  clearTreeCreate,
   createWorkspaceState,
   expandTreeFolder,
   forgetTreePath,
   renameTreePath,
+  requestTreeCreate,
   selectTreePath,
   toggleTreeFolder,
 } from './workspace';
@@ -45,6 +47,7 @@ describe('workspace tree state', () => {
     expect(restored).toEqual({
       expanded: { drafts: true },
       lifecycle: 'active',
+      pendingCreate: null,
       scope: {
         folder: { name: 'Notes', path: '/library/notes' },
         generation: 9,
@@ -54,7 +57,10 @@ describe('workspace tree state', () => {
   });
 
   it('moves expansion and selection with a renamed entry and drops them with a deleted one', () => {
-    const scope = { folder: { name: 'Notes', path: '/library/notes' }, generation: 1 };
+    const scope = {
+      folder: { name: 'Notes', path: '/library/notes' },
+      generation: 1,
+    };
     let state = createWorkspaceState(scope);
     state = expandTreeFolder(expandTreeFolder(state, 'drafts'), 'drafts/2026');
     expect(expandTreeFolder(state, 'drafts')).toBe(state);
@@ -76,5 +82,23 @@ describe('workspace tree state', () => {
       expanded: { drafts: true, 'drafts/2026': true },
       selectedPath: 'drafts/2026/plan.md',
     });
+  });
+});
+
+describe('workspace create requests', () => {
+  it('holds one create request at a time and clears it once the tree takes it up', () => {
+    const state = createWorkspaceState({
+      folder: { name: 'Notes', path: '/library/notes' },
+      generation: 1,
+    });
+    expect(state.pendingCreate).toBeNull();
+
+    const asked = requestTreeCreate(state, 'draft');
+    expect(asked.pendingCreate).toEqual({ kind: 'draft', revision: 1 });
+    // Asking again is a new request even though nothing else changed.
+    expect(requestTreeCreate(asked, 'draft').pendingCreate?.revision).toBe(2);
+
+    expect(clearTreeCreate(asked).pendingCreate).toBeNull();
+    expect(clearTreeCreate(state)).toBe(state);
   });
 });

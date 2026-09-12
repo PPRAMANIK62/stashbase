@@ -18,9 +18,11 @@
   position: absolute;
   z-index: 2;
   /* 6px puts the 28px control's centre 20px below the pane top, the same
-     line the Chat pane's header control sits on across the seam. */
+     line the Chat pane's header control sits on across the seam. 8px is the
+     titlebar's own inset, so with the Chat hidden the Reading glyph sits on
+     the panel toggle's column in the corner above it. */
   top: 6px;
-  right: 20px;
+  right: 8px;
 }
 
 .markdown-link-failure {

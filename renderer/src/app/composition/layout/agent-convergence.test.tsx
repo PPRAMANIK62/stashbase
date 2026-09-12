@@ -232,7 +232,8 @@ async function converge(test: Harness): Promise<AgentConnectionListener> {
 
   const user = userEvent.setup();
   await user.click(await screen.findByRole('treeitem', { name: 'Welcome.md' }));
-  await screen.findByRole('tab', { name: 'Welcome.md' });
+  // A tree click browses, so the tab it opens is the preview.
+  await screen.findByRole('tab', { name: 'Welcome.md, preview' });
 
   const composer = await messageEditor();
   act(() => {
@@ -278,10 +279,10 @@ describe('J07 converge chat into a document', () => {
     settleWrite(listener, 'write-1', 'Canvas.md', '# Canvas v1');
 
     expect(await screen.findByRole('treeitem', { name: 'Canvas.md' })).not.toBeNull();
-    expect(screen.getByRole('tab', { name: 'Welcome.md' }).getAttribute('aria-selected')).toBe(
-      'true',
-    );
-    expect(screen.queryByRole('tab', { name: 'Canvas.md' })).toBeNull();
+    expect(
+      screen.getByRole('tab', { name: 'Welcome.md, preview' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(screen.queryByRole('tab', { name: /^Canvas\.md/ })).toBeNull();
     // The write must not pull focus out of wherever the user left it.
     expect(document.activeElement).toBe(focusedBefore);
     expect(test.dependencies.preparation.controlApi.sync).toHaveBeenCalledWith(
@@ -299,7 +300,10 @@ describe('J07 converge chat into a document', () => {
 
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Open Canvas.md' }));
 
-    expect(await screen.findByRole('tab', { name: 'Canvas.md' })).not.toBeNull();
+    // Opening from the transcript is browsing too: the Canvas takes the
+    // preview's place rather than a tab of its own.
+    expect(await screen.findByRole('tab', { name: 'Canvas.md, preview' })).not.toBeNull();
+    expect(screen.queryByRole('tab', { name: /^Welcome\.md/ })).toBeNull();
     await waitFor(() => expect(markdownEditorFor('Canvas.md').markdown).toBe('# Canvas v1'));
 
     test.setSource('Canvas.md', '# Canvas v2', 'c2');
@@ -315,7 +319,7 @@ describe('J07 converge chat into a document', () => {
     test.setFiles(['Welcome.md', 'Canvas.md']);
     settleWrite(listener, 'write-1', 'Canvas.md', '# Canvas v1');
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Open Canvas.md' }));
-    await screen.findByRole('tab', { name: 'Canvas.md' });
+    await screen.findByRole('tab', { name: 'Canvas.md, preview' });
     await waitFor(() => expect(markdownEditorFor('Canvas.md').markdown).toBe('# Canvas v1'));
 
     const canvas = markdownEditorFor('Canvas.md');

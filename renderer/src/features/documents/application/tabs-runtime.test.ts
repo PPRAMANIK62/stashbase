@@ -4,7 +4,7 @@ import type { DocumentTextSaveResult } from '@/features/documents/domain/documen
 import { documentQueryScope, sourceApi, textSource } from '@/test/fakes/documents';
 
 import type { DocumentSourcePort } from './ports';
-import { createDocumentTabsRuntime } from './tabs-runtime';
+import { createDocumentTabsRuntime, type DocumentTabsRuntimeOptions } from './tabs-runtime';
 
 function idFactory() {
   let next = 0;
@@ -135,8 +135,14 @@ describe('Document tabs runtime', () => {
       folderPath: '/library/notes',
       generation: 1,
     });
-    const first = await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
-    const second = await runtime.open({ folderPath: '/library/notes', path: 'two.md' });
+    const first = await runtime.open({
+      folderPath: '/library/notes',
+      path: 'one.md',
+    });
+    const second = await runtime.open({
+      folderPath: '/library/notes',
+      path: 'two.md',
+    });
     const capturedScope = first?.capture();
     const completion = vi.fn();
 
@@ -156,12 +162,18 @@ describe('Document tabs runtime', () => {
       folderPath: '/library/notes',
       generation: 2,
     });
-    const document = await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
+    const document = await runtime.open({
+      folderPath: '/library/notes',
+      path: 'one.md',
+    });
     const completion = vi.fn();
 
     expect(
       runtime.accept(
-        { generation: 0, scope: { folderPath: '/library/notes', generation: 1 } },
+        {
+          generation: 0,
+          scope: { folderPath: '/library/notes', generation: 1 },
+        },
         completion,
       ),
     ).toBe(false);
@@ -206,8 +218,14 @@ describe('Document tabs runtime', () => {
       restored: {
         activeTabId: 'one',
         tabs: [
-          { id: 'one', source: { folderPath: '/library/notes', path: 'one.md' } },
-          { id: 'two', source: { folderPath: '/library/notes', path: 'two.md' } },
+          {
+            id: 'one',
+            source: { folderPath: '/library/notes', path: 'one.md' },
+          },
+          {
+            id: 'two',
+            source: { folderPath: '/library/notes', path: 'two.md' },
+          },
         ],
       },
     });
@@ -238,7 +256,10 @@ describe('Document tabs runtime', () => {
       folderPath: '/library/notes',
       generation: 1,
     });
-    const document = await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
+    const document = await runtime.open({
+      folderPath: '/library/notes',
+      path: 'one.md',
+    });
     makeDirty(runtime, 'tab-1');
 
     const closing = runtime.close('tab-1');
@@ -298,7 +319,10 @@ describe('Document tabs runtime', () => {
     await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
     makeDirty(runtime, 'tab-1');
 
-    const opening = runtime.open({ folderPath: '/library/notes', path: 'two.md' });
+    const opening = runtime.open({
+      folderPath: '/library/notes',
+      path: 'two.md',
+    });
     await vi.waitFor(() => expect(api.save).toHaveBeenCalledOnce());
     runtime.dispose();
     finishSaves.shift()?.(textSource({ content: 'draft', version: 'v2' }));
@@ -306,5 +330,117 @@ describe('Document tabs runtime', () => {
     await expect(opening).resolves.toBeNull();
     expect(createId).toHaveBeenCalledOnce();
     expect(runtime.store.getState().tabs).toMatchObject([{ id: 'tab-1' }]);
+  });
+});
+
+const notes = (path: string) => ({ folderPath: '/library/notes', path });
+/** The open set as one string per tab, a star marking the preview. */
+const shape = (runtime: ReturnType<typeof createDocumentTabsRuntime>) =>
+  runtime.store.getState().tabs.map((tab) => `${tab.source.path}${tab.preview ? '*' : ''}`);
+
+describe('Document tabs runtime previews and history', () => {
+  function createRuntime(restored: DocumentTabsRuntimeOptions['restored'] = null) {
+    return createDocumentTabsRuntime({
+      api: createApi(),
+      createId: idFactory(),
+      createQueries: () => documentQueryScope(),
+      folderPath: '/library/notes',
+      generation: 1,
+      restored,
+    });
+  }
+
+  it('reuses the one preview tab for each browse and keeps it when asked or edited', async () => {
+    const runtime = createRuntime();
+
+    const first = await runtime.open(notes('one.md'), { preview: true });
+    await runtime.open(notes('two.md'), { preview: true });
+    expect(shape(runtime)).toEqual(['two.md*']);
+    // The replaced preview's document is retired with its tab.
+    expect(runtime.getDocument('tab-1')).toBeNull();
+    expect(first?.store.getState().lifecycle).toBe('disposed');
+
+    // Asking keeps the preview, and the next browse goes beside it.
+    expect(runtime.keep('tab-2')).toBe(true);
+    expect(runtime.keep('tab-1')).toBe(false);
+    await runtime.open(notes('three.md'), { preview: true });
+    expect(shape(runtime)).toEqual(['two.md', 'three.md*']);
+
+    // An edit keeps the preview the moment its text moves.
+    makeDirty(runtime, 'tab-3');
+    expect(shape(runtime)).toEqual(['two.md', 'three.md']);
+
+    // Opening a previewed source as kept keeps that tab rather than adding one.
+    await runtime.open(notes('four.md'), { preview: true });
+    await runtime.open(notes('four.md'));
+    expect(shape(runtime)).toEqual(['two.md', 'three.md', 'four.md']);
+  });
+
+  it('leaves preview tabs out of the saved session', async () => {
+    const runtime = createRuntime();
+    await runtime.open(notes('one.md'));
+    await runtime.open(notes('two.md'), { preview: true });
+
+    expect(runtime.toSession()).toEqual({
+      activeTabId: null,
+      tabs: [{ id: 'tab-1', path: 'one.md' }],
+    });
+  });
+
+  it('steps back through visited sources, using an open tab or else the preview', async () => {
+    const runtime = createRuntime();
+    await runtime.open(notes('one.md'));
+    await runtime.open(notes('two.md'), { preview: true, anchor: 'details' });
+    await runtime.open(notes('three.md'), { preview: true });
+    expect(shape(runtime)).toEqual(['one.md', 'three.md*']);
+    expect(runtime.history.previous()?.source.path).toBe('two.md');
+
+    // The replaced preview comes back as the preview, at the place it was
+    // opened to, and never as a new kept tab.
+    const back = await runtime.back();
+    expect(back?.scope.source.path).toBe('two.md');
+    expect(shape(runtime)).toEqual(['one.md', 'two.md*']);
+    expect(runtime.navigation.store.getState().pendingAnchor).toEqual({
+      id: 'details',
+      tabId: back?.scope.id,
+    });
+
+    // A source still open is used as it is.
+    await runtime.back();
+    expect(runtime.activeSource()?.path).toBe('one.md');
+    expect(shape(runtime)).toEqual(['one.md', 'two.md*']);
+    expect(runtime.history.previous()).toBeNull();
+    expect(await runtime.back()).toBeNull();
+
+    await runtime.forward();
+    expect(runtime.activeSource()?.path).toBe('two.md');
+    // The history's own steps are returns, not new visits.
+    const visited = () =>
+      runtime.history.store.getState().entries.map((entry) => entry.source.path);
+    expect(visited()).toEqual(['one.md', 'two.md', 'three.md']);
+
+    // A fresh visit from the middle cuts off what lay ahead.
+    await runtime.open(notes('four.md'), { preview: true });
+    expect(visited()).toEqual(['one.md', 'two.md', 'four.md']);
+    expect(runtime.history.next()).toBeNull();
+  });
+
+  it('records a tab activation as a visit but not the neighbour a close lands on', async () => {
+    const runtime = createRuntime({
+      activeTabId: 'tab-plan',
+      tabs: [{ id: 'tab-plan', source: notes('plan.md') }],
+    });
+    const visited = () =>
+      runtime.history.store.getState().entries.map((entry) => entry.source.path);
+    // The tab the window came back on is where the reader starts.
+    expect(visited()).toEqual(['plan.md']);
+
+    await runtime.open(notes('two.md'));
+    await runtime.activate('tab-plan');
+    expect(visited()).toEqual(['plan.md', 'two.md', 'plan.md']);
+
+    await runtime.close('tab-plan');
+    expect(runtime.activeSource()?.path).toBe('two.md');
+    expect(visited()).toEqual(['plan.md', 'two.md', 'plan.md']);
   });
 });

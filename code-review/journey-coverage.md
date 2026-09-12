@@ -179,11 +179,33 @@ aliases, and a driven runtime pass owns representative composition.
   toggle's checked semantics in the tree's own context menu, and
   `renderer/src/features/workspace/infrastructure/files-api.test.ts` locks row
   marking and stale continuation ownership.
+  `renderer/src/features/documents/domain/tabs.test.ts`, `domain/history.test.ts`,
+  and `application/tabs-runtime.test.ts` lock preview reuse, keep on the
+  first edit, the kept-only session projection, and history stepping that
+  prefers an open tab and never adds a kept one;
+  `renderer/src/features/documents/ui/workspace/tabs.test.tsx` and
+  `ui/workspace/history-buttons.test.tsx` lock the preview label, the
+  double-click and Enter keep, and the arrows' named targets;
+  `renderer/src/features/workspace/ui/file-tree-rows.test.tsx`,
+  `file-tree.test.tsx`, `file-tree-naming.test.tsx`, `domain/tree.test.ts`,
+  and `hooks/use-file-operations.test.tsx` lock the tree's browse and keep
+  gestures and the New draft create with its Untitled name, kept tab, and
+  rename on the new row; `renderer/src/app/composition/layout/workspace-sidebar.test.tsx`
+  locks the band's controls end to end.
 - **Driven Runtime Pass:** crash recovery is driven through the real
   application with a stand-in keyring, covering a crash, the relaunch, the
   offer of the surviving draft, the restore into a dirty editor, its autosave
-  through the ordinary versioned save, and the journal clearing afterward. The
-  rest of the journey has no driven pass: reading, editing, saving, navigating
+  through the ordinary versioned save, and the journal clearing afterward.
+  2026-09-13, built app launched in isolation (own user data, own port,
+  scratch home, mock keychain) over a scratch member folder: a tree click
+  opened a preview tab, the next click reused it, a double click kept a tab
+  and the next click opened a preview beside it; Back named and reached the
+  previous file twice, with the replaced preview coming back as the preview,
+  and Forward returned; New draft opened an Untitled kept tab with the Files
+  panel showing, the row's rename field focused, and the stem selected,
+  and typing a name renamed the file on disk and retitled the tab; a relaunch
+  on the same user data restored the kept tabs and not the preview. The rest
+  of the journey has no driven pass: reading, editing, saving, navigating
   under the save barrier, and external-write conflict resolution are proven by
   the contract tests above and not yet by driving the built application.
 - **AI Eval:** not required.
@@ -276,6 +298,11 @@ aliases, and a driven runtime pass owns representative composition.
   injection; a renderer composition
   test pins that a save remounts the sessions on that exact scope and leaves
   every other scope's session alone.
+  `renderer/src/app/composition/layout/workspace-titlebar.test.tsx` locks
+  that New chat travels with the Chat pane and the titlebar's corner holds
+  the panel toggle alone;
+  `renderer/src/features/agent/ui/new-chat-button.test.tsx` locks the shared
+  start.
   `pnpm test:opencode:native` starts the
   exact bundled OpenCode binary and completes an SDK session against a local
   fake OpenAI-compatible gateway; broker tests cover token isolation, streaming,
@@ -293,7 +320,11 @@ aliases, and a driven runtime pass owns representative composition.
   duration from the native timestamps; exactly one edit control rendered,
   and pressing it put the prompt back into the focused composer. A live
   turn's settle stamp is covered by the runtime test; no runtime was signed
-  in under the scratch home, so no live turn was driven.
+  in under the scratch home, so no live turn was driven. 2026-09-13, the same
+  isolated launch: the Chat pane's header carried New chat at its right end
+  on the panel toggle's column, hiding the pane left no New chat in the
+  titlebar and showing it brought the control back, and the Chats panel
+  showed a rule under New chat and the Recent heading above its list.
 - **AI Eval:** not required for panel and runtime correctness; actual
   task-quality evidence belongs to the J10 core loop.
 - **Release Check:** packaged OpenCode version/executability plus a fake-gateway

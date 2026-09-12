@@ -112,8 +112,12 @@ describe('file tree naming', () => {
         expect.any(AbortSignal),
       ),
     );
+    // A file the tree just made is the reader's to work in, so its tab stays.
     await waitFor(() =>
-      expect(onOpenSource).toHaveBeenCalledWith({ folderPath: RESEARCH_FOLDER.path, path: 'Plan' }),
+      expect(onOpenSource).toHaveBeenCalledWith(
+        { folderPath: RESEARCH_FOLDER.path, path: 'Plan' },
+        { keep: true },
+      ),
     );
     expect(screen.queryByRole('textbox')).toBeNull();
 
@@ -175,10 +179,10 @@ describe('file tree naming', () => {
     );
     expect(retireSources).toHaveBeenCalledWith({ kind: 'file', path: 'docs/plan.md' });
     await waitFor(() =>
-      expect(onOpenSource).toHaveBeenCalledWith({
-        folderPath: RESEARCH_FOLDER.path,
-        path: 'docs/outline.md',
-      }),
+      expect(onOpenSource).toHaveBeenCalledWith(
+        { folderPath: RESEARCH_FOLDER.path, path: 'docs/outline.md' },
+        { keep: true },
+      ),
     );
 
     fireEvent.doubleClick(screen.getByRole('treeitem', { name: 'docs' }));

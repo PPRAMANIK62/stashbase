@@ -20,7 +20,10 @@ function folderRuntime(client: QueryClient): WorkspaceRuntime {
   const runtime = createWorkspaceRuntime(
     workspaceRuntimeOptions({
       generation: runtimes.length + 1,
-      queries: { cancel: () => client.cancelQueries(), remove: () => client.removeQueries() },
+      queries: {
+        cancel: () => client.cancelQueries(),
+        remove: () => client.removeQueries(),
+      },
     }),
   );
   runtimes.push(runtime);
@@ -74,10 +77,11 @@ describe('file operations', () => {
     );
     expect(runtime.store.getState().selectedPath).toBe('docs/plan.md');
     expect(hook.result.current.settledPath).toBe('docs/plan.md');
-    expect(onOpenSource).toHaveBeenCalledWith({
-      folderPath: RESEARCH_FOLDER.path,
-      path: 'docs/plan.md',
-    });
+    // A created file is the reader's to work in, so its tab stays.
+    expect(onOpenSource).toHaveBeenCalledWith(
+      { folderPath: RESEARCH_FOLDER.path, path: 'docs/plan.md' },
+      { keep: true },
+    );
     expect(hook.result.current.naming).toBeNull();
     expect(hook.result.current.failure).toBeNull();
   });
@@ -102,10 +106,41 @@ describe('file operations', () => {
       expect.any(AbortSignal),
     );
     expect(runtime.store.getState().selectedPath).toBe('docs/outline.md');
-    expect(onOpenSource).toHaveBeenCalledWith({
-      folderPath: RESEARCH_FOLDER.path,
-      path: 'docs/outline.md',
+    expect(onOpenSource).toHaveBeenCalledWith(
+      { folderPath: RESEARCH_FOLDER.path, path: 'docs/outline.md' },
+      { keep: true },
+    );
+  });
+
+  it('creates a draft with the name it was handed, opens it at once, and hands its row a rename', async () => {
+    const api = operationsApi();
+    const onOpenSource = vi.fn();
+    const { hook, runtime } = harness(api, { onOpenSource });
+
+    await act(() => hook.result.current.createDraft('docs', 'Untitled.md'));
+
+    expect(api.createEntry).toHaveBeenCalledWith(
+      RESEARCH_FOLDER.path,
+      'file',
+      'docs',
+      'Untitled.md',
+      expect.any(AbortSignal),
+    );
+    expect(onOpenSource).toHaveBeenCalledWith(
+      { folderPath: RESEARCH_FOLDER.path, path: 'docs/Untitled.md' },
+      { keep: true },
+    );
+    expect(runtime.store.getState()).toMatchObject({
+      expanded: { docs: true },
+      selectedPath: 'docs/Untitled.md',
     });
+    // The row is handed a rename rather than plain focus, so the name is the
+    // first thing typed.
+    expect(hook.result.current.renamePath).toBe('docs/Untitled.md');
+    expect(hook.result.current.settledPath).toBeNull();
+    expect(hook.result.current.failure).toBeNull();
+    act(() => hook.result.current.consumeRenamePath());
+    expect(hook.result.current.renamePath).toBeNull();
   });
 
   it('keeps an entry when its open document cannot be saved, and deletes when it can', async () => {

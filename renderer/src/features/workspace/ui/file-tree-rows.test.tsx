@@ -33,7 +33,11 @@ const LISTING = listing(
   ['docs', 'deep', 'deep/nested', listingFolder({ kind: 'excluded', path: 'vendor' })],
 );
 
-const EXPANDED: ExpandedFolders = { deep: true, 'deep/nested': true, docs: true };
+const EXPANDED: ExpandedFolders = {
+  deep: true,
+  'deep/nested': true,
+  docs: true,
+};
 
 /** Every row the tree would show with all normal folders open, so a test
  *  names the one it wants by path rather than hand-building a node. */
@@ -56,6 +60,7 @@ function renderRow(row: TreeRow, overrides: RowOverrides = {}) {
   const spies = {
     onActivate: vi.fn<FileTreeRowProps['onActivate']>(),
     onFocus: vi.fn<FileTreeRowProps['onFocus']>(),
+    onKeep: vi.fn<FileTreeRowProps['onKeep']>(),
     onKeyDown: vi.fn<FileTreeRowProps['onKeyDown']>(),
     onRename: vi.fn<FileTreeRowProps['onRename']>(),
     registerRow: vi.fn<FileTreeRowProps['registerRow']>(),
@@ -116,7 +121,10 @@ describe('file tree row geometry', () => {
 
 describe('file tree row model', () => {
   it('reduces a row to the entry a mutation acts on', () => {
-    expect(entryOf(rowFor('docs/plan.md'))).toEqual({ kind: 'file', path: 'docs/plan.md' });
+    expect(entryOf(rowFor('docs/plan.md'))).toEqual({
+      kind: 'file',
+      path: 'docs/plan.md',
+    });
     expect(entryOf(rowFor('docs'))).toEqual({ kind: 'folder', path: 'docs' });
   });
 
@@ -197,16 +205,23 @@ describe('file tree row semantics', () => {
   });
 
   it('announces a preparation state that needs the user, unless the row is restricted', () => {
-    const marker = { kind: 'failed' as const, title: 'File preparation failed.' };
+    const marker = {
+      kind: 'failed' as const,
+      title: 'File preparation failed.',
+    };
     const { view } = renderRow(rowFor('deep/nested/paper.pdf'), { marker });
 
-    const marked = screen.getByRole('treeitem', { name: 'paper.pdf, File preparation failed.' });
+    const marked = screen.getByRole('treeitem', {
+      name: 'paper.pdf, File preparation failed.',
+    });
     expect(marked.title).toBe('File preparation failed.');
 
     view.unmount();
     renderRow(rowFor('linked-file'), { marker });
     expect(
-      screen.getByRole('treeitem', { name: 'linked-file, restricted, Show in file manager' }),
+      screen.getByRole('treeitem', {
+        name: 'linked-file, restricted, Show in file manager',
+      }),
     ).not.toBeNull();
   });
 });
@@ -223,18 +238,27 @@ describe('file tree row gestures', () => {
     expect(onActivate).toHaveBeenCalledTimes(1);
   });
 
-  it('starts a rename from a double click on an editable row and refuses a restricted one', () => {
-    const row = rowFor('docs/plan.md');
-    const { onRename, view } = renderRow(row);
+  it('keeps a file open from a double click and starts a rename from one on a folder', () => {
+    const file = rowFor('docs/plan.md');
+    const { onKeep, onRename, view } = renderRow(file);
 
     expect(fireEvent.doubleClick(rowElement())).toBe(false);
-    expect(onRename).toHaveBeenCalledTimes(1);
-    expect(onRename.mock.calls[0]?.[0]).toBe(row);
-    expect(typeof onRename.mock.calls[0]?.[1]).toBe('number');
+    expect(onKeep).toHaveBeenCalledWith(file);
+    expect(onRename).not.toHaveBeenCalled();
 
     view.unmount();
+    const folder = rowFor('docs');
+    const folderRow = renderRow(folder);
+    fireEvent.doubleClick(rowElement());
+    expect(folderRow.onKeep).not.toHaveBeenCalled();
+    expect(folderRow.onRename).toHaveBeenCalledTimes(1);
+    expect(folderRow.onRename.mock.calls[0]?.[0]).toBe(folder);
+    expect(typeof folderRow.onRename.mock.calls[0]?.[1]).toBe('number');
+
+    folderRow.view.unmount();
     const restricted = renderRow(rowFor('vendor'));
     fireEvent.doubleClick(rowElement());
+    expect(restricted.onKeep).not.toHaveBeenCalled();
     expect(restricted.onRename).not.toHaveBeenCalled();
   });
 

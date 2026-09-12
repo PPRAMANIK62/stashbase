@@ -21,6 +21,15 @@ manager, or a primary graph-navigation tool.
 - Open documents sit in one horizontally scrolling tab strip, each tab
   naming its source and marking unsaved changes. A tab is a drag source for
   its file, which is how a document is handed to the Agent composer beside it.
+  There are two kinds of tab. A single click on a file, a search hit, a link,
+  Quick Open, and a file named in a Chat each open a
+  [preview tab](../glossary.md#preview-tab), whose name is set in italics:
+  a window holds at most one, and the next browse reuses it in place, so
+  looking around never piles up tabs. A double click on the file or on the
+  tab, or Enter on the focused tab, keeps it as an ordinary tab; the first
+  edit keeps it too, and a draft the tree just created opens kept. Browsing
+  to a source that already has a tab switches to that tab. Only kept tabs
+  come back on relaunch.
 
 - A window with no folder open shows the welcome screen: the mark and its
   one-line promise centered at the top, then everything else on one shared
@@ -55,10 +64,14 @@ manager, or a primary graph-navigation tool.
   never overwrite the user's copy.
 - The sidebar is the window's left column. Its titlebar band carries its own
   collapse toggle and, while a folder is open, back and forward arrows beside
-  it that step through the window's open Chats in tab order — at either end
-  of the order the unavailable step waits disabled — with the **New chat**
-  button at the band's right end. With no folder open the band holds the
-  toggle alone. The band carries no
+  it that step through the window's
+  [document history](../glossary.md#document-history), with the **New
+  draft** button, a plain plus, at the band's right end. The arrows are file
+  chrome whatever panel the navigator below is showing: each names the file
+  it would reach and waits disabled at its end of the history, a source
+  still open is switched to, and one whose preview was since replaced comes
+  back as the preview again, so stepping never adds a kept tab. With no
+  folder open the band holds the toggle alone. The band carries no
   wordmark: the welcome screen owns the brand, and a folder window's first
   row beneath the band is the folder itself. The column ends in a footer set
   off by rules: a standing **Gallery** row, then the account row; **Settings**
@@ -81,7 +94,10 @@ manager, or a primary graph-navigation tool.
 - While a folder is open, the top-right titlebar icon mirrors the left
   sidebar toggle and hides or shows the Chat panel. Hiding it preserves the
   conversation and composer draft, and gives open documents the full width.
-  The same icon remains available to reopen Chat. A hidden Chat is not named
+  The same icon remains available to reopen Chat, and it is alone in that
+  corner: **New chat** lives in the Chat pane's own header and leaves with
+  it, so starting a chat while the panel is hidden means showing the panel
+  first. A hidden Chat is not named
   in the titlebar: with no document open, the shared slot stays empty until
   the panel is shown again, because the chat it would name is off screen.
 - With no folder open the picker and the navigator are absent, so the bare
@@ -139,8 +155,9 @@ manager, or a primary graph-navigation tool.
   apart, and the row shows an attention mark when preparation needs the user.
   A name wider than the sidebar column truncates within that column. Only
   while the sidebar is collapsed does the titlebar carry the sidebar's
-  reopening toggle and, while a folder is open, the **New chat** button
-  beside it; its one shared slot holds the open document tabs. With no
+  reopening toggle and, while a folder is open, the document history arrows
+  and **New draft** beside it; its one shared slot holds the open document
+  tabs. With no
   folder open the slot says **Welcome**, because that is what is on screen,
   and otherwise it stays empty, since the Chat pane names its own
   conversation in its header.
@@ -186,8 +203,14 @@ manager, or a primary graph-navigation tool.
   the context menu provide the same system-file-manager exit.
 - Files use the surface declared in the
   [Documents format matrix](documents.md#format-capability-matrix) and open in
-  persistent tabs with Quick Open, history, and platform-appropriate
-  shortcuts. Symlinks and special or unavailable entries
+  preview or kept tabs with Quick Open, document history, and
+  platform-appropriate shortcuts. **New draft** in the sidebar band creates
+  `Untitled.md` beside the tree's selection, or `Untitled 2.md` and on when
+  that name is taken, and opens it at once as a kept tab. The sidebar opens
+  on Files if it was not showing, and the new row starts the tree's ordinary
+  rename with the stem selected, so the name is the first thing typed;
+  Escape keeps `Untitled.md`. A new folder stays in the tree's own menu,
+  where its place is explicit. Symlinks and special or unavailable entries
   are shown but never followed; their only file action is reveal.
 - Search or Agent links to a file in another member folder open a read-only
   out-of-folder tab without switching the current folder. The user can open
@@ -242,9 +265,12 @@ manager, or a primary graph-navigation tool.
   does not create descendant DOM. The hidden-files preference widens only
   Workbench visibility — retrieval, indexing, and Agent discovery scope are
   server-owned policies it never changes.
-- Repeated or concurrent navigation to one source focuses its existing
-  persistent tab. The same relative path in different Library folders remains
-  a distinct source.
+- Repeated or concurrent navigation to one source focuses its existing tab,
+  preview or kept, and a window never holds more than one preview tab. A
+  preview never outlives the session, and an edit always keeps its tab. The
+  same relative path in different Library folders remains a distinct source.
+- Back and forward are document history only. They never change the sidebar
+  panel, the Chat, or the set of kept tabs.
 - Chat visibility is explicit after initialization. Closing the last document
   expands an open Chat; hiding Chat stays respected until the user reopens it.
 - Keyboard focus, overlay dismissal, splitters, and reduced-motion behavior are
@@ -267,8 +293,12 @@ manager, or a primary graph-navigation tool.
   file tools, so the
   [Documents matrix](documents.md#format-capability-matrix)'s file-mutable
   capability is not complete in the Workbench.
-- Document tabs cannot be reordered, and no control opens a new tab. The strip
-  scrolls and each tab drags as its source instead.
+- Document tabs cannot be reordered. The strip scrolls and each tab drags as
+  its source instead.
+- Document history restores the file and the heading or search match it was
+  opened at, not the reading position within it. A retained Markdown surface
+  keeps its own place while its tab stays open; every other return starts
+  from the top or the anchor.
 - No window surfaces an available update. Packaged builds still check the
   release channel on schedule, but the dismissible announcement and the one
   explicit Update action the contract above requires have no control, so a

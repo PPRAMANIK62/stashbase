@@ -122,6 +122,30 @@ organizing documents across ordinary local folders. It combines the Workspace
 and Documents product areas. A **workspace** may still name the current window
 or folder context; it is not a competing name for the whole capability.
 
+## Preview tab
+
+A document tab opened by browsing: a single click in Files, a search hit, a
+link, Quick Open, or a file named in a Chat. Its name is set in italics, a
+window holds at most one, and the next browse reuses it in place. A tab that
+is not a preview is a **kept tab**. A preview becomes kept on a double click,
+on Enter, or on its first edit, and only kept tabs are restored on relaunch.
+Say "preview tab" and "kept tab"; the product does not say "pinned".
+
+## Document history
+
+The window's record of the documents visited in the open folder, in visiting
+order, stepped by the back and forward arrows in the sidebar's titlebar band.
+It lists files, not tabs, so it can return to a preview that was replaced.
+Its scope is documents whatever the sidebar is showing.
+
+## Draft
+
+A Markdown file a person starts from the sidebar band's **New draft**: created
+as `Untitled.md` beside the selection, opened at once as a kept tab, and
+handed its name in the tree, where the new row starts a rename with the stem
+selected. Distinguish it in copy from the *recovered drafts* of unsaved text
+a previous session left, which [Documents](design/documents.md) owns.
+
 ## Format capability
 
 The user-observable operations available for one source format. Avoid the

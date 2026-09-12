@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
 import type { QueuedMessage } from '@/components/ui/input-message';
+import type { AgentCatalogPort } from '@/features/agent/application/ports';
 import { honoredAccessMode } from '@/features/agent/domain/access';
 import { agentGate, type Agent } from '@/features/agent/domain/agent-catalog';
 import { changedSource } from '@/features/agent/domain/file-change';
@@ -34,6 +35,7 @@ import { AgentPermissionMode } from './composer/permission-mode';
 import { AgentProviderControl } from './composer/provider';
 import { AgentThinkingControl } from './composer/thinking';
 import { AgentInstructionsControl } from './instructions/agent-instructions-control';
+import { NewChatButton } from './new-chat-button';
 import { AgentSetupNotice } from './setup';
 import { AgentTranscript } from './transcript/transcript';
 import type { AgentWorkspaceProps } from './workspace-lazy';
@@ -81,6 +83,7 @@ function connectionNotice(connection: AgentConnection): { settled: boolean; text
  *  screen that replaces the draft. */
 function ChatWorkspace({
   catalog,
+  catalogPort,
   instructions: instructionsApi,
   onOpenAgentSettings,
   onOpenExternal,
@@ -88,7 +91,11 @@ function ChatWorkspace({
   onReprocess,
   runtime,
   scopeOutline,
-}: Omit<AgentWorkspaceProps, 'catalog'> & { catalog: WorkspaceCatalog }) {
+}: Omit<AgentWorkspaceProps, 'catalog'> & {
+  catalog: WorkspaceCatalog;
+  /** The catalog as a Port, for the new-chat control that reads it itself. */
+  catalogPort: AgentCatalogPort;
+}) {
   const activeId = useStore(runtime.store, (state) => state.activeId);
   const scopeEnvironment = useStore(runtime.store, (state) => state.scopeEnvironment);
   const active = runtime.session(activeId) ?? runtime.activeSession();
@@ -183,6 +190,10 @@ function ChatWorkspace({
         failure={renaming.failure}
         onRename={(session, title) => void renaming.rename(session, title)}
         session={active}
+        // New chat sits with the conversation's name: the row is where the
+        // current Chat's own actions live, while the Chats panel keeps the
+        // history.
+        trailing={<NewChatButton catalog={catalogPort} runtime={runtime} scope={state.scope} />}
       />
       {empty && <div aria-hidden className="min-h-0 grow basis-0" />}
       <div
@@ -347,6 +358,7 @@ export default function ManagedAgentWorkspace(props: AgentWorkspaceProps) {
   return (
     <ChatWorkspace
       {...props}
+      catalogPort={props.catalog}
       catalog={{
         agents: catalog.agents,
         error: catalog.error,

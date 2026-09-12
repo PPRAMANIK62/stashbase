@@ -7,24 +7,14 @@
  */
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
+import type { DocumentSearchTarget, FindOptions } from '@/features/documents/domain/location';
 import type { DocumentHeading } from '@/features/documents/domain/outline';
 
-export interface FindOptions {
-  caseSensitive: boolean;
-  wholeWord: boolean;
-}
+export type { FindOptions };
 
 export interface FindMatchInfo {
   current: number;
   total: number;
-}
-
-export interface DocumentSearchTarget extends FindOptions {
-  audioTimestampMs?: number;
-  line?: number;
-  occurrenceIndex: number;
-  pdfPage?: number;
-  query: string;
 }
 
 export interface DocumentFindController {
@@ -120,7 +110,10 @@ export function createDocumentNavigationRuntime(
   let pendingSearch: { tabId: string; target: DocumentSearchTarget } | null = null;
 
   const updateFind = (patch: Partial<DocumentFindState>) => {
-    store.setState((state) => ({ ...state, find: { ...state.find, ...patch } }));
+    store.setState((state) => ({
+      ...state,
+      find: { ...state.find, ...patch },
+    }));
   };
 
   const applyMatch = (pending: FindMatchInfo | Promise<FindMatchInfo>) => {
@@ -158,7 +151,14 @@ export function createDocumentNavigationRuntime(
     pendingSearch = null;
     const sequence = ++requestSequence;
     const { caseSensitive, occurrenceIndex, query, wholeWord } = pending.target;
-    updateFind({ caseSensitive, current: 0, open: false, query, total: 0, wholeWord });
+    updateFind({
+      caseSensitive,
+      current: 0,
+      open: false,
+      query,
+      total: 0,
+      wholeWord,
+    });
     void Promise.resolve(controller.setQuery(query, { caseSensitive, wholeWord }))
       .then(async (initial) => {
         let match = initial;

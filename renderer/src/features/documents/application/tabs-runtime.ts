@@ -2,94 +2,52 @@
  * The open-document set: which tabs exist, which one is active, and the
  * per-document runtime behind each. Closing a tab disposes its runtime, so an
  * in-flight load or save for a retired document can never land.
+ *
+ * Browsing opens a preview: one tab that the next browse reuses. A preview
+ * is kept once the reader asks or the moment its text is edited, and the
+ * history beside the set records where the reader has been, by source, so
+ * stepping back reaches a preview that has since been replaced.
  */
-import { createStore, type StoreApi } from 'zustand/vanilla';
+import { createStore } from 'zustand/vanilla';
 
 import {
   createDocumentRuntime,
   type DocumentRuntime,
 } from '@/features/documents/application/document-runtime';
-import { sourceIdentity, type DocumentScope } from '@/features/documents/domain/document';
+import { isDocumentDirty, sourceIdentity } from '@/features/documents/domain/document';
+import type { DocumentVisit } from '@/features/documents/domain/history';
+import type { DocumentLocation } from '@/features/documents/domain/location';
 import {
   activateDocumentTab,
   closeDocumentTab,
   createDocumentTabsState,
   disposeDocumentTabsState,
+  keepDocumentTab,
   openDocumentTab,
+  previewDocumentTab,
   type DocumentTabsState,
-  type RestoredDocumentTabs,
 } from '@/features/documents/domain/tabs';
 import type { SourceReference } from '@/shared/domain/source-reference';
-import { createScopeGuard, type CapturedScope } from '@/shared/runtime/scope-guard';
+import { createScopeGuard } from '@/shared/runtime/scope-guard';
 
-import {
-  createDocumentNavigationRuntime,
-  type DocumentNavigationRuntime,
-  type DocumentSearchTarget,
-} from './navigation-runtime';
-import type { DocumentQueryScope, DocumentSourcePort } from './ports';
+import { createDocumentHistoryRuntime } from './history-runtime';
+import { createDocumentNavigationRuntime } from './navigation-runtime';
+import type {
+  DocumentOpenOptions,
+  DocumentTabsRuntime,
+  DocumentTabsRuntimeOptions,
+  DocumentTabsScope,
+} from './tabs-contract';
 
-interface DocumentTabsScope {
-  readonly folderPath: string;
-  readonly generation: number;
-}
+export type { DocumentOpenOptions, DocumentTabsRuntime, DocumentTabsRuntimeOptions };
 
-/** What one tabs transition was started under: the folder scope, and the
- *  generation of the open set at the time. A transition reads the active tab
- *  before it awaits a save, so the generation is what tells a resumed
- *  transition that the set it read has since moved. */
-type CapturedTabsScope = CapturedScope<DocumentTabsScope>;
-
-interface DocumentSessionProjection {
-  activeTabId: string | null;
-  tabs: Array<{ id: string; path: string }>;
-}
-
-export interface DocumentTabsRuntime {
-  readonly navigation: DocumentNavigationRuntime;
-  readonly scope: DocumentTabsScope;
-  readonly signal: AbortSignal;
-  readonly store: StoreApi<DocumentTabsState>;
-  /** Runs `completion` only when `captured` is still the scope this runtime
-   *  owns, the open set has not moved since, and the runtime is live. Answers
-   *  whether it ran, so a caller can drop the rest of a stale completion too. */
-  accept(captured: CapturedTabsScope, completion: () => void): boolean;
-  activate(tabId: string): Promise<boolean>;
-  /** The source in front of the reader, or null when nothing is open. */
-  activeSource(): SourceReference | null;
-  /** The token a transition is started under: the folder scope this collection
-   *  is bound to, which is fixed for its life, and the generation of the open
-   *  set as of now, which is not. */
-  capture(): CapturedTabsScope;
-  close(tabId: string): Promise<boolean>;
-  /** Closes the tab in front of the reader, if there is one. */
-  closeActive(): Promise<boolean>;
-  /** Closes the tab showing `source`, if one is open. */
-  closeSource(source: SourceReference): Promise<boolean>;
-  dispose(): void;
-  flush(): Promise<boolean>;
-  getDocument(tabId: string): DocumentRuntime | null;
-  /** Whether any document is open. */
-  hasDocuments(): boolean;
-  /** The sources behind the open tabs, as one cached array so a reader can
-   *  compare it by identity across renders. */
-  openSources(): readonly SourceReference[];
-  /** Notifies `listener` whenever the open set or the active tab moves. */
-  subscribe(listener: () => void): () => void;
-  open(
-    source: SourceReference,
-    options?: { anchor?: string; search?: DocumentSearchTarget },
-  ): Promise<DocumentRuntime | null>;
-  toSession(): DocumentSessionProjection;
-}
-
-export interface DocumentTabsRuntimeOptions {
-  api: DocumentSourcePort;
-  createId: () => string;
-  createQueries: (scope: DocumentScope) => DocumentQueryScope;
-  folderPath: string;
-  generation: number;
-  restored?: RestoredDocumentTabs | null;
+/** The location an open or a visit names, with absent fields left out so
+ *  the exact-optional shapes downstream accept it. */
+function visitLocation(location: DocumentLocation): DocumentLocation {
+  return {
+    ...(location.anchor === undefined ? {} : { anchor: location.anchor }),
+    ...(location.search === undefined ? {} : { search: location.search }),
+  };
 }
 
 export function createDocumentTabsRuntime({
@@ -112,8 +70,11 @@ export function createDocumentTabsRuntime({
   const initialState = createDocumentTabsState(restored);
   const store = createStore<DocumentTabsState>(() => initialState);
   const navigation = createDocumentNavigationRuntime(initialState.activeTabId);
+  const history = createDocumentHistoryRuntime();
   const documents = new Map<string, DocumentRuntime>();
   const sourceIds = new Map<string, string>();
+  /** Each child's watch for its first edit, which is what keeps a preview. */
+  const editWatches = new Map<string, () => void>();
   let nextDocumentGeneration = 0;
   let disposed = false;
   /** Derived from the tab list and rebuilt only when that list changes, so a
@@ -147,6 +108,12 @@ export function createDocumentTabsRuntime({
     return true;
   };
 
+  const keep = (tabId: string): boolean => {
+    if (!documents.has(tabId)) return false;
+    store.setState((current) => keepDocumentTab(current, tabId));
+    return true;
+  };
+
   const createChild = (id: string, source: SourceReference) => {
     const childGeneration = ++nextDocumentGeneration;
     const childScope = { generation: childGeneration, id, source };
@@ -159,13 +126,28 @@ export function createDocumentTabsRuntime({
     });
     documents.set(id, runtime);
     sourceIds.set(sourceIdentity(source), id);
+    // An edit is the reader saying the document is theirs to work in, so a
+    // preview stops being one the moment its text moves.
+    editWatches.set(
+      id,
+      runtime.store.subscribe((state) => {
+        if (state.editor && isDocumentDirty(state.editor)) keep(id);
+      }),
+    );
     return runtime;
   };
 
-  const requestDocumentLocation = (
-    document: DocumentRuntime,
-    options: { anchor?: string; search?: DocumentSearchTarget },
-  ) => {
+  const retireChild = (id: string) => {
+    const document = documents.get(id);
+    if (!document) return;
+    editWatches.get(id)?.();
+    editWatches.delete(id);
+    document.dispose();
+    documents.delete(id);
+    sourceIds.delete(sourceIdentity(document.scope.source));
+  };
+
+  const requestDocumentLocation = (document: DocumentRuntime, options: DocumentLocation) => {
     if (options.anchor) navigation.requestAnchor(document.scope.id, options.anchor);
     if (!options.search) return;
     navigation.requestSearch(document.scope.id, options.search);
@@ -177,15 +159,18 @@ export function createDocumentTabsRuntime({
   const openSource = (
     source: SourceReference,
     identity: string,
-    options: { anchor?: string; search?: DocumentSearchTarget },
+    options: DocumentOpenOptions,
+    record: boolean,
   ): DocumentRuntime | null => {
+    const preview = options.preview === true;
     const existingId = sourceIds.get(identity);
     if (existingId !== undefined) {
       const existing = documents.get(existingId) ?? null;
       if (existing) {
-        store.setState((current) => activateDocumentTab(current, existingId));
+        store.setState((current) => openDocumentTab(current, { id: existingId, source }, preview));
         navigation.activate(existingId);
         requestDocumentLocation(existing, options);
+        if (record) history.record({ source, ...visitLocation(options) });
         guard.retireOperations();
       }
       return existing;
@@ -194,17 +179,79 @@ export function createDocumentTabsRuntime({
     if (id.trim().length === 0 || documents.has(id)) {
       throw new Error('Document tab IDs must be non-empty and unique.');
     }
+    // The standing preview gives its slot to the new one, unless it holds
+    // an edit, in which case it is kept and the new preview goes beside it.
+    // An edit keeps a tab the moment it is made, so this is a last guard.
+    const standing = preview ? previewDocumentTab(store.getState()) : null;
+    const standingEditor = standing ? documents.get(standing.id)?.store.getState().editor : null;
+    if (standing && standingEditor && isDocumentDirty(standingEditor)) keep(standing.id);
+    const replaced = preview ? previewDocumentTab(store.getState()) : null;
     const document = createChild(id, source);
-    store.setState((current) => openDocumentTab(current, { id, source }));
+    store.setState((current) => openDocumentTab(current, { id, source }, preview));
+    if (replaced) retireChild(replaced.id);
     navigation.activate(id);
     requestDocumentLocation(document, options);
+    if (record) history.record({ source, ...visitLocation(options) });
     guard.retireOperations();
     return document;
   };
 
+  /** The whole open, run inside the transition queue. `record` is false for
+   *  the history's own steps, which are returns rather than new visits. */
+  const openTransition = async (
+    source: SourceReference,
+    options: DocumentOpenOptions,
+    record: boolean,
+  ): Promise<DocumentRuntime | null> => {
+    if (disposed) return null;
+    const identity = sourceIdentity(source);
+    const openedId = sourceIds.get(identity);
+    if (openedId !== undefined && openedId === store.getState().activeTabId) {
+      const existing = documents.get(openedId) ?? null;
+      if (existing) {
+        if (options.preview !== true) keep(openedId);
+        requestDocumentLocation(existing, options);
+        if (record) history.record({ source, ...visitLocation(options) });
+      }
+      return existing;
+    }
+    const captured = guard.capture();
+    const active = documents.get(store.getState().activeTabId ?? '') ?? null;
+    if (active && !(await active.save(api))) return null;
+    // The save spanned an await, so what was read before it — which tab was
+    // active, whether this source was already open — is re-read here rather
+    // than trusted.
+    let opened: DocumentRuntime | null = null;
+    guard.accept(captured, () => {
+      opened = openSource(source, identity, options, record);
+    });
+    return opened;
+  };
+
+  const stepHistory = (
+    visit: () => DocumentVisit | null,
+    step: () => void,
+  ): Promise<DocumentRuntime | null> =>
+    enqueueTransition(async () => {
+      const target = visit();
+      if (!target) return null;
+      const opened = await openTransition(
+        target.source,
+        { ...visitLocation(target), preview: true },
+        false,
+      );
+      if (opened) step();
+      return opened;
+    });
+
   for (const tab of initialState.tabs) createChild(tab.id, tab.source);
+  // The tab the window comes back on is where the reader is, so the first
+  // browse away from it has somewhere to step back to.
+  const restoredActive = initialState.tabs.find((tab) => tab.id === initialState.activeTabId);
+  if (restoredActive) history.record({ source: restoredActive.source });
 
   const runtime: DocumentTabsRuntime = {
+    history,
     navigation,
     scope,
     signal: controller.signal,
@@ -225,15 +272,18 @@ export function createDocumentTabsRuntime({
         if (active && !(await active.save(api))) return false;
         let activated = false;
         guard.accept(captured, () => {
-          if (!documents.has(tabId)) return;
+          const document = documents.get(tabId);
+          if (!document) return;
           store.setState((current) => activateDocumentTab(current, tabId));
           navigation.activate(tabId);
+          history.record({ source: document.scope.source });
           guard.retireOperations();
           activated = true;
         });
         return activated;
       });
     },
+    back: () => stepHistory(history.previous, history.stepBack),
     capture: guard.capture,
     closeActive() {
       const activeTabId = store.getState().activeTabId;
@@ -252,9 +302,7 @@ export function createDocumentTabsRuntime({
         let closed = false;
         guard.accept(captured, () => {
           if (documents.get(tabId) !== document) return;
-          document.dispose();
-          documents.delete(tabId);
-          sourceIds.delete(sourceIdentity(document.scope.source));
+          retireChild(tabId);
           store.setState((state) => closeDocumentTab(state, tabId));
           navigation.activate(store.getState().activeTabId);
           guard.retireOperations();
@@ -268,9 +316,8 @@ export function createDocumentTabsRuntime({
       disposed = true;
       guard.retireOperations();
       controller.abort();
-      for (const document of documents.values()) document.dispose();
-      documents.clear();
-      sourceIds.clear();
+      // A Map iterates safely over its own deletions.
+      for (const id of documents.keys()) retireChild(id);
       navigation.dispose();
       store.setState(disposeDocumentTabsState);
     },
@@ -280,12 +327,14 @@ export function createDocumentTabsRuntime({
         return saveDocuments([...documents.values()]);
       });
     },
+    forward: () => stepHistory(history.next, history.stepForward),
     getDocument(tabId) {
       return documents.get(tabId) ?? null;
     },
     hasDocuments() {
       return store.getState().tabs.length > 0;
     },
+    keep,
     openSources() {
       const { tabs } = store.getState();
       if (sourcesCache.tabs !== tabs) {
@@ -297,32 +346,14 @@ export function createDocumentTabsRuntime({
       return store.subscribe(listener);
     },
     open(source, options = {}) {
-      return enqueueTransition(async () => {
-        if (disposed) return null;
-        const identity = sourceIdentity(source);
-        const openedId = sourceIds.get(identity);
-        if (openedId !== undefined && openedId === store.getState().activeTabId) {
-          const existing = documents.get(openedId) ?? null;
-          if (existing) requestDocumentLocation(existing, options);
-          return existing;
-        }
-        const captured = guard.capture();
-        const active = documents.get(store.getState().activeTabId ?? '') ?? null;
-        if (active && !(await active.save(api))) return null;
-        // The save spanned an await, so what was read before it — which tab was
-        // active, whether this source was already open — is re-read here rather
-        // than trusted.
-        let opened: DocumentRuntime | null = null;
-        guard.accept(captured, () => {
-          opened = openSource(source, identity, options);
-        });
-        return opened;
-      });
+      return enqueueTransition(() => openTransition(source, options, true));
     },
     toSession() {
       const state = store.getState();
+      // A preview was only ever a look, so it is not part of what the window
+      // comes back to.
       const tabs = state.tabs
-        .filter((tab) => tab.source.folderPath === scope.folderPath)
+        .filter((tab) => !tab.preview && tab.source.folderPath === scope.folderPath)
         .map((tab) => ({ id: tab.id, path: tab.source.path }));
       return {
         activeTabId: tabs.some((tab) => tab.id === state.activeTabId) ? state.activeTabId : null,

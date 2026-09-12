@@ -76,4 +76,27 @@ describe('workspace titlebar', () => {
     expect(await screen.findByRole('heading', { name: chatName }, SLOW)).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Hide chat panel' })).not.toBeNull();
   });
+
+  it('keeps New chat with the pane, so the corner holds the toggle alone while it is hidden', async () => {
+    const user = userEvent.setup();
+    render(
+      <Providers>
+        <App dependencies={appDependencies()} />
+      </Providers>,
+    );
+
+    const chatName = /^New chat, /;
+    expect(await screen.findByRole('heading', { name: chatName }, SLOW)).not.toBeNull();
+    // With the pane showing, New chat is in its header.
+    expect(screen.getByRole('button', { name: 'New chat' })).not.toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Hide chat panel' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: chatName })).toBeNull(), SLOW);
+    // The control leaves with the pane; the titlebar offers no second one.
+    expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show chat panel' })).not.toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Show chat panel' }));
+    expect(await screen.findByRole('button', { name: 'New chat' }, SLOW)).not.toBeNull();
+  });
 });

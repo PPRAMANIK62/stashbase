@@ -1,14 +1,15 @@
 /** The Chat pane's own name row: the Agent's mark and the conversation's
  *  title, left-aligned at the top of the pane in both layouts, so the pane
  *  says which Chat it is whether or not the titlebar is busy with document
- *  tabs. The row draws no rule; the transcript fades out beneath it, the
- *  same way it fades in above the composer. Once the Chat has started the
- *  title renames in place on a click or F2, the same rename the Chats panel
- *  offers its rows, and a pencil surfaces on hover and focus to say so; an
- *  unstarted Chat's default name is plain text, because there is no
- *  conversation to name yet. */
+ *  tabs, with the conversation's own actions at the row's right end. The
+ *  row draws no rule; the transcript fades out beneath it, the same way it
+ *  fades in above the composer. Once the Chat has started the title renames
+ *  in place on a click or F2, the same rename the Chats panel offers its
+ *  rows, and a pencil surfaces on hover and focus to say so; an unstarted
+ *  Chat's default name is plain text, because there is no conversation to
+ *  name yet. */
 import { Pencil } from 'lucide-react';
-import { useState, type MouseEvent } from 'react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -26,11 +27,14 @@ export function ChatHeader({
   failure,
   onRename,
   session,
+  trailing,
 }: {
   /** Why the last rename was refused, or null. */
   failure: string | null;
   onRename(session: AgentSessionRuntime, title: string): void;
   session: AgentSessionRuntime;
+  /** The conversation's own actions, at the row's right end. */
+  trailing?: ReactNode;
 }) {
   const state = useStore(
     session.store,
@@ -141,6 +145,10 @@ export function ChatHeader({
           {failure}
         </span>
       )}
+      {/* The row's 16px inset is the text's; the compact action square pulls
+       *  back 4px so its glyph's centre, 14px in from its edge, lands on the
+       *  panel toggle's column in the corner above it (8px + 18px). */}
+      {trailing && <div className="-mr-1 ml-auto flex shrink-0 items-center">{trailing}</div>}
     </div>
   );
 }

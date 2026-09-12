@@ -1,0 +1,85 @@
+/**
+ * The draft the window asked the tree to make. The request waits in the
+ * folder's store until the listing is here to place and name it, an Untitled
+ * beside the selection made at once, and the new row takes the rename the
+ * moment the refreshed listing shows it, so the name is the first thing
+ * typed.
+ */
+import { useEffect } from 'react';
+import { useStore } from 'zustand';
+
+import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
+import {
+  treeCreationParent,
+  untitledDraftName,
+  type TreeRow,
+  type WorkspaceEntry,
+  type WorkspaceListing,
+} from '@/features/workspace/domain/tree';
+import { clearTreeCreate } from '@/features/workspace/domain/workspace';
+
+import { entryOf } from './file-tree-rows';
+
+export function useTreeDraft({
+  listing,
+  operations,
+  renderedPathKey,
+  renderedRows,
+  runtime,
+  select,
+  setRenameCaret,
+  setRovingPath,
+}: {
+  /** The folder's listing, or undefined while it has not arrived. */
+  listing: WorkspaceListing | undefined;
+  /** The tree's create and rename verbs, and the row waiting for a rename. */
+  operations: {
+    beginRename(entry: WorkspaceEntry): void;
+    consumeRenamePath(): void;
+    createDraft(parentPath: string, name: string): Promise<void>;
+    renamePath: string | null;
+  };
+  renderedPathKey: string;
+  renderedRows: readonly TreeRow[];
+  runtime: WorkspaceRuntime;
+  select(path: string): void;
+  setRenameCaret(offset: number | undefined): void;
+  setRovingPath(path: string): void;
+}): void {
+  const { beginRename, consumeRenamePath, createDraft, renamePath } = operations;
+  const pendingCreate = useStore(runtime.store, (state) => state.pendingCreate);
+
+  // The request is cleared as it is taken up, so the same ask can be made
+  // again once this one has landed.
+  useEffect(() => {
+    if (!pendingCreate || !listing) return;
+    const captured = runtime.capture();
+    runtime.accept(captured, () => {
+      runtime.store.setState(clearTreeCreate);
+      const parent = treeCreationParent(listing, runtime.store.getState().selectedPath);
+      void createDraft(parent, untitledDraftName(listing, parent));
+    });
+  }, [createDraft, listing, pendingCreate, runtime]);
+
+  // The row is selected and renamed with the stem of its name ready to be
+  // typed over; the rename row focuses itself when it mounts.
+  useEffect(() => {
+    if (!renamePath) return;
+    const row = renderedRows.find((candidate) => candidate.node.path === renamePath);
+    if (!row) return;
+    consumeRenamePath();
+    select(row.node.path);
+    setRovingPath(row.node.path);
+    setRenameCaret(undefined);
+    beginRename(entryOf(row));
+  }, [
+    beginRename,
+    consumeRenamePath,
+    renamePath,
+    renderedPathKey,
+    renderedRows,
+    select,
+    setRenameCaret,
+    setRovingPath,
+  ]);
+}

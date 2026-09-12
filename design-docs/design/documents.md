@@ -94,8 +94,8 @@ assertions.
 | Source family | Extensions | Workbench surface | Workbench authoring | Retrieval text | Agent and MCP file access |
 |---|---|---|---|---|---|
 | Markdown | `.md`, `.markdown` | Writer Mode and Reading View | New notes and existing sources are content-editable | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
-| Plain text | `.txt` | Literal source editor | Existing sources are content-editable; New Note creates Markdown | Direct UTF-8 source text; unsupported encodings are excluded | `read_file`, `write_file`, and `edit_file` use valid UTF-8 source text |
-| JSON | `.json` | Source-preserving Tree and Source views | Existing sources are content-editable; New Note creates Markdown | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
+| Plain text | `.txt` | Literal source editor | Existing sources are content-editable; New draft creates Markdown | Direct UTF-8 source text; unsupported encodings are excluded | `read_file`, `write_file`, and `edit_file` use valid UTF-8 source text |
+| JSON | `.json` | Source-preserving Tree and Source views | Existing sources are content-editable; New draft creates Markdown | Direct source text | `read_file`, `write_file`, and `edit_file` use the source text |
 | HTML | `.html`, `.htm` | Compatibility preview | Preview-only in the Workbench | In-memory text derived from the source without durable Preparation | `read_file`, `write_file`, and `edit_file` use raw HTML source |
 | PDF | `.pdf` | Source PDF preview | Preview-only | Prepared Markdown | `read_file` returns current prepared Markdown; content writes are rejected |
 | Image | `.png`, `.jpg`, `.jpeg`, `.webp` | Source image preview and lightbox | Preview-only; accepted imports create visible image sources | Prepared OCR evidence | Search consumes OCR; external MCP `read_file` does not return image bytes; an Agent Panel runtime may consume an explicitly supplied source image |

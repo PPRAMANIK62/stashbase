@@ -136,6 +136,14 @@ function WorkspaceWindow() {
 
   const gallery = useGalleryShop(dependencies.gallery);
   const updateNotice = useUpdateNotice(dependencies.updates);
+  // A new draft is the tree's to make, beside its selection, and its name is
+  // typed in the tree, so the request brings the Files panel on screen
+  // before the tree takes it up.
+  const newDraft = () => {
+    session.runtime.setSidebarOpen(true);
+    chrome.navigator.select('files');
+    workspace?.requestCreate('draft');
+  };
 
   return (
     <WorkspaceLayout
@@ -186,6 +194,7 @@ function WorkspaceWindow() {
           }}
           navigator={chrome.navigator}
           onBrowseGallery={gallery.browse}
+          onNewDraft={newDraft}
           onReprocess={refresh.reprocess}
           settings={chrome.settings}
           sources={sources}
@@ -196,11 +205,10 @@ function WorkspaceWindow() {
       titlebar={
         <WorkspaceTitlebar
           chatPaneOpen={chatPaneOpen}
+          onNewDraft={newDraft}
           onToggleChatPane={() => setChatPaneOpen((open) => !open)}
-          agent={runtime}
           documents={documents}
           hasActiveFolder={activeFolder !== null}
-          scope={agent.scope}
         />
       }
       updateNotice={<UpdateNotice notice={updateNotice} />}

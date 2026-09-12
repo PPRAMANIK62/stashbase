@@ -46,8 +46,14 @@ export type FileTreeNaming =
   | { kind: 'create'; entryKind: WorkspaceEntry['kind']; parentPath: string }
   | { entry: WorkspaceEntry; kind: 'rename' };
 
+/** How the tree asks for a source to open: a created entry, and one reopened
+ *  after its rename was refused, ask for a tab that stays. */
+export interface TreeOpenOptions {
+  keep?: boolean;
+}
+
 export interface FileOperationsOptions {
-  onOpenSource?: ((source: SourceReference) => void) | undefined;
+  onOpenSource?: ((source: SourceReference, options?: TreeOpenOptions) => void) | undefined;
   /** Settles the open documents under an entry before it leaves its path:
    *  saves and closes them and returns their sources, or null when a save
    *  failed and the entry must stay where it is. */
@@ -87,6 +93,9 @@ export function useFileOperations(
   const [pending, setPending] = useState(false);
   /** The path whose row should take focus once the listing shows it. */
   const [settledPath, setSettledPath] = useState<string | null>(null);
+  /** The path whose row should start a rename once the listing shows it: a
+   *  draft the tree just made, whose name is the first thing to type. */
+  const [renamePath, setRenamePath] = useState<string | null>(null);
 
   const folderPath = runtime.scope.folder.path;
   /** Applies a state change only while `capturedScope` is still the open one. */
@@ -107,7 +116,8 @@ export function useFileOperations(
     [folderPath, queryClient],
   );
   const openSource = useCallback(
-    (path: string) => latest.current.onOpenSource?.({ folderPath, path }),
+    (path: string, how: TreeOpenOptions = { keep: true }) =>
+      latest.current.onOpenSource?.({ folderPath, path }, how),
     [folderPath],
   );
 
@@ -156,6 +166,29 @@ export function useFileOperations(
       setNaming({ entryKind, kind: 'create', parentPath });
     },
     [runtime, update],
+  );
+
+  /** Creates a draft under `parentPath` with the name the tree chose, opens
+   *  it the moment it exists as a kept tab, and, once the refreshed listing
+   *  shows its row, hands that row to a rename so the name is the first thing
+   *  typed. */
+  const createDraft = useCallback(
+    async (parentPath: string, name: string): Promise<void> => {
+      const capturedScope = runtime.capture();
+      setNaming(null);
+      const created = await run(`create:${parentPath}/${name}`, (signal) =>
+        api.createEntry(folderPath, 'file', parentPath, name, signal),
+      );
+      if (!created || !stillOpen(capturedScope)) return;
+      openSource(created.path, { keep: true });
+      update(capturedScope, (state) =>
+        selectTreePath(parentPath ? expandTreeFolder(state, parentPath) : state, created.path),
+      );
+      await refresh();
+      if (!stillOpen(capturedScope)) return;
+      setRenamePath(created.path);
+    },
+    [api, folderPath, openSource, refresh, run, runtime, stillOpen, update],
   );
 
   const beginRename = useCallback((entry: WorkspaceEntry) => {
@@ -270,6 +303,7 @@ export function useFileOperations(
   }, [api, deleting, folderPath, openSource, refresh, retire, run, runtime, stillOpen, update]);
 
   const consumeSettledPath = useCallback(() => setSettledPath(null), []);
+  const consumeRenamePath = useCallback(() => setRenamePath(null), []);
 
   return {
     beginCreate,
@@ -278,11 +312,14 @@ export function useFileOperations(
     cancelNaming,
     commitNaming,
     confirmDelete,
+    consumeRenamePath,
     consumeSettledPath,
+    createDraft,
     deleting,
     failure,
     naming,
     pending,
+    renamePath,
     requestDelete,
     settledPath,
   };

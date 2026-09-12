@@ -1,8 +1,8 @@
-/** The titlebar's quick way into a fresh conversation. It starts the same
- *  chat the Chats panel's **New chat** starts, with the same preferred Agent
- *  and scope, so the two entries can never disagree about what "new" means.
- *  With no runtime ready there is nothing to start, so the button waits,
- *  disabled, and says where to go. */
+/** The quick way into a fresh conversation, at the right end of the Chat
+ *  pane's name row. It starts the same chat the Chats panel's **New chat**
+ *  starts, with the same preferred Agent and scope, so the two entries can
+ *  never disagree about what "new" means. With no runtime ready there is
+ *  nothing to start, so the button waits, disabled, and says where to go. */
 import { SquarePen } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,9 @@ export function NewChatButton({
         onClick={() => {
           if (defaultAgent) runtime.newChat(defaultAgent.id, scope);
         }}
+        // The compact square: 28px around a 14px glyph, the same box and
+        // weight as the Markdown viewer's Writer and Reading items across the
+        // seam, so the three read as one family on one line.
         size="icon-compact"
         variant="ghost"
       >

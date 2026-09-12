@@ -71,10 +71,12 @@ import a sibling feature.
   identity, keeps the name on record
   through the same `renameHistory` mutation the Chats panel's rows use,
   rewriting the cached listing rather than refetching it; a refusal restores
-  the previous title. The titlebar carries document tabs while any document
-  is open and is otherwise empty for a folder window. Its new-chat button is
-  the feature's own `NewChatButton`, so the titlebar and the Chats panel
-  share one preferred-Agent rule and one `newChat` call.
+  the previous title. `ChatHeader` carries the feature's own `NewChatButton`
+  at its right end, on the titlebar's glyph column; the titlebar carries no
+  chat control, so a hidden pane takes the button with it, and the header
+  and the Chats panel share one preferred-Agent rule and one `newChat` call.
+  The titlebar carries document tabs while any document is open and is
+  otherwise empty for a folder window.
 - Both Agent surfaces load behind one lazy boundary with a retry, so a chunk
   that fails offers to reload itself instead of taking the window down.
 
@@ -270,7 +272,8 @@ folder's Agent Instructions.
   Arrow keys, Enter, Tab, and Escape are one declared binding shared by the
   editor that raises them and the panel that answers them, and the active row
   is named through `aria-activedescendant`.
-- The chats list is a sidebar tree of recency groups. A row opens on a click,
+- The chats list is a sidebar tree of recency groups under a **Recent**
+  label, set off from the panel's New chat by a rule. A row opens on a click,
   renames in place on a slow second click or F2 (the Chat pane's header
   renames the open conversation the same way), and deletion is a confirming
   dialog that stays open on a refusal so the reason stays in front of the
@@ -342,7 +345,7 @@ gap below is observed in Shipping.
 
 | Role | Stable entry points |
 |---|---|
-| Feature boundary | `renderer/src/features/agent/public.ts` re-exports the Ports and their Adapter factories, the two lazy surfaces, the titlebar's chat-navigation and new-chat buttons, the window runtime hook, the instructions editor hook, and the composer-focus marker. Only modules under `renderer/src/app/` may read it |
+| Feature boundary | `renderer/src/features/agent/public.ts` re-exports the Ports and their Adapter factories, the two lazy surfaces, the new-chat button, the window runtime hook, the instructions editor hook, and the composer-focus marker. Only modules under `renderer/src/app/` may read it |
 | Window runtime Interface | `renderer/src/features/agent/application/workspace-runtime.ts` owns tabs, mounting, the window-folder rule, retirement, and the history verbs; `renderer/src/features/agent/hooks/use-agent-workspace-runtime.ts` is its React lifetime |
 | Conversation Interface | `renderer/src/features/agent/application/session/runtime-contract.ts` declares the verbs a composer and a transcript call; `renderer/src/features/agent/application/session-runtime.ts` assembles them over the transport, dispatch, event, prompt-ledger, and files-changed Modules in `renderer/src/features/agent/application/session/` |
 | State Modules | `renderer/src/features/agent/domain/session.ts` is the one reducer and the selectors that read it, over the shapes in `session-state.ts` and the transcript edits in `session-transcript.ts`; tabs are `renderer/src/features/agent/domain/workspace.ts`; the runtime registry, capability resolution, and readiness gate are `renderer/src/features/agent/domain/agent-catalog.ts`; `model-choice.ts` beside them derives what the next turn runs on |

@@ -20,20 +20,15 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
-import {
-  AgentChats,
-  ChatNavButtons,
-  NewChatButton,
-  type AgentScope,
-  type AgentWorkspaceRuntime,
-} from '@/features/agent/public';
-import type { DocumentTabsRuntime } from '@/features/documents/public';
+import { AgentChats, type AgentScope, type AgentWorkspaceRuntime } from '@/features/agent/public';
+import { DocumentHistoryButtons, type DocumentTabsRuntime } from '@/features/documents/public';
 import type { FolderSearchReadiness } from '@/features/preparation/public';
 import { LibrarySearch } from '@/features/retrieval/public';
 import { SidebarAccountRow } from '@/features/settings/public';
 import {
   FileTree,
   LibrarySidebar,
+  NewDraftButton,
   type ActiveLibraryFolder,
   type FileTreeRowMarker,
   type WorkspaceRuntime,
@@ -50,13 +45,19 @@ export interface WorkspaceSidebarProps {
   folder: {
     /** The Workbench-wide hidden-entry visibility, offered on the tree's own
      *  space. Null while no folder is listed. */
-    hiddenFiles: { readonly disabled: boolean; readonly shown: boolean; toggle(): void } | null;
+    hiddenFiles: {
+      readonly disabled: boolean;
+      readonly shown: boolean;
+      toggle(): void;
+    } | null;
     rowMarkers: Record<string, FileTreeRowMarker>;
     search: FolderSearchReadiness;
   };
   navigator: SidebarNavigatorState;
   /** Opens the Gallery over this window. The folder stays where it is. */
   onBrowseGallery(): void;
+  /** Creates an Untitled draft beside the tree's selection and opens it. */
+  onNewDraft(): void;
   onReprocess(source: SourceReference): void;
   settings: SettingsCommand;
   sources: DocumentSources;
@@ -70,6 +71,7 @@ export function WorkspaceSidebar({
   folder,
   navigator: sidebar,
   onBrowseGallery,
+  onNewDraft,
   onReprocess,
   settings,
   sources,
@@ -89,25 +91,27 @@ export function WorkspaceSidebar({
          *  shared 16px glyph column (folder row, tree, footer), for when no
          *  traffic lights claim the corner (fullscreen, non-macOS); with
          *  lights present the shell.css darwin rule widens the padding past
-         *  them. */}
-        <div className="workspace-titlebar flex h-11 shrink-0 items-center pr-2 pl-1.5">
+         *  them. The same 6px closes the band's right end, so the plus's
+         *  glyph ends on the column the folder row's chevron ends on. */}
+        <div className="workspace-titlebar flex h-11 shrink-0 items-center pr-1.5 pl-1.5">
           {/* No gap of its own: the buttons' square padding already spaces
            *  the glyphs, keeping the trio a tighter cluster than the room
            *  between it and the traffic lights. */}
           <div className="workspace-titlebar-controls flex items-center">
             <SidebarTrigger aria-label="Hide files sidebar" />
-            {activeFolder && <ChatNavButtons runtime={agent.runtime} />}
+            {/* Back and forward step the document history whatever panel
+             *  the navigator below is showing: the band is file chrome, so
+             *  its scope does not follow Files, Search, or Chats. */}
+            {activeFolder && documents && <DocumentHistoryButtons runtime={documents} />}
           </div>
-          {/* New chat holds the band's right end while the sidebar is on
-           *  screen; collapsed, the workspace titlebar carries it beside the
-           *  reopening trigger instead. */}
+          {/* New draft holds the band's right end while the sidebar is on
+           *  screen, the pair to the history arrows at its left; collapsed,
+           *  the workspace titlebar carries both beside the reopening trigger
+           *  instead. New chat lives with the conversation, in the Chat
+           *  pane's own header. */}
           {activeFolder && (
             <div className="workspace-titlebar-controls ml-auto flex items-center">
-              <NewChatButton
-                catalog={dependencies.agent.catalog}
-                runtime={agent.runtime}
-                scope={agent.scope}
-              />
+              <NewDraftButton onCreate={onNewDraft} />
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 import type {
+  DocumentOpenOptions,
   DocumentRuntime,
-  DocumentSearchTarget,
   DocumentTabsRuntime,
 } from '@/features/documents/public';
 import type { WorkspaceRuntime } from '@/features/workspace/public';
@@ -10,7 +10,7 @@ export async function openDocument(
   workspace: WorkspaceRuntime,
   documents: DocumentTabsRuntime,
   source: SourceReference,
-  options?: { anchor?: string; search?: DocumentSearchTarget },
+  options?: DocumentOpenOptions,
 ): Promise<DocumentRuntime | null> {
   const workspaceOperation = workspace.capture();
   const documentScope = documents.capture();

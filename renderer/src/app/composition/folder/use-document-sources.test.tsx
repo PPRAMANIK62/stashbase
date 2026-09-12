@@ -64,7 +64,8 @@ describe('useDocumentSources', () => {
 
     result.current.navigate({ anchor: 'results', source: notes });
 
-    expect(open).toHaveBeenCalledWith(notes, { anchor: 'results' });
+    // A link is browsing, so the open it asks for is a preview.
+    expect(open).toHaveBeenCalledWith(notes, { anchor: 'results', preview: true });
     documents.dispose();
     workspace.dispose();
   });
@@ -86,7 +87,7 @@ describe('useDocumentSources', () => {
       result.current.navigateToMatch({ source: notes, target, type: 'open-search-source' }),
     ).resolves.toBe(true);
 
-    expect(open).toHaveBeenCalledWith(notes, { search: target });
+    expect(open).toHaveBeenCalledWith(notes, { preview: true, search: target });
     expect(documents.activeSource()).toEqual(notes);
     documents.dispose();
     workspace.dispose();

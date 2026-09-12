@@ -315,6 +315,10 @@ describe('AgentChats', () => {
     );
 
     await screen.findByRole('button', { name: 'Today newer' });
+    // New chat is set off from the history by a rule, and the history is
+    // named before its day groups.
+    expect(screen.getByRole('separator')).not.toBeNull();
+    expect(screen.getByText('Recent')).not.toBeNull();
     expect(screen.queryByText('Open', { exact: true })).toBeNull();
     expect(screen.queryByText('History', { exact: true })).toBeNull();
     expect(screen.queryByRole('button', { name: /^New Chat$/u })).toBeNull();

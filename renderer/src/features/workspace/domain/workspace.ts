@@ -7,9 +7,21 @@ export interface WorkspaceScope {
   readonly generation: number;
 }
 
+/** A create the window asked the tree to make: a draft, an `Untitled.md`
+ *  beside the selection. Folders keep their explicit place in the tree's own
+ *  menu, so the request has one kind. */
+export interface TreeCreateRequest {
+  kind: 'draft';
+  /** Distinguishes one request from the next of the same kind, so asking
+   *  twice starts the naming twice. */
+  revision: number;
+}
+
 export interface WorkspaceState {
   expanded: ExpandedFolders;
   lifecycle: 'active' | 'disposed';
+  /** The create the tree has been asked to start and has not yet taken up. */
+  pendingCreate: TreeCreateRequest | null;
   selectedPath: string | null;
   scope: WorkspaceScope;
 }
@@ -21,9 +33,24 @@ export function createWorkspaceState(
   return {
     expanded: Object.fromEntries(restored?.expandedPaths.map((path) => [path, true]) ?? []),
     lifecycle: 'active',
+    pendingCreate: null,
     scope,
     selectedPath: restored?.selectedPath ?? null,
   };
+}
+
+/** Asks the tree to create a new entry of `kind`. */
+export function requestTreeCreate(
+  state: WorkspaceState,
+  kind: TreeCreateRequest['kind'],
+): WorkspaceState {
+  const revision = (state.pendingCreate?.revision ?? 0) + 1;
+  return { ...state, pendingCreate: { kind, revision } };
+}
+
+/** The tree took the request up, or the reader cancelled it. */
+export function clearTreeCreate(state: WorkspaceState): WorkspaceState {
+  return state.pendingCreate === null ? state : { ...state, pendingCreate: null };
 }
 
 export function disposeWorkspaceState(state: WorkspaceState): WorkspaceState {

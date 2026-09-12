@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useStore } from 'zustand';
 
 import { Button } from '@/components/ui/button';
+import { SidebarGroupLabel } from '@/components/ui/sidebar-group-label';
 import { preferredAgent } from '@/features/agent/domain/agent-catalog';
 import {
   buildConversationGroups,
@@ -84,10 +85,15 @@ export default function AgentChats({
         )}
       </div>
 
+      {/* A rule sets the creation control off from the history beneath it,
+       *  and the history says what it is: the folder's recent chats, in
+       *  the day groups that follow. */}
+      <hr className="mx-2 my-1 h-px border-0 bg-border" />
       <div
         aria-label={`Conversation tree in ${workspaceName}`}
-        className="min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-2"
+        className="min-h-0 flex-1 overflow-y-auto px-2 pt-1 pb-2"
       >
+        <SidebarGroupLabel>Recent</SidebarGroupLabel>
         {history.historyLoading && conversationCount === 0 && (
           <p className="px-2 py-1 text-caption text-muted-foreground">Loading chats…</p>
         )}

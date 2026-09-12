@@ -171,12 +171,13 @@ described by the
 
 ### Primary Flow
 
-1. Open the source in a persistent tab and receive only the preview or editing
-   capabilities declared for that format.
+1. Open the source, as a preview tab by browsing or as a kept tab by asking,
+   and receive only the preview or editing capabilities declared for that
+   format.
 2. For content-editable Markdown, JSON, or UTF-8 plain text, enter the appropriate editing state
    and save through the shared durability path.
-3. Navigate with tabs, Quick Open, the outline, Find, local links, or search
-   results.
+3. Navigate with tabs, back and forward through the document history, Quick
+   Open, the outline, Find, local links, or search results.
 4. Close the tab or window, or use renderer-error recovery, after the current
    edit becomes durable.
 5. After an interrupted session, reopen the folder and restore or discard each
@@ -185,8 +186,14 @@ described by the
 ### Required Observable Results
 
 - The visible source file remains the identity behind every view and save.
-- Repeated or concurrent navigation to that source resolves to one persistent
-  tab; a same-named source in another Library folder remains distinct.
+- Repeated or concurrent navigation to that source resolves to one tab, and
+  browsing holds at most one preview tab; a same-named source in another
+  Library folder remains distinct.
+- Back and forward step through the documents visited, in order, reaching a
+  preview that has since been replaced without adding a kept tab.
+- **New draft** creates an Untitled Markdown file beside the selection, opens
+  it at once as a kept tab, and starts renaming it in the Files tree so the
+  name is the first thing typed.
 - Preview-only formats never expose a content-editing affordance. Workbench
   content editing, Agent/MCP content writes, and file-level rename/move/delete
   remain distinguishable capabilities.
@@ -358,8 +365,8 @@ may be ready, missing, disconnected, or recoverable.
 
 ### Primary Flow
 
-1. Use New chat with OpenQuill, or choose another Agent in the composer. A
-   Chat takes the open folder as its scope.
+1. Use **New chat** from the Chat pane's name row with OpenQuill, or choose
+   another Agent in the composer. A Chat takes the open folder as its scope.
 2. For OpenQuill, sign in to the StashBase account when needed, from the
    account row at the foot of the sidebar or from the Agents section of
    Settings; no Agent install, model API key, or separate recharge is

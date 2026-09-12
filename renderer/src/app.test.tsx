@@ -198,7 +198,8 @@ describe('workspace shell', () => {
     await act(async () => view.getByRole('treeitem', { name: 'plan.md' }).click());
 
     const workspace = view.getByLabelText('Document workspace');
-    const tab = view.getByRole('tab', { name: 'plan.md' });
+    // A tree click browses, so the tab it opens is the preview.
+    const tab = view.getByRole('tab', { name: 'plan.md, preview' });
     expect(tab.textContent).toContain('plan.md');
     expect(tab.closest('header')).not.toBeNull();
     // The tab strip lives in the window's title row, never inside the document.

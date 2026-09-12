@@ -79,6 +79,7 @@ function TreePreview({ renaming, selectedPath = 'lessons/week-1.md' }: TreePrevi
                 marker={row.node.type === 'file' ? MARKERS[row.node.path] : undefined}
                 onActivate={() => undefined}
                 onFocus={() => undefined}
+                onKeep={() => undefined}
                 onKeyDown={() => undefined}
                 onRename={() => undefined}
                 proximityActive={false}

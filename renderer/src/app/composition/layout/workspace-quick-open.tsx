@@ -46,7 +46,12 @@ export function WorkspaceQuickOpen({
     async (intent: QuickOpenNavigationIntent) => {
       if (intent.source.folderPath !== workspace.scope.folder.path) return false;
       if (intent.type === 'reveal-source') return reveal.reveal(intent.source.path);
-      return (await openDocument(workspace, documents, intent.source)) !== null;
+      // Quick Open is browsing, so what it opens is a preview.
+      return (
+        (await openDocument(workspace, documents, intent.source, {
+          preview: true,
+        })) !== null
+      );
     },
     [documents, reveal, workspace],
   );

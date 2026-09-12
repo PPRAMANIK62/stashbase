@@ -69,7 +69,9 @@ const GENERIC_TITLE = 'Search and automatic Chat context exclude this file.';
 const GENERIC_LABEL = 'excluded from Search and automatic Chat context';
 
 export function rowInset(depth: number): CSSProperties {
-  return { paddingLeft: `${TREE_ROOT_INSET + (depth - 1) * TREE_LEVEL_INDENT}px` };
+  return {
+    paddingLeft: `${TREE_ROOT_INSET + (depth - 1) * TREE_LEVEL_INDENT}px`,
+  };
 }
 
 /** The vertical guides that connect a nested row to its ancestors. */
@@ -148,6 +150,9 @@ export interface FileTreeRowProps {
   marker?: FileTreeRowMarker | undefined;
   onActivate(row: TreeRow): void;
   onFocus(path: string): void;
+  /** A double click on a file: the reader asking for its document to stay
+   *  open rather than be the preview the next click replaces. */
+  onKeep(row: TreeRow): void;
   onKeyDown(event: KeyboardEvent<HTMLButtonElement>, row: TreeRow, editable: boolean): void;
   onRename(row: TreeRow, caretOffset?: number): void;
   proximityActive: boolean;
@@ -165,6 +170,7 @@ export function FileTreeRow({
   marker,
   onActivate,
   onFocus,
+  onKeep,
   onKeyDown,
   onRename,
   proximityActive,
@@ -182,16 +188,22 @@ export function FileTreeRow({
 
   // A click acts at once: a folder toggle is the tree's most frequent gesture
   // and must not wait out a double-click window. Only the first click of a
-  // double click acts, so a rename starts on the folder as that click left it,
-  // or on a file already opened.
+  // double click acts, so the second lands on the folder as that click left
+  // it, or on a file already previewed.
   const onClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (event.detail > 1) return;
     onActivate(row);
   };
 
+  // A double click keeps a file's document open; on a folder it starts the
+  // rename, which a file still reaches through F2 and the menu.
   const onDoubleClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (!editable) return;
     event.preventDefault();
+    if (row.node.type === 'file') {
+      onKeep(row);
+      return;
+    }
     const target = event.target instanceof HTMLElement ? event.target : event.currentTarget;
     onRename(row, caretOffsetAtPoint(target, event.clientX, event.clientY));
   };
@@ -226,7 +238,10 @@ export function FileTreeRow({
             event.preventDefault();
             return;
           }
-          writeSourceDrag(event.dataTransfer, { folderPath, path: row.node.path });
+          writeSourceDrag(event.dataTransfer, {
+            folderPath,
+            path: row.node.path,
+          });
         }}
         onFocus={() => onFocus(row.node.path)}
         onKeyDown={(event) => onKeyDown(event, row, editable)}

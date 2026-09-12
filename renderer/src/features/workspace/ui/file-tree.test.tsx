@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
@@ -24,8 +24,17 @@ import { createTestQueryClient, withQueryClient } from '@/test/query';
 import { FileTree } from './file-tree';
 
 const PLAN = listingFile({ heading: 'Plan', path: 'docs/plan.md', size: 42 });
-const ARCHIVE = listingFile({ format: 'generic', path: 'archive.zip', size: 7 });
-const LINKED = listingFile({ format: 'generic', kind: 'symlink', path: 'linked-file', size: 0 });
+const ARCHIVE = listingFile({
+  format: 'generic',
+  path: 'archive.zip',
+  size: 7,
+});
+const LINKED = listingFile({
+  format: 'generic',
+  kind: 'symlink',
+  path: 'linked-file',
+  size: 0,
+});
 const RESEARCH_LISTING = listing(
   [PLAN, ARCHIVE, LINKED],
   ['docs', listingFolder({ kind: 'excluded', path: 'vendor' })],
@@ -207,7 +216,10 @@ describe('file tree', () => {
       onReprocess,
       rowMarkers: {
         'paper.pdf': { kind: 'failed', title: 'File preparation failed.' },
-        'talk.mp3': { kind: 'blocked', title: 'Transcription setup is required.' },
+        'talk.mp3': {
+          kind: 'blocked',
+          title: 'Transcription setup is required.',
+        },
       },
     });
 
@@ -296,5 +308,75 @@ describe('file tree drag source', () => {
       name: 'linked-file, restricted, Show in file manager',
     });
     expect(restricted.getAttribute('draggable')).toBe('false');
+  });
+});
+
+describe('file tree keep and create', () => {
+  it('keeps a file open from a double click and makes a draft beside the selection', async () => {
+    // The listing grows with what the tree creates, so the new row shows.
+    const files = [PLAN, ARCHIVE, LINKED];
+    const api = filesApi({
+      createEntry: vi.fn(async (_folder, _kind, parent, name) => {
+        const path = parent ? `${parent}/${name}` : name;
+        files.push(listingFile({ path }));
+        return { path };
+      }),
+      load: vi.fn(async () =>
+        listing(files, ['docs', listingFolder({ kind: 'excluded', path: 'vendor' })]),
+      ),
+    });
+    const onOpenSource = vi.fn();
+    renderTree(api, onOpenSource);
+    const runtime = runtimes.at(-1);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('treeitem', { name: 'docs' }));
+    const plan = await screen.findByRole('treeitem', { name: 'plan.md' });
+    await user.dblClick(plan);
+    // The first click browsed; the double click asked for the tab to stay.
+    expect(onOpenSource).toHaveBeenNthCalledWith(1, {
+      folderPath: RESEARCH_FOLDER.path,
+      path: 'docs/plan.md',
+    });
+    expect(onOpenSource).toHaveBeenLastCalledWith(
+      { folderPath: RESEARCH_FOLDER.path, path: 'docs/plan.md' },
+      { keep: true },
+    );
+
+    // With plan.md selected, the window's new draft lands in docs at once,
+    // as Untitled, and opens for editing.
+    act(() => runtime?.requestCreate('draft'));
+    await waitFor(() =>
+      expect(api.createEntry).toHaveBeenCalledWith(
+        RESEARCH_FOLDER.path,
+        'file',
+        'docs',
+        'Untitled.md',
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(runtime?.store.getState().pendingCreate).toBeNull();
+    await waitFor(() =>
+      expect(onOpenSource).toHaveBeenLastCalledWith(
+        { folderPath: RESEARCH_FOLDER.path, path: 'docs/Untitled.md' },
+        { keep: true },
+      ),
+    );
+    // Once its row shows, the draft is renamed in place with the stem
+    // selected, so the name is the first thing typed.
+    const field = await screen.findByRole<HTMLInputElement>('textbox', {
+      name: 'Rename Untitled.md',
+    });
+    expectFocused(field);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 8]);
+    await user.keyboard('Ideas{Enter}');
+    await waitFor(() =>
+      expect(api.renameEntry).toHaveBeenCalledWith(
+        RESEARCH_FOLDER.path,
+        { kind: 'file', path: 'docs/Untitled.md' },
+        'Ideas.md',
+        expect.any(AbortSignal),
+      ),
+    );
   });
 });

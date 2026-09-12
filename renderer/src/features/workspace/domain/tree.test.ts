@@ -10,7 +10,9 @@ import {
   nextTreePath,
   parentTreePath,
   renamedTreePath,
+  treeCreationParent,
   treePathWithin,
+  untitledDraftName,
   visibleTree,
 } from './tree';
 
@@ -101,5 +103,32 @@ describe('workspace tree model', () => {
     expect(entryNameProblem('a\\b')).toBe('A name cannot contain slashes.');
     expect(entryNameProblem('..')).toBe('That name is reserved.');
     expect(entryNameProblem('x'.repeat(256))).toBe('That name is too long.');
+  });
+});
+
+describe('new entry placement and naming', () => {
+  it('names a new draft Untitled and counts past the siblings already so named', () => {
+    expect(untitledDraftName(RESEARCH_LISTING, '')).toBe('Untitled.md');
+    expect(untitledDraftName(RESEARCH_LISTING, 'notes')).toBe('Untitled.md');
+    const crowded = listing(
+      [
+        listingFile({ path: 'notes/untitled.md' }),
+        listingFile({ path: 'notes/Untitled 2.md' }),
+        listingFile({ path: 'Untitled 3.md' }),
+      ],
+      ['notes'],
+    );
+    // Case does not free a name, and a sibling elsewhere does not take one.
+    expect(untitledDraftName(crowded, 'notes')).toBe('Untitled 3.md');
+    expect(untitledDraftName(crowded, '')).toBe('Untitled.md');
+  });
+
+  it('places a new entry beside the selection, or at the root with none', () => {
+    expect(treeCreationParent(RESEARCH_LISTING, null)).toBe('');
+    expect(treeCreationParent(RESEARCH_LISTING, 'notes/drafts')).toBe('notes/drafts');
+    // A folder the listing only implies is still a folder.
+    expect(treeCreationParent(RESEARCH_LISTING, 'notes')).toBe('notes');
+    expect(treeCreationParent(RESEARCH_LISTING, 'notes/chapter2.md')).toBe('notes');
+    expect(treeCreationParent(RESEARCH_LISTING, 'socket')).toBe('');
   });
 });

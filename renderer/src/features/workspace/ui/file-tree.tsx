@@ -17,7 +17,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
 } from 'react';
@@ -27,7 +26,10 @@ import { FilesError, type FilesPort } from '@/features/workspace/application/por
 import type { WorkspaceRuntime } from '@/features/workspace/application/runtime';
 import type { TreeRow, WorkspaceEntry, WorkspaceListing } from '@/features/workspace/domain/tree';
 import type { WorkspaceScope } from '@/features/workspace/domain/workspace';
-import { useFileOperations } from '@/features/workspace/hooks/use-file-operations';
+import {
+  useFileOperations,
+  type TreeOpenOptions,
+} from '@/features/workspace/hooks/use-file-operations';
 import { useFiles } from '@/features/workspace/hooks/use-files';
 import { useReveal } from '@/features/workspace/hooks/use-reveal';
 import { useTree } from '@/features/workspace/hooks/use-tree';
@@ -38,9 +40,10 @@ import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { DeleteEntryDialog } from './delete-entry-dialog';
+import { useTreeDraft } from './file-tree-draft';
 import { tabStopPath, useTreeRowFocus } from './file-tree-focus';
+import { treeGestures } from './file-tree-gestures';
 import { TreeGroup, TreeProximityHighlight } from './file-tree-group';
-import { treeKeyIntent } from './file-tree-keyboard';
 import { FileTreeMenu, type FileTreeMenuTarget } from './file-tree-menu';
 import {
   hoverRect,
@@ -68,7 +71,9 @@ export type { FileTreeRowMarker };
 
 export interface FileTreeProps {
   api: FilesPort;
-  onOpenSource?: ((source: SourceReference) => void) | undefined;
+  /** Opens a source. A click browses, which opens a preview; a double click,
+   *  and a file the tree just created, ask for a tab that stays. */
+  onOpenSource?: ((source: SourceReference, options?: TreeOpenOptions) => void) | undefined;
   /** Offered from the row context menu for failed or cancelled sources. */
   /** The Workbench-wide hidden-entry visibility, offered on the tree's own
    *  space. Absent when the window has no folder to list. */
@@ -99,7 +104,10 @@ export function FileTree({
   const files = useFiles(runtime, api);
   const tree = useTree(runtime, files.data ?? EMPTY_LISTING);
   const reveal = useReveal(runtime, api);
-  const operations = useFileOperations(runtime, api, { onOpenSource, retireSources });
+  const operations = useFileOperations(runtime, api, {
+    onOpenSource,
+    retireSources,
+  });
   const [limit, setLimit] = useState(TREE_PAGE_SIZE);
   const [renameCaret, setRenameCaret] = useState<number | undefined>();
   const treeElement = useRef<HTMLDivElement>(null);
@@ -167,42 +175,28 @@ export function FileTree({
     consumeSettledPath();
   }, [consumeSettledPath, focus, renderedPathKey, renderedRows, settledPath]);
 
-  const activate = (row: TreeRow) => {
-    tree.select(row.node.path);
-    setRovingPath(row.node.path);
-    if (row.node.type === 'folder') {
-      if (rowIsRestricted(row)) reveal.reveal(row.node.path);
-      else tree.toggle(row.node.path);
-    } else if (rowIsRestricted(row)) {
-      reveal.reveal(row.node.path);
-    } else {
-      onOpenSource?.({ folderPath: runtime.scope.folder.path, path: row.node.path });
-    }
-  };
+  useTreeDraft({
+    listing: files.data,
+    operations,
+    renderedPathKey,
+    renderedRows,
+    runtime,
+    select: tree.select,
+    setRenameCaret,
+    setRovingPath,
+  });
 
-  const beginRename = (row: TreeRow, caretOffset?: number) => {
-    tree.select(row.node.path);
-    setRovingPath(row.node.path);
-    setRenameCaret(caretOffset);
-    operations.beginRename(entryOf(row));
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, row: TreeRow) => {
-    const expanded = row.node.type === 'folder' && tree.expanded[row.node.path] === true;
-    const intent = treeKeyIntent(event.key, row, {
-      expanded,
-      renderedRows,
-      restricted: rowIsRestricted(row),
-      rows: tree.rows,
-    });
-    if (intent.kind === 'none') return;
-    event.preventDefault();
-    if (intent.kind === 'focus') focus(intent.path);
-    else if (intent.kind === 'activate') activate(row);
-    else if (intent.kind === 'rename') beginRename(row);
-    else if (intent.kind === 'delete') operations.requestDelete(entryOf(row));
-    else if (intent.kind === 'toggle') tree.toggle(row.node.path);
-  };
+  const { activate, beginRename, keep, onKeyDown } = treeGestures({
+    focus,
+    onOpenSource,
+    operations,
+    renderedRows,
+    reveal,
+    runtime,
+    setRenameCaret,
+    setRovingPath,
+    tree,
+  });
 
   const reprocessableRow = (row: TreeRow): boolean => {
     const marker = row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined;
@@ -279,6 +273,7 @@ export function FileTree({
         marker={row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined}
         onActivate={activate}
         onFocus={setRovingPath}
+        onKeep={keep}
         onKeyDown={onKeyDown}
         onRename={beginRename}
         proximityActive={activeIndex === index}

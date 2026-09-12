@@ -1,3 +1,9 @@
+/**
+ * The open documents' tab strip. A preview tab wears its name in italics and
+ * says so in its label; a double click, or Enter on the focused tab, keeps
+ * it. Delete closes the focused tab, and every tab is a drag source for its
+ * file.
+ */
 import { Circle, X } from 'lucide-react';
 import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { useStore } from 'zustand';
@@ -31,17 +37,26 @@ function UnsavedIndicator({ className, ...props }: IconComponentProps) {
   );
 }
 
+function tabLabel(name: string, dirty: boolean, preview: boolean): string {
+  if (dirty) return `${name}, unsaved changes`;
+  return preview ? `${name}, preview` : name;
+}
+
 function DocumentTab({
-  closeWithDelete,
   document,
   onClose,
+  onKeep,
+  onKeyDown,
+  preview,
   register,
   source,
   value,
 }: {
-  closeWithDelete: (event: KeyboardEvent<HTMLButtonElement>, tabId: string) => void;
   document: DocumentRuntime;
   onClose: (tabId: string) => void;
+  onKeep: (tabId: string) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLButtonElement>, tabId: string) => void;
+  preview: boolean;
   register: (tabId: string, element: HTMLButtonElement | null) => void;
   source: SourceReference;
   value: string;
@@ -54,16 +69,23 @@ function DocumentTab({
 
   return (
     <TabItem
-      aria-keyshortcuts="Delete"
-      aria-label={dirty ? `${name}, unsaved changes` : name}
+      aria-keyshortcuts={preview ? 'Delete Enter' : 'Delete'}
+      aria-label={tabLabel(name, dirty, preview)}
+      // Italic is inherited by the label, so the tab says "only looking"
+      // without the strip's label primitive knowing about previews.
+      className={preview ? 'italic' : undefined}
       data-document-dirty={dirty || undefined}
+      data-document-preview={preview || undefined}
       draggable
       icon={icon}
       label={name}
+      // A double click is the reader asking for the tab to stay; a kept tab
+      // has nothing further to give.
+      onDoubleClick={preview ? () => onKeep(value) : undefined}
       // The open document is a source the user can hand to another surface —
       // dropping a tab on the Agent composer binds it as explicit context.
       onDragStart={(event) => writeSourceDrag(event.dataTransfer, source)}
-      onKeyDown={(event) => closeWithDelete(event, value)}
+      onKeyDown={(event) => onKeyDown(event, value)}
       onTrailingClick={() => onClose(value)}
       ref={(element) => register(value, element)}
       title={`${source.folderPath}/${source.path}${dirty ? ' — Unsaved changes' : ''}`}
@@ -74,7 +96,7 @@ function DocumentTab({
 }
 
 export function DocumentTabs({ className, emptyContent = null, runtime }: DocumentTabsProps) {
-  const { activate, activeTabId, close, tabs } = useDocumentTabs(runtime);
+  const { activate, activeTabId, close, keep, tabs } = useDocumentTabs(runtime);
   const focusAfterClose = useRef(false);
   const tabElements = useRef(new Map<string, HTMLButtonElement>());
 
@@ -91,11 +113,15 @@ export function DocumentTabs({ className, emptyContent = null, runtime }: Docume
 
   if (tabs.length === 0) return emptyContent;
 
-  const closeWithDelete = (event: KeyboardEvent<HTMLButtonElement>, tabId: string) => {
-    if (event.key !== 'Delete') return;
-    event.preventDefault();
-    focusAfterClose.current = true;
-    close(tabId);
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tabId: string) => {
+    if (event.key === 'Delete') {
+      event.preventDefault();
+      focusAfterClose.current = true;
+      close(tabId);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      keep(tabId);
+    }
   };
 
   const registerTab = (tabId: string, element: HTMLButtonElement | null) => {
@@ -116,10 +142,12 @@ export function DocumentTabs({ className, emptyContent = null, runtime }: Docume
             if (!document) return null;
             return (
               <DocumentTab
-                closeWithDelete={closeWithDelete}
                 document={document}
                 key={tab.id}
                 onClose={close}
+                onKeep={keep}
+                onKeyDown={onTabKeyDown}
+                preview={tab.preview}
                 register={registerTab}
                 source={tab.source}
                 value={tab.id}

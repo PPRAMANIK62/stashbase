@@ -1,19 +1,15 @@
 import { AnimatePresence, motion } from 'framer-motion';
 
-import { useDependencies } from '@/app/composition/dependency-context';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { Tooltip } from '@/components/ui/tooltip';
 import {
-  NewChatButton,
-  type AgentScope,
-  type AgentWorkspaceRuntime,
-} from '@/features/agent/public';
-import {
+  DocumentHistoryButtons,
   DocumentTabs,
   useHasOpenDocuments,
   type DocumentTabsRuntime,
 } from '@/features/documents/public';
+import { NewDraftButton } from '@/features/workspace/public';
 import { useIcon } from '@/lib/icon-context';
 import { useSizeVariant } from '@/lib/size-context';
 import { spring } from '@/lib/springs';
@@ -23,30 +19,30 @@ import { spring } from '@/lib/springs';
  *  its header, so the row never has to, and a hidden panel takes the name
  *  away with it. With no folder open there is no workspace on screen at
  *  all, and the row says Welcome instead, which is what is on screen.
- *  The expanded sidebar's header
- *  carries the collapse control and the new-chat button; only while the
+ *  The expanded sidebar's header carries the collapse control, the document
+ *  history's back and forward, and the new-draft button; only while the
  *  sidebar is collapsed does this titlebar host them — the reopening
- *  trigger with, while a folder is open, new-chat beside it — in the same
- *  window corner they left. The chat panel's toggle mirrors that trigger at
- *  the row's far right: the same square in the opposite corner with the
- *  mirrored glyph, present in every folder state so the panel can always be
- *  brought back from where it was hidden. */
+ *  trigger with, while a folder is open, the same file controls beside it —
+ *  in the same window corner they left. The chat panel's toggle mirrors that
+ *  trigger at the row's far right: the same square in the opposite corner
+ *  with the mirrored glyph, present in every folder state so the panel can
+ *  always be brought back from where it was hidden, and alone there, so the
+ *  corner never changes shape. New chat lives with the conversation, in the
+ *  pane's own header, and a hidden pane takes it along. */
 export function WorkspaceTitlebar({
-  agent,
   chatPaneOpen,
-  onToggleChatPane,
   documents,
   hasActiveFolder,
-  scope,
+  onNewDraft,
+  onToggleChatPane,
 }: {
-  agent: AgentWorkspaceRuntime;
   chatPaneOpen: boolean;
-  onToggleChatPane(): void;
   documents: DocumentTabsRuntime | null;
   hasActiveFolder: boolean;
-  scope: AgentScope;
+  /** Creates an Untitled draft beside the tree's selection and opens it. */
+  onNewDraft(): void;
+  onToggleChatPane(): void;
 }) {
-  const dependencies = useDependencies();
   const PanelRight = useIcon('panel-right');
   const size = useSizeVariant() === 'compact' ? 'icon-compact' : 'icon';
   const chatPaneLabel = chatPaneOpen ? 'Hide chat panel' : 'Show chat panel';
@@ -70,9 +66,8 @@ export function WorkspaceTitlebar({
               transition={spring.fast}
             >
               <SidebarTrigger aria-label="Show files sidebar" />
-              {hasActiveFolder && (
-                <NewChatButton catalog={dependencies.agent.catalog} runtime={agent} scope={scope} />
-              )}
+              {hasActiveFolder && documents && <DocumentHistoryButtons runtime={documents} />}
+              {hasActiveFolder && <NewDraftButton onCreate={onNewDraft} />}
             </motion.div>
           )}
         </AnimatePresence>

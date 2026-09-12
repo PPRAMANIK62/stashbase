@@ -26,7 +26,9 @@ and uses a hosted service only as its metered model provider.
 - The Chat pane names itself. A row at the top of the pane, in both layouts,
   carries the Agent's mark and the conversation's title, left-aligned where
   the reader looks first, so the name never depends on whether the titlebar
-  is busy with document tabs. Docked, the row shares one line with the
+  is busy with document tabs, and **New chat** at the row's right end, on
+  the same glyph column as the titlebar's panel toggle above it, so the
+  current conversation's own actions sit with its name. Docked, the row shares one line with the
   Markdown viewer's Writer/Reading control across the seam. The row draws no
   rule of its own; the transcript fades out beneath it, the same way it fades
   in above the composer. A Chat no turn has started yet shows its default
@@ -104,12 +106,16 @@ and uses a hosted service only as its metered model provider.
   available on demand, and keeps Codex and Claude Code as explicit
   alternatives. It never exposes the credits' dollar value.
 - **New chat** is the deliberate creation entry and reuses a completely blank
-  tab. It sits at the top of the sidebar's Chats panel, where it becomes
-  **Set up an Agent** while no runtime is ready, and as a button beside the
-  sidebar toggle in the titlebar, which starts the same chat and waits,
-  disabled, while no runtime is ready. The panel below it groups the folder's
-  conversations by day, newest first, merging restored history with open tabs
-  and omitting allocations that hold no work. A row renames in place and its
+  tab. It sits at the right end of the Chat pane's name row, where it waits,
+  disabled, while no runtime is ready, and at the top of the sidebar's Chats
+  panel, where it becomes **Set up an Agent** in that state; both start the
+  same chat. Neither the sidebar's titlebar band nor the workspace titlebar
+  carries a chat control: the Chats panel manages the history, the pane's
+  own row manages the current conversation, and a hidden pane takes its
+  control with it. In the Chats panel a rule sets the button off from the
+  **Recent** list beneath it, which groups the folder's conversations by
+  day, newest first, merging restored history with open tabs and omitting
+  allocations that hold no work. A row renames in place and its
   menu offers deletion. Opening the app, a folder, a tab, or history never
   grants runtime-installation consent; a missing bring-your-own runtime waits
   for **Install and continue**.

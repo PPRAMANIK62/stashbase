@@ -6,6 +6,8 @@ import type { FolderSessionState } from '@/features/workspace/domain/session';
 import {
   createWorkspaceState,
   disposeWorkspaceState,
+  requestTreeCreate,
+  type TreeCreateRequest,
   type WorkspaceScope,
   type WorkspaceState,
 } from '@/features/workspace/domain/workspace';
@@ -30,6 +32,10 @@ export interface WorkspaceRuntime {
    *  nothing. */
   capture(): WorkspaceOperationScope;
   dispose(): void;
+  /** Asks the folder's tree to start naming a new entry. The tree decides
+   *  where, beside its selection, and takes the request up when it is on
+   *  screen. */
+  requestCreate(kind: TreeCreateRequest['kind']): void;
   retire(): void;
   /** Retires every operation in flight, so their completions are refused. The
    *  folder itself stays open: rebinding it re-reads the tree from scratch, and
@@ -94,6 +100,10 @@ export function createWorkspaceRuntime({
     capture: guard.capture,
     dispose() {
       finish(false);
+    },
+    requestCreate(kind) {
+      if (disposed) return;
+      store.setState((state) => requestTreeCreate(state, kind));
     },
     retire() {
       finish(true);

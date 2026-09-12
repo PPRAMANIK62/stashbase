@@ -25,6 +25,7 @@ describe('Workspace runtime', () => {
     expect(runtime.store.getState()).toEqual({
       expanded: {},
       lifecycle: 'active',
+      pendingCreate: null,
       selectedPath: null,
       scope: {
         folder: { name: 'Notes', path: '/library/notes' },

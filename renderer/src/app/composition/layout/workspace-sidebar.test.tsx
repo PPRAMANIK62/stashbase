@@ -6,6 +6,7 @@ import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
 import { appDependencies } from '@/test/fakes/app';
 import { accountPort, SIGNED_IN_ACCOUNT } from '@/test/fakes/settings';
+import { filesApi, workspaceAdapters } from '@/test/fakes/workspace';
 
 afterEach(cleanup);
 
@@ -78,7 +79,9 @@ describe('account row', () => {
     render(
       <Providers>
         <App
-          dependencies={appDependencies({ settings: { ...base.settings, accountApi: account } })}
+          dependencies={appDependencies({
+            settings: { ...base.settings, accountApi: account },
+          })}
         />
       </Providers>,
     );
@@ -100,5 +103,44 @@ describe('account row', () => {
     await user.click(within(menu).getByRole('menuitem', { name: 'Sign out' }));
     await waitFor(() => expect(account.signOut).toHaveBeenCalledOnce());
     expect(await screen.findByRole('button', { name: 'Sign in' })).not.toBeNull();
+  });
+});
+
+describe('titlebar band', () => {
+  it('carries the document history and New draft, and no chat controls', async () => {
+    const files = filesApi({
+      createEntry: vi.fn(async (_folder, _kind, parent, name) => ({
+        path: parent ? `${parent}/${name}` : name,
+      })),
+    });
+    const adapters = workspaceAdapters({ files });
+    render(
+      <Providers>
+        <App
+          dependencies={appDependencies({
+            workspace: { adapters, revealLabel: 'Show in file manager' },
+          })}
+        />
+      </Providers>,
+    );
+
+    const newDraft = await screen.findByRole('button', { name: 'New draft' });
+    const back = await screen.findByRole<HTMLButtonElement>('button', { name: 'Back' });
+    expect(back.disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Forward' }).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Previous chat' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Next chat' })).toBeNull();
+
+    // New draft makes Untitled.md at the root while nothing is selected and
+    // opens it at once as a kept tab.
+    await userEvent.setup().click(newDraft);
+    expect(await screen.findByRole('tab', { name: 'Untitled.md' }, LAZY)).not.toBeNull();
+    expect(files.createEntry).toHaveBeenCalledWith(
+      expect.any(String),
+      'file',
+      '',
+      'Untitled.md',
+      expect.any(AbortSignal),
+    );
   });
 });

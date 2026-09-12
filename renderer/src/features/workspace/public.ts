@@ -31,5 +31,6 @@ export type { WorkspaceScope } from './domain/workspace';
 export { createWorkspaceAdapters, type WorkspaceAdapters } from './infrastructure/adapters';
 export { ClipboardOffer } from './ui/clipboard-offer';
 export { FileTree, type FileTreeRowMarker } from './ui/file-tree';
+export { NewDraftButton } from './ui/new-draft-button';
 export { LibrarySidebar } from './ui/sidebar';
 export { LibraryWelcome } from './ui/welcome';

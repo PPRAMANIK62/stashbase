@@ -1,9 +1,21 @@
+/**
+ * The open-tab set and the two kinds of tab in it.
+ *
+ * A kept tab stays until it is closed. A preview tab is the one a reader is
+ * only looking at: there is at most one, and browsing to another source
+ * reuses it in place rather than adding a tab beside it. A preview becomes a
+ * kept tab when the reader asks for it to stay or edits it; a restored set is
+ * kept tabs only, because a preview was never meant to outlive the look.
+ */
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { sameSource } from './document';
 
 export interface DocumentTab {
   id: string;
+  /** True while the tab is only a look at its source: the next browse
+   *  replaces it, and it is left out of the saved session. */
+  preview: boolean;
   source: SourceReference;
 }
 
@@ -15,7 +27,7 @@ export interface DocumentTabsState {
 
 export interface RestoredDocumentTabs {
   activeTabId: string | null;
-  tabs: DocumentTab[];
+  tabs: Array<{ id: string; source: SourceReference }>;
 }
 
 /**
@@ -53,7 +65,8 @@ export function createDocumentTabsState(
     }
     if (ids.has(tab.id)) continue;
     ids.add(tab.id);
-    sources.push({ id: tab.id, source: { ...tab.source } });
+    // Only kept tabs are saved, so everything read back is a kept tab.
+    sources.push({ id: tab.id, preview: false, source: { ...tab.source } });
   }
 
   const requestedActiveId = restored?.activeTabId ?? null;
@@ -63,11 +76,55 @@ export function createDocumentTabsState(
   ]);
 }
 
-export function openDocumentTab(state: DocumentTabsState, tab: DocumentTab): DocumentTabsState {
+/** The tab the reader is only looking at, if there is one. */
+export function previewDocumentTab(state: DocumentTabsState): DocumentTab | null {
+  return state.tabs.find((tab) => tab.preview) ?? null;
+}
+
+/**
+ * Opens a source. One already open is activated, and kept if the open asked
+ * for that. A new preview takes the standing preview's slot, so browsing
+ * never piles up tabs; a new kept tab goes on the end.
+ */
+export function openDocumentTab(
+  state: DocumentTabsState,
+  tab: { id: string; source: SourceReference },
+  preview: boolean,
+): DocumentTabsState {
   if (state.lifecycle === 'disposed') return state;
   const existing = state.tabs.find((candidate) => sameSource(candidate.source, tab.source));
-  if (existing) return withTabs(state, state.tabs, [existing.id]);
-  return withTabs(state, [...state.tabs, { id: tab.id, source: { ...tab.source } }], [tab.id]);
+  if (existing) {
+    const tabs =
+      existing.preview && !preview
+        ? state.tabs.map((candidate) =>
+            candidate.id === existing.id ? { ...candidate, preview: false } : candidate,
+          )
+        : state.tabs;
+    return withTabs(state, tabs, [existing.id]);
+  }
+  const opened: DocumentTab = {
+    id: tab.id,
+    preview,
+    source: { ...tab.source },
+  };
+  const standing = preview ? previewDocumentTab(state) : null;
+  const tabs = standing
+    ? state.tabs.map((candidate) => (candidate.id === standing.id ? opened : candidate))
+    : [...state.tabs, opened];
+  return withTabs(state, tabs, [tab.id]);
+}
+
+/** Turns a preview into a kept tab. A kept tab stays as it is. */
+export function keepDocumentTab(state: DocumentTabsState, tabId: string): DocumentTabsState {
+  if (state.lifecycle === 'disposed') return state;
+  const tab = state.tabs.find((candidate) => candidate.id === tabId);
+  if (!tab || !tab.preview) return state;
+  return {
+    ...state,
+    tabs: state.tabs.map((candidate) =>
+      candidate.id === tabId ? { ...candidate, preview: false } : candidate,
+    ),
+  };
 }
 
 export function activateDocumentTab(state: DocumentTabsState, tabId: string): DocumentTabsState {

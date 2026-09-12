@@ -38,7 +38,10 @@ function createRuntime(api: DocumentSourcePort = loadedSourceApi) {
     restored: {
       activeTabId: 'tab-2',
       tabs: [
-        { id: 'tab-1', source: { folderPath: '/library/notes', path: 'plan.md' } },
+        {
+          id: 'tab-1',
+          source: { folderPath: '/library/notes', path: 'plan.md' },
+        },
         {
           id: 'tab-2',
           source: { folderPath: '/library/notes', path: 'drafts/other.md' },
@@ -202,11 +205,17 @@ describe('document tabs', () => {
     scrollIntoView.mockClear();
 
     await act(async () => {
-      await runtime.open({ folderPath: '/library/notes', path: 'newly-opened.md' });
+      await runtime.open({
+        folderPath: '/library/notes',
+        path: 'newly-opened.md',
+      });
     });
 
     const newlyOpened = screen.getByRole('tab', { name: 'newly-opened.md' });
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      block: 'nearest',
+      inline: 'nearest',
+    });
     expect(scrollIntoView.mock.instances.at(-1)).toBe(newlyOpened);
   });
 
@@ -311,7 +320,9 @@ describe('document tabs', () => {
 
     // `data-unsaved-indicator` and `data-tab-trailing` mark aria-hidden trailing-icon elements —
     // the tab's own accessible name already carries dirty state, so only the icon swap is untested by role.
-    const dirtyTab = screen.getByRole('tab', { name: 'plan.md, unsaved changes' });
+    const dirtyTab = screen.getByRole('tab', {
+      name: 'plan.md, unsaved changes',
+    });
     expect(dirtyTab.querySelector('[data-unsaved-indicator]')).not.toBeNull(); // dom-contract: see comment above
     expect(dirtyTab.getAttribute('data-document-dirty')).toBe('true');
 
@@ -355,5 +366,49 @@ describe('document tabs', () => {
 
     await userEvent.setup().click(tab);
     expect(runtime.store.getState().activeTabId).toBe('tab-1');
+  });
+});
+
+describe('preview tabs', () => {
+  it('marks a preview tab and keeps it on a double click or Enter', async () => {
+    const runtime = createRuntime();
+    runtimes.push(runtime);
+    const user = userEvent.setup();
+    withQueryClient(
+      <>
+        <DocumentTabs runtime={runtime} />
+        <DocumentWorkspace
+          {...documentWorkspaceProps}
+          runtime={runtime}
+          sourceApi={loadedSourceApi}
+        />
+      </>,
+    );
+
+    await act(async () => {
+      await runtime.open(
+        { folderPath: '/library/notes', path: 'notes/look.md' },
+        { preview: true },
+      );
+    });
+    const preview = screen.getByRole('tab', { name: 'look.md, preview' });
+    expect(preview.getAttribute('data-document-preview')).toBe('true');
+
+    await user.dblClick(preview);
+    expect(screen.getByRole('tab', { name: 'look.md' }).getAttribute('data-document-preview')).toBe(
+      null,
+    );
+    expect(runtime.store.getState().tabs.find((tab) => tab.id === 'tab-3')?.preview).toBe(false);
+
+    await act(async () => {
+      await runtime.open(
+        { folderPath: '/library/notes', path: 'notes/glance.md' },
+        { preview: true },
+      );
+    });
+    const glance = screen.getByRole('tab', { name: 'glance.md, preview' });
+    glance.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('tab', { name: 'glance.md' })).not.toBeNull();
   });
 });

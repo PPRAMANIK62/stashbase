@@ -2,7 +2,7 @@
  * One subscription to the open-tab set, shared by the tab strip and the
  * document workspace.
  *
- * Both views need the same three answers and the same two commands. Reading
+ * Both views need the same three answers and the same three commands. Reading
  * them here means the strip and the pane beneath it cannot disagree about
  * which tab is active on a frame, and neither view holds the store itself.
  */
@@ -18,6 +18,7 @@ export function useDocumentTabs(runtime: DocumentTabsRuntime) {
 
   const activate = useCallback((tabId: string) => void runtime.activate(tabId), [runtime]);
   const close = useCallback((tabId: string) => void runtime.close(tabId), [runtime]);
+  const keep = useCallback((tabId: string) => void runtime.keep(tabId), [runtime]);
 
-  return { activate, activeTab, activeTabId, close, tabs };
+  return { activate, activeTab, activeTabId, close, keep, tabs };
 }
