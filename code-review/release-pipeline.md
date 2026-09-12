@@ -262,6 +262,14 @@ package; `release.nosync/` is the only output root.
 
 Known macOS failures:
 
+- `SecKeychainUnlock: The user name or passphrase you entered is not correct`
+  from `security set-key-partition-list` while electron-builder imports the
+  identity into its temporary keychain means the hosted image's keychain
+  services refuse a pre-session unlock; the macOS 26.6 image does, where
+  26.5 did not. The macOS Adapter therefore runs on the pinned `macos-15`
+  image rather than `macos-latest`. A retry on the refusing image does not
+  help; lift the pin only after a dispatched run on the newer image signs
+  and notarizes.
 - `bundle format is ambiguous` means a framework no longer has Apple's required
   versioned-bundle layout. The pre-sign structure check must identify a
   flattened top-level link before `codesign`; ensure packaging uses the official

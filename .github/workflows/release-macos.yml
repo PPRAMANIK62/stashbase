@@ -28,7 +28,12 @@ jobs:
 
   macos-dmg:
     needs: release-ci-gate
-    runs-on: macos-latest
+    # Pinned, not macos-latest: the macOS 26.6 image refuses to unlock
+    # electron-builder's temporary signing keychain in the runner's
+    # pre-session context ("SecKeychainUnlock: The user name or passphrase
+    # you entered is not correct"), where 26.5 accepted it. Lift the pin only
+    # after a dispatched run on the newer image signs and notarizes.
+    runs-on: macos-15
     env:
       RELEASE_TAG: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
       GITHUB_TOKEN: ${{ github.token }}
