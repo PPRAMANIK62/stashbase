@@ -191,7 +191,8 @@ aliases, and a driven runtime pass owns representative composition.
   and `hooks/use-file-operations.test.tsx` lock the tree's browse and keep
   gestures and the New draft create with its Untitled name, kept tab, and
   rename on the new row; `renderer/src/app/composition/layout/workspace-sidebar.test.tsx`
-  locks the band's controls end to end.
+  locks the band's arrows following the navigator, their handoff to the
+  titlebar on collapse, and the titlebar's standing New draft end to end.
 - **Driven Runtime Pass:** crash recovery is driven through the real
   application with a stand-in keyring, covering a crash, the relaunch, the
   offer of the surviving draft, the restore into a dirty editor, its autosave
@@ -300,7 +301,9 @@ aliases, and a driven runtime pass owns representative composition.
   every other scope's session alone.
   `renderer/src/app/composition/layout/workspace-titlebar.test.tsx` locks
   that New chat travels with the Chat pane and the titlebar's corner holds
-  the panel toggle alone;
+  the panel toggle alone, and
+  `renderer/src/features/agent/ui/chats/history-popover.test.tsx` locks the
+  header's history popover listing, filtering, and restoring a chat;
   `renderer/src/features/agent/ui/new-chat-button.test.tsx` locks the shared
   start.
   `pnpm test:opencode:native` starts the

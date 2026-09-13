@@ -190,7 +190,8 @@ described by the
   browsing holds at most one preview tab; a same-named source in another
   Library folder remains distinct.
 - Back and forward step through the documents visited, in order, reaching a
-  preview that has since been replaced without adding a kept tab.
+  preview that has since been replaced without adding a kept tab, whenever
+  the sidebar shows anything but Chats.
 - **New draft** creates an Untitled Markdown file beside the selection, opens
   it at once as a kept tab, and starts renaming it in the Files tree so the
   name is the first thing typed.

@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 import { useStickToBottom } from '@/shared/runtime/use-stick-to-bottom';
 
 import { ChatHeader } from './chat-header';
+import { ChatHistoryPopover } from './chats/history-popover';
 import { AgentContextComposer } from './composer/context-composer';
 import { useAgentComposerFocused } from './composer/focus';
 import { AgentPermissionMode } from './composer/permission-mode';
@@ -190,10 +191,15 @@ function ChatWorkspace({
         failure={renaming.failure}
         onRename={(session, title) => void renaming.rename(session, title)}
         session={active}
-        // New chat sits with the conversation's name: the row is where the
-        // current Chat's own actions live, while the Chats panel keeps the
-        // history.
-        trailing={<NewChatButton catalog={catalogPort} runtime={runtime} scope={state.scope} />}
+        // The conversation's own actions sit with its name: the quick way to
+        // the rest of the folder's chats, then a new one. The Chats panel
+        // stays the manager.
+        trailing={
+          <>
+            <ChatHistoryPopover runtime={runtime} scope={state.scope} />
+            <NewChatButton catalog={catalogPort} runtime={runtime} scope={state.scope} />
+          </>
+        }
       />
       {empty && <div aria-hidden className="min-h-0 grow basis-0" />}
       <div

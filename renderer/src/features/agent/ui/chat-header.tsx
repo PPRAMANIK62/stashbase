@@ -79,7 +79,12 @@ export function ChatHeader({
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-full z-10 h-4 bg-gradient-to-b from-surface-2 to-transparent"
       />
-      <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+      {/* The mark stands alone beside the title, so it takes the chrome's
+       *  stroke rather than the heavier one it wears beside the vendor
+       *  logos: 1.75 over the feather's 32-unit box paints 0.875px at 16px,
+       *  the weight of every resting glyph around it. The vendor marks
+       *  ignore the prop. */}
+      <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
       {state.unstarted ? (
         // No turn has left yet and nothing backs the chat, so there is
         // nothing to rename: the default name stays quiet so the greeting is
@@ -148,7 +153,11 @@ export function ChatHeader({
       {/* The row's 16px inset is the text's; the compact action square pulls
        *  back 4px so its glyph's centre, 14px in from its edge, lands on the
        *  panel toggle's column in the corner above it (8px + 18px). */}
-      {trailing && <div className="-mr-1 ml-auto flex shrink-0 items-center">{trailing}</div>}
+      {trailing && (
+        // gap-0.5 is the subtle tab strip's own gap, so the two squares here
+        // sit as far apart as the Writer and Reading squares across the seam.
+        <div className="-mr-1 ml-auto flex shrink-0 items-center gap-0.5">{trailing}</div>
+      )}
     </div>
   );
 }

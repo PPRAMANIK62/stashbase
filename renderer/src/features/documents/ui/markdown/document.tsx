@@ -323,6 +323,9 @@ export function MarkdownDocument({
           selectedIndex={mode === 'writer' ? 0 : 1}
           size="compact"
         >
+          {/* Glyph-only items are the compact 28px square, the box the Chat
+           *  header's New chat wears across the seam, so the hover fills
+           *  match on the one line they share. */}
           <TabsSubtleItem icon={PenLine} label="Writer" title="Writer" />
           <TabsSubtleItem icon={BookOpen} label="Reading" title="Reading" />
         </TabsSubtle>

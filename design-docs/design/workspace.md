@@ -64,14 +64,17 @@ manager, or a primary graph-navigation tool.
   never overwrite the user's copy.
 - The sidebar is the window's left column. Its titlebar band carries its own
   collapse toggle and, while a folder is open, back and forward arrows beside
-  it that step through the window's
-  [document history](../glossary.md#document-history), with the **New
-  draft** button, a plain plus, at the band's right end. The arrows are file
-  chrome whatever panel the navigator below is showing: each names the file
+  it that follow the navigator below. With Files, Document outline, or Search
+  showing they step through the window's
+  [document history](../glossary.md#document-history): each names the file
   it would reach and waits disabled at its end of the history, a source
   still open is switched to, and one whose preview was since replaced comes
-  back as the preview again, so stepping never adds a kept tab. With no
-  folder open the band holds the toggle alone. The band carries no
+  back as the preview again, so stepping never adds a kept tab. With Chats
+  showing the same pair steps through the window's open Chats in tab order,
+  disabled at either end. With no folder open the band holds the toggle
+  alone. **New draft**, a file with a plus,
+  is not in the band: it makes a document, so it sits at the left end of
+  the workspace titlebar, ahead of the tabs, in every sidebar state. The band carries no
   wordmark: the welcome screen owns the brand, and a folder window's first
   row beneath the band is the folder itself. The column ends in a footer set
   off by rules: a standing **Gallery** row, then the account row; **Settings**
@@ -156,8 +159,8 @@ manager, or a primary graph-navigation tool.
   A name wider than the sidebar column truncates within that column. Only
   while the sidebar is collapsed does the titlebar carry the sidebar's
   reopening toggle and, while a folder is open, the document history arrows
-  and **New draft** beside it; its one shared slot holds the open document
-  tabs. With no
+  beside it, ahead of the standing **New draft**; its one shared slot holds
+  the open document tabs. With no
   folder open the slot says **Welcome**, because that is what is on screen,
   and otherwise it stays empty, since the Chat pane names its own
   conversation in its header.
@@ -204,8 +207,8 @@ manager, or a primary graph-navigation tool.
 - Files use the surface declared in the
   [Documents format matrix](documents.md#format-capability-matrix) and open in
   preview or kept tabs with Quick Open, document history, and
-  platform-appropriate shortcuts. **New draft** in the sidebar band creates
-  `Untitled.md` beside the tree's selection, or `Untitled 2.md` and on when
+  platform-appropriate shortcuts. **New draft** at the titlebar's left end
+  creates `Untitled.md` beside the tree's selection, or `Untitled 2.md` and on when
   that name is taken, and opens it at once as a kept tab. The sidebar opens
   on Files if it was not showing, and the new row starts the tree's ordinary
   rename with the stem selected, so the name is the first thing typed;
@@ -269,8 +272,9 @@ manager, or a primary graph-navigation tool.
   preview or kept, and a window never holds more than one preview tab. A
   preview never outlives the session, and an edit always keeps its tab. The
   same relative path in different Library folders remains a distinct source.
-- Back and forward are document history only. They never change the sidebar
-  panel, the Chat, or the set of kept tabs.
+- Back and forward follow the navigator: the document history unless Chats
+  is showing, when they step the open Chats. Either way they never change
+  the panel or the set of kept tabs.
 - Chat visibility is explicit after initialization. Closing the last document
   expands an open Chat; hiding Chat stays respected until the user reopens it.
 - Keyboard focus, overlay dismissal, splitters, and reduced-motion behavior are

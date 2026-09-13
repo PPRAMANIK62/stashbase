@@ -186,6 +186,25 @@ stamps `data-size` on `<html>`, where the `--fs-*` roles read the document's
 step, so a pinned region decides its own subtree and not the page's chrome. The
 stamp lands in a layout effect, so the first frame is never a step off.
 
+Which step a surface sits on is decided where the surface is composed, not
+inside the primitive. The titlebar and the sidebar's titlebar band read
+`useSizeVariant` and draw their squares at the default step
+(`renderer/src/app/composition/layout/workspace-titlebar.tsx`,
+`workspace-sidebar.tsx`, and the Documents and Workspace buttons they place).
+Pane and panel surfaces pin the compact step: the sidebar's navigator strip
+and the Markdown mode switch pass `size="compact"` to `TabsSubtle`, the Files
+tree's rows are `Button size="compact"`, the Chat header's actions are
+`Button size="icon-compact"`, and the Chats panel and the header's history
+popover wrap their whole subtree in `SizeProvider size="compact"`, which is
+what puts `SidebarMenuButton` rows and the palette primitives on the 28px
+rhythm without a prop on each. A glyph-only `TabsSubtleItem` takes
+`sizeClasses.square` rather than the control height and its padding, so it
+is the same square an icon button is. A ghost `Button`'s hover fill is inset
+by one pixel and ringed by one pixel of the same tint, so it reads as the
+full square beside a tab pill that fills its box. The folder row at the
+column's head, the footer rows, and the document tab strip stay at the
+default step on purpose; a fourth exception needs a reason in review.
+
 Elevation is a number. `renderer/src/lib/surface-context.tsx` publishes a level
 clamped to 1 through 8, `renderer/src/components/ui/elevated.tsx` adds an offset
 and re-provides the result so nesting walks the ladder automatically, and
@@ -266,7 +285,12 @@ Every primitive asks for an icon by role through `useIcon` in
 asked for. Adding a role means adding the name, giving it a default, and having a
 caller, in that order. `IconProvider` lets a host swap the whole set or a single
 entry. Glyph size comes from the size ladder's `icon` field rather than a
-literal, and stroke weight is the primitive's own hover affordance.
+literal, and stroke weight is the primitive's own hover affordance: a glyph
+rests at 1.5 in `--muted-foreground` and goes to 2 in `--foreground` when its
+control is hovered, selected, or active, whether the control is a button, a
+tab, a tree row, or a disclosure header. A brand mark keeps its own strokes;
+the OpenQuill feather alone is a lucide glyph, and where it stands beside a
+title rather than beside vendor marks it takes the chrome's stroke.
 
 Two icon sets stay separate because they are not product controls.
 `renderer/src/components/ui/file-type-icon.tsx` maps a file extension to its own
@@ -420,3 +444,8 @@ it a floor a line count could satisfy.
 - Stacking has no ramp. Overlay layering is written as individual Tailwind `z-*`
   utilities at each surface, and no gate holds the order between a tooltip, a
   menu, and a dialog.
+- **No gate measures step consistency.** Which step a surface sits on, the
+  glyph size and stroke it draws, and the fill its pill wears are held by the
+  composition rules above and checked by review. The 2026-09-14 audit was a
+  driven probe over the built application reading boxes, glyphs, computed
+  stroke widths, type, and hover fills; nothing runs it in CI.

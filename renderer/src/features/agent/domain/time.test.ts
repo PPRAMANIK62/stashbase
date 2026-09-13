@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import {
+  ageLabel,
   dayLabel,
   durationLabel,
   promptTimeLabel,
@@ -81,5 +82,20 @@ describe('replyTimeLabel', () => {
     expect(plain(replyTimeLabel(now - DAY, now - DAY - 65_000, now, EN))).toBe(
       'Tue 3:30 PM · 1m 5s',
     );
+  });
+});
+
+describe('ageLabel', () => {
+  it('says how long ago in one number and a unit', () => {
+    const clock = Date.UTC(2026, 8, 13, 12);
+    const minute = 60_000;
+    expect(ageLabel(clock - 20_000, clock)).toBe('now');
+    expect(ageLabel(clock - 5 * minute, clock)).toBe('5m');
+    expect(ageLabel(clock - 22 * 60 * minute, clock)).toBe('22h');
+    expect(ageLabel(clock - 2 * 24 * 60 * minute, clock)).toBe('2d');
+    expect(ageLabel(clock - 12 * 24 * 60 * minute, clock)).toBe('1w');
+    expect(ageLabel(clock - 45 * 24 * 60 * minute, clock)).toBe('1mo');
+    expect(ageLabel(clock - 400 * 24 * 60 * minute, clock)).toBe('1y');
+    expect(ageLabel(clock + minute, clock)).toBe('now');
   });
 });

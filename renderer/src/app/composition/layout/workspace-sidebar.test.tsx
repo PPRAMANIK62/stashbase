@@ -107,7 +107,7 @@ describe('account row', () => {
 });
 
 describe('titlebar band', () => {
-  it('carries the document history and New draft, and no chat controls', async () => {
+  it('steps the document history, or the open Chats while Chats shows, and keeps New draft on the titlebar', async () => {
     const files = filesApi({
       createEntry: vi.fn(async (_folder, _kind, parent, name) => ({
         path: parent ? `${parent}/${name}` : name,
@@ -125,15 +125,33 @@ describe('titlebar band', () => {
     );
 
     const newDraft = await screen.findByRole('button', { name: 'New draft' });
+    // New draft makes a document, so it sits on the card's title row rather
+    // than in the sidebar band, whether or not the sidebar is showing.
+    expect(newDraft.closest('header')).not.toBeNull(); // dom-contract: the title row is the window's one header
     const back = await screen.findByRole<HTMLButtonElement>('button', { name: 'Back' });
     expect(back.disabled).toBe(true);
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Forward' }).disabled).toBe(true);
     expect(screen.queryByRole('button', { name: 'Previous chat' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Next chat' })).toBeNull();
 
+    // With Chats showing, the band's slot steps the open Chats instead.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('tab', { name: 'Chats' }));
+    expect(await screen.findByRole('button', { name: 'Previous chat' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Next chat' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    await user.click(screen.getByRole('tab', { name: 'Files' }));
+    expect(await screen.findByRole('button', { name: 'Back' })).not.toBeNull();
+
+    // Collapsing the sidebar leaves New draft where it was, and hands the
+    // one pair of history arrows to the titlebar rather than doubling them.
+    await user.click(screen.getByRole('button', { name: 'Hide files sidebar' }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Back' })).toHaveLength(1));
+    expect(screen.getByRole('button', { name: 'New draft' })).toBe(newDraft);
+
     // New draft makes Untitled.md at the root while nothing is selected and
     // opens it at once as a kept tab.
-    await userEvent.setup().click(newDraft);
+    await user.click(newDraft);
     expect(await screen.findByRole('tab', { name: 'Untitled.md' }, LAZY)).not.toBeNull();
     expect(files.createEntry).toHaveBeenCalledWith(
       expect.any(String),

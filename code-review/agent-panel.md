@@ -71,10 +71,15 @@ import a sibling feature.
   identity, keeps the name on record
   through the same `renameHistory` mutation the Chats panel's rows use,
   rewriting the cached listing rather than refetching it; a refusal restores
-  the previous title. `ChatHeader` carries the feature's own `NewChatButton`
-  at its right end, on the titlebar's glyph column; the titlebar carries no
-  chat control, so a hidden pane takes the button with it, and the header
-  and the Chats panel share one preferred-Agent rule and one `newChat` call.
+  the previous title. `ChatHeader` carries the feature's own
+  `ChatHistoryPopover` and `NewChatButton` at its right end, on the
+  titlebar's glyph column; the titlebar carries no chat control, so a hidden
+  pane takes them with it, and the header and the Chats panel share one
+  preferred-Agent rule and one `newChat` call. The popover reads the same
+  history query and `buildConversationGroups` projection as the Chats panel,
+  filters rows by title, and opens a row through the runtime's `activate`
+  or `restore`, so it can never disagree with the panel about what a
+  conversation is; it offers no rename or delete.
   The titlebar carries document tabs while any document is open and is
   otherwise empty for a folder window.
 - Both Agent surfaces load behind one lazy boundary with a retry, so a chunk
@@ -345,7 +350,7 @@ gap below is observed in Shipping.
 
 | Role | Stable entry points |
 |---|---|
-| Feature boundary | `renderer/src/features/agent/public.ts` re-exports the Ports and their Adapter factories, the two lazy surfaces, the new-chat button, the window runtime hook, the instructions editor hook, and the composer-focus marker. Only modules under `renderer/src/app/` may read it |
+| Feature boundary | `renderer/src/features/agent/public.ts` re-exports the Ports and their Adapter factories, the two lazy surfaces, the chat-navigation buttons, the window runtime hook, the instructions editor hook, and the composer-focus marker. Only modules under `renderer/src/app/` may read it |
 | Window runtime Interface | `renderer/src/features/agent/application/workspace-runtime.ts` owns tabs, mounting, the window-folder rule, retirement, and the history verbs; `renderer/src/features/agent/hooks/use-agent-workspace-runtime.ts` is its React lifetime |
 | Conversation Interface | `renderer/src/features/agent/application/session/runtime-contract.ts` declares the verbs a composer and a transcript call; `renderer/src/features/agent/application/session-runtime.ts` assembles them over the transport, dispatch, event, prompt-ledger, and files-changed Modules in `renderer/src/features/agent/application/session/` |
 | State Modules | `renderer/src/features/agent/domain/session.ts` is the one reducer and the selectors that read it, over the shapes in `session-state.ts` and the transcript edits in `session-transcript.ts`; tabs are `renderer/src/features/agent/domain/workspace.ts`; the runtime registry, capability resolution, and readiness gate are `renderer/src/features/agent/domain/agent-catalog.ts`; `model-choice.ts` beside them derives what the next turn runs on |
@@ -358,7 +363,7 @@ gap below is observed in Shipping.
 | Transcript Modules | `renderer/src/features/agent/ui/transcript/transcript.tsx` owns the block list and turn layout; `activity.tsx` owns tool groups and permission cards over `tool-presentation.ts`; `file-change.tsx` owns diffs; `markdown.tsx` is the reply renderer |
 | Composer Modules | `renderer/src/features/agent/ui/composer/context-composer.tsx` owns the card, the drops, the pastes, and the send predicate; `mention-editor.tsx` with `mention-document.ts`, `mention-markers.ts`, and `mention-widgets.ts` owns the text field; `context-rows.tsx` and `mention-listbox.tsx` own the suggestion panel; `context-tiles.tsx` owns bound tiles and chips; `provider.tsx`, `permission-mode.tsx`, and `thinking.tsx` own the control cluster over the breakpoints in `narrow.ts` |
 | Agent Instructions | `renderer/src/features/agent/hooks/use-agent-instructions.ts` owns the per-scope read, the local draft, and the save; `renderer/src/features/agent/ui/instructions/agent-instructions-control.tsx` and `agent-instructions-dialog.tsx` own the surface |
-| Chats list | `renderer/src/features/agent/ui/chats/chats.tsx` behind the same lazy boundary, over `conversation-tree.tsx`, `delete-conversation-dialog.tsx`, and the grouping in `renderer/src/features/agent/domain/conversation-history.ts` |
+| Chats list | `renderer/src/features/agent/ui/chats/chats.tsx` behind the same lazy boundary, over `conversation-tree.tsx`, `delete-conversation-dialog.tsx`, and the grouping in `renderer/src/features/agent/domain/conversation-history.ts`; `history-popover.tsx` beside them is the header's quick list over the same grouping, with its ages from `domain/time.ts` |
 | Composition | `renderer/src/app/composition/layout/workspace-panes.tsx` binds the conversation surface, `workspace-sidebar.tsx` places the chats list and the Gallery row, `agent-document-workspace.tsx` owns the split, and `workspace-layout.tsx` stamps the feature's own surface marker so the paste rule needs no Agent selector in the shell. `renderer/src/app/composition/folder/use-agent-environment.ts` publishes the folder snapshot the Agent validates against, and `renderer/src/app/composition/folder/use-folder-refresh.ts` consumes the settled-write report |
 | Attachment HTTP Adapter | `renderer/src/features/agent/infrastructure/context-api.ts` and `server/routes/attach.ts` |
 | Gallery seam | `renderer/src/features/gallery/` composed at `renderer/src/app/composition/gallery/use-gallery-shop.tsx`, with `server/routes/gallery.ts` as its daemon proxy |

@@ -1,8 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion';
 
+import type { SidebarPanelId } from '@/app/composition/commands/use-workspace-commands';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { Tooltip } from '@/components/ui/tooltip';
+import { ChatNavButtons, type AgentWorkspaceRuntime } from '@/features/agent/public';
 import {
   DocumentHistoryButtons,
   DocumentTabs,
@@ -19,29 +21,37 @@ import { spring } from '@/lib/springs';
  *  its header, so the row never has to, and a hidden panel takes the name
  *  away with it. With no folder open there is no workspace on screen at
  *  all, and the row says Welcome instead, which is what is on screen.
- *  The expanded sidebar's header carries the collapse control, the document
- *  history's back and forward, and the new-draft button; only while the
- *  sidebar is collapsed does this titlebar host them — the reopening
- *  trigger with, while a folder is open, the same file controls beside it —
- *  in the same window corner they left. The chat panel's toggle mirrors that
+ *  The row's left end carries **New draft** in every sidebar state, ahead of
+ *  the tabs: it makes a document, and this card is where documents show,
+ *  so it does not travel with the sidebar. The expanded sidebar's header
+ *  carries the collapse control and the document history's back and
+ *  forward; only while the sidebar is collapsed does this titlebar host
+ *  them, the reopening trigger and the arrows ahead of New draft, in the
+ *  same window corner they left. The chat panel's toggle mirrors that
  *  trigger at the row's far right: the same square in the opposite corner
  *  with the mirrored glyph, present in every folder state so the panel can
  *  always be brought back from where it was hidden, and alone there, so the
  *  corner never changes shape. New chat lives with the conversation, in the
  *  pane's own header, and a hidden pane takes it along. */
 export function WorkspaceTitlebar({
+  agent,
   chatPaneOpen,
   documents,
   hasActiveFolder,
   onNewDraft,
   onToggleChatPane,
+  panel,
 }: {
+  agent: AgentWorkspaceRuntime;
   chatPaneOpen: boolean;
   documents: DocumentTabsRuntime | null;
   hasActiveFolder: boolean;
   /** Creates an Untitled draft beside the tree's selection and opens it. */
   onNewDraft(): void;
   onToggleChatPane(): void;
+  /** The navigator panel the collapsed sidebar was last showing, which is
+   *  what the arrows here step: Chats, or else the document history. */
+  panel: SidebarPanelId;
 }) {
   const PanelRight = useIcon('panel-right');
   const size = useSizeVariant() === 'compact' ? 'icon-compact' : 'icon';
@@ -66,11 +76,16 @@ export function WorkspaceTitlebar({
               transition={spring.fast}
             >
               <SidebarTrigger aria-label="Show files sidebar" />
-              {hasActiveFolder && documents && <DocumentHistoryButtons runtime={documents} />}
-              {hasActiveFolder && <NewDraftButton onCreate={onNewDraft} />}
+              {hasActiveFolder &&
+                (panel === 'chats' ? (
+                  <ChatNavButtons runtime={agent} />
+                ) : (
+                  documents && <DocumentHistoryButtons runtime={documents} />
+                ))}
             </motion.div>
           )}
         </AnimatePresence>
+        {hasActiveFolder && <NewDraftButton onCreate={onNewDraft} />}
       </div>
       <div className="relative flex min-w-0 flex-1 px-2">
         <AnimatePresence initial={false} mode="popLayout">

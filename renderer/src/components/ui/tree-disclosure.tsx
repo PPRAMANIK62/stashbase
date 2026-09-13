@@ -25,6 +25,8 @@ export function TreeDisclosure({ children, label }: { children: ReactNode; label
           >
             <ChevronRight
               aria-hidden="true"
+              // The resting stroke every other glyph in the column wears.
+              strokeWidth={1.5}
               className={
                 open
                   ? 'size-3.5 rotate-90 transition-transform duration-fast motion-reduce:transition-none'

@@ -232,9 +232,17 @@ untrusted input on the way back in.
   only, and stays empty otherwise. New chat lives only in the Chat pane's
   header (`ChatHeader` in the Agent feature), so a hidden pane takes the
   control with it and the titlebar's right corner holds the toggle alone.
-- The sidebar's titlebar band and the collapsed titlebar carry the same file
-  controls and no chat control: `DocumentHistoryButtons` from the Documents
-  feature and `NewDraftButton` from the Workspace feature. New draft is a
+- The sidebar's titlebar band carries the collapse toggle and one pair of
+  arrows while it is open, and the workspace titlebar hosts them only while
+  the sidebar is collapsed; the collapsed column stays mounted off screen,
+  so the band drops its arrows as the titlebar takes them up and one pair is
+  on offer at a time. The pair follows the navigator's selected panel:
+  `ChatNavButtons` from the Agent feature while Chats is showing, otherwise
+  `DocumentHistoryButtons` from the Documents feature; the collapsed
+  titlebar reads the same selection through its `panel` prop. `NewDraftButton`
+  from the Workspace feature sits at the titlebar's left end in every sidebar
+  state, ahead of the tabs, because a draft is a document and the card is
+  where documents show. Neither carries a chat control. New draft is a
   typed request on the workspace store (`requestCreate` on
   `WorkspaceRuntime`, `pendingCreate` in
   `renderer/src/features/workspace/domain/workspace.ts`) that the tree takes
@@ -245,9 +253,10 @@ untrusted input on the way back in.
   it the tree's ordinary rename (`renamePath`, the pair to `settledPath`,
   consumed by the tree with the stem selected), so the name is the first
   thing typed; the shell opens the sidebar on Files before asking, because
-  that is where the name is typed. The band's ends share one inset, so its plus ends on the folder row's chevron
-  column, and the Markdown viewer's mode control takes the titlebar's inset,
-  so its Reading glyph sits under the panel toggle while the Chat is hidden.
+  that is where the name is typed. The Markdown viewer's mode items and the
+  Chat header's New chat are the same 28px square at the same inset, so
+  their hover fills match on the line they share and the Reading glyph sits
+  under the panel toggle while the Chat is hidden.
 - Pane geometry is durable, held in the session snapshot and clamped by the
   same bounds in both directions. The Agent seam is a named ARIA separator with
   arrow-key steps and a double-click reset, and every path reports a width

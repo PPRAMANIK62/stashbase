@@ -134,13 +134,15 @@ Say "preview tab" and "kept tab"; the product does not say "pinned".
 ## Document history
 
 The window's record of the documents visited in the open folder, in visiting
-order, stepped by the back and forward arrows in the sidebar's titlebar band.
-It lists files, not tabs, so it can return to a preview that was replaced.
-Its scope is documents whatever the sidebar is showing.
+order, stepped by the back and forward arrows in the sidebar's titlebar band
+(and in the workspace titlebar while the sidebar is collapsed) whenever the
+navigator shows anything but Chats; with Chats showing the same arrows step
+the open Chats instead. It lists files, not tabs, so it can return to a
+preview that was replaced.
 
 ## Draft
 
-A Markdown file a person starts from the sidebar band's **New draft**: created
+A Markdown file a person starts from the titlebar's **New draft**: created
 as `Untitled.md` beside the selection, opened at once as a kept tab, and
 handed its name in the tree, where the new row starts a rename with the stem
 selected. Distinguish it in copy from the *recovered drafts* of unsaved text

@@ -18,9 +18,15 @@ import {
   SidebarGroup,
   SidebarHeader,
   SidebarTrigger,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar-menu';
-import { AgentChats, type AgentScope, type AgentWorkspaceRuntime } from '@/features/agent/public';
+import {
+  AgentChats,
+  ChatNavButtons,
+  type AgentScope,
+  type AgentWorkspaceRuntime,
+} from '@/features/agent/public';
 import { DocumentHistoryButtons, type DocumentTabsRuntime } from '@/features/documents/public';
 import type { FolderSearchReadiness } from '@/features/preparation/public';
 import { LibrarySearch } from '@/features/retrieval/public';
@@ -28,7 +34,6 @@ import { SidebarAccountRow } from '@/features/settings/public';
 import {
   FileTree,
   LibrarySidebar,
-  NewDraftButton,
   type ActiveLibraryFolder,
   type FileTreeRowMarker,
   type WorkspaceRuntime,
@@ -56,8 +61,6 @@ export interface WorkspaceSidebarProps {
   navigator: SidebarNavigatorState;
   /** Opens the Gallery over this window. The folder stays where it is. */
   onBrowseGallery(): void;
-  /** Creates an Untitled draft beside the tree's selection and opens it. */
-  onNewDraft(): void;
   onReprocess(source: SourceReference): void;
   settings: SettingsCommand;
   sources: DocumentSources;
@@ -71,13 +74,16 @@ export function WorkspaceSidebar({
   folder,
   navigator: sidebar,
   onBrowseGallery,
-  onNewDraft,
   onReprocess,
   settings,
   sources,
   workspace,
 }: WorkspaceSidebarProps) {
   const dependencies = useDependencies();
+  // The collapsed column stays mounted off screen, so the arrows leave the
+  // band as the titlebar takes them up: one pair is on offer at a time.
+  const { isMobile, open } = useSidebar();
+  const bandShowsArrows = open && !isMobile;
   return (
     <Sidebar className="bg-surface-1" variant="inset">
       <SidebarHeader className="gap-0 p-0">
@@ -91,29 +97,26 @@ export function WorkspaceSidebar({
          *  shared 16px glyph column (folder row, tree, footer), for when no
          *  traffic lights claim the corner (fullscreen, non-macOS); with
          *  lights present the shell.css darwin rule widens the padding past
-         *  them. The same 6px closes the band's right end, so the plus's
-         *  glyph ends on the column the folder row's chevron ends on. */}
-        <div className="workspace-titlebar flex h-11 shrink-0 items-center pr-1.5 pl-1.5">
+         *  them. */}
+        <div className="workspace-titlebar flex h-11 shrink-0 items-center pr-2 pl-1.5">
           {/* No gap of its own: the buttons' square padding already spaces
            *  the glyphs, keeping the trio a tighter cluster than the room
            *  between it and the traffic lights. */}
           <div className="workspace-titlebar-controls flex items-center">
             <SidebarTrigger aria-label="Hide files sidebar" />
-            {/* Back and forward step the document history whatever panel
-             *  the navigator below is showing: the band is file chrome, so
-             *  its scope does not follow Files, Search, or Chats. */}
-            {activeFolder && documents && <DocumentHistoryButtons runtime={documents} />}
+            {/* Back and forward follow the navigator below: with Chats
+             *  showing they step the window's open Chats in tab order, and
+             *  otherwise the document history. New draft is not here: it
+             *  makes a document, so it lives on the card where documents
+             *  show, in the workspace titlebar. */}
+            {bandShowsArrows &&
+              activeFolder &&
+              (sidebar.selected === 'chats' ? (
+                <ChatNavButtons runtime={agent.runtime} />
+              ) : (
+                documents && <DocumentHistoryButtons runtime={documents} />
+              ))}
           </div>
-          {/* New draft holds the band's right end while the sidebar is on
-           *  screen, the pair to the history arrows at its left; collapsed,
-           *  the workspace titlebar carries both beside the reopening trigger
-           *  instead. New chat lives with the conversation, in the Chat
-           *  pane's own header. */}
-          {activeFolder && (
-            <div className="workspace-titlebar-controls ml-auto flex items-center">
-              <NewDraftButton onCreate={onNewDraft} />
-            </div>
-          )}
         </div>
       </SidebarHeader>
       <SidebarGroup className="shrink-0 pb-0">

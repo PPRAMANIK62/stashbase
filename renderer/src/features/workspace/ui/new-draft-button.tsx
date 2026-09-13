@@ -1,8 +1,8 @@
-/** The sidebar band's way into a new draft: a plain plus, the band's one
- *  creation control. It asks the tree to create `Untitled.md` beside the
- *  selection and open it for editing; a window with no folder has nowhere to
- *  put one, so the button is not offered there. */
-import { Plus } from 'lucide-react';
+/** The titlebar's way into a new draft: a file with a plus, at the row's
+ *  left end ahead of the tabs. It asks the tree to create `Untitled.md`
+ *  beside the selection and open it for editing; a window with no folder
+ *  has nowhere to put one, so the button is not offered there. */
+import { FilePlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -13,7 +13,7 @@ export function NewDraftButton({ onCreate }: { onCreate(): void }) {
   return (
     <Tooltip content="New draft" side="bottom">
       <Button aria-label="New draft" onClick={onCreate} size={size} variant="ghost">
-        <Plus aria-hidden="true" />
+        <FilePlus aria-hidden="true" />
       </Button>
     </Tooltip>
   );

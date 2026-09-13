@@ -194,7 +194,6 @@ function WorkspaceWindow() {
           }}
           navigator={chrome.navigator}
           onBrowseGallery={gallery.browse}
-          onNewDraft={newDraft}
           onReprocess={refresh.reprocess}
           settings={chrome.settings}
           sources={sources}
@@ -204,11 +203,13 @@ function WorkspaceWindow() {
       started={chrome.started}
       titlebar={
         <WorkspaceTitlebar
+          agent={runtime}
           chatPaneOpen={chatPaneOpen}
           onNewDraft={newDraft}
           onToggleChatPane={() => setChatPaneOpen((open) => !open)}
           documents={documents}
           hasActiveFolder={activeFolder !== null}
+          panel={chrome.navigator.selected}
         />
       }
       updateNotice={<UpdateNotice notice={updateNotice} />}

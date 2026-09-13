@@ -83,6 +83,24 @@ type is carried primarily by shape and label rather than a rainbow of colors.
   If the shape appears, it was chosen.
 - Density is a small preset ladder rather than free-form scaling, and a region
   may be pinned to the compact step inside a roomier surface.
+- Which step a control sits on follows what it belongs to. The window's own
+  chrome, the titlebar and the sidebar's titlebar band, sits on the default
+  step. Everything inside a pane or a panel sits on the compact step: a pane's
+  header row and its actions, the sidebar's navigator, the Files and Chats
+  rows, the Markdown mode switch, and every popover. Switching what a panel
+  lists never changes the size of a row. Three things stand at the sidebar's
+  standard row instead: the folder row at the column's head, the footer's
+  Gallery and account rows, and the document tab strip, which belongs to the
+  titlebar.
+- A control that is only a glyph is a square of its step, with the step's
+  glyph inside; a labelled control takes the step's height and its own
+  padding. Every glyph rests muted at the lighter stroke and turns to ink at
+  the heavier one when it is selected, hovered, or active, and a selected
+  label changes tint, never weight. Brand marks keep their own strokes and
+  colours.
+- One hover tint and one interaction shape serve every pill, whether a
+  button, a tab, a row, or a popover row. A fill is never squarer, rounder,
+  or darker because of which primitive drew it.
 - Desktop panes adapt to the room they are given rather than to the size of
   the window. A reading measure or a shelf layout responds to its own
   container; a viewport assumption is a fallback, not the rule.

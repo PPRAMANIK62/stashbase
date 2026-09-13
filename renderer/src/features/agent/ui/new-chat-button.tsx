@@ -3,7 +3,7 @@
  *  starts, with the same preferred Agent and scope, so the two entries can
  *  never disagree about what "new" means. With no runtime ready there is
  *  nothing to start, so the button waits, disabled, and says where to go. */
-import { SquarePen } from 'lucide-react';
+import { MessageCirclePlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -41,7 +41,7 @@ export function NewChatButton({
         size="icon-compact"
         variant="ghost"
       >
-        <SquarePen aria-hidden="true" />
+        <MessageCirclePlus aria-hidden="true" />
       </Button>
     </Tooltip>
   );

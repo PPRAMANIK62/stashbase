@@ -231,8 +231,12 @@ const TabsSubtleItem = forwardRef<HTMLButtonElement, TabsSubtleItemProps>(
           // text-box trim on the label doesn't shrink the tab. Standalone
           // pills sit directly on the ladder's control height.
           'relative z-10 flex cursor-pointer items-center border-none bg-transparent outline-none',
-          sizeClasses.control,
-          sizeClasses.px,
+          // A glyph-only item is the ladder's square, the same box every
+          // icon button beside it wears, so its pill matches theirs; a
+          // labelled item takes the control height and its own padding.
+          iconOnly && Icon
+            ? cn(sizeClasses.square, 'justify-center')
+            : cn(sizeClasses.control, sizeClasses.px),
           !collapseLabel && sizeClasses.gap,
           shape.bg,
           className,
