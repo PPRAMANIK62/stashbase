@@ -2,7 +2,7 @@
   "name": "stashbase",
   "version": "2.7.0",
   "packageManager": "pnpm@11.5.1",
-  "description": "StashBase is a Wiki for your local files.",
+  "description": "StashBase is an IDE for writing: brainstorm, draft, and revise in local projects.",
   "author": {
     "name": "liliu-z",
     "email": "bingwuthu@gmail.com"
@@ -17,11 +17,11 @@
   },
   "homepage": "https://github.com/liliu-z/stashbase#readme",
   "keywords": [
-    "knowledge-base",
+    "writing",
     "local-first",
     "electron",
     "mcp",
-    "milvus",
+    "editor",
     "embeddings",
     "rag",
     "semantic-search"

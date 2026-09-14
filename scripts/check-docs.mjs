@@ -39,6 +39,13 @@ const anchors = new Map(files.map((file) => {
 }));
 
 for (const [source, markdown] of contents) {
+  const relativeSource = path.relative(repoRoot, source).split(path.sep).join('/');
+  if (
+    /^(?:design-docs|code-review)\//.test(relativeSource)
+    && /(?:\]\([^\n)]*|`[^`\n]*)research\//.test(markdown)
+  ) {
+    failures.push(`${relativeSource}: move durable decisions or gaps out of temporary research before referencing them`);
+  }
   for (const match of markdown.matchAll(/!?\[[^\]]*\]\(([^)]+)\)/g)) {
     const rawTarget = match[1].trim().replace(/^<|>$/g, '');
     if (!rawTarget || /^(?:https?:|mailto:)/i.test(rawTarget)) continue;
@@ -78,6 +85,15 @@ for (const [source, markdown] of contents) {
 
 const forbidden = [
   'design-docs/use-cases.md',
+  'design-docs/principles.md',
+  'design-docs/product-scenarios.md',
+  'design-docs/architecture.md',
+  'design-docs/design/workspace.md',
+  'design-docs/design/documents.md',
+  'design-docs/design/agent-panel.md',
+  'design-docs/design/bug-reporting.md',
+  'design-docs/design/preparation.md',
+  'design-docs/design/search.md',
   'design-docs/design/project.md',
   'design-docs/design/markdown.md',
   'code-review/data-layer.md',
@@ -89,20 +105,30 @@ for (const [file, markdown] of contents) {
   }
 }
 
-const focusedContracts = fs.readdirSync(path.join(repoRoot, 'code-review'))
-  .filter((name) => name.endsWith('.md') && !['README.md', 'journey-coverage.md'].includes(name))
-  .sort();
+const reviewDocuments = {
+  'README.md': ['Intent-first Review', 'Diff-first Review', 'Review Output Contract'],
+  'architecture.md': ['Runtime Ownership', 'Renderer Boundaries', 'Validation'],
+  'journey-coverage.md': ['Evidence Model', 'Traceability Map', 'Maintenance Rule'],
+  'release-pipeline.md': ['Implementation Map', 'Release Runbook', 'Validation for Pipeline Changes'],
+};
 const reviewGuide = fs.readFileSync(path.join(repoRoot, 'code-review', 'README.md'), 'utf8');
-for (const heading of ['Intent-first Review', 'Diff-first Review', 'Review Output Contract']) {
-  if (!reviewGuide.includes(`## ${heading}`)) {
-    failures.push(`code-review/README.md: missing ${heading}`);
+for (const name of fs.readdirSync(path.join(repoRoot, 'code-review'))) {
+  if (name.endsWith('.md') && !Object.hasOwn(reviewDocuments, name)) {
+    failures.push(`code-review/${name}: use the existing four review documents instead of adding a module contract`);
   }
 }
-for (const name of focusedContracts) {
-  const markdown = fs.readFileSync(path.join(repoRoot, 'code-review', name), 'utf8');
-  if (!/^## Implementation Map$/m.test(markdown)) failures.push(`code-review/${name}: missing Implementation Map`);
-  if (!/^## (?:.* )?Validation(?: .*)?$/im.test(markdown)) failures.push(`code-review/${name}: missing Validation section`);
-  if (!reviewGuide.includes(`(${name})`)) failures.push(`code-review/README.md: missing route to ${name}`);
+for (const [name, headings] of Object.entries(reviewDocuments)) {
+  const markdown = contents.get(path.join(repoRoot, 'code-review', name));
+  if (!markdown) {
+    failures.push(`code-review/${name}: missing review document`);
+    continue;
+  }
+  for (const heading of headings) {
+    if (!markdown.split('\n').includes(`## ${heading}`)) failures.push(`code-review/${name}: missing ${heading}`);
+  }
+  if (name !== 'README.md' && !reviewGuide.includes(`(${name})`)) {
+    failures.push(`code-review/README.md: missing route to ${name}`);
+  }
 }
 
 for (const [file, markdown] of contents) {
@@ -141,12 +167,9 @@ const journeyMatches = [...journeyDoc.matchAll(/^## (J\d{2}):[^\n]*$/gm)];
 const journeyIds = journeyMatches.map((match) => match[1]);
 const uniqueJourneyIds = [...new Set(journeyIds)];
 const requiredJourneyHeadings = [
-  'Outcome',
-  'Entry State',
-  'Primary Flow',
-  'Required Observable Results',
-  'Degradation and Recovery',
-  'Evidence',
+  'Flow',
+  'Required Results',
+  'Failure and Recovery',
 ];
 const traceRows = new Map();
 for (const line of coverageDoc.split('\n')) {
@@ -154,7 +177,7 @@ for (const line of coverageDoc.split('\n')) {
   const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
   const id = /^\[(J\d{2}) /.exec(cells[0])?.[1];
   if (!id) continue;
-  traceRows.set(id, { areas: cells[1], contracts: cells[2] });
+  traceRows.set(id, { areas: cells[1] ?? '', boundaries: cells[2] ?? '' });
 }
 for (const [index, id] of uniqueJourneyIds.entries()) {
   const expected = `J${String(index + 1).padStart(2, '0')}`;
@@ -176,6 +199,10 @@ for (const [index, id] of uniqueJourneyIds.entries()) {
     }
   }
 
+  if (!journeySection.includes(`**Evidence:** [${id}](../code-review/journey-coverage.md#`)) {
+    failures.push(`design-docs/user-journeys.md: ${id} missing evidence route`);
+  }
+
   const coverageHeading = new RegExp(`^## ${id}:[^\\n]*$`, 'm').exec(coverageDoc);
   if (!coverageHeading) {
     failures.push(`code-review/journey-coverage.md: missing ${id} evidence section`);
@@ -187,7 +214,7 @@ for (const [index, id] of uniqueJourneyIds.entries()) {
       coverageHeading.index,
       nextCoverageHeading?.index ?? coverageDoc.indexOf('\n## Maintenance Rule', coverageHeading.index),
     );
-    for (const label of ['Status', 'Contract Test', 'Driven Runtime Pass', 'AI Eval', 'Release Check']) {
+    for (const label of ['Implementation', 'Status', 'Contract Test', 'Driven Runtime Pass', 'AI Eval', 'Release Check']) {
       if (!coverageSection.includes(`**${label}:**`)) {
         failures.push(`code-review/journey-coverage.md: ${id} missing ${label}`);
       }
@@ -198,21 +225,14 @@ for (const [index, id] of uniqueJourneyIds.entries()) {
   if (!trace) continue;
   const areaTargets = [...trace.areas.matchAll(/\]\(\.\.\/design-docs\/design\/([^)]+\.md)\)/g)]
     .map((match) => match[1]);
-  const contractTargets = [...trace.contracts.matchAll(/\]\(([^/)]+\.md)\)/g)]
-    .map((match) => match[1]);
+  const boundaryTargets = [...trace.boundaries.matchAll(/\]\(architecture\.md#([^)]+)\)/g)];
   if (areaTargets.length === 0) failures.push(`code-review/journey-coverage.md: ${id} has no product area`);
-  if (contractTargets.length === 0) failures.push(`code-review/journey-coverage.md: ${id} has no review contract`);
+  if (boundaryTargets.length === 0) failures.push(`code-review/journey-coverage.md: ${id} has no engineering boundary`);
 
   for (const target of areaTargets) {
     const area = path.join(repoRoot, 'design-docs', 'design', target);
     if (!contents.get(area)?.includes(`[${id}](`)) {
       failures.push(`design-docs/design/${target}: missing reciprocal ${id} route from Journey Coverage`);
-    }
-  }
-  for (const target of contractTargets) {
-    const contract = path.join(repoRoot, 'code-review', target);
-    if (!contents.get(contract)?.includes(`[${id}](`)) {
-      failures.push(`code-review/${target}: missing reciprocal ${id} route from Journey Coverage`);
     }
   }
 }
