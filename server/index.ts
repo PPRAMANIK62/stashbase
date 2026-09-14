@@ -83,7 +83,6 @@ import { mount as mountAccountRoutes } from './routes/account.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from './agent-adapters.ts';
 import {
   cancelAgentRuntimeInstalls,
-  connectInstalledAgentMcpAfterBoot,
   connectInstalledAgentMcpOnStartup,
 } from './agent-runtime-installer.ts';
 import { createClientErrorHandler } from './client-error.ts';
@@ -398,18 +397,12 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   void mcpHttpService.start().catch((err: unknown) => {
     log.warn(`MCP HTTP startup failed: ${err instanceof Error ? err.message : String(err)}`);
   });
-  for (const { id, status } of connectInstalledAgentMcpOnStartup()) {
-    if (status.phase === 'ready') log.info(`connected StashBase MCP for installed ${id} runtime`);
-    else if (status.phase === 'failed') log.warn(`could not connect StashBase MCP for ${id}: ${status.failure?.message ?? 'unknown error'}`);
-  }
-  // Deferred second pass with the login-shell probe (spawns a shell, so it
-  // stays off the listen path): system runtimes on nvm/homebrew-style
-  // paths auto-connect too, instead of waiting for the first New Chat.
-  setTimeout(() => {
-    for (const { id, status } of connectInstalledAgentMcpAfterBoot()) {
-      if (status.phase === 'ready') log.info(`connected StashBase MCP for ${id} runtime (login-shell probe)`);
+  void connectInstalledAgentMcpOnStartup().then((results) => {
+    for (const { id, status } of results) {
+      if (status.phase === 'ready') log.info(`connected StashBase MCP for installed ${id} runtime`);
+      else if (status.phase === 'failed') log.warn(`could not connect StashBase MCP for ${id}: ${status.failure?.message ?? 'unknown error'}`);
     }
-  }, 3000).unref?.();
+  }).catch((error) => log.warn(`Agent startup check failed: ${String(error)}`));
   if (DEV_VITE) log.info(`dev-proxy → vite at http://localhost:${VITE_PORT}`);
   // We own :8090 now → we're THE server. Reap any orphan daemon left by a
   // previous server that died hard (kill -9 / crash / lost the startup
