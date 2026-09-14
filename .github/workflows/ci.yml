@@ -70,57 +70,76 @@ jobs:
         run: pnpm test:inventory
 
       - name: Install Python sidecar dependencies
+        id: python
         run: pnpm setup:python
 
+      # Collect every host failure after setup; failures still fail the job.
       - name: Test Python sidecars
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:python
 
       - name: Test release CI gate
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:release-gate
 
       - name: Test macOS signing contract
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:macos-signing
 
       - name: Test optional Windows signing contract
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:windows-signing
 
       - name: Test desktop update contracts
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:updates
 
       - name: Test application config and hosted account
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:config
 
       - name: Test Electron window lifecycle
+        id: electron
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: npm run test:electron
 
       - name: Test conversion scheduler
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:conversion-scheduler
 
       - name: Test project file transactions
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:project-files
 
       - name: Test retrieval
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:retrieval
 
       - name: Test agent adapters
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:agent
 
       - name: Test bundled OpenCode runtime
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:opencode:native
 
       - name: Test MCP transports
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm test:mcp
 
       - name: Typecheck server + mcp + Electron
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm typecheck:host
 
       - name: Build server + MCP
+        id: services
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
         run: pnpm build:services
 
       - name: Smoke real Electron app lifecycle (Linux)
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && steps.services.outcome == 'success' && steps.electron.outcome == 'success' && runner.os == 'Linux' }}
         run: xvfb-run -a pnpm test:electron:smoke:built
 
       - name: Smoke real Electron app lifecycle (macOS and Windows)
-        if: runner.os != 'Linux'
+        if: ${{ !cancelled() && steps.services.outcome == 'success' && steps.electron.outcome == 'success' && runner.os != 'Linux' }}
         run: pnpm test:electron:smoke:built

@@ -104,6 +104,8 @@ test('Vite+ task-result caching is disabled repository-wide', () => {
 // Count root-script invocations, expanding the aggregate renderer runner too.
 // This catches hidden rebuilds inside nested scripts, not just repeated CI steps.
 const scripts = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).scripts;
+const hostCheckCondition = "${{ !cancelled() && steps.python.outcome == 'success' }}";
+const smokeConditionPrefix = "${{ !cancelled() && steps.services.outcome == 'success' && steps.electron.outcome == 'success' && ";
 function scriptCalls(command) {
   const calls = [];
   for (const match of command.matchAll(/(?:pnpm|npm run) ([\w:-]+)/g)) {
@@ -123,6 +125,9 @@ test('source validation builds each target once and reuses it for Electron smoke
   const platforms = ['Linux', 'Windows', 'macOS'];
   const commands = platforms.map((os) => [os, steps.filter((step) => {
     if (!step.if) return true;
+    if (step.if === hostCheckCondition) return true;
+    if (step.if === `${smokeConditionPrefix}runner.os == 'Linux' }}`) return os === 'Linux';
+    if (step.if === `${smokeConditionPrefix}runner.os != 'Linux' }}`) return os !== 'Linux';
     if (step.if === "runner.os == 'Linux'") return os === 'Linux';
     if (step.if === "runner.os != 'Linux'") return os !== 'Linux';
     assert.fail(`Review the CI selection rule: ${step.if}`);
@@ -140,6 +145,21 @@ test('source validation builds each target once and reuses it for Electron smoke
       assert.equal(calls.filter((call) => call === name).length, complete ? 1 : 0, `${platform}: ${name}`);
     }
     assert.equal(calls.includes('test:renderer'), !complete, `${platform}: renderer behavior remains covered`);
+  }
+});
+
+test('host failures do not skip later checks or turn the source job green', () => {
+  const steps = readWorkflow('.github/workflows/ci.yml').jobs['source-build'].steps;
+  const setup = steps.findIndex((step) => step.id === 'python');
+  const build = steps.findIndex((step) => step.id === 'services');
+  assert.ok(setup >= 0 && build > setup);
+  for (const step of steps.slice(setup + 1, build + 1)) {
+    assert.equal(step.if, hostCheckCondition, `${step.name} must run after an earlier test failure`);
+    assert.notEqual(step['continue-on-error'], true, `${step.name} must still fail the job`);
+  }
+  for (const step of steps.slice(build + 1)) {
+    assert.ok(step.if.startsWith(smokeConditionPrefix), 'smoke needs fresh successful builds');
+    assert.notEqual(step['continue-on-error'], true);
   }
 });
 
