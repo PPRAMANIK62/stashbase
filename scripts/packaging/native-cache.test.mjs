@@ -19,11 +19,27 @@ const restore = (id) => steps.find((step) => step.id === id);
 function fingerprint(id, overrides = {}) {
   const expression = restore(id).with.key.match(/hashFiles\((.*?)\)/)[1];
   const patterns = [...expression.matchAll(/'([^']+)'/g)].map((match) => match[1]);
-  const files = [...new Set(patterns.flatMap((pattern) => [...fs.globSync(pattern, { cwd: root })]
-    .map((file) => file.replaceAll('\\', '/'))))].sort();
+  const files = [...new Set(patterns.flatMap(match))].sort();
+  // An override that names a file no pattern reached would silently prove
+  // nothing, so say which pattern set is missing it rather than failing later
+  // on an unchanged digest.
+  for (const file of Object.keys(overrides)) {
+    if (file === 'package.json') continue;
+    assert.ok(files.includes(file), `${id}: no cache-key pattern matches ${file}`);
+  }
   const digest = createHash('sha256');
   for (const file of files) digest.update(file).update(overrides[file] ?? read(file));
   return digest.digest('hex');
+}
+
+/** The workflow writes its patterns with `/`, which is the separator GitHub's
+ *  `hashFiles` takes on every runner. Node's glob is not guaranteed to read
+ *  them that way on a platform whose own separator differs, so the native
+ *  spelling is tried as well and the results are normalized back. */
+function match(pattern) {
+  const found = [...fs.globSync(pattern, { cwd: root })];
+  if (path.sep !== '/') found.push(...fs.globSync(pattern.replaceAll('/', path.sep), { cwd: root }));
+  return found.map((file) => file.replaceAll('\\', '/'));
 }
 
 test('native reuse invalidates on source/build changes but survives an app version bump', () => {
