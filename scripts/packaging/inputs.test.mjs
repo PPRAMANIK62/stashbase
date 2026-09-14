@@ -83,13 +83,26 @@ test('bundled Start Here filenames preserve the intended reading order', () => {
 
 test('packaged Agent Instructions include the canonical default prompt', () => {
   const prompt = fs.readFileSync(path.join(root, 'assets', 'agent-instructions', 'default.md'), 'utf8').trim();
-  assert.match(prompt, /🔎 \*\*Answer questions\*\*/);
-  assert.match(prompt, /Always search through my Wiki/);
+  // The three things the shipped prompt has to still say: who the Agent is,
+  // that a file change needs asking for, and where a wiki lives. A packaged
+  // placeholder or a truncated copy fails on all three.
+  assert.match(prompt, /You are my writing partner/);
+  assert.match(prompt, /\*\*Discuss ideas\*\*/);
+  assert.match(prompt, /\*\*Draft and revise\*\*/);
+  assert.match(prompt, /\*\*Build a wiki when requested\*\*/);
   assert.match(prompt, /plain, natural language/);
-  assert.match(prompt, /✏️ \*\*Make changes\*\*/);
-  assert.match(prompt, /📚 \*\*Maintain the Wiki\*\*/);
-  assert.match(prompt, /Keep all Wiki Pages in the `wiki\/` folder/);
-  assert.match(prompt, /follow its structure, naming, and linking conventions/);
+  assert.match(prompt, /Discussion alone does not authorize file changes/);
+  assert.match(prompt, /Keep Wiki Pages in `wiki\/`/);
+  assert.match(prompt, /follow an existing wiki's structure, naming, and linking conventions/);
+
+  // The unbound prompt ships from the same directory and is what an
+  // unattributed Chat runs on; a missing one would leave that Chat with none.
+  const unbound = fs
+    .readFileSync(path.join(root, 'assets', 'agent-instructions', 'unbound.md'), 'utf8')
+    .trim();
+  assert.match(unbound, /not yet bound to a project/);
+  assert.match(unbound, /without searching my local projects/);
+  assert.match(unbound, /`create_project`/);
   assert.deepEqual(
     pkg.build?.extraResources?.find((entry) => entry?.to === 'assets/agent-instructions'),
     {
