@@ -27,25 +27,12 @@ import { useConversationHistory } from '@/features/agent/hooks/use-conversation-
 import { useShape } from '@/lib/shape-context';
 import { SizeProvider } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
+import { listNavigationTarget } from '@/shared/utils/list-cursor';
 
 const ROW_LIMIT = 50;
 
-/** Where an arrow key moves the active row, or null for a key that is not
- *  one of the list's. */
-function nextActive(key: string, active: number, count: number): number | null {
-  switch (key) {
-    case 'ArrowDown':
-      return Math.min(active + 1, count - 1);
-    case 'ArrowUp':
-      return Math.max(active - 1, 0);
-    case 'Home':
-      return 0;
-    case 'End':
-      return count - 1;
-    default:
-      return null;
-  }
-}
+/** Five rows stand in the popover at once, so a page key moves by five. */
+const ROW_PAGE_SIZE = 5;
 
 export function ChatHistoryPopover({
   runtime,
@@ -95,7 +82,11 @@ export function ChatHistoryPopover({
       openConversation(selected);
       return;
     }
-    const target = nextActive(event.key, activeIndex, rows.length);
+    const target = listNavigationTarget(event.key, {
+      activeIndex,
+      count: rows.length,
+      pageSize: ROW_PAGE_SIZE,
+    });
     if (target === null) return;
     event.preventDefault();
     setActiveIndex(target);

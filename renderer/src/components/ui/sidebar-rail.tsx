@@ -17,12 +17,16 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { fontWeights } from '@/lib/font-weight';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
+import { clamp } from '@/shared/utils/clamp';
 
 /** Drag-resize clamp for the rail handle (px). The floor is the narrowest
- *  width that still shows the titlebar band's whole control trio on macOS
- *  (traffic-light room 80 + toggle 36 + two overlapped arrows 32 each +
- *  band padding 8); anything narrower collapses instead of clipping. */
-const SIDEBAR_MIN_WIDTH = 192;
+ *  width that still shows the titlebar band's whole row on macOS
+ *  (traffic-light room 80 + the band's 30px toggle + two arrows at a 32px
+ *  pitch + an 8px breath + the two-glyph mode switch on its track 66 + band
+ *  padding 9 comes to 257, and the floor keeps room over it); anything
+ *  narrower collapses instead of clipping. Mirrored by the session's clamp
+ *  in `features/workspace/domain/session.ts`. */
+const SIDEBAR_MIN_WIDTH = 272;
 const SIDEBAR_MAX_WIDTH = 360;
 /** Dragging this far past the minimum width collapses the sidebar instead of
  *  bottoming out — the same "throw it at the edge to dismiss" affordance
@@ -94,7 +98,7 @@ const SidebarRail = forwardRef<HTMLButtonElement, SidebarRailProps>(
         drag.collapsed = false;
         setOpen(true);
       }
-      const next = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, raw));
+      const next = clamp(raw, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
       setWidth(`${next}px`);
     };
 

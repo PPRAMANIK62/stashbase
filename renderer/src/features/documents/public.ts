@@ -21,8 +21,10 @@ export { createDocumentAdapters, type DocumentAdapters } from './infrastructure/
 export { useDocumentCommands } from './hooks/use-document-commands';
 export { useDocumentSaveBarrier } from './hooks/use-document-save-barrier';
 export { useHasOpenDocuments, useOpenDocumentSources } from './hooks/use-open-documents';
+export { useNewTab, type NewTab } from './hooks/use-new-tab';
+export { NewTabPage } from './ui/workspace/new-tab';
 export { DocumentTabs } from './ui/workspace/tabs';
 export { DocumentHistoryButtons } from './ui/workspace/history-buttons';
-export { DocumentOutline } from './ui/workspace/outline';
+export { DocumentOutline, DocumentOutlineEmpty } from './ui/workspace/outline';
 export { DocumentWorkspace } from './ui/workspace/workspace';
 export type { DocumentNavigationTarget } from './ui/source/viewer';

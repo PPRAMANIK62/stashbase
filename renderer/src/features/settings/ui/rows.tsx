@@ -3,21 +3,23 @@
  * titled groups, hairline lists, and rows of `lead · title and detail ·
  * trailing control`. Rows carry their own title, so a control inside one
  * never renders a label of its own. A row that picks one of several options
- * is a `ChoiceRow`: its radio sits in the leading slot and the whole row is
- * the option. Nothing here has a surface fill; the only tint is the one
- * pressable controls share.
+ * is a `ChoiceRow`, which lives beside this file in `choice-rows.tsx`.
+ * Nothing here has a surface fill; the only tint is the one pressable
+ * controls share.
+ *
+ * One tone rule runs through all of it: a row that cannot be used right now
+ * recedes to `muted` and says why in its own words. Nothing here turns a
+ * sentence red. Red belongs to a refusal of what the reader just typed or
+ * asked for (`FailureNotice` in its input tone) and to a destructive
+ * confirmation, both of which sit outside this grammar.
  */
 
-import {
-  useId,
-  type HTMLAttributes,
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactNode,
-} from 'react';
+import { useId, type HTMLAttributes, type ReactNode } from 'react';
 
-import { focusRing } from '@/lib/focus-ring';
+import { Button } from '@/components/ui/button';
+import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
+import { clamp } from '@/shared/utils/clamp';
 
 export function SettingsPane({
   children,
@@ -74,9 +76,14 @@ export function SettingsList({
   className,
   ...props
 }: HTMLAttributes<HTMLElement> & { as?: 'div' | 'ul' }) {
+  const shape = useShape();
   return (
     <Component
-      className={cn('m-0 list-none overflow-hidden rounded-xl border border-border p-0', className)}
+      className={cn(
+        'm-0 list-none overflow-hidden border border-border p-0',
+        shape.panel,
+        className,
+      )}
       {...props}
     />
   );
@@ -87,11 +94,12 @@ export interface SettingsRowProps extends Omit<HTMLAttributes<HTMLElement>, 'tit
   /** Content under the title and detail: a bar, an inline editor, a notice. */
   children?: ReactNode;
   detail?: ReactNode;
-  detailTone?: 'muted' | 'error' | undefined;
   /** Leading slot: a runtime icon, a status glyph, or a choice indicator. */
   lead?: ReactNode;
   title: ReactNode;
-  titleTone?: 'default' | 'error';
+  /** `muted` is how a row says "not available yet": the whole row recedes
+   *  instead of a sentence turning red. */
+  titleTone?: 'default' | 'muted';
   /** Trailing slot: the row's control or actions. */
   trail?: ReactNode;
 }
@@ -101,7 +109,6 @@ export function SettingsRow({
   children,
   className,
   detail,
-  detailTone = 'muted',
   lead,
   title,
   titleTone = 'default',
@@ -124,20 +131,13 @@ export function SettingsRow({
         <div
           className={cn(
             'flex flex-wrap items-center gap-x-2 gap-y-0.5 text-body font-medium',
-            titleTone === 'error' ? 'text-destructive' : 'text-foreground',
+            titleTone === 'muted' ? 'text-muted-foreground' : 'text-foreground',
           )}
         >
           {title}
         </div>
         {detail && (
-          <div
-            className={cn(
-              'mt-0.5 text-caption leading-snug',
-              detailTone === 'error' ? 'text-destructive' : 'text-muted-foreground',
-            )}
-          >
-            {detail}
-          </div>
+          <div className="mt-0.5 text-caption leading-snug text-muted-foreground">{detail}</div>
         )}
       </div>
       {trail !== undefined && trail !== null && (
@@ -154,134 +154,39 @@ export function SettingsRow({
   );
 }
 
-const INTERACTIVE = 'a[href], button, input, select, textarea, [role="tab"], [role="button"]';
-
-/** A radiogroup whose options are whole rows. Arrow keys move and select;
- *  the checked row is the tab stop, or the first row when nothing is. */
-export function ChoiceList({
-  children,
-  className,
-  onValueChange,
-  value,
-  ...props
-}: Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> & {
-  onValueChange(value: string): void;
-  value: string | null;
-}) {
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-    const rows = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"][data-value]'),
-    );
-    const current = rows.indexOf(event.target as HTMLElement);
-    if (current === -1) return;
-    event.preventDefault();
-    const next =
-      event.key === 'Home'
-        ? 0
-        : event.key === 'End'
-          ? rows.length - 1
-          : (current + (event.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length;
-    const row = rows[next];
-    if (!row) return;
-    row.focus();
-    const nextValue = row.dataset.value;
-    if (nextValue !== undefined && nextValue !== value) onValueChange(nextValue);
-  };
-  return (
-    <div
-      className={cn('m-0 list-none overflow-hidden rounded-xl border border-border p-0', className)}
-      data-has-selection={value !== null ? '' : undefined}
-      onKeyDown={onKeyDown}
-      role="radiogroup"
-      tabIndex={-1}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-}
-
-export function ChoiceRow({
-  checked,
-  children,
-  className,
-  detail,
-  detailTone,
-  firstTabStop = false,
-  label,
-  onSelect,
-  title,
-  trail,
-  value,
+/** A row that reports a state instead of offering a setting: a read still in
+ *  flight, or one that failed and can be tried again. It keeps the list's
+ *  shape, so a section does not change grammar the moment something is
+ *  missing, and it keeps the list's voice: quiet, with the way out on the
+ *  right. */
+export function SettingsMessage({
+  as = 'div',
+  message,
+  onRetry,
 }: {
-  checked: boolean;
-  children?: ReactNode;
-  className?: string;
-  detail?: ReactNode;
-  detailTone?: 'muted' | 'error';
-  /** With nothing checked, the first row keeps the group reachable by keyboard. */
-  firstTabStop?: boolean;
-  /** Accessible name of the option; the visible title may add a status chip. */
-  label: string;
-  onSelect(): void;
-  title?: ReactNode;
-  trail?: ReactNode;
-  value: string;
+  as?: 'div' | 'li';
+  message: string;
+  onRetry?: () => void;
 }) {
-  const onClick = (event: MouseEvent<HTMLElement>) => {
-    const interactive = (event.target as HTMLElement).closest(INTERACTIVE);
-    if (interactive && interactive !== event.currentTarget) return;
-    onSelect();
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.target !== event.currentTarget) return;
-    if (event.key === ' ' || event.key === 'Enter') {
-      event.preventDefault();
-      onSelect();
-    }
-  };
   return (
     <SettingsRow
-      aria-checked={checked}
-      aria-label={label}
-      className={cn(
-        'cursor-pointer transition-colors duration-fast outline-none hover:bg-hover',
-        focusRing('focus-visible:ring-inset'),
-        className,
-      )}
-      data-value={value}
-      detail={detail}
-      detailTone={detailTone}
-      lead={<ChoiceIndicator checked={checked} />}
-      onClick={onClick}
-      onKeyDown={onKeyDown}
-      role="radio"
-      tabIndex={checked || firstTabStop ? 0 : -1}
-      title={title ?? label}
-      trail={trail}
-    >
-      {children}
-    </SettingsRow>
-  );
-}
-
-function ChoiceIndicator({ checked }: { checked: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'flex size-4 items-center justify-center rounded-full border-[1.5px] transition-colors duration-fast',
-        checked ? 'border-transparent' : 'border-border',
-      )}
-    >
-      <span
-        className={cn(
-          'size-2 rounded-full bg-foreground transition-transform duration-fast',
-          checked ? 'scale-100' : 'scale-0',
-        )}
-      />
-    </span>
+      as={as}
+      title={
+        // The live region is the sentence, not the row: a list item that took
+        // `role="status"` would stop being a list item.
+        <span className="font-normal" role="status">
+          {message}
+        </span>
+      }
+      titleTone="muted"
+      trail={
+        onRetry && (
+          <Button onClick={onRetry} size="compact" variant="ghost">
+            Retry
+          </Button>
+        )
+      }
+    />
   );
 }
 
@@ -326,7 +231,7 @@ export function ProgressBar({
   live?: boolean;
   value: number;
 }) {
-  const percent = Math.max(0, Math.min(100, Math.round(value)));
+  const percent = clamp(Math.round(value), 0, 100);
   return (
     <div className={cn('h-1.5 overflow-hidden rounded-full bg-active', className)}>
       <div

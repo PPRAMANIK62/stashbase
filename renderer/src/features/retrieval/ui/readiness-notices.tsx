@@ -5,7 +5,9 @@ import type {
   SemanticReadinessAction,
 } from '@/features/retrieval/domain/semantic-readiness';
 import type { IndexDecisionAction } from '@/features/retrieval/hooks/use-index-decisions';
+import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 const ACTION_LABELS: Record<SemanticReadinessAction, string> = {
   'dismiss-warning': 'Dismiss',
@@ -34,11 +36,13 @@ export function SemanticReadinessNotice({
   onDecision,
   pendingAction,
 }: SemanticReadinessNoticeProps) {
+  const shape = useShape();
   const attention = notice.tone === 'attention';
   return (
     <div
       className={cn(
-        'mx-2 mb-2 rounded-md border px-3 py-2',
+        'mx-2 mb-2 border px-3 py-2',
+        shape.item,
         notice.prominent ? 'border-border bg-surface-2' : 'border-transparent',
       )}
       role={attention ? 'alert' : 'status'}
@@ -55,9 +59,9 @@ export function SemanticReadinessNotice({
         <p className="text-caption leading-relaxed text-muted-foreground">{notice.detail}</p>
       )}
       {error && (
-        <p className="pt-1 text-caption text-destructive" role="alert">
+        <FailureLine className="pt-1" tone="input">
           {error}
-        </p>
+        </FailureLine>
       )}
       {notice.actions.length > 0 && (
         <div className="flex flex-wrap gap-1 pt-1.5">

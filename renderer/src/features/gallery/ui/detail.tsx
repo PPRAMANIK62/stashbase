@@ -9,7 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { GalleryEntry } from '@/features/gallery/domain/entry';
 import { focusRing } from '@/lib/focus-ring';
+import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
+import { writeToClipboard } from '@/shared/ui/clipboard';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 import { GalleryScreenshots } from './screenshots';
 
@@ -92,6 +95,7 @@ export function GalleryEntryPage({
   onBack(): void;
   onCopy(entry: GalleryEntry): void;
 }) {
+  const shape = useShape();
   const [copied, setCopied] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const instructionsPanelId = useId();
@@ -130,7 +134,13 @@ export function GalleryEntryPage({
           <GalleryScreenshots name={entry.name} screenshots={entry.screenshots ?? []} />
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-col gap-5 @2xl:col-start-1 @2xl:row-start-1 @2xl:overflow-y-auto">
+        {/* The prose column is one scroller for everything a reader weighs,
+         * introduction and request together, and it says so at its edge: the
+         * fade is scroll-aware, so a column with nothing below it stays crisp
+         * and a column with more dissolves into the action row rather than
+         * ending on a cut. Without it a folded request sat below the fold
+         * with nothing to suggest it was there. */}
+        <div className="scroll-fade flex min-h-0 min-w-0 flex-col gap-5 [--scroll-fade-size:1.25rem] @2xl:col-start-1 @2xl:row-start-1 @2xl:overflow-y-auto">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="m-0 text-title font-semibold tracking-tight text-foreground">
@@ -174,18 +184,24 @@ export function GalleryEntryPage({
            * the same grey open or closed, so it reads as one more heading
            * with its body put away rather than as a control: the chevron
            * alone says which state it is in. It trails so the label keeps
-           * the column's left edge. Open, the box is capped and scrolls inside itself, so
-           * a long request never pushes the page's conclusion out of reach.
-           * Copy is a glyph in the box's corner, where every code block on
-           * the web keeps it: a reader who has unfolded the recipe knows what
-           * the glyph takes without a word beside it. */}
+           * the column's left edge. Open, the box states the request at its
+           * full height and rides the column's own scroller: a recipe read
+           * through a short window of its own put two scrollers under one
+           * wheel, and the reader lost the introduction the moment they
+           * reached for the request. Copy is a glyph in the box's corner,
+           * where every code block on the web keeps it: a reader who has
+           * unfolded the recipe knows what the glyph takes without a word
+           * beside it. */}
           <Collapsible.Root onOpenChange={setInstructionsOpen} open={instructionsOpen}>
             <Collapsible.Trigger
               render={
                 <button
                   aria-controls={instructionsPanelId}
-                  className={focusRing(
-                    '-mx-1 flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-caption font-medium tracking-wide text-muted-foreground uppercase transition-colors duration-fast outline-none hover:text-foreground',
+                  className={cn(
+                    focusRing(
+                      '-mx-1 flex min-w-0 cursor-pointer items-center gap-1 px-1 py-0.5 text-caption font-medium tracking-wide text-muted-foreground uppercase transition-colors duration-fast outline-none hover:text-foreground',
+                    ),
+                    shape.chip,
                   )}
                   type="button"
                 >
@@ -196,18 +212,19 @@ export function GalleryEntryPage({
                       'size-3.5 shrink-0 transition-transform duration-fast motion-reduce:transition-none',
                       instructionsOpen && 'rotate-90',
                     )}
+                    strokeWidth={1.5}
                   />
                 </button>
               }
             />
             <Collapsible.Panel className="pt-2" id={instructionsPanelId}>
-              {/* The text is the scroller and the glyph sits over the frame,
-               * outside it, so it stays in the corner while the text moves.
-               * The text keeps clear of that corner with its own padding. */}
-              <div className="relative rounded-md border border-border bg-surface-3">
+              {/* The glyph sits over the frame's corner and travels with it,
+               * as a code block's does. The text keeps clear of that corner
+               * with its own padding. */}
+              <div className={cn('relative border border-border bg-surface-3', shape.panel)}>
                 <p
                   className={cn(
-                    'm-0 max-h-72 overflow-y-auto p-3 pr-10 text-body leading-relaxed whitespace-pre-wrap',
+                    'm-0 p-3 pr-10 text-body leading-relaxed whitespace-pre-wrap',
                     entry.wikiPrompt ? 'text-foreground' : 'text-muted-foreground',
                   )}
                 >
@@ -219,9 +236,11 @@ export function GalleryEntryPage({
                       aria-label={copied ? 'Copied' : 'Copy'}
                       className="absolute top-1.5 right-1.5"
                       onClick={() => {
-                        void navigator.clipboard
-                          .writeText(entry.wikiPrompt ?? '')
-                          .then(() => setCopied(true));
+                        void writeToClipboard(entry.wikiPrompt ?? '').then(
+                          () => setCopied(true),
+                          // Nothing reached the clipboard, so nothing confirms.
+                          () => undefined,
+                        );
                       }}
                       size="icon-compact"
                       variant="ghost"
@@ -254,9 +273,9 @@ export function GalleryEntryPage({
           >
             Gallery home
           </Button>
-          <p className="m-0 min-w-0 text-caption text-destructive" role="alert">
+          <FailureLine className="m-0 min-w-0" tone="input">
             {issue}
-          </p>
+          </FailureLine>
         </div>
         <Button
           className="shrink-0"

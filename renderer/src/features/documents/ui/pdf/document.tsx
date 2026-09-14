@@ -17,6 +17,7 @@ import {
   ViewerToolbarButton,
   ViewerToolbarValue,
 } from '@/features/documents/ui/viewer-toolbar';
+import { clamp } from '@/shared/utils/clamp';
 
 import { createPdfFindController, type PdfFindMatch } from './find-controller';
 import { openPdfDocument } from './loader';
@@ -54,7 +55,7 @@ function PdfViewer({
   const fitScale = useCallback(() => {
     const width = scrollerRef.current?.clientWidth ?? 0;
     if (width <= 0) return 1;
-    return Math.max(MIN_SCALE, Math.min(MAX_SCALE, (width - 32) / pageSize.width));
+    return clamp((width - 32) / pageSize.width, MIN_SCALE, MAX_SCALE);
   }, [pageSize.width]);
 
   useEffect(() => {
@@ -158,12 +159,12 @@ function PdfViewer({
   const document = pdf.document;
 
   const jump = (value: number) => {
-    const page = Math.max(1, Math.min(document.numPages, Math.round(value)));
+    const page = clamp(Math.round(value), 1, document.numPages);
     scrollToPage({ page });
   };
   const zoomBy = (offset: number) => {
     setFit(false);
-    setScale((value) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, value + offset)));
+    setScale((value) => clamp(value + offset, MIN_SCALE, MAX_SCALE));
   };
 
   return (
@@ -199,7 +200,7 @@ function PdfViewer({
             min={MIN_SCALE * 100}
             onCommit={(value) => {
               setFit(false);
-              setScale(Math.max(MIN_SCALE, Math.min(MAX_SCALE, value / 100)));
+              setScale(clamp(value / 100, MIN_SCALE, MAX_SCALE));
             }}
             onSingleClick={() => {
               setFit(false);

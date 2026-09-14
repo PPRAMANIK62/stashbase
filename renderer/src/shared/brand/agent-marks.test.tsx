@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vite-plus/test';
 
-import { CodexIcon, OpenQuillIcon } from './brand-icons';
+import { CodexIcon, OpenQuillIcon } from './agent-marks';
 
 describe('Agent brand icons', () => {
   it('gives every inlined mark gradient ids of its own', () => {

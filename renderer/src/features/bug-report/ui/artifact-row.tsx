@@ -7,6 +7,7 @@
 import { useId } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Disclosure } from '@/components/ui/disclosure';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { failureMessage } from '@/features/bug-report/application/failure-messages';
@@ -15,6 +16,9 @@ import type {
   PreviewState,
   ReviewArtifact,
 } from '@/features/bug-report/domain/review-session';
+import { useShape } from '@/lib/shape-context';
+import { cn } from '@/lib/utils';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 import { artifactMeta, artifactTitle, DIAGNOSTIC_ROWS } from './labels';
 import { ScreenshotPreview } from './screenshot-preview';
@@ -32,6 +36,7 @@ export interface ArtifactRowProps {
 }
 
 function PreviewBody({ preview }: { preview: ArtifactPreview }) {
+  const shape = useShape();
   switch (preview.kind) {
     case 'log':
       return (
@@ -41,7 +46,7 @@ function PreviewBody({ preview }: { preview: ArtifactPreview }) {
           </p>
           <ScrollArea
             aria-label="Sanitized bounded application-log excerpt"
-            className="rounded-md border border-border bg-surface-2"
+            className={cn('border border-border bg-surface-2', shape.item)}
             role="group"
             viewportClassName="max-h-72"
           >
@@ -70,7 +75,13 @@ function PreviewPanel({ preview }: { preview: PreviewState | undefined }) {
     return <p className="text-caption text-muted-foreground">Loading preview…</p>;
   }
   if (preview.kind === 'failed') {
-    return <p className="text-caption text-destructive">{failureMessage(preview.failure.kind)}</p>;
+    return (
+      // The window's StatusLine is its one live region; this line is read in
+      // place by a reader who opened the preview.
+      <FailureLine announce={false} tone="input">
+        {failureMessage(preview.failure.kind)}
+      </FailureLine>
+    );
   }
   return <PreviewBody preview={preview.preview} />;
 }
@@ -84,11 +95,12 @@ export function ArtifactRow({
   open,
   preview,
 }: ArtifactRowProps) {
+  const shape = useShape();
   const panelId = useId();
   const title = artifactTitle(artifact.kind);
   const available = artifact.availability.kind === 'available';
   return (
-    <li className="flex flex-col gap-2 rounded-md border border-border bg-surface-1 p-3">
+    <li className={cn('flex flex-col gap-2 border border-border bg-surface-1 p-3', shape.panel)}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-body font-medium">{title}</p>
@@ -116,16 +128,14 @@ export function ArtifactRow({
             {artifact.kind === 'diagnostics' ? 'Details' : 'Preview'}
             <span className="sr-only"> for {title}</span>
           </Button>
-          {open && (
-            <div
-              aria-label={`${title} preview`}
-              className="flex flex-col gap-2"
-              id={panelId}
-              role="region"
-            >
+          {/* Unmounted while closed, so the row keeps no gap for a zero-height
+              preview and a preview still loading is dropped rather than held
+              behind a closed region. */}
+          <Disclosure id={panelId} open={open}>
+            <div aria-label={`${title} preview`} className="flex flex-col gap-2" role="region">
               <PreviewPanel preview={preview} />
             </div>
-          )}
+          </Disclosure>
         </>
       )}
     </li>

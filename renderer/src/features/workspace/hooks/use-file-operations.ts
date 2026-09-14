@@ -36,6 +36,7 @@ import {
 import type { FailureView } from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { useRequestSignals } from '@/shared/runtime/use-request-signals';
+import { basePathName } from '@/shared/utils/file-path';
 
 /** One lane per command and per entry path. */
 type FileOperationLane = `${'create' | 'delete' | 'rename'}:${string}`;
@@ -65,10 +66,6 @@ const RETIRE_BLOCKED: FailureView = {
   message: 'An open document could not be saved, so nothing was changed.',
   tone: 'input',
 };
-
-function leafName(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1);
-}
 
 function movedPath(path: string, from: string, to: string): string {
   return `${to}${path.slice(from.length)}`;
@@ -200,7 +197,7 @@ export function useFileOperations(
     async (rawName: string): Promise<void> => {
       if (!naming) return;
       const name = rawName.trim();
-      if (naming.kind === 'rename' && (name === '' || name === leafName(naming.entry.path))) {
+      if (naming.kind === 'rename' && (name === '' || name === basePathName(naming.entry.path))) {
         cancelNaming();
         return;
       }
@@ -249,7 +246,9 @@ export function useFileOperations(
         for (const source of retired) openSource(source.path);
         return;
       }
-      update(capturedScope, (state) => renameTreePath(state, entry.path, leafName(renamed.path)));
+      update(capturedScope, (state) =>
+        renameTreePath(state, entry.path, basePathName(renamed.path)),
+      );
       await refresh();
       if (!stillOpen(capturedScope)) return;
       setSettledPath(renamed.path);

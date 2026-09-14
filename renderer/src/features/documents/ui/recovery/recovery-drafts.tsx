@@ -14,6 +14,7 @@ import {
   recoveryCandidateNote,
   type RecoveryCandidate,
 } from '@/features/documents/domain/recovery';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 const TITLE = 'Unsaved changes from a previous session';
 
@@ -109,11 +110,7 @@ export function RecoveryDrafts({ runtime }: { runtime: RecoveryRuntime }) {
           Discard all
         </Button>
       </div>
-      {refusal && (
-        <p className="py-1 text-caption text-destructive" role="alert">
-          {refusal.message}
-        </p>
-      )}
+      {refusal && <FailureNotice className="py-1" failure={refusal} />}
       <ul className="divide-y divide-border">
         {candidates.map((candidate) => {
           const key = recoveryCandidateKey(candidate);

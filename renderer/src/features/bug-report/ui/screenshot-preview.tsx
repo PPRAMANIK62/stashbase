@@ -15,6 +15,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { ArtifactPreview } from '@/features/bug-report/domain/review-session';
+import { useShape } from '@/lib/shape-context';
+import { cn } from '@/lib/utils';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 type ScreenshotPreviewValue = Extract<ArtifactPreview, { kind: 'screenshot' }>;
 
@@ -46,6 +49,7 @@ function pinchOf(pointers: Map<number, Point>): { distance: number; x: number; y
 const VIEWPORT = '[data-slot="scroll-area-viewport"]';
 
 export function ScreenshotPreview({ preview }: { preview: ScreenshotPreviewValue }) {
+  const shape = useShape();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLElement | null>(null);
   const anchorRef = useRef<Anchor | null>(null);
@@ -184,7 +188,11 @@ export function ScreenshotPreview({ preview }: { preview: ScreenshotPreviewValue
   }, [fitToView]);
 
   if (failed) {
-    return <p className="text-caption text-destructive">This preview is unavailable.</p>;
+    return (
+      <FailureLine announce={false} tone="capability">
+        This preview is unavailable.
+      </FailureLine>
+    );
   }
 
   return (
@@ -194,7 +202,10 @@ export function ScreenshotPreview({ preview }: { preview: ScreenshotPreviewValue
       </p>
       <ScrollArea
         aria-label="Zoomable screenshot preview"
-        className="h-[min(418px,70svh)] touch-none rounded-md border border-border bg-surface-2"
+        className={cn(
+          'h-[min(418px,70svh)] touch-none border border-border bg-surface-2',
+          shape.panel,
+        )}
         orientation="both"
         ref={rootRef}
         role="group"

@@ -1,5 +1,6 @@
 import { isRetrievableViewerFormat, type ViewerFormat } from '@/contracts/file-formats';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { basePathName, parentPathOf } from '@/shared/utils/file-path';
 
 type QuickOpenAction = 'open' | 'reveal';
 type QuickOpenRetrievalAccess = 'included' | 'excluded';
@@ -28,10 +29,7 @@ export type QuickOpenNavigationIntent =
   | { type: 'reveal-source'; source: SourceReference };
 
 function pathParts(path: string): { basename: string; parentPath: string } {
-  const separator = path.lastIndexOf('/');
-  return separator === -1
-    ? { basename: path, parentPath: '' }
-    : { basename: path.slice(separator + 1), parentPath: path.slice(0, separator) };
+  return { basename: basePathName(path), parentPath: parentPathOf(path) };
 }
 
 function fuzzyScore(value: string, query: string): number | null {

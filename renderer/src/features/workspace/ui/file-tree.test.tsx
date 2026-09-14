@@ -274,7 +274,9 @@ describe('file tree', () => {
       .mockResolvedValue(RESEARCH_LISTING);
     renderTree(filesApi({ load }));
 
-    expect((await screen.findByRole('alert')).textContent).toBe('StashBase is unavailable.');
+    // The tone is the one `filesFailure` assigned, not one the view picked:
+    // an unreadable listing is a lost capability.
+    expect((await screen.findByRole('status')).textContent).toBe('StashBase is unavailable.');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(await screen.findByRole('tree', { name: 'Files' })).not.toBeNull();
@@ -378,5 +380,25 @@ describe('file tree keep and create', () => {
         expect.any(AbortSignal),
       ),
     );
+  });
+
+  it('starts a folder named in place beside the selection when the window asks', async () => {
+    const api = filesApi({
+      load: vi.fn(async () => listing([PLAN, ARCHIVE, LINKED], ['docs'])),
+    });
+    renderTree(api, vi.fn());
+    const runtime = runtimes.at(-1);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('treeitem', { name: 'docs' }));
+    // A folder is named first, so the request opens the tree's own naming
+    // row where the selection sits, and clears itself as it is taken up.
+    act(() => runtime?.requestCreate('folder'));
+    const field = await screen.findByRole<HTMLInputElement>('textbox', {
+      name: 'New folder in docs',
+    });
+    expectFocused(field);
+    expect(runtime?.store.getState().pendingCreate).toBeNull();
+    expect(api.createEntry).not.toHaveBeenCalled();
   });
 });

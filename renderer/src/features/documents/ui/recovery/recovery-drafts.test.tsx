@@ -7,7 +7,7 @@ import { recoveryApi } from '@/test/fakes/documents';
 
 import { RecoveryDrafts } from './recovery-drafts';
 
-const folderPath = '/library/notes';
+const folderPath = '/project/notes';
 
 function runtimeWith(drafts: Array<{ currentVersion: string | null; path: string }>) {
   const api = recoveryApi({
@@ -115,7 +115,9 @@ describe('recovery drafts surface', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Discard a.md draft' }));
     await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toBe(
+      // The recovery runtime classifies an unreachable draft as a lost
+      // capability, and the row says it in that tone.
+      expect(screen.getByRole('status').textContent).toBe(
         'The draft for a.md could not be reached.',
       ),
     );

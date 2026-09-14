@@ -41,6 +41,8 @@ export {
   type AgentSessionState,
   type AgentSkillCatalog,
 } from './session-state';
+import { basePathName } from '@/shared/utils/file-path';
+
 import type { AgentTranscriptBlock } from './session-transcript';
 
 export { latestUserBlock, type AgentTranscriptBlock } from './session-transcript';
@@ -352,32 +354,31 @@ export function agentSessionIsBlank(state: AgentSessionState): boolean {
 export function agentScopesEqual(left: AgentScope, right: AgentScope): boolean {
   return (
     left.kind === right.kind &&
-    (left.kind === 'library' || (right.kind === 'folder' && left.path === right.path))
+    (left.kind === 'unbound' || (right.kind === 'folder' && left.path === right.path))
   );
 }
 
 export function scopeForWindowFolder(folderPath: string | null): AgentScope {
-  return folderPath ? { kind: 'folder', path: folderPath } : { kind: 'library' };
+  return folderPath ? { kind: 'folder', path: folderPath } : { kind: 'unbound' };
 }
 
 /**
- * A scope's stable identity: the literal `library`, or the folder's path.
+ * A scope's stable identity: the literal `unbound`, or the folder's path.
  *
  * One function because two readers need it to agree. The instructions editor
  * keys its read on it and the transport spells `?scope=` with it, and deriving
  * those separately is how an editor shows one scope's text and saves it into
  * another's.
  *
- * The Library's spelling is a literal, so it is only unambiguous because
+ * The unbound scope's spelling is a literal, so it is only unambiguous because
  * folder paths are absolute. The route refuses a relative folder scope for the
  * same reason.
  */
 export function agentScopeKey(scope: AgentScope): string {
-  return scope.kind === 'library' ? 'library' : scope.path;
+  return scope.kind === 'unbound' ? 'unbound' : scope.path;
 }
 
 export function scopeLabel(scope: AgentScope): string {
-  if (scope.kind === 'library') return 'Library';
-  const normalized = scope.path.replace(/[\\/]+$/u, '');
-  return normalized.split(/[\\/]/u).at(-1) || scope.path;
+  if (scope.kind === 'unbound') return 'Chat';
+  return basePathName(scope.path);
 }

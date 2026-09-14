@@ -1,5 +1,7 @@
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { WorkspaceEntry } from '@/features/workspace/domain/tree';
+import { PathChip } from '@/shared/ui/path-chip';
+import { basePathName } from '@/shared/utils/file-path';
 
 export function DeleteEntryDialog({
   entry,
@@ -14,7 +16,7 @@ export function DeleteEntryDialog({
   onConfirm(): void;
   pending: boolean;
 }) {
-  const name = entry ? entry.path.slice(entry.path.lastIndexOf('/') + 1) : '';
+  const name = entry ? basePathName(entry.path) : '';
 
   return (
     <ConfirmDialog
@@ -28,14 +30,7 @@ export function DeleteEntryDialog({
         </>
       }
       destructive
-      details={
-        <div
-          className="max-w-full rounded-md bg-muted px-2.5 py-2 font-mono text-caption break-all text-muted-foreground"
-          title={entry?.path}
-        >
-          {entry?.path}
-        </div>
-      }
+      details={entry && <PathChip path={entry.path} />}
       failure={failure}
       onCancel={onCancel}
       onConfirm={onConfirm}

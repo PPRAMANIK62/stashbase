@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react';
 
+import { clamp } from '@/shared/utils/clamp';
+
 export const MIN_IMAGE_SCALE = 0.1;
 export const MAX_IMAGE_SCALE = 8;
 
 export function clampImageScale(scale: number): number {
-  return Math.max(MIN_IMAGE_SCALE, Math.min(MAX_IMAGE_SCALE, scale));
+  return clamp(scale, MIN_IMAGE_SCALE, MAX_IMAGE_SCALE);
 }
 
 function fitScale(

@@ -10,10 +10,7 @@ import {
   documentTextSourceRequestSchema,
   genericFilePreviewResponseSchema,
 } from '@/protocols/http/files';
-
-function encodePath(entryPath: string): string {
-  return entryPath.split('/').map(encodeURIComponent).join('/');
-}
+import { encodePathSegments } from '@/shared/utils/file-path';
 
 const SCOPE_LOST = 'The file folder is no longer available in this window.';
 
@@ -83,7 +80,7 @@ export function createGenericFilePreviewAdapter(client: HttpClient): GenericFile
             unauthorized: 'This window can no longer inspect that file.',
             unavailable: 'The file could not be inspected. It has not been changed.',
           },
-          path: `/api/file-preview/${encodePath(identity.data.path)}?${query}`,
+          path: `/api/file-preview/${encodePathSegments(identity.data.path)}?${query}`,
           schema: genericFilePreviewResponseSchema,
           signal,
         }),

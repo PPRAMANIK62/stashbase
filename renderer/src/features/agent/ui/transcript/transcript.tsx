@@ -20,7 +20,11 @@ import {
   transcriptDayBreaks,
 } from '@/features/agent/domain/time';
 import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
+import { useShape } from '@/lib/shape-context';
+import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { writeToClipboard } from '@/shared/ui/clipboard';
+import { basePathName } from '@/shared/utils/file-path';
 
 import { AgentActivityGroup, AgentPermissionCard, isAgentToolBlock } from './activity';
 import { AgentMarkdown } from './markdown';
@@ -33,10 +37,15 @@ type TranscriptGroup = AgentTranscriptBlock | Extract<AgentTranscriptBlock, { ki
 function CopyAction({ label, text }: { label: string; text: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    void navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true);
-      globalThis.setTimeout(() => setCopied(false), 1_500);
-    });
+    void writeToClipboard(text).then(
+      () => {
+        setCopied(true);
+        globalThis.setTimeout(() => setCopied(false), 1_500);
+      },
+      // A host that refused the write has not copied anything, so the glyph
+      // stays as it was rather than confirming something that did not happen.
+      () => undefined,
+    );
   };
   return (
     <ChatMessageAction
@@ -147,6 +156,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   promptAt: number | undefined;
   transientFile?: ((path: string) => File | undefined) | undefined;
 }) {
+  const shape = useShape();
   if (block.kind === 'user') {
     const context = sentContext(block);
     const transientPaths = context.flatMap((item) =>
@@ -187,7 +197,10 @@ const TranscriptBlock = memo(function TranscriptBlock({
               segment.text
             ) : (
               <span
-                className="mx-px inline-flex max-w-full items-center gap-1 rounded-md bg-foreground/8 px-1.5 py-px align-baseline font-medium"
+                className={cn(
+                  'mx-px inline-flex max-w-full items-center gap-1 bg-foreground/8 px-1.5 py-px align-baseline font-medium',
+                  shape.chip,
+                )}
                 key={`${segment.start}:${segment.path}`}
                 title={segment.path}
               >
@@ -197,9 +210,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
                   path={segment.path}
                   size={12}
                 />
-                <span className="truncate">
-                  {segment.path.slice(segment.path.lastIndexOf('/') + 1)}
-                </span>
+                <span className="truncate">{basePathName(segment.path)}</span>
                 <span className="sr-only"> (file mention: {segment.path})</span>
               </span>
             ),
@@ -232,7 +243,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   }
   if (block.kind === 'error') {
     return (
-      <section className="rounded-md border border-destructive/30 bg-destructive-light p-3">
+      <section className={cn('border border-destructive/30 bg-destructive-light p-3', shape.panel)}>
         <h3 className="text-caption font-medium text-foreground">The Agent could not finish</h3>
         <p className="mt-1 text-caption text-muted-foreground">{block.text}</p>
         {block.retryablePrompt !== undefined && (

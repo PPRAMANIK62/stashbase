@@ -1,5 +1,7 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
+import { CommandItem, CommandList } from '@/components/ui/command-menu';
+import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
 export function mentionOptionId(listboxId: string, index: number): string {
@@ -28,9 +30,19 @@ export interface MentionListboxBinding {
   onDismiss(): void;
 }
 
-/** The `@`/`/` suggestion popup. Focus stays in the editor; the composer
- *  points `aria-activedescendant` at the row the caret is on. A skill query
- *  keeps the popup open with no rows, so `notice` can say why. */
+/**
+ * The `@`/`/` suggestion popup.
+ *
+ * The list itself is the app's command list, so the listbox role, the active
+ * row's highlight, hover tracking and scrolling the active row into view are
+ * the same ones Quick Open and the chat history popover run. This panel owns
+ * only what is particular to the composer: where the popup sits, that a row is
+ * taken on `mousedown` rather than on click so the editor never loses the
+ * caret, and the notice a skill query leaves behind when it matches nothing.
+ *
+ * Focus stays in the editor throughout; the composer points
+ * `aria-activedescendant` at the row the caret is on.
+ */
 export function MentionListbox({
   activeIndex,
   id,
@@ -48,53 +60,48 @@ export function MentionListbox({
   onPick: (index: number) => void;
   rows: MentionRow[];
 }) {
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const active = listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]');
-    active?.scrollIntoView?.({ block: 'nearest' });
-  }, [activeIndex]);
+  const shape = useShape();
   return (
-    <div className="absolute inset-x-0 bottom-full z-20 mb-2 rounded-xl border border-border bg-surface-3 p-1 shadow-surface-3">
+    <div
+      className={cn(
+        'absolute inset-x-0 bottom-full z-20 mb-2 border border-border bg-surface-3 p-1 shadow-surface-3',
+        shape.container,
+      )}
+    >
       {rows.length > 0 && (
-        <div
+        <CommandList
+          activeIndex={activeIndex}
           aria-label={label}
-          className="max-h-64 overflow-y-auto"
+          className="max-h-64 p-0"
           id={id}
-          ref={listRef}
-          role="listbox"
+          onActiveIndexChange={onHover}
         >
-          {rows.map((row, index) => {
-            const selected = index === activeIndex;
-            return (
-              <div
-                aria-selected={selected}
-                className={cn(
-                  'flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-body text-foreground',
-                  selected ? 'bg-hover' : 'hover:bg-hover',
+          {rows.map((row, index) => (
+            <CommandItem
+              // A suggestion carries two lines, so the row grows to them
+              // instead of holding the command list's single-line height.
+              className="h-auto items-start gap-2 px-2 py-1.5"
+              id={mentionOptionId(id, index)}
+              key={row.key}
+              // `mousedown`, not `click`: a click would blur the editor first,
+              // and the insertion has nowhere to land without the caret.
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onPick(index);
+              }}
+            >
+              {row.icon}
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate">{row.primary}</span>
+                {row.secondary && (
+                  <span className="truncate text-caption text-muted-foreground">
+                    {row.secondary}
+                  </span>
                 )}
-                id={mentionOptionId(id, index)}
-                key={row.key}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  onPick(index);
-                }}
-                onMouseEnter={() => onHover(index)}
-                role="option"
-                tabIndex={-1}
-              >
-                {row.icon}
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate">{row.primary}</span>
-                  {row.secondary && (
-                    <span className="truncate text-caption text-muted-foreground">
-                      {row.secondary}
-                    </span>
-                  )}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+              </span>
+            </CommandItem>
+          ))}
+        </CommandList>
       )}
       {notice}
     </div>

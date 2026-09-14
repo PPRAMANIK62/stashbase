@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 /** One sentence in place of results: idle guidance, progress, or nothing
  *  found. */
@@ -14,9 +15,7 @@ export function StatusLine({ children }: { children: string }) {
 export function SearchFailure({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="flex items-center justify-between gap-2 px-4 py-2">
-      <p className="text-caption text-destructive" role="alert">
-        {message}
-      </p>
+      <FailureLine tone="input">{message}</FailureLine>
       <Button onClick={onRetry} size="compact" variant="tertiary">
         Retry
       </Button>
@@ -24,17 +23,22 @@ export function SearchFailure({ message, onRetry }: { message: string; onRetry: 
   );
 }
 
-/** A line under the results: what was left out, or what could not be opened. */
+/** A line under the results: what was left out, or what could not be opened.
+ *  The two are not the same line said twice — what was left out is a footnote
+ *  below the type scale, while a refusal is said at the app's own failure
+ *  size and in its voice. */
+const FOOTER_EDGE = 'shrink-0 border-t border-border px-4 py-2';
+
 export function FooterNote({ children, tone }: { children: string; tone: 'error' | 'muted' }) {
+  if (tone === 'error') {
+    return (
+      <FailureLine className={FOOTER_EDGE} tone="input">
+        {children}
+      </FailureLine>
+    );
+  }
   return (
-    <p
-      className={
-        tone === 'error'
-          ? 'shrink-0 border-t border-border px-4 py-2 text-caption text-destructive'
-          : 'shrink-0 border-t border-border px-4 py-2 text-[10px] text-muted-foreground'
-      }
-      role={tone === 'error' ? 'alert' : 'status'}
-    >
+    <p className={`${FOOTER_EDGE} text-[10px] text-muted-foreground`} role="status">
       {children}
     </p>
   );

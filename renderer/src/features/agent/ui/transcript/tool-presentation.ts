@@ -1,4 +1,5 @@
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
+import { basePathName } from '@/shared/utils/file-path';
 
 export type AgentToolBlock = Extract<AgentTranscriptBlock, { kind: 'tool' }>;
 export type AgentToolKind = 'read' | 'list' | 'search' | 'command' | 'write' | 'edit' | 'other';
@@ -23,11 +24,6 @@ function clipText(value: string, characterLimit: number): string {
     : output;
 }
 
-function basename(path: string): string {
-  const normalized = path.replace(/[\\/]+$/u, '');
-  return normalized.split(/[\\/]/u).at(-1) || path;
-}
-
 export function agentToolKind(tool: AgentToolBlock): AgentToolKind {
   if (tool.name === 'Bash' || /command|shell|exec/i.test(tool.name)) return 'command';
   if (/read_file$/i.test(tool.name) || /^read$/i.test(tool.name)) return 'read';
@@ -47,7 +43,7 @@ export function agentToolRow(tool: AgentToolBlock): {
   const input = argumentsOf(tool.input);
   const kind = agentToolKind(tool);
   const rawPath = input.path ?? input.file_path ?? input.file;
-  const path = typeof rawPath === 'string' ? basename(rawPath) : undefined;
+  const path = typeof rawPath === 'string' ? basePathName(rawPath) : undefined;
   switch (kind) {
     case 'read':
       return { target: path, verb: path ? 'Read' : 'Read a file' };

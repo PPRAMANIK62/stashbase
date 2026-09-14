@@ -2,14 +2,19 @@ import { ChevronRight } from 'lucide-react';
 import { useEffect, useId, useState, type Ref } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Disclosure } from '@/components/ui/disclosure';
 import type { ReviewDescription } from '@/features/bug-report/domain/review-session';
-import { focusRing } from '@/lib/focus-ring';
+import { shapeTokens } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
+import { textFieldClass } from '@/shared/ui/text-field';
 
 const MAX_FIELD_LENGTH = 12_000;
 
-const FIELD_CLASS = focusRing(
-  'block w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-body text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50',
+// A plain form field on the window's own background, which the reader may
+// drag taller when their description runs long.
+const FIELD_CLASS = textFieldClass(
+  'resize-y bg-background text-body text-foreground',
+  shapeTokens.input,
 );
 
 export interface DescriptionFieldsProps {
@@ -68,11 +73,17 @@ export function DescriptionFields({
               'size-3.5 transition-transform duration-fast motion-reduce:transition-none',
               reproductionOpen && 'rotate-90',
             )}
+            strokeWidth={1.5}
           />
           Add steps to reproduce (optional)
         </span>
       </Button>
-      <div className="flex flex-col gap-2" hidden={!reproductionOpen} id={reproductionId}>
+      {/* The field unmounts while the region is closed rather than sitting at
+          height zero: the section spaces its children, so a zero-height child
+          would still take the gap above it, and a closed field must not be
+          reachable by tab. Its text lives in the description, so nothing is
+          lost by the trip. */}
+      <Disclosure className="flex flex-col gap-2" id={reproductionId} open={reproductionOpen}>
         <label className="text-body font-medium" htmlFor={`${reproductionId}-field`}>
           Steps to reproduce
         </label>
@@ -87,7 +98,7 @@ export function DescriptionFields({
           rows={4}
           value={description.reproduction}
         />
-      </div>
+      </Disclosure>
     </section>
   );
 }

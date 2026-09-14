@@ -124,6 +124,11 @@ export function JsonDocument({
         >
           <div className="flex h-9 shrink-0 items-center gap-2 px-3">
             <span className="text-caption font-medium text-muted-foreground">Source</span>
+            {/* Not a `FailureLine`: this is a standing badge for the state the
+                open document is in, not a refusal of something the reader just
+                did. It keeps the attention colour because the document really
+                does have a problem, and the polite role because it is restated
+                on every switch to a broken file rather than raised once. */}
             {!analysis.available && (
               <span
                 className="min-w-0 truncate text-caption text-destructive"

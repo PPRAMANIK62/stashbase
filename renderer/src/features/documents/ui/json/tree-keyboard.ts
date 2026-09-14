@@ -6,6 +6,7 @@
  * and tested without a DOM.
  */
 import { formatJsonPath, type JsonSourceNode } from '@/features/documents/domain/json-source';
+import { listNavigationTarget } from '@/shared/utils/list-cursor';
 
 import { isJsonContainer, type JsonEditIntent, type VisibleJsonNode } from './tree-model';
 
@@ -43,10 +44,11 @@ export function jsonTreeKeyCommand(
   const container = isJsonContainer(item.node);
   const path = formatJsonPath(item.node.path);
 
-  if (key === 'ArrowDown') return moved(visible[Math.min(index + 1, visible.length - 1)]?.node);
-  if (key === 'ArrowUp') return moved(visible[Math.max(index - 1, 0)]?.node);
-  if (key === 'Home') return moved(visible[0]?.node);
-  if (key === 'End') return moved(visible.at(-1)?.node);
+  // Down, up, and the ends are the same cursor every list in the app runs; the
+  // grid owns only the keys that are about being a tree. It declares no page
+  // size, so a page key stays the browser's, as it is in the folder tree.
+  const linear = listNavigationTarget(key, { activeIndex: index, count: visible.length });
+  if (linear !== null) return moved(visible[linear]?.node);
   if (key === 'ArrowRight' && container) {
     return expanded.has(path)
       ? moved(item.node.children[0])

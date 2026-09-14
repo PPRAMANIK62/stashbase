@@ -30,8 +30,13 @@ import { splitLeadingYamlFrontmatter } from '@/features/documents/domain/markdow
 import type { DocumentHeading } from '@/features/documents/domain/outline';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { writeToClipboard } from '@/shared/ui/clipboard';
 
 import { createMarkdownFindController } from './find-controller';
+
+import '@milkdown/crepe/theme/common/style.css';
+import '@milkdown/crepe/theme/frame.css';
+import './document.css';
 import {
   activeHeadingId,
   applyHeadingIds,
@@ -42,10 +47,6 @@ import {
   type HeadingNodeView,
   type ProseMirrorDocument,
 } from './outline-adapter';
-
-import '@milkdown/crepe/theme/common/style.css';
-import '@milkdown/crepe/theme/frame.css';
-import './document.css';
 
 type CreationState = 'creating' | 'failed' | 'ready';
 
@@ -135,7 +136,11 @@ export function MarkdownDocument({
       .addFeature(listItem)
       .addFeature(linkTooltip, {
         inputPlaceholder: 'Paste a URL or note path…',
-        onCopyLink: (href) => void navigator.clipboard?.writeText(href),
+        onCopyLink: (href) =>
+          void writeToClipboard(href).catch(() => {
+            // swallowed: the link tooltip is already gone by the time a refusal
+            // lands, so there is no longer a surface to report it on.
+          }),
       })
       .addFeature(blockEdit)
       .addFeature(toolbar)
@@ -322,10 +327,13 @@ export function MarkdownDocument({
           onSelect={(index) => onModeChange(index === 0 ? 'writer' : 'reading')}
           selectedIndex={mode === 'writer' ? 0 : 1}
           size="compact"
+          track
         >
-          {/* Glyph-only items are the compact 28px square, the box the Chat
-           *  header's New chat wears across the seam, so the hover fills
-           *  match on the one line they share. */}
+          {/* No width of its own: a glyph-only item on a track takes the
+           *  ladder's segment height and its one-step-wider glyph width, so
+           *  the lifted pill reads as a pill. The `w-6` these carried made
+           *  them 24px squares — the one segmented control in the app that
+           *  contradicted that rule, against the sidebar's two. */}
           <TabsSubtleItem icon={PenLine} label="Writer" title="Writer" />
           <TabsSubtleItem icon={BookOpen} label="Reading" title="Reading" />
         </TabsSubtle>

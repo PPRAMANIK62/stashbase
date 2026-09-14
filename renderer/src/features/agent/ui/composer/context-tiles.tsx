@@ -24,12 +24,7 @@ import { spring } from '@/lib/springs';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-const STATUS_WORD: Record<Exclude<ContextStatus, 'ready'>, string> = {
-  blocked: 'Blocked',
-  failed: 'Failed',
-  preparing: 'Preparing',
-  stale: 'Stale',
-};
+import { STATUS_WORD } from './mention-widgets';
 
 type SourceItem = Extract<AgentContextItem, { kind: 'source' }>;
 type TransientItem = Extract<AgentContextItem, { kind: 'transient' }>;
@@ -145,6 +140,7 @@ function SourceTile({
   size: number;
   status?: ContextStatus;
 }) {
+  const shape = useShape();
   const name = contextItemName(item);
   const reprocessable = status === 'failed' && onReprocess !== undefined;
   return (
@@ -154,12 +150,7 @@ function SourceTile({
         className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground"
         role="img"
       >
-        <FileTypeIcon
-          aria-hidden="true"
-          path={item.source.path}
-          size={Math.max(16, size * 0.3)}
-          strokeWidth={1.5}
-        />
+        <FileTypeIcon aria-hidden="true" path={item.source.path} size={Math.max(16, size * 0.3)} />
       </div>
       <div className="flex flex-col items-center gap-px px-1.5 pb-1.5">
         <div
@@ -174,7 +165,10 @@ function SourceTile({
       </div>
       {reprocessable && (
         <ReprocessButton
-          className="absolute inset-x-1 bottom-1 cursor-pointer rounded-md bg-neutral-900 py-0.5 text-[10px] font-medium text-white opacity-0 transition-opacity duration-fast outline-none group-hover/tile:opacity-100 focus-visible:opacity-100"
+          className={cn(
+            'absolute inset-x-1 bottom-1 cursor-pointer bg-neutral-900 py-0.5 text-[10px] font-medium text-white opacity-0 transition-opacity duration-fast outline-none group-hover/tile:opacity-100 focus-visible:opacity-100',
+            shape.chip,
+          )}
           onReprocess={onReprocess}
           source={item.source}
         />
@@ -211,13 +205,15 @@ function SourceChip({
         className="shrink-0 text-muted-foreground"
         path={item.source.path}
         size={14}
-        strokeWidth={1.5}
       />
       <span className="min-w-0 truncate">{name}</span>
       {status !== 'ready' && <StatusLine status={status} />}
       {status === 'failed' && onReprocess && (
         <ReprocessButton
-          className="-mr-1 shrink-0 cursor-pointer rounded-md px-1 text-[11px] font-medium text-foreground transition-colors duration-fast outline-none hover:bg-hover"
+          className={cn(
+            '-mr-1 shrink-0 cursor-pointer px-1 text-[11px] font-medium text-foreground transition-colors duration-fast outline-none hover:bg-hover',
+            shape.chip,
+          )}
           onReprocess={onReprocess}
           source={item.source}
         />
@@ -243,12 +239,7 @@ function RemoteTile({ item, size }: { item: TransientItem; size: number }) {
           className="absolute inset-0 flex items-center justify-center text-muted-foreground"
           role="img"
         >
-          <FileTypeIcon
-            aria-hidden="true"
-            path={item.path}
-            size={Math.max(16, size * 0.35)}
-            strokeWidth={1.5}
-          />
+          <FileTypeIcon aria-hidden="true" path={item.path} size={Math.max(16, size * 0.35)} />
         </div>
       )}
     </TileBox>

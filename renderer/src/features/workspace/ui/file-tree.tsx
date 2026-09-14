@@ -36,8 +36,8 @@ import { useTree } from '@/features/workspace/hooks/use-tree';
 import { useShape } from '@/lib/shape-context';
 import { useProximityHover } from '@/lib/use-proximity-hover';
 import { useTouchPrimary } from '@/lib/use-touch-primary';
-import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { FailureLine, FailureNotice } from '@/shared/ui/failure-notice';
 
 import { DeleteEntryDialog } from './delete-entry-dialog';
 import { useTreeDraft } from './file-tree-draft';
@@ -365,7 +365,6 @@ export function FileTree({
         <Button
           className="mt-1 w-full justify-start"
           onClick={() => setLimit((current) => current + TREE_PAGE_SIZE)}
-          size="compact"
           variant="ghost"
         >
           Show {Math.min(TREE_PAGE_SIZE, tree.rows.length - renderedRows.length)} more
@@ -373,20 +372,12 @@ export function FileTree({
       )}
 
       {refusal && !naming && !operations.deleting && (
-        <p
-          className={cn(
-            'px-2 pt-2 text-caption',
-            refusal.tone === 'input' ? 'text-destructive' : 'text-muted-foreground',
-          )}
-          role={refusal.tone === 'input' ? 'alert' : 'status'}
-        >
-          {refusal.message}
-        </p>
+        <FailureNotice className="px-2 pt-2" failure={refusal} />
       )}
       {reveal.error && (
-        <p className="px-2 pt-2 text-caption text-destructive" role="alert">
+        <FailureLine className="px-2 pt-2" tone="input">
           {reveal.error}
-        </p>
+        </FailureLine>
       )}
 
       <DeleteEntryDialog

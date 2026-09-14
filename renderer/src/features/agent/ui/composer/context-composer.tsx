@@ -33,7 +33,10 @@ import {
   type ContextStatus,
 } from '@/features/agent/domain/context';
 import { agentSkills } from '@/features/agent/domain/session';
+import { useShape } from '@/lib/shape-context';
+import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { FailureLine } from '@/shared/ui/failure-notice';
 import { dragCarriesSource, readSourceDrag } from '@/shared/utils/source-drag';
 
 import { useMentionRows } from './context-rows';
@@ -136,6 +139,7 @@ export function AgentContextComposer({
   skills,
   status,
 }: AgentContextComposerProps) {
+  const shape = useShape();
   const { context, contextIssue, draft, queuedPrompts, scope, skill, skillCatalog } = useStore(
     session.store,
     useShallow((state) => ({
@@ -298,7 +302,11 @@ export function AgentContextComposer({
 
   return (
     <div
-      className="relative flex flex-col rounded-2xl bg-surface-3 shadow-surface-3"
+      // The Chat composer is a card-sized surface, so it takes that role
+      // rather than the fixed radius it used to spell out — the frame the
+      // reader sees around the editor is this wrapper, not the InputMessage
+      // inside it, and the two were drawing different corners.
+      className={cn('relative flex flex-col bg-surface-3 shadow-surface-3', shape.card)}
       onDragOverCapture={onDragOverCapture}
       onDropCapture={onDropCapture}
       onPasteCapture={onPasteCapture}
@@ -315,9 +323,9 @@ export function AgentContextComposer({
         />
       )}
       {contextIssue && (
-        <p className="m-0 px-3 pt-2 text-caption text-destructive" role="alert">
+        <FailureLine className="m-0 px-3 pt-2" tone="input">
           {contextIssue}
-        </p>
+        </FailureLine>
       )}
       <InputMessage
         accept={ATTACH_ACCEPT}

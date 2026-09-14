@@ -22,13 +22,10 @@ import {
   documentTextSourceResponseSchema,
 } from '@/protocols/http/files';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { encodePathSegments } from '@/shared/utils/file-path';
 
 const READ_SCOPE_LOST = 'The document folder is no longer available in this window.';
 const SAVE_SCOPE_LOST = 'The document folder is no longer active in this window.';
-
-function encodePath(entryPath: string): string {
-  return entryPath.split('/').map(encodeURIComponent).join('/');
-}
 
 function cause(serverMessage: string | null): ErrorOptions | undefined {
   return serverMessage === null ? undefined : { cause: new Error(serverMessage) };
@@ -115,7 +112,7 @@ function savedDocument(source: SourceReference, body: SaveResponse) {
 
 function documentPath(folderPath: string, entryPath: string): string {
   const query = new URLSearchParams({ folder: folderPath });
-  return `/api/files/${encodePath(entryPath)}?${query}`;
+  return `/api/files/${encodePathSegments(entryPath)}?${query}`;
 }
 
 export function createDocumentSourceAdapter(client: HttpClient): DocumentSourcePort {

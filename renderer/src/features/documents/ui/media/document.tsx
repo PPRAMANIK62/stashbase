@@ -25,6 +25,7 @@ import {
 } from '@/features/documents/domain/media';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 import { createMediaFindController } from './find-controller';
 import { useMediaFallback } from './use-media-fallback';
@@ -82,9 +83,9 @@ function TranscriptState({
           </Button>
         )}
         {actionError && (
-          <p className="mt-2 text-caption text-destructive" role="alert">
+          <FailureLine className="mt-2" tone="input">
             {actionError}
-          </p>
+          </FailureLine>
         )}
       </div>
     </div>

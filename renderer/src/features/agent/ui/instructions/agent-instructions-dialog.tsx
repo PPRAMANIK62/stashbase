@@ -10,15 +10,27 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { AgentInstructionsEditor } from '@/features/agent/hooks/use-agent-instructions';
-import { focusRing } from '@/lib/focus-ring';
+import { shapeTokens } from '@/lib/shape-context';
 import { FailureNotice } from '@/shared/ui/failure-notice';
+import { textFieldClass } from '@/shared/ui/text-field';
 
 /* The field sits one step above the dialog rather than on `background`, which
- * on a light panel reads as a hole punched through it. No `resize`: the panel
- * owns its own height, and a native grabber in the corner of a modal is the
- * browser's furniture, not the product's. */
-const FIELD_CLASS = focusRing(
-  'block h-[min(52vh,26rem)] w-full overflow-auto rounded-md border border-border bg-surface-3 px-3 py-2.5 font-mono text-caption leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50',
+ * on a light panel reads as a hole punched through it. `resize-none`: the
+ * panel owns its own height, and a native grabber in the corner of a modal is
+ * the browser's furniture, not the product's.
+ *
+ * It draws no focus indicator. The field is the dialog's only content and the
+ * panel hands it the caret as it opens, so a ring would stand there the whole
+ * time the dialog is up — chrome rather than a state — and it would be the one
+ * colored thing on a monochrome panel. The caret already says where the typing
+ * lands. `outline-none` keeps the base-layer fallback ring off for the same
+ * reason. */
+// The editor sits on the dialog's own raised surface and holds a file's text,
+// so it takes the panel corner, a mono face, and a fixed height it does not
+// let the reader drag.
+const FIELD_CLASS = textFieldClass(
+  'h-[min(52vh,26rem)] resize-none overflow-auto bg-surface-3 font-mono text-caption leading-relaxed text-foreground',
+  shapeTokens.panel,
 );
 
 export interface AgentInstructionsDialogProps {
@@ -52,8 +64,7 @@ export function AgentInstructionsDialog({
         <DialogHeader>
           <DialogTitle>Instructions for {scopeName}</DialogTitle>
           <DialogDescription>
-            Every Chat in this scope starts with these. Open Chats pick them up on their next
-            conversation.
+            Customize how the Agent responds and works with your files.
           </DialogDescription>
         </DialogHeader>
         <label className="sr-only" htmlFor={fieldId}>
@@ -71,7 +82,13 @@ export function AgentInstructionsDialog({
         <DialogFooter>
           {editor.customized && (
             <Button
-              className="mr-auto"
+              /* The retreat keeps its box on the content edge, where the
+               * field's frame and the title start, so the pill that appears
+               * under the pointer lines up with the field above it. Its
+               * padding is tightened to the same 6px the Chat header's rename
+               * button uses, so the label at rest sits on that column too
+               * instead of reading as indented by a full ladder step. */
+              className="mr-auto px-1.5"
               disabled={editor.saving}
               onClick={editor.reset}
               variant="ghost"

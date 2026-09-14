@@ -1,3 +1,5 @@
+'use client';
+
 import {
   FileAudio,
   FileCode2,
@@ -10,6 +12,9 @@ import {
   type LucideIcon,
   type LucideProps,
 } from 'lucide-react';
+
+import { useSize } from '@/lib/size-context';
+import { fileExtensionOf } from '@/shared/utils/file-path';
 
 const EXTENSION_ICONS: Record<string, LucideIcon> = {
   aac: FileAudio,
@@ -49,10 +54,19 @@ interface FileTypeIconProps extends LucideProps {
   path: string;
 }
 
-export function FileTypeIcon({ path, ...props }: FileTypeIconProps) {
-  const basename = path.slice(path.lastIndexOf('/') + 1);
-  const separator = basename.lastIndexOf('.');
-  const extension = separator === -1 ? '' : basename.slice(separator + 1).toLowerCase();
-  const Icon = EXTENSION_ICONS[extension] ?? FileQuestion;
-  return <Icon {...props} />;
+/** The file glyph, at the ladder's size and the site's resting stroke.
+ *
+ *  Both defaults live here rather than at each call site. The same `.md` mark
+ *  is drawn in a search result, a Chat attachment row, a mention row and a
+ *  transcript chip, and while every caller spelled its own numbers those
+ *  copies drifted: four of them kept lucide's default stroke of 2, one wrote
+ *  1.5, and the sizes ran 12, 14 and 16 with no rule behind which was which.
+ *
+ *  A caller with a scale of its own still passes `size` — a tile glyph
+ *  measured off its thumbnail, or an inline chip on a 12px text line — but it
+ *  is now saying something, rather than restating the default. */
+export function FileTypeIcon({ path, size, strokeWidth = 1.5, ...props }: FileTypeIconProps) {
+  const sizeClasses = useSize();
+  const Icon = EXTENSION_ICONS[fileExtensionOf(path)] ?? FileQuestion;
+  return <Icon {...props} size={size ?? sizeClasses.icon} strokeWidth={strokeWidth} />;
 }

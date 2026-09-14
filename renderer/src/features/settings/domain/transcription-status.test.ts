@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { transcriptionModel } from '@/test/fakes/settings';
 
-import { describeTranscriptionModel, formatBytes, transcriptionBusy } from './transcription-status';
+import { describeTranscriptionModel, transcriptionBusy } from './transcription-status';
 
 const base = transcriptionModel({ sizeBytes: 150 * 1024 * 1024, speed: 'Fast' });
 
@@ -74,11 +74,5 @@ describe('transcription model display', () => {
         { ...base, operation: { receivedBytes: 1, status: 'downloading', totalBytes: 2 } },
       ]),
     ).toBe(true);
-  });
-
-  it('formats sizes at the unit a reader would use', () => {
-    expect(formatBytes(2 * 1024 ** 3)).toBe('2.0 GB');
-    expect(formatBytes(150 * 1024 ** 2)).toBe('150 MB');
-    expect(formatBytes(10)).toBe('1 KB');
   });
 });

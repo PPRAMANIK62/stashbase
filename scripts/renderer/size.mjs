@@ -13,13 +13,12 @@ export const LIMIT = 400;
 export const TEST_LIMIT = 500;
 // An entry here is a standing exception, and the list only ever shrinks: an
 // allowlisted file that has come back under the limit fails until its entry is
-// removed, so a ceiling follows the code down and never up. Both entries below
+// removed, so a ceiling follows the code down and never up. The entry below
 // arrived with the replacement renderer a few lines over the limit. Splitting
-// them is a design change rather than a cleanup, so each is pinned at the
+// it is a design change rather than a cleanup, so it stays pinned at the
 // length it arrived at until that work happens.
 const defaultAllowlist = new Map([
   ['features/agent/application/workspace-runtime.ts', 409],
-  ['features/workspace/ui/file-tree.tsx', 408],
 ]);
 
 function files(dir) {

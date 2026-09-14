@@ -7,6 +7,7 @@
  * `value !== baseline` — because storing it separately let the two disagree.
  */
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { basePathName } from '@/shared/utils/file-path';
 
 import type { DocumentTextFormat } from './document-format';
 
@@ -124,7 +125,7 @@ export function sameSource(left: SourceReference, right: SourceReference): boole
 }
 
 export function sourceName(source: SourceReference): string {
-  return source.path.split('/').at(-1) ?? source.path;
+  return basePathName(source.path);
 }
 
 export function documentAccess(source: SourceReference, activeFolderPath: string): DocumentAccess {

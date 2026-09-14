@@ -5,6 +5,7 @@ import type {
   FindMatchInfo,
   FindOptions,
 } from '@/features/documents/application/navigation-runtime';
+import { clamp } from '@/shared/utils/clamp';
 
 export interface PdfFindMatch {
   page: number;
@@ -76,7 +77,7 @@ async function scanDocument(
           if (candidate.offset > offset) break;
           item = candidate;
         }
-        const yRatio = item ? Math.max(0, Math.min(1, 1 - item.y / viewport.height)) : 0;
+        const yRatio = item ? clamp(1 - item.y / viewport.height, 0, 1) : 0;
         matches.push({ page: pageNumber, yRatio });
       }
     } catch {

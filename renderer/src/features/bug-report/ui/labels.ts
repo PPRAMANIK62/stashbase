@@ -12,6 +12,7 @@ import type {
   ReviewArtifact,
   ReviewingPending,
 } from '@/features/bug-report/domain/review-session';
+import { formatBytes } from '@/shared/utils/format-bytes';
 
 const TITLES: Readonly<Record<ArtifactKind, string>> = {
   diagnostics: 'System info',
@@ -21,13 +22,6 @@ const TITLES: Readonly<Record<ArtifactKind, string>> = {
 
 export function artifactTitle(kind: ArtifactKind): string {
   return TITLES[kind];
-}
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const UNAVAILABLE_META = 'Unavailable for this report';

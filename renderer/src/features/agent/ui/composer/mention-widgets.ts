@@ -6,20 +6,21 @@
 import { EditorView, WidgetType, type DecorationSet, Decoration } from '@codemirror/view';
 
 import type { ContextStatus } from '@/features/agent/domain/context';
+import { shapeTokens } from '@/lib/shape-context';
+import { basePathName } from '@/shared/utils/file-path';
 
 import { mentionField, statusField } from './mention-markers';
 
-const STATUS_WORD: Record<ContextStatus, string> = {
+/** The word a bound source wears while it is not ready. The chip in the
+ *  editor and the tile below it are naming the same state, so they read it
+ *  from one map. */
+export const STATUS_WORD: Record<ContextStatus, string> = {
   blocked: 'Blocked',
   failed: 'Failed',
   preparing: 'Preparing',
   ready: 'Ready',
   stale: 'Stale',
 };
-
-function basename(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1);
-}
 
 function reducedMotion(root: Document): boolean {
   const view = root.defaultView;
@@ -29,8 +30,7 @@ function reducedMotion(root: Document): boolean {
   );
 }
 
-const CHIP_CLASS =
-  'mx-px inline-flex max-w-full items-center gap-1 rounded-md bg-foreground/8 px-1.5 align-baseline font-medium whitespace-nowrap text-foreground';
+const CHIP_CLASS = `mx-px inline-flex max-w-full items-center gap-1 ${shapeTokens.chip} bg-foreground/8 px-1.5 align-baseline font-medium whitespace-nowrap text-foreground`;
 
 function popIn(chip: HTMLElement, root: Document) {
   if (typeof chip.animate !== 'function' || reducedMotion(root)) return;
@@ -119,7 +119,7 @@ class MentionWidget extends WidgetType {
     chip.append(glyph);
 
     const name = root.createElement('span');
-    name.textContent = basename(this.path);
+    name.textContent = basePathName(this.path);
     chip.append(name);
 
     if (this.status !== 'ready') {

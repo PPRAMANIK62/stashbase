@@ -14,6 +14,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { formatJsonPath, type JsonSourceNode } from '@/features/documents/domain/json-source';
 import { focusRing } from '@/lib/focus-ring';
 import { cn } from '@/lib/utils';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 import {
   isJsonContainer,
@@ -104,9 +105,9 @@ function JsonKeyCell({
 
 function JsonCellError({ message }: { message: string }) {
   return (
-    <span className="mt-1 block font-sans text-caption text-destructive" role="alert">
+    <FailureLine as="span" className="mt-1 block font-sans" tone="input">
       {message}
-    </span>
+    </FailureLine>
   );
 }
 

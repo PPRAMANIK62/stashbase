@@ -8,6 +8,8 @@
  */
 import { parseTree, printParseErrorCode, type Node, type ParseError } from 'jsonc-parser';
 
+import { formatBytes } from '@/shared/utils/format-bytes';
+
 export const JSON_TREE_LIMITS = Object.freeze({ bytes: 512_000, depth: 80, nodes: 20_000 });
 
 export type JsonPath = Array<number | string>;
@@ -155,10 +157,6 @@ function unavailable(
   location?: { column: number; line: number },
 ): JsonTreeAnalysis {
   return { available: false, ...(location === undefined ? {} : { location }), message, reason };
-}
-
-function formatBytes(bytes: number): string {
-  return `${(bytes / 1_000_000).toFixed(bytes >= 1_000_000 ? 0 : 1)} MB`;
 }
 
 function humanizeError(code: string): string {

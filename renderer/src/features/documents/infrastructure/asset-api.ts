@@ -3,10 +3,7 @@ import { documentViewerFormat } from '@/features/documents/domain/document-forma
 import { send } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import { documentTextSourceRequestSchema } from '@/protocols/http/files';
-
-function encodePath(entryPath: string): string {
-  return entryPath.split('/').map(encodeURIComponent).join('/');
-}
+import { encodePathSegments } from '@/shared/utils/file-path';
 
 function assetPath(
   prefix: '/asset' | '/asset-audio-preview' | '/asset-derived',
@@ -14,7 +11,7 @@ function assetPath(
   entryPath: string,
 ): string {
   const folder = encodeURIComponent(encodeURIComponent(folderPath));
-  return `${prefix}/__folder/${folder}/${encodePath(entryPath)}`;
+  return `${prefix}/__folder/${folder}/${encodePathSegments(entryPath)}`;
 }
 
 export function createDocumentAssetAdapter(
@@ -39,7 +36,7 @@ export function createDocumentAssetAdapter(
           unavailable: 'The file could not be loaded.',
         },
         method: 'HEAD',
-        path: `/api/files/${encodePath(request.data.path)}?${query}`,
+        path: `/api/files/${encodePathSegments(request.data.path)}?${query}`,
         signal,
       });
       const version = response.headers?.['x-stashbase-file-version'];

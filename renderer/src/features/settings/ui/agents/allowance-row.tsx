@@ -1,11 +1,7 @@
-import { Collapsible } from '@base-ui/react/collapsible';
-import { RefreshCw } from 'lucide-react';
-import { useId, useState } from 'react';
-
 import { Button } from '@/components/ui/button';
 import type { AgentAllowance } from '@/features/settings/domain/agent-catalog';
-import { ProgressBar, SettingsRow } from '@/features/settings/ui/rows';
-import { useIcon } from '@/lib/icon-context';
+import { Disclosure, ProgressBar, SettingsRow } from '@/features/settings/ui/rows';
+import { clamp } from '@/shared/utils/clamp';
 
 /** OpenQuill's free credits, which refill on a fixed 7-day window: one bar
  *  and one sentence, with the token breakdown behind a disclosure most
@@ -17,11 +13,7 @@ export function AllowanceRow({
   allowance: AgentAllowance;
   onRefresh: () => void;
 }) {
-  const ChevronDown = useIcon('chevron-down');
-  const ChevronRight = useIcon('chevron-right');
-  const [detailOpen, setDetailOpen] = useState(false);
-  const detailPanelId = useId();
-  const percent = Math.max(0, Math.min(100, Math.round(allowance.remainingPercent)));
+  const percent = clamp(Math.round(allowance.remainingPercent), 0, 100);
   const reset = allowance.windowEndsAt
     ? new Date(allowance.windowEndsAt).toLocaleString([], {
         dateStyle: 'medium',
@@ -31,34 +23,21 @@ export function AllowanceRow({
 
   return (
     <SettingsRow
-      detail={`${percent}% left${reset ? ` · Refills ${reset}` : ' · The 7-day window starts on first use'}`}
+      detail={`${percent}% remaining${reset ? ` · Refills ${reset}` : ' · Resets every 7 days from first use'}`}
       title="Free credits"
       trail={
-        <Button leadingIcon={RefreshCw} onClick={onRefresh} size="compact" variant="ghost">
+        <Button onClick={onRefresh} size="compact" variant="ghost">
           Refresh
         </Button>
       }
     >
       <ProgressBar value={percent} />
-      <Collapsible.Root className="mt-1" onOpenChange={setDetailOpen} open={detailOpen}>
-        <Collapsible.Trigger
-          render={
-            <Button
-              aria-controls={detailPanelId}
-              className="-ml-1.5 h-auto gap-1.5 px-1.5 py-0.5 text-caption font-normal whitespace-nowrap"
-              size="compact"
-              trailingIcon={detailOpen ? ChevronDown : ChevronRight}
-              variant="ghost"
-            >
-              Token detail
-            </Button>
-          }
-        />
-        <Collapsible.Panel className="pt-0.5 text-caption text-muted-foreground" id={detailPanelId}>
+      <Disclosure summary="Token usage">
+        <p className="text-caption text-muted-foreground">
           {allowance.inputTokens.toLocaleString()} input · {allowance.outputTokens.toLocaleString()}{' '}
           output · {allowance.cacheReadTokens.toLocaleString()} cached
-        </Collapsible.Panel>
-      </Collapsible.Root>
+        </p>
+      </Disclosure>
     </SettingsRow>
   );
 }

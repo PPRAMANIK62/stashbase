@@ -23,6 +23,7 @@ import { useSize, type SizeVariant } from '@/lib/size-context';
 import { spring } from '@/lib/springs';
 import { instant, useMotionTier } from '@/lib/use-motion-tier';
 import { cn } from '@/lib/utils';
+import { clamp } from '@/shared/utils/clamp';
 
 interface SwitchProps extends HTMLAttributes<HTMLDivElement> {
   label: string;
@@ -127,7 +128,7 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
         const pressedThumbWidth = m.thumbSize + m.pressExtend;
         const dragMax = m.trackWidth - THUMB_OFFSET - pressedThumbWidth;
         const rawX = pointerStart.current.originX + delta;
-        motionX.set(Math.max(dragMin, Math.min(dragMax, rawX)));
+        motionX.set(clamp(rawX, dragMin, dragMax));
       },
       [motionX, m],
     );

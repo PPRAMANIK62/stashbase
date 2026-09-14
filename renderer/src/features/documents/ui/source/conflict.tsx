@@ -9,6 +9,7 @@ import type {
   DocumentConflictState,
 } from '@/features/documents/domain/document';
 import { cn } from '@/lib/utils';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 export interface DocumentConflictProps {
   conflict: DocumentConflictState;
@@ -31,7 +32,11 @@ export function DocumentConflict({ conflict, name, resolve }: DocumentConflictPr
     >
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-4 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
-          <AlertTriangle aria-hidden="true" className="size-4 shrink-0 text-destructive" />
+          <AlertTriangle
+            aria-hidden="true"
+            className="size-4 shrink-0 text-destructive"
+            strokeWidth={1.5}
+          />
           <div className="min-w-0">
             <h2 className="truncate text-body font-medium" id="document-conflict-title">
               {name} changed on disk
@@ -72,9 +77,9 @@ export function DocumentConflict({ conflict, name, resolve }: DocumentConflictPr
         </div>
       </div>
       {conflict.resolutionMessage && (
-        <p className="border-b border-border px-4 py-2 text-caption text-destructive" role="alert">
+        <FailureLine className="border-b border-border px-4 py-2" tone="input">
           {conflict.resolutionMessage}
-        </p>
+        </FailureLine>
       )}
       <ScrollArea className="min-h-0 flex-1" orientation="both">
         <table className="w-full min-w-[48rem] table-fixed border-collapse font-mono text-caption">

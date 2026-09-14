@@ -25,6 +25,7 @@ import {
   workspaceRevealResponseSchema,
   type WorkspaceFilesWire,
 } from '@/protocols/http/files';
+import { encodePathSegments } from '@/shared/utils/file-path';
 
 function mapListing(listing: WorkspaceFilesWire): WorkspaceListing {
   return {
@@ -85,10 +86,6 @@ function operationFailure({ response, serverMessage }: TransportFailure): FilesE
   );
 }
 
-function encodePath(relativePath: string): string {
-  return relativePath.split('/').map(encodeURIComponent).join('/');
-}
-
 function folderQuery(folderPath: string): string {
   return new URLSearchParams({ folder: folderPath }).toString();
 }
@@ -140,7 +137,7 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
       if (!reveal.success) throw new FilesError('unavailable', 'The item identity is invalid.');
       await request(client, {
         ...files(
-          `/api/reveal/${encodePath(reveal.data.path)}?${folderQuery(reveal.data.folderPath)}`,
+          `/api/reveal/${encodePathSegments(reveal.data.path)}?${folderQuery(reveal.data.folderPath)}`,
           signal,
           {
             invalid: 'The reveal operation returned an invalid response.',
@@ -192,7 +189,7 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
       const { data } = rename;
       return request(client, {
         ...files(
-          `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePath(data.path)}?${folderQuery(data.folderPath)}`,
+          `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePathSegments(data.path)}?${folderQuery(data.folderPath)}`,
           signal,
           {
             invalid: 'The rename operation returned an invalid response.',
@@ -213,7 +210,7 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
       const { data } = remove;
       await request(client, {
         ...files(
-          `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePath(data.path)}?${folderQuery(data.folderPath)}`,
+          `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePathSegments(data.path)}?${folderQuery(data.folderPath)}`,
           signal,
           {
             invalid: 'The delete operation returned an invalid response.',

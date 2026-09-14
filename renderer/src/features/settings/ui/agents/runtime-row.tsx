@@ -1,5 +1,3 @@
-import { Feather, Sparkles, Terminal } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import type { AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import {
@@ -7,17 +5,11 @@ import {
   type AgentRuntimeAction,
 } from '@/features/settings/domain/agent-runtime-status';
 import { SettingsRow } from '@/features/settings/ui/rows';
-import type { AgentId } from '@/shared/domain/agent-id';
+import { useShape } from '@/lib/shape-context';
+import { cn } from '@/lib/utils';
+import { AGENT_ICONS } from '@/shared/brand/agent-icons';
 import type { FailureView } from '@/shared/domain/feature-error';
 import { FailureNotice } from '@/shared/ui/failure-notice';
-
-import { StageTrack } from './stage-track';
-
-const AGENT_ICONS: Record<AgentId, typeof Feather> = {
-  claude: Sparkles,
-  codex: Terminal,
-  stashbase: Feather,
-};
 
 export interface RuntimeRowProps {
   runtime: AgentRuntime;
@@ -35,23 +27,32 @@ export interface RuntimeRowProps {
  *  action that applies right now. */
 export function RuntimeRow({ runtime, busy, failure, onAction, onUninstall }: RuntimeRowProps) {
   const display = describeRuntime(runtime, busy);
+  const shape = useShape();
   const Icon = AGENT_ICONS[runtime.id];
   const action = display.action;
-  const trackStage = display.stage === null || display.stage === 'ready' ? null : display.stage;
+  /** Nothing here is usable until preparation reaches `ready`. An unusable row
+   *  recedes; it does not turn red. A failure the reader can act on says so in
+   *  its own sentence and offers the action that clears it. */
+  const ready = display.stage === 'ready';
   const canUninstall = runtime.installed && runtime.ownership === 'managed' && !busy;
-  const hasChildren = trackStage !== null || failure !== null;
 
   return (
     <SettingsRow
       as="li"
       detail={display.description}
-      detailTone={display.failed ? 'error' : 'muted'}
       lead={
-        <span className="flex size-8 items-center justify-center rounded-md border border-border text-foreground">
-          <Icon aria-hidden="true" className="size-4" />
+        <span
+          className={cn(
+            'flex size-8 items-center justify-center border border-border',
+            ready ? 'text-foreground' : 'text-muted-foreground',
+            shape.chip,
+          )}
+        >
+          <Icon aria-hidden="true" className="size-4" strokeWidth={1.5} />
         </span>
       }
       title={runtime.label}
+      titleTone={ready ? 'default' : 'muted'}
       trail={
         busy || action || canUninstall ? (
           <>
@@ -74,12 +75,7 @@ export function RuntimeRow({ runtime, busy, failure, onAction, onUninstall }: Ru
         ) : null
       }
     >
-      {hasChildren && (
-        <>
-          {trackStage && <StageTrack failed={display.failed} stage={trackStage} />}
-          {failure && <FailureNotice className="mt-1" failure={failure} />}
-        </>
-      )}
+      {failure && <FailureNotice className="mt-1" failure={failure} />}
     </SettingsRow>
   );
 }

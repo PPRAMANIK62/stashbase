@@ -11,12 +11,12 @@ const sources: QuickOpenSource[] = [
   {
     action: 'open',
     retrievalAccess: 'included',
-    source: { folderPath: '/library/notes', path: 'notes/plan.md' },
+    source: { folderPath: '/project/notes', path: 'notes/plan.md' },
   },
   {
     action: 'reveal',
     retrievalAccess: 'excluded',
-    source: { folderPath: '/library/notes', path: 'linked/report.bin' },
+    source: { folderPath: '/project/notes', path: 'linked/report.bin' },
   },
 ];
 
@@ -64,7 +64,9 @@ describe('Quick Open picker', () => {
       />,
     );
 
-    expect(screen.getByRole('alert').textContent).toBe('Files are unavailable.');
+    // A capability StashBase cannot reach is a quiet status, not an alarm the
+    // reader is asked to fix. The recovery beside it is what they act on.
+    expect(screen.getByRole('status').textContent).toBe('Files are unavailable.');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
@@ -93,7 +95,7 @@ describe('Quick Open picker', () => {
   it('reports a rejected navigation without leaking its cause', async () => {
     renderPicker({
       onNavigate: vi.fn(async () => {
-        throw new Error('EACCES: /library/notes/notes/plan.md');
+        throw new Error('EACCES: /project/notes/notes/plan.md');
       }),
     });
 

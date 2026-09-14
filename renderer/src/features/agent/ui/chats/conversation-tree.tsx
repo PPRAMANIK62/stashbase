@@ -21,11 +21,11 @@ import type {
   AgentHistoryEntry,
   AgentConversationItem,
 } from '@/features/agent/domain/conversation-history';
-import { AGENT_ICONS } from '@/features/agent/ui/identity/agent-icons';
 import { fontWeights } from '@/lib/font-weight';
+import { AGENT_ICONS } from '@/shared/brand/agent-icons';
+import { SINGLE_CLICK_DELAY_MS } from '@/shared/utils/click-intent';
 
 const CONVERSATION_PAGE_SIZE = 100;
-const SINGLE_CLICK_DELAY_MS = 180;
 
 function HistoryActions({
   entry,
@@ -209,7 +209,6 @@ function ConversationGroup({
         <Button
           className="mt-1 ml-1"
           onClick={() => setVisibleCount((count) => count + CONVERSATION_PAGE_SIZE)}
-          size="compact"
           variant="ghost"
         >
           Show more

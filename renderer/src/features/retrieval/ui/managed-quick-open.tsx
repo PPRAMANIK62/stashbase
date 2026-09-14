@@ -18,8 +18,9 @@ import {
   type QuickOpenItem,
 } from '@/features/retrieval/domain/quick-open';
 import { cn } from '@/lib/utils';
+import { FailureLine } from '@/shared/ui/failure-notice';
+import { listNavigationTarget } from '@/shared/utils/list-cursor';
 
-import { listNavigationTarget } from './list-navigation';
 import type { QuickOpenProps } from './quick-open-types';
 
 const RESULT_LIMIT = 50;
@@ -138,9 +139,7 @@ export default function ManagedQuickOpen({
 
         {status === 'unavailable' && (
           <div className="flex h-12 items-center justify-between gap-3 px-4">
-            <p className="text-caption text-destructive" role="alert">
-              Files are unavailable.
-            </p>
+            <FailureLine tone="capability">Files are unavailable.</FailureLine>
             <Button onClick={onRetry} size="compact" variant="tertiary">
               Retry
             </Button>
@@ -175,7 +174,7 @@ export default function ManagedQuickOpen({
                   <FileTypeIcon
                     aria-hidden="true"
                     className={cn(
-                      'size-4 shrink-0',
+                      'shrink-0',
                       excluded && !selected ? 'text-muted-foreground' : 'text-foreground',
                     )}
                     path={item.source.path}
@@ -194,7 +193,11 @@ export default function ManagedQuickOpen({
                     )}
                     <span className="truncate">{location}</span>
                     {item.action === 'reveal' && (
-                      <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+                      <ExternalLink
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0"
+                        strokeWidth={1.5}
+                      />
                     )}
                   </span>
                 </CommandItem>
@@ -204,12 +207,9 @@ export default function ManagedQuickOpen({
         )}
 
         {failure && (
-          <p
-            className="border-t border-border px-4 py-3 text-caption text-destructive"
-            role="alert"
-          >
+          <FailureLine className="border-t border-border px-4 py-3" tone="input">
             {failure}
-          </p>
+          </FailureLine>
         )}
       </DialogContent>
     </Dialog>

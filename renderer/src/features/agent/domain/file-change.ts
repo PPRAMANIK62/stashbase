@@ -7,6 +7,7 @@
  */
 import type { AgentScope } from '@/features/agent/domain/session';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { basePathName } from '@/shared/utils/file-path';
 
 export type FileChangeAction = 'created' | 'wrote' | 'edited' | 'deleted' | 'changed';
 
@@ -183,7 +184,7 @@ function normalizeSeparators(path: string): string {
 
 /** The workspace source behind a changed path: a path already relative to
  *  the folder, or an absolute one inside it. A path outside the scoped
- *  folder, or any path in a Library chat, has no openable source. */
+ *  folder, or any path in a unbound chat, has no openable source. */
 export function changedSource(scope: AgentScope, rawPath: string): SourceReference | null {
   if (scope.kind !== 'folder') return null;
   const folder = normalizeSeparators(scope.path).replace(/\/+$/u, '');
@@ -200,6 +201,5 @@ export function changedSource(scope: AgentScope, rawPath: string): SourceReferen
 }
 
 export function fileBasename(path: string): string {
-  const normalized = normalizeSeparators(path).replace(/\/+$/u, '');
-  return normalized.slice(normalized.lastIndexOf('/') + 1) || path;
+  return basePathName(path);
 }

@@ -15,16 +15,13 @@ import {
 } from '@/features/agent/domain/context';
 import type { AgentSkill } from '@/features/agent/domain/runtime-catalog';
 import { agentSkills, type AgentSkillCatalog } from '@/features/agent/domain/session';
+import { basePathName } from '@/shared/utils/file-path';
 
 import type { MentionEditorHandle } from './mention-editor';
 import { mentionOptionId, type MentionListboxBinding, type MentionRow } from './mention-listbox';
 
 const MAX_SKILL_ROWS = 8;
 const ROW_ICON_CLASS = 'mt-0.5 size-3.5 shrink-0 text-muted-foreground';
-
-function basename(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1);
-}
 
 export interface MentionRowsOptions {
   editorRef: RefObject<MentionEditorHandle | null>;
@@ -55,7 +52,7 @@ export interface MentionRowsView {
 
 function skillRow(entry: AgentSkill): MentionRow {
   return {
-    icon: <Sparkles aria-hidden="true" className={ROW_ICON_CLASS} />,
+    icon: <Sparkles aria-hidden="true" className={ROW_ICON_CLASS} strokeWidth={1.5} />,
     key: `skill:${entry.id}`,
     primary: entry.label,
     secondary: entry.description,
@@ -66,13 +63,13 @@ function suggestionRow(suggestion: { kind: 'file' | 'folder'; path: string }): M
   return {
     icon:
       suggestion.kind === 'folder' ? (
-        <Folder aria-hidden="true" className={ROW_ICON_CLASS} />
+        <Folder aria-hidden="true" className={ROW_ICON_CLASS} strokeWidth={1.5} />
       ) : (
         <FileTypeIcon aria-hidden="true" className={ROW_ICON_CLASS} path={suggestion.path} />
       ),
     key: `${suggestion.kind}:${suggestion.path}`,
-    primary: basename(suggestion.path),
-    secondary: suggestion.path === basename(suggestion.path) ? undefined : suggestion.path,
+    primary: basePathName(suggestion.path),
+    secondary: suggestion.path === basePathName(suggestion.path) ? undefined : suggestion.path,
   };
 }
 

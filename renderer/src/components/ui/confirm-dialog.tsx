@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import type { IconComponent } from '@/lib/icon-context';
 import { cn } from '@/lib/utils';
 
 interface ConfirmDialogProps {
@@ -32,6 +33,10 @@ interface ConfirmDialogProps {
   description: ReactNode;
   /** Whether the action destroys something. Marks the confirm accordingly. */
   destructive?: boolean;
+  /** A mark above the title, for a question whose subject is easier to
+   *  recognize than to read. Optional: most questions are carried by their
+   *  own words, and a mark on every one of them stops meaning anything. */
+  icon?: IconComponent;
   /** Anything the question needs to show between its description and the
    *  buttons — the path about to be deleted, a preview of what is affected. */
   details?: ReactNode;
@@ -51,6 +56,7 @@ export function ConfirmDialog({
   description,
   destructive = false,
   details,
+  icon: Icon,
   failure = null,
   onCancel,
   onConfirm,
@@ -70,10 +76,18 @@ export function ConfirmDialog({
     <Dialog onOpenChange={(next) => !next && !pending && onCancel()} open={open}>
       <DialogContent closeDisabled={pending}>
         <DialogHeader>
+          {Icon && (
+            <span className="mb-1 flex size-8 items-center justify-center rounded-full bg-hover text-foreground">
+              <Icon aria-hidden="true" className="size-4" strokeWidth={1.5} />
+            </span>
+          )}
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         {details}
+        {/* The kit may not reach `shared/ui`, so this one restates the failure
+            line rather than importing it. That boundary is what keeps the
+            primitives installable without the application. */}
         {failure && (
           <p
             className={cn(details ? 'mt-3' : 'mt-1', 'text-caption text-destructive')}

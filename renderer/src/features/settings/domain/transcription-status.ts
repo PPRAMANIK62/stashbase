@@ -1,3 +1,6 @@
+import { clamp } from '@/shared/utils/clamp';
+import { formatBytes } from '@/shared/utils/format-bytes';
+
 import type { TranscriptionModel } from './transcription';
 
 /**
@@ -19,12 +22,6 @@ export type TranscriptionModelDisplay =
   /** Listed by the service but not offered on this account. */
   | { readonly state: 'unavailable'; readonly detail: string };
 
-export function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
-
 function traits(model: TranscriptionModel): string {
   return [model.speed, model.accuracy, model.resourceUse].filter(Boolean).join(' · ');
 }
@@ -36,7 +33,7 @@ function baseDetail(model: TranscriptionModel): string {
 
 function downloadPercent(receivedBytes: number, totalBytes: number): number {
   if (totalBytes <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((receivedBytes / totalBytes) * 100)));
+  return clamp(Math.round((receivedBytes / totalBytes) * 100), 0, 100);
 }
 
 /** One row's copy and control for a transcription model. */

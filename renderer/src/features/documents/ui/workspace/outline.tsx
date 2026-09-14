@@ -4,7 +4,15 @@
  * document whose outline has not arrived.
  */
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { useStore } from 'zustand';
 
 import {
@@ -27,6 +35,7 @@ import {
   type DocumentOutlineNode,
 } from '@/features/documents/domain/outline';
 import { documentViewerEntry } from '@/features/documents/ui/source/registry';
+import { cn } from '@/lib/utils';
 
 interface OutlineNodeItemProps {
   collapsed: ReadonlySet<string>;
@@ -107,6 +116,26 @@ function OutlineNodeItem({ collapsed, depth, node, runtime, toggle }: OutlineNod
   );
 }
 
+/** A quiet line in place of the tree: why there is nothing to show. One
+ *  spelling, because the panel is reached two ways and a reader must not meet
+ *  two different sentences for the same nothing. */
+function OutlineNote({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <p className={cn('px-4 pt-1 pb-2 text-caption text-muted-foreground', className)}>{children}</p>
+  );
+}
+
+/** The panel with no document behind it at all. Composition shows this while
+ *  no tab is open, so the empty Document outline reads the same whether the
+ *  panel was reached with a runtime or without one. */
+export function DocumentOutlineEmpty() {
+  return (
+    <SidebarGroup aria-label="Document outline section" className="min-h-0 p-0">
+      <OutlineNote>No outline available</OutlineNote>
+    </SidebarGroup>
+  );
+}
+
 export function DocumentOutline({ runtime }: { runtime: DocumentTabsRuntime }) {
   const activeTabId = useStore(runtime.store, (state) => state.activeTabId);
   const activeTab = useStore(runtime.store, (state) =>
@@ -135,13 +164,7 @@ export function DocumentOutline({ runtime }: { runtime: DocumentTabsRuntime }) {
   }, [outline.headings]);
 
   const tree = useMemo(() => buildDocumentOutline(outline.headings), [outline.headings]);
-  if (!activeTabId) {
-    return (
-      <SidebarGroup aria-label="Document outline section" className="min-h-0 p-0">
-        <p className="px-4 pt-1 pb-2 text-caption text-muted-foreground">No outline available</p>
-      </SidebarGroup>
-    );
-  }
+  if (!activeTabId) return <DocumentOutlineEmpty />;
   const name = activeTab ? sourceName(activeTab.source) : 'Document';
   // A format that never publishes headings says so, instead of reading as a
   // document whose outline has not arrived yet.
@@ -169,7 +192,7 @@ export function DocumentOutline({ runtime }: { runtime: DocumentTabsRuntime }) {
         aria-label={`${name} outline, ${outlineSummary}`}
         className="mx-2 h-7 w-auto gap-1.5 px-2 text-caption"
       >
-        <FileText aria-hidden="true" className="size-3.5 shrink-0" />
+        <FileText aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={1.5} />
         <span className="min-w-0 truncate" title={name}>
           {name}
         </span>
@@ -184,16 +207,14 @@ export function DocumentOutline({ runtime }: { runtime: DocumentTabsRuntime }) {
       </SidebarGroupLabel>
       <SidebarGroupContent>
         {!outline.available ? (
-          <p className="px-4 pt-1 pb-2 text-caption leading-relaxed text-muted-foreground">
+          <OutlineNote className="leading-relaxed">
             No outline available for this document
-          </p>
+          </OutlineNote>
         ) : tree.length === 0 ? (
-          <p className="px-4 pt-1 pb-2 text-caption text-muted-foreground">
-            No headings in this document
-          </p>
+          <OutlineNote>No headings in this document</OutlineNote>
         ) : (
           <nav aria-label="Document outline" className="px-2 pb-2">
-            <SidebarMenu ref={menuRef} size="compact">
+            <SidebarMenu ref={menuRef}>
               {tree.map((node) => (
                 <OutlineNodeItem
                   collapsed={collapsed}

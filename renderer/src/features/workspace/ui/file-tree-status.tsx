@@ -2,12 +2,17 @@ import { LoaderCircle, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { filesFailure } from '@/features/workspace/application/failure-messages';
+import { FailureNotice } from '@/shared/ui/failure-notice';
 
 /** The tree before it has a listing to show. */
 export function FileTreeLoading() {
   return (
     <div className="flex items-center gap-2 px-4 py-5 text-caption text-muted-foreground">
-      <LoaderCircle aria-hidden="true" className="size-3.5 motion-safe:animate-spin" />
+      <LoaderCircle
+        aria-hidden="true"
+        className="size-3.5 motion-safe:animate-spin"
+        strokeWidth={1.5}
+      />
       Loading files
     </div>
   );
@@ -23,9 +28,7 @@ export interface FileTreeUnavailableProps {
 export function FileTreeUnavailable({ error, onRetry }: FileTreeUnavailableProps) {
   return (
     <div className="px-4 py-4">
-      <p className="text-caption text-destructive" role="alert">
-        {filesFailure(error).message}
-      </p>
+      <FailureNotice failure={filesFailure(error)} />
       <Button
         className="mt-2"
         leadingIcon={RefreshCw}

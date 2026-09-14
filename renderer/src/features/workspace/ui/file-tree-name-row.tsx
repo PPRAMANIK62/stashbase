@@ -2,8 +2,9 @@ import type { LucideIcon } from 'lucide-react';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 
 import { InlineInput } from '@/components/ui/inline-input';
-import { useShape } from '@/lib/shape-context';
+import { useSize } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 /**
  * A tree row whose label is being typed: the draft of a new entry, or an
@@ -42,7 +43,7 @@ export function FileTreeNameRow({
 }) {
   const [value, setValue] = useState(initialValue);
   const trimmed = value.trim();
-  const shape = useShape();
+  const sizeClasses = useSize('compact');
 
   return (
     <div className="relative z-10" role="none">
@@ -52,8 +53,12 @@ export function FileTreeNameRow({
         aria-level={level}
         aria-selected={false}
         className={cn(
-          'relative flex h-7 items-center gap-1 bg-hover pr-3 text-[12px] text-foreground',
-          shape.button,
+          // The tree's own row: 28px, a 14px glyph, and the 13px label,
+          // with the label on the rows' 38px text line.
+          'relative flex h-7 items-center gap-2 bg-hover pr-3 text-[13px] text-foreground',
+          // The row it stands in for is a compact Button, so it takes the
+          // same ladder corner rather than a shape role of its own.
+          sizeClasses.radius,
         )}
         data-tree-name-row=""
         role="treeitem"
@@ -80,9 +85,9 @@ export function FileTreeNameRow({
         />
       </div>
       {problem && (
-        <p className="py-0.5 pr-3 text-caption text-destructive" role="alert" style={style}>
+        <FailureLine className="py-0.5 pr-3" style={style} tone="input">
           {problem}
-        </p>
+        </FailureLine>
       )}
     </div>
   );

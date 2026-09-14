@@ -23,6 +23,7 @@ import { CodeEditorDocument } from '@/features/documents/ui/code-editor/document
 import type { DocumentViewerStatus } from '@/features/documents/ui/source/viewer';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { useRequestSignals } from '@/shared/runtime/use-request-signals';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 import { formatFileSize, genericPreviewCopy } from './presentation';
 
@@ -62,9 +63,9 @@ export function GenericFileDocument({
   };
 
   const revealError = revealState === 'error' && (
-    <p className="mt-2 text-caption text-destructive" role="alert">
+    <FailureLine className="mt-2" tone="input">
       The file could not be shown in the system file manager.
-    </p>
+    </FailureLine>
   );
 
   if (preview.isPending) return <>{status({ name })}</>;
@@ -75,7 +76,11 @@ export function GenericFileDocument({
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
         <div className="max-w-md">
-          <FileQuestion aria-hidden="true" className="mx-auto size-4 text-muted-foreground" />
+          <FileQuestion
+            aria-hidden="true"
+            className="mx-auto size-4 text-muted-foreground"
+            strokeWidth={1.5}
+          />
           <h2 className="mt-3 text-body font-medium">
             {formatSpecific ? name : `Could not inspect ${name}`}
           </h2>
@@ -133,7 +138,11 @@ export function GenericFileDocument({
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
       <div className="max-w-md">
-        <FileQuestion aria-hidden="true" className="mx-auto size-4 text-muted-foreground" />
+        <FileQuestion
+          aria-hidden="true"
+          className="mx-auto size-4 text-muted-foreground"
+          strokeWidth={1.5}
+        />
         <h2 className="mt-3 text-body font-medium">{copy.title}</h2>
         <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role="status">
           {copy.description}

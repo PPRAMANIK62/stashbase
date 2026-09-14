@@ -5,6 +5,8 @@
  * `ViewerFormat`, so the listing wire and the tree cannot drift.
  */
 import type { ViewerFormat } from '@/contracts/file-formats';
+import { basePathName, parentPathOf } from '@/shared/utils/file-path';
+import { listNavigationTarget } from '@/shared/utils/list-cursor';
 
 export type { ViewerFormat };
 
@@ -66,17 +68,9 @@ export interface WorkspaceEntry {
   path: string;
 }
 
-function basename(entryPath: string): string {
-  return entryPath.split('/').at(-1) ?? entryPath;
-}
-
-function parentPath(entryPath: string): string {
-  return entryPath.split('/').slice(0, -1).join('/');
-}
-
 /** The folder-relative parent of an entry; empty at the folder root. */
 export function parentTreePath(entryPath: string): string {
-  return parentPath(entryPath);
+  return parentPathOf(entryPath);
 }
 
 export function joinTreePath(parent: string, name: string): string {
@@ -89,8 +83,8 @@ export function joinTreePath(parent: string, name: string): string {
 export function untitledDraftName(listing: WorkspaceListing, parent: string): string {
   const taken = new Set(
     listing.files
-      .filter((file) => parentPath(file.path) === parent)
-      .map((file) => basename(file.path).toLowerCase()),
+      .filter((file) => parentPathOf(file.path) === parent)
+      .map((file) => basePathName(file.path).toLowerCase()),
   );
   // One more candidate than there are siblings is always enough.
   for (let ordinal = 1; ordinal <= listing.files.length + 1; ordinal += 1) {
@@ -112,12 +106,12 @@ export function treeCreationParent(listing: WorkspaceListing, selectedPath: stri
   const isFolder =
     listing.folders.some((folder) => folder.path === selectedPath || inside(folder.path)) ||
     listing.files.some((file) => inside(file.path));
-  return isFolder ? selectedPath : parentPath(selectedPath);
+  return isFolder ? selectedPath : parentPathOf(selectedPath);
 }
 
 /** The path an entry takes when only its leaf name changes. */
 export function renamedTreePath(entryPath: string, name: string): string {
-  return joinTreePath(parentPath(entryPath), name);
+  return joinTreePath(parentPathOf(entryPath), name);
 }
 
 /** True for the entry itself and everything below it. */
@@ -157,11 +151,11 @@ export function buildTree(listing: WorkspaceListing): TreeNode[] {
     const node: FolderNode = {
       children: [],
       kind,
-      name: basename(folderPath),
+      name: basePathName(folderPath),
       path: folderPath,
       type: 'folder',
     };
-    const parent = parentPath(folderPath);
+    const parent = parentPathOf(folderPath);
     if (parent) ensureFolder(parent).children.push(node);
     else roots.push(node);
     folders.set(folderPath, node);
@@ -170,8 +164,8 @@ export function buildTree(listing: WorkspaceListing): TreeNode[] {
 
   for (const folder of listing.folders) ensureFolder(folder.path, folder.kind);
   for (const file of listing.files) {
-    const node: FileNode = { ...file, name: basename(file.path), type: 'file' };
-    const parent = parentPath(file.path);
+    const node: FileNode = { ...file, name: basePathName(file.path), type: 'file' };
+    const parent = parentPathOf(file.path);
     if (parent) ensureFolder(parent).children.push(node);
     else roots.push(node);
   }
@@ -218,14 +212,15 @@ export function nextTreePath(
   rows: readonly TreeRow[],
 ): string | null {
   if (rows.length === 0) return null;
-  const currentIndex = Math.max(
+  const activeIndex = Math.max(
     0,
     rows.findIndex((row) => row.node.path === currentPath),
   );
-  if (key === 'Home') return rows[0]?.node.path ?? null;
-  if (key === 'End') return rows.at(-1)?.node.path ?? null;
-  if (key === 'ArrowDown')
-    return rows[Math.min(currentIndex + 1, rows.length - 1)]?.node.path ?? null;
-  if (key === 'ArrowUp') return rows[Math.max(currentIndex - 1, 0)]?.node.path ?? null;
-  return null;
+  // The linear half of the tree's keyboard is the same cursor every other list
+  // in the app runs, so the tree reads it from there instead of restating the
+  // arithmetic. It declares no page size: the tree owns the horizontal moves
+  // that open and close folders, and a page jump past a collapsed folder is
+  // not a move a reader can follow.
+  const target = listNavigationTarget(key, { activeIndex, count: rows.length });
+  return target === null ? null : (rows[target]?.node.path ?? null);
 }

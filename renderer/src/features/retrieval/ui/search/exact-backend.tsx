@@ -19,9 +19,10 @@ import {
   type ExactSearchRequest,
   type ExactSearchResult,
 } from '@/features/retrieval/domain/exact-search';
+import { parentPathOf } from '@/shared/utils/file-path';
 
 import type { SearchBackend, SearchRows } from './backend';
-import { parentPath, rowLabel, SourceName } from './row';
+import { rowLabel, SourceName } from './row';
 
 const EXACT_DELAY_MS = 160;
 
@@ -71,7 +72,7 @@ function groupOccurrences(result: ExactSearchResult, folderPath: string): ExactG
     const occurrences = exactSearchOccurrences(file);
     if (occurrences.length === 0) continue;
     groups.push({
-      directory: parentPath(file.source.path),
+      directory: parentPathOf(file.source.path),
       occurrences,
       start,
       totalMatches: file.totalMatches,

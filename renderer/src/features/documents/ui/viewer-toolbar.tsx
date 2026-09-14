@@ -18,8 +18,8 @@ import { InlineInput } from '@/components/ui/inline-input';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
+import { SINGLE_CLICK_DELAY_MS } from '@/shared/utils/click-intent';
 
-const SINGLE_CLICK_DELAY_MS = 240;
 const VALUE_TYPOGRAPHY_CLASS = 'font-sans text-[12px] leading-none tabular-nums';
 
 export function ViewerToolbar({
