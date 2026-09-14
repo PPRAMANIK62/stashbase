@@ -11,6 +11,7 @@ import path from 'node:path';
 import test from 'node:test';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
+import { filesystemPath } from '../filesystem-path.ts';
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-github-import-'));
 const originalHomedir = os.homedir;
@@ -560,7 +561,7 @@ test('publication retains nested files, executable modes, and symbolic links', a
   await publishStagedRepository(staged, target, new AbortController().signal);
   assert.equal(fs.readFileSync(path.join(target, 'scripts', 'run.sh'), 'utf8'), fs.readFileSync(script, 'utf8'));
   if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(target, 'scripts', 'run.sh')).mode & 0o777, 0o755);
-  if (hasLink) assert.equal(fs.readlinkSync(path.join(target, 'run')), 'scripts/run.sh');
+  if (hasLink) assert.equal(fs.readlinkSync(path.join(target, 'run')), fs.readlinkSync(path.join(staged, 'run')));
 });
 
 test('import commits project membership without changing the active window', async () => {
@@ -569,7 +570,7 @@ test('import commits project membership without changing the active window', asy
   deps.register = productionGitHubImportDeps.register;
   const result = await importPublicGitHubRepository({ url: 'https://github.com/owner/registered-copy' }, deps);
   assert.equal(result.path, path.join(home, 'registered-copy'));
-  assert.ok(getRecentFolders().some((folder) => folder.path === result.path));
+  assert.ok(getRecentFolders().some((folder) => folder.path === filesystemPath.absolute(result.path)));
   assert.equal(getCurrentFolder(), null);
 });
 
@@ -595,5 +596,5 @@ test('cancellation before membership commit removes the published copy without r
   };
   await assert.rejects(importPublicGitHubRepository({ url: 'https://github.com/owner/cancel-commit', signal: controller.signal }, deps), { code: 'IMPORT_CANCELLED' });
   assert.deepEqual(fs.readdirSync(home), []);
-  assert.equal(getRecentFolders().some((folder) => folder.path === path.join(home, 'cancel-commit')), false);
+  assert.equal(getRecentFolders().some((folder) => folder.path === filesystemPath.absolute(path.join(home, 'cancel-commit'))), false);
 });
