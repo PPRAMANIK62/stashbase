@@ -205,6 +205,7 @@ test('both retrieval modes reject deleted, cancelled, failed, and stale prepared
       const { preparedTextCandidatePath } = await import('./server/conversion-dispatch.ts');
       const { markCancelled, markFailed, clearRecord } = await import('./server/conversion-status.ts');
       const { closeStateDb } = await import('./server/state-db.ts');
+      const { filesystemPath } = await import('./server/filesystem-path.ts');
       const root = path.join(os.homedir(), 'project');
       fs.mkdirSync(root);
       const direct = path.join(root, 'note.md');
@@ -222,7 +223,7 @@ test('both retrieval modes reject deleted, cancelled, failed, and stale prepared
         for (const mode of ['keyword', 'semantic']) {
           const result = await retrieval.search({ mode, query: 'needle', folderRoot: root });
           assert.equal(result.evidence.length, count, mode + ': ' + label);
-          if (count) assert.equal(result.evidence[0].sourcePath, source);
+          if (count) assert.equal(result.evidence[0].sourcePath, filesystemPath.absolute(source));
         }
       }
       try {
