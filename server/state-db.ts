@@ -1,26 +1,10 @@
-/**
- * Application-level transactional state in the per-machine app data directory.
- *
- * This is StashBase-owned state, separate from the MFS store.
- * schema. It holds non-derivable workflow decisions: durable file preparation
- * failures and per-folder semantic-indexing deferrals,
- * which are non-derivable — a failed extraction/index attempt can look
- * identical on disk to one that hasn't run — and drives per-file
- * recovery affordances.
- *
- * Other derived indexing truth lives at its authoritative source: MFS owns
- * accepted document revisions and index state, the filesystem answers "does
- * this file exist", and `~/.stashbase/config.json` holds
- * project folders and embedder config. (Earlier `files` and `index_queue`
- * tables duplicated daemon/reconcile state write-only and were removed.)
- */
+/** Current preparation failures/cancellations; MFS owns indexing state. */
 import { createRequire } from 'node:module';
 import type BetterSqlite3 from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { logger, errorMessage } from './log.ts';
-import { getFolderHome } from './folder.ts';
-import { appStateDbPath, stateDbPathForRoot } from './local-data.ts';
+import { appStateDbPath } from './local-data.ts';
 import { filesystemPath } from './filesystem-path.ts';
 
 const log = logger('state-db');
@@ -68,16 +52,12 @@ function getStateDb(): BetterSqlite3.Database | null {
     db = null;
   }
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  migrateLegacyStateDb(target);
   try {
     db = new Database(target);
     dbPath = target;
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
-    migrate(db);
-    migrateLegacyStateDbRows(db);
-    migrateLegacyStatusJson(db);
-    reconcileConversionPathIdentities(db);
+    initializeSchema(db);
   } catch (err: unknown) {
     log.warn(`state db disabled: ${errorMessage(err)}`);
     stateDbUnavailable = true;
@@ -88,61 +68,6 @@ function getStateDb(): BetterSqlite3.Database | null {
   return db;
 }
 
-function legacyFolderStateDbPath(): string {
-  return path.join(getFolderHome(), '.stashbase', 'state.db');
-}
-
-function legacyStateDbPaths(): string[] {
-  const target = filesystemPath.absolute(stateDbPath());
-  const candidates = [
-    stateDbPathForRoot(getFolderHome()),
-    legacyFolderStateDbPath(),
-  ];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const candidate of candidates) {
-    const resolved = filesystemPath.absolute(candidate);
-    const identity = filesystemPath.identity(resolved);
-    if (filesystemPath.equal(resolved, target) || seen.has(identity)) continue;
-    seen.add(identity);
-    out.push(candidate);
-  }
-  return out;
-}
-
-function migrateLegacyStateDb(target: string): void {
-  if (fs.existsSync(target)) return;
-  const legacy = legacyStateDbPaths().find((candidate) => fs.existsSync(candidate));
-  if (!legacy) return;
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  const suffixes = ['', '-wal', '-shm'].filter((suffix) => fs.existsSync(legacy + suffix));
-  const nonce = `${process.pid}.${Date.now()}`;
-  const temps = suffixes.map((suffix) => ({ suffix, path: `${target}${suffix}.${nonce}.tmp` }));
-  const installed: string[] = [];
-  try {
-    for (const { suffix, path: tmp } of temps) {
-      fs.copyFileSync(legacy + suffix, tmp);
-    }
-    for (const { suffix, path: tmp } of temps) {
-      const to = target + suffix;
-      fs.renameSync(tmp, to);
-      installed.push(to);
-    }
-    for (const suffix of suffixes) {
-      try { fs.unlinkSync(legacy + suffix); } catch { /* keep retry-safe source cleanup best-effort */ }
-    }
-    log.info(`migrated legacy state.db → ${target}`);
-  } catch (err: unknown) {
-    for (const { path: tmp } of temps) {
-      try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
-    }
-    for (const file of installed) {
-      try { fs.rmSync(file, { force: true }); } catch { /* best effort */ }
-    }
-    log.warn(`failed to migrate legacy state db ${legacy}: ${errorMessage(err)}`);
-  }
-}
-
 export function closeStateDb(): void {
   if (!db) return;
   try { db.close(); } catch { /* ignore */ }
@@ -150,189 +75,20 @@ export function closeStateDb(): void {
   dbPath = null;
 }
 
-function migrate(conn: BetterSqlite3.Database): void {
+function initializeSchema(conn: BetterSqlite3.Database): void {
   conn.exec(`
     CREATE TABLE IF NOT EXISTS conversions (
       path TEXT PRIMARY KEY,
-      path_identity TEXT,
+      path_identity TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('in-flight', 'done', 'failed', 'cancelled')),
       attempts INTEGER NOT NULL DEFAULT 0,
       last_error TEXT,
       last_attempt_at TEXT NOT NULL,
       done_at TEXT
     );
-
     CREATE INDEX IF NOT EXISTS conversions_status_idx ON conversions(status, last_attempt_at);
-
-    -- 2026-06: only failures are persisted now. in-flight lives in
-    -- process memory (a crash kills the conversion with us — persisting
-    -- it only produced corpses needing a reclaim pass), and "done" is
-    -- recorded by the derived note's existence on disk. Shed legacy rows.
-    DELETE FROM conversions WHERE status != 'failed';
-
-    -- Drop legacy tables on open so existing installs shed dead schema:
-    --   'pdf_conversions'  → renamed to 'conversions' (covers PDF + image
-    --        alike; the old name predated image OCR sharing the table).
-    --        Its rows are ephemeral preparation status — dropping them just
-    --        makes reconcile re-trigger any untracked source, so no
-    --        migration is needed.
-    --   'files' (per-file index/hash) and 'index_queue' (op queue) — both
-    --        were write-only: MFS owns accepted document revisions and
-    --        reconcile recovers idempotently, so nothing consumed them.
-    -- 'conversions' is the only state.db data that is non-derivable and
-    -- actually read.
-    DROP TABLE IF EXISTS pdf_conversions;
-    DROP TABLE IF EXISTS files;
-    DROP TABLE IF EXISTS index_queue;
-    DROP TABLE IF EXISTS semantic_indexing_decisions;
+    CREATE UNIQUE INDEX IF NOT EXISTS conversions_path_identity_idx ON conversions(path_identity);
   `);
-  const columns = conn.prepare('PRAGMA table_info(conversions)').all() as Array<{ name: string }>;
-  if (!columns.some((column) => column.name === 'path_identity')) {
-    conn.exec('ALTER TABLE conversions ADD COLUMN path_identity TEXT');
-  }
-}
-
-function reconcileConversionPathIdentities(conn: BetterSqlite3.Database): void {
-  const rows = conn.prepare(`
-    SELECT rowid, path, attempts
-    FROM conversions
-    ORDER BY last_attempt_at DESC, rowid DESC
-  `).all() as Array<{ rowid: number; path: string; attempts: number }>;
-  const groups = new Map<string, typeof rows>();
-  const invalidRowIds: number[] = [];
-  for (const row of rows) {
-    try {
-      const identity = filesystemPath.identity(row.path);
-      const group = groups.get(identity) ?? [];
-      group.push(row);
-      groups.set(identity, group);
-    } catch {
-      invalidRowIds.push(row.rowid);
-    }
-  }
-  const deleteRow = conn.prepare('DELETE FROM conversions WHERE rowid = ?');
-  const updateRow = conn.prepare(`
-    UPDATE conversions
-    SET path_identity = ?, attempts = ?
-    WHERE rowid = ?
-  `);
-  const tx = conn.transaction(() => {
-    for (const rowid of invalidRowIds) deleteRow.run(rowid);
-    for (const [identity, group] of groups) {
-      const [keeper, ...duplicates] = group;
-      for (const duplicate of duplicates) deleteRow.run(duplicate.rowid);
-      updateRow.run(identity, Math.max(...group.map((row) => row.attempts)), keeper.rowid);
-    }
-  });
-  tx();
-  conn.exec(`
-    CREATE UNIQUE INDEX IF NOT EXISTS conversions_path_identity_idx
-    ON conversions(path_identity)
-  `);
-}
-
-function migrateLegacyStateDbRows(conn: BetterSqlite3.Database): void {
-  for (const legacy of legacyStateDbPaths()) migrateLegacyStateDbRowsFrom(conn, legacy);
-}
-
-function migrateLegacyStateDbRowsFrom(conn: BetterSqlite3.Database, legacy: string): void {
-  if (!fs.existsSync(legacy)) return;
-  let attached = false;
-  try {
-    conn.prepare('ATTACH DATABASE ? AS legacy_state').run(legacy);
-    attached = true;
-    const hasConversions = conn.prepare(`
-      SELECT 1 AS ok
-      FROM legacy_state.sqlite_master
-      WHERE type = 'table' AND name = 'conversions'
-      LIMIT 1
-    `).get();
-    if (hasConversions) {
-      conn.exec(`
-        INSERT INTO conversions (path, status, attempts, last_error, last_attempt_at, done_at)
-        SELECT path, status, attempts, last_error, last_attempt_at, done_at
-        FROM legacy_state.conversions
-        WHERE status = 'failed'
-        ON CONFLICT(path) DO UPDATE SET
-          status = excluded.status,
-          attempts = excluded.attempts,
-          last_error = excluded.last_error,
-          last_attempt_at = excluded.last_attempt_at,
-          done_at = excluded.done_at;
-      `);
-    }
-    conn.prepare('DETACH DATABASE legacy_state').run();
-    attached = false;
-    for (const suffix of ['', '-wal', '-shm']) {
-      try { fs.unlinkSync(legacy + suffix); } catch { /* best-effort */ }
-    }
-    log.info(`merged legacy state.db rows from ${legacy}`);
-  } catch (err: unknown) {
-    if (attached) {
-      try { conn.prepare('DETACH DATABASE legacy_state').run(); } catch { /* best-effort */ }
-    }
-    log.warn(`failed to merge legacy state db rows from ${legacy}: ${errorMessage(err)}`);
-  }
-}
-
-function migrateLegacyStatusJson(conn: BetterSqlite3.Database): void {
-  const legacy = path.join(getFolderHome(), '.stashbase', 'pdf-status.json');
-  const migrated = legacy + '.migrated';
-  if (!fs.existsSync(legacy) || fs.existsSync(migrated)) return;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(legacy, 'utf8'));
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const upsert = conn.prepare(`
-        INSERT INTO conversions (path, status, attempts, last_error, last_attempt_at, done_at)
-        VALUES (@path, @status, @attempts, @lastError, @lastAttemptAt, @doneAt)
-        ON CONFLICT(path) DO UPDATE SET
-          status = excluded.status,
-          attempts = excluded.attempts,
-          last_error = excluded.last_error,
-          last_attempt_at = excluded.last_attempt_at,
-          done_at = excluded.done_at
-      `);
-      const tx = conn.transaction((entries: Array<Record<string, unknown>>) => {
-        for (const entry of entries) upsert.run(entry);
-      });
-      const rows: Array<Record<string, unknown>> = [];
-      for (const [pathKey, raw] of Object.entries(parsed)) {
-        const entry = sanitizeConversionEntry(raw);
-        if (!entry) continue;
-        // Only failures survive process restarts. Legacy in-flight rows
-        // are corpse state (the child process died with us), and done is
-        // represented by the derived note already being on disk.
-        if (entry.status !== 'failed') continue;
-        rows.push({
-          path: pathKey,
-          status: entry.status,
-          attempts: entry.attempts,
-          lastError: entry.lastError ?? null,
-          lastAttemptAt: entry.lastAttemptAt,
-          doneAt: entry.doneAt ?? null,
-        });
-      }
-      tx(rows);
-    }
-    fs.renameSync(legacy, migrated);
-    log.info('migrated pdf-status.json → state.db');
-  } catch (err: unknown) {
-    log.warn(`failed to migrate pdf-status.json: ${errorMessage(err)}`);
-  }
-}
-
-function sanitizeConversionEntry(v: unknown): ConversionStatusEntry | null {
-  if (!v || typeof v !== 'object') return null;
-  const o = v as Record<string, unknown>;
-  const status = o.status;
-  if (status !== 'in-flight' && status !== 'done' && status !== 'failed' && status !== 'cancelled') return null;
-  return {
-    status,
-    attempts: typeof o.attempts === 'number' && Number.isFinite(o.attempts) ? o.attempts : 0,
-    ...(typeof o.lastError === 'string' ? { lastError: o.lastError } : {}),
-    lastAttemptAt: typeof o.lastAttemptAt === 'string' ? o.lastAttemptAt : new Date(0).toISOString(),
-    ...(typeof o.doneAt === 'string' ? { doneAt: o.doneAt } : {}),
-  };
 }
 
 export function readConversionStatusMap(): Record<string, ConversionStatusEntry> {

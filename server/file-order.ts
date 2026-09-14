@@ -16,9 +16,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { logger, errorMessage, errorCode } from './log.ts';
-import { getFolderHome, requireCurrentFolder } from './folder.ts';
+import { requireCurrentFolder } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { fileOrderDir, localDataDirForRoot } from './local-data.ts';
+import { fileOrderDir } from './local-data.ts';
 
 const log = logger('file-order');
 
@@ -35,21 +35,13 @@ function configPath(root: string): string {
   return path.join(fileOrderDir(), orderFileName(root));
 }
 
-function legacyAppDataConfigPath(root: string): string {
-  return path.join(localDataDirForRoot(getFolderHome()), 'file-order', orderFileName(root));
-}
-
-function legacyConfigPath(root: string): string {
-  return path.join(root, '.stashbase', 'file-order.json');
-}
-
 /** Read the full map. Returns `{}` if the file doesn't exist or is
  *  corrupt — never throws, since the sidebar must still render. */
 export function readFileOrder(): FileOrderMap {
   let root: string;
   try { root = requireCurrentFolder(); } catch { return {}; }
   try {
-    const raw = readOrderFile(root);
+    const raw = fs.readFileSync(configPath(root), 'utf8');
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     const out: FileOrderMap = {};
@@ -75,51 +67,6 @@ export function readFileOrder(): FileOrderMap {
   }
 }
 
-function readOrderFile(root: string): string {
-  const current = configPath(root);
-  try {
-    return fs.readFileSync(current, 'utf8');
-  } catch (err: any) {
-    if (errorCode(err) !== 'ENOENT') throw err;
-  }
-
-  for (const legacy of [legacyAppDataConfigPath(root), legacyConfigPath(root)]) {
-    let raw: string;
-    try {
-      raw = fs.readFileSync(legacy, 'utf8');
-    } catch (err: any) {
-      if (errorCode(err) === 'ENOENT') continue;
-      throw err;
-    }
-    try {
-      writeOrderMap(root, sanitizeRawOrder(raw));
-      fs.rmSync(legacy, { force: true });
-    } catch (err) {
-      log.warn(`failed to migrate legacy file-order.json: ${errorMessage(err)}`);
-    }
-    return raw;
-  }
-
-  throw Object.assign(new Error('file order not found'), { code: 'ENOENT' });
-}
-
-function sanitizeRawOrder(raw: string): FileOrderMap {
-  const parsed = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-  const out: FileOrderMap = {};
-  for (const [k, v] of Object.entries(parsed)) {
-    if (typeof k !== 'string' || !Array.isArray(v)) continue;
-    try {
-      out[normalizeParentPath(k)] = uniqueNames(
-        v.filter((s): s is string => typeof s === 'string').map(normalizeChildName),
-      );
-    } catch {
-      // Drop invalid legacy entries.
-    }
-  }
-  return cleanMap(out);
-}
-
 /** Replace one parent's ordered list. Drops the entry entirely when
  *  `names` is empty (avoids accumulating stale keys). Atomic write
  *  via `.tmp` + rename. */
@@ -138,7 +85,6 @@ export function setFolderOrder(parentPath: string, names: string[]): void {
 
 export function deleteFileOrderForRoot(root: string): void {
   try { fs.rmSync(configPath(root), { force: true }); } catch { /* best effort */ }
-  try { fs.rmSync(legacyAppDataConfigPath(root), { force: true }); } catch { /* best effort */ }
 }
 
 export function remapFileOrderPath(oldRel: string, newRel: string, kind: 'file' | 'folder'): void {

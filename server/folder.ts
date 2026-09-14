@@ -582,10 +582,8 @@ function pushRecent(absPath: string): void {
   // log. Each folder keeps its own search namespace. The only way
   // out is an explicit remove (`removeRecentAsync`). A hard cap would silently
   // evict the oldest member's searchability — see the project-membership
-  // ownership contract in code-review/data-lifecycle.md.
+  // boundary in code-review/architecture.md#project-scope-and-paths.
   cfg.recentFolders = filtered;
-  // Drop the legacy field once we've migrated its content forward.
-  delete cfg.recentVaults;
   writeConfigStrict(cfg);
 }
 
@@ -600,7 +598,6 @@ async function prepareProjectRegistration(normalized: string) {
     { path: root, openedAt: new Date().toISOString(), ...(existing?.favorite === true ? { favorite: true } : {}) },
     ...list.filter((_, index) => !matches[index]),
   ];
-  delete config.recentVaults;
   return { config, revision, root };
 }
 

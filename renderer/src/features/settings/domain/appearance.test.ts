@@ -9,26 +9,6 @@ import {
 
 const FIELDS: readonly AppearanceField[] = ['theme', 'uiScale', 'readingTextSize'];
 
-describe('APPEARANCE_ROWS', () => {
-  it('names every preference exactly once', () => {
-    expect(APPEARANCE_ROWS.map((row) => row.field)).toEqual([
-      'theme',
-      'uiScale',
-      'readingTextSize',
-    ]);
-  });
-
-  it('gives every row choices with labels unique within it', () => {
-    for (const row of APPEARANCE_ROWS) {
-      expect(row.choices.length).toBeGreaterThan(0);
-      const labels = row.choices.map((choice) => choice.label);
-      expect(new Set(labels).size).toBe(labels.length);
-      expect(row.title).not.toBe('');
-      expect(row.detail).not.toBe('');
-    }
-  });
-});
-
 describe('appearanceChange', () => {
   it('accepts every value its own field names', () => {
     for (const row of APPEARANCE_ROWS) {

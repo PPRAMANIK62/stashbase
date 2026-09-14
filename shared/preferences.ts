@@ -5,9 +5,7 @@
  * Appearance is deliberately a small set of presets rather than free-form
  * customization: the renderer applies each value as a document-level class,
  * so an unbounded value would have no styling to select. Update preferences
- * control automatic release checks. Onboarding records which
- * one-time notices a user has already seen, versioned so a later revision of
- * a notice can show again without reusing a dismissed flag.
+ * control automatic release checks.
  */
 
 export type AppearanceTheme = 'system' | 'light' | 'dark';
@@ -33,12 +31,3 @@ export interface UpdatePreferences {
   /** Check the official desktop release channel after launch and periodically. */
   autoCheck: boolean;
 }
-
-export interface OnboardingPreferences {
-  sourceCodeNoticeVersion?: number;
-  /** The revision of the search-by-meaning setup invitation the user has
-   *  already answered, by configuring a source or declining it. Absent means
-   *  never answered, which is the only state that offers it. */
-  searchSetupInvitationVersion?: number;
-}
-
