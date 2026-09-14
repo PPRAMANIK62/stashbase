@@ -92,3 +92,40 @@ test('extractor signing retains codesign diagnostics without leaking credential 
     return true;
   });
 });
+
+test('temporary extractor identities join the search list and restore it after signing failure', async (t) => {
+  const { signExtractorComponent } = await import('./sign-extractor.mjs');
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'extractor-keychain-test-'));
+  t.after(() => fs.rm(tmp, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmp, 'stashbase-extract'), Buffer.from('cffaedfe00000000', 'hex'));
+  const original = ['/fixture/login.keychain-db', '/fixture/other identity.keychain-db'];
+  let searchList = [...original];
+  let keychain;
+  let signed = false;
+  let deleted = false;
+  const run = (cmd, args) => {
+    if (cmd === 'security') {
+      if (args[0] === 'create-keychain') keychain = args.at(-1);
+      if (args[0] === 'list-keychains') {
+        if (args.includes('-s')) searchList = args.slice(args.indexOf('-s') + 1);
+        return searchList.map((item) => `    "${item}"`).join('\n');
+      }
+      if (args[0] === 'find-identity') return '1) ' + 'A'.repeat(40) + ' "Developer ID Application: Fixture"';
+      if (args[0] === 'delete-keychain') deleted = true;
+      return '';
+    }
+    if (cmd === 'codesign') {
+      assert.ok(searchList.includes(keychain), 'codesign must be able to resolve the temporary identity through the search list');
+      assert.ok(original.every((item) => searchList.includes(item)));
+      signed = true;
+    }
+    if (cmd === 'xcrun') return JSON.stringify({ id: 'fixture-rejection', status: 'Invalid' });
+    return '';
+  };
+  await assert.rejects(signExtractorComponent(tmp, {
+    platform: 'darwin', env: { APPLE_KEYCHAIN_PROFILE: 'fixture-profile', CSC_LINK: 'Zml4dHVyZQ==' }, run,
+  }), /notarization failed/);
+  assert.equal(signed, true);
+  assert.deepEqual(searchList, original);
+  assert.equal(deleted, true);
+});

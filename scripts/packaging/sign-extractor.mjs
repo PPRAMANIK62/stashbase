@@ -13,6 +13,7 @@ export async function signExtractorComponent(source, options = {}) {
   const mode = assertMacosReleaseCredentials(env);
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'stashbase-extractor-sign-'));
   let keychain;
+  let originalSearchList;
   const execute = options.run ?? ((cmd, args) => execFileSync(cmd, args, {
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20 * 60_000,
   }));
@@ -37,10 +38,15 @@ export async function signExtractorComponent(source, options = {}) {
       const link = env.CSC_LINK;
       const bytes = await fs.readFile(link).catch(() => Buffer.from(link, 'base64'));
       await fs.writeFile(certificate, bytes, { mode: 0o600 });
+      originalSearchList = [...run('security', ['list-keychains', '-d', 'user']).matchAll(/^\s*"(.+)"\s*$/gm)]
+        .map((match) => match[1]);
       run('security', ['create-keychain', '-p', password, keychain]);
       run('security', ['unlock-keychain', '-p', password, keychain]);
       run('security', ['import', certificate, '-k', keychain, '-P', env.CSC_KEY_PASSWORD ?? '', '-T', '/usr/bin/codesign']);
       run('security', ['set-key-partition-list', '-S', 'apple-tool:,apple:', '-s', '-k', password, keychain]);
+      // --keychain narrows identity matching; codesign still resolves signing
+      // material through the user's search list. Preserve all existing entries.
+      run('security', ['list-keychains', '-d', 'user', '-s', keychain, ...originalSearchList]);
     }
     const keychainArgs = keychain ? [keychain] : [];
     const identities = run('security', ['find-identity', '-v', '-p', 'codesigning', ...keychainArgs]);
@@ -81,7 +87,11 @@ export async function signExtractorComponent(source, options = {}) {
     if (result.status !== 'Accepted') throw new Error(`Extractor notarization failed: ${result.id} (${result.status})`);
     console.log(`[extractor-component] signed ${binaries.length} Mach-O files; notarization ${result.id} accepted`);
   } finally {
-    if (keychain) { try { run('security', ['delete-keychain', keychain]); } catch { /* temporary keychain cleanup */ } }
-    await fs.rm(temporary, { recursive: true, force: true });
+    try {
+      if (originalSearchList) run('security', ['list-keychains', '-d', 'user', '-s', ...originalSearchList]);
+    } finally {
+      if (keychain) { try { run('security', ['delete-keychain', keychain]); } catch { /* temporary keychain cleanup */ } }
+      await fs.rm(temporary, { recursive: true, force: true });
+    }
   }
 }

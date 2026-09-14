@@ -104,7 +104,9 @@ toolchain rather than the linter any gate runs.
   independent tar.gz and matching JSON manifest per app version/platform;
   packaging verifies their hash, size, and target before embedding the manifest.
   macOS signs every native component binary/framework with Developer ID and
-  requires accepted notarization before hashing the archive. Windows/Linux
+  requires accepted notarization before hashing the archive. Its temporary
+  signing keychain joins the user search list for codesign identity resolution;
+  the original list is restored on success and failure. Windows/Linux
   use the exact archive digest carried by the installed app. Component runtime
   installation is owned by [Data Lifecycle](architecture.md#optional-local-components).
 - Python packaging rejects inference/OCR modules in the index daemon. App
