@@ -67,8 +67,8 @@ read-only access surface external clients copy from.
   with the whole listener state so the page never guesses what took effect.
 - Account OAuth starts from two places in this renderer, the account row at
   the foot of the sidebar and the Agents section of Settings, through one
-  `AccountPort` and always with purpose `account`; the renderer never starts
-  an embedding-purpose flow and never selects the hosted embedding source.
+  `AccountPort` and always with purpose `account`; the account contract has no
+  embedding-purpose flow or hosted embedding source.
   Only the Node server persists the session. A window polls the flow it
   started and never holds the session itself.
 - The Agent runtime rows expose readiness, installation, sign-in, and reset for
@@ -120,18 +120,15 @@ read-only access surface external clients copy from.
 - Migration is idempotent and loss-averse. Invalid legacy state must not erase
   a valid current value or silently select a different provider.
 - BYOK credentials, the refreshable Supabase account session, and the active
-  embedding source persist independently. Switching between account and BYOK
-  retains the inactive credential and never silently falls back after a
-  provider failure. The retired local source is a one-way, pre-daemon startup
-  migration: select a valid account session first, otherwise a stored BYOK
-  credential, otherwise clear the explicit source so searching by meaning is
-  not set up. New local selections are rejected.
-- Every OAuth flow records its initiating purpose. Account and Agent sign-in
-  establish identity only; only the explicit choice of hosted search by meaning
-  may activate `stashbase-account`, reset the indexer, or begin backfill.
+  embedding source persist independently. Only OpenAI and OpenRouter are valid
+  active embedding sources, and provider failure never falls back silently.
+  Retired `local` and `stashbase-account` selections migrate once before the
+  daemon starts: a stored BYOK credential is selected when present; otherwise
+  the explicit source is cleared so searching by meaning is not set up.
+- Every OAuth flow establishes account identity for OpenQuill only. Account
+  sign-in and sign-out never reset the indexer or begin semantic backfill.
 - Account access and refresh tokens are Node-only configuration. They never
-  cross renderer HTTP responses or the Node/Python boundary; Python receives a
-  random per-process loopback bearer credential instead.
+  cross renderer HTTP responses or the Node/Python boundary.
 - Google display name and avatar URL are optional display-only session fields.
   Refreshes and legacy-session hydration preserve known valid values when
   provider metadata is absent or unavailable; sign-out clears them with the
@@ -346,20 +343,6 @@ path. Renaming them is a separate change.
   size. A strict Content Security Policy rules out an inline script in the
   entry document, so closing this means handing the snapshot to the window from
   the host before it loads.
-- The server has not followed the renderer yet. `getEmbeddingSource` in
-  `server/app-config.ts` still resolves a signed-in session to
-  `stashbase-account` when no key is stored, and the retired-local migration
-  and key removal fall back to it too, so a sign-in for OpenQuill still makes
-  hosted indexing bind on the next start and spend the account's search
-  quota; the renderer projects that source as not set up and never shows it.
-  `PUT /api/account/source`, the `embedding` OAuth purpose, the quota fields
-  on `GET /api/account`, `stashbase-account` in
-  `shared/protocols/http/embedder.ts`, and the `quota-exhausted` index state
-  remain on the wire with no renderer path that reaches them. `DELETE
-  /api/account` still resets the indexer when the hosted source was active.
-  `searchSetupInvitationVersion` in `shared/protocols/http/onboarding.ts` and
-  its route have no renderer reader. Retiring all of that is the server side
-  of the same change.
 - The composer's setup gate cannot sign in. It offers **Set up OpenQuill**,
   which bootstraps and fails with `account-required`; the route is **Agent
   settings** beside it, where the Agents section signs in.
@@ -369,7 +352,7 @@ path. Renaming them is a separate change.
 | Role | Stable entry points |
 |---|---|
 | Persistent Interface | strict/fallback read and write plus domain getters/setters in `server/app-config.ts`, over the preference shapes in `shared/preferences.ts` |
-| Domain owners | `server/agent-instructions.ts`, `server/mcp-http-settings.ts`, `server/hosted-account.ts`, `server/hosted-embedding-broker.ts`, `server/hosted-agent-broker.ts`, embedding and transcription configuration Modules |
+| Domain owners | `server/agent-instructions.ts`, `server/mcp-http-settings.ts`, `server/hosted-account.ts`, `server/hosted-agent-broker.ts`, embedding and transcription configuration Modules |
 | HTTP Adapters | `server/routes/agent-instructions.ts`, `appearance.ts`, `capture.ts`, `updates.ts`, `workspace-preferences.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
 | Wire schemas | `shared/protocols/http/onboarding.ts` and `shared/protocols/http/workspace-preferences.ts` for the two preferences a reader's own choice reaches, with the rest of the registered set under `shared/protocols/http/` |
 | Renderer Interface | `renderer/src/features/settings/public.ts`, bound once in `renderer/src/app/dependencies.ts` |

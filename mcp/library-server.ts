@@ -101,7 +101,7 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
         1,
         Math.min(MAX_TOP_K, Math.floor(typeof args.top_k === 'number' ? args.top_k : DEFAULT_TOP_K)),
       );
-      const searchResult = await operations.search({ query, topK: k, scope: args.scope as 'current' | 'library' | undefined, folder, pathPrefix, types, mode, caseStrict, wholeWord });
+      const searchResult = await operations.search({ query, topK: k, folder, pathPrefix, types, mode, caseStrict, wholeWord });
       const hits = annotateSearchHitsForMcp(searchResult.hits);
       const effectiveMode = searchResult.mode ?? mode;
       return {
@@ -110,7 +110,7 @@ export function createLibraryMcpServer(opts: LibraryMcpServerOptions): Server {
           text: JSON.stringify({
             query,
             mode: effectiveMode,
-            folder: searchResult.folder ?? folder ?? null,
+            folder: searchResult.folder,
             path_prefix: pathPrefix ?? null,
             types: types ?? null,
             top_k: k,
@@ -278,7 +278,8 @@ const BUILTIN_TOOLS = [
       name: 'write_file',
       description:
         'Create or overwrite a Markdown, HTML, JSON, or UTF-8 plain-text file. Creates parent folders as ' +
-        'needed, writes atomically, and updates data for search by meaning when a provider is configured.',
+        'needed, writes atomically, and updates the MFS search projection. Exact search works without an ' +
+        'embedding provider; meaning-based indexing follows when one is configured.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -311,7 +312,7 @@ const BUILTIN_TOOLS = [
       description:
         'Rename or move a file within the same folder. Keeps note attachment bundles together, ' +
         'regenerates PDF/image searchable text when needed, optionally cascades Markdown/HTML links, ' +
-        'and updates data for search by meaning when possible.',
+        'and replaces the old MFS document identity. The new identity may be embedded again.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -326,7 +327,7 @@ const BUILTIN_TOOLS = [
       name: 'delete_file',
       description:
         'Delete a visible file by absolute path. Also removes note bundles or ' +
-        'PDF/image derived artifacts owned by that file, and cleans up data for search by meaning asynchronously.',
+        'PDF/image derived artifacts owned by that file, and removes its MFS search projection.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -341,14 +342,13 @@ const BUILTIN_TOOLS = [
         'Search opened local folders, including current prepared text for PDFs, DOCX, images, and media. ' +
         'Two modes: `semantic` (default) searches by meaning — hybrid ' +
         '(vector + full-text) retrieval that needs an embedding provider set up in StashBase; `keyword` is ' +
-        'exact literal search (ripgrep) for identifiers, error codes, config keys, or quoted ' +
+        'exact literal search through the local MFS text index for identifiers, error codes, config keys, or quoted ' +
         'phrases that meaning-based matching may blur, and it works without any setup. ' +
         'In a StashBase panel chat, turning search by meaning off resolves this tool to ' +
         'keyword mode even when the `semantic` mode was requested; the response `mode` is the strategy actually used. ' +
-        'Defaults to the current chat scope: its folder, or the whole library for a Library chat or external client. ' +
-        'Use `scope: "library"` only when the user requests global search; do not broaden an empty search automatically. ' +
-        'The response `folder` reports the effective root (null for the whole library). ' +
-        'Search another specific folder by passing its absolute root as `folder` (e.g. ' +
+        'Every request searches one Folder. A Folder Chat may omit `folder` to use its bound Folder; ' +
+        'a Library Chat or external client must select an absolute root from `library_info` and pass it as `folder`. ' +
+        'The response `folder` reports that effective root. Search another specific folder by passing its absolute root (e.g. ' +
         '"/Users/me/notes"). For finer control, `path_prefix` restricts hits to sources ' +
         'starting with that prefix (e.g. "/Users/me/notes/transcripts/"). Each hit returns the absolute file path, ' +
         'the matching content, optional heading and source line range, and (in `semantic` mode) a fused ' +
@@ -365,16 +365,11 @@ const BUILTIN_TOOLS = [
               'Search mode. "semantic" (default) searches by meaning and needs an embedding provider set up in StashBase. ' +
               '"keyword" is exact literal matching over source and prepared text and works without setup.',
           },
-          scope: {
-            type: 'string',
-            enum: ['current', 'library'],
-            description: 'Default current uses the chat scope. Use library for explicit global search; cannot combine with folder or path_prefix.',
-          },
           folder: {
             type: 'string',
             description:
-              'Optional absolute folder root from library_info (e.g. "/Users/me/notes"). ' +
-              'Omit to use the current chat scope.',
+              'Absolute folder root from library_info (e.g. "/Users/me/notes"). ' +
+              'Only a Folder Chat may omit it and use its bound Folder.',
           },
           path_prefix: {
             type: 'string',
@@ -446,13 +441,14 @@ const BUILTIN_TOOLS = [
         'Reconcile search data with the files currently on disk, then report ' +
         'index health. StashBase file tools update the index themselves when possible; ' +
         'call this after bulk external changes or when a file tool returns an index warning. ' +
-        'You do NOT need to ' +
-        'say what changed: the sweep diffs disk against the index and discovers added / ' +
-        'modified / removed / renamed files itself. Defaults to the **whole library**; ' +
+        'You do NOT need to say what changed: the sweep offers every admitted text ' +
+        'projection to MFS, which identifies unchanged content, and removes identities ' +
+        'missing from disk. A rename is reported as an old removal plus a new add or update. ' +
+        'Defaults to the **whole library**; ' +
         'pass `folder` (an absolute folder root) to limit the disk walk to one ' +
-        'folder. Re-embedding cost is ' +
-        'proportional to the diff (only changed files are re-embedded), not the library size. ' +
-        'Returns `{folders: [{folder, added, modified, removed, renamed, failed}], ' +
+        'folder. Unchanged content spends no embedding tokens; renamed documents may ' +
+        'be embedded again under their new MFS identity. ' +
+        'Returns `{folders: [{folder, added, modified, removed, failed}], ' +
         'total, indexed, pendingCount, pending, upToDate}` — the totals come from a ' +
         'whole-library index-status check run after the sweep.',
       inputSchema: {

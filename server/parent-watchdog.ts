@@ -4,7 +4,7 @@
  *
  * Electron's `will-quit` ladder (loopback shutdown → SIGTERM → SIGKILL) only
  * exists while Electron itself is alive. When the owner dies uncleanly the
- * server — and its Python daemon child holding the Milvus flock — would
+ * server — and its Python MFS daemon child holding the store lease — would
  * otherwise run until the next launch reclaims the port. POSIX reparents an
  * orphan (its ppid changes to init/launchd or a subreaper), so a ppid change
  * is a reliable "my owner is gone" signal that needs no foreign-pid polling.

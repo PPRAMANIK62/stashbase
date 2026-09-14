@@ -1,93 +1,45 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import {
-  clearSemanticIndexingDecision,
-  closeStateDb,
-  getSemanticIndexingDecision,
-  setSemanticIndexingDecision,
-} from './state-db.ts';
 import {
   cancelFolderSyncsAndWait,
   deleteFolderRuntimeState,
   embeddingRuntimeUnavailableMessage,
   enqueueFolderSyncOperation,
   runFolderSyncOperation,
-  semanticSyncPolicy,
 } from './state.ts';
-import { publishSemanticPause } from './sync.ts';
 import type { Indexer } from './indexer.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { MfsDaemonRetiringError } from './mfs-daemon.ts';
 
-test('semantic pause is folder-scoped, durable across database reopen, and explicitly recoverable', () => {
-  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-semantic-state-'));
-  const previous = process.env.STASHBASE_LOCAL_DATA_ROOT;
-  process.env.STASHBASE_LOCAL_DATA_ROOT = dataRoot;
-  const first = path.join(dataRoot, 'library-one');
-  const second = path.join(dataRoot, 'library-two');
-  try {
-    setSemanticIndexingDecision(first, 'paused', { sourceCount: 1_200, estimatedBytes: 42 });
-    assert.equal(getSemanticIndexingDecision(second), null);
-    closeStateDb(); // simulates the process releasing state before restart
-    assert.deepEqual(getSemanticIndexingDecision(first), {
-      decision: 'paused', sourceCount: 1_200, estimatedBytes: 42,
-      updatedAt: getSemanticIndexingDecision(first)?.updatedAt,
-    });
-    clearSemanticIndexingDecision(first);
-    assert.equal(getSemanticIndexingDecision(first), null);
-  } finally {
-    closeStateDb();
-    if (previous == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
-    else process.env.STASHBASE_LOCAL_DATA_ROOT = previous;
-    fs.rmSync(dataRoot, { recursive: true, force: true });
-  }
-});
-
-test('embedding runtime warnings distinguish setup, credits, and runtime recovery', () => {
-  const folder = '/library/research';
+test('embedding runtime warning explains the BYOK requirement', () => {
   assert.match(embeddingRuntimeUnavailableMessage(
-    folder,
+    '/library/research',
     { configured: false, available: false, reason: 'embedding-source-required' },
-    'openai',
-  ), /until an account or key is selected/);
-  assert.match(embeddingRuntimeUnavailableMessage(
-    folder,
-    { configured: true, available: false, reason: 'hosted-quota-exhausted' },
-    'stashbase-account',
-  ), /credits exhausted/);
-  assert.match(embeddingRuntimeUnavailableMessage(
-    folder,
-    { configured: true, available: true },
-    'stashbase-account',
-  ), /hosted embedding runtime is not ready/);
+  ), /OpenAI or OpenRouter key/);
 });
 
-test('resume intent is serialized after an older reconcile can publish its decision', async () => {
+test('Folder sync operations are serialized', async () => {
   const events: string[] = [];
   let releaseOlder!: () => void;
   const olderGate = new Promise<void>((resolve) => { releaseOlder = resolve; });
   const older = enqueueFolderSyncOperation('folder-race', async () => {
     events.push('older-start');
     await olderGate;
-    events.push('older-publish-awaiting');
+    events.push('older-finish');
   });
-  const resume = enqueueFolderSyncOperation('folder-race', async () => {
-    events.push('resume-clear');
-    events.push('resume-embed');
+  const newer = enqueueFolderSyncOperation('folder-race', async () => {
+    events.push('newer-start');
   });
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.deepEqual(events, ['older-start']);
   releaseOlder();
-  await Promise.all([older, resume]);
-  assert.deepEqual(events, [
-    'older-start', 'older-publish-awaiting', 'resume-clear', 'resume-embed',
-  ]);
+  await Promise.all([older, newer]);
+  assert.deepEqual(events, ['older-start', 'older-finish', 'newer-start']);
 });
 
-test('removing folder runtime state invalidates an in-flight reconcile', async () => {
+test('removing Folder runtime state invalidates an in-flight reconcile', async () => {
   const folder = path.join(os.tmpdir(), 'stashbase-removal-cancels-sync');
   let shouldContinue: (() => boolean) | undefined;
   let releaseSync!: () => void;
@@ -103,102 +55,61 @@ test('removing folder runtime state invalidates an in-flight reconcile', async (
       await syncGate;
       throw new Error('MFS daemon closing');
     },
-    semanticEnabled: true,
   };
-
   const running = runFolderSyncOperation(folder, { reason: 'app boot' }, deps);
   let result;
   try {
     await started;
     assert.equal(shouldContinue?.(), true);
     await deleteFolderRuntimeState(folder);
-    assert.equal(shouldContinue?.(), false, 'library removal must invalidate work already scanning the folder');
+    assert.equal(shouldContinue?.(), false);
   } finally {
     releaseSync();
     result = await running;
   }
-  assert.equal(result.cancelled, true, 'an interrupted reconcile is cancellation, not a visible sync failure');
+  assert.equal(result.cancelled, true);
 });
 
-test('a live folder reconcile resumes after another folder retires the shared daemon', async () => {
+test('a live Folder reconcile retries after shared daemon retirement', async () => {
   const folder = path.join(os.tmpdir(), 'stashbase-live-sync-through-daemon-retirement');
   let bindCalls = 0;
   let syncCalls = 0;
-  const deps = {
+  const result = await runFolderSyncOperation(folder, { reason: 'library reconcile' }, {
     indexer: {} as Indexer,
     bind: async () => { bindCalls += 1; },
     sync: async () => {
       syncCalls += 1;
       if (syncCalls === 1) throw new MfsDaemonRetiringError();
-      return { added: [], modified: [], removed: [], renamed: [], failed: [] };
+      return { added: [], modified: [], removed: [], failed: [] };
     },
-    semanticEnabled: true,
-  };
-
-  const result = await runFolderSyncOperation(folder, { reason: 'library reconcile' }, deps);
-
+  });
   assert.equal(result.cancelled, undefined);
-  assert.equal(bindCalls, 2, 'the replacement daemon must receive the folder binding again');
-  assert.equal(syncCalls, 2, 'authoritative reconcile is safe to retry from the beginning');
+  assert.equal(bindCalls, 2);
+  assert.equal(syncCalls, 2);
 });
 
-test('a folder reconcile rebinds when a runtime reset drops the root during indexing', async () => {
+test('a Folder reconcile rebinds once when runtime reset drops the binding', async () => {
   const folder = path.join(os.tmpdir(), 'stashbase-live-sync-through-binding-reset');
   let bindCalls = 0;
   let syncCalls = 0;
-  const deps = {
+  const result = await runFolderSyncOperation(folder, { reason: 'runtime reset' }, {
     indexer: {} as Indexer,
     bind: async () => { bindCalls += 1; },
     sync: async () => {
       syncCalls += 1;
-      if (syncCalls === 1) {
-        return {
-          added: [], modified: [], removed: [], renamed: [],
-          failed: [{
-            name: path.join(folder, 'paper.pdf'),
-            error: `no bound root matches path '${path.join(folder, 'paper.pdf')}'; call bind_root first (or set an embedding API key)`,
-          }],
-        };
-      }
-      return { added: ['paper.pdf'], modified: [], removed: [], renamed: [], failed: [] };
+      if (syncCalls === 1) return {
+        added: [], modified: [], removed: [],
+        failed: [{ name: path.join(folder, 'paper.pdf'), error: `no bound root matches path '${path.join(folder, 'paper.pdf')}'; call bind_root first` }],
+      };
+      return { added: ['paper.pdf'], modified: [], removed: [], failed: [] };
     },
-    semanticEnabled: true,
-  };
-
-  const result = await runFolderSyncOperation(folder, { reason: 'hosted allowance reset' }, deps);
-
+  });
   assert.deepEqual(result.failed, []);
-  assert.deepEqual(result.added, ['paper.pdf']);
-  assert.equal(bindCalls, 2, 'the replacement daemon must receive the folder binding again');
-  assert.equal(syncCalls, 2, 'the reconcile must retry after the binding-loss fingerprint');
+  assert.equal(bindCalls, 2);
+  assert.equal(syncCalls, 2);
 });
 
-test('a persistent binding loss is returned after one recovery attempt', async () => {
-  const folder = path.join(os.tmpdir(), 'stashbase-persistent-binding-loss');
-  let bindCalls = 0;
-  let syncCalls = 0;
-  const failure = {
-    name: path.join(folder, 'paper.pdf'),
-    error: `no bound root matches path '${path.join(folder, 'paper.pdf')}'; call bind_root first (or set an embedding API key)`,
-  };
-  const deps = {
-    indexer: {} as Indexer,
-    bind: async () => { bindCalls += 1; },
-    sync: async () => {
-      syncCalls += 1;
-      return { added: [], modified: [], removed: [], renamed: [], failed: [failure] };
-    },
-    semanticEnabled: true,
-  };
-
-  const result = await runFolderSyncOperation(folder, { reason: 'hosted allowance reset' }, deps);
-
-  assert.deepEqual(result.failed, [failure]);
-  assert.equal(bindCalls, 2, 'binding recovery is attempted once');
-  assert.equal(syncCalls, 2, 'persistent failures must not loop indefinitely');
-});
-
-test('folder removal interrupts an unresponsive reconcile instead of waiting behind it', async () => {
+test('Folder removal interrupts an unresponsive reconcile before waiting', async () => {
   const folder = path.join(os.tmpdir(), 'stashbase-removal-interrupts-sync');
   let releaseSync!: () => void;
   const syncGate = new Promise<void>((resolve) => { releaseSync = resolve; });
@@ -220,84 +131,6 @@ test('folder removal interrupts an unresponsive reconcile instead of waiting beh
   ]);
   if (!settledQuickly) releaseSync();
   await Promise.allSettled([running, cancellation]);
-
-  assert.equal(settledQuickly, true, 'removal must interrupt a daemon scan before awaiting its queue');
+  assert.equal(settledQuickly, true);
   assert.equal(interruptCalls, 1);
-});
-
-test('restart policy reloads pause, invalidates stale work, and resumes only after clear', async () => {
-  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-restart-policy-'));
-  const previous = process.env.STASHBASE_LOCAL_DATA_ROOT;
-  process.env.STASHBASE_LOCAL_DATA_ROOT = dataRoot;
-  const folder = path.join(dataRoot, 'library');
-  const workload = { sourceCount: 1_200, estimatedBytes: 120_000_000, large: true };
-  try {
-    setSemanticIndexingDecision(folder, 'paused', workload);
-    closeStateDb();
-    const bootPolicy = semanticSyncPolicy(folder);
-    assert.equal(bootPolicy.shouldPauseEmbedding(workload), true);
-    const deleted: string[] = [];
-    assert.equal(await publishSemanticPause(
-      { deleteFile: async (source) => { deleted.push(source); } },
-      folder, [path.join(folder, 'stale.md')], workload, [], bootPolicy.publishPaused,
-    ), true);
-    assert.deepEqual(deleted, [path.join(folder, 'stale.md')]);
-    assert.equal(getSemanticIndexingDecision(folder)?.decision, 'paused');
-
-    const resumePolicy = semanticSyncPolicy(folder, true);
-    assert.equal(clearSemanticIndexingDecision(folder), true);
-    assert.equal(resumePolicy.shouldPauseEmbedding(workload), false);
-    assert.equal(resumePolicy.commitEmbedding(), true);
-    assert.equal(getSemanticIndexingDecision(folder), null);
-  } finally {
-    closeStateDb();
-    if (previous == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
-    else process.env.STASHBASE_LOCAL_DATA_ROOT = previous;
-    fs.rmSync(dataRoot, { recursive: true, force: true });
-  }
-});
-
-test('actual queued startup sync honors a restored pause and forced resume embeds', async () => {
-  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-restart-sync-'));
-  const previous = process.env.STASHBASE_LOCAL_DATA_ROOT;
-  process.env.STASHBASE_LOCAL_DATA_ROOT = dataRoot;
-  const folder = path.join(dataRoot, 'library');
-  fs.mkdirSync(folder, { recursive: true });
-  const source = path.join(folder, 'changed.md');
-  fs.writeFileSync(source, 'replacement content');
-  const events: string[] = [];
-  const mockIndexer = {
-    syncDiff: async () => ({ added: [], modified: [source], deleted: [], renamed: [] }),
-    listFiles: async () => ({ [source]: 'old-hash' }),
-    deleteFile: async (path: string) => { events.push(`delete:${path}`); },
-    upsertFile: async (path: string) => { events.push(`upsert:${path}`); return 1; },
-    status: async () => ({ pending: [], total: 1, indexed: 1, pendingCount: 0, orphanedCount: 0, orphaned: [], upToDate: true }),
-  } as unknown as Indexer;
-  const deps = {
-    indexer: mockIndexer,
-    bind: async () => { events.push('bind'); },
-    sync: (await import('./sync.ts')).syncIndex,
-    semanticEnabled: true,
-  };
-  try {
-    setSemanticIndexingDecision(folder, 'paused', { sourceCount: 1, estimatedBytes: 10 });
-    closeStateDb();
-    const boot = await runFolderSyncOperation(folder, { reason: 'app boot' }, deps);
-    assert.equal(boot.semanticPaused, true);
-    assert.deepEqual(events, ['bind', `delete:${source}`]);
-    assert.equal(getSemanticIndexingDecision(folder)?.decision, 'paused');
-
-    events.length = 0;
-    const resumed = await runFolderSyncOperation(folder, {
-      reason: 'user started semantic indexing', forceEmbedding: true, clearDecisionAtStart: true,
-    }, deps);
-    assert.equal(resumed.semanticPaused, undefined);
-    assert.deepEqual(events, ['bind', `upsert:${source}`]);
-    assert.equal(getSemanticIndexingDecision(folder), null);
-  } finally {
-    closeStateDb();
-    if (previous == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
-    else process.env.STASHBASE_LOCAL_DATA_ROOT = previous;
-    fs.rmSync(dataRoot, { recursive: true, force: true });
-  }
 });

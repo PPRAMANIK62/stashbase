@@ -37,6 +37,7 @@ import {
 import { clearRecord } from './conversion-status.ts';
 import { fromSourcePath, getActiveFolders, memberRootForAbs, onClose, onSwitch } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import type { IndexUpsertResult } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
 import {
   FILESYSTEM_SCAN_YIELD_EVERY,
@@ -79,10 +80,6 @@ export interface ConversionSpec {
   /** Optional completeness check for formats whose derived note can be
    *  assembled from resumable partial work. */
   derivedReady?: (absPath: string, derivedAbsPath: string) => boolean;
-  /** Source-byte hash already bound to the completed derived output. Formats
-   *  with a content-addressed manifest use this instead of letting the index
-   *  hook hash a potentially replaced source after conversion completed. */
-  indexSourceHash?: (absPath: string, derivedAbsPath: string) => string | null;
   /** Run the extractor; resolve on success, reject with the stderr tail. */
   convert: (
     absPath: string,
@@ -104,7 +101,7 @@ export interface ConversionSpec {
 
 export type DerivedFreshnessSpec = Pick<
   ConversionSpec,
-  'derivedNote' | 'derivedReady' | 'indexSourceHash'
+  'derivedNote' | 'derivedReady'
 >;
 
 export class TransientConversionError extends Error {
@@ -123,9 +120,9 @@ function isTransientConversionError(err: unknown): boolean {
  *  source PDF/image/DOCX is the indexed entity). Injected to avoid a module
  *  cycle with `state.ts` — conversion is below the indexer in the import
  *  graph. */
-let indexDerivedNote: ((sourceAbs: string, derivedAbs: string, sourceHash?: string) => Promise<void>) | null = null;
+let indexDerivedNote: ((sourceAbs: string, derivedAbs: string) => Promise<IndexUpsertResult | null>) | null = null;
 export function setDerivedNoteIndexer(
-  fn: (sourceAbs: string, derivedAbs: string, sourceHash?: string) => Promise<void>,
+  fn: (sourceAbs: string, derivedAbs: string) => Promise<IndexUpsertResult | null>,
 ): void {
   indexDerivedNote = fn;
 }
@@ -391,16 +388,7 @@ async function executeConversion(
         return 'settled';
       }
       setProgress(sourcePath, { phase: 'indexing' });
-      const indexSourceHash = spec.indexSourceHash?.(absPath, noteAbs);
-      if (spec.indexSourceHash && !indexSourceHash) {
-        log.info(`${spec.kind}: source changed before indexing, retiring stale output for ${absPath}`);
-        try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
-          log.warn(`${spec.kind}: stale derived cleanup failed before indexing ${absPath}: ${errorMessage(cleanupErr)}`);
-        }
-        clearRecord(sourcePath);
-        return 'rediscover';
-      }
-      await indexDerivedNote?.(absPath, noteAbs, indexSourceHash ?? undefined);
+      await indexDerivedNote?.(absPath, noteAbs);
     } catch (err: unknown) {
       const msg = errorMessage(err);
       log.warn(`${spec.kind}: derived-text index failed for ${absPath}: ${msg}`);
@@ -550,16 +538,17 @@ export function maybeConvert(
 /** Reindex an already-fresh derived note under its source path. Used when a
  *  PDF/image/DOCX/audio source was converted while semantic indexing was unavailable, then a
  *  later reconcile runs after an API key has been configured. */
-export async function indexFreshDerived(absPath: string, spec: DerivedFreshnessSpec): Promise<boolean> {
+export async function indexFreshDerived(
+  absPath: string,
+  spec: DerivedFreshnessSpec,
+): Promise<IndexUpsertResult | null> {
   const sourcePath = sourcePathOf(absPath);
-  if (isPendingOrFailed(sourcePath) || scheduler.has(sourcePath)) return false;
-  if (!derivedIsFresh(spec, absPath)) return false;
+  if (isPendingOrFailed(sourcePath) || scheduler.has(sourcePath)) return null;
+  if (!derivedIsFresh(spec, absPath)) return null;
   const derivedAbs = spec.derivedNote(absPath);
-  const indexSourceHash = spec.indexSourceHash?.(absPath, derivedAbs);
-  if (spec.indexSourceHash && !indexSourceHash) return false;
-  await indexDerivedNote?.(absPath, derivedAbs, indexSourceHash ?? undefined);
+  const result = await indexDerivedNote?.(absPath, derivedAbs);
   markDone(sourcePath);
-  return true;
+  return result ?? null;
 }
 
 /** Reconcile hook: walk `folderAbs` for convertible sources and queue any

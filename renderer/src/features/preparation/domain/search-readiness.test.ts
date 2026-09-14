@@ -36,10 +36,10 @@ describe('folder search readiness', () => {
     expect(
       folderSearchReadiness(
         folderIndexStatus({
-          semantic: { partial: false, state: 'paused', workload: { estimatedBytes: 1, files: 2 } },
+          semantic: { partial: false, remaining: 2, state: 'indexing' },
         }),
       ).semantic,
-    ).toEqual({ partial: false, state: 'paused', workload: { estimatedBytes: 1, files: 2 } });
+    ).toEqual({ partial: false, remaining: 2, state: 'indexing' });
 
     expect(
       folderSearchReadiness(

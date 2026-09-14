@@ -30,11 +30,6 @@ export const preparationFailureSchema = z
 
 export const semanticIndexingStateSchema = z.enum([
   'disabled',
-  'quota-exhausted',
-  'partial-quota-exhausted',
-  'awaiting-decision',
-  'paused',
-  'partial-paused',
   'indexing',
   'partial-indexing',
   'ready',
@@ -43,8 +38,6 @@ export const semanticIndexingStateSchema = z.enum([
 
 export const semanticIndexingStatusSchema = z
   .object({
-    estimatedBytes: countSchema.optional(),
-    sourceCount: countSchema.optional(),
     state: semanticIndexingStateSchema,
   })
   .strict();
@@ -90,13 +83,6 @@ export const indexStatusFailureSchema = z
   })
   .passthrough();
 
-export const semanticIndexingDecisionRequestSchema = z
-  .object({
-    decision: z.enum(['start', 'defer']),
-    folder: folderPathSchema.optional(),
-  })
-  .strict();
-
 export const indexStatusAcknowledgementSchema = z.object({ ok: z.literal(true) }).passthrough();
 
 /** `POST /api/sync?folder=` — the folder-explicit reconcile the renderer
@@ -110,6 +96,3 @@ export type ConversionProgressWire = z.infer<typeof conversionProgressSchema>;
 export type IndexStatusResponseWire = z.infer<typeof indexStatusResponseSchema>;
 export type PreparationFailureWire = z.infer<typeof preparationFailureSchema>;
 export type SemanticIndexingStateWire = z.infer<typeof semanticIndexingStateSchema>;
-export type SemanticIndexingDecisionRequestWire = z.infer<
-  typeof semanticIndexingDecisionRequestSchema
->;

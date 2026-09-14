@@ -31,17 +31,18 @@ function hitLocation(hit: SemanticHit): string {
   return '';
 }
 
-function similarRows(result: SemanticSearchResult): SearchRows {
+function similarRows(result: SemanticSearchResult, folderPath: string): SearchRows {
   const hits = result.hits;
-  const groups = groupSemanticHits(hits, 'folder');
-  const indexOf = new Map(hits.map((hit, index) => [hit.id, index]));
+  const groups = groupSemanticHits(hits, folderPath);
+  const visibleHits = groups.flatMap((group) => group.hits);
+  const indexOf = new Map(visibleHits.map((hit, index) => [hit.id, index]));
   return {
-    count: hits.length,
+    count: visibleHits.length,
     intent: (index) => {
-      const hit = hits[index];
+      const hit = visibleHits[index];
       return hit ? semanticNavigationIntent(hit) : null;
     },
-    note: result.truncated ? `Showing the strongest ${hits.length} results.` : null,
+    note: result.truncated ? `Showing the strongest ${visibleHits.length} results.` : null,
     render: (view) =>
       groups.map((group) => (
         <div key={group.folderPath}>
@@ -93,7 +94,7 @@ export function similarSearchBackend(api: SemanticSearchPort): SearchBackend {
     lane: ({ folderPath, query }) => {
       const request = { folderPath, query, topK: SEMANTIC_SEARCH_CANDIDATES };
       return {
-        fetch: async (signal) => similarRows(await api.search(request, signal)),
+        fetch: async (signal) => similarRows(await api.search(request, signal), folderPath),
         key: retrievalQueryKeys.semantic(request),
       };
     },

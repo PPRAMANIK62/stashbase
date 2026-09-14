@@ -19,22 +19,18 @@ clients and are not a general host-filesystem API.
 - Every file path resolves under an authorized library member. Hidden derived
   data is not listable or writable; a read may consume manifest-known current
   derived text only through its live visible source.
-- Search defaults to the attributed live Chat scope. Exact session identity
-  wins; legacy window identity is usable only for its sole active turn. Stale
-  or ambiguous supplied identity fails rather than widening. Unattributed
-  external callers and Library Chats retain the whole-library default; scope
-  never borrows the app-wide sole active turn. Explicit `folder` overrides the
-  default, and `path_prefix` must stay inside the effective member folder.
-  `scope: "library"` explicitly requests global search and cannot combine with
-  folder/prefix filters. Invalid narrowing fails; it never silently widens.
-  Responses report the effective `folder` (null for the whole library).
-- `search_library(query, mode?, scope?, folder?, path_prefix?, types?, case_strict?,
+- Search defaults only from an attributed live folder Chat. Exact session
+  identity wins; legacy window identity is usable only for its sole active
+  turn. Stale or ambiguous supplied identity fails rather than widening.
+  Library Chats and unattributed external callers must pass one `folder` from
+  `library_info`; search never borrows the app-wide sole active turn.
+  `path_prefix` must stay inside the effective member Folder. Invalid
+  narrowing fails; it never silently widens. Responses report that Folder.
+- `search_library(query, mode?, folder?, path_prefix?, types?, case_strict?,
   whole_word?, top_k?)` searches in semantic mode by default or exact keyword
   mode, returning the same source-hit shape and the strategy actually used.
-  Both strategies share the Chat-scope default and `types` accepts the shared
-  source categories. Library-wide keyword search fans through member roots at
-  the operation boundary rather than exposing that folder-rooted mechanism to
-  callers.
+  Both strategies use the same one-Folder boundary and `types` accepts the
+  shared source categories.
 - An attributable panel session may resolve any `search_library` request to
   keyword mode while its **Search by meaning** control is Off. This policy
   comes from trusted transport attribution, never model-controlled tool

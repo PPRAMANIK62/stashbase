@@ -306,24 +306,13 @@ describe('Library Search', () => {
     expect(screen.queryByRole('tab', { name: 'By meaning' })).toBeNull();
   });
 
-  it('offers the search-by-meaning workload decision in both modes and forwards it folder-explicitly', async () => {
+  it('reports automatic search-by-meaning indexing progress', () => {
     const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
-    const rendered = renderSearch(exactApi, {
-      readiness: {
-        state: 'awaiting-decision',
-        workload: { estimatedBytes: 2 * 1024 * 1024, files: 40 },
-      },
+    renderSearch(exactApi, {
+      readiness: { partial: false, remaining: 40, state: 'indexing' },
     });
-
-    expect(screen.getByText('Many files need preparation for search by meaning')).not.toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Prepare files' }));
-    await waitFor(() =>
-      expect(rendered.decisions.decide).toHaveBeenCalledWith(
-        '/library/research',
-        'start',
-        expect.any(AbortSignal),
-      ),
-    );
+    expect(screen.getByText('Preparing files for search by meaning…')).not.toBeNull();
+    expect(screen.getByText('40 files remaining.')).not.toBeNull();
   });
 
   it('shows the preparation readiness line with a transcription setup action', async () => {

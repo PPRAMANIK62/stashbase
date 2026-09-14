@@ -14,13 +14,13 @@ Node application server
   ├─ local file operations and preparation orchestration
   ├─ Agent Panel bridge
   ├─ MCP transports and library operations
-  └─ Supabase session and loopback embedding broker
+  └─ Supabase session and OpenQuill model bridge
         │
         ▼
-Python indexing daemon → one local Milvus Lite store
-        │ hosted source only: process-ephemeral localhost credential
+Python indexing daemon → one local MFS store
+        │ BYOK embedding requests
         ▼
-StashBase hosted embedding API
+OpenAI or OpenRouter
 ```
 
 One application session may own several renderer windows. They share the Node
@@ -35,13 +35,14 @@ presentation, and Agent tabs.
 - The Node server owns authorized filesystem operations, format preparation,
   reconcile orchestration, Settings writes including scoped Agent Instructions,
   MCP, and Agent adapters.
-- The Python daemon owns chunking, embeddings, vector storage, and semantic
-  retrieval. It receives text and source identity; it never decides how a
-  source format is converted. For hosted embeddings it calls a Node-owned
-  OpenAI-compatible loopback broker and never receives Supabase tokens.
-- The Node server alone stores and refreshes the optional account session. It
-  assigns hosted request idempotency keys, labels index versus query purpose,
-  and exposes only display/quota state to renderer windows.
+- The Python daemon uses public MFS APIs for projection content revisions,
+  document status, unchanged classification, chunking, embeddings, vector
+  storage, and semantic retrieval. It receives text and source identity; it
+  never decides how a source format is converted. It receives only the
+  configured OpenAI or OpenRouter BYOK credential.
+- The Node server alone stores and refreshes the optional account session for
+  OpenQuill. That session never selects an embedding source or crosses into the
+  Python daemon.
 - Renderer state is presentation and request coordination, not durable data
   truth. It cannot define preparation completion, index currency, file
   versions, or library membership.
@@ -70,21 +71,19 @@ Generated text and index rows are rebuildable. Every read, result, and mutation
 that crosses a product boundary retains or resolves to an authorized visible
 source file.
 
-The desktop popup's semantic path uses the same ungated
+The desktop popup's semantic path uses the same folder-explicit
 `POST /api/library/search` that powers MCP `search_library`; its exact path
-uses `POST /api/library/keyword-search`, a library-operations sweep that runs
-the per-folder ripgrep + derived-text search across every member folder
-(bounded concurrency, one shared delivered-match cap) and returns
-folder-qualified relative paths. A folder scope (with an optional escape-safe
-subfolder prefix) narrows either call; `normalizeLibrarySearchScope` rejects a
-prefix outside the requested folder instead of silently widening and derives
-the owning member for a prefix-only scope. File-type category chips are
+uses the folder-explicit `POST /api/library/keyword-search`. A Folder root is
+required unless an attributed folder Chat supplies it, and an optional
+escape-safe subfolder prefix may narrow either call.
+`normalizeLibrarySearchScope` rejects a prefix outside the requested Folder
+instead of silently widening. File-type category chips are
 agent-facing only (`shared/search-types.ts` defines and validates the
 `notes` / `pdf` / `image` / `docx` / `audio` vocabulary; `server/format.ts`
 maps categories to source extensions). Scope and type narrowing compose; the
-semantic path filters daemon results back to `top_k`, the keyword path
-restricts ripgrep and the derived-text walk to the scoped subtree, and both
-report partial availability when a bound omitted matches. Display-path
+semantic path filters daemon results back to `top_k`, while the exact path
+uses MFS `grep` with namespace, path-prefix, extension, byte, document, and
+global-match bounds. Both report truncation when a configured bound omits matches. Display-path
 remapping is unchanged: filters act on source paths, and derived notes never
 surface.
 
@@ -108,9 +107,9 @@ surface.
   current generation's process or request state.
 - Application quit is an authenticated owner-to-server shutdown handshake.
   Signals are timeout fallbacks, not the normal cleanup path.
-- The shutdown ladder closes hosted-broker listening, active, and idle sockets
-  independently of MCP, Agent-install, GitHub-import, conversion, database, and
-  indexer cleanup failures.
+- The shutdown ladder closes MCP, Agent-install, GitHub-import, conversion,
+  database, and indexer resources independently so one cleanup failure cannot
+  skip the others.
 - Static renderer serving must bypass every API and asset route before serving
   the web bundle.
 - `shared/file-formats.ts` and `shared/library-files.ts` carry the exact
@@ -206,7 +205,7 @@ The main ownership seams are intentionally narrower than this map:
 | Data lifecycle Interfaces | `server/conversion-dispatch.ts`, `server/conversion-scheduler.ts`, `server/indexer.ts`, `server/mfs-daemon.ts` |
 | Library/MCP Interface | `LibraryOperations` in `server/library-operations/index.ts` |
 | Agent Interface | `AgentAdapter` and normalized events in `server/agent-contract.ts` |
-| Process Adapters | Electron preload/HTTP, MCP stdio/HTTP, Agent native protocols, the Python daemon protocol, and the hosted embedding loopback broker |
+| Process Adapters | Electron preload/HTTP, MCP stdio/HTTP, Agent native protocols, and the Python daemon protocol |
 
 This map names ownership Seams, not every runtime file. Follow the focused
 contract before reading an owner Module's internals.

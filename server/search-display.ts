@@ -8,8 +8,8 @@ import type { KeywordHitFile } from '../shared/search-results.ts';
 export type { KeywordHitFile, KeywordMatch } from '../shared/search-results.ts';
 
 /**
- * The raw output of a keyword scan, before a route echoes the request back
- * onto it. Deliberately NOT the `/api/keyword-search` response — that is
+ * The MFS exact-search output after product display mapping, before a route
+ * echoes the request onto it. Deliberately NOT the `/api/keyword-search` response — that is
  * `KeywordSearchResult` in `shared/search-results.ts`, which additionally
  * carries the `query` and `folder` the caller asked for.
  */

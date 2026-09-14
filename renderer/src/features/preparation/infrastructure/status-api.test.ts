@@ -22,7 +22,7 @@ const wire = {
   preparationFailures: [],
   semanticAvailable: true,
   semanticEnabled: true,
-  semanticIndexing: { estimatedBytes: 2048, sourceCount: 4, state: 'awaiting-decision' },
+  semanticIndexing: { state: 'indexing' },
   total: 5,
   treeVersion: 9,
   upToDate: false,
@@ -40,10 +40,7 @@ describe('preparation status API', () => {
       expect.objectContaining({ path: '/api/index-status?folder=%2Flibrary%2Fresearch' }),
     );
     expect(status.conversionProgress['a.pdf']?.phase).toBe('queued');
-    expect(status.semantic).toEqual({
-      state: 'awaiting-decision',
-      workload: { estimatedBytes: 2048, files: 4 },
-    });
+    expect(status.semantic).toEqual({ partial: false, remaining: 1, state: 'indexing' });
     expect(status.indexSettled).toBe(true);
     expect(status.indexWarning).toEqual({
       at: '2026-09-09T00:00:00.000Z',

@@ -25,7 +25,7 @@ describe('exact search domain', () => {
     totalMatches: 1,
   };
 
-  it('keeps source identity folder-qualified for cross-folder results', () => {
+  it('keeps source identity folder-qualified inside one Folder', () => {
     expect(exactSearchFileId(file.source)).toBe('/library/research\u0000notes/answer.md');
     const occurrences = exactSearchOccurrences(file);
     expect(occurrences).toHaveLength(2);
@@ -34,6 +34,7 @@ describe('exact search domain', () => {
     expect(
       exactSearchNavigationIntent(second, {
         caseSensitive: false,
+        folderPath: '/library/research',
         query: 'answer',
         wholeWord: false,
       }),

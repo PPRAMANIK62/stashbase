@@ -74,11 +74,11 @@ aliases, and a driven runtime pass owns representative composition.
   navigation, and Electron lifecycle are exercised by `pnpm test:renderer`,
   `pnpm test:config`, `pnpm test:updates`, and `pnpm test:electron:smoke`.
   The renderer Settings suites cover the bring-your-own key for search by
-  meaning, the only source the renderer offers; the server config suites still
-  cover the hosted source the server retains, rejection of new local
-  selection, deterministic retirement of persisted local selection before
-  daemon startup, and transactional source activation that keeps the prior
-  source selected when runtime reset or binding fails.
+  meaning, the only source the product offers. Server config suites cover
+  rejection of retired local and hosted-account selections, deterministic
+  migration of either persisted value before daemon startup, and transactional
+  BYOK source activation that keeps the prior source selected when runtime
+  reset or binding fails.
   Account identity fixtures cover profile normalization, migration, privacy,
   and UI fallbacks.
   Renderer state evidence keeps bootstrap settlement distinct from confirmed
@@ -247,15 +247,16 @@ aliases, and a driven runtime pass owns representative composition.
 - **Contract Test:** `pnpm test:retrieval` and the data, scope, credential,
   and renderer suites cover exact filtering (including encoding-safe TXT), semantic mechanics, source
   remapping, access boundaries, account identity, and failure presentation.
-  Python daemon tests additionally lock the fixed ONNX model identity,
-  provider/dimension collection separation, and cross-collection cleanup for
-  renamed or deleted sources; keyword search remains provider-independent.
-- **Driven Runtime Pass:** only the opt-in gate is driven. Against a scratch
-  profile with no embedding key, opening a folder and its search panel shows
-  one field with no mode strip and no mention of search by meaning, and
-  Settings shows the Search by Meaning section after Transcription as a
-  single key row. The search flow itself is not driven; journey automation
-  retired with the Playwright suites.
+  Python daemon tests additionally lock one MFS Internal namespace per Folder,
+  visible relative DocumentIds, provider configuration, and rename/delete
+  cleanup; keyword search remains provider-independent.
+- **Driven Runtime Pass:** against a scratch profile with no embedding key,
+  opening a folder and its search panel shows one field with no mode strip and
+  no mention of search by meaning, and Settings shows the Search by Meaning
+  section after Transcription as a single key row. The running desktop server
+  also reconciled the built-in Start Here Folder and returned visible-source,
+  untruncated matches through the live MFS exact-search route. Journey
+  automation retired with the Playwright suites.
 - **AI Eval:** `pnpm eval:semantic-retrieval` runs the versioned, synthetic
   [semantic retrieval dataset](../evals/semantic-retrieval/README.md) through
   the production index and Retrieval interfaces. It reports provider, model,
@@ -267,10 +268,9 @@ aliases, and a driven runtime pass owns representative composition.
   chunking changes are actually observable.
 - **Release Check:** the semantic AI Eval is credentialed BYOK release evidence,
   not required or scheduled CI, because it makes paid provider requests and
-  allows bounded ranking variability. Hosted account behavior remains
-  lower-layer or release evidence.
-- **Gap:** library-wide readiness is not yet Shipping. The semantic Eval is
-  present but still in calibration: no baseline run is retained, so no
+  allows bounded ranking variability.
+- **Gap:** the semantic Eval is present but still in calibration: no baseline
+  run is retained, so no
   semantic-quality gate is active yet. Completing the baselines and activating
   the thresholds is tracked in
   [GitHub issue #176](https://github.com/liliu-z/stashbase/issues/176).
@@ -290,10 +290,11 @@ aliases, and a driven runtime pass owns representative composition.
   layout state, and structured folder-scope retirement
   for blank, draft-only, queued, and active-tool Chats. Workspace reset tests
   pin Chat preservation through both direct folder loss and 412 recovery.
-  Library-operation, route, keyword-search, and renderer composition tests pin
-  the per-session policy for search by meaning, Chat-scoped search defaults,
-  explicit global search, stale-attribution rejection, library-wide text fallback, and
-  prepared-PDF source remapping while the switch is Off. Agent Instructions
+  Library-operation, route, retrieval, and renderer composition tests pin
+  the per-session policy for search by meaning, folder-Chat search defaults,
+  required Folder selection for Library Chats and external callers,
+  stale-attribution rejection, and prepared-PDF source remapping while the
+  switch is Off. Agent Instructions
   config tests pin bounded folder isolation, strict persistence, and membership
   cleanup plus default restoration; Adapter tests pin verbatim runtime
   injection; a renderer composition

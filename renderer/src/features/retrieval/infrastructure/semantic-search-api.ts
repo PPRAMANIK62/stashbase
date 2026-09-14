@@ -37,21 +37,14 @@ function mapResult(result: SemanticSearchResponseWire): SemanticSearchResult {
   };
 }
 
-/** Search-by-meaning refusals the shared ladder cannot see: the hosted credits ran
- *  out, and the folder has no configured source yet. */
+/** Search-by-meaning refusal the shared ladder cannot see: no BYOK embedder
+ *  is configured yet. */
 function readinessFailure({
   response,
   serverMessage,
 }: TransportFailure): SemanticSearchError | null {
   const failure = semanticSearchFailureSchema.safeParse(response.body);
   const cause = serverMessage === null ? undefined : { cause: new Error(serverMessage) };
-  if (response.status === 402 || failure.data?.code === 'HOSTED_QUOTA_EXHAUSTED') {
-    return new SemanticSearchError(
-      'quota-exhausted',
-      'Your hosted credits for search by meaning are used up. Keyword search is still available.',
-      cause,
-    );
-  }
   if (response.status === 412 || failure.data?.code === 'EMBEDDER_KEY_REQUIRED') {
     return new SemanticSearchError(
       'not-set-up',
@@ -66,7 +59,7 @@ export function createSemanticSearchAdapter(client: HttpClient): SemanticSearchP
   return {
     async search(search, signal) {
       const body = semanticSearchRequestSchema.parse({
-        ...(search.folderPath ? { folder: search.folderPath } : {}),
+        folder: search.folderPath,
         mode: 'semantic',
         query: search.query,
         top_k: search.topK,

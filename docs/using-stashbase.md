@@ -17,8 +17,9 @@ required. You can instead select Claude Code or Codex.
 Those runtimes use their own provider login; a missing runtime waits for
 **Install and continue** before installation.
 
-Chat can work across the Library or within a selected folder. Use a Chat
-scoped to your folder when asking an Agent to build or update its Wiki. The
+Chat can work from Library scope or within a selected Folder. Search always
+targets one Folder; a Library Chat selects it from Library information. Use a
+Chat scoped to your Folder when asking an Agent to build or update its Wiki. The
 request creates or improves `wiki/index.md` and focused pages under `wiki/`
 while preserving Sources outside that directory. Ask again when you want
 updates; Wiki maintenance is not automatically scheduled.

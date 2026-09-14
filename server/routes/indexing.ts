@@ -28,8 +28,6 @@ import {
 } from '../conversion-dispatch.ts';
 import {
   clearIndexWarning,
-  deferSemanticIndexing,
-  startSemanticIndexing,
   syncFolderNow,
 } from '../state.ts';
 import { noteTreeChanged } from '../watcher.ts';
@@ -264,31 +262,8 @@ export function mount(app: express.Express): void {
     }
   });
 
-  app.post('/api/semantic-indexing/decision', async (req, res) => {
-    try {
-      const { folderRoot } = await requireRequestFolder(parseFolderParam(req.body?.folder));
-      const decision = req.body?.decision;
-      if (decision === 'defer') {
-        deferSemanticIndexing(folderRoot);
-        res.json({ ok: true });
-        return;
-      }
-      if (decision === 'start') {
-        void startSemanticIndexing(folderRoot).catch((err: unknown) => {
-          log.warn(`start semantic indexing failed for ${folderRoot}: ${err instanceof Error ? err.message : String(err)}`);
-        });
-        res.status(202).json({ ok: true });
-        return;
-      }
-      res.status(400).json({ error: 'decision must be "start" or "defer"' });
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
-  });
-
-  // Hybrid (vector + BM25) search, scoped to one folder (explicit `folder`
-  // or the window's current one). Library-wide search — the in-app popup
-  // and MCP `search_library` — lives on the ungated `/api/library/*` routes.
+  // Hybrid (vector + BM25) search, scoped to one Folder (explicit `folder`
+  // or the window's current one). MCP uses the same one-Folder contract.
   // Optional narrowing: `path_prefix` (folder-relative subfolder, resolved
   // escape-safe) and `types` (file-type categories mapped to source
   // extensions, applied daemon-side before the final top-k cut).
@@ -307,12 +282,6 @@ export function mount(app: express.Express): void {
         mode: 'semantic', query, topK, folderRoot, pathPrefix: prefixAbs, types,
       });
       if (result.availability.state === 'unavailable') {
-        if (result.availability.reason === 'hosted-quota-exhausted') {
-          return res.status(402).json({
-            error: 'Your hosted allowance for search by meaning is used up. Keyword search is still available.',
-            code: 'HOSTED_QUOTA_EXHAUSTED',
-          });
-        }
         return res.status(412).json({
           error: 'To search by meaning, set it up in StashBase Settings.',
           code: 'EMBEDDER_KEY_REQUIRED',
@@ -328,12 +297,12 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Keyword (substring / regex) search via ripgrep, scoped to the
-  // active folder directory. Bypasses the daemon and the index — useful
+  // Exact literal search via MFS grep, scoped to the active Folder namespace.
+  // It works while vector indexing is off and is useful
   // for finding specific tokens (function names, exact phrases) that
   // meaning-based retrieval blurs out. Defaults to smart-case, restricts to
-  // markdown / HTML (the only formats we index anyway), caps per-file
-  // and total match counts so a generic query can't OOM the renderer.
+  // every admitted direct or prepared text projection and caps total work so
+  // a generic query cannot exhaust the renderer or daemon.
   app.get('/api/keyword-search', async (req, res) => {
     try {
       const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -355,11 +324,9 @@ export function mount(app: express.Express): void {
         mode: 'keyword', query, folderRoot: folderDir, pathPrefix: prefixAbs,
         caseStrict, wholeWord, types,
       });
-      // ripgrep's `*.md` glob may also match legacy hidden dot-prefixed
-      // derived notes (`.paper.pdf.md` / `.shot.png.md`). Apply the same
-      // remap-or-drop rule as the semantic routes so a hit's row points
-      // at the openable source PDF / image (the matched OCR / converted
-      // snippet stays) and an orphan note never surfaces.
+      // Keep the same visible-source remap as semantic retrieval. Internal
+      // MFS documents already use source identities, while this also drops
+      // any legacy derived identity that survives a migration window.
       const files = keywordFilesFromEvidence(result.evidence, folderDir);
       const totalMatches = files.reduce((sum, file) => sum + file.totalMatches, 0);
       res.json({ query, folder: folderDir, files, totalMatches, truncated: result.truncated });

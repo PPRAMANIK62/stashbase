@@ -10,10 +10,8 @@
 
 export type EmbedderProvider = 'openai' | 'openrouter';
 
-/** Every source the server may report. Only a provider key is one the
- *  renderer offers; `local` and `stashbase-account` are server-owned values it
- *  never selects and treats as no key. */
-export type EmbeddingSource = EmbedderProvider | 'local' | 'stashbase-account';
+/** Every source the server may report. */
+export type EmbeddingSource = EmbedderProvider;
 
 /** The providers a reader may choose between, in offer order. */
 export const EMBEDDER_PROVIDERS: readonly EmbedderProvider[] = ['openai', 'openrouter'];

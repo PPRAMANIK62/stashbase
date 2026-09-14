@@ -2,8 +2,8 @@
 
 ## User Outcome
 
-People and Agents can find relevant evidence across authorized local folders
-and return to the user-visible source that supports it.
+People and Agents can find relevant evidence inside one selected authorized
+Folder and return to the user-visible source that supports it.
 
 ## Scope and Non-goals
 
@@ -22,9 +22,9 @@ user-managed results.
   [Documents format matrix](documents.md#format-capability-matrix), including
   raw JSON, valid UTF-8 plain text, and current prepared text. Plain-text files
   with unsupported encodings are excluded from exact and semantic evidence
-  rather than decoded lossily. Whole-token search applies its result cap
-  after token filtering, so substring-heavy files do not hide later eligible
-  evidence.
+  rather than decoded lossily. MFS applies smart-case or case-sensitive
+  literal matching, Unicode whole-word matching, scope filters, and bounded
+  work before StashBase formats source-visible snippets.
 - With an embedding key added under Settings, retrieval can also search by
   meaning. It is off until then, and nothing outside Settings names it before
   it is on. Product copy keeps the phrase lowercase; engineering terms such as
@@ -44,15 +44,14 @@ user-managed results.
   folder, and a match outside it is not offered. The panel keeps its query and
   mode while another panel is on screen and across folder switches, then
   refreshes results against current content.
-- MCP retrieval uses one `search_library` operation across the whole library
-  for Library Chats and external clients. In an attributed folder Chat it
-  defaults to that Chat's folder; global search requires an explicit request
-  (`scope: "library"`). Empty results do not automatically broaden scope.
-  Meaning-based and text-only strategies share the same visible
-  source-hit shape and may both narrow by folder root, path prefix, and source
-  file-type categories. An attributed panel Chat's own retrieval policy
-  resolves the operation's strategy without asking the Agent to select a
-  different tool.
+- MCP retrieval uses one `search_library` operation for one Folder. In an
+  attributed folder Chat it defaults to that Chat's Folder. A Library Chat or
+  external client first selects a Folder returned by `library_info` and passes
+  it explicitly. Empty results never broaden to another Folder.
+  Meaning-based and text-only strategies share the same visible source-hit
+  shape and may both narrow by path prefix and source file-type categories. An
+  attributed panel Chat's own retrieval policy resolves the operation's
+  strategy without asking the Agent to select a different tool.
 - Search is keyword search alone until a key is on: one field, no mode
   chooser, and nothing that names the other mode. Once a key is on, the **By
   keyword** and **By meaning** modes share one query surface. Results
@@ -60,7 +59,7 @@ user-managed results.
 - A result always identifies a source file. Evidence may come from PDF, DOCX,
   OCR, or transcript text, but opening it never exposes AppData, and opening
   one never switches the active folder.
-- Readiness distinguishes preparing, partial, paused, failed, and ready
+- Readiness distinguishes preparing, partial, failed, and ready
   states once a key is on; before that the search panel says nothing about
   search by meaning at all. Keyword search remains usable throughout.
 - Nothing offers the setup. A window with no folder open stays quiet, a
@@ -70,9 +69,11 @@ user-managed results.
   ([J12](../user-journeys.md#j12-build-wiki-pages-from-a-local-folder)) never
   opens or waits for it. The observable path lives in
   [J05](../user-journeys.md#j05-search-and-open-source-evidence).
-- Deferring a large first index build for one folder leaves the key in place
-  and shows that folder as paused; **Not now** there is about that folder's
-  build, never about the key.
+- Reconcile always offers the current Folder's admitted text projections to
+  MFS, which skips unchanged revisions. Without a key the namespace keeps
+  vector indexing off and serves exact search; adding a key activates
+  meaning-based indexing. There is no size-based pause or first-index decision
+  in the Shipping flow.
 - Semantic runtime refreshes after key changes remain background work.
   Overlapping refresh and folder-removal activity does not interrupt local
   browsing or surface native process errors as user actions.
@@ -89,8 +90,8 @@ user-managed results.
 
 - Missing results can be explained by scope, mode, preparation, indexing, or
   provider state; those states must not collapse into one generic empty view.
-- Known-stale semantic evidence is unavailable before a paused large workload
-  is presented. Current indexed files may still provide partial results.
+- Known-stale semantic evidence is unavailable before failed or pending work is
+  presented. Current indexed files may still provide partial results.
 - Result scope never widens silently, and a derived path never crosses the
   product boundary.
 - Previewability alone never claims retrievable text. Each result comes from a
@@ -113,24 +114,6 @@ user-managed results.
 - MCP is context infrastructure over authorized folders, not a general host
   filesystem interface.
 
-## Known Gaps
-
-- In-app search no longer reaches the whole library. Both modes are bound to
-  the active folder, with no scope control, while
-  [J05](../user-journeys.md#j05-search-and-open-source-evidence) and the
-  [J10](../user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
-  core loop describe finding evidence across authorized folders. MCP retrieval
-  still defaults to the whole library, so a person's reach is now narrower
-  than an Agent's.
-- The server still resolves a signed-in account session to a hosted
-  embedding source of its own when no key is stored, may index with it in the
-  background, and still accepts that source and an embedding-purpose sign-in
-  on its routes. The renderer treats that source as not set up, so nothing on
-  screen offers or names it, but hosted indexing can still run and spend the
-  account's search quota until the server side of this change lands.
-  [Settings and Config](../../code-review/settings-config.md) records the
-  server follow-ups.
-
 ## Cross-area Seams
 
 - [Preparation](preparation.md) owns the currency of derived evidence.
@@ -142,8 +125,7 @@ user-managed results.
 
 ### Next
 
-- Clarify modes, partial readiness, paused work, and errors.
-- Report library-wide readiness rather than only the active folder.
+- Clarify modes, partial readiness, and errors.
 - Improve ranking, snippets, source navigation, and useful filters.
 - Improve MCP and context diagnostics.
 

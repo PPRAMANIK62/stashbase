@@ -5,11 +5,9 @@ import { exactSearchFileId, type SearchNavigationIntent } from './exact-search';
 export const SEMANTIC_SEARCH_CANDIDATES = 30;
 const SNIPPET_LENGTH = 200;
 
-export type SearchScope = 'folder' | 'library';
-
 export interface SemanticSearchRequest {
-  /** Present when the scope is one member folder; absent for the library. */
-  readonly folderPath?: string;
+  /** Absolute root of the one member Folder this query may search. */
+  readonly folderPath: string;
   readonly query: string;
   readonly topK: number;
 }
@@ -50,23 +48,14 @@ export function semanticSnippet(content: string): string {
     : collapsed;
 }
 
-/** Rank order is preserved in both shapes. In library scope a folder group
- *  sits where its strongest hit ranks, so a later folder never jumps ahead. */
+/** Keep only results from the requested Folder. The server enforces the same
+ *  boundary; this check prevents an invalid response from widening the UI. */
 export function groupSemanticHits(
   hits: readonly SemanticHit[],
-  scope: SearchScope,
+  folderPath: string,
 ): SemanticHitGroup[] {
-  if (scope === 'folder') {
-    const first = hits[0];
-    return first ? [{ folderPath: first.source.folderPath, hits }] : [];
-  }
-  const groups = new Map<string, SemanticHit[]>();
-  for (const hit of hits) {
-    const bucket = groups.get(hit.source.folderPath);
-    if (bucket) bucket.push(hit);
-    else groups.set(hit.source.folderPath, [hit]);
-  }
-  return [...groups.entries()].map(([folderPath, groupHits]) => ({ folderPath, hits: groupHits }));
+  const folderHits = hits.filter((hit) => hit.source.folderPath === folderPath);
+  return folderHits.length > 0 ? [{ folderPath, hits: folderHits }] : [];
 }
 
 function anchorLine(content: string): string {

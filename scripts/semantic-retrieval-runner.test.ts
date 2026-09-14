@@ -56,8 +56,8 @@ test('runner stages direct and prepared evidence, reports results, and cleans is
       return {
         bind: async () => {},
         indexDirect: async (source) => { indexed.push(path.basename(source)); },
-        indexPrepared: async (source, prepared, hash) => {
-          indexed.push(`${path.basename(source)}:${prepared}:${hash.length > 0}`);
+        indexPrepared: async (source, prepared) => {
+          indexed.push(`${path.basename(source)}:${prepared}`);
         },
         semanticSearch: async (query, chunkBudget) => {
           chunkBudgets.push(chunkBudget);
@@ -75,7 +75,7 @@ test('runner stages direct and prepared evidence, reports results, and cleans is
   assert.match(result.report, /Commit: abc123/);
   assert.match(result.report, /exact: \(no results\)/);
   assert.deepEqual(indexed[0], 'direct.md');
-  assert.match(indexed[1] ?? '', /^source\.pdf:prepared evidence:true$/);
+  assert.equal(indexed[1], 'source.pdf:prepared evidence');
   assert.equal(observedAppData, path.join(scratch, 'app-data'));
   // The index is asked for chunks, not documents; the runner collapses them.
   assert.deepEqual(chunkBudgets, [

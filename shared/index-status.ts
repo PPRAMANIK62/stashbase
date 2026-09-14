@@ -15,11 +15,6 @@ import type { ConversionProgress } from './conversion.ts';
 /** Coarse embedding-readiness label the renderer renders directly. */
 export type SemanticIndexingState =
   | 'disabled'
-  | 'quota-exhausted'
-  | 'partial-quota-exhausted'
-  | 'awaiting-decision'
-  | 'paused'
-  | 'partial-paused'
   | 'indexing'
   | 'partial-indexing'
   | 'ready'
@@ -27,10 +22,6 @@ export type SemanticIndexingState =
 
 export interface SemanticIndexingStatus {
   state: SemanticIndexingState;
-  /** Present only while a folder has a recorded decision (awaiting/paused);
-   *  the two together size the "index N files" prompt. */
-  sourceCount?: number;
-  estimatedBytes?: number;
 }
 
 /** Non-null when the active folder's background index sync failed after
@@ -72,7 +63,7 @@ export interface IndexStatus {
   /** False when semantic indexing/retrieval is unconfigured, e.g. no
    *  embedding key. */
   semanticEnabled: boolean;
-  /** False while a configured hosted source is blocked by its shared quota. */
+  /** False while the configured BYOK provider is unavailable. */
   semanticAvailable: boolean;
   /** Human-readable reason, sent only when `semanticAvailable` is false. */
   semanticDisabledReason?: string;

@@ -2,9 +2,8 @@
  * Embedder routes: manage the global embedding provider key and validate
  * a key without persisting it.
  *
- * The source set is intentionally narrow: the hosted account broker or
- * OpenAI/OpenRouter BYOK. Each runtime uses a provider/dimension collection
- * identity so incompatible vector spaces never mix.
+ * Search by meaning uses an OpenAI or OpenRouter key supplied by the user.
+ * Each Folder is configured as one MFS Internal namespace.
  */
 import express from 'express';
 import { logger, errorMessage } from '../log.ts';
@@ -24,7 +23,6 @@ import {
 } from '../embedding-availability.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from '../state.ts';
 import { sendError, validateEmbedderKey } from '../http.ts';
-import { hostedAccountState } from '../hosted-account.ts';
 import type { ApiKeySaveResult, EmbedderState } from '../../shared/embedding.ts';
 import type { EmbeddingSource } from '../../shared/embedding.ts';
 import type { EmbedderRuntimeConfig } from '../indexer.ts';
@@ -101,14 +99,12 @@ export function mount(app: express.Express): void {
   app.get('/api/embedder', async (_req, res) => {
     const cfg = getEmbedderConfig();
     const source = getEmbeddingSource();
-    const account = await hostedAccountState(source === 'stashbase-account');
     const state: EmbedderState = {
       provider: cfg.provider,
       hasKey: !!cfg.apiKey,
       authorized: isEmbeddingConfigured(),
       source,
       model: cfg.model,
-      account,
     };
     res.json(state);
   });
@@ -193,7 +189,6 @@ export function mount(app: express.Express): void {
         dimension: cfg.dimension,
         baseUrl: cfg.baseUrl,
       };
-      const account = await hostedAccountState(false);
       await activateEmbeddingSource(previousSource, source, runtime);
       if (shouldBackfill) {
         void reconcileLibraryFolders(`${sourceLabel(source)} source selected`)
@@ -207,7 +202,6 @@ export function mount(app: express.Express): void {
         authorized: true,
         source,
         model: cfg.model,
-        account,
         backfillStarted: shouldBackfill,
       });
     } catch (err: unknown) {
@@ -237,7 +231,6 @@ export function mount(app: express.Express): void {
       source: getEmbeddingSource(),
       provider: cfg.provider,
       model: cfg.model,
-      account: await hostedAccountState(false),
     });
   });
 }

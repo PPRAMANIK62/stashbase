@@ -24,7 +24,6 @@ import {
   sanitizeFilename,
 } from '../files.ts';
 import { isConvertibleSource, isNoteName } from '../format.ts';
-import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { normalizeFolderRelativePath } from '../folder-relative-path.ts';
 import { errorMessage, logger } from '../log.ts';
 import {
@@ -311,19 +310,15 @@ async function processUploadedFiles(
   const payload: UploadResult = { files: out };
   res.json(payload);
   // Background indexing — don't await; the response has already been sent.
-  if (isEmbeddingAvailable()) {
-    (async () => {
-      for (const { name, sourcePath, text } of toIndex) {
-        try {
-          await indexer.upsertFile(sourcePath, text);
-        } catch (err: unknown) {
-          log.warn(`upload: index failed for ${name}: ${errorMessage(err)}`);
-        }
+  (async () => {
+    for (const { name, sourcePath, text } of toIndex) {
+      try {
+        await indexer.upsertFile(sourcePath, text);
+      } catch (err: unknown) {
+        log.warn(`upload: index failed for ${name}: ${errorMessage(err)}`);
       }
-    })();
-  } else if (toIndex.length) {
-    log.info(`upload: skipped indexing ${toIndex.length} file(s) because semantic embedding is unavailable`);
-  }
+    }
+  })();
   // Kick off conversions fire-and-forget. They handle their own async
   // failures internally; guard only against a synchronous throw at
   // kickoff (the response is already sent, so it'd otherwise be an

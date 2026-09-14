@@ -7,17 +7,6 @@ import { createIndexDecisionAdapter } from './index-decision-api';
 const signal = new AbortController().signal;
 
 describe('index decision API', () => {
-  it('posts a folder-explicit start decision and accepts the accepted status', async () => {
-    const request = vi.fn(async () => ({ body: { ok: true }, status: 202 }));
-    await createIndexDecisionAdapter({ request }).decide('/library/research', 'start', signal);
-    expect(request).toHaveBeenCalledWith({
-      body: { decision: 'start', folder: '/library/research' },
-      method: 'POST',
-      path: '/api/semantic-indexing/decision',
-      signal,
-    });
-  });
-
   it('dismisses a warning and resyncs the folder', async () => {
     const request = vi.fn(async () => ({ body: { ok: true, added: [] }, status: 200 }));
     const api = createIndexDecisionAdapter({ request });
@@ -42,7 +31,7 @@ describe('index decision API', () => {
       request: vi.fn(async () => ({ body: { error: 'daemon busy' }, status: 500 })),
     };
     await expect(
-      createIndexDecisionAdapter(client).decide('/library/research', 'defer', signal),
-    ).rejects.toMatchObject({ kind: 'unavailable', message: 'Preparation could not be deferred.' });
+      createIndexDecisionAdapter(client).resync('/library/research', signal),
+    ).rejects.toMatchObject({ kind: 'unavailable', message: 'Sync could not start.' });
   });
 });

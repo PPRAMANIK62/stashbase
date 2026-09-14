@@ -1,11 +1,9 @@
 /**
  * The one place the embedder wire shapes are spoken.
  *
- * The transport answers every embedder call with the whole source state, an
- * account block included; the feature's own vocabulary (`domain/embedder.ts`)
- * keeps only what a key can be, so the account block is left on the wire. The
- * mappers below are that translation, so nothing above this adapter imports a
- * protocol module.
+ * The transport answers every embedder call with BYOK source state only. The
+ * mappers below translate that wire shape, so nothing above this adapter
+ * imports a protocol module.
  */
 
 import { EmbedderError, type EmbedderPort } from '@/features/settings/application/embedder-port';

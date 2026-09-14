@@ -187,7 +187,6 @@ export function SearchSurface({
           error={decisions.error}
           notice={notice}
           onDecision={decisions.run}
-          onOpenSettings={() => onOpenSettings('ai-index')}
           pendingAction={decisions.pendingAction}
         />
       )}

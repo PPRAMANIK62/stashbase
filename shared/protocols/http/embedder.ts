@@ -1,32 +1,14 @@
 import { z } from 'zod';
 
 export const embedderProviderSchema = z.enum(['openai', 'openrouter']);
-export const embeddingSourceSchema = z.enum(['openai', 'openrouter', 'stashbase-account', 'local']);
+export const embeddingSourceSchema = embedderProviderSchema;
 
-const isoDateSchema = z.string().min(1).max(64).nullable();
-
-export const hostedQuotaSchema = z
-  .object({
-    grantedTokens: z.number().nonnegative(),
-    periodEndsAt: isoDateSchema,
-    periodStartedAt: isoDateSchema,
-    plan: z.string().max(120),
-    remainingTokens: z.number().nonnegative(),
-    reservedTokens: z.number().nonnegative(),
-    usedTokens: z.number().nonnegative(),
-  })
-  .passthrough();
-
-/** `GET /api/account` and the `account` block of the embedder state. */
+/** `GET /api/account`. Account identity is independent from embeddings. */
 export const hostedAccountStateSchema = z
   .object({
-    active: z.boolean(),
     avatarUrl: z.string().max(4096).optional(),
-    backfillStarted: z.boolean().optional(),
     displayName: z.string().max(240).optional(),
     email: z.string().max(320).optional(),
-    quota: hostedQuotaSchema.optional(),
-    quotaUnavailable: z.boolean().optional(),
     signedIn: z.boolean(),
   })
   .passthrough();
@@ -34,7 +16,6 @@ export const hostedAccountStateSchema = z
 /** `GET /api/embedder`, and the body every embedder mutation answers with. */
 export const embedderStateSchema = z
   .object({
-    account: hostedAccountStateSchema,
     authorized: z.boolean(),
     backfillStarted: z.boolean().optional(),
     hasKey: z.boolean(),
@@ -51,7 +32,7 @@ export const embedderKeyRequestSchema = z
   })
   .strict();
 
-/** `PUT /api/embedder/key` answers without the account block. */
+/** `PUT /api/embedder/key`. */
 export const embedderKeySaveResponseSchema = z
   .object({
     authorized: z.literal(true),
@@ -69,7 +50,7 @@ export const embedderSourceRequestSchema = z.object({ source: embedderProviderSc
 export const hostedOAuthStartRequestSchema = z
   .object({
     provider: z.literal('google'),
-    purpose: z.enum(['account', 'embedding']),
+    purpose: z.literal('account'),
   })
   .strict();
 
@@ -77,7 +58,7 @@ export const hostedOAuthStartResponseSchema = z
   .object({
     flowId: z.string().min(1).max(256),
     provider: z.literal('google'),
-    purpose: z.enum(['account', 'embedding']),
+    purpose: z.literal('account'),
     url: z.string().url().max(4096),
   })
   .passthrough();

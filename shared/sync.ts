@@ -11,17 +11,9 @@ export interface SyncResult {
   added: string[];
   modified: string[];
   removed: string[];
-  /** Files the daemon's scan_diff matched by content hash to a
-   *  previously-indexed (now-deleted) path. Each entry is the NEW
-   *  folder-relative path. Routed through `indexer.renameFile`, which the
-   *  daemon fast-paths to reuse cached embeddings — no embedding tokens
-   *  spent for these. */
-  renamed: string[];
   failed: { name: string; error: string }[];
   /** True when the caller deliberately abandoned the sync because the
    *  target folder/window is no longer current. Any arrays are partial work
    *  completed before cancellation was observed. */
   cancelled?: boolean;
-  /** Embedding was intentionally stopped by the folder's preflight state. */
-  semanticPaused?: boolean;
 }

@@ -4,7 +4,6 @@ import test from 'node:test';
 import {
   folderSyncResponseSchema,
   indexStatusResponseSchema,
-  semanticIndexingDecisionRequestSchema,
 } from './index-status.ts';
 
 const baseline = {
@@ -58,11 +57,6 @@ test('index status rejects an unknown progress phase and an unknown semantic sta
     }).success,
     false,
   );
-});
-
-test('semantic decision accepts only start or defer', () => {
-  assert.equal(semanticIndexingDecisionRequestSchema.safeParse({ decision: 'start' }).success, true);
-  assert.equal(semanticIndexingDecisionRequestSchema.safeParse({ decision: 'later' }).success, false);
 });
 
 test('folder sync tolerates change lists and reports only cancellation', () => {

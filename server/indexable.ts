@@ -143,7 +143,7 @@ export async function indexableFileSizeErrorAsync(absPath: string): Promise<stri
 /** True when the file's *extractable* text is empty even though the
  *  file itself is not — a bundler-format HTML that is one giant
  *  `<script>` with no prose, or a whitespace-only note. Such files can
- *  never produce chunks, so nothing is ever stored in Milvus for them
+ *  never produce chunks, so nothing is ever stored in MFS for them
  *  and the daemon's name-only `status` reports them pending forever.
  *  Callers treat them like empty files: drop from the sidebar's pending
  *  pulse, skip the futile embed round-trip.

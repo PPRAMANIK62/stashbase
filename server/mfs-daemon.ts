@@ -6,11 +6,10 @@
  * to requests by an auto-incrementing id. Auto-respawns if the daemon
  * dies (in-flight requests get rejected with the exit info).
  *
- * The daemon owns ONE global Milvus DB in per-machine app data (see
- * `local-data.ts:globalVectorStoreDir`) and is **not** anchored to a default
- * folder home: every opened folder registers an **absolute root** and is indexed
- * into the active provider/dimension collection, keyed by absolute path. The
- * Node side records each bound root here so a respawn can replay them.
+ * The daemon owns one MFS store in per-machine app data (see
+ * `local-data.ts:globalVectorStoreDir`). Every Folder registers an absolute
+ * root and maps to one MFS Internal namespace. The Node side records each
+ * binding here so a respawn can replay it.
  *
  * Python lives in `<project>/python/.venv.nosync/bin/python` after the user
  * runs `pnpm setup:python`. In packaged Electron a portable Python
@@ -18,15 +17,7 @@
  * via `STASHBASE_PYTHON` env var (see `electron/main.cjs`).
  */
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { INDEX_EXCLUDED_DIRS, MAX_INDEXABLE_BYTES } from './indexable.ts';
-import { NOTE_EXTS } from './format.ts';
 import { EventEmitter } from 'node:events';
-import {
-  CONVERTIBLE_SOURCE_EXTENSIONS,
-  DIRECT_TEXT_EXTENSIONS,
-  LEGACY_DERIVED_SOURCE_EXTENSIONS,
-  LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS,
-} from '../shared/file-formats.ts';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -35,7 +26,7 @@ import { logger } from './log.ts';
 import { globalVectorStoreDir } from './local-data.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { isDevelopmentRuntime } from './development-runtime.ts';
-import type { LOCAL_EMBEDDING_PROVIDER } from '../shared/embedding.ts';
+import type { EmbedderProvider } from '../shared/embedding.ts';
 
 const log = logger('mfs');
 
@@ -75,8 +66,8 @@ export function isMfsDaemonRetiringError(error: unknown): error is MfsDaemonReti
 }
 
 /** Ceiling for one op's reply. A daemon that is alive but never replies
- *  (main thread stuck inside a C extension — observed during a Milvus
- *  Lite flock fight with a second StashBase-spawned daemon) used to hang
+ *  (for example while blocked in an MFS dependency during a competing-store
+ *  failure) used to hang
  *  its caller forever: `pending` entries only settle on reply, process
  *  exit, or close(). And since the daemon serialises ops, one wedged op
  *  wedges everything queued behind it.
@@ -91,13 +82,13 @@ export function isMfsDaemonRetiringError(error: unknown): error is MfsDaemonReti
 const CALL_TIMEOUT_MS = 10 * 60_000;
 
 /** Ceiling for the `ready` handshake after spawn. A child that starts
- *  but never prints `ready` (blocked acquiring the Milvus Lite flock
- *  held by another process) would leave `readyP` — and therefore every
+ *  but never prints `ready` (for example while another process owns the MFS
+ *  store) would leave `readyP` — and therefore every
  *  call() — pending forever. */
 const READY_TIMEOUT_MS = 90_000;
 
 export interface BindFolderArgs {
-  provider: 'openai' | 'openrouter' | 'stashbase' | typeof LOCAL_EMBEDDING_PROVIDER;
+  provider: EmbedderProvider;
   apiKey?: string;
   model?: string;
   dimension?: number;
@@ -133,9 +124,9 @@ export class MfsDaemon extends EventEmitter {
     super();
   }
 
-  /** Spawn (idempotent) and resolve only after the daemon has accepted the
-   * current rules and every retained folder binding. Public operations never
-   * race the bootstrap handshake. */
+  /** Spawn (idempotent) and resolve only after the daemon has accepted every
+   * retained Folder binding. Public operations never race the bootstrap
+   * handshake. */
   async ensureReady(): Promise<void> {
     // `close()` clears `proc`/`readyP` before the child has necessarily
     // released its flock. A concurrent config reset used to observe that
@@ -158,19 +149,6 @@ export class MfsDaemon extends EventEmitter {
 
   private async spawnAndConfigure(): Promise<void> {
     await this.spawnAndWait();
-    await this.callReadyProcess('set_rules', {
-      excluded_dirs: [...INDEX_EXCLUDED_DIRS],
-      max_indexable_bytes: MAX_INDEXABLE_BYTES,
-      include_extensions: [
-        ...DIRECT_TEXT_EXTENSIONS.map((extension) => `.${extension}`),
-        ...CONVERTIBLE_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
-      ],
-      note_extensions: NOTE_EXTS.map((extension) => `.${extension}`),
-      legacy_derived_source_extensions:
-        LEGACY_DERIVED_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
-      legacy_extensionless_derived_source_extensions:
-        LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
-    });
     for (const { folder, cfg } of this.bindings.values()) {
       await this.callReadyProcess('bind_folder', bindFolderPayload(folder, cfg));
     }
@@ -193,24 +171,6 @@ export class MfsDaemon extends EventEmitter {
     await this.call('bind_folder', {
       folder: source,
       folder_identity: key,
-      provider: cfg.provider,
-      ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
-      ...(cfg.model ? { model: cfg.model } : {}),
-      ...(cfg.dimension ? { dimension: cfg.dimension } : {}),
-      ...(cfg.baseUrl ? { base_url: cfg.baseUrl } : {}),
-    });
-  }
-
-  /** Load one embedder without changing folder bindings or opening a
-   * collection. Settings uses this readiness barrier before persisting a
-   * local source, so missing runtime files and bounded first-model setup
-   * failures remain an actionable selection error. */
-  async probeEmbedder(cfg: BindFolderArgs): Promise<{
-    provider: string;
-    model: string;
-    dimension: number;
-  }> {
-    return this.call('probe_embedder', {
       provider: cfg.provider,
       ...(cfg.apiKey ? { api_key: cfg.apiKey } : {}),
       ...(cfg.model ? { model: cfg.model } : {}),
@@ -255,7 +215,7 @@ export class MfsDaemon extends EventEmitter {
         env: {
           ...process.env,
           PYTHONUNBUFFERED: '1',
-          // Milvus Lite spins up its own gRPC server in-process; pymilvus
+          // MFS's pinned backend spins up a gRPC server in-process; its client
           // client's default keepalive ping (every 10s) is too aggressive
           // for that loopback server and trips a `ENHANCE_YOUR_CALM`
           // GOAWAY ~every minute. The reconnect is transparent — only
@@ -268,8 +228,8 @@ export class MfsDaemon extends EventEmitter {
       this.generation += 1;
 
       // Ready-handshake watchdog — see READY_TIMEOUT_MS. SIGKILL (not
-      // SIGTERM): a child stuck acquiring the Milvus flock is blocked in
-      // a C extension and won't run a signal handler. The exit handler
+      // SIGTERM): a child stuck in a native MFS dependency may not run a
+      // signal handler. The exit handler
       // below turns the kill into a rejection callers can observe.
       const readyTimer = setTimeout(() => {
         log.warn(`daemon did not report ready within ${READY_TIMEOUT_MS / 1000}s — killing`);
@@ -404,7 +364,7 @@ export class MfsDaemon extends EventEmitter {
     proc.stdin.end();
     // Escalation ladder: graceful EOF → SIGTERM → SIGKILL. The Python
     // signal handler can't run while the main thread is blocked inside
-    // a C extension (Milvus Lite, ONNX), so a stuck daemon won't die
+    // a native MFS dependency, so a stuck daemon won't die
     // on SIGTERM. SIGKILL can't be caught — guarantees the slot frees
     // up so the next bind doesn't trip on a stale flock.
     const retirement = new Promise<void>((resolve) => {
@@ -439,8 +399,8 @@ export class MfsDaemon extends EventEmitter {
  *   1. ``STASHBASE_PYTHON`` env (used by packaged Electron to point at the
  *      bundled portable runtime under ``process.resourcesPath``).
  *   2. ``python/.venv.nosync/bin/python`` populated by ``pnpm setup:python``.
- *   3. system ``python3`` — last resort, gives a clearer error if mfs-cli
- *      isn't installed than just failing to spawn. */
+ *   3. system ``python3.13`` / ``python3`` — last resort, giving a clearer
+ *      import error than a command-resolution failure. */
 function resolvePythonBin(): string {
   const bin = (() => {
     if (process.env.STASHBASE_PYTHON) return process.env.STASHBASE_PYTHON;

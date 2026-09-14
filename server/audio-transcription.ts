@@ -114,7 +114,7 @@ interface AudioPreviewManifest {
 interface AudioSourceIdentity {
   size: number;
   mtimeMs: number;
-  /** dev/inode/ctime detects replacements before a reconcile hash diff runs. */
+  /** dev/inode/ctime detects replacements before content hashing completes. */
   statIdentity: string;
 }
 
@@ -530,7 +530,7 @@ export async function incompleteAudioSourcesForFolder(folderAbs: string): Promis
   return out.sort();
 }
 
-export function indexFreshAudio(sourceAbs: string): Promise<boolean> {
+export function indexFreshAudio(sourceAbs: string) {
   return indexFreshDerived(sourceAbs, audioFreshnessSpec());
 }
 
@@ -665,7 +665,6 @@ function audioFreshnessSpec(): DerivedFreshnessSpec {
 const AUDIO_FRESHNESS_POLICY = {
   derivedNote: derivedNoteFor,
   derivedReady: (sourceAbs: string, notePath: string) => readCurrentAudioTranscript(sourceAbs, notePath) !== null,
-  indexSourceHash: (sourceAbs: string) => readAudioTranscript(sourceAbs)?.source.contentHash ?? null,
 } satisfies DerivedFreshnessSpec;
 
 /** Manual retry invalidates inference outputs and checkpoints but keeps an

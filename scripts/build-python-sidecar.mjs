@@ -40,6 +40,8 @@ const daemonExcludedModules = [
   'PIL',
   'cv2',
   'rapidocr_onnxruntime',
+  'onnxruntime',
+  'tokenizers',
   // Pulled by optional document parsing hooks, not by the daemon protocol
   // itself. Keeping them out saves space from the default app.
   'lxml',
@@ -51,6 +53,8 @@ const daemonForbiddenEntries = [
   'fitz',
   'cv2',
   'rapidocr_onnxruntime',
+  'onnxruntime',
+  'tokenizers',
   'lxml',
 ];
 const extractExcludedModules = [
@@ -189,27 +193,18 @@ execFileSync(
     '--name',
     'stashbase-daemon',
     '--hidden-import',
-    'mfs.store',
-    '--hidden-import',
-    'mfs.config',
-    '--hidden-import',
-    'mfs.ingest.chunker',
-    '--hidden-import',
-    'mfs.ingest.scanner',
-    '--hidden-import',
-    'mfs.embedder.onnx',
+    'mfs._process_supervisor',
     '--hidden-import',
     'blake3',
-    // Document extraction stays in its own optional sidecar. The daemon now
-    // includes the local ONNX embedder runtime; model weights remain a
-    // first-selection download rather than package payload.
+    // Document extraction stays in its own optional sidecar. MFS receives
+    // only StashBase-completed UTF-8 projections in this daemon.
     ...daemonExcludedModules.flatMap((moduleName) => ['--exclude-module', moduleName]),
     '--copy-metadata',
     'milvus-lite',
     '--copy-metadata',
     'pymilvus',
     '--copy-metadata',
-    'mfs-cli',
+    'mfs',
     '--distpath',
     distPath,
     '--workpath',

@@ -63,8 +63,6 @@ function packagedLayout(appPath) {
       appRoot: path.join(resourcesPath, 'app.asar'),
       electronBin: path.join(appPath, 'Contents', 'MacOS', productName),
       resourcesPath,
-      ripgrepPackage: `ripgrep-darwin-${process.arch}`,
-      ripgrepBinary: 'rg',
     };
   }
   if (process.platform === 'win32') {
@@ -73,8 +71,6 @@ function packagedLayout(appPath) {
       appRoot: path.join(resourcesPath, 'app.asar'),
       electronBin: path.join(appPath, `${productName}.exe`),
       resourcesPath,
-      ripgrepPackage: `ripgrep-win32-${process.arch}`,
-      ripgrepBinary: 'rg.exe',
     };
   }
   const resourcesPath = path.join(appPath, 'resources');
@@ -82,8 +78,6 @@ function packagedLayout(appPath) {
     appRoot: path.join(resourcesPath, 'app.asar'),
     electronBin: findLinuxElectronBin(appPath),
     resourcesPath,
-    ripgrepPackage: `ripgrep-linux-${process.arch}`,
-    ripgrepBinary: 'rg',
   };
 }
 
@@ -880,19 +874,8 @@ const requireExtract = args.includes('--require-extract')
   || process.env.STASHBASE_BUILD_EXTRACT === '1';
 const requireTranscription = args.includes('--require-transcription')
   || process.env.STASHBASE_REQUIRE_TRANSCRIPTION === '1';
-const rgPath = path.join(
-  resourcesPath,
-  'app.asar.unpacked',
-  'node_modules',
-  '@vscode',
-  layout.ripgrepPackage,
-  'bin',
-  layout.ripgrepBinary,
-);
-
 assertFile(electronBin, 'packaged Electron binary');
 assertFile(appRoot, 'app.asar');
-assertFile(rgPath, 'packaged ripgrep binary');
 assertFile(openCodeBin, 'packaged OpenCode binary');
 assertFile(daemonBin, 'packaged Python daemon sidecar');
 if (requireExtract) assertFile(extractBin, 'packaged Python extractor sidecar');

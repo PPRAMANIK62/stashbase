@@ -5,9 +5,8 @@
  * failed sign-in answer without a sentence; the feature's own vocabulary
  * (`domain/account.ts`) models absence as `null` and gives every failure a
  * sentence. The mappers below are that translation, so nothing above this
- * adapter imports a protocol module. The account block the server sends
- * carries search-credit fields as well; they are not read, because signing in
- * buys OpenQuill's credits and nothing for search.
+ * adapter imports a protocol module. Account identity is independent from
+ * search by meaning.
  */
 import type { AccountPort } from '@/features/settings/application/ports';
 import type {

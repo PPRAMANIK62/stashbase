@@ -1,9 +1,8 @@
 /**
  * One-time Python sidecar installer.
  *
- * 1. Find a Python >= 3.10 on PATH (preferring `python3.13` / `python3.12`
- *    / `python3.11` / `python3.10` over a bare `python3` whose version
- *    might be 3.9 — that combo silently fails on `mfs-cli` install).
+ * 1. Find Python 3.13 on PATH. The embedded MFS revision intentionally
+ *    supports only Python >=3.13,<3.14.
  * 2. Create `python/.venv.nosync` if missing (the `.nosync` suffix keeps
  *    iCloud Drive from corrupting it when the repo is under ~/Documents).
  * 3. `pip install -r python/requirements.txt` into it.
@@ -17,7 +16,7 @@
  * embedding daemon crash later with "No module named 'mfs'".
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,14 +30,11 @@ const VENV_PYTHON = process.platform === 'win32'
   ? path.join(VENV, 'Scripts', 'python.exe')
   : path.join(VENV, 'bin', 'python');
 
-const MIN_MAJOR = 3;
-const MIN_MINOR = 10;
+const REQUIRED_MAJOR = 3;
+const REQUIRED_MINOR = 13;
 
 const CANDIDATES = [
   'python3.13',
-  'python3.12',
-  'python3.11',
-  'python3.10',
   'python3',
   'python',
 ];
@@ -58,15 +54,15 @@ function findPython() {
     const r = probe(c);
     if (!r) continue;
     tried.push(`${c} (${r.major}.${r.minor})`);
-    if (r.major > MIN_MAJOR || (r.major === MIN_MAJOR && r.minor >= MIN_MINOR)) {
+    if (r.major === REQUIRED_MAJOR && r.minor === REQUIRED_MINOR) {
       return r;
     }
   }
   const seen = tried.length ? tried.join(', ') : 'none';
   console.error(
-    `[setup:python] no Python >= ${MIN_MAJOR}.${MIN_MINOR} found on PATH.\n` +
+    `[setup:python] Python ${REQUIRED_MAJOR}.${REQUIRED_MINOR} was not found on PATH.\n` +
       `  Probed: ${seen}\n` +
-      `  Install Python 3.10+ (e.g. \`brew install python@3.12\`) and re-run.`,
+      `  Install Python 3.13 (for example \`brew install python@3.13\`) and re-run.`,
   );
   process.exit(1);
 }
@@ -75,6 +71,13 @@ const py = findPython();
 console.log(`[setup:python] using ${py.bin} (${py.major}.${py.minor})`);
 
 mkdirSync(path.dirname(VENV), { recursive: true });
+if (existsSync(VENV)) {
+  const existing = probe(VENV_PYTHON);
+  if (!existing || existing.major !== REQUIRED_MAJOR || existing.minor !== REQUIRED_MINOR) {
+    console.log(`[setup:python] replacing incompatible venv at ${VENV}`);
+    rmSync(VENV, { recursive: true, force: true });
+  }
+}
 if (!existsSync(VENV)) {
   console.log(`[setup:python] creating venv at ${VENV}`);
   execFileSync(py.bin, ['-m', 'venv', VENV], { stdio: 'inherit' });
@@ -82,6 +85,10 @@ if (!existsSync(VENV)) {
 
 console.log(`[setup:python] installing deps from ${REQS}`);
 execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip'], { stdio: 'inherit' });
+// The retired zilliztech distribution owns the same `mfs` import package.
+// Remove it before installing the new library so stale modules cannot survive
+// an in-place development environment upgrade.
+execFileSync(VENV_PYTHON, ['-m', 'pip', 'uninstall', '-y', 'mfs-cli'], { stdio: 'inherit' });
 execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-r', REQS], { stdio: 'inherit' });
 if (WITH_EXTRACT) {
   console.log(`[setup:python] installing extraction deps from ${EXTRACT_REQS}`);
@@ -94,7 +101,8 @@ const probeImports = `
 import sys
 try:
     import mfs, openai, numpy
-    print(f'[setup:python] ok: mfs, openai ({openai.__version__}), numpy')
+    assert hasattr(mfs, 'MFS'), 'installed mfs package does not expose MFS'
+    print(f'[setup:python] ok: mfs.MFS, openai ({openai.__version__}), numpy')
 except Exception as e:
     print(f'[setup:python] import probe failed: {e}', file=sys.stderr)
     sys.exit(1)

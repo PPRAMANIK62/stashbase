@@ -104,13 +104,13 @@ describe('useSearchKeyConfigured', () => {
     expect(keyed.result.current).toBeNull();
     await waitFor(() => expect(keyed.result.current).toBe(true));
 
-    const hosted = renderHook(
+    const differentProvider = renderHook(
       () =>
         useSearchKeyConfigured(
-          embedderPort(embedderState({ authorized: true, source: 'stashbase-account' })),
+          embedderPort(embedderState({ authorized: true, source: 'openrouter' })),
         ),
       { wrapper: queryWrapper(createTestQueryClient()) },
     );
-    await waitFor(() => expect(hosted.result.current).toBe(false));
+    await waitFor(() => expect(differentProvider.result.current).toBe(false));
   });
 });

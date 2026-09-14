@@ -307,8 +307,8 @@ See [J04 evidence](../code-review/journey-coverage.md#j04-preparation).
 
 ### Outcome
 
-A person finds relevant evidence across the authorized library and returns to
-the visible source that supports it.
+A person finds relevant evidence inside one selected authorized Folder and
+returns to the visible source that supports it.
 
 ### Entry State
 
@@ -341,10 +341,9 @@ unavailable.
 
 ### Degradation and Recovery
 
-Known-stale semantic evidence becomes unavailable before paused or failed work
-is presented. Current indexed files may remain partially useful, and
-replacing the key resumes pending work without blocking local-file
-workflows.
+Known-stale semantic evidence becomes unavailable before failed work is
+presented. Current indexed files may remain partially useful, and replacing
+the key resumes pending work without blocking local-file workflows.
 
 ### Evidence
 
@@ -430,9 +429,9 @@ may be ready, missing, disconnected, or recoverable.
   turn failure.
 - Tool and source use remain inspectable without turning generated artifacts
   or transcripts into hidden product state.
-- Agent search defaults to the live Chat scope; a folder Chat searches across
-  the Library only when explicitly requested. Search results report the
-  effective folder, and invalid scope does not fall back to a broader search.
+- Agent search defaults to a folder Chat's live Folder. A Library Chat selects
+  one Folder from `library_info` for each query. Search results report that
+  Folder, and invalid scope does not fall back to a broader search.
 - Whether a Chat adds meaning-based evidence affects only that Chat's
   retrieval strategy. Without it `search_library` stays available across the
   authorized scope using direct and current prepared text; with it the same
@@ -515,7 +514,8 @@ MCP-capable client to configure.
 
 1. Copy the standard configuration or URL access details from Settings and
    register them in the client.
-2. Orient with library information, then search or read authorized files.
+2. Orient with library information, select one Folder for each search, then
+   search or read authorized files.
 3. Use bounded mutations when the client needs to write back.
 4. Reindex or reconcile external changes when required.
 
@@ -611,8 +611,8 @@ Agent.
 
 ### Required Observable Results
 
-- Workspace, retrieval, built-in Chat, and external MCP agree on library scope
-  and visible source identity.
+- Workspace, retrieval, built-in Chat, and external MCP agree on one-Folder
+  search scope and visible source identity.
 - Prepared evidence remains derived and invisible while still resolving to the
   original source.
 - The user can distinguish exploration from the accepted durable result.

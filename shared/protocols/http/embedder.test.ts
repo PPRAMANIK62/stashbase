@@ -7,30 +7,15 @@ import {
   hostedOAuthStartResponseSchema,
 } from './embedder.ts';
 
-test('embedder state accepts a signed-in hosted account with a quota', () => {
+test('embedder state contains only BYOK source state', () => {
   const parsed = embedderStateSchema.parse({
-    account: {
-      active: true,
-      displayName: 'Ada',
-      email: 'ada@example.com',
-      quota: {
-        grantedTokens: 1000,
-        periodEndsAt: '2026-10-01T00:00:00.000Z',
-        periodStartedAt: '2026-09-01T00:00:00.000Z',
-        plan: 'free',
-        remainingTokens: 250,
-        reservedTokens: 0,
-        usedTokens: 750,
-      },
-      signedIn: true,
-    },
     authorized: true,
-    hasKey: false,
-    model: 'hosted',
+    hasKey: true,
+    model: 'text-embedding-3-small',
     provider: 'openai',
-    source: 'stashbase-account',
+    source: 'openai',
   });
-  assert.equal(parsed.account.quota?.remainingTokens, 250);
+  assert.equal(parsed.source, 'openai');
 });
 
 test('embedder requests reject an unknown provider and a missing key', () => {
@@ -38,7 +23,7 @@ test('embedder requests reject an unknown provider and a missing key', () => {
   assert.equal(embedderKeyRequestSchema.safeParse({ key: '', provider: 'openai' }).success, false);
   assert.equal(embedderKeyRequestSchema.safeParse({ key: 'sk', provider: 'gemini' }).success, false);
   assert.equal(
-    hostedOAuthStartResponseSchema.safeParse({ flowId: 'f', provider: 'google', purpose: 'embedding', url: 'nope' }).success,
+    hostedOAuthStartResponseSchema.safeParse({ flowId: 'f', provider: 'google', purpose: 'embedding', url: 'https://example.com' }).success,
     false,
   );
 });

@@ -243,12 +243,13 @@ test('credential and source mutations never overwrite malformed config through a
   }
 });
 
-test('retired local embedding source cannot be selected again', () => {
+test('retired embedding sources cannot be selected again', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-local-embedding-config-test-'));
   try {
     const result = runConfigMutation(home, `
       const assert = (await import('node:assert/strict')).default;
-      assert.throws(() => config.setEmbeddingSource('local'), /no longer available/);
+      assert.throws(() => config.setEmbeddingSource('local'), /Add an OpenAI key/);
+      assert.throws(() => config.setEmbeddingSource('stashbase-account'), /Add an OpenAI key/);
     `);
     assert.equal(result.status, 0, result.stderr);
   } finally {
@@ -256,7 +257,7 @@ test('retired local embedding source cannot be selected again', () => {
   }
 });
 
-test('retired local embedding source migrates to account, BYOK, or unconfigured state', () => {
+test('retired local and hosted embedding sources migrate to BYOK or unconfigured state', () => {
   const session = {
     accessToken: 'access',
     refreshToken: 'refresh',
@@ -266,15 +267,15 @@ test('retired local embedding source migrates to account, BYOK, or unconfigured 
   };
   const cases = [
     {
-      name: 'account takes priority when both credentials exist',
+      name: 'BYOK takes priority even when an account session exists',
       config: {
         embeddingSource: 'local',
         embedder: { provider: 'openrouter', apiKey: 'sk-or-test' },
         account: { session },
         appearance: { theme: 'dark' },
       },
-      expectedSource: 'stashbase-account',
-      expectedResolved: 'stashbase-account',
+      expectedSource: 'openrouter',
+      expectedResolved: 'openrouter',
       expectedConfigured: true,
     },
     {
@@ -298,6 +299,13 @@ test('retired local embedding source migrates to account, BYOK, or unconfigured 
       expectedResolved: 'openai',
       expectedConfigured: false,
     },
+    {
+      name: 'retired hosted source preserves the account but no longer configures search',
+      config: { embeddingSource: 'stashbase-account', account: { session }, appearance: { theme: 'dark' } },
+      expectedSource: undefined,
+      expectedResolved: 'openai',
+      expectedConfigured: false,
+    },
   ] as const;
 
   for (const scenario of cases) {
@@ -309,8 +317,8 @@ test('retired local embedding source migrates to account, BYOK, or unconfigured 
     try {
       const result = runConfigMutation(home, `
         const assert = (await import('node:assert/strict')).default;
-        config.migrateRetiredLocalEmbeddingSource();
-        config.migrateRetiredLocalEmbeddingSource();
+        config.migrateRetiredEmbeddingSources();
+        config.migrateRetiredEmbeddingSources();
         assert.equal(config.getEmbeddingSource(), ${JSON.stringify(scenario.expectedResolved)});
         assert.equal(config.isEmbeddingConfigured(), ${scenario.expectedConfigured});
       `);
@@ -324,7 +332,7 @@ test('retired local embedding source migrates to account, BYOK, or unconfigured 
   }
 });
 
-test('retired local migration leaves current account and BYOK sources unchanged', () => {
+test('retired source migration leaves current BYOK sources unchanged', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-current-embedding-migration-test-'));
   const configDir = path.join(home, '.stashbase');
   const configPath = path.join(configDir, 'config.json');
@@ -336,7 +344,7 @@ test('retired local migration leaves current account and BYOK sources unchanged'
   fs.mkdirSync(configDir);
   fs.writeFileSync(configPath, serialized);
   try {
-    const result = runConfigMutation(home, 'config.migrateRetiredLocalEmbeddingSource();');
+    const result = runConfigMutation(home, 'config.migrateRetiredEmbeddingSources();');
     assert.equal(result.status, 0, result.stderr);
     assert.equal(fs.readFileSync(configPath, 'utf8'), serialized);
   } finally {
@@ -354,7 +362,7 @@ test('embedding source activation persists only after reset and bind succeed', a
   };
   const events: string[] = [];
 
-  await activateEmbeddingSource('stashbase-account', 'openai', runtime, {
+  await activateEmbeddingSource('openrouter', 'openai', runtime, {
     resetRuntime: async () => { events.push('reset'); },
     bindFolders: async (nextRuntime) => { events.push(`bind:${nextRuntime?.provider ?? 'previous'}`); },
     persistSource: (source) => { events.push(`persist:${source}`); },
@@ -363,7 +371,7 @@ test('embedding source activation persists only after reset and bind succeed', a
 
   events.length = 0;
   await assert.rejects(
-    activateEmbeddingSource('stashbase-account', 'openai', runtime, {
+    activateEmbeddingSource('openrouter', 'openai', runtime, {
       resetRuntime: async () => {
         events.push('reset');
         throw new Error('reset failed');
@@ -378,7 +386,7 @@ test('embedding source activation persists only after reset and bind succeed', a
   events.length = 0;
   let firstBind = true;
   await assert.rejects(
-    activateEmbeddingSource('stashbase-account', 'openai', runtime, {
+    activateEmbeddingSource('openrouter', 'openai', runtime, {
       resetRuntime: async () => { events.push('reset'); },
       bindFolders: async (nextRuntime) => {
         events.push(`bind:${nextRuntime?.provider ?? 'previous'}`);

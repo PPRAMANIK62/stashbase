@@ -32,29 +32,14 @@ interface SemanticIndexWarning {
   readonly sentence: string;
 }
 
-/** What an unresolved search-by-meaning build would cost, for the two states that ask
- *  the reader to decide about it. */
-interface SemanticIndexWorkload {
-  readonly estimatedBytes: number | null;
-  /** Visible sources the build would have to embed. */
-  readonly files: number;
-}
-
 /** One folder's search-by-meaning state, as one variant per observable state carrying
  *  exactly the facts that state has. A state with nothing to say carries
  *  nothing, so no reader can consult a flag beside the state it came from. */
 export type SemanticIndexStatus =
-  | { readonly state: 'awaiting-decision'; readonly workload: SemanticIndexWorkload }
   | { readonly state: 'failed' }
   /** `partial` marks an index that already answers while the rest builds. */
   | { readonly partial: boolean; readonly remaining: number; readonly state: 'indexing' }
-  | {
-      readonly partial: boolean;
-      readonly state: 'paused';
-      readonly workload: SemanticIndexWorkload;
-    }
   | { readonly state: 'not-set-up' }
-  | { readonly state: 'quota-exhausted' }
   | { readonly state: 'ready' };
 
 export interface FolderIndexStatus {

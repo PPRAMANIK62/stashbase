@@ -8,7 +8,7 @@ import { isLibraryFolderRemovalInProgress } from './folder.ts';
 import { hasNoExtractableText, shouldIndexFilePath } from './indexable.ts';
 import { displayPathForHit } from './pdf.ts';
 import { getFsChangeCounter } from './watcher.ts';
-import { getIndexWarning, getSemanticIndexingState, indexer } from './state.ts';
+import { getIndexWarning, indexer } from './state.ts';
 import type { IndexStatus, PreparationFailure, SemanticIndexingState } from '../shared/index-status.ts';
 import type { IndexerStatus } from './indexer.ts';
 
@@ -28,16 +28,11 @@ type SchedulerSnapshot = ReturnType<typeof getConversionSchedulerSnapshot>;
 
 export function semanticIndexingState(input: {
   enabled: boolean;
-  decision: 'awaiting-decision' | 'paused' | null;
   indexed: number;
   pending: number;
   failed: boolean;
-  quotaExhausted?: boolean;
 }): SemanticIndexingState {
   if (!input.enabled) return 'disabled';
-  if (input.quotaExhausted) return input.indexed > 0 ? 'partial-quota-exhausted' : 'quota-exhausted';
-  if (input.decision === 'awaiting-decision') return 'awaiting-decision';
-  if (input.decision === 'paused') return input.indexed > 0 ? 'partial-paused' : 'paused';
   if (input.failed) return 'failed';
   if (input.pending > 0) return input.indexed > 0 ? 'partial-indexing' : 'indexing';
   return 'ready';
@@ -86,15 +81,12 @@ export async function buildIndexStatus(folderRoot: string): Promise<IndexStatus>
     .map((p) => filesystemPath.relative(curRoot, p))
     .filter((p): p is string => p != null);
   const schedulerSnapshot = getConversionSchedulerSnapshot();
-  const semanticDecision = semanticAvailable ? getSemanticIndexingState(curRoot) : null;
   const indexWarning = getIndexWarning(curRoot);
   const semanticState = semanticIndexingState({
     enabled: semanticEnabled,
-    decision: semanticDecision?.decision ?? null,
     indexed: status.indexed,
     pending: pending.length,
     failed: indexWarning != null,
-    quotaExhausted: unavailableReason === 'hosted-quota-exhausted',
   });
 
   return {
@@ -103,22 +95,14 @@ export async function buildIndexStatus(folderRoot: string): Promise<IndexStatus>
     semanticEnabled,
     semanticAvailable,
     ...(!semanticAvailable ? {
-      semanticDisabledReason: unavailableReason === 'hosted-quota-exhausted'
-        ? 'Hosted allowance used up; keyword search still works'
-        : 'Embedding source required',
+      semanticDisabledReason: 'Embedding source required',
     } : {}),
     pending,
     pendingCount: pending.length,
     orphaned,
     orphanedCount: orphaned.length,
-    visibleIndexingSettled: !semanticAvailable || semanticDecision != null || pending.length === 0,
-    semanticIndexing: {
-      state: semanticState,
-      ...(semanticDecision ? {
-        sourceCount: semanticDecision.sourceCount,
-        estimatedBytes: semanticDecision.estimatedBytes,
-      } : {}),
-    },
+    visibleIndexingSettled: !semanticAvailable || pending.length === 0,
+    semanticIndexing: { state: semanticState },
     pendingConversions: getInFlightConversions(curRoot),
     blockedConversions: await blockedAudioSourcesForFolder(curRoot, treeVersion),
     conversionProgress: conversionProgressForFolder(curRoot, schedulerSnapshot),

@@ -13,8 +13,8 @@ import { libraryOperationError } from './library-operations/errors.ts';
 export type { AgentContextFile } from '../shared/library-files.ts';
 
 export interface LibrarySearchScope {
-  /** Absolute root of the folder to scope to, or undefined for whole-library. */
-  folderRoot?: string;
+  /** Absolute root of the one Folder this query may search. */
+  folderRoot: string;
   /** Absolute path prefix to narrow to, or undefined. */
   pathPrefix?: string;
 }
@@ -29,7 +29,10 @@ async function requireMemberFolderRoot(ref: string): Promise<string> {
 
 export async function normalizeLibrarySearchScope(folderRaw: unknown, pathPrefixRaw: unknown): Promise<LibrarySearchScope> {
   const folderRef = typeof folderRaw === 'string' && folderRaw.trim() ? folderRaw.trim() : undefined;
-  const folderRoot = folderRef ? await requireMemberFolderRoot(folderRef) : undefined;
+  if (!folderRef) {
+    throw routeError('search requires one folder from library_info', 400, 'FOLDER_REQUIRED');
+  }
+  const folderRoot = await requireMemberFolderRoot(folderRef);
   const pathPrefix = typeof pathPrefixRaw === 'string' && pathPrefixRaw.trim()
     ? await normalizeLibraryPathPrefix(pathPrefixRaw.trim())
     : undefined;
@@ -38,13 +41,7 @@ export async function normalizeLibrarySearchScope(folderRaw: unknown, pathPrefix
   if (folderRoot && pathPrefix && await filesystemPath.relativeAsync(folderRoot, pathPrefix) == null) {
     throw routeError('path_prefix must live under folder', 400);
   }
-  // A normalized prefix is already known to live under a library member.
-  // Return that owner when the caller omitted `folder` so folder-walking
-  // retrieval can honor a prefix-only scope without widening or rejecting it.
-  return {
-    folderRoot: folderRoot ?? (pathPrefix ? await memberRootForAbsAsync(pathPrefix) ?? undefined : undefined),
-    pathPrefix,
-  };
+  return { folderRoot, pathPrefix };
 }
 
 export async function requireLibraryStatusFolder(folderRaw: unknown): Promise<string | undefined> {

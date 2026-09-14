@@ -1,5 +1,5 @@
 /**
- * Library-wide routes. External agents talk in absolute source paths because
+ * Library routes. External agents talk in absolute source paths because
  * they may run in sandboxes that cannot read the user's local filesystem.
  * These routes are the host-side bridge for semantic retrieval, index status,
  * orientation, library rules, and file CRUD.
@@ -43,8 +43,8 @@ const log = logger('routes/library-files');
 
 
 export function mount(app: express.Express, operations: LibraryOperations = createLibraryOperations()): void {
-  // Unified source search using the attributed chat scope (optional `folder`,
-  // `path_prefix`, and source `types` filters). Powers MCP's
+  // Unified source search over one explicit or attributed Folder (optional
+  // `path_prefix` and source `types` filters). Powers MCP's
   // `search_library`; an attributed panel-session policy may resolve the
   // request to lexical retrieval. Hidden derived text is searched but always
   // remapped to its visible source identity.
@@ -69,7 +69,6 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
       res.json(await operations.search({
         query,
         topK,
-        scope: req.body?.scope,
         folder: req.body?.folder,
         pathPrefix: req.body?.path_prefix,
         types,
@@ -87,11 +86,9 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
     }
   });
 
-  // Keyword (ripgrep) search over the whole library, or one `folder`
-  // (optionally narrowed to a folder-relative `path_prefix`). Powers the
-  // in-app search popup's exact mode; deliberately outside the per-window
-  // folder gate so it answers before any folder is open. Hidden derived
-  // notes are remapped or dropped, same as every other search surface.
+  // MFS exact search over one `folder`, optionally narrowed to a
+  // folder-relative `path_prefix`. Powers the in-app search popup's exact
+  // mode. MFS stores prepared text under the visible source DocumentId.
   app.post('/api/library/keyword-search', async (req, res) => {
     try {
       const query = typeof req.body?.query === 'string' ? req.body.query : '';
@@ -119,9 +116,9 @@ export function mount(app: express.Express, operations: LibraryOperations = crea
       // absolute (members live anywhere).
       let recentlyIndexed: Array<{ path: string; mtimeMs: number }> = [];
       try {
-        const indexed = await indexer.listFiles(folderRoot);
+        const indexed = await indexer.listDocuments(folderRoot);
         const enriched: Array<{ path: string; mtimeMs: number }> = [];
-        for (const abs of Object.keys(indexed)) {
+        for (const abs of indexed) {
           try {
             const st = await fs.promises.stat(abs);
             enriched.push({ path: abs, mtimeMs: st.mtimeMs });

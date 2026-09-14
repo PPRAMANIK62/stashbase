@@ -8,55 +8,25 @@
  * from, and nothing here reaches for the daemon's own status shape.
  */
 
-export type SemanticReadinessAction =
-  | 'build'
-  | 'dismiss-warning'
-  | 'not-now'
-  | 'open-settings'
-  | 'resume'
-  | 'retry-index';
-
-/** What an unresolved search-by-meaning build would cost the reader deciding on it. */
-interface SemanticWorkload {
-  readonly estimatedBytes: number | null;
-  readonly files: number;
-}
+export type SemanticReadinessAction = 'dismiss-warning' | 'retry-index';
 
 export type SemanticReadiness =
-  | { readonly state: 'awaiting-decision'; readonly workload: SemanticWorkload }
   | { readonly state: 'failed'; readonly warning: string }
   /** `partial` marks an index that already answers while the rest builds. */
   | { readonly partial: boolean; readonly remaining: number; readonly state: 'indexing' }
-  | { readonly partial: boolean; readonly state: 'paused'; readonly workload: SemanticWorkload }
   | { readonly state: 'not-set-up' }
-  | { readonly state: 'quota-exhausted' }
   | { readonly state: 'ready' }
   | { readonly state: 'unknown' };
-
-function mebibytes(bytes: number): string {
-  const value = bytes / (1024 * 1024);
-  return value >= 10 ? Math.round(value).toString() : value.toFixed(1);
-}
-
-function workloadDetail(workload: SemanticWorkload): string {
-  const files = workload.files;
-  const size =
-    workload.estimatedBytes === null ? '' : ` · about ${mebibytes(workload.estimatedBytes)} MiB`;
-  return `About ${files} ${files === 1 ? 'file' : 'files'} waiting${size}. Preparing them may take a while and use provider quota. Keyword search keeps working.`;
-}
 
 /** Whether search by meaning may run now. Keyword search never depends on it. */
 export function canSemanticSearch(readiness: SemanticReadiness): boolean {
   switch (readiness.state) {
-    case 'awaiting-decision':
     case 'failed':
     case 'ready':
       return true;
     case 'indexing':
-    case 'paused':
       return readiness.partial;
     case 'not-set-up':
-    case 'quota-exhausted':
     case 'unknown':
       return false;
   }
@@ -78,15 +48,6 @@ export interface SemanticIndexNotice {
  *  has nothing to say. */
 export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndexNotice | null {
   switch (readiness.state) {
-    case 'awaiting-decision':
-      return {
-        actions: ['build', 'not-now'],
-        detail: workloadDetail(readiness.workload),
-        persistent: true,
-        prominent: true,
-        title: 'Many files need preparation for search by meaning',
-        tone: 'neutral',
-      };
     case 'failed':
       return {
         actions: ['retry-index', 'dismiss-warning'],
@@ -103,28 +64,10 @@ export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndex
           readiness.remaining > 0
             ? `${readiness.remaining} ${readiness.remaining === 1 ? 'file' : 'files'} remaining.`
             : null,
-        persistent: false,
+        persistent: true,
         prominent: false,
         title: 'Preparing files for search by meaning…',
         tone: 'neutral',
-      };
-    case 'paused':
-      return {
-        actions: ['resume', 'not-now'],
-        detail: workloadDetail(readiness.workload),
-        persistent: true,
-        prominent: true,
-        title: 'Preparation for search by meaning is paused',
-        tone: 'neutral',
-      };
-    case 'quota-exhausted':
-      return {
-        actions: ['open-settings'],
-        detail: 'Keyword search is still available.',
-        persistent: false,
-        prominent: false,
-        title: 'Your hosted credits for search by meaning are used up.',
-        tone: 'attention',
       };
     // Not set up has nothing to say: the mode is not offered until it is
     // turned on in Settings, and the search surface never names it before.

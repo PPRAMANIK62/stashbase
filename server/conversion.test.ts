@@ -279,19 +279,19 @@ test('interactive preview interrupts only the source conversion and preserves sc
   }
 });
 
-test('converted indexing uses the source hash bound to completed derived output', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-bound-index-hash-'));
+test('converted indexing hands the complete derived projection to MFS', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-derived-projection-'));
   const previousDataRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
   process.env.STASHBASE_LOCAL_DATA_ROOT = path.join(root, 'data');
   const source = path.join(root, 'meeting.wav');
   const derived = path.join(root, 'meeting.md');
   fs.writeFileSync(source, 'old source bytes');
-  let indexedHash: string | undefined;
+  let indexed: { source: string; derived: string } | undefined;
   try {
     const { maybeConvert, setDerivedNoteIndexer } = await import('./conversion.ts');
-    setDerivedNoteIndexer(async (_sourceAbs, _derivedAbs, sourceHash) => {
-      indexedHash = sourceHash;
-      fs.writeFileSync(source, 'new source bytes');
+    setDerivedNoteIndexer(async (sourceAbs, derivedAbs) => {
+      indexed = { source: sourceAbs, derived: derivedAbs };
+      return { outcome: 'added' };
     });
     const completion = maybeConvert(source, {
       kind: 'bound_hash_test',
@@ -300,16 +300,15 @@ test('converted indexing uses the source hash bound to completed derived output'
       matches: () => true,
       derivedNote: () => derived,
       derivedReady: () => true,
-      indexSourceHash: () => 'a'.repeat(64),
       convert: async () => { fs.writeFileSync(derived, 'timestamped transcript'); },
       cleanupDerived: () => fs.rmSync(derived, { force: true }),
     });
     assert.ok(completion);
     await completion;
-    assert.equal(indexedHash, 'a'.repeat(64));
+    assert.deepEqual(indexed, { source, derived });
   } finally {
     const { setDerivedNoteIndexer } = await import('./conversion.ts');
-    setDerivedNoteIndexer(async () => undefined);
+    setDerivedNoteIndexer(async () => null);
     closeStateDb();
     if (previousDataRoot == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
     else process.env.STASHBASE_LOCAL_DATA_ROOT = previousDataRoot;

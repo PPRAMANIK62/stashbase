@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import test, { after } from 'node:test';
+import test, { after, before } from 'node:test';
 import { EditorState } from '@codemirror/state';
 import {
   AUDIO_SOURCE_EXTENSIONS,
@@ -14,6 +14,7 @@ import { saveFileContent, validateEditableFileWrite } from './file-save.ts';
 import { detectViewerFormat, isConvertibleSource } from './format.ts';
 import { runWithFolderRoot } from './folder.ts';
 import { getDaemon } from './mfs-daemon.ts';
+import { indexer } from './state.ts';
 import {
   createFolder,
   createTextExclusiveAsync,
@@ -38,7 +39,17 @@ import {
   sanitizeFilename,
 } from './files.ts';
 
+const originalUpsertFile = indexer.upsertFile.bind(indexer);
+const originalDeleteFile = indexer.deleteFile.bind(indexer);
+
+before(() => {
+  indexer.upsertFile = async () => ({ outcome: 'unchanged' });
+  indexer.deleteFile = async () => undefined;
+});
+
 after(async () => {
+  indexer.upsertFile = originalUpsertFile;
+  indexer.deleteFile = originalDeleteFile;
   await getDaemon().close();
 });
 

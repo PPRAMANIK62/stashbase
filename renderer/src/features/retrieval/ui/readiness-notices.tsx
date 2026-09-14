@@ -8,29 +8,21 @@ import type { IndexDecisionAction } from '@/features/retrieval/hooks/use-index-d
 import { cn } from '@/lib/utils';
 
 const ACTION_LABELS: Record<SemanticReadinessAction, string> = {
-  build: 'Prepare files',
   'dismiss-warning': 'Dismiss',
-  'not-now': 'Not now',
-  'open-settings': 'Open Settings',
-  resume: 'Resume preparation',
   'retry-index': 'Retry',
 };
 
 const PENDING_LABELS: Record<IndexDecisionAction, string> = {
-  build: 'Starting…',
   'dismiss-warning': 'Dismissing…',
-  'not-now': 'Deferring…',
-  resume: 'Resuming…',
   'retry-index': 'Retrying…',
 };
 
-const PRIMARY_ACTIONS = new Set<SemanticReadinessAction>(['build', 'resume', 'retry-index']);
+const PRIMARY_ACTIONS = new Set<SemanticReadinessAction>(['retry-index']);
 
 export interface SemanticReadinessNoticeProps {
   error: string | null;
   notice: SemanticIndexNotice;
   onDecision(action: IndexDecisionAction): void;
-  onOpenSettings(): void;
   pendingAction: IndexDecisionAction | null;
 }
 
@@ -40,7 +32,6 @@ export function SemanticReadinessNotice({
   error,
   notice,
   onDecision,
-  onOpenSettings,
   pendingAction,
 }: SemanticReadinessNoticeProps) {
   const attention = notice.tone === 'attention';
@@ -79,7 +70,7 @@ export function SemanticReadinessNotice({
               <Button
                 disabled={pendingAction !== null}
                 key={action}
-                onClick={() => (action === 'open-settings' ? onOpenSettings() : onDecision(action))}
+                onClick={() => onDecision(action)}
                 size="compact"
                 variant={PRIMARY_ACTIONS.has(action) ? 'secondary' : 'tertiary'}
               >

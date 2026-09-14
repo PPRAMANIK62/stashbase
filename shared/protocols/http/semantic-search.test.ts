@@ -25,15 +25,34 @@ test('semantic search hits carry a folder-qualified identity beside the compatib
 
 test('semantic search requires the semantic mode and a bounded top_k', () => {
   assert.equal(
-    semanticSearchRequestSchema.safeParse({ mode: 'semantic', query: 'idea', top_k: 30 }).success,
+    semanticSearchRequestSchema.safeParse({
+      folder: '/library/research',
+      mode: 'semantic',
+      query: 'idea',
+      top_k: 30,
+    }).success,
     true,
   );
   assert.equal(
-    semanticSearchRequestSchema.safeParse({ mode: 'keyword', query: 'idea', top_k: 30 }).success,
+    semanticSearchRequestSchema.safeParse({
+      folder: '/library/research',
+      mode: 'keyword',
+      query: 'idea',
+      top_k: 30,
+    }).success,
     false,
   );
   assert.equal(
-    semanticSearchRequestSchema.safeParse({ mode: 'semantic', query: 'idea', top_k: 0 }).success,
+    semanticSearchRequestSchema.safeParse({
+      folder: '/library/research',
+      mode: 'semantic',
+      query: 'idea',
+      top_k: 0,
+    }).success,
+    false,
+  );
+  assert.equal(
+    semanticSearchRequestSchema.safeParse({ mode: 'semantic', query: 'idea', top_k: 30 }).success,
     false,
   );
   assert.equal(

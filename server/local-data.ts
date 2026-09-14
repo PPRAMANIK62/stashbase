@@ -56,9 +56,9 @@ export function recoveryJournalDir(): string {
   return path.join(appDataRoot(), 'recovery-journal');
 }
 
-/** The single global vector store for the whole app. The daemon holds one
- *  Milvus collection here; every opened folder is indexed into it, keyed by
- *  absolute path. `.nosync` keeps iCloud off the WAL files even though this
+/** The single global MFS store root for the whole app. The daemon maps every
+ *  member Folder to one Internal namespace below it. `.nosync` keeps iCloud
+ *  off the database files even though this
  *  lives under Application Support (which isn't iCloud-synced) — the suffix
  *  is a cheap per-machine guard that travels with the convention. */
 export function globalVectorStoreDir(): string {

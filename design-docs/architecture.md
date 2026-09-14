@@ -41,15 +41,14 @@ operate as one local library per installation.
 | Desktop release state | Electron main process | It reads packaged-build update metadata; the renderer receives bounded status and actions only. |
 
 Credentials and optional hosted-account sessions are owned by the local Node
-service. Provider and account tokens do not cross into renderer responses,
-OpenCode configuration/history, or the indexing daemon. When the user adds an
-embedding key for search by meaning, Node sends extracted text to that
-provider; no renderer path selects the hosted embedding Adapter. When the
-user runs OpenQuill, the Node broker sends prompts and necessary model
+service. Provider and account tokens do not cross into renderer responses or
+OpenCode configuration/history. When the user adds an embedding key for search
+by meaning, the MFS indexing daemon uses that key with the selected OpenAI or
+OpenRouter provider; account sign-in never selects an embedding source. When
+the user runs OpenQuill, the Node broker sends prompts and necessary model
 context through the hosted model Adapter; sessions, tool execution, permissions,
 Diffs, and files remain local. The hosted service owns model routing and usage
-accounting, not Agent execution or session storage. Agent accounting is a
-separate cost ledger from hosted search by meaning: the service atomically
+accounting, not Agent execution or session storage. The service atomically
 reserves and settles
 each model request against its prompt turn, fixed seven-day account window,
 short-term limits, and UTC-day provider budget. Model and policy versions are
@@ -80,9 +79,9 @@ visible, user-owned content and follows ordinary file transactions.
 - Each window works primarily in one current folder. Multiple windows may
   show different folders at the same time; those are independent UI scopes,
   not separate libraries or indexing runtimes.
-- Search and Agent retrieval stay within authorized library membership and
-  return visible Source identity. Keyword search works before any setup for
-  search by meaning.
+- Search and Agent retrieval target one selected authorized Folder and return
+  visible Source identity. A Library Chat selects a Folder before searching.
+  Keyword search works before any setup for search by meaning.
   Mode-specific scope rules live in [Search and Retrieval](design/search.md)
   and [MCP Access](../code-review/mcp-access.md).
 - Agent Instructions resolve from the scope's own packaged plain-language
@@ -127,7 +126,7 @@ visible, user-owned content and follows ordinary file transactions.
 - One daemon owns semantic state. Configuration changes rebind that owner
   rather than creating competing indexes.
 
-Format completion, scheduler, freshness, quota, and cleanup rules live in
+Format completion, scheduler, freshness, provider, and cleanup rules live in
 [Data Lifecycle](../code-review/data-lifecycle.md).
 
 ## Liveness And Recovery

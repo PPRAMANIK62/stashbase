@@ -37,27 +37,15 @@ function mapConversionProgress(
   return mapped;
 }
 
-/** Folds the daemon's ten index states into the variants the renderer models,
+/** Folds the daemon's index states into the variants the renderer models,
  *  so a flag can never be read beside the state it belongs to. The partial
  *  spellings differ from their whole counterparts only in whether the index
  *  already answers, which is what `partial` carries. */
 function mapSemanticStatus(wire: IndexStatusResponseWire): SemanticIndexStatus {
   const indexing = wire.semanticIndexing;
-  const workload = {
-    estimatedBytes: indexing.estimatedBytes ?? null,
-    files: indexing.sourceCount ?? wire.pending.length,
-  };
   switch (indexing.state) {
     case 'disabled':
       return { state: 'not-set-up' };
-    case 'quota-exhausted':
-    case 'partial-quota-exhausted':
-      return { state: 'quota-exhausted' };
-    case 'awaiting-decision':
-      return { state: 'awaiting-decision', workload };
-    case 'paused':
-    case 'partial-paused':
-      return { partial: indexing.state === 'partial-paused', state: 'paused', workload };
     case 'indexing':
     case 'partial-indexing':
       return {

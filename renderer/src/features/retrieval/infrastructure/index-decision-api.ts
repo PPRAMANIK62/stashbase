@@ -4,7 +4,6 @@ import type { HttpClient } from '@/platform/http/client';
 import {
   indexStatusAcknowledgementSchema,
   indexStatusFailureSchema,
-  semanticIndexingDecisionRequestSchema,
 } from '@/protocols/http/index-status';
 
 /** Every decision route is a folder-explicit POST that reports its own
@@ -31,19 +30,6 @@ function decision(
 
 export function createIndexDecisionAdapter(client: HttpClient): IndexDecisionPort {
   return {
-    async decide(folderPath, choice, signal) {
-      await request(client, {
-        ...decision(
-          '/api/semantic-indexing/decision',
-          semanticIndexingDecisionRequestSchema.parse({ decision: choice, folder: folderPath }),
-          signal,
-          choice === 'start'
-            ? 'Preparation could not start.'
-            : 'Preparation could not be deferred.',
-        ),
-        schema: indexStatusAcknowledgementSchema,
-      });
-    },
     async dismissWarning(folderPath, signal) {
       await request(client, {
         ...decision(

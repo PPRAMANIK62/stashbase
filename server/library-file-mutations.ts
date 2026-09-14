@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isEmbeddingAvailable } from './embedding-availability.ts';
 import { queueConvertibleSource } from './conversion-dispatch.ts';
 import { clearRecord } from './conversion-status.ts';
 import { deleteDerivedForSource } from './derived-store.ts';
@@ -203,9 +202,6 @@ export async function moveLibraryFile(
         await indexer.deleteFile(newTarget.abs).catch((err) => {
           log.warn(`library move: failed to remove hidden target index row ${newTarget.abs}: ${errorMessage(err)}`);
         });
-      } else if (!isEmbeddingAvailable()) {
-        await indexer.deleteFile(oldTarget.abs);
-        indexWarning = "The file wasn't updated for search by meaning because it isn't set up yet.";
       } else {
         const movedContent = (await readTextAsync(newTarget.folderRel)) ?? '';
         const tooLarge = contentSizeError(movedContent);
@@ -213,7 +209,7 @@ export async function moveLibraryFile(
           await indexer.deleteFile(oldTarget.abs).catch((err) => {
             log.warn(`library move: failed to remove old index row ${oldTarget.abs}: ${errorMessage(err)}`);
           });
-          indexWarning = `${tooLarge}. The file moved, but it won't be searchable by meaning until you split or reduce it and run sync.`;
+          indexWarning = `${tooLarge}. The file moved, but it won't be searchable until you split or reduce it and run sync.`;
         } else {
           await indexer.renameFile(oldTarget.abs, newTarget.abs, movedContent);
         }
@@ -224,17 +220,16 @@ export async function moveLibraryFile(
           await indexer.deleteFile(filesystemPath.join(oldTarget.folderRoot, updated.name));
           continue;
         }
-        if (!isEmbeddingAvailable()) continue;
         const body = await readTextAsync(updated.name);
         if (body != null) await indexer.upsertFile(filesystemPath.join(oldTarget.folderRoot, updated.name), body);
       }
     } catch (err) {
-      // The disk move is already valid. Report semantic-index lag instead of
+      // The disk move is already valid. Report search-projection lag instead of
       // rolling it back after link rewrites have completed.
       await indexer.deleteFile(oldTarget.abs).catch((cleanupErr) => {
         log.warn(`library move: stale-source cleanup failed for ${oldTarget.abs}: ${errorMessage(cleanupErr)}`);
       });
-      indexWarning = `Moved, but the file couldn't be updated for search by meaning: ${errorMessage(err)}`;
+      indexWarning = `Moved, but the file couldn't be updated for search: ${errorMessage(err)}`;
     }
     return {
       oldPath: oldTarget.abs,

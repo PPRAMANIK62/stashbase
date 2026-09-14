@@ -80,8 +80,8 @@ function addDerivedCleanupStats(a: DerivedCleanupStats, b: DerivedCleanupStats):
 async function cleanupDerivedForFolder(folderAbs: string): Promise<DerivedCleanupStats> {
   let stats = deleteDerivedUnderFolder(folderAbs);
   try {
-    const indexed = await indexer.listFiles(folderAbs);
-    for (const sourcePath of Object.keys(indexed)) {
+    const indexed = await indexer.listDocuments(folderAbs);
+    for (const sourcePath of indexed) {
       stats = addDerivedCleanupStats(stats, deleteDerivedForSource(sourcePath));
     }
   } catch (err: unknown) {
@@ -94,10 +94,8 @@ async function cleanupDerivedForFolder(folderAbs: string): Promise<DerivedCleanu
 }
 
 async function cleanupRemovedLibraryFolder(abs: string): Promise<void> {
-  // A large semantic `scan_diff` runs inside the single-threaded Python
-  // daemon and otherwise serializes every cleanup request behind it. Retire
-  // that reconcile first so Remove cannot sit in a half-cleared window state
-  // until the daemon's global ten-minute watchdog fires.
+  // Retire any in-flight MFS operation first so Remove cannot sit in a
+  // half-cleared window state until the daemon's global watchdog fires.
   await cancelFolderSyncsAndWait(abs);
   const cancelled = await cancelConversionsUnderAndWait(abs);
   if (cancelled.length) {

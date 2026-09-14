@@ -62,7 +62,12 @@ describe('exact search API', () => {
     });
     await expect(
       malformed.search(
-        { caseSensitive: false, query: 'answer', wholeWord: false },
+        {
+          caseSensitive: false,
+          folderPath: '/library/research',
+          query: 'answer',
+          wholeWord: false,
+        },
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ kind: 'invalid-response' });
@@ -75,7 +80,12 @@ describe('exact search API', () => {
     });
     await expect(
       unavailable.search(
-        { caseSensitive: false, query: 'answer', wholeWord: false },
+        {
+          caseSensitive: false,
+          folderPath: '/library/research',
+          query: 'answer',
+          wholeWord: false,
+        },
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ kind: 'unavailable', message: 'Search is unavailable.' });

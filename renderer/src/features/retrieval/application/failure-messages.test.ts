@@ -9,9 +9,6 @@ describe('retrieval failure messages', () => {
     expect(failureMessage('not-set-up')).toBe(
       'To search by meaning, set it up in StashBase Settings.',
     );
-    expect(failureMessage('quota-exhausted')).toContain(
-      'credits for search by meaning are used up',
-    );
     expect(failureMessage('scope-lost')).toContain('no longer available');
     expect(failureMessage('unauthorized')).toContain('no longer');
     expect(failureMessage('unavailable')).toBe('StashBase is unavailable.');
@@ -19,8 +16,8 @@ describe('retrieval failure messages', () => {
   });
 
   it('reads a refusal through its kind and never repeats a raw message', () => {
-    const refusal = new FeatureError('SemanticSearchError', 'quota-exhausted', 'raw detail');
-    expect(retrievalFailure(refusal).message).toBe(failureMessage('quota-exhausted'));
+    const refusal = new FeatureError('SemanticSearchError', 'not-set-up', 'raw detail');
+    expect(retrievalFailure(refusal).message).toBe(failureMessage('not-set-up'));
     expect(retrievalFailure(new Error('boom')).message).toBe(failureMessage('unavailable'));
     expect(retrievalFailure(null).message).toBe(failureMessage('unavailable'));
   });

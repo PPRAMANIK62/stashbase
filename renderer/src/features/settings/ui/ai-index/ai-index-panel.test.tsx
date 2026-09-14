@@ -81,13 +81,9 @@ describe('search by meaning settings panel', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('does not call a stored key active while the server resolves another source', async () => {
-    // Until the server stops resolving a signed-in session to its own source,
-    // a stored key can sit beside a source this renderer does not offer. The
-    // panel then says search by meaning is not set up, which is what the
-    // window does with it.
+  it('does not call a stored key active while another BYOK provider is selected', async () => {
     renderPanel(
-      embedderPort(embedderState({ authorized: true, hasKey: true, source: 'stashbase-account' })),
+      embedderPort(embedderState({ authorized: true, hasKey: true, source: 'openrouter' })),
     );
 
     expect(await screen.findByText('OpenAI key stored')).not.toBeNull();

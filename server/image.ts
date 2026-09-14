@@ -162,7 +162,7 @@ export async function discoverNewImages(folderAbs: string, candidates?: readonly
   await discoverNewSources(folderAbs, IMAGE_SPEC);
 }
 
-export function indexFreshImage(imageAbsPath: string): Promise<boolean> {
+export function indexFreshImage(imageAbsPath: string) {
   return indexFreshDerived(imageAbsPath, IMAGE_SPEC);
 }
 

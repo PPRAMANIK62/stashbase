@@ -23,7 +23,6 @@ import type {
   WorkspacePreferences,
 } from '../shared/preferences.ts';
 import type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
-import { LOCAL_EMBEDDING_SOURCE } from '../shared/embedding.ts';
 import type { LocalTranscriptionModelId } from '../shared/transcription.ts';
 import { normalizeHostedDisplayName, parseGoogleAvatarUrl } from './hosted-account-profile.ts';
 
@@ -128,10 +127,9 @@ export interface AppConfigFile {
     model?: string;
     baseUrl?: string;
   };
-  /** Active embedding funding source. BYOK credentials and the account
-   * session are retained independently so switching never destroys the
-   * other option or silently falls back after a hosted failure. */
-  embeddingSource?: EmbeddingSource;
+  /** Active BYOK provider. Retired values remain accepted here only so the
+   * startup migration can read old config files. */
+  embeddingSource?: EmbeddingSource | 'stashbase-account' | 'local';
   account?: {
     session?: HostedAccountSession;
   };
@@ -354,24 +352,17 @@ export function setHostedAccountSession(session: HostedAccountSession | undefine
 
 export function getEmbeddingSource(): EmbeddingSource {
   const cfg = readAppConfig();
-  const value = cfg.embeddingSource;
-  if (value === 'stashbase-account' || value === LOCAL_EMBEDDING_SOURCE || isEmbedderProvider(value)) return value;
   const direct = getEmbedderConfig();
-  if (direct.apiKey) return direct.provider;
-  if (getHostedAccountSession()) return 'stashbase-account';
+  if (isEmbedderProvider(cfg.embeddingSource) && cfg.embeddingSource === direct.provider) {
+    return cfg.embeddingSource;
+  }
   return direct.provider;
 }
 
 export function setEmbeddingSource(source: EmbeddingSource): EmbeddingSource {
   const cfg = readAppConfigStrict();
-  if (source === 'stashbase-account') {
-    if (!getHostedAccountSession()) throw new Error('Sign in before selecting the StashBase account allowance.');
-  } else if (source === LOCAL_EMBEDDING_SOURCE) {
-    throw new Error('The local embedding source is no longer available.');
-  } else {
-    const direct = getEmbedderConfig();
-    if (!direct.apiKey || direct.provider !== source) throw new Error(`Add a ${source === 'openrouter' ? 'OpenRouter' : 'OpenAI'} key before selecting it.`);
-  }
+  const direct = getEmbedderConfig();
+  if (!direct.apiKey || direct.provider !== source) throw new Error(`Add ${source === 'openrouter' ? 'an OpenRouter' : 'an OpenAI'} key before selecting it.`);
   cfg.embeddingSource = source;
   writeAppConfigStrict(cfg);
   return source;
@@ -379,8 +370,6 @@ export function setEmbeddingSource(source: EmbeddingSource): EmbeddingSource {
 
 export function isEmbeddingConfigured(): boolean {
   const source = getEmbeddingSource();
-  if (source === 'stashbase-account') return !!getHostedAccountSession();
-  if (source === LOCAL_EMBEDDING_SOURCE) return true;
   const direct = getEmbedderConfig();
   return direct.provider === source && !!direct.apiKey;
 }
@@ -424,7 +413,7 @@ export function setEmbedderConfig(next: { provider: EmbedderProvider; apiKey?: s
   else delete cfg.apiKey;
   if (cfg.embedder.apiKey) cfg.embeddingSource = next.provider;
   else if (cfg.embeddingSource === next.provider) {
-    cfg.embeddingSource = cfg.account?.session ? 'stashbase-account' : next.provider;
+    delete cfg.embeddingSource;
   }
   writeAppConfigStrict(cfg);
   return getEmbedderConfig();
@@ -691,25 +680,20 @@ export function migrateLegacyEmbedderConfig(): void {
   log.info('migrated legacy embedder.openaiKey into active embedder config');
 }
 
-/** Retire the former keyless local embedding source before the daemon boots.
- *  Account allowance is the primary replacement when a valid session exists;
- *  otherwise a stored BYOK credential is restored. With neither credential,
- *  deleting the explicit source returns the product to its unconfigured
- *  state. The migration is idempotent and preserves every unrelated field. */
-export function migrateRetiredLocalEmbeddingSource(): void {
+/** Retire former local and hosted-account embedding sources before the daemon
+ * boots. A stored BYOK credential is restored when present; otherwise the
+ * explicit source is removed. The account session itself remains available
+ * to the hosted Agent runtime. */
+export function migrateRetiredEmbeddingSources(): void {
   const cfg = readAppConfigStrict();
-  if (cfg.embeddingSource !== LOCAL_EMBEDDING_SOURCE) return;
+  if (cfg.embeddingSource !== 'local' && cfg.embeddingSource !== 'stashbase-account') return;
 
   const direct = getEmbedderConfig();
-  const next: EmbeddingSource | undefined = getHostedAccountSession()
-    ? 'stashbase-account'
-    : direct.apiKey
-      ? direct.provider
-      : undefined;
+  const next: EmbeddingSource | undefined = direct.apiKey ? direct.provider : undefined;
   if (next) cfg.embeddingSource = next;
   else delete cfg.embeddingSource;
   writeAppConfigStrict(cfg);
-  log.info(`retired local embedding source${next ? `; selected ${next}` : '; no embedding source configured'}`);
+  log.info(`retired unsupported embedding source${next ? `; selected ${next}` : '; no embedding source configured'}`);
 }
 
 export function getOnboardingPreferences(): OnboardingPreferences {

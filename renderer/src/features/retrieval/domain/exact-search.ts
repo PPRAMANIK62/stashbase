@@ -28,7 +28,7 @@ export interface ExactSearchResult {
 
 export interface ExactSearchRequest {
   readonly caseSensitive: boolean;
-  readonly folderPath?: string;
+  readonly folderPath: string;
   readonly query: string;
   readonly wholeWord: boolean;
 }

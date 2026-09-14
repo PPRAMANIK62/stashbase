@@ -5,11 +5,9 @@
  * one flat evidence model keyed by the visible, absolute source path; prepared
  * representations never cross this seam.
  */
-import { embeddingAvailability, isEmbeddingAvailable } from '../embedding-availability.ts';
+import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { searchExtensionsForTypes } from '../format.ts';
-import { filesystemPath } from '../filesystem-path.ts';
-import { runKeywordSearch, type KeywordSearchOpts } from '../keyword-search.ts';
-import type { SearchHit } from '../indexer.ts';
+import type { ExactSearchOptions, SearchHit } from '../indexer.ts';
 import { indexer } from '../state.ts';
 import type { SearchMode, SearchTypeCategory } from '../../shared/search-types.ts';
 import { semanticEvidence } from './semantic.ts';
@@ -21,12 +19,12 @@ export type RetrievalMode = SearchMode;
 export type RetrievalAvailability =
   | { state: 'ready' }
   | { state: 'partial'; reason: 'truncated' }
-  | { state: 'unavailable'; reason: 'embedding-key-required' | 'hosted-quota-exhausted' };
+  | { state: 'unavailable'; reason: 'embedding-key-required' };
 
 export interface RetrievalQuery {
   mode: RetrievalMode;
   query: string;
-  folderRoot?: string;
+  folderRoot: string;
   pathPrefix?: string;
   types?: readonly SearchTypeCategory[];
   topK?: number;
@@ -42,22 +40,17 @@ export interface RetrievalResult {
 
 export interface RetrievalDependencies {
   hasEmbeddingKey: () => boolean;
-  embeddingUnavailableReason: () => 'embedding-key-required' | 'hosted-quota-exhausted';
-  vectorSearch: (query: string, topK: number, folderRoot?: string, pathPrefix?: string, extensions?: string[]) => Promise<SearchHit[]>;
-  keywordSearch: (query: string, folderRoot: string, opts: KeywordSearchOpts) => Promise<{ files: import('../search-display.ts').KeywordHitFile[]; truncated: boolean }>;
+  embeddingUnavailableReason: () => 'embedding-key-required';
+  vectorSearch: (query: string, topK: number, folderRoot: string, pathPrefix?: string, extensions?: string[]) => Promise<SearchHit[]>;
+  exactSearch: (query: string, folderRoot: string, opts: ExactSearchOptions) => Promise<{ files: import('../search-display.ts').KeywordHitFile[]; truncated: boolean }>;
 }
 
 const productionDependencies: RetrievalDependencies = {
   hasEmbeddingKey: isEmbeddingAvailable,
-  embeddingUnavailableReason: () => {
-    const availability = embeddingAvailability();
-    return !availability.available && availability.reason === 'hosted-quota-exhausted'
-      ? 'hosted-quota-exhausted'
-      : 'embedding-key-required';
-  },
+  embeddingUnavailableReason: () => 'embedding-key-required',
   vectorSearch: (query, topK, folderRoot, pathPrefix, extensions) =>
     indexer.search(query, topK, folderRoot, pathPrefix, extensions),
-  keywordSearch: runKeywordSearch,
+  exactSearch: (query, folderRoot, options) => indexer.grep(query, folderRoot, options),
 };
 
 /** The retrieval module interface shared by UI routes and library/MCP operations. */
@@ -89,14 +82,11 @@ export function createRetrieval(overrides: Partial<RetrievalDependencies> = {}):
         return { evidence: semanticEvidence(hits, query.folderRoot), availability: { state: 'ready' }, truncated: false };
       }
 
-      if (!query.folderRoot) throw new Error('keyword retrieval requires a folder scope');
-      const result = await deps.keywordSearch(text, query.folderRoot, {
+      const result = await deps.exactSearch(text, query.folderRoot, {
         caseStrict: query.caseStrict === true,
         wholeWord: query.wholeWord === true,
-        pathPrefix: query.pathPrefix
-          ? (filesystemPath.relative(query.folderRoot, query.pathPrefix) ?? undefined)
-          : undefined,
-        types: query.types,
+        pathPrefix: query.pathPrefix,
+        extensions: searchExtensionsForTypes(query.types ?? []) ?? undefined,
       });
       const allEvidence = visibleKeywordEvidence(result.files, query.folderRoot);
       const limit = query.topK == null ? undefined : Math.max(1, Math.floor(query.topK));

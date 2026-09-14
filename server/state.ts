@@ -2,11 +2,9 @@
  * Process-wide indexer state + folder-switch orchestration.
  *
  * One `MfsIndexer` instance lives for the lifetime of the server
- * process. The daemon underneath owns one Milvus DB in app data and isolates
- * vectors by provider/dimension collection. Every folder is bound into the
- * collection selected by the active embedding source. Boot binds every known
- * folder so MCP cross-folder search has them all available; boot and
- * Welcome can also reconcile known folders without opening them, so
+ * process. The daemon underneath owns the MFS store in app data and gives
+ * each Folder one Internal namespace. Boot binds every known Folder so it is
+ * ready when selected; boot and Welcome can also reconcile known folders without opening them, so
  * interrupted conversion work is rediscovered library-wide.
  *
  * Extracted from `server/index.ts` so route modules can import the
@@ -23,32 +21,16 @@ import {
   runWithWindowId,
 } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { getEmbeddingSource, getEmbedderConfig } from './app-config.ts';
+import { getEmbedderConfig } from './app-config.ts';
 import {
   embeddingAvailability,
   isEmbeddingAvailable,
   type EmbeddingAvailability,
 } from './embedding-availability.ts';
-import { hostedEmbeddingRuntime } from './hosted-embedding-broker.ts';
 import { syncIndex, type SyncResult } from './sync.ts';
 import { getDaemon, isMfsDaemonRetiringError } from './mfs-daemon.ts';
-import { clearStaleMilvusLock } from './stale-lock.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { logger, errorMessage } from './log.ts';
-import { globalVectorStoreDir } from './local-data.ts';
-import {
-  clearSemanticIndexingDecision,
-  getSemanticIndexingDecision,
-  setSemanticIndexingDecision,
-  type SemanticIndexingDecision,
-} from './state-db.ts';
-import type { SemanticWorkloadEstimate } from './semantic-workload.ts';
-import {
-  LOCAL_EMBEDDING_DIMENSION,
-  LOCAL_EMBEDDING_MODEL,
-  LOCAL_EMBEDDING_PROVIDER,
-  LOCAL_EMBEDDING_SOURCE,
-} from '../shared/embedding.ts';
 
 const log = logger('state');
 
@@ -73,16 +55,9 @@ function recordIndexWarning(folder: string, message: string): void {
 export function embeddingRuntimeUnavailableMessage(
   folderAbs: string,
   availability: EmbeddingAvailability = embeddingAvailability(),
-  source = getEmbeddingSource(),
 ): string {
   if (!availability.configured) {
-    return `embedder: no embedding source active — ${folderAbs} bound but semantic retrieval is unavailable until an account or key is selected`;
-  }
-  if (!availability.available && availability.reason === 'hosted-quota-exhausted') {
-    return `embedder: hosted search credits exhausted — ${folderAbs} bound but semantic indexing is paused until the credits reset`;
-  }
-  if (source === 'stashbase-account') {
-    return `embedder: hosted embedding runtime is not ready — ${folderAbs} bound for cleanup; semantic indexing will resume after runtime recovery`;
+    return `embedder: no provider key configured — ${folderAbs} bound but semantic retrieval is unavailable until an OpenAI or OpenRouter key is added`;
   }
   return `embedder: configured embedding runtime is not ready — ${folderAbs} bound for cleanup; semantic indexing will resume after runtime recovery`;
 }
@@ -114,65 +89,11 @@ export async function deleteFolderRuntimeState(folderRoot: string): Promise<void
   // doing so makes a generation-0 task look current again. Retaining the
   // monotonic value is cheap and lets a later re-add start from fresh truth.
   folderSyncGeneration.set(root, currentFolderSyncGeneration(folderRoot) + 1);
-  clearSemanticIndexingDecision(folderRoot);
 }
 
-export function getSemanticIndexingState(folderRoot: string): SemanticIndexingDecision | null {
-  return getSemanticIndexingDecision(folderRoot);
-}
-
-export function deferSemanticIndexing(folderRoot: string): void {
-  const current = getSemanticIndexingDecision(folderRoot);
-  if (current) setSemanticIndexingDecision(folderRoot, 'paused', current);
-}
-
-export async function startSemanticIndexing(folderRoot: string): Promise<SyncResult> {
-  return syncFolderNow(folderRoot, {
-    reason: 'user started semantic indexing', forceEmbedding: true, clearDecisionAtStart: true,
-  });
-}
-
-export function semanticSyncPolicy(folderRoot: string, forceEmbedding = false): {
-  shouldPauseEmbedding: (workload: SemanticWorkloadEstimate) => boolean;
-  publishPaused: (workload: SemanticWorkloadEstimate) => boolean;
-  commitEmbedding: () => boolean;
-} {
-  return {
-    shouldPauseEmbedding: (workload) => {
-      if (forceEmbedding) return false;
-      const existing = getSemanticIndexingDecision(folderRoot);
-      if (existing?.decision === 'paused') return true;
-      return workload.large;
-    },
-    publishPaused: (workload) => {
-      const existing = getSemanticIndexingDecision(folderRoot);
-      return setSemanticIndexingDecision(
-        folderRoot,
-        existing?.decision === 'paused' ? 'paused' : 'awaiting-decision',
-        workload,
-      );
-    },
-    commitEmbedding: () => {
-      const existing = getSemanticIndexingDecision(folderRoot);
-      return !existing || clearSemanticIndexingDecision(folderRoot);
-    },
-  };
-}
-
-/** Resolve the active runtime embedder config. Returns null when no source is
- * configured or the hosted allowance is exhausted — the caller still binds
- * the folder, while semantic work stays paused until availability returns. */
+/** Resolve the active BYOK runtime config, or null when no key is configured. */
 export function resolveEmbedderRuntime(): EmbedderRuntimeConfig | null {
   if (!isEmbeddingAvailable()) return null;
-  const source = getEmbeddingSource();
-  if (source === 'stashbase-account') return hostedEmbeddingRuntime();
-  if (source === LOCAL_EMBEDDING_SOURCE) {
-    return {
-      provider: LOCAL_EMBEDDING_PROVIDER,
-      model: LOCAL_EMBEDDING_MODEL,
-      dimension: LOCAL_EMBEDDING_DIMENSION,
-    };
-  }
   const cfg = getEmbedderConfig();
   if (!cfg.apiKey) return null;
   return {
@@ -185,14 +106,13 @@ export function resolveEmbedderRuntime(): EmbedderRuntimeConfig | null {
 }
 
 /** Configure + spawn the daemon, then bind every folder in Your Folders.
- *  Idempotent on the bind side; safe to call once at server
- *  startup. With no embedding source, folders are still bound (registered) but the
- *  collection isn't created until one is supplied — semantic search just
- *  returns nothing until then. */
+ *  Idempotent on the bind side; safe to call once at server startup. Without
+ *  an embedding key each Internal namespace is created with vector indexing
+ *  off, so exact retrieval and projection maintenance stay available. */
 function libraryFolderRoots(): string[] {
   // Membership = "Your Folders" (the recents list), which can live anywhere
-  // on disk. Bind every member's absolute root so MCP/Claude can search the
-  // whole library without the user first opening each folder.
+  // on disk. Bind every member's absolute root so its namespace can reconcile
+  // without requiring the user to open it first.
   const members = new Map<string, string>();
   for (const recent of getRecentFolders()) {
     const source = filesystemPath.absolute(recent.path);
@@ -213,13 +133,8 @@ export async function bootBindAllFolders(
     return;
   }
   log.info(`boot bind: ${roots.length} folder(s)`);
-  const source = getEmbeddingSource();
   const cfg = runtimeOverride ?? resolveEmbedderRuntime() ?? {
-    provider: source === 'stashbase-account'
-      ? 'stashbase'
-      : source === LOCAL_EMBEDDING_SOURCE
-        ? LOCAL_EMBEDDING_PROVIDER
-        : getEmbedderConfig().provider,
+    provider: getEmbedderConfig().provider,
   };
   for (const root of roots) {
     try {
@@ -257,43 +172,13 @@ export async function resetIndexerRuntime(opts: { forgetBindings?: boolean } = {
   if (opts.forgetBindings) getDaemon().forgetBindings();
 }
 
-/** Per-vector-store latch for the stale-flock sweep below. */
-const staleLockSweptStores = new Set<string>();
-
-function claimStaleLockSweep(storeRoot: string): boolean {
-  const key = filesystemPath.identity(storeRoot);
-  if (staleLockSweptStores.has(key)) return false;
-  staleLockSweptStores.add(key);
-  return true;
-}
-
 /** Bind the indexer to a folder using the configured embedder. Called on
  *  every folder switch (idempotent). Doesn't trigger sync — caller's
  *  responsibility via `scheduleIndexerSync`. With no active source the folder is
  *  still bound but indexing is disabled. */
 export async function bindIndexerForFolder(folderAbs: string): Promise<void> {
-  // Before the first bind of this process, sweep any stashbase daemon
-  // still holding the global Milvus flock: a dirty previous exit (kill -9,
-  // OS shutdown) or another session's leftover daemon would otherwise
-    // wedge our bind, and the loser of a lock fight keeps "succeeding" while
-    // its writes go nowhere. This call site is
-  // deliberately the WEB SERVER's bind path only — the MCP host must never
-  // run the sweep, since the GUI's daemon is the rightful lock owner it
-  // would be killing.
-  if (claimStaleLockSweep(globalVectorStoreDir())) {
-    try { clearStaleMilvusLock(); } catch (err: unknown) {
-      log.warn(`stale-lock sweep failed: ${errorMessage(err)}`);
-    }
-  }
   const cfg = resolveEmbedderRuntime();
-  const source = getEmbeddingSource();
-  const runtime = cfg ?? {
-    provider: source === 'stashbase-account'
-      ? 'stashbase'
-      : source === LOCAL_EMBEDDING_SOURCE
-        ? LOCAL_EMBEDDING_PROVIDER
-        : getEmbedderConfig().provider,
-  };
+  const runtime = cfg ?? { provider: getEmbedderConfig().provider };
   if (!cfg) {
     log.warn(embeddingRuntimeUnavailableMessage(folderAbs));
   }
@@ -355,17 +240,15 @@ function syncTouchedVisibleTree(result: SyncResult): boolean {
   return result.added.length > 0
     || result.modified.length > 0
     || result.removed.length > 0
-    || result.renamed.length > 0
     || result.failed.length > 0;
 }
 
 const folderSyncQueues = new Map<string, Promise<unknown>>();
 
-/** Stop queued/running reconcile before removal begins index cleanup. The
- * Python daemon handles one request at a time, and a large `scan_diff` cannot
- * observe Node's cooperative generation flag while it is walking disk. Close
- * the daemon to reject that request immediately; the next cleanup operation
- * respawns it and replays bindings from durable Node-owned state. */
+/** Stop queued/running reconcile before removal begins index cleanup. An
+ * in-flight MFS write cannot observe Node's cooperative generation flag.
+ * Close the daemon to reject that request immediately; the next cleanup
+ * operation respawns it and replays bindings from durable Node-owned state. */
 export async function cancelFolderSyncsAndWait(
   folderRoot: string,
   interruptIndexer: () => Promise<void> = () => indexer.close(),
@@ -394,11 +277,11 @@ export function enqueueFolderSyncOperation<T>(queueKey: string, operation: () =>
 
 export async function syncFolderNow(
   folderRoot: string,
-  opts: { reason?: string; shouldContinue?: () => boolean; forceEmbedding?: boolean; clearDecisionAtStart?: boolean } = {},
+  opts: { reason?: string; shouldContinue?: () => boolean } = {},
 ): Promise<SyncResult> {
   const syncFolderRoot = filesystemPath.absolute(folderRoot);
   if (isLibraryFolderRemovalInProgress(syncFolderRoot)) {
-    return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+    return { added: [], modified: [], removed: [], failed: [], cancelled: true };
   }
   const queueKey = filesystemPath.identity(syncFolderRoot);
   const scheduledGeneration = currentFolderSyncGeneration(syncFolderRoot);
@@ -410,34 +293,28 @@ export async function syncFolderNow(
 
 export async function runFolderSyncOperation(
   folderRoot: string,
-  opts: { reason?: string; shouldContinue?: () => boolean; forceEmbedding?: boolean; clearDecisionAtStart?: boolean },
+  opts: { reason?: string; shouldContinue?: () => boolean },
   deps: {
     indexer: Indexer;
     bind: (folderRoot: string) => Promise<void>;
     sync: typeof syncIndex;
-    semanticEnabled?: boolean;
   } = { indexer, bind: bindIndexerForFolder, sync: syncIndex },
   scheduledGeneration = currentFolderSyncGeneration(folderRoot),
 ): Promise<SyncResult> {
   const shouldContinue = () => shouldContinueFolderSync(folderRoot, scheduledGeneration, opts.shouldContinue);
   let daemonRecoveryRetries = 0;
   try {
-    if (opts.clearDecisionAtStart && !clearSemanticIndexingDecision(folderRoot)) {
-      throw new Error('semantic indexing decision could not be cleared');
-    }
     while (true) {
       try {
         if (!shouldContinue()) {
-          return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+          return { added: [], modified: [], removed: [], failed: [], cancelled: true };
         }
         await deps.bind(folderRoot);
         if (!shouldContinue()) {
-          return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+          return { added: [], modified: [], removed: [], failed: [], cancelled: true };
         }
         const result = await deps.sync(deps.indexer, folderRoot, {
           shouldContinue,
-          semanticEnabled: deps.semanticEnabled,
-          ...semanticSyncPolicy(folderRoot, opts.forceEmbedding),
         });
         if (daemonRecoveryRetries === 0 && hasLostIndexerBinding(result)) {
           daemonRecoveryRetries += 1;
@@ -448,7 +325,7 @@ export async function runFolderSyncOperation(
           return result;
         }
         if (syncTouchedVisibleTree(result)) noteTreeChanged();
-        if (result.failed.length && !result.semanticPaused) {
+        if (result.failed.length) {
           recordIndexWarning(folderRoot, syncFailureMessage(result));
         } else {
           clearIndexWarning(folderRoot);
@@ -456,7 +333,7 @@ export async function runFolderSyncOperation(
         return result;
       } catch (err: unknown) {
         if (!shouldContinue()) {
-          return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+          return { added: [], modified: [], removed: [], failed: [], cancelled: true };
         }
         // Folder removal must close the process-wide daemon to interrupt a
         // scan for that folder. A concurrent reconcile for another live
@@ -472,11 +349,11 @@ export async function runFolderSyncOperation(
       }
     }
   } catch (err: unknown) {
-    // Folder removal closes the single-threaded daemon to interrupt a long
-    // disk scan. The rejected request belongs to an invalidated generation,
+    // Folder removal closes the daemon to interrupt an in-flight MFS call.
+    // The rejected request belongs to an invalidated generation,
     // so surface normal cancellation instead of a stale warning/toast.
     if (!shouldContinue()) {
-      return { added: [], modified: [], removed: [], renamed: [], failed: [], cancelled: true };
+      return { added: [], modified: [], removed: [], failed: [], cancelled: true };
     }
     recordIndexWarning(folderRoot, errorMessage(err));
     throw err;
@@ -494,12 +371,11 @@ export function scheduleIndexerSync(folderRoot: string, reason: string, windowId
         const current = getCurrentFolder();
         if (!current || !filesystemPath.equal(current, folderRoot)) return;
         try {
-          // Full content-hash diff — the only reconcile tier. Hashing
-          // is milliseconds for a personal library; embedding still only
-          // happens for changed hashes, so reopening a fully-indexed
-          // folder costs zero tokens, AND external edits made while the
-          // app was closed are caught right here instead of waiting for
-          // a manual sync.
+          // One authoritative reconcile tier: enumerate admitted sources and
+          // offer complete projections to MFS. MFS hashes each projection and
+          // skips embedding unchanged revisions, so reopening a current Folder
+          // costs no provider tokens while external direct-text edits are
+          // still observed here.
           await syncFolderNow(folderRoot, {
             reason,
             shouldContinue: () => {

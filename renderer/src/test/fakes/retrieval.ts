@@ -19,7 +19,6 @@ export function semanticSearchApi(overrides: Partial<SemanticSearchPort> = {}): 
 
 export function indexDecisionApi(overrides: Partial<IndexDecisionPort> = {}): IndexDecisionPort {
   return {
-    decide: vi.fn(async () => undefined),
     dismissWarning: vi.fn(async () => undefined),
     resync: vi.fn(async () => undefined),
     ...overrides,

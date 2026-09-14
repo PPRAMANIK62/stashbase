@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { filesystemPath } from '../filesystem-path.ts';
+import type { ExactSearchOptions } from '../indexer.ts';
 import { createRetrieval } from './index.ts';
 
 test('Retrieval reports unavailable semantic mode without invoking its adapter', async () => {
@@ -23,26 +24,26 @@ test('Retrieval reports unavailable semantic mode without invoking its adapter',
   assert.equal(called, false);
 });
 
-test('Retrieval distinguishes exhausted hosted quota without invoking vector search', async () => {
+test('Retrieval reports missing BYOK configuration without invoking vector search', async () => {
   let called = false;
   const retrieval = createRetrieval({
     hasEmbeddingKey: () => false,
-    embeddingUnavailableReason: () => 'hosted-quota-exhausted',
+    embeddingUnavailableReason: () => 'embedding-key-required',
     vectorSearch: async () => {
       called = true;
       return [];
     },
   });
 
-  const result = await retrieval.search({ mode: 'semantic', query: 'architecture' });
-  assert.deepEqual(result.availability, { state: 'unavailable', reason: 'hosted-quota-exhausted' });
+  const result = await retrieval.search({ mode: 'semantic', query: 'architecture', folderRoot: '/library' });
+  assert.deepEqual(result.availability, { state: 'unavailable', reason: 'embedding-key-required' });
   assert.equal(called, false);
 });
 
 test('Retrieval normalizes keyword matches into flat visible-source evidence', async () => {
   const folderRoot = filesystemPath.absolute('/library');
   const retrieval = createRetrieval({
-    keywordSearch: async () => ({
+    exactSearch: async () => ({
       files: [{
         path: 'notes/brief.md', totalMatches: 2,
         matches: [
@@ -68,7 +69,7 @@ test('Retrieval normalizes keyword matches into flat visible-source evidence', a
 
 test('Retrieval applies top_k to keyword evidence and reports truncation', async () => {
   const retrieval = createRetrieval({
-    keywordSearch: async () => ({
+    exactSearch: async () => ({
       files: [{
         path: 'notes/brief.md', totalMatches: 2,
         matches: [
@@ -91,6 +92,33 @@ test('Retrieval applies top_k to keyword evidence and reports truncation', async
   assert.equal(result.evidence[0]?.locator.line, 4);
   assert.deepEqual(result.availability, { state: 'partial', reason: 'truncated' });
   assert.equal(result.truncated, true);
+});
+
+test('Retrieval passes exact scope and source filters to MFS grep', async () => {
+  let options: ExactSearchOptions | undefined;
+  const retrieval = createRetrieval({
+    exactSearch: async (_query, _folder, requested) => {
+      options = requested;
+      return { files: [], truncated: false };
+    },
+  });
+
+  await retrieval.search({
+    mode: 'keyword',
+    query: 'Needle',
+    folderRoot: '/library',
+    pathPrefix: '/library/research',
+    types: ['pdf', 'docx'],
+    caseStrict: true,
+    wholeWord: true,
+  });
+
+  assert.deepEqual(options, {
+    caseStrict: true,
+    wholeWord: true,
+    pathPrefix: '/library/research',
+    extensions: ['.pdf', '.docx'],
+  });
 });
 
 test('Retrieval preserves semantic source identity and source-safe locators', async () => {
@@ -125,6 +153,7 @@ test('Retrieval maps source categories to semantic index extension filters', asy
   await retrieval.search({
     mode: 'semantic',
     query: 'evidence',
+    folderRoot: '/library',
     types: ['pdf', 'docx'],
   });
 

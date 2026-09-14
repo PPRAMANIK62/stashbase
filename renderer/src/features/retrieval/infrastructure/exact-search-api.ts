@@ -41,7 +41,7 @@ export function createExactSearchAdapter(client: HttpClient): ExactSearchPort {
     async search(search, signal) {
       const body = exactSearchRequestSchema.parse({
         case_strict: search.caseSensitive,
-        ...(search.folderPath ? { folder: search.folderPath } : {}),
+        folder: search.folderPath,
         query: search.query,
         whole_word: search.wholeWord,
       });

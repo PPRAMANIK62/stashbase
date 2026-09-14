@@ -1305,8 +1305,8 @@ if (!hasSingleInstanceLock) {
 // we hook `will-quit` rather than `window-all-closed` here.
 //
 // We need to **wait** for the server to actually exit before quitting
-// Electron — otherwise the Python daemon orphans, still holding
-// Milvus Lite's flock, and the next launch fails to open the DB.
+// Electron — otherwise the Python daemon orphans, still holding the MFS store
+// lease, and the next launch fails to open the store.
 // Hard 8 s ceiling so the server's 6.5 s cleanup ladder can finish without a
 // stuck child pinning Electron forever.
 let quitting = false;

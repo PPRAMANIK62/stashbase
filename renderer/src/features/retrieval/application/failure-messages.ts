@@ -12,9 +12,8 @@ import {
   type FeatureFailureKind,
 } from '@/shared/domain/feature-error';
 
-/** Refusals only the search-by-meaning side of retrieval can meet: the folder has no
- *  configured embedder, or the hosted credits ran out. */
-export type SemanticFailureExtra = 'not-set-up' | 'quota-exhausted';
+/** Refusal only the search-by-meaning side of retrieval can meet. */
+export type SemanticFailureExtra = 'not-set-up';
 
 /** Every way a retrieval capability can refuse. */
 export type RetrievalFailureKind = FeatureFailureKind<SemanticFailureExtra>;
@@ -22,7 +21,6 @@ export type RetrievalFailureKind = FeatureFailureKind<SemanticFailureExtra>;
 const MESSAGES: Readonly<Record<RetrievalFailureKind, string>> = {
   'invalid-response': 'StashBase answered unexpectedly.',
   'not-set-up': 'To search by meaning, set it up in StashBase Settings.',
-  'quota-exhausted': 'Your hosted credits for search by meaning are used up.',
   'scope-lost': 'That folder is no longer available in this window.',
   unauthorized: 'This window can no longer run that request.',
   unavailable: 'StashBase is unavailable.',

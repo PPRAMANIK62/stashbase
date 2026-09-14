@@ -4,9 +4,7 @@
  *
  * A browser sign-in is tracked by its flow id and polled until the server
  * reports the flow finished. Either way the account changes, everything that
- * depends on it is re-read: OpenQuill's readiness and credits, and the
- * search-by-meaning source, which the server still resolves from the session
- * until that policy leaves the server.
+ * depends on it is re-read: OpenQuill's readiness and credits.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
@@ -25,11 +23,7 @@ const SIGN_IN_POLL_MS = 1_500;
 
 /** The keys a changed account invalidates, in the order a reader would notice
  *  them. The account itself is written from the command's answer. */
-const DEPENDENT_KEYS = [
-  settingsQueryKeys.agentCatalog,
-  settingsQueryKeys.agentAllowance,
-  settingsQueryKeys.embedder,
-] as const;
+const DEPENDENT_KEYS = [settingsQueryKeys.agentCatalog, settingsQueryKeys.agentAllowance] as const;
 
 export interface AccountViewModel {
   /** Null until the first read lands, or while it cannot. */

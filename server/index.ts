@@ -33,13 +33,7 @@ import {
 } from './agent-contract.ts';
 import { onClose, ensureFolderHome, memberFolderRoots } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import {
-  getEmbeddingSource,
-  getHostedAccountSession,
-  migrateLegacyEmbedderConfig,
-  migrateRetiredLocalEmbeddingSource,
-} from './app-config.ts';
-import { isEmbeddingAvailable } from './embedding-availability.ts';
+import { migrateLegacyEmbedderConfig, migrateRetiredEmbeddingSources } from './app-config.ts';
 import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from './state.ts';
 import { reapOrphanDaemons, reclaimStaleServerPort } from './stale-lock.ts';
 import { startParentWatchdog } from './parent-watchdog.ts';
@@ -77,7 +71,6 @@ import { mount as mountTerminalRoutes } from './routes/terminal.ts';
 import { mount as mountMcpRoutes } from './routes/mcp.ts';
 import { createMcpHttpService } from './mcp-http-service.ts';
 import { runShutdownCleanup } from './shutdown-cleanup.ts';
-import { blake3File } from './file-hash.ts';
 import { mount as mountSessionsRoutes } from './routes/sessions.ts';
 import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
@@ -92,8 +85,6 @@ import {
   connectInstalledAgentMcpOnStartup,
 } from './agent-runtime-installer.ts';
 import { createClientErrorHandler } from './client-error.ts';
-import { startHostedEmbeddingBroker, stopHostedEmbeddingBroker } from './hosted-embedding-broker.ts';
-import { hostedAccountState, setHostedQuotaAvailableHandler } from './hosted-account.ts';
 import { stopOpenCodeRuntime } from './opencode-runtime.ts';
 import { cancelAllGitHubImports } from './github-import.ts';
 
@@ -109,38 +100,18 @@ for (const adapter of BUILT_IN_AGENT_ADAPTERS) registerAgentAdapter(adapter);
 // Converters push their derived notes straight into the index on
 // completion — there is no fs-watcher intermediary anymore. Wired here
 // (not inside conversion.ts) to avoid a conversion ↔ state module cycle.
-setDerivedNoteIndexer(async (sourceAbs, derivedAbs, boundSourceHash) => {
-  if (!isEmbeddingAvailable()) return;
+setDerivedNoteIndexer(async (sourceAbs, derivedAbs) => {
   // Derived text lives in app data; index it UNDER the source
-  // PDF/image/DOCX path so folder-scoped search finds it. Stamp the SOURCE's
-  // byte hash so the daemon's scan_diff (which hashes the source file) sees
-  // it as unchanged rather than re-converting in a loop.
+  // PDF/image/DOCX/audio path so folder-scoped search finds it. MFS owns the
+  // accepted projection's content identity and unchanged decision.
   const derivedContent = fs.readFileSync(derivedAbs, 'utf8');
-  let sourceHash = boundSourceHash;
-  if (!sourceHash) {
-    const beforeHash = fs.statSync(sourceAbs);
-    sourceHash = await blake3File(sourceAbs);
-    const afterHash = fs.statSync(sourceAbs);
-    if (beforeHash.size !== afterHash.size || beforeHash.mtimeMs !== afterHash.mtimeMs) {
-      throw new Error(`source changed while hashing converted content: ${sourceAbs}`);
-    }
-  }
-  await indexer.upsertConvertedFile(filesystemPath.absolute(sourceAbs), derivedContent, sourceHash, path.extname(derivedAbs));
+  const result = await indexer.upsertConvertedFile(
+    filesystemPath.absolute(sourceAbs),
+    derivedContent,
+    path.extname(derivedAbs),
+  );
   noteTreeChanged();
-});
-
-setHostedQuotaAvailableHandler(async () => {
-  if (getEmbeddingSource() !== 'stashbase-account') return;
-  try {
-    await startHostedEmbeddingBroker();
-    await resetIndexerRuntime({ forgetBindings: true });
-    await bootBindAllFolders();
-    void reconcileLibraryFolders('hosted allowance reset').catch((err: unknown) => {
-      log.warn(`hosted allowance backfill failed: ${err instanceof Error ? err.message : String(err)}`);
-    });
-  } catch (err: unknown) {
-    log.warn(`hosted allowance recovery failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  return result;
 });
 
 function parsePortArg(argv: string[], fallback: number): number {
@@ -170,9 +141,9 @@ const PDFJS_DIST_DIR = path.resolve(APP_ROOT, 'node_modules', 'pdfjs-dist');
 
 // One-time migration from the old global-provider schema. Idempotent.
 migrateLegacyEmbedderConfig();
-// Retire the former local embedding source before the first daemon bind so an
-// upgraded app never downloads or loads its model. Idempotent.
-migrateRetiredLocalEmbeddingSource();
+// Retire the former local and hosted-account embedding sources before the
+// first daemon bind. Idempotent.
+migrateRetiredEmbeddingSources();
 // Ensure the default folder home exists and seed the built-in manual, and
 // prune any stale recent entries. There is no first-run picker — the home
 // is a fixed path, always ready.
@@ -181,7 +152,7 @@ ensureFolderHome();
 // `listen` success callback below, i.e. only AFTER we win the `:8090`
 // arbiter. That way the loser of a startup race never spawns a daemon
 // (no race orphan), and the winner reaps pre-existing orphans before
-// spawning its own (clean Milvus lock).
+// spawning its own MFS owner.
 
 const app = express();
 const mcpHttpService = createMcpHttpService({ webPort: PORT });
@@ -438,19 +409,16 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   if (DEV_VITE) log.info(`dev-proxy → vite at http://localhost:${VITE_PORT}`);
   // We own :8090 now → we're THE server. Reap any orphan daemon left by a
   // previous server that died hard (kill -9 / crash / lost the startup
-  // race) BEFORE spawning ours, so it gets a clean Milvus lock instead of
-  // fighting an orphan and black-holing writes.
+  // race) BEFORE spawning ours, so it can acquire the MFS store cleanly.
   try { reapOrphanDaemons(); } catch (err: unknown) {
     log.warn(`reap orphan daemons failed: ${err instanceof Error ? err.message : String(err)}`);
   }
   // NB: the built-in manual is seeded inside `ensureFolderHome` (called at
   // module load above), so by the time we bind here the seeded folder is
   // already on disk and gets picked up. Configure the daemon + bind every
-  // known folder so MCP / cross-folder search works without waiting for the
-  // user to open one. Background.
-  (getHostedAccountSession()
-    ? hostedAccountState(true).then(() => startHostedEmbeddingBroker())
-    : Promise.resolve())
+  // known Folder so its namespace reconciles without waiting for the user to
+  // open it. Background.
+  Promise.resolve()
     .then(() => bootBindAllFolders())
     .then(() => reconcileLibraryFolders('app boot'))
     .catch((err) =>
@@ -661,8 +629,8 @@ server.on('upgrade', (req, socket, head) => {
 // ----- graceful shutdown --------------------------------------------------
 //
 // Without this, SIGTERM (Electron `will-quit`) leaves the Python daemon
-// orphaned still holding Milvus Lite's flock — the next launch then
-// fails to open the same DB. Active extractors are cancelled before state.db
+// orphaned still holding the MFS store lease — the next launch then
+// fails to open the same store. Active extractors are cancelled before state.db
 // closes so transient conversion exits can clear in-flight state. Run the close
 // ladder once, with a hard ceiling so a stuck close can't keep us pinned.
 
@@ -685,7 +653,6 @@ async function shutdown(reason: string): Promise<void> {
       closeMcp: () => mcpHttpService.close(),
       cancelAgentInstalls: cancelAgentRuntimeInstalls,
       closeBundledAgent: stopOpenCodeRuntime,
-      closeHostedBroker: stopHostedEmbeddingBroker,
       cancelGitHubImports: cancelAllGitHubImports,
       cancelModelDownloads: cancelAllTranscriptionModelDownloads,
       cancelConversions: cancelAllConversions,
@@ -718,7 +685,7 @@ process.on('SIGHUP', () => { void shutdown('SIGHUP'); });
 
 // An Electron-owned server must not outlive its owner. The `will-quit` kill
 // ladder lives in the parent, so it protects nothing when Electron itself
-// dies uncleanly — the orphan then keeps the daemon, the Milvus flock, and
+// dies uncleanly — the orphan then keeps the daemon, the MFS store lease, and
 // the port. The shutdown token env is the "Electron owns me" marker; a
 // standalone `node server` run stays exempt.
 if (process.env.STASHBASE_SHUTDOWN_TOKEN) {

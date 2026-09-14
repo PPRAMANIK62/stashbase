@@ -1,22 +1,8 @@
-import type { HostedAccountState } from './account.ts';
-
-/**
- * Which source, if any, is authorized to produce embeddings.
- *
- * `EmbeddingSource` is deliberately wider than `EmbedderProvider`: a user
- * can bring their own provider key or spend the signed-in account allowance,
- * and persisted configs may still contain the retired local source until the
- * startup migration runs. A provider is one of the selectable direct APIs.
- */
+/** The user-owned provider authorized to produce embeddings. */
 
 export type EmbedderProvider = 'openai' | 'openrouter';
 
-export const LOCAL_EMBEDDING_SOURCE = 'local' as const;
-export const LOCAL_EMBEDDING_PROVIDER = 'onnx' as const;
-export const LOCAL_EMBEDDING_MODEL = 'gpahal/bge-m3-onnx-int8' as const;
-export const LOCAL_EMBEDDING_DIMENSION = 1024 as const;
-
-export type EmbeddingSource = EmbedderProvider | 'stashbase-account' | typeof LOCAL_EMBEDDING_SOURCE;
+export type EmbeddingSource = EmbedderProvider;
 
 /** What saving a provider key reports back. `hasKey` is literal `true`:
  *  the endpoint only answers on success, so a caller never has to check it. */
@@ -48,7 +34,6 @@ export interface EmbedderState {
   authorized: boolean;
   source: EmbeddingSource;
   model: string;
-  account: HostedAccountState;
   /** Present only on a source-switch response when pending files should be
    * presented as backfill work immediately. */
   backfillStarted?: boolean;

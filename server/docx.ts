@@ -262,6 +262,6 @@ export async function discoverNewDocx(folderAbs: string, candidates?: readonly s
   await discoverNewSources(folderAbs, DOCX_SPEC);
 }
 
-export function indexFreshDocx(docxAbsPath: string): Promise<boolean> {
+export function indexFreshDocx(docxAbsPath: string) {
   return indexFreshDerived(docxAbsPath, DOCX_SPEC);
 }

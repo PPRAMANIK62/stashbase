@@ -13,7 +13,7 @@
 | Prepared text and assets | AppData | Rebuildable; valid only for the current source |
 | Preparation failures and explicit cancellation | AppData state database | Durable attention and user intent |
 | Queued, yielded, and running work | Process-wide scheduler | Disposable; reconcile must rediscover loss |
-| Semantic rows | Python daemon / Milvus Lite | Rebuildable; daemon status owns semantic readiness |
+| Search projections and semantic rows | Python daemon / MFS | Rebuildable; MFS text owns exact retrieval and daemon status owns semantic readiness |
 | Unsaved draft snapshots | Server-private local data | Durable user intent; never rebuildable and never derived, owned by [File Transactions](file-transactions.md#crash-recovery-draft-journal) |
 | Renderer readiness snapshots | Renderer memory | Explanatory only; never completion truth |
 
@@ -34,11 +34,13 @@
   extractable text and its marker. The direct renderer preview has no durable
   completion state and does not wait for this path.
 - Media preparation requires both validated structured transcript JSON and
-  timestamped Markdown with the terminal marker. Chunk checkpoints and the
-  lazy compatible playback preview never establish transcript completion.
+  timestamped Markdown with the terminal marker. StashBase owns playback and
+  transcription; only the completed current transcript text is projected into
+  MFS. Chunk checkpoints and the lazy compatible playback preview never
+  establish transcript completion.
 - Conversion completion is independent of semantic indexing. Current prepared
   text can serve exact retrieval while semantic indexing is disabled, pending,
-  paused, or failed.
+  or failed.
 - A Chat's **Search by meaning** switch is consumption policy only. Off routes
   its attributed retrieval through direct and current prepared text without
   pausing Preparation, reconcile, or semantic indexing.
@@ -94,35 +96,32 @@ For one folder it must:
 - validate current format-specific derived output;
 - preserve durable failure or cancellation gates;
 - schedule missing work without blocking navigation;
-- add, update, reuse, or remove semantic rows by content identity;
+- offer complete admitted projections and apply MFS's added, updated,
+  unchanged, or removed result;
 - hide unavailable or orphaned evidence from retrieval.
 
 No-op reconcile spends no embedding work. Without an embedding source it still
-maintains prepared text and exact retrieval.
+offers complete text projections to an MFS namespace whose vector indexing is
+off, which keeps exact retrieval current without a provider call.
 
-Adding or removing a BYOK key, signing in or out, or explicitly switching the
-embedding source resets and rebinds the single daemon so stale runtime
-credentials cannot survive. Compatible vectors remain reusable. Hosted index
-and query calls carry distinct purpose labels but consume one quota ledger;
-quota exhaustion disables only hosted semantic work and never exact retrieval.
-The availability gate is checked before and between embedding calls so one
-quota response stops the remainder of a batch. Pending work remains
-reconcilable and resumes after a quota refresh/reset or an available source
-switch.
+Adding or removing a BYOK key, or switching between OpenAI and OpenRouter,
+resets and rebinds the single daemon so stale runtime credentials cannot
+survive. Account sign-in and sign-out do not affect indexing. Pending work
+remains reconcilable and resumes when a supported BYOK source is available.
 
-Daemon retirement is single-flight across shutdown, credential/quota reset,
-and recovery callers. A replacement generation waits until the retiring child
-has exited and released the store lock; a late event from an older generation
+Daemon retirement is single-flight across shutdown, credential reset, and
+recovery callers. A replacement generation waits until the retiring child has
+exited and released its MFS resources; a late event from an older generation
 cannot clear the current readiness latch or reject current operations. If a
 runtime reset lands after a folder bind but before reconcile upserts, the
 daemon's binding-loss result is a recoverable lifecycle fingerprint: retry the
 authoritative operation once from bind instead of persisting a per-file index
 failure.
 
-Large semantic workloads use the same authoritative content-hash diff. Known
-stale rows become unavailable before a durable awaiting/paused decision is
-published. A pause never delays browsing, preparation, editing, or keyword
-search; only explicit Start clears it.
+Large semantic workloads run automatically once BYOK is configured. No
+size-based decision or pause is published in the current flow. The unresolved
+large-index product policy is recorded as a TODO in
+`research/mfs-migration.md`.
 
 ## Freshness and Visibility
 
@@ -136,29 +135,33 @@ search; only explicit Start clears it.
   daemon admission, keyword-search, or Preparation work.
 - A newly queued source invalidates stale final output immediately, then the
   extractor repeats cleanup at execution.
-- Content-addressed prepared output carries the source hash into the indexing
-  handoff. Old derived text cannot be rebound to replacement bytes.
+- A prepared projection crosses into MFS only after its format owner accepts
+  the derived artifact as current. MFS hashes that complete projection and
+  owns its unchanged decision.
 - Daemon mutation acknowledgements are visibility barriers: after a completed
   delete or move, immediate status/search cannot observe rows reported removed.
 - Process readiness is a configured barrier, not merely a child-process event:
   current admission rules and every retained folder binding are acknowledged
   before a public daemon operation can run after initial spawn or respawn.
-- An existing local collection may reopen without an embedding credential for
-  list/delete cleanup. The persisted active embedding source selects the
-  provider/dimension collection when historical provider collections coexist;
-  a legacy config with one collection may still discover that sole identity.
-  Delete and rename mutations enumerate every persisted embedding collection,
-  while search and indexing remain confined to the active collection. Store
-  deletion failures propagate across the daemon boundary; they are never
-  converted into a successful zero-row result.
+- Each Folder maps to one deterministic MFS Internal namespace. Visible
+  Folder-relative paths are its DocumentIds. The namespace key derives from
+  the Folder comparison identity; MFS document status is the only accepted-
+  projection catalog. Existing namespaces reopen without an embedding
+  credential for exact search, upsert, list, and cleanup; only vector indexing
+  and search by meaning require BYOK. Store deletion failures propagate across the daemon boundary;
+  they are never converted into a successful zero-row result.
 - Retrieval filters unavailable sources and always remaps evidence to a live
   visible source before it crosses HTTP or MCP.
-- Exact retrieval applies whole-token filtering before its per-file result cap;
-  raw substring density cannot hide later eligible evidence.
-- Local Milvus collect-all reads use a complete scalar snapshot. Segment order
-  cannot be treated as a globally ordered primary-key cursor.
-- Closing or failing to open the store releases the client, shared pymilvus
-  connection, and local Milvus server before cleanup returns.
+- Exact retrieval is MFS `grep` over the accepted text revision. MFS applies
+  smart case, whole-word, path, extension, document, byte, and global-match
+  bounds before StashBase formats source-visible snippets.
+- Node owns filesystem traversal, path comparison identity, preparation
+  freshness, and the complete text projection handed to MFS. MFS owns
+  projection content identity, revision status, unchanged classification,
+  processing, chunking, embedding, vector storage, and retrieval through its
+  public API; the adapter does not query MFS implementation tables.
+- Closing or failing to open the store releases MFS and its process supervisor
+  before cleanup returns.
 
 ## Cleanup and Recovery
 
@@ -168,7 +171,7 @@ search; only explicit Start clears it.
   rejects concurrent reopen/register attempts, and durable membership is
   removed last so an interrupted cleanup remains recoverable by reconcile. It
   invalidates queued folder-sync generations before cleanup and interrupts an
-  active single-threaded daemon scan; concurrent status polls treat that short
+  active MFS operation; concurrent status polls treat that short
   retirement window as transitional instead of surfacing a daemon-close error.
   Because the daemon is process-wide, the same retirement may interrupt a
   concurrent reconcile for another live member; that authoritative operation
@@ -176,8 +179,9 @@ search; only explicit Start clears it.
   expected lifecycle 500.
 - Source delete removes its derived text, manifests, resumable work, playback
   preview, attention rows, and index rows.
-- Move/rename retires the old source identity. Direct text may reuse index
-  content; prepared formats clean old ownership and prepare under the new path.
+- Move/rename retires the old source identity. The new DocumentId is an MFS
+  upsert and may require embedding; prepared formats clean old ownership and
+  prepare under the new path.
 - Reprocess validates optional dependencies before destructive reset, clears
   stale final output and attention, and queues interactive work. Media manual
   retry clears inference checkpoints but may retain a current model-independent
@@ -214,13 +218,13 @@ of the resource tradeoff.
 |---|---|
 | Scheduling Interface | `ConversionScheduler` in `server/conversion-scheduler.ts` |
 | Format dispatch Interface | `server/conversion-dispatch.ts` and `server/conversion.ts` |
-| Reconcile owner | `server/sync.ts`, `server/state.ts`, `server/semantic-workload.ts` |
+| Reconcile owner | `server/sync.ts` and `server/state.ts` |
 | Index Interface | `IndexerStatus` and the rest of `server/indexer.ts`, implemented by `server/indexer.mfs.ts` |
 | Folder status contract | `IndexStatus` in `shared/index-status.ts`, built by `buildIndexStatus` in `server/index-status.ts` — a superset of `IndexerStatus`, not the same type |
 | Daemon Adapter | `server/mfs-daemon.ts` ↔ `python/stashbase_daemon.py` |
 | Retrieval Interface | `server/retrieval/index.ts`, with keyword, semantic, and evidence Modules beside it |
 | Format owners | PDF, OCR, DOCX, and audio Modules under `server/` plus their native/Python Adapters |
-| Focused evidence | `server/conversion-scheduler.test.ts`, `server/conversion.test.ts`, `server/conversion-status.test.ts`, `server/extractor-process.test.ts`, `server/semantic-workload.test.ts`, `server/index-status.test.ts`, `server/indexer-mfs-path.test.ts`, `server/audio-transcription.test.ts`, `server/retrieval/index.test.ts`, `scripts/semantic-retrieval-metrics.test.ts`, `scripts/semantic-retrieval-dataset.test.ts`, `scripts/semantic-retrieval-runner.test.ts`, the versioned `evals/semantic-retrieval/` AI Eval, and `python/stashbase_daemon_test.py` |
+| Focused evidence | `server/conversion-scheduler.test.ts`, `server/conversion.test.ts`, `server/conversion-status.test.ts`, `server/extractor-process.test.ts`, `server/semantic-index-inputs.test.ts`, `server/index-status.test.ts`, `server/indexer-mfs-path.test.ts`, `server/audio-transcription.test.ts`, `server/retrieval/index.test.ts`, `scripts/semantic-retrieval-metrics.test.ts`, `scripts/semantic-retrieval-dataset.test.ts`, `scripts/semantic-retrieval-runner.test.ts`, the versioned `evals/semantic-retrieval/` AI Eval, and `python/stashbase_daemon_test.py` |
 
 ## Review Checklist
 

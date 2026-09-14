@@ -57,7 +57,7 @@ export interface KeywordHitFile {
  * by the route so a late response can be matched to the request that asked
  * for it; `folder` is the absolute folder root, not a display label.
  *
- * The server's own scan produces only `files`/`totalMatches`/`truncated` —
+ * The MFS adapter produces only `files`/`totalMatches`/`truncated` —
  * see `KeywordScanResult` in `server/search-display.ts`, which is that
  * narrower internal shape and deliberately not this type.
  */
@@ -69,14 +69,8 @@ export interface KeywordSearchResult {
   truncated: boolean;
 }
 
-/** One keyword-hit file from the library-wide sweep: `folder` is the
- *  member folder that owns it, so a row can be opened in its own identity. */
+/** One keyword-hit file from an explicit Folder query. `folder` retains the
+ *  selected member identity so a caller can open the result directly. */
 export interface LibraryKeywordFile extends KeywordHitFile {
   folder: string;
-}
-
-export interface LibraryKeywordSearchResult {
-  files: LibraryKeywordFile[];
-  totalMatches: number;
-  truncated: boolean;
 }

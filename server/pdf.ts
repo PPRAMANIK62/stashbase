@@ -363,6 +363,6 @@ export async function discoverNewPdfs(folderAbs: string, candidates?: readonly s
   await discoverNewSources(folderAbs, PDF_SPEC, (abs) => maybeConvertPdf(abs));
 }
 
-export function indexFreshPdf(pdfAbsPath: string): Promise<boolean> {
+export function indexFreshPdf(pdfAbsPath: string) {
   return indexFreshDerived(pdfAbsPath, PDF_SPEC);
 }

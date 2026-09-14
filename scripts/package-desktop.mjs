@@ -437,23 +437,6 @@ function compareDottedVersions(left, right) {
   return 0;
 }
 
-function assertRipgrepForPlatform() {
-  if (!hostMatchesTarget()) return;
-
-  const nodePlatform = targetRuntime().nodePlatform;
-  const packageName = `@vscode/ripgrep-${nodePlatform}-${process.arch}`;
-  const binary = nodePlatform === 'win32' ? 'rg.exe' : 'rg';
-  try {
-    requireFromRoot.resolve(`${packageName}/bin/${binary}`);
-  } catch {
-    throw new Error(
-      `${platform} packaging requires ${packageName}. ` +
-        `Run \`pnpm install --frozen-lockfile\` on ${targetRuntime().label} and make sure ` +
-        `package.json optionalDependencies includes ${packageName}.`,
-    );
-  }
-}
-
 function assertClaudeAgentSdkForPlatform() {
   if (!hostMatchesTarget()) return;
 
@@ -474,7 +457,6 @@ function assertClaudeAgentSdkForPlatform() {
 if (!hostMatchesTarget()) {
   assertSidecarsForPlatform();
   assertTranscriptionToolsForPlatform();
-  assertRipgrepForPlatform();
   assertClaudeAgentSdkForPlatform();
   runScript('build');
 } else {
@@ -483,7 +465,6 @@ if (!hostMatchesTarget()) {
   if (!skipTranscriptionBuild) runScript('build:transcription-sidecar');
   assertSidecarsForPlatform();
   assertTranscriptionToolsForPlatform();
-  assertRipgrepForPlatform();
   assertClaudeAgentSdkForPlatform();
 }
 clearQuarantine();

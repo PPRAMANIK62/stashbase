@@ -6,20 +6,19 @@
  * and changing one import line in `index.ts`.
  *
  * Paths on every method are absolute POSIX paths. Server modules that
- * operate in folder-relative terms translate at the route/files boundary;
- * the indexer and daemon key the active collection by absolute source path.
+ * operate in Folder-relative terms translate at the route/files boundary;
+ * the daemon converts them to MFS namespace-relative DocumentIds.
  */
-import type { SearchHit } from '../shared/search-results.ts';
-import type { LOCAL_EMBEDDING_PROVIDER } from '../shared/embedding.ts';
+import type { KeywordHitFile, SearchHit } from '../shared/search-results.ts';
+import type { EmbedderProvider } from '../shared/embedding.ts';
 
 export type { SearchHit } from '../shared/search-results.ts';
 
 export interface EmbedderRuntimeConfig {
   /** Supported embedding endpoints. OpenRouter is used only as an
    *  OpenAI-compatible embeddings endpoint for the fixed 1536d model. */
-  provider: 'openai' | 'openrouter' | 'stashbase' | typeof LOCAL_EMBEDDING_PROVIDER;
-  /** Provider API key. Cloud providers require one; the local ONNX runtime
-   *  deliberately does not. */
+  provider: EmbedderProvider;
+  /** Provider API key. */
   apiKey?: string;
   /** Optional model override. Defaults are provider-specific. */
   model?: string;
@@ -29,10 +28,28 @@ export interface EmbedderRuntimeConfig {
   baseUrl?: string;
 }
 
+export interface IndexUpsertResult {
+  /** MFS owns projection content identity and reports whether this accepted
+   * body created, replaced, or matched the current document revision. */
+  outcome: 'added' | 'updated' | 'unchanged' | 'removed';
+}
+
+export interface ExactSearchOptions {
+  caseStrict: boolean;
+  wholeWord: boolean;
+  pathPrefix?: string;
+  extensions?: string[];
+}
+
+export interface ExactSearchResult {
+  files: KeywordHitFile[];
+  totalMatches: number;
+  truncated: boolean;
+}
+
 export interface Indexer {
-  /** Register a folder with the indexer. This makes the folder known and
-   *  opens the collection for the active provider/dimension on the first
-   *  configured bind. Idempotent — safe to call on every
+  /** Register a Folder with the indexer and open its Internal namespace.
+   *  Idempotent — safe to call on every
    *  server start for every known folder, and after a daemon respawn. */
   bindFolder(folder: string, cfg: EmbedderRuntimeConfig): Promise<void>;
 
@@ -40,19 +57,17 @@ export interface Indexer {
    *  searchable until explicit delete. */
   unbindFolder(folder: string): Promise<void>;
 
-  /** Insert / replace all chunks for one file. Returns the number of
-   *  chunks actually stored. Empty / unchunkable content is valid: the
-   *  file disappears from the index, returns 0, and no error is raised. */
-  upsertFile(path: string, content: string): Promise<number>;
+  /** Insert / replace one complete text projection. Empty / unchunkable
+   *  content is valid: the document disappears from the index and no error
+   *  is raised. */
+  upsertFile(path: string, content: string): Promise<IndexUpsertResult>;
 
   /** Insert/replace chunks for a **converted source** (PDF/image/DOCX) whose
    *  searchable text comes from a separately-stored derived text file
    *  (app data, never in the user's folder). Indexes `derivedContent` UNDER the
-   *  source's own path so folder-scoped search + the daemon's source-file
-   *  hash diff line up; stamps the explicit
-   *  `sourceHash` (= hash of the source file's bytes) so reconcile sees the
-   *  source as unchanged. */
-  upsertConvertedFile(sourceAbs: string, derivedContent: string, sourceHash: string, derivedExt?: string): Promise<number>;
+   *  source's own path so folder-scoped retrieval returns the visible source
+   *  identity. MFS owns the projection content hash and unchanged decision. */
+  upsertConvertedFile(sourceAbs: string, derivedContent: string, derivedExt?: string): Promise<IndexUpsertResult>;
 
   /** Drop all chunks for one file. Safe to call on a never-indexed file. */
   deleteFile(path: string): Promise<void>;
@@ -61,71 +76,46 @@ export interface Indexer {
    *  Used by recursive folder-delete to clear the index in one shot. */
   deletePathPrefix(prefix: string): Promise<void>;
 
-  /** Move a file in the index. `content` is the (unchanged) body — the
-   *  impl may or may not re-embed depending on the backend. The MFS
-   *  impl fast-paths this: when every stored chunk's `file_hash` still
-   *  matches, it reuses the cached `dense_vector`s and only rewrites
-   *  `source` / `id` (no re-embed). It falls back to a full
-   *  delete + re-insert if any chunk drifted or lacks a vector. Returns
-   *  the number of chunks present under the new path. */
-  renameFile(oldPath: string, newPath: string, content: string): Promise<number>;
+  /** Move a file in the index by removing the old DocumentId and upserting
+   *  the unchanged body under the new DocumentId. */
+  renameFile(oldPath: string, newPath: string, content: string): Promise<void>;
 
   /** Move every file under `oldPrefix` to `newPrefix`. `files` carries
-   *  the bodies under the OLD paths. The MFS impl deletes every
-   *  old-prefix row and re-embeds each file. */
+   *  the bodies under the old paths. */
   renamePathPrefix(
     oldPrefix: string,
     newPrefix: string,
     files: Array<{ path: string; content: string }>,
   ): Promise<void>;
 
-  /** Hybrid search. `folder?` scopes to one absolute folder root; omitted
-   *  = whole library. `pathPrefix?` further narrows
+  /** Hybrid search. `folder` scopes to one absolute Folder root.
+   *  `pathPrefix?` further narrows
    *  to chunks whose `source` starts with that prefix — useful when an
-   *  agent wants to ask "only inside cs183b/transcripts/". When both
-   *  are passed, `pathPrefix` takes precedence (it's more specific).
+   *  agent wants to ask "only inside cs183b/transcripts/".
    *  `extensions?` restricts hits to sources with one of the given
    *  lowercase dot-prefixed extensions; the daemon applies it before
    *  final top-k selection. Returns at most `topK` hits ordered by
    *  descending score, with `fileName` absolute. */
-  search(query: string, topK: number, folder?: string, pathPrefix?: string, extensions?: string[]): Promise<SearchHit[]>;
+  search(query: string, topK: number, folder: string, pathPrefix?: string, extensions?: string[]): Promise<SearchHit[]>;
 
-  /** Walk the library and compute the content-hash diff against the
-   *  index. `folder?` scopes the walk; omitted = whole library. Paths
-   *  in the returned lists are absolute. */
-  syncDiff(folder?: string): Promise<SyncDiff>;
+  /** Exact literal search over MFS's accepted text projections. It remains
+   * available when vector indexing is off and requires one Folder namespace. */
+  grep(query: string, folder: string, options: ExactSearchOptions): Promise<ExactSearchResult>;
 
-  /** Lightweight progress check — name-set diff only, no hashing.
-   *  `folder?` scopes; omitted = whole library. */
+  /** Lightweight progress check. With a Folder it reports that namespace;
+   *  omission aggregates status for non-search maintenance surfaces. */
   status(folder?: string): Promise<IndexerStatus>;
 
-  /** Every file present in the index, keyed by absolute path with
-   *  its stored content hash as value. `folder?` scopes to one folder;
-   *  omitted = whole library. Used by reconcile and the
-   *  `/api/library/index-status` recently-indexed slice. */
-  listFiles(folder?: string): Promise<Record<string, string>>;
+  /** Absolute source identities currently accepted by MFS. Omission
+   *  aggregates the bound namespaces for non-search maintenance surfaces. */
+  listDocuments(folder?: string): Promise<string[]>;
 
-  /** Release the Milvus Lite locks so the server can move / wipe the
-   *  underlying DB file. Next op reopens lazily via `bindFolder`. */
+  /** Release MFS resources so the server can retire or replace the store.
+   *  The next operation reopens lazily via `bindFolder`. */
   closeStore(): Promise<void>;
 
   /** Shut down underlying resources. Currently called only on process exit. */
   close(): Promise<void>;
-}
-
-export interface SyncDiff {
-  /** On disk, not yet in the index. Absolute paths. */
-  added: string[];
-  /** In both, but content hash differs — likely an external edit. */
-  modified: string[];
-  /** In the index, gone from disk. */
-  deleted: string[];
-  /** Pairs where an added file's content hash matches a deleted file's
-   *  stored hash — almost certainly a rename / move. The reconcile path
-   *  routes these through `renameFile` so the daemon can keep the cached
-   *  embeddings instead of paying to re-embed. Only 1:1 hash matches
-   *  land here; ambiguous N:M pairs stay in `added`/`deleted`. */
-  renamed: Array<{ old: string; new: string; fileHash: string }>;
 }
 
 /** The indexer's own view of a folder. Narrower than, and not the same type
@@ -133,15 +123,16 @@ export interface SyncDiff {
  *  `shared/index-status.ts`), which layers embedding availability,
  *  conversion, and preparation state on top of this. */
 export interface IndexerStatus {
-  /** Files on disk that look indexable. */
+  /** Documents accepted by MFS for the selected namespace(s). */
   total: number;
-  /** Files on disk that already have rows in the index. */
+  /** Accepted documents whose current revision is indexed. */
   indexed: number;
   /** How many files are still waiting to be indexed. */
   pendingCount: number;
   /** Full list of absolute paths waiting to be indexed. */
   pending: string[];
-  /** Files in the index that no longer exist on disk. Usually 0. */
+  /** Kept for the public status shape. Internal MFS namespaces do not observe
+   *  the filesystem, so reconcile removes absent projections directly. */
   orphanedCount: number;
   /** Full list of orphaned absolute paths. */
   orphaned: string[];

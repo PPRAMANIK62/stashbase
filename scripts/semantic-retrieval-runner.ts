@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { blake3File } from '../server/file-hash.ts';
 import { hasCompleteBaselines, resolveDatasetPath, type SemanticEvalDataset } from './semantic-retrieval-dataset.ts';
 import { scoreRankedQueries, type RankedQueryResult } from './semantic-retrieval-metrics.ts';
 
@@ -15,7 +14,7 @@ export const CHUNK_FETCH_MULTIPLIER = 10;
 export interface SemanticEvalBackend {
   bind(libraryRoot: string): Promise<void>;
   indexDirect(sourcePath: string, content: string): Promise<void>;
-  indexPrepared(sourcePath: string, preparedText: string, sourceHash: string): Promise<void>;
+  indexPrepared(sourcePath: string, preparedText: string): Promise<void>;
   /** `chunkBudget` is a chunk count, deliberately larger than the dataset's
    *  `topK`; the runner reduces the reply to distinct sources. */
   semanticSearch(query: string, chunkBudget: number, libraryRoot: string): Promise<string[]>;
@@ -98,8 +97,7 @@ export async function runSemanticRetrievalEval(options: SemanticEvalRunnerOption
       } else {
         const preparedFixture = resolveDatasetPath(options.datasetRoot, document.preparedText, `prepared ${document.preparedText}`);
         const prepared = await fs.readFile(preparedFixture, 'utf8');
-        // Same source-byte hash the production convertible path stamps.
-        await backend.indexPrepared(destination, prepared, await blake3File(destination));
+        await backend.indexPrepared(destination, prepared);
       }
     }
 

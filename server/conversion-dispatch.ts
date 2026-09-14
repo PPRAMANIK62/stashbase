@@ -23,6 +23,7 @@ import { isAudioFile, isDocxFile, isImageFile } from './format.ts';
 import { currentDerivedTextPathForImage, currentDerivedTextPathForImageAsync, derivedNotePathForImage, discoverNewImages, indexFreshImage, maybeConvertImage } from './image.ts';
 import { currentDerivedTextPathForPdf, currentDerivedTextPathForPdfAsync, derivedPathsForPdf, discoverNewPdfs, indexFreshPdf, maybeConvertPdf } from './pdf.ts';
 import type { ConfiguredTranscriptionBlock } from '../shared/transcription.ts';
+import type { IndexUpsertResult } from './indexer.ts';
 
 export interface ConvertibleOptions {
   urgency?: 'interactive';
@@ -38,7 +39,7 @@ interface ConvertibleFormatAdapter {
   matches(path: string): boolean;
   queue(sourceAbs: string, options: ConvertibleOptions): void;
   discover(folderAbs: string, candidates?: readonly string[]): Promise<void>;
-  indexFresh(sourceAbs: string): Promise<boolean>;
+  indexFresh(sourceAbs: string): Promise<IndexUpsertResult | null>;
   reset(sourceAbs: string): void;
   interactive: boolean;
   reprocessBlock?(): ConfiguredTranscriptionBlock | null;
@@ -135,13 +136,20 @@ export function prepareConvertibleSource(sourceAbs: string, displayName = source
   return true;
 }
 
-export async function discoverConvertibleSources(folderAbs: string): Promise<void> {
-  const candidates = await collectSourceCandidates(folderAbs, (candidate) => findFormat(candidate) != null);
+export async function discoverConvertibleSources(
+  folderAbs: string,
+  knownCandidates?: readonly string[],
+): Promise<void> {
+  const candidates = knownCandidates
+    ?? await collectSourceCandidates(folderAbs, (candidate) => findFormat(candidate) != null);
   for (const format of FORMATS) await format.discover(folderAbs, candidates);
 }
 
-export function indexFreshConvertibleSource(sourceAbs: string, displayName = sourceAbs): Promise<boolean> {
-  return findFormat(displayName)?.indexFresh(sourceAbs) ?? Promise.resolve(false);
+export function indexFreshConvertibleSource(
+  sourceAbs: string,
+  displayName = sourceAbs,
+): Promise<IndexUpsertResult | null> {
+  return findFormat(displayName)?.indexFresh(sourceAbs) ?? Promise.resolve(null);
 }
 
 export function currentPreparedTextPath(

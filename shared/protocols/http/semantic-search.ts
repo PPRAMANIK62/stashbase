@@ -3,11 +3,11 @@ import { z } from 'zod';
 const folderPathSchema = z.string().trim().min(1).max(4096);
 const relativePathSchema = z.string().trim().min(1).max(4096);
 
-/** `POST /api/library/search` in `semantic` mode. `folder` narrows to one
- *  member; omitted means the whole library. */
+/** `POST /api/library/search` in `semantic` mode. Every request names one
+ *  member Folder. */
 export const semanticSearchRequestSchema = z
   .object({
-    folder: folderPathSchema.optional(),
+    folder: folderPathSchema,
     mode: z.literal('semantic'),
     path_prefix: z.string().trim().min(1).max(4096).optional(),
     query: z.string().trim().min(1).max(4096),
@@ -39,7 +39,7 @@ export const semanticSearchResponseSchema = z
   })
   .passthrough();
 
-export const SEMANTIC_SEARCH_FAILURE_CODES = ['HOSTED_QUOTA_EXHAUSTED', 'EMBEDDER_KEY_REQUIRED'] as const;
+export const SEMANTIC_SEARCH_FAILURE_CODES = ['EMBEDDER_KEY_REQUIRED'] as const;
 
 export const semanticSearchFailureSchema = z
   .object({
@@ -47,8 +47,6 @@ export const semanticSearchFailureSchema = z
     error: z.string().trim().min(1).max(500),
   })
   .passthrough();
-
-export const semanticIndexingDecisionResponseSchema = z.object({ ok: z.literal(true) }).passthrough();
 
 export type SemanticSearchRequestWire = z.infer<typeof semanticSearchRequestSchema>;
 export type SemanticHitWire = z.infer<typeof semanticHitSchema>;

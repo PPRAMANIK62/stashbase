@@ -53,7 +53,6 @@ describe('useAccount', () => {
         settingsQueryKeys.account,
         settingsQueryKeys.agentCatalog,
         settingsQueryKeys.agentAllowance,
-        settingsQueryKeys.embedder,
       ]),
     );
   });

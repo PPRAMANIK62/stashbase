@@ -69,7 +69,7 @@
     "test:docs": "node scripts/check-docs.mjs",
     "test:inventory": "node scripts/check-test-inventory.mjs",
     "test:toolchain": "node --test scripts/check-vite-plus-toolchain.test.mjs scripts/vite-plus-ci.test.mjs && node scripts/check-vite-plus-toolchain.mjs",
-    "test:conversion-scheduler": "node --import tsx --test server/html.test.ts server/filesystem-path.test.ts server/folder-relative-path.test.ts server/folder-window.test.ts server/window-context-route.test.ts server/internal-shutdown-route.test.ts server/middleware/renderer-origin.test.ts server/stale-lock.test.ts server/parent-watchdog.test.ts server/files.test.ts server/file-formats.test.ts server/file-hash.test.ts server/http.test.ts server/markdown-source-format.test.ts server/keyword-search.test.ts server/index-status.test.ts server/indexer-mfs-path.test.ts server/semantic-workload.test.ts server/session-path.test.ts server/conversion-scheduler.test.ts server/conversion-auxiliary.test.ts server/conversion-status.test.ts server/conversion.test.ts server/extractor-process.test.ts server/audio-transcription.test.ts server/transcription-models.test.ts server/transcription-provider.test.ts server/transcription-runtime.test.ts server/transcription-tools.test.ts server/upload.test.ts server/client-error.test.ts server/semantic-indexing-state.test.ts",
+    "test:conversion-scheduler": "node --import tsx --test server/html.test.ts server/filesystem-path.test.ts server/folder-relative-path.test.ts server/folder-window.test.ts server/window-context-route.test.ts server/internal-shutdown-route.test.ts server/middleware/renderer-origin.test.ts server/stale-lock.test.ts server/parent-watchdog.test.ts server/files.test.ts server/file-formats.test.ts server/file-hash.test.ts server/http.test.ts server/markdown-source-format.test.ts server/index-status.test.ts server/indexer-mfs-path.test.ts server/semantic-index-inputs.test.ts server/session-path.test.ts server/conversion-scheduler.test.ts server/conversion-auxiliary.test.ts server/conversion-status.test.ts server/conversion.test.ts server/extractor-process.test.ts server/audio-transcription.test.ts server/transcription-models.test.ts server/transcription-provider.test.ts server/transcription-runtime.test.ts server/transcription-tools.test.ts server/upload.test.ts server/client-error.test.ts server/semantic-indexing-state.test.ts",
     "test:library-files": "node --import tsx --test server/library-file-mutations.test.ts server/library-operations/index.test.ts server/routes/library.test.ts server/routes/library-files.test.ts server/routes/gallery.test.ts server/routes/files.test.ts server/routes/file-mutations.test.ts server/routes/attach.test.ts server/__tests__/file-listing.test.ts server/__tests__/github-import.test.ts server/generic-file-preview.test.ts server/recovery-journal.test.ts server/routes/recovery-drafts.test.ts",
     "test:retrieval": "node --import tsx --test server/retrieval/index.test.ts scripts/semantic-retrieval-metrics.test.ts scripts/semantic-retrieval-dataset.test.ts scripts/semantic-retrieval-runner.test.ts",
     "eval:semantic-retrieval": "node --import tsx scripts/run-semantic-retrieval-eval.ts",
@@ -179,11 +179,9 @@
     "asar": true,
     "asarUnpack": [
       "node_modules/better-sqlite3/**/*",
-      "node_modules/@vscode/**/*",
       "node_modules/@anthropic-ai/claude-agent-sdk*/**/*",
       "node_modules/opencode-ai/bin/**/*",
       "node_modules/.pnpm/better-sqlite3*/**/*",
-      "node_modules/.pnpm/@vscode+ripgrep*/**/*",
       "node_modules/.pnpm/@anthropic-ai+claude-agent-sdk*/**/*",
       "node_modules/.pnpm/opencode-ai*/node_modules/opencode-ai/bin/**/*"
     ],
@@ -267,7 +265,6 @@
     "@modelcontextprotocol/sdk": "^1.21.0",
     "@noble/hashes": "^2.2.0",
     "@opencode-ai/sdk": "1.18.19",
-    "@vscode/ripgrep": "^1.18.0",
     "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -320,10 +317,5 @@
     "typescript": "^5.7.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.3.0",
     "vite-plus": "0.3.0"
-  },
-  "optionalDependencies": {
-    "@vscode/ripgrep-darwin-arm64": "1.18.0",
-    "@vscode/ripgrep-linux-x64": "1.18.0",
-    "@vscode/ripgrep-win32-x64": "1.18.0"
   }
 }

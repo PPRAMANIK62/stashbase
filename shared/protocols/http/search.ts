@@ -6,7 +6,7 @@ const relativePathSchema = z.string().trim().min(1).max(4096);
 export const exactSearchRequestSchema = z
   .object({
     case_strict: z.boolean(),
-    folder: folderPathSchema.optional(),
+    folder: folderPathSchema,
     query: z.string().trim().min(1).max(4096),
     whole_word: z.boolean(),
   })

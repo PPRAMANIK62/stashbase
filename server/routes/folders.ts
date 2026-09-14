@@ -16,7 +16,6 @@ import {
 } from '../files.ts';
 import { applyRenamePlanAsync, planRenameLinksAsync } from '../links.ts';
 import { toSourcePath } from '../folder.ts';
-import { isEmbeddingAvailable } from '../embedding-availability.ts';
 import { errorMessage, logger } from '../log.ts';
 import { indexer } from '../state.ts';
 import { guardExplicitFolder, sendError } from '../http.ts';
@@ -140,20 +139,14 @@ export function mount(app: express.Express): void {
               await indexer.deleteFile(toSourcePath(updated.name));
             }
           }
-          if (!isEmbeddingAvailable()) {
-            if (!newPrefixIsRetrievalEligible) await indexer.deletePathPrefix(oldSourcePrefix);
-            log.info(`rename_folder: skipped index update for ${oldPath} -> ${newPath} because no embedding key is configured`);
-            return;
-          }
           if (!newPrefixIsRetrievalEligible) {
             // The disk move is valid Workbench behavior, but the retrieval
             // owner must forget the old identity and must not traverse the
             // newly hidden subtree to build a replacement payload.
             await indexer.deletePathPrefix(oldSourcePrefix);
           } else {
-            // Cascade BEFORE the index call so files whose links we rewrite
-            // are embedded with their fresh content — saves a second round of
-            // embed for everything inside the renamed folder.
+            // Cascade before the index call so files whose links we rewrite
+            // are projected with their fresh content in one pass.
             // Re-collect bodies from the new locations (cascade may have
             // rewritten some). renamePathPrefix's contract takes OLD-keyed
             // entries, so we map new → old names.

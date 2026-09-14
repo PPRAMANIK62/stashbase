@@ -1,19 +1,16 @@
 import packageJson from '../package.json' with { type: 'json' };
 import crypto from 'node:crypto';
-import type { HostedAccountState, HostedAgentAllowance, HostedOAuthProvider, HostedOAuthPurpose, HostedOAuthStart, HostedOAuthStatus, HostedQuota } from '../shared/account.ts';
+import type { HostedAccountState, HostedAgentAllowance, HostedOAuthProvider, HostedOAuthPurpose, HostedOAuthStart, HostedOAuthStatus } from '../shared/account.ts';
 
 export type {
-  HostedAccountActivation,
   HostedAccountState,
   HostedAgentAllowance,
   HostedOAuthProvider,
   HostedOAuthPurpose,
   HostedOAuthStart,
   HostedOAuthStatus,
-  HostedQuota,
 } from '../shared/account.ts';
 import {
-  getEmbeddingSource,
   getHostedAccountSession,
   setHostedAccountSession,
   type HostedAccountSession,
@@ -66,11 +63,6 @@ interface PendingOAuthFlow {
 
 const OAUTH_FLOW_TTL_MS = 10 * 60 * 1000;
 const pendingOAuthFlows = new Map<string, PendingOAuthFlow>();
-const QUOTA_REFRESH_RETRY_MS = 5 * 60 * 1000;
-let lastQuota: HostedQuota | undefined;
-let quotaRefreshTimer: NodeJS.Timeout | null = null;
-let onQuotaAvailable: (() => void | Promise<void>) | null = null;
-let quotaAvailabilityRecovery: Promise<void> = Promise.resolve();
 let tokenRefresh: { sessionKey: string; promise: Promise<string> } | null = null;
 let profileHydration: { sessionKey: string; attemptedAt: number; promise: Promise<void> } | null = null;
 const PROFILE_HYDRATION_RETRY_MS = 5 * 60 * 1000;
@@ -215,7 +207,6 @@ export async function exchangeHostedOAuthCode(flowId: string, authCode: string):
       code_verifier: flow.verifier,
     });
     const session = sessionFrom(payload);
-    clearHostedQuota();
     setHostedAccountSession(session);
     flow.state = 'exchanged';
     return session;
@@ -325,7 +316,6 @@ export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}
       const current = getHostedAccountSession();
       if (current && `${current.userId}\0${current.refreshToken}\0${current.accessToken}` === sessionKey) {
         setHostedAccountSession(undefined);
-        clearHostedQuota();
       }
       throw error;
     }
@@ -340,7 +330,6 @@ export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}
 
 export async function signOutHostedAccount(): Promise<void> {
   const session = getHostedAccountSession();
-  clearHostedQuota();
   setHostedAccountSession(undefined);
   avatarCache = null;
   profileHydration = null;
@@ -431,23 +420,6 @@ export async function hostedAccountAvatar(): Promise<{ contentType: string; byte
   }
 }
 
-export async function fetchHostedQuota(options: { forceRefreshToken?: boolean } = {}): Promise<HostedQuota> {
-  const token = await hostedAccessToken({ forceRefresh: options.forceRefreshToken });
-  const response = await fetch(`${STASHBASE_API_URL}/v1/account/usage`, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      'x-stashbase-client-version': CLIENT_VERSION,
-    },
-  });
-  const payload = await jsonBody<HostedQuota & ErrorPayload>(response);
-  if (response.status === 401 && !options.forceRefreshToken) return fetchHostedQuota({ forceRefreshToken: true });
-  if (!response.ok) throw new Error(messageOf(payload, `StashBase account service failed (HTTP ${response.status}).`));
-  const quota = payload as HostedQuota;
-  rememberHostedQuota(quota);
-  await quotaAvailabilityRecovery;
-  return quota;
-}
-
 export async function fetchHostedAgentAllowance(
   options: { forceRefreshToken?: boolean } = {},
 ): Promise<HostedAgentAllowance> {
@@ -466,75 +438,16 @@ export async function fetchHostedAgentAllowance(
   return payload as HostedAgentAllowance;
 }
 
-function scheduleQuotaRefresh(quota: HostedQuota): void {
-  if (quotaRefreshTimer) clearTimeout(quotaRefreshTimer);
-  quotaRefreshTimer = null;
-  if (quota.remainingTokens > 0) return;
-  const resetAt = quota.periodEndsAt ? Date.parse(quota.periodEndsAt) : Number.NaN;
-  const untilReset = Number.isFinite(resetAt) ? resetAt - Date.now() + 1_000 : Number.NaN;
-  const delay = Number.isFinite(untilReset)
-    ? Math.max(untilReset, untilReset <= 0 ? QUOTA_REFRESH_RETRY_MS : 1_000)
-    : QUOTA_REFRESH_RETRY_MS;
-  quotaRefreshTimer = setTimeout(() => {
-    quotaRefreshTimer = null;
-    void fetchHostedQuota().catch(() => {
-      if (lastQuota) scheduleQuotaRefresh(lastQuota);
-    });
-  }, Math.min(delay, 2_147_000_000));
-  quotaRefreshTimer.unref?.();
-}
-
-function clearHostedQuota(): void {
-  lastQuota = undefined;
-  if (quotaRefreshTimer) clearTimeout(quotaRefreshTimer);
-  quotaRefreshTimer = null;
-}
-
-export function rememberHostedQuota(quota: HostedQuota): void {
-  const wasExhausted = isHostedQuotaExhausted();
-  lastQuota = quota;
-  scheduleQuotaRefresh(quota);
-  if (wasExhausted && !isHostedQuotaExhausted()) {
-    quotaAvailabilityRecovery = Promise.resolve(onQuotaAvailable?.())
-      .catch(() => { /* owner logs recovery failures */ });
-  }
-}
-
-export function cachedHostedQuota(): HostedQuota | undefined {
-  return lastQuota;
-}
-
-export function isHostedQuotaExhausted(): boolean {
-  return (lastQuota?.remainingTokens ?? 1) <= 0;
-}
-
-export function setHostedQuotaAvailableHandler(handler: (() => void | Promise<void>) | null): void {
-  onQuotaAvailable = handler;
-}
-
-export async function hostedAccountState(refreshQuota = false): Promise<HostedAccountState> {
+export async function hostedAccountState(_refresh = false): Promise<HostedAccountState> {
   let session = getHostedAccountSession();
-  if (!session) return { signedIn: false, active: false };
+  if (!session) return { signedIn: false };
   void hydrateHostedProfile(session).catch(() => { /* display-only profile data never gates account or local workflows */ });
-  let quota = lastQuota;
-  let quotaUnavailable = false;
-  if (refreshQuota || !quota) {
-    try {
-      quota = await fetchHostedQuota();
-    } catch {
-      if (!getHostedAccountSession()) return { signedIn: false, active: false };
-      quotaUnavailable = true;
-    }
-  }
   session = getHostedAccountSession() ?? session;
   return {
     signedIn: true,
-    active: getEmbeddingSource() === 'stashbase-account',
     email: session.email,
     ...(session.displayName ? { displayName: session.displayName } : {}),
     ...(session.avatarUrl ? { avatarUrl: '/api/account/avatar' } : {}),
-    ...(quota ? { quota } : {}),
-    ...(quotaUnavailable ? { quotaUnavailable: true } : {}),
   };
 }
 

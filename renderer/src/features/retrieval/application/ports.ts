@@ -23,11 +23,8 @@ export interface SemanticSearchPort {
 export type SemanticSearchError = FeatureError<SemanticFailureExtra>;
 export const SemanticSearchError = featureErrorClass<SemanticFailureExtra>('SemanticSearchError');
 
-type IndexDecision = 'start' | 'defer';
-
-/** Folder-explicit search-by-meaning decisions and index-warning recovery. */
+/** Folder-explicit index-warning recovery. */
 export interface IndexDecisionPort {
-  decide(folderPath: string, decision: IndexDecision, signal: AbortSignal): Promise<void>;
   dismissWarning(folderPath: string, signal: AbortSignal): Promise<void>;
   resync(folderPath: string, signal: AbortSignal): Promise<void>;
 }

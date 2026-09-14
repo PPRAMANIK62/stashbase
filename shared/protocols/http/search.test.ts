@@ -32,10 +32,19 @@ test('exact search requires a complete bounded request and ordered match ranges'
   assert.equal(
     exactSearchRequestSchema.safeParse({
       case_strict: false,
+      folder: '/library/research',
       query: 'answer',
       whole_word: false,
     }).success,
     true,
+  );
+  assert.equal(
+    exactSearchRequestSchema.safeParse({
+      case_strict: false,
+      query: 'answer',
+      whole_word: false,
+    }).success,
+    false,
   );
   assert.equal(
     exactSearchResponseSchema.safeParse({

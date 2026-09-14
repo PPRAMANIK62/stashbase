@@ -31,23 +31,20 @@ describe('semantic search domain', () => {
     expect(snippet.endsWith('…')).toBe(true);
   });
 
-  it('keeps rank order and groups by folder only for the library scope', () => {
+  it('keeps rank order inside the requested folder and drops invalid cross-folder hits', () => {
     const hits = [
       hit('/library/b', 'one.md', 0.9),
       hit('/library/a', 'two.md', 0.8),
       hit('/library/b', 'three.md', 0.7),
     ];
-    expect(groupSemanticHits(hits, 'library').map((group) => group.folderPath)).toEqual([
+    expect(groupSemanticHits(hits, '/library/b').map((group) => group.folderPath)).toEqual([
       '/library/b',
-      '/library/a',
     ]);
-    expect(groupSemanticHits(hits, 'library')[0]?.hits.map((entry) => entry.source.path)).toEqual([
-      'one.md',
-      'three.md',
-    ]);
-    expect(groupSemanticHits(hits, 'folder')).toHaveLength(1);
-    expect(groupSemanticHits(hits, 'folder')[0]?.hits).toHaveLength(3);
-    expect(groupSemanticHits([], 'folder')).toEqual([]);
+    expect(
+      groupSemanticHits(hits, '/library/b')[0]?.hits.map((entry) => entry.source.path),
+    ).toEqual(['one.md', 'three.md']);
+    expect(groupSemanticHits(hits, '/library/a')[0]?.hits).toHaveLength(1);
+    expect(groupSemanticHits([], '/library/a')).toEqual([]);
   });
 
   it('anchors navigation on the first non-heading line of the chunk', () => {

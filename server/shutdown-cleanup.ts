@@ -3,7 +3,6 @@ export interface ShutdownCleanupOptions {
   closeMcp(): Promise<void>;
   cancelAgentInstalls(): Promise<string[]>;
   closeBundledAgent(): Promise<void>;
-  closeHostedBroker(): Promise<void>;
   cancelGitHubImports(): Promise<number>;
   cancelModelDownloads(): Promise<string[]>;
   cancelConversions(): Promise<string[]>;
@@ -13,7 +12,7 @@ export interface ShutdownCleanupOptions {
   onModelDownloadsCancelled?(ids: string[]): void;
   onAgentInstallsCancelled?(ids: string[]): void;
   onGitHubImportsCancelled?(count: number): void;
-  onError(step: 'mcp-http' | 'agent-installs' | 'bundled-agent' | 'hosted-broker' | 'github-imports' | 'model-downloads' | 'conversions' | 'state-db' | 'indexer', error: unknown): void;
+  onError(step: 'mcp-http' | 'agent-installs' | 'bundled-agent' | 'github-imports' | 'model-downloads' | 'conversions' | 'state-db' | 'indexer', error: unknown): void;
 }
 
 export async function runShutdownCleanup(options: ShutdownCleanupOptions): Promise<void> {
@@ -34,12 +33,6 @@ export async function runShutdownCleanup(options: ShutdownCleanupOptions): Promi
     await options.closeBundledAgent();
   } catch (err: unknown) {
     options.onError('bundled-agent', err);
-  }
-
-  try {
-    await options.closeHostedBroker();
-  } catch (err: unknown) {
-    options.onError('hosted-broker', err);
   }
 
   try {

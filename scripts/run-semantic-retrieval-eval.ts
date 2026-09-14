@@ -60,8 +60,8 @@ const result = await runSemanticRetrievalEval({
     return {
       bind: (libraryRoot) => indexer.bindFolder(libraryRoot, embedder),
       indexDirect: async (sourcePath, content) => { await indexer.upsertFile(sourcePath, content); },
-      indexPrepared: async (sourcePath, preparedText, sourceHash) => {
-        await indexer.upsertConvertedFile(sourcePath, preparedText, sourceHash);
+      indexPrepared: async (sourcePath, preparedText) => {
+        await indexer.upsertConvertedFile(sourcePath, preparedText);
       },
       semanticSearch: async (query, chunkBudget, libraryRoot) => {
         const found = await retrieval.search({ mode: 'semantic', query, folderRoot: libraryRoot, topK: chunkBudget });

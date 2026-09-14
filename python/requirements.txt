@@ -1,25 +1,23 @@
 # StashBase Python sidecar dependencies. Installed into a venv at
 # `<project>/python/.venv.nosync/` by the `setup:python` npm script.
 #
-# mfs-cli vendors most of what we need (pymilvus, langchain-text-splitters,
-# pyyaml, filelock, tree-sitter, numpy etc.) so we only have to add the bits
-# the sidecar uses directly:
+# MFS owns the embedded catalog, chunk index, and search implementation. Pin
+# the exact reviewed upstream revision: this integration uses its public MFS,
+# Internal namespace, Processor, Chunker, and Embedder interfaces.
+#
+# The remaining packages are used directly by the StashBase adapter:
 #   - openai:       OpenAI-compatible embedding client for the fixed
 #                   text-embedding-3-small family.
-#   - onnx extras:  CPU-only local embeddings. Runtime libraries ship with
-#                   the daemon; model weights download on first selection
-#                   and remain in the user's local model cache.
-#   - numpy:        vector handling (also pulled transitively by pymilvus).
-#   - blake3:       content + chunk-id hashing (faster + streaming-
-#                   friendly than SHA256; mfs's Scanner is patched to
-#                   match — see stashbase_daemon.py:_patch_scanner_blake3).
+#   - numpy:        vector validation in the provider adapter (also pulled
+#                   transitively by MFS).
+#   - blake3:       stable opaque namespace key from Folder comparison identity.
 #
 # Optional local PDF/OCR extraction dependencies live in
 # `requirements-extract.txt`. Keep them out of the default venv and
 # packaged daemon so normal setup/release avoids their document-parser and
 # computer-vision payloads.
 #
-mfs-cli[onnx]>=0.1.0
+mfs @ git+https://github.com/liliu-z/mfs.git@9856ef95a713a6456a3832b106f0a3786037fdcc
 openai>=1.0
 numpy>=1.26
 blake3>=1.0

@@ -142,20 +142,20 @@ test('Windows extractor build wires PyInstaller hide-console without switching o
   assert.doesNotMatch(source, /'--(?:no)?console'/);
 });
 
-test('the packaged daemon for search by meaning includes the local ONNX embedding runtime', () => {
+test('the packaged daemon pins the public MFS library and excludes retired ONNX wiring', () => {
   const requirements = fs.readFileSync(path.join(root, 'python', 'requirements.txt'), 'utf8');
   const build = fs.readFileSync(path.join(root, 'scripts', 'build-python-sidecar.mjs'), 'utf8');
   const daemonExcludes = build.match(/const daemonExcludedModules = \[([\s\S]*?)\n\];/)?.[1] ?? '';
   const daemonForbidden = build.match(/const daemonForbiddenEntries = \[([\s\S]*?)\n\];/)?.[1] ?? '';
 
-  assert.match(requirements, /^mfs-cli\[onnx\]>=/m);
-  for (const runtime of ['onnxruntime', 'tokenizers', 'mfs.embedder.onnx']) {
-    assert.doesNotMatch(daemonExcludes, new RegExp(`['"]${runtime.replaceAll('.', '\\\\.')}['"]`));
-  }
+  assert.match(requirements, /^mfs @ git\+https:\/\/github\.com\/liliu-z\/mfs\.git@[0-9a-f]{40}$/m);
+  assert.doesNotMatch(requirements, /mfs-cli|\[onnx\]/);
+  assert.doesNotMatch(build, /mfs\.embedder\.onnx|mfs\.store|mfs\.ingest\.scanner/);
+  assert.match(build, /'--hidden-import',\s*'mfs\._process_supervisor'/);
+  assert.match(build, /'--copy-metadata',\s*'mfs'/);
   for (const runtime of ['onnxruntime', 'tokenizers']) {
-    assert.doesNotMatch(daemonForbidden, new RegExp(`['"]${runtime}['"]`));
+    assert.ok(daemonExcludes.includes(`'${runtime}'`) || daemonForbidden.includes(`'${runtime}'`));
   }
-  assert.match(build, /'--hidden-import',\s*'mfs\.embedder\.onnx'/);
 });
 
 test('bundled OpenCode runtime and SDK are pinned with an explicit packaged executable', () => {

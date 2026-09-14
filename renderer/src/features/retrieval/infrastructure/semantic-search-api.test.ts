@@ -52,7 +52,7 @@ describe('semantic search API', () => {
     });
   });
 
-  it('classifies a missing embedding source and used-up credits', async () => {
+  it('classifies a missing embedding source', async () => {
     const keyless: HttpClient = {
       request: vi.fn(async () => ({
         body: { code: 'EMBEDDER_KEY_REQUIRED', error: 'search by meaning is not set up' },
@@ -60,17 +60,11 @@ describe('semantic search API', () => {
       })),
     };
     await expect(
-      createSemanticSearchAdapter(keyless).search({ query: 'idea', topK: 8 }, signal),
+      createSemanticSearchAdapter(keyless).search(
+        { folderPath: '/library/research', query: 'idea', topK: 8 },
+        signal,
+      ),
     ).rejects.toMatchObject({ kind: 'not-set-up' });
-    const quota: HttpClient = {
-      request: vi.fn(async () => ({
-        body: { code: 'HOSTED_QUOTA_EXHAUSTED', error: 'exhausted' },
-        status: 402,
-      })),
-    };
-    await expect(
-      createSemanticSearchAdapter(quota).search({ query: 'idea', topK: 8 }, signal),
-    ).rejects.toMatchObject({ kind: 'quota-exhausted' });
   });
 
   it('rethrows an abort without relabelling it', async () => {
@@ -83,7 +77,10 @@ describe('semantic search API', () => {
       }),
     };
     await expect(
-      createSemanticSearchAdapter(client).search({ query: 'idea', topK: 8 }, controller.signal),
+      createSemanticSearchAdapter(client).search(
+        { folderPath: '/library/research', query: 'idea', topK: 8 },
+        controller.signal,
+      ),
     ).rejects.toBe(abortError);
   });
 });

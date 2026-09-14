@@ -50,7 +50,7 @@ test('library search validates and forwards file-type filters', async (t) => {
     const filtered = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query: 'paper', types: ['pdf', 'docx'] }),
+      body: JSON.stringify({ query: 'paper', folder: '/library', types: ['pdf', 'docx'] }),
     });
     assert.equal(filtered.status, 200);
     assert.deepEqual(searchInput?.types, ['pdf', 'docx']);
@@ -61,6 +61,7 @@ test('library search validates and forwards file-type filters', async (t) => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         query: 'ExactMatch',
+        folder: '/library',
         mode: 'keyword',
         path_prefix: '/library/notes',
         types: ['notes'],
@@ -93,13 +94,13 @@ test('library search validates and forwards file-type filters', async (t) => {
     assert.equal(policySearch.status, 200);
     assert.equal(attributedSession, 'panel-session');
     assert.equal(normalizedFolder, '/library');
-    const globalSearch = await fetch(url, {
+    const explicitFolderSearch = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-stashbase-agent-session-id': 'panel-session' },
-      body: JSON.stringify({ query: 'answer', scope: 'library' }),
+      body: JSON.stringify({ query: 'answer', folder: '/library' }),
     });
-    assert.equal(globalSearch.status, 200);
-    assert.equal(normalizedFolder, undefined);
+    assert.equal(explicitFolderSearch.status, 200);
+    assert.equal(normalizedFolder, '/library');
     assert.equal((searchInput as Record<string, unknown> | undefined)?.mode, 'keyword');
     assert.equal((await policySearch.json() as { mode: string }).mode, 'keyword');
 

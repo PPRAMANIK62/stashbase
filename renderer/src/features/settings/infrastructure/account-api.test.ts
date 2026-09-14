@@ -9,23 +9,13 @@ const ORIGIN = 'http://127.0.0.1:8090';
 const noFetch = () => Promise.reject(new Error('not expected'));
 
 describe('account API', () => {
-  it('reads the account and leaves the search-credit fields on the wire', async () => {
+  it('reads account identity without embedding state', async () => {
     const client: HttpClient = {
       request: vi.fn(async () => ({
         body: {
-          active: true,
           avatarUrl: '/api/account/avatar',
           displayName: 'Ada Lovelace',
           email: 'ada@example.com',
-          quota: {
-            grantedTokens: 1,
-            periodEndsAt: null,
-            periodStartedAt: null,
-            plan: 'free',
-            remainingTokens: 1,
-            reservedTokens: 0,
-            usedTokens: 0,
-          },
           signedIn: true,
         },
         status: 200,
@@ -101,7 +91,7 @@ describe('account API', () => {
   });
 
   it('signs out and answers with the signed-out account', async () => {
-    const request = vi.fn(async () => ({ body: { active: false, signedIn: false }, status: 200 }));
+    const request = vi.fn(async () => ({ body: { signedIn: false }, status: 200 }));
     const account = await createAccountAdapter({ request }, ORIGIN, noFetch).signOut(signal);
     expect(account).toEqual({ avatarUrl: null, displayName: null, email: null, signedIn: false });
     expect(request).toHaveBeenCalledWith({ method: 'DELETE', path: '/api/account', signal });

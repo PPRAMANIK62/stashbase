@@ -69,6 +69,7 @@ test('MCP library mutations work outside an active folder and enforce versions',
   const target = path.join(root, 'Archive', 'Note.md');
   fs.mkdirSync(root, { recursive: true });
   folder.setCurrentFolder(root);
+  await state.bindIndexerForFolder(root);
   folder.clearCurrentFolder();
   assert.equal(folder.getCurrentFolder(), null);
 
@@ -134,6 +135,14 @@ $$`;
     baseVersion: created.version,
   });
   assert.ok(updated.version);
+  const exact = await callTool(base, token, 'search_library', {
+    query: 'version two',
+    mode: 'keyword',
+    folder: root,
+  });
+  assert.equal(exact.mode, 'keyword');
+  assert.equal(exact.hits[0]?.fileName, source.replace(/\\/g, '/'));
+  assert.match(exact.hits[0]?.content ?? '', /version two/);
   await assert.rejects(
     callTool(base, token, 'write_file', {
       path: source,

@@ -4,8 +4,8 @@
  * the `Indexer` contract. The `Indexer` API speaks absolute POSIX-spelled
  * source paths; this module is the daemon boundary and sends Node-generated
  * comparison identities separately wherever Python needs routing keys. The
- * daemon keys the active provider/dimension collection by retained absolute
- * source path and scopes by an absolute folder root.
+ * daemon maps each absolute Folder root to one MFS Internal namespace and
+ * converts source paths to namespace-relative DocumentIds.
  *
  * HTML special-case: we feed MFS a markdown-shaped plaintext (see
  * `server/html.ts:analyzeHtml`) so its markdown chunker keeps respecting
@@ -14,85 +14,31 @@
  * rewritten. JSON and UTF-8 TXT are passed through byte-for-text unchanged so
  * the generic text chunker handles them without parsing or serialization.
  */
-import { blake3 } from '@noble/hashes/blake3.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
-import path from 'node:path';
 import { analyzeHtml } from './html.ts';
-import { detectFormat } from './format.ts';
+import { detectFormat, isAudioFile } from './format.ts';
 import { contentSizeError, shouldIndexSourcePath } from './indexable.ts';
 import { logger } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import type { FilesystemPathModule } from './filesystem-path.ts';
-import { getSemanticIndexingDecision } from './state-db.ts';
 import type {
   EmbedderRuntimeConfig,
+  ExactSearchOptions,
+  ExactSearchResult,
+  IndexUpsertResult,
   Indexer,
   IndexerStatus,
   SearchHit,
-  SyncDiff,
 } from './indexer.ts';
 
 const log = logger('index');
 
-export function pausedWriteDisposition(
-  indexedHash: string | null | undefined,
-  nextHash: string,
-): 'index' | 'retain' | 'invalidate' {
-  if (indexedHash === undefined) return 'index';
-  return indexedHash === nextHash ? 'retain' : 'invalidate';
-}
-
-export function excludePausedPendingHits<T extends { fileName: string }>(
-  hits: T[],
-  pending: ReadonlySet<string>,
-): T[] {
-  return hits.filter((hit) => !pending.has(filesystemPath.identity(hit.fileName)));
-}
-
-// The daemon keys its active collection by **absolute POSIX path**
-// and binds absolute folder roots. Under the Folder model every caller
-// already passes absolute paths/roots (`state.ts` binds absolute roots) and accepts absolute paths
-// back. This adapter normalizes every crossing so daemon calls never acquire
-// a second separator or relative-path convention.
+// Node remains the owner of platform and Unicode path identity. Python receives
+// both retained spelling and opaque comparison identity at every path crossing.
 const normalizeDaemonPath = (p: string): string => filesystemPath.absolute(p);
 
-/** Rebase one indexed source onto the retained spelling of its longest bound
- * member root. Identity is deliberately computed only by filesystemPath;
- * Python receives the resulting old/new pair and does no Unicode case map. */
-export function retainedIndexedSource(
-  root: string,
-  source: string,
-  boundRoots: readonly string[],
-  paths: FilesystemPathModule = filesystemPath,
-): string | null {
-  const owner = boundRoots
-    .filter((candidate) => paths.contains(candidate, source))
-    .sort((a, b) => paths.identity(b).length - paths.identity(a).length)[0];
-  if (!owner || !paths.equal(owner, root)) return null;
-  const rel = paths.relative(root, source);
-  if (!rel) return null;
-  const retained = paths.join(root, rel);
-  return retained === source ? null : retained;
-}
-
-/** Convert (path, raw content) into the (text, ext, fileHash) tuple
- *  the daemon expects. HTML gets pre-flattened to markdown-shaped
- *  plaintext so MFS's markdown chunker respects heading boundaries.
- *
- *  `fileHash` is **always BLAKE3 of the ORIGINAL on-disk content**, not
- *  the chunked text — it has to match the hash MFS Scanner computes
- *  during scan_diff (we patch the scanner to BLAKE3 too — see
- *  `python/stashbase_daemon.py:_patch_scanner_blake3`), otherwise an HTML
- *  file would forever look "modified" against the index. BLAKE3(content
- *  as UTF-8) here equals the daemon's BLAKE3 of the raw file bytes for
- *  any UTF-8 file — the same invariant SHA256 relied on. */
-export function prepareForIndex(filePath: string, content: string): {
-  text: string;
-  ext: string;
-  fileHash: string;
-} {
-  const fileHash = bytesToHex(blake3(new TextEncoder().encode(content)));
+/** Build the complete text projection handed to MFS. MFS owns its content
+ * identity and unchanged decision. */
+export function prepareForIndex(filePath: string, content: string): string {
   const format = detectFormat(filePath);
   if (format === 'html') {
     // HTML is structured (the .html file is the source of truth), but
@@ -105,14 +51,10 @@ export function prepareForIndex(filePath: string, content: string): {
     // by contrast, are extracted to a hidden `.md` on disk because their
     // conversion is expensive and worth caching.
     const { plaintext } = analyzeHtml(content);
-    return { text: plaintext, ext: '.md', fileHash };
+    return plaintext;
   }
   // Markdown, JSON, and TXT already are the directly readable source of truth.
-  return {
-    text: content,
-    ext: path.extname(filePath).toLowerCase() || '.md',
-    fileHash,
-  };
+  return content;
 }
 
 interface DaemonHit {
@@ -125,21 +67,81 @@ interface DaemonHit {
   metadata?: Record<string, unknown>;
 }
 
+interface DaemonGrepMatch {
+  line: number;
+  text: string;
+  ranges: Array<[number, number]>;
+}
+
+interface DaemonGrepFile {
+  path: string;
+  matches: DaemonGrepMatch[];
+  total_matches: number;
+}
+
+const EXACT_MAX_LINE_CHARS = 240;
+
+function transcriptTimestampPrefix(line: string): string {
+  return line.match(/^\s*-\s*\[\d{1,3}:\d{2}:\d{2}(?:\.\d{1,3})?\]\s*/)?.[0] ?? '';
+}
+
+function audioTimestampForLine(line: string): number | undefined {
+  const match = line.match(/^\s*-\s*\[(\d{1,3}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]/);
+  if (!match) return undefined;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  if (minutes > 59 || seconds > 59) return undefined;
+  const millis = Number((match[4] ?? '').padEnd(3, '0')) || 0;
+  return ((hours * 3600) + (minutes * 60) + seconds) * 1000 + millis;
+}
+
+function grepSnippet(match: DaemonGrepMatch): DaemonGrepMatch {
+  const { text, ranges } = match;
+  let windowStart = 0;
+  if (text.length > EXACT_MAX_LINE_CHARS && ranges.length > 0) {
+    windowStart = Math.max(0, Math.min(
+      text.length - EXACT_MAX_LINE_CHARS,
+      (ranges[0]?.[0] ?? 0) - Math.floor(EXACT_MAX_LINE_CHARS / 3),
+    ));
+  }
+  const windowEnd = Math.min(text.length, windowStart + EXACT_MAX_LINE_CHARS);
+  const timestamp = windowStart > 0 ? transcriptTimestampPrefix(text) : '';
+  const leading = windowStart > 0
+    ? timestamp && windowStart >= timestamp.length ? `${timestamp.trimEnd()} … ` : '…'
+    : '';
+  const trailing = windowEnd < text.length ? '…' : '';
+  const snippet = leading + text.slice(windowStart, windowEnd) + trailing;
+  return {
+    line: match.line,
+    text: snippet,
+    ranges: ranges.flatMap(([start, end]) => {
+      const localStart = start - windowStart + leading.length;
+      const localEnd = end - windowStart + leading.length;
+      if (localEnd <= leading.length || localStart >= snippet.length - trailing.length) return [];
+      return [[
+        Math.max(leading.length, localStart),
+        Math.min(snippet.length - trailing.length, localEnd),
+      ] as [number, number]];
+    }),
+  };
+}
+
 export class MfsIndexer implements Indexer {
   private loggedBindings = new Map<string, string>();
   /** Folders that have successfully received at least one daemon status
    *  response in this process. */
   private folderReady = new Set<string>();
-  private legacySources: Map<string, string> | null = null;
-  private legacySourceGeneration = -1;
 
-  private async pausedIndexedHash(sourcePath: string): Promise<string | null | undefined> {
+  /** Cleanup for a Folder that was never bound cannot have an MFS row to
+   * remove. Avoid spawning the daemon only to turn that idempotent case into
+   * a binding error. */
+  private hasBindingFor(sourcePath: string): boolean {
+    const source = normalizeDaemonPath(sourcePath);
     for (const folder of getDaemon().knownBindings().keys()) {
-      if (!filesystemPath.contains(folder, sourcePath) || !getSemanticIndexingDecision(folder)) continue;
-      const indexed = await this.listFiles(folder);
-      return indexed[normalizeDaemonPath(sourcePath)] ?? null;
+      if (filesystemPath.relative(folder, source) !== null) return true;
     }
-    return undefined;
+    return false;
   }
 
   async bindFolder(folder: string, cfg: EmbedderRuntimeConfig): Promise<void> {
@@ -153,14 +155,6 @@ export class MfsIndexer implements Indexer {
       dimension: cfg.dimension,
       baseUrl: cfg.baseUrl,
     });
-    if (cfg.apiKey || cfg.provider === 'onnx') {
-      try { await this.reconcileLegacySourceSpelling(source); }
-      catch (err) {
-        // Legacy spelling repair is auxiliary. A list/read failure must not
-        // turn an otherwise valid daemon bind into an indexing outage.
-        log.warn(`indexed source spelling inspection failed for ${source}: ${(err as Error).message}`);
-      }
-    }
     this.folderReady.delete(key);
     const bindingKey = `${cfg.provider}:${cfg.model ?? ''}:${cfg.dimension ?? ''}:${cfg.baseUrl ?? ''}`;
     if (this.loggedBindings.get(key) === bindingKey) {
@@ -179,123 +173,102 @@ export class MfsIndexer implements Indexer {
     this.loggedBindings.delete(key);
   }
 
-  async upsertFile(filePath: string, content: string): Promise<number> {
+  async upsertFile(filePath: string, content: string): Promise<IndexUpsertResult> {
     if (!shouldIndexSourcePath(filePath)) {
-      await getDaemon().call('delete', { path: normalizeDaemonPath(filePath) });
+      await getDaemon().call('delete', {
+        path: normalizeDaemonPath(filePath),
+        path_identity: filesystemPath.identity(filePath),
+      });
       log.info(`upsert ${filePath}: skipped by index rules`);
-      return 0;
+      return { outcome: 'removed' };
     }
     const tooLarge = contentSizeError(content);
     if (tooLarge) {
-      await getDaemon().call('delete', { path: normalizeDaemonPath(filePath) });
+      await getDaemon().call('delete', {
+        path: normalizeDaemonPath(filePath),
+        path_identity: filesystemPath.identity(filePath),
+      });
       log.warn(`upsert ${filePath}: ${tooLarge}`);
-      return 0;
+      return { outcome: 'removed' };
     }
-    const { text, ext, fileHash } = prepareForIndex(filePath, content);
-    const pausedHash = await this.pausedIndexedHash(filePath);
-    const pausedDisposition = pausedWriteDisposition(pausedHash, fileHash);
-    if (pausedDisposition !== 'index') {
-      if (pausedDisposition === 'retain') return 1;
-      await getDaemon().call('delete', { path: normalizeDaemonPath(filePath) });
-      return 0;
-    }
+    const text = prepareForIndex(filePath, content);
     // Covers truly empty files AND files whose extractable text is empty
     // (bundler-format HTML that is one giant <script>, whitespace-only
     // notes) — embedding either would store 0 chunks, so skip the
     // round-trip. `/api/index-status` filters the same files out of
     // `pending` (see `hasNoExtractableText`) so they don't pulse forever.
     if (text.trim().length === 0) {
-      await getDaemon().call('delete', { path: normalizeDaemonPath(filePath) });
+      await getDaemon().call('delete', {
+        path: normalizeDaemonPath(filePath),
+        path_identity: filesystemPath.identity(filePath),
+      });
       log.info(`upsert ${filePath}: no extractable text, skipped embedding`);
-      return 0;
+      return { outcome: 'removed' };
     }
     const t0 = Date.now();
-    const res = await getDaemon().call<{ chunks: number; embed_ms: number; total_ms: number }>(
+    const res = await getDaemon().call<IndexUpsertResult & { total_ms: number }>(
       'upsert', {
         path: normalizeDaemonPath(filePath),
         path_identity: filesystemPath.identity(filePath),
         content: text,
-        ext,
-        file_hash: fileHash,
-        metadata: {},
       },
     );
     log.info(
-      `upsert ${filePath}: ${res.chunks} chunks ` +
-        `(embed ${fmtMs(res.embed_ms)}, total ${fmtMs(res.total_ms)}, wall ${fmtMs(Date.now() - t0)})`,
+      `upsert ${filePath}: ${res.outcome} ` +
+        `(MFS ${fmtMs(res.total_ms)}, wall ${fmtMs(Date.now() - t0)})`,
     );
-    return res.chunks;
+    return { outcome: res.outcome };
   }
 
-  async upsertConvertedFile(sourceAbs: string, derivedContent: string, sourceHash: string, derivedExt = '.md'): Promise<number> {
-    const pausedHash = await this.pausedIndexedHash(sourceAbs);
-    const pausedDisposition = pausedWriteDisposition(pausedHash, sourceHash);
-    if (pausedDisposition !== 'index') {
-      if (pausedDisposition === 'retain') return 1;
-      await getDaemon().call('delete', { path: normalizeDaemonPath(sourceAbs) });
-      return 0;
-    }
+  async upsertConvertedFile(sourceAbs: string, derivedContent: string, derivedExt = '.md'): Promise<IndexUpsertResult> {
     // Convertible sources: the searchable text is stored in AppData, but
-    // indexed UNDER the source's own path so folder-scoped search finds it
-    // and daemon source-file hash diff matches. HTML-derived DOCX content is
+    // indexed UNDER the source's own path so folder-scoped search finds it.
+    // HTML-derived DOCX content is
     // flattened with the same transform as source HTML before we feed MFS.
     const ext = derivedExt.toLowerCase();
     const content = ext === '.html' || ext === '.htm'
       ? analyzeHtml(derivedContent).plaintext
       : derivedContent;
-    if (content.trim().length === 0) {
-      await getDaemon().call('delete', { path: normalizeDaemonPath(sourceAbs) });
-      return 0;
+    const tooLarge = contentSizeError(content);
+    if (content.trim().length === 0 || tooLarge) {
+      await getDaemon().call('delete', {
+        path: normalizeDaemonPath(sourceAbs),
+        path_identity: filesystemPath.identity(sourceAbs),
+      });
+      if (tooLarge) log.warn(`upsert(converted) ${sourceAbs}: ${tooLarge}`);
+      return { outcome: 'removed' };
     }
-    const res = await getDaemon().call<{ chunks: number; embed_ms: number; total_ms: number }>(
+    const res = await getDaemon().call<IndexUpsertResult & { total_ms: number }>(
       'upsert', {
         path: normalizeDaemonPath(sourceAbs),
         path_identity: filesystemPath.identity(sourceAbs),
         content,
-        ext: '.md',
-        file_hash: sourceHash,
-        metadata: {},
       },
     );
-    log.info(`upsert(converted) ${sourceAbs}: ${res.chunks} chunks (embed ${fmtMs(res.embed_ms)})`);
-    return res.chunks;
+    log.info(`upsert(converted) ${sourceAbs}: ${res.outcome} (MFS ${fmtMs(res.total_ms)})`);
+    return { outcome: res.outcome };
   }
 
   async deleteFile(filePath: string): Promise<void> {
-    await getDaemon().call('delete', { path: normalizeDaemonPath(filePath) });
+    if (!this.hasBindingFor(filePath)) return;
+    await getDaemon().call('delete', {
+      path: normalizeDaemonPath(filePath),
+      path_identity: filesystemPath.identity(filePath),
+    });
   }
 
   async deletePathPrefix(prefix: string): Promise<void> {
+    if (!this.hasBindingFor(prefix)) return;
     const norm = normalizeDaemonPath(prefix);
     const res = await getDaemon().call<{ removed: number }>(
-      'delete_prefix', { prefix: norm },
+      'delete_prefix', { prefix: norm, prefix_identity: filesystemPath.identity(prefix) },
     );
-    log.info(`delete_prefix ${prefix}: removed ${res.removed} chunk(s) from index`);
+    log.info(`delete_prefix ${prefix}: removed ${res.removed} document(s) from index`);
   }
 
-  async renameFile(oldPath: string, newPath: string, content: string): Promise<number> {
-    const { text, ext, fileHash } = prepareForIndex(newPath, content);
-    const t0 = Date.now();
-    const res = await getDaemon().call<{ chunks: number; embed_ms: number; fast_path?: boolean }>(
-      'rename', {
-        old: normalizeDaemonPath(oldPath),
-        new: normalizeDaemonPath(newPath),
-        new_identity: filesystemPath.identity(newPath),
-        content: text,
-        ext,
-        file_hash: fileHash,
-        metadata: {},
-      },
-    );
-    // Fast path reuses the cached vectors (embed_ms == 0); only the
-    // fallback actually re-embeds. Log which one ran so a slow rename
-    // is distinguishable from a copied one.
-    const how = res.fast_path ? 'copied' : 're-embedded';
-    log.info(
-      `rename ${oldPath} → ${newPath}: ${how} ${res.chunks} chunks ` +
-        `(embed ${fmtMs(res.embed_ms)}, wall ${fmtMs(Date.now() - t0)})`,
-    );
-    return res.chunks;
+  async renameFile(oldPath: string, newPath: string, content: string): Promise<void> {
+    await this.deleteFile(oldPath);
+    await this.upsertFile(newPath, content);
   }
 
   async renamePathPrefix(
@@ -305,63 +278,26 @@ export class MfsIndexer implements Indexer {
   ): Promise<void> {
     const oldRoot = normalizeDaemonPath(oldPrefix);
     const newRoot = normalizeDaemonPath(newPrefix);
-    if (files.length === 0) {
-      await getDaemon().call('rename_prefix', { old: oldRoot, new: newRoot, files: [] });
-      return;
-    }
-    const payload = files.map((f) => {
-      const rel = filesystemPath.relative(oldRoot, normalizeDaemonPath(f.path));
+    await this.deletePathPrefix(oldRoot);
+    for (const file of files) {
+      const rel = filesystemPath.relative(oldRoot, normalizeDaemonPath(file.path));
       if (rel == null || rel === '') {
-        throw new Error(`rename source is outside prefix: ${f.path}`);
+        throw new Error(`rename source is outside prefix: ${file.path}`);
       }
-      const newP = filesystemPath.join(newRoot, rel);
-      const { text, ext, fileHash } = prepareForIndex(newP, f.content);
-      return {
-        path: normalizeDaemonPath(newP),
-        path_identity: filesystemPath.identity(newP),
-        content: text,
-        ext,
-        file_hash: fileHash,
-      };
-    });
-    const t0 = Date.now();
-    const res = await getDaemon().call<{ files: number; chunks: number; fast_path_files?: number }>(
-      'rename_prefix', { old: oldRoot, new: newRoot, files: payload },
-    );
-    const fast = res.fast_path_files ?? 0;
-    log.info(
-      `rename_prefix ${oldPrefix} → ${newPrefix}: ` +
-        `${res.files} files (${fast} copied, ${res.files - fast} re-embedded), ` +
-        `${res.chunks} chunks (wall ${fmtMs(Date.now() - t0)})`,
-    );
+      await this.upsertFile(filesystemPath.join(newRoot, rel), file.content);
+    }
   }
 
-  async syncDiff(folder?: string): Promise<SyncDiff> {
-    const args: Record<string, unknown> = {};
-    if (folder) args.folder = normalizeDaemonPath(folder);
-    const res = await getDaemon().call<{
-      added: string[];
-      modified: string[];
-      deleted: string[];
-      renamed?: Array<{ old: string; new: string; file_hash: string }>;
-      unchanged_count: number;
-    }>('scan_diff', args);
-    const renamed = (res.renamed ?? []).map((r) => ({ old: normalizeDaemonPath(r.old), new: normalizeDaemonPath(r.new), fileHash: r.file_hash }));
-    return {
-      added: res.added.map(normalizeDaemonPath),
-      modified: res.modified.map(normalizeDaemonPath),
-      deleted: res.deleted.map(normalizeDaemonPath),
-      renamed,
+  async search(query: string, topK: number, folder: string, pathPrefix?: string, extensions?: string[]): Promise<SearchHit[]> {
+    const args: Record<string, unknown> = {
+      query,
+      top_k: topK,
+      folder: normalizeDaemonPath(folder),
     };
-  }
-
-  async search(query: string, topK: number, folder?: string, pathPrefix?: string, extensions?: string[]): Promise<SearchHit[]> {
-    const args: Record<string, unknown> = { query, top_k: topK };
-    if (folder) args.folder = normalizeDaemonPath(folder);
     if (pathPrefix) args.path_prefix = normalizeDaemonPath(pathPrefix);
     if (extensions && extensions.length > 0) args.extensions = extensions;
     const res = await getDaemon().call<{ hits: DaemonHit[] }>('search', args);
-    const hits = res.hits.map((h) => ({
+    return res.hits.map((h) => ({
       fileName: normalizeDaemonPath(h.path),
       chunkIndex: h.chunk_index,
       content: h.chunk_text,
@@ -375,20 +311,46 @@ export class MfsIndexer implements Indexer {
       endLine: h.end_line,
       score: h.score,
     }));
-    const pending = new Set<string>();
-    const candidateFolders = folder ? [folder] : [...getDaemon().knownBindings().keys()];
-    for (const candidate of candidateFolders) {
-      if (!getSemanticIndexingDecision(candidate)) continue;
-      const status = await this.status(candidate);
-      for (const source of status.pending) pending.add(filesystemPath.identity(source));
-    }
-    return pending.size > 0 ? excludePausedPendingHits(hits, pending) : hits;
+  }
+
+  async grep(query: string, folder: string, options: ExactSearchOptions): Promise<ExactSearchResult> {
+    const args: Record<string, unknown> = {
+      query,
+      folder: normalizeDaemonPath(folder),
+      case_strict: options.caseStrict,
+      whole_word: options.wholeWord,
+    };
+    if (options.pathPrefix) args.path_prefix = normalizeDaemonPath(options.pathPrefix);
+    if (options.extensions?.length) args.extensions = options.extensions;
+    const result = await getDaemon().call<{
+      files: DaemonGrepFile[];
+      total_matches: number;
+      truncated: boolean;
+    }>('grep', args);
+    return {
+      files: result.files.map((file) => ({
+        path: file.path,
+        totalMatches: file.total_matches,
+        matches: file.matches.map((raw) => {
+          const match = grepSnippet(raw);
+          const audioTimestampMs = isAudioFile(file.path)
+            ? audioTimestampForLine(raw.text)
+            : undefined;
+          return {
+            ...match,
+            ...(audioTimestampMs == null ? {} : { audioTimestampMs }),
+          };
+        }),
+      })),
+      totalMatches: result.total_matches,
+      truncated: result.truncated,
+    };
   }
 
   async status(folder?: string): Promise<IndexerStatus> {
-    // Per-folder status: ask the daemon directly. It owns both disk scan
-    // and indexed-name truth, which keeps Node from maintaining a second
-    // partial cache that can drift from the vector store.
+    // Per-folder status comes directly from MFS accepted document revisions,
+    // which keeps Node from maintaining a second partial cache that can drift
+    // from the vector store.
     const args: Record<string, unknown> = {};
     if (folder) args.folder = normalizeDaemonPath(folder);
     const res = await getDaemon().call<{
@@ -415,13 +377,11 @@ export class MfsIndexer implements Indexer {
     };
   }
 
-  async listFiles(folder?: string): Promise<Record<string, string>> {
+  async listDocuments(folder?: string): Promise<string[]> {
     const args: Record<string, unknown> = {};
     if (folder) args.folder = normalizeDaemonPath(folder);
-    const res = await getDaemon().call<{ files: Record<string, string> }>('list', args);
-    const out: Record<string, string> = {};
-    for (const [abs, hash] of Object.entries(res.files)) out[normalizeDaemonPath(abs)] = hash;
-    return out;
+    const res = await getDaemon().call<{ documents: string[] }>('list_documents', args);
+    return res.documents.map(normalizeDaemonPath);
   }
 
   async closeStore(): Promise<void> {
@@ -433,40 +393,10 @@ export class MfsIndexer implements Indexer {
       await daemon.close();
     }
     this.folderReady.clear();
-    this.legacySources = null;
-    this.legacySourceGeneration = -1;
   }
 
   async close(): Promise<void> {
     await getDaemon().close();
-  }
-
-  private async reconcileLegacySourceSpelling(root: string): Promise<void> {
-    const daemon = getDaemon();
-    const generation = daemon.currentGeneration();
-    if (this.legacySources === null || this.legacySourceGeneration !== generation) {
-      const listed = await daemon.call<{ files: Record<string, string> }>('list', {});
-      this.legacySources = new Map(Object.entries(listed.files));
-      this.legacySourceGeneration = generation;
-    }
-
-    const boundRoots = [...daemon.knownBindings().keys()];
-    for (const [oldSource, fileHash] of [...this.legacySources.entries()]) {
-      const retained = retainedIndexedSource(root, oldSource, boundRoots);
-      if (!retained) continue;
-      try {
-        const result = await daemon.call<{ reused: boolean }>('reconcile_source', {
-          old: oldSource,
-          new: retained,
-          file_hash: fileHash,
-        });
-        this.legacySources.delete(oldSource);
-        if (result.reused) this.legacySources.set(retained, fileHash);
-        log.info(`reconciled indexed source spelling ${oldSource} → ${retained}`);
-      } catch (err) {
-        log.warn(`indexed source spelling reconcile failed for ${oldSource}: ${(err as Error).message}`);
-      }
-    }
   }
 }
 

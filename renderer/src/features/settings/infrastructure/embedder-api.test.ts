@@ -6,7 +6,6 @@ import { createEmbedderAdapter } from './embedder-api';
 
 const signal = new AbortController().signal;
 const state = {
-  account: { active: false, signedIn: false },
   authorized: false,
   hasKey: false,
   model: 'text-embedding-3-small',

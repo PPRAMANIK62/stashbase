@@ -7,45 +7,12 @@ import {
 } from './semantic-readiness';
 
 describe('semantic readiness', () => {
-  it('says nothing about a missing source, and explains used-up credits without blocking keyword search', () => {
+  it('says nothing about a missing BYOK source', () => {
     // Not set up is not a state the reader is told about: the mode is not
     // offered until it is turned on in Settings, so there is no notice to show.
     const missing = { state: 'not-set-up' } as const;
     expect(canSemanticSearch(missing)).toBe(false);
     expect(semanticIndexNotice(missing)).toBeNull();
-
-    const quota = { state: 'quota-exhausted' } as const;
-    expect(canSemanticSearch(quota)).toBe(false);
-    expect(semanticIndexNotice(quota)?.title).toContain(
-      'credits for search by meaning are used up',
-    );
-    expect(semanticIndexNotice(quota)?.tone).toBe('attention');
-  });
-
-  it('offers build and resume decisions with the workload size', () => {
-    expect(
-      semanticIndexNotice({
-        state: 'awaiting-decision',
-        workload: { estimatedBytes: 3 * 1024 * 1024, files: 12 },
-      }),
-    ).toMatchObject({
-      actions: ['build', 'not-now'],
-      detail:
-        'About 12 files waiting · about 3.0 MiB. Preparing them may take a while and use provider quota. Keyword search keeps working.',
-      prominent: true,
-      title: 'Many files need preparation for search by meaning',
-    });
-
-    const workload = { estimatedBytes: null, files: 1 };
-    const partiallyPaused = { partial: true, state: 'paused', workload } as const;
-    expect(canSemanticSearch(partiallyPaused)).toBe(true);
-    expect(semanticIndexNotice(partiallyPaused)).toMatchObject({
-      actions: ['resume', 'not-now'],
-      detail:
-        'About 1 file waiting. Preparing them may take a while and use provider quota. Keyword search keeps working.',
-      title: 'Preparation for search by meaning is paused',
-    });
-    expect(canSemanticSearch({ partial: false, state: 'paused', workload })).toBe(false);
   });
 
   it('reports progress, failure, and readiness', () => {
