@@ -19,7 +19,8 @@ const restore = (id) => steps.find((step) => step.id === id);
 function fingerprint(id, overrides = {}) {
   const expression = restore(id).with.key.match(/hashFiles\((.*?)\)/)[1];
   const patterns = [...expression.matchAll(/'([^']+)'/g)].map((match) => match[1]);
-  const files = [...new Set(patterns.flatMap((pattern) => [...fs.globSync(pattern, { cwd: root })]))].sort();
+  const files = [...new Set(patterns.flatMap((pattern) => [...fs.globSync(pattern, { cwd: root })]
+    .map((file) => file.replaceAll('\\', '/'))))].sort();
   const digest = createHash('sha256');
   for (const file of files) digest.update(file).update(overrides[file] ?? read(file));
   return digest.digest('hex');
