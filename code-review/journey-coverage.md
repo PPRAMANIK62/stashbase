@@ -130,6 +130,9 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`, `server
   edits, failed empty-source removal with same-content retry, and consecutive
   projection acceptance while a local embedder blocks. They do not establish
   provider completion or search latency during a pending revision.
+  HTTP source-format contracts isolate index admission; they do not start or
+  verify the Python daemon. Real daemon lifecycle belongs to Electron smoke
+  and the built-service pass below.
 - **Driven Runtime Pass:** isolated built-app passes cover crash → journal offer
   → restore dirty text → versioned autosave → journal clearing with a stand-in
   keyring; distinct whitespace recovery identities; preview reuse/keep, history,

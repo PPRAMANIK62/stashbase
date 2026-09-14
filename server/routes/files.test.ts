@@ -12,7 +12,11 @@ import { clearCurrentFolder, removeRecentAsync, openProjectFolder } from "../fol
 import { requireFolder } from "../http.ts";
 import { mount } from "./files.ts";
 
-test("versioned document route accepts JSON through the shared source authority", async () => {
+test("versioned document route accepts JSON through the shared source authority", async (t) => {
+  // This route contract owns source bytes, not the Python daemon lifecycle.
+  // A real upsert leaves a child alive in a clean CI environment.
+  const { indexer } = await import('../state.ts');
+  t.mock.method(indexer, 'upsertFile', async () => ({ outcome: 'updated' }));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-json-route-"));
   const source = '\uFEFF{\r\n  "value": 1\r\n}\r\n';
   fs.writeFileSync(path.join(root, "data.json"), source, "utf8");
