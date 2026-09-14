@@ -1,3 +1,4 @@
+import { smokeDaemon } from './packaging/smoke-daemon.mjs';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,3 +18,6 @@ execFileSync(python, ['-m', 'unittest', 'discover', '-s', 'python', '-p', '*_tes
   cwd: root,
   stdio: 'inherit',
 });
+
+// Exercise the same RPC sequence used against the frozen release daemon.
+await smokeDaemon(python, [path.join(root, 'python', 'stashbase_daemon.py')]);

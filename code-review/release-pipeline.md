@@ -181,6 +181,11 @@ no fallback keys. Changed inputs, image rotation, eviction, or an unfinished
 warm-up result in an ordinary cold build. UI-only releases can reuse unchanged
 components. Cache hit status is recorded in the Actions job summary.
 
+Source Python validation and packaged smoke share the daemon RPC probe in
+`scripts/packaging/smoke-daemon.mjs`: bind an empty folder, list its documents,
+close the store, and require clean process exit. The source probe catches
+protocol drift early; only the release probe establishes frozen execution.
+
 Python runtime and isolated build dependencies use `python/constraints.txt`,
 generated with `pnpm lock:python` (requires `uv`). The input digest check rejects
 requirements edits without a refreshed resolution. Review dependency updates

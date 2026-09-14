@@ -1,3 +1,4 @@
+import { smokeDaemon } from './packaging/smoke-daemon.mjs';
 import { createExtractorRuntime } from '../server/extractor-runtime.ts';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -787,81 +788,6 @@ async function smokePdfExtractor(extractBin) {
   }
 }
 
-async function smokeDaemon(daemonBin) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-smoke-py-'));
-  const folderHome = path.join(tmp, 'folder-home');
-  const folderRoot = path.join(folderHome, 'Smoke');
-  const storeRoot = path.join(tmp, 'store');
-  fs.mkdirSync(folderRoot, { recursive: true });
-  const child = spawn(daemonBin, ['--store-root', storeRoot], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-  let output = '';
-  try {
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`daemon smoke did not finish within 20s\n${output.slice(-4_000)}`));
-      }, 20_000);
-      let settled = false;
-      const settle = (fn, value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        fn(value);
-      };
-      const send = (id, op, args) => {
-        child.stdin.write(`${JSON.stringify({ id, op, args })}\n`);
-      };
-      child.stdout.on('data', (chunk) => {
-        output += chunk.toString();
-        for (const line of chunk.toString().split(/\r?\n/)) {
-          if (!line.trim()) continue;
-          try {
-            const msg = JSON.parse(line);
-            if (msg.event === 'ready') {
-              send(1, 'bind_folder', { folder: folderRoot, provider: 'openai', api_key: 'sk-smoke' });
-              continue;
-            }
-            if (msg.id === 1) {
-              if (!msg.ok) {
-                settle(reject, new Error(`daemon bind_folder failed: ${msg.error}\n${output.slice(-4_000)}`));
-                continue;
-              }
-              send(2, 'list', { folder: folderRoot });
-              continue;
-            }
-            if (msg.id === 2) {
-              if (!msg.ok) {
-                settle(reject, new Error(`daemon list failed: ${msg.error}\n${output.slice(-4_000)}`));
-                continue;
-              }
-              settle(resolve);
-            }
-            if (msg.event === 'error') settle(reject, new Error(`daemon error: ${msg.error}`));
-          } catch {
-            // Keep collecting output; the daemon should speak JSON lines.
-          }
-        }
-      });
-      child.stderr.on('data', (chunk) => { output += chunk.toString(); });
-      child.on('error', (err) => settle(reject, err));
-      child.on('exit', (code, signal) => {
-        settle(reject, new Error(`daemon exited before smoke completed (code=${code}, signal=${signal})\n${output.slice(-4_000)}`));
-      });
-    });
-    console.log('[smoke] python daemon responded to bind/list');
-  } finally {
-    child.stdin.end();
-    if (child.exitCode == null) child.kill('SIGTERM');
-    await Promise.race([
-      new Promise((resolve) => child.once('exit', resolve)),
-      sleep(2_000).then(() => {
-        if (child.exitCode == null) child.kill('SIGKILL');
-      }),
-    ]);
-    fs.rmSync(tmp, { recursive: true, force: true });
-  }
-}
 
 const appPath = findPackagedApp();
 const layout = packagedLayout(appPath);
