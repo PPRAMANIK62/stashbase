@@ -85,7 +85,7 @@ for (const entry of ['existing.md', '.hidden', 'node_modules', '👋 Start Here'
 test('an unreadable home is not treated as empty and remains retryable', (t) => {
   const readdir = fs.readdirSync;
   const unreadable = t.mock.method(fs, 'readdirSync', (...args: Parameters<typeof readdir>) => {
-    if (args[0] === home) throw Object.assign(new Error('unreadable'), { code: 'EACCES' });
+    if (path.resolve(String(args[0])) === path.resolve(home)) throw Object.assign(new Error('unreadable'), { code: 'EACCES' });
     return readdir(...args);
   });
   folder.ensureFolderHome();

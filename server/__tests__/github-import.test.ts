@@ -499,7 +499,9 @@ test('Git availability probing participates in cancellation and shutdown', async
     const started = new Promise<void>((resolve) => { spawned = resolve; });
     const spawn = childProcess.spawn;
     let proc: childProcess.ChildProcess | undefined;
-    const mock = t.mock.method(childProcess, 'spawn', (_command: string, _args: string[], options: childProcess.SpawnOptions) => {
+    const mock = t.mock.method(childProcess, 'spawn', (command: string, args: string[], options: childProcess.SpawnOptions) => {
+      // Keep Windows taskkill real so cancellation can retire the probe.
+      if (command !== 'git') return spawn(command, args, options);
       proc = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], options);
       spawned();
       return proc;
@@ -527,7 +529,8 @@ test('Git availability probing participates in cancellation and shutdown', async
 test('Git availability probe timeout terminates the child and reports unavailable', async (t) => {
   const spawn = childProcess.spawn;
   let proc: childProcess.ChildProcess | undefined;
-  const mock = t.mock.method(childProcess, 'spawn', (_command: string, _args: string[], options: childProcess.SpawnOptions) => {
+  const mock = t.mock.method(childProcess, 'spawn', (command: string, args: string[], options: childProcess.SpawnOptions) => {
+    if (command !== 'git') return spawn(command, args, options);
     proc = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], options);
     return proc;
   });

@@ -12,6 +12,7 @@ import { registerProjectFolderAsync } from './folder.ts';
 import { agentContextFile, readProjectFile } from './project-file-reader.ts';
 import { registerAttributedAgentSession, unregisterAttributedAgentSession } from './agent-session-registry.ts';
 import { withAgentProjectScope } from './project-request-scope.ts';
+import { filesystemPath } from './filesystem-path.ts';
 
 test('prepared reads and context require a current source and complete output, including legacy derived paths', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-prepared-read-'));
@@ -43,7 +44,7 @@ test('prepared reads and context require a current source and complete output, i
       assert.equal((await agentContextFile(source)).available, true);
       const read = await readProjectFile(source);
       assert.equal(read.content, completed);
-      assert.equal(read.path, source);
+      assert.equal(read.path, filesystemPath.absolute(source));
       assert.ok(read.version);
       assert.deepEqual(await readProjectFile(derived), read);
       const window = await readProjectFile(derived, { offset: 1, limit: 1 });
