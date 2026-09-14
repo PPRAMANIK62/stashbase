@@ -49,7 +49,7 @@ const log = logger('routes/indexing');
 const retrieval = createRetrieval();
 
 function parseFolderParam(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
 async function requireMemberFolderRoot(ref: string): Promise<string> {
@@ -126,7 +126,7 @@ export async function reprocessFileInFolder(
   folderName?: string,
   options: { language?: string } = {},
 ): Promise<'conversion' | 'index'> {
-  const rel = typeof relPath === 'string' ? relPath.trim() : '';
+  const rel = typeof relPath === 'string' ? relPath : '';
   if (!rel) {
     const err = new Error('path required');
     (err as any).status = 400;
@@ -139,7 +139,7 @@ export async function reprocessFileInFolder(
     throw err;
   }
 
-  const { folderRoot } = await requireRequestFolder(folderName?.trim() || undefined);
+  const { folderRoot } = await requireRequestFolder(folderName || undefined);
 
   const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   const sourcePath = sourcePathForAbs(abs);
@@ -182,13 +182,13 @@ function audioReprocessBlockMessage(block: ConfiguredTranscriptionBlock): string
 }
 
 async function cancelFilePreparationInFolder(relPath: string, folderName?: string): Promise<boolean> {
-  const rel = typeof relPath === 'string' ? relPath.trim() : '';
+  const rel = typeof relPath === 'string' ? relPath : '';
   if (!rel) {
     const err = new Error('path required');
     (err as any).status = 400;
     throw err;
   }
-  const { folderRoot } = await requireRequestFolder(folderName?.trim() || undefined);
+  const { folderRoot } = await requireRequestFolder(folderName || undefined);
   const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   const sourcePath = sourcePathForAbs(abs);
   if (isAudioFile(rel)) return cancelAudioPreparation(sourcePath);
@@ -198,7 +198,7 @@ async function cancelFilePreparationInFolder(relPath: string, folderName?: strin
 }
 
 async function prepareConvertibleInFolder(relPath: string, folderName?: string): Promise<void> {
-  const rel = typeof relPath === 'string' ? relPath.trim() : '';
+  const rel = typeof relPath === 'string' ? relPath : '';
   if (!rel) {
     const err = new Error('path required');
     (err as any).status = 400;
@@ -210,7 +210,7 @@ async function prepareConvertibleInFolder(relPath: string, folderName?: string):
     (err as any).code = 'PATH_NOT_PREPARABLE';
     throw err;
   }
-  const { folderRoot } = await requireRequestFolder(folderName?.trim() || undefined);
+  const { folderRoot } = await requireRequestFolder(folderName || undefined);
   const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   if (!prepareConvertibleSource(abs, rel)) {
     const err = new Error('only DOCX and media files require interactive preparation');
@@ -379,9 +379,9 @@ export function mount(app: express.Express): void {
   // reconcile so the index is rebuilt from source.
   app.post('/api/files/reprocess', async (req, res) => {
     try {
-      const rel = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+      const rel = typeof req.body?.path === 'string' ? req.body.path : '';
       const targetFolder = typeof req.body?.folder === 'string' && req.body.folder.trim()
-        ? req.body.folder.trim()
+        ? req.body.folder
         : undefined;
       const mode = await reprocessFileInFolder(rel, targetFolder, { language: req.body?.language });
       res.json({ ok: true, mode });
@@ -392,9 +392,9 @@ export function mount(app: express.Express): void {
 
   app.post('/api/files/cancel-preparation', async (req, res) => {
     try {
-      const rel = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
+      const rel = typeof req.body?.path === 'string' ? req.body.path : '';
       const targetFolder = typeof req.body?.folder === 'string' && req.body.folder.trim()
-        ? req.body.folder.trim()
+        ? req.body.folder
         : undefined;
       const cancelled = await cancelFilePreparationInFolder(rel, targetFolder);
       res.json({ ok: true, cancelled });
@@ -410,7 +410,7 @@ export function mount(app: express.Express): void {
 async function resolveScopePrefix(folderRoot: string, raw: unknown): Promise<string | undefined | false> {
   if (raw == null) return undefined;
   if (typeof raw !== 'string') return false;
-  const rel = raw.trim().replace(/^\/+|\/+$/g, '');
+  const rel = raw.replace(/^\/+|\/+$/g, '');
   if (!rel) return undefined;
   if (!isRetrievalEligibleDirectoryPath(rel)) return false;
   try {

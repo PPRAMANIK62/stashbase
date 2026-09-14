@@ -143,6 +143,8 @@ test('an explicit session folder is accepted only when it is a registered projec
   assert.deepEqual(accepted, { ok: true, folder: '/Users/me/Projects/Research' });
 
   // Absent/empty → fall back to the window's current folder (no explicit binding).
+  assert.deepEqual(resolveAgentSessionFolder('/Users/me/Projects/Research ', ['/Users/me/Projects/Research ']), { ok: true, folder: '/Users/me/Projects/Research ' });
+  assert.equal(resolveAgentSessionFolder('/Users/me/Projects/Research ', members).ok, false);
   assert.deepEqual(resolveAgentSessionFolder(undefined, members), { ok: true });
   assert.deepEqual(resolveAgentSessionFolder(null, members), { ok: true });
   assert.deepEqual(resolveAgentSessionFolder('   ', members), { ok: true });

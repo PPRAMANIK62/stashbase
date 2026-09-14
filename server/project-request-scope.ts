@@ -7,7 +7,7 @@ import { ProjectOperationError } from './project-operations/errors.ts';
 const requestScope = new AsyncLocalStorage<{ folder: string | null }>();
 
 export function withAgentProjectScope<T>(sessionId: string | undefined, work: () => T): T {
-  if (!sessionId) return work();
+  if (sessionId == null) return work();
   const session = attributedAgentSession(sessionId);
   if (!session) throw new ProjectOperationError('The Chat session is no longer available.', 409, 'SESSION_UNAVAILABLE');
   return requestScope.run({ folder: session.boundFolder() }, work);

@@ -193,3 +193,46 @@ test("folder-scoped DOCX fallback remains reachable without an active folder", a
     fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }
 });
+
+test('folder-explicit listing, reads, saves, and index status preserve a trailing space', { skip: process.platform === 'win32' }, async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-spaced-scope-'));
+  const root = path.join(scratch, 'Project ');
+  fs.mkdirSync(root);
+  fs.writeFileSync(path.join(root, 'note.md'), 'draft');
+  await openProjectFolder(root);
+  const { indexer } = await import('../state.ts');
+  t.mock.method(indexer, 'upsertFile', async () => ({ outcome: 'updated' }));
+  t.mock.method(indexer, 'status', async (folder?: string) => {
+    assert.equal(folder, root);
+    return { total: 0, indexed: 0, pendingCount: 0, pending: [], orphanedCount: 0, orphaned: [], upToDate: true, indexReady: true };
+  });
+  const { mount: mountIndexing } = await import('./indexing.ts');
+  const app = express();
+  app.use(express.json());
+  mount(app);
+  mountIndexing(app);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const base = `http://127.0.0.1:${address.port}`;
+  const scope = `folder=${encodeURIComponent(root)}`;
+  try {
+    for (const endpoint of ['/api/files', '/api/files/note.md', '/api/index-status']) {
+      const result = await fetch(`${base}${endpoint}?${scope}`);
+      assert.equal(result.status, 200, `${endpoint}: ${await result.text()}`);
+    }
+    const saved = await fetch(`${base}/api/files/note.md?${scope}`, {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'next draft', baseVersion: fileVersion('note.md') }),
+    });
+    assert.equal(saved.status, 200, await saved.text());
+    assert.equal(fs.readFileSync(path.join(root, 'note.md'), 'utf8'), 'next draft');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    clearCurrentFolder();
+    await removeRecentAsync(root);
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});
