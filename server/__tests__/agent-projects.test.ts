@@ -112,7 +112,7 @@ test('create_project validates the name as one cross-platform-safe segment', asy
 test('create_project defaults to the folder home and accepts only owned locations', async () => {
   const scope = { folderHome: HOME, memberRoots: [MEMBER] };
   const defaulted = await resolveCreateProjectTargetAsync('Proj', undefined, scope);
-  assert.deepEqual(defaulted, { ok: true, parent: HOME, target: projectPath('Proj'), name: 'Proj', owner: HOME });
+  assert.deepEqual(defaulted, { ok: true, parent: HOME, target: projectPath('Proj'), name: 'Proj', owner: filesystemPath.absolute(HOME) });
 
   // The folder home itself, inside it, a member root, and inside a member
   // root are all valid explicit locations.
@@ -275,7 +275,7 @@ test('history persistence failure keeps the registered project without moving th
     assert.equal(result.rebound, false);
     assert.match(result.note, /history ownership could not be saved/i);
     assert.equal(session.reboundTo, null);
-    assert.equal(agentSessionFolderOverride('claude', id), MEMBER);
+    assert.equal(agentSessionFolderOverride('claude', id), filesystemPath.absolute(MEMBER));
     assert.deepEqual(log.registered, [result.path]);
     assert.deepEqual(log.cleared, []);
   } finally {
