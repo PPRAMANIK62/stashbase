@@ -80,5 +80,7 @@ export function runGates(list = gates, options = {}) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const results = runGates();
-  process.exit(results.every((result) => result.passed) ? 0 : 1);
+  // Failure diagnostics can exceed a pipe buffer. Let Node flush them before
+  // exiting; process.exit() truncates the error tail in hosted CI logs.
+  process.exitCode = results.every((result) => result.passed) ? 0 : 1;
 }

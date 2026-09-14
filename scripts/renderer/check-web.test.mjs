@@ -3,9 +3,27 @@
 // until something fails. Each case below runs fake gates and asserts the
 // runner reached every one of them and said so.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { runGates } from './check-web.mjs';
+
+test('the CLI flushes long failure diagnostics before exiting through a pipe', () => {
+  const preload = `
+    import childProcess from 'node:child_process';
+    import { syncBuiltinESMExports } from 'node:module';
+    childProcess.spawnSync = () => ({ status: 1, stdout: 'x'.repeat(128 * 1024) + '\\nEND-OF-GATE\\n', stderr: '' });
+    syncBuiltinESMExports();
+  `;
+  const result = spawnSync(process.execPath, [
+    '--import', `data:text/javascript,${encodeURIComponent(preload)}`,
+    fileURLToPath(new URL('./check-web.mjs', import.meta.url)),
+  ], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout.match(/END-OF-GATE/g)?.length, 12);
+  assert.match(result.stdout, /12 of 12 renderer gates failed:/);
+});
 
 const fakeGates = [
   { name: 'first', command: 'node', args: ['-e', 'process.exit(0)'] },
