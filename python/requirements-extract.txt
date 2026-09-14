@@ -8,4 +8,6 @@
 # ONNXRuntime and RapidOCR model data), so they are intentionally not part
 # of the default `pnpm setup:python` flow.
 pymupdf4llm>=0.0.17
-rapidocr-onnxruntime>=1.2.3
+# Later releases declare Python <3.13; keep the Python 3.13-compatible release.
+# uv's universal resolution alone does not prove pip can install the result.
+rapidocr-onnxruntime==1.2.3

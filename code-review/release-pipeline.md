@@ -181,6 +181,11 @@ requirements edits without a refreshed resolution. Review dependency updates
 in the generated file; the resolver retains existing pins where compatible.
 The build reconciles its environment before freezing instead of accepting any
 already-installed PyInstaller version. Source setup uses the same constraints.
+After regenerating constraints, validate a clean resolution with Python 3.13's
+`pip install --dry-run --ignore-installed -c python/constraints.txt -r python/requirements-extract.txt -r python/build-requirements.txt`.
+Universal uv resolution and an existing environment can miss index-level Python
+compatibility restrictions. RapidOCR stays on 1.2.3 because later releases
+declare Python <3.13; the hosted cold component builds verify actual installation.
 
 Save Python bundles before macOS signing mutates the extractor. Every release
 still signs/notarizes its macOS components, creates its own versioned extractor

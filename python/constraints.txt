@@ -7,7 +7,6 @@ blake3==1.0.9
 cachetools==7.1.8
 certifi==2026.7.22
 charset-normalizer==3.5.1
-colorama==0.4.6 ; sys_platform == 'win32'
 faiss-cpu==1.15.0
 filelock==3.32.5
 flatbuffers==25.12.19
@@ -52,7 +51,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.3
 pywin32-ctypes==0.2.3 ; sys_platform == 'win32'
 pyyaml==6.0.3
-rapidocr-onnxruntime==1.4.4
+rapidocr-onnxruntime==1.2.3
 requests==2.34.2
 rfc8785==0.1.4
 setuptools==84.0.0
@@ -61,7 +60,6 @@ six==1.17.0
 sniffio==1.3.1
 tabulate==0.10.0
 tomlkit==0.15.1
-tqdm==4.70.1
 trove-classifiers==2026.6.1.19
 truststore==0.10.4 ; sys_platform != 'emscripten'
 typing-extensions==4.16.0
@@ -69,4 +67,4 @@ typing-inspection==0.4.4
 tzdata==2026.4 ; sys_platform == 'emscripten' or sys_platform == 'win32'
 urllib3==2.7.0
 
-# requirements-sha256: c76dc0300c1f0cb3145f2c52e58ebe3a1a914e74d7ea7910de7413ecde209a88
+# requirements-sha256: f717d469a0c34dc8581b354f0d4079f42bbf0eb69d4c9d88668beea71c3fe1b1
