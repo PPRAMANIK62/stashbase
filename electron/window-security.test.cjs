@@ -71,3 +71,47 @@ test('application windows deny popups, unexpected navigation, webviews, and perm
   permissionRequest(null, 'camera', (allowed) => { permissionGranted = allowed; });
   assert.equal(permissionGranted, false);
 });
+
+test('application windows grant the clipboard only to their own origin', () => {
+  const webContents = new EventEmitter();
+  let permissionCheck;
+  let permissionRequest;
+  webContents.setWindowOpenHandler = () => {};
+  webContents.session = {
+    setPermissionCheckHandler(handler) { permissionCheck = handler; },
+    setPermissionRequestHandler(handler) { permissionRequest = handler; },
+  };
+
+  secureApplicationWindow({ webContents }, 'app://renderer');
+
+  const decide = (permission, details) => {
+    let granted = null;
+    permissionRequest(null, permission, (allowed) => { granted = allowed; }, details);
+    return granted;
+  };
+
+  // The write a Settings panel or the transcript asks for. Chromium requests it
+  // under this name; the window's own driven pass is what pins the spelling.
+  assert.equal(
+    decide('clipboard-sanitized-write', { requestingUrl: 'app://renderer/index.html' }),
+    true,
+  );
+
+  // A frame at any other origin is refused, including the opaque origin a
+  // sandboxed document preview runs at, which reports no requesting URL.
+  const fromElsewhere = 'clipboard-sanitized-write';
+  assert.equal(decide(fromElsewhere, { requestingUrl: 'https://example.com/' }), false);
+  assert.equal(decide(fromElsewhere, { requestingUrl: '' }), false);
+  assert.equal(decide(fromElsewhere, {}), false);
+  assert.equal(decide(fromElsewhere, undefined), false);
+
+  // Reading the clipboard is not the write, and stays denied.
+  assert.equal(decide('clipboard-read', { requestingUrl: 'app://renderer/index.html' }), false);
+
+  // Nothing else is granted, whoever asks.
+  assert.equal(decide('media', { requestingUrl: 'app://renderer/index.html' }), false);
+  assert.equal(decide('geolocation', { requestingUrl: 'app://renderer/index.html' }), false);
+
+  // And nothing is granted ambiently, the clipboard included.
+  assert.equal(permissionCheck(), false);
+});
