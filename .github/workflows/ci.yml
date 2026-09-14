@@ -39,37 +39,29 @@ jobs:
         with:
           python-version: '3.13'
 
-      - uses: msys2/setup-msys2@v2
-        if: runner.os == 'Windows'
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            git
-            make
-            tar
-            xz
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-curl
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-nasm
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-nodejs
-            mingw-w64-x86_64-pkgconf
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Verify Vite+ inventory
         run: pnpm test:toolchain
 
-      # One step, eleven gates: scripts/renderer/check-web.mjs runs
-      # architecture, size, conventions, unused, duplication, format, lint,
-      # coverage, typecheck, build, and the production-equivalent Storybook
-      # build — each to completion — so lint, the renderer coverage gate, and
-      # Storybook are already covered here and need no separate step.
+      # Static analysis, coverage, Story accessibility and catalog compilation
+      # run once. Other platforms retain behavior tests and native builds.
       - name: Check supported renderer
+        if: runner.os == 'Linux'
         run: pnpm check:web
+
+      - name: Test renderer behavior
+        if: runner.os != 'Linux'
+        run: pnpm test:renderer
+
+      - name: Build renderer
+        if: runner.os != 'Linux'
+        run: pnpm build:web
+
+      - name: Check documentation and icons
+        if: runner.os == 'Linux'
+        run: pnpm test:docs && pnpm test:icons
 
       - name: Test renderer packaging input
         run: pnpm test:package-inputs
@@ -119,40 +111,16 @@ jobs:
       - name: Test MCP transports
         run: pnpm test:mcp
 
-      - name: Typecheck server + mcp + renderer
-        run: pnpm typecheck
+      - name: Typecheck server + mcp + Electron
+        run: pnpm typecheck:host
 
-      - name: Build web + server
-        run: pnpm build
+      - name: Build server + MCP
+        run: pnpm build:services
 
       - name: Smoke real Electron app lifecycle (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a pnpm test:electron:smoke
+        run: xvfb-run -a pnpm test:electron:smoke:built
 
       - name: Smoke real Electron app lifecycle (macOS and Windows)
         if: runner.os != 'Linux'
-        run: pnpm test:electron:smoke
-
-      - name: Build Windows Python sidecars
-        if: runner.os == 'Windows'
-        run: pnpm build:python-extract-sidecar
-
-      - name: Build PDF/OCR download component
-        if: runner.os == 'Windows'
-        run: pnpm build:extractor-component
-
-      - name: Build Windows transcription sidecar
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: bash scripts/build-transcription-sidecar.sh
-
-      - name: Build packaged Windows app
-        if: runner.os == 'Windows'
-        env:
-          STASHBASE_SKIP_SIDECAR_BUILD: '1'
-          STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1'
-        run: pnpm dist:win
-
-      - name: Smoke packaged Windows server
-        if: runner.os == 'Windows'
-        run: node scripts/smoke-packaged-server.mjs --require-transcription
+        run: pnpm test:electron:smoke:built

@@ -25,6 +25,9 @@ const ROOT = path.resolve(__dirname, '..');
 const VENV = path.join(ROOT, 'python', '.venv.nosync');
 const REQS = path.join(ROOT, 'python', 'requirements.txt');
 const EXTRACT_REQS = path.join(ROOT, 'python', 'requirements-extract.txt');
+// Constrain runtime and isolated build dependencies to the reviewed resolution.
+execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'lock-python.mjs'), '--check'], { cwd: ROOT });
+process.env.PIP_CONSTRAINT = path.join(ROOT, 'python', 'constraints.txt');
 const WITH_EXTRACT = process.argv.includes('--with-extract');
 const VENV_PYTHON = process.platform === 'win32'
   ? path.join(VENV, 'Scripts', 'python.exe')

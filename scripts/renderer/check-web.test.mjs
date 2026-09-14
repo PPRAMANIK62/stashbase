@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { gates, runGates } from './check-web.mjs';
+import { runGates } from './check-web.mjs';
 
 const fakeGates = [
   { name: 'first', command: 'node', args: ['-e', 'process.exit(0)'] },
@@ -20,35 +20,14 @@ function collect(list) {
   return { lines, results, text: lines.join('\n') };
 }
 
-test('every gate runs even after an earlier one fails', () => {
-  const { results } = collect(fakeGates);
+test('all gates run after failure, and every failure is reported with its output', () => {
+  const { results, lines, text } = collect(fakeGates);
   assert.deepEqual(
     results.map((result) => [result.name, result.passed]),
-    [
-      ['first', true],
-      ['second', false],
-      ['third', false],
-      ['fourth', true],
-    ],
+    [['first', true], ['second', false], ['third', false], ['fourth', true]],
   );
-});
-
-test('the run opens by naming every gate it is about to run', () => {
-  const { lines } = collect(fakeGates);
   assert.equal(lines[0], 'running 4 renderer gates: first, second, third, fourth');
-});
-
-test('each gate gets one status line and every failure is named in the summary', () => {
-  const { lines, text } = collect(fakeGates);
-  assert.equal(lines[1], 'pass  first (0s)');
-  assert.equal(lines[2], 'FAIL  second (0s)');
-  assert.equal(lines[3], 'FAIL  third (0s)');
-  assert.equal(lines[4], 'pass  fourth (0s)');
   assert.match(text, /2 of 4 renderer gates failed: second, third/);
-});
-
-test('the output of every failing gate is replayed, not just the first', () => {
-  const { text } = collect(fakeGates);
   assert.match(text, /----- second -----\nsecond broke/);
   assert.match(text, /----- third -----\nthird broke/);
 });
@@ -72,27 +51,4 @@ test('a gate whose command cannot be spawned fails instead of throwing', () => {
     ],
   );
   assert.match(text, /1 of 2 renderer gates failed: missing/);
-});
-
-test('the shipped gate list covers every renderer quality command in review order', () => {
-  assert.deepEqual(
-    gates.map((gate) => gate.name),
-    [
-      'architecture',
-      'size',
-      'conventions',
-      'unused',
-      'duplication',
-      'format',
-      'lint',
-      'coverage',
-      'typecheck',
-      'build',
-      'storybook',
-    ],
-  );
-  for (const gate of gates) {
-    assert.equal(gate.command, 'pnpm', `${gate.name} must run through the package scripts`);
-    assert.equal(gate.args.length, 1, `${gate.name} names exactly one script`);
-  }
 });

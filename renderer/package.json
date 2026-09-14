@@ -10,11 +10,12 @@
     "build:storybook": "storybook build --output-dir ../dist/storybook",
     "format": "vp fmt src .storybook vite.config.ts --check",
     "lint": "vp lint --deny-warnings --config ../.oxlintrc.json src .storybook vite.config.ts",
-    "test": "vp test run",
+    "test": "vp test run --exclude src/stories.a11y.test.tsx",
     "typecheck": "tsc --noEmit",
-    "test:coverage": "vp test run --coverage",
+    "test:coverage": "vp test run --coverage --exclude src/stories.a11y.test.tsx",
     "check:unused": "knip --no-progress",
-    "check:dupes": "jscpd --config .jscpd.json src"
+    "check:dupes": "jscpd --config .jscpd.json src",
+    "test:a11y": "vp test run src/stories.a11y.test.tsx"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

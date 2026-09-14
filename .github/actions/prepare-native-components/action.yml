@@ -1,0 +1,103 @@
+name: Prepare native components
+description: Restore exact unsigned component inputs or build them; never cache installers or signing output.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      id: python
+      with:
+        python-version: '3.13'
+        cache: pip
+        cache-dependency-path: python/constraints.txt
+
+    - name: Check locked Python inputs
+      shell: bash
+      run: node scripts/lock-python.mjs --check
+
+    - name: Identify runner image
+      id: image
+      shell: bash
+      run: |
+        test -n "$ImageOS" && test -n "$ImageVersion"
+        echo "id=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+    - name: Restore unsigned Python components
+      id: python-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: python/sidecar.nosync
+        key: python-components-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.id }}-${{ steps.python.outputs.python-version }}-${{ hashFiles('python/*.py', 'python/*requirements*.txt', 'python/constraints.txt', 'scripts/build-python-sidecar.mjs', 'scripts/setup-python.mjs', 'scripts/lock-python.mjs', '.github/actions/prepare-native-components/action.yml') }}
+
+    - name: Build unsigned Python components
+      if: steps.python-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: node scripts/build-python-sidecar.mjs --with-extract
+
+    # Save before extractor signing mutates its input directory. Only main can
+    # populate shared caches; release tags can read main's exact-key entries.
+    - name: Save unsigned Python components
+      if: steps.python-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v5
+      with:
+        path: python/sidecar.nosync
+        key: ${{ steps.python-cache.outputs.cache-primary-key }}
+
+    - name: Restore transcription components
+      id: transcription-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: native/transcription/sidecar.nosync
+        key: transcription-components-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.id }}-${{ hashFiles('native/transcription/toolchain.json', 'native/transcription/fixtures/*', 'scripts/build-transcription-sidecar.sh', 'scripts/check-transcription-media.mjs', '.github/actions/prepare-native-components/action.yml') }}
+
+    - uses: msys2/setup-msys2@v2
+      if: runner.os == 'Windows' && steps.transcription-cache.outputs.cache-hit != 'true'
+      with:
+        msystem: MINGW64
+        update: true
+        install: >-
+          git make tar xz
+          mingw-w64-x86_64-cmake
+          mingw-w64-x86_64-curl
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-nasm
+          mingw-w64-x86_64-ninja
+          mingw-w64-x86_64-nodejs
+          mingw-w64-x86_64-pkgconf
+
+    - name: Install Linux transcription build dependencies
+      if: runner.os == 'Linux' && steps.transcription-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y binutils cmake nasm pkg-config xz-utils
+
+    - name: Build Windows transcription components
+      if: runner.os == 'Windows' && steps.transcription-cache.outputs.cache-hit != 'true'
+      shell: msys2 {0}
+      run: bash scripts/build-transcription-sidecar.sh
+
+    - name: Build Unix transcription components
+      if: runner.os != 'Windows' && steps.transcription-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: bash scripts/build-transcription-sidecar.sh
+
+    - name: Verify restored transcription media
+      shell: bash
+      run: node scripts/check-transcription-media.mjs "native/transcription/sidecar.nosync/$(node -p 'process.platform + "-" + process.arch')"
+
+    - name: Save transcription components
+      if: steps.transcription-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v5
+      with:
+        path: native/transcription/sidecar.nosync
+        key: ${{ steps.transcription-cache.outputs.cache-primary-key }}
+
+    - name: Report component reuse
+      shell: bash
+      env:
+        PYTHON_CACHE_HIT: ${{ steps.python-cache.outputs.cache-hit }}
+        TRANSCRIPTION_CACHE_HIT: ${{ steps.transcription-cache.outputs.cache-hit }}
+      run: |
+        {
+          echo '### Native component reuse'
+          echo "Python cache hit: ${PYTHON_CACHE_HIT:-false}"
+          echo "Transcription cache hit: ${TRANSCRIPTION_CACHE_HIT:-false}"
+        } >> "$GITHUB_STEP_SUMMARY"

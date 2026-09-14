@@ -45,37 +45,12 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
       - uses: voidzero-dev/setup-vp@1b32467adbe183473499fd9d5d372c3ed9641754 # v1.18.0
         with:
           version: '0.3.0'
           node-manager: false
           run-install: false
           cache: false
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            git
-            make
-            tar
-            xz
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-curl
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-nasm
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-nodejs
-            mingw-w64-x86_64-pkgconf
 
       - name: Validate release tag
         shell: pwsh
@@ -90,15 +65,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Windows Python sidecars
-        run: pnpm build:python-extract-sidecar
+      - uses: ./.github/actions/prepare-native-components
 
       - name: Build PDF/OCR download component
         run: pnpm build:extractor-component
-
-      - name: Build Windows transcription sidecar
-        shell: msys2 {0}
-        run: bash scripts/build-transcription-sidecar.sh
 
       - name: Build Windows installer
         env:

@@ -51,10 +51,6 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
       - uses: voidzero-dev/setup-vp@1b32467adbe183473499fd9d5d372c3ed9641754 # v1.18.0
         with:
           version: '0.3.0'
@@ -72,6 +68,8 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - uses: ./.github/actions/prepare-native-components
 
       - name: Prepare Apple signing credentials
         env:
@@ -94,8 +92,18 @@ jobs:
           chmod 600 "$key_path"
           echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
 
+      - name: Build PDF/OCR download component
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+        run: pnpm build:extractor-component
+
       - name: Build and upload macOS assets to draft release
         env:
+          STASHBASE_SKIP_SIDECAR_BUILD: '1'
+          STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1'
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}

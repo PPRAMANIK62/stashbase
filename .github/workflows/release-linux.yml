@@ -47,10 +47,6 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
       - uses: voidzero-dev/setup-vp@1b32467adbe183473499fd9d5d372c3ed9641754 # v1.18.0
         with:
           version: '0.3.0'
@@ -69,23 +65,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install transcription build dependencies
-        run: sudo apt-get update && sudo apt-get install -y binutils cmake nasm pkg-config xz-utils
-
-      - name: Build Linux Python sidecar
-        run: pnpm build:python-extract-sidecar
+      - uses: ./.github/actions/prepare-native-components
 
       - name: Build PDF/OCR download component
         run: pnpm build:extractor-component
 
-      - name: Build Linux transcription sidecar
-        run: pnpm build:transcription-sidecar
-
       - name: Build Linux packages
         env:
           GH_TOKEN: ${{ github.token }}
+          STASHBASE_SKIP_SIDECAR_BUILD: '1'
           STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1'
-        run: STASHBASE_SKIP_SIDECAR_BUILD=1 pnpm dist:linux
+        run: pnpm dist:linux
 
       - name: Smoke packaged Linux server
         run: node scripts/smoke-packaged-server.mjs --require-transcription
