@@ -13,14 +13,21 @@ export async function signExtractorComponent(source, options = {}) {
   const mode = assertMacosReleaseCredentials(env);
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'stashbase-extractor-sign-'));
   let keychain;
-  const run = options.run ?? ((cmd, args) => {
-    try { return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20 * 60_000 }); }
+  const execute = options.run ?? ((cmd, args) => execFileSync(cmd, args, {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20 * 60_000,
+  }));
+  const run = (cmd, args) => {
+    try { return execute(cmd, args); }
     catch (error) {
-      // ChildProcess errors include command arguments, including certificate
-      // passwords. Report the operation without echoing credential material.
-      throw new Error(`${cmd} failed while signing the extractor (exit ${error.status ?? 'unknown'})`);
+      // ChildProcess messages echo arguments, including keychain passwords.
+      // Only codesign stderr describes the failing binary without auth arguments.
+      let diagnostic = cmd === 'codesign' ? String(error.stderr ?? '').trim() : '';
+      for (const [name, value] of Object.entries(env)) {
+        if (/^(CSC_|APPLE_)/.test(name) && value) diagnostic = diagnostic.replaceAll(value, '[redacted]');
+      }
+      throw new Error(`${cmd} failed while signing the extractor (exit ${error.status ?? 'unknown'})${diagnostic ? `: ${diagnostic}` : ''}`);
     }
-  });
+  };
   try {
     if (env.CSC_LINK) {
       const password = crypto.randomBytes(24).toString('hex');

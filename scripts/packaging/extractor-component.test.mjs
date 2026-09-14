@@ -70,3 +70,25 @@ test('macOS component signing rejects unaccepted notarization and requires Devel
   assert.ok(commands.some(([cmd, args]) => cmd === 'codesign' && args.includes('--timestamp')));
   assert.ok(commands.some(([cmd, args]) => cmd === 'codesign' && args.includes('--verify')));
 });
+
+
+test('extractor signing retains codesign diagnostics without leaking credential arguments', async (t) => {
+  const { signExtractorComponent } = await import('./sign-extractor.mjs');
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'extractor-sign-diagnostic-'));
+  t.after(() => fs.rm(tmp, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmp, 'stashbase-extract'), Buffer.from('cffaedfe00000000', 'hex'));
+  const secret = 'fixture-private-password';
+  const env = { APPLE_KEYCHAIN_PROFILE: 'fixture-profile', CSC_KEY_PASSWORD: secret, CSC_LINK: 'Zml4dHVyZQ==' };
+  const run = (cmd) => {
+    if (cmd === 'security') return '1) ' + 'A'.repeat(40) + ' "Developer ID Application: Fixture"';
+    throw Object.assign(new Error(`command with ${secret}`), {
+      status: 1, stderr: `unable to build chain to self-signed root: ${secret}`,
+    });
+  };
+  await assert.rejects(signExtractorComponent(tmp, { platform: 'darwin', env, run }), (error) => {
+    assert.match(error.message, /codesign failed/);
+    assert.match(error.message, /unable to build chain/);
+    assert.ok(!error.message.includes(secret));
+    return true;
+  });
+});
