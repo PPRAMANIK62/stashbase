@@ -21,12 +21,14 @@ const {
 const { installRequestAuthorization } = require('./requests.cjs');
 
 const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-boundary-'));
+app.setPath('userData', path.join(smokeRoot, 'profile'));
 registerAppScheme(protocol);
 
 const repositoryRoot = path.resolve(__dirname, '../..');
 let projectServer;
+let phase = 'app readiness';
 const timeout = setTimeout(() => {
-  console.error('replacement Electron boundary smoke timed out');
+  console.error(`replacement Electron boundary smoke timed out during ${phase}`);
   app.exit(1);
 }, 30_000);
 
@@ -243,8 +245,10 @@ app
     authorizedWindows.add(window);
     windowLifecycleService.attach(window);
     secureApplicationWindow(window, APP_ORIGIN);
+    phase = 'primary renderer load';
     await window.loadURL(APP_URL);
 
+    phase = 'primary IPC and security checks';
     const result = await window.webContents.executeJavaScript(`
     (async () => {
       const welcomeDeadline = Date.now() + 5000;
@@ -376,6 +380,7 @@ app
         path: '/project/engineering-blogs',
       },
     ];
+    phase = 'project list reload';
     const didReload = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
     window.reload();
     await didReload;
@@ -417,7 +422,9 @@ app
       },
     });
     secureApplicationWindow(peer, APP_ORIGIN);
+    phase = 'peer renderer load';
     await peer.loadURL(APP_URL);
+    phase = 'two-window session persistence';
     await peer.webContents.executeJavaScript(`(async () => {
       const deadline = Date.now() + 5000;
       while (document.body.dataset.bootSettled !== '1' && Date.now() < deadline) {
@@ -442,6 +449,7 @@ app
       'window.stashbase.workspaceSession.read()',
     )).session.folders, []);
     const { runUpdateInstallSmoke } = require('./update-install-smoke.cjs');
+    phase = 'two-window update barrier';
     await runUpdateInstallSmoke({
       windows: [window, peer], lifecycle: windowLifecycleService, isLiveWindow,
     });
@@ -458,6 +466,7 @@ app
       }),
     });
     secureApplicationWindow(reviewWindow, APP_ORIGIN);
+    phase = 'bug report renderer';
     await reviewWindow.loadURL(`${APP_URL}bug-report.html`);
     const reviewResult = await reviewWindow.webContents.executeJavaScript(`
       (async () => {
