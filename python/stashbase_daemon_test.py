@@ -97,7 +97,9 @@ class StashbaseMfsTests(unittest.TestCase):
                             "path": source, "content": "oldneedle", "wait_for_index": False,
                         })
                         self.assertEqual(first.result(timeout=5)["outcome"], "added")
-                        self.assertTrue(entered.wait(5))
+                        # The worker may still be opening its native vector store.
+                        # Wait for the barrier independently of the save deadlines.
+                        self.assertTrue(entered.wait(30), "embedding worker did not reach the test barrier")
                         second = pool.submit(service.upsert, {
                             "path": source, "content": "newneedle", "wait_for_index": False,
                         })
