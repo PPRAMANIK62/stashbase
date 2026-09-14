@@ -12,6 +12,7 @@ import { resolveWindowsSigningConfiguration } from './windows-release-contract.m
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const requireFromRoot = createRequire(path.join(root, 'package.json'));
+const pkg = requireFromRoot('./package.json');
 const claudeAgentSdkDir = path.join(root, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
 const args = process.argv.slice(2);
 const platform = args.includes('--linux') ? 'linux' : args.includes('--win') ? 'win' : 'mac';

@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -191,4 +194,41 @@ test('bundled OpenCode runtime and SDK are pinned with an explicit packaged exec
   const workspace = fs.readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8');
   assert.match(workspace, /^\s*opencode-ai:\s+true\s*$/m);
   assert.ok(fs.existsSync(path.join(root, 'node_modules', 'opencode-ai', 'bin', 'opencode.exe')));
+});
+
+
+test('the packaging CLI validates component version and bytes before invoking the builder', (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'package-input-validation-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  for (const relative of ['scripts/package-desktop.mjs', 'scripts/macos-release-contract.mjs',
+    'scripts/windows-release-contract.mjs', 'shared/extractor-runtime.ts', 'native/transcription/toolchain.json', 'package.json']) {
+    fs.mkdirSync(path.dirname(path.join(tmp, relative)), { recursive: true });
+    fs.copyFileSync(path.join(root, relative), path.join(tmp, relative));
+  }
+  fs.symlinkSync(path.join(root, 'node_modules'), path.join(tmp, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  const sidecar = path.join(tmp, 'python', 'sidecar.nosync');
+  fs.mkdirSync(sidecar, { recursive: true });
+  fs.writeFileSync(path.join(sidecar, 'stashbase-daemon'), Buffer.from('7f454c46', 'hex'));
+  const bytes = Buffer.from('component archive fixture');
+  const manifest = { schema: 1, version: pkg.version, platform: 'linux', arch: 'x64',
+    asset: `stashbase-extract-${pkg.version}-linux-x64.tar.gz`,
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length };
+  fs.mkdirSync(path.join(tmp, 'release.nosync'));
+  const archive = path.join(tmp, 'release.nosync', manifest.asset);
+  fs.writeFileSync(archive, bytes);
+  const manifestPath = path.join(sidecar, 'extractor-runtime.json');
+  const preload = `import cp from 'node:child_process'; import { syncBuiltinESMExports } from 'node:module';
+    cp.execFileSync = () => ''; syncBuiltinESMExports();`;
+  const run = () => spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`,
+    path.join(tmp, 'scripts', 'package-desktop.mjs'), '--linux', '--skip-sidecar-build'], {
+    encoding: 'utf8', env: { ...process.env, STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1' },
+  });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  // Passing the component checks reaches the next real guard, without packaging an installer.
+  assert.match(run().stderr, /requires a verified native transcription toolchain/);
+  fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, version: '0.0.0' }));
+  assert.match(run().stderr, /Extractor component manifest does not match this app build/);
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  fs.writeFileSync(archive, 'corrupted');
+  assert.match(run().stderr, /Extractor component archive does not match its embedded manifest/);
 });
