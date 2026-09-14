@@ -71,14 +71,6 @@ transitive resolution can drift, and recorded again in the source block of
   resolved toolchain and requires a deep match against
   `toolchain/vite-plus.json`, so a silent tool substitution fails the build.
 
-**Known gap — the toolchain contract test contradicts the workflow.**
-`scripts/vite-plus-ci.test.mjs` still asserts that `ci.yml` runs each renderer
-gate as its own step and carries a separate catalog-build step. The workflow
-collapsed those into `pnpm check:web`, so `pnpm test:toolchain` fails today and
-the CI step that runs it fails before the renderer gate executes. Repair the
-test against the current workflow shape; do not weaken the inventory check to
-get past it.
-
 **Known gap — a second Oxlint.** The root manifest pins an Oxlint older than
 the one the pinned Vite+ release delivers, and both resolve in the lockfile.
 The renderer lints with the release's copy, so the root pin is an unused second
