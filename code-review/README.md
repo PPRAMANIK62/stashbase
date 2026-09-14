@@ -1,268 +1,55 @@
-# Code Review Contracts
+# Code Review
 
-These maintainer-facing contracts make a large codebase reviewable in bounded
-context. They connect product intent to the Interface that owns a behavior, the
-invariants at that Seam, stable implementation entry points, and focused
-evidence. They are not a source-tree inventory or a substitute for reading the
-diff.
+Start from the task, read the relevant boundary, then inspect the code. These
+four documents support review; they are not a second implementation manual.
 
-The repository-wide human/AI workflow lives in
-[`MAINTENANCE.md`](../MAINTENANCE.md); this directory owns its engineering
-review layer.
-
-The contract set is an index over deep Modules, not a compressed source-tree
-inventory. Select the smallest set of Seams that owns the change; do not load
-every contract or expand an Implementation Map unless the change crosses the
-named Interface. This is the engineering half of the
-[coarse-to-fine documentation model](../design-docs/README.md#coarse-to-fine-model).
-
-## Product Baseline and Existing-code Review
-
-Use [Product Direction](../design-docs/product-direction.md) as the current
-necessity baseline: enter a project, brainstorm, write, and refine. Existing
-writing and context capabilities are implemented; document-specific diff for
-fine revision remains incomplete. A coverage gap is not a missing feature,
-and an old contract is not by itself a reason to retain a superseded behavior.
-
-For a module audit rather than a diff, fix the checkout/worktree snapshot and
-scope, then follow the same area, contract, and evidence routes. Assess three
-questions explicitly:
-
-1. **Necessity:** which current user task or required infrastructure purpose
-   justifies the behavior? Separate a product decision from proven dead code.
-2. **Simplicity:** do callers share one rule owner, or duplicate policy, state,
-   adapters, or obsolete compatibility paths? Fewer lines alone are not proof.
-3. **Correctness:** do scope, permissions, normal behavior, cancellation,
-   concurrency, failure, and recovery satisfy the applicable contract?
-
-Resolve an outdated product assumption before treating it as an engineering
-violation. Preserve necessary trust, data, and durability guarantees while
-updating intent. Proposed product changes, maintainability judgments, and
-confirmed defects remain distinct findings.
+| Document | Read it for |
+|---|---|
+| This guide | How to scope a review and report useful findings |
+| [Engineering Boundaries](architecture.md) | Cross-module ownership, invariants, and focused validation |
+| [Journey Coverage](journey-coverage.md) | Journey-to-code entry points, existing evidence, and unresolved gaps |
+| [Release Runbook](release-pipeline.md) | CI, packaging, signing, updates, and publication; needed only for release work |
 
 ## Intent-first Review
 
-```text
-product scenario → user journey → product area → review contract
-→ Interface and owner modules → focused tests → changed code
-```
-
-1. Identify the motivating
-   [Product Scenario](../design-docs/product-scenarios.md) and the observable
-   outcome in [User Journeys](../design-docs/user-journeys.md).
-2. Read the narrowest owning area in
-   [`design-docs/design/`](../design-docs/README.md#product-areas). For a change
-   to established behavior, starting from the area is acceptable, but resolve
-   the affected journey before implementation.
-3. Choose the focused contract below. Add Architecture only when ownership or
-   a process boundary changes.
-4. Use its Implementation Map to locate the Interface, primary owners,
-   Adapters, and focused validation. Inspect neighboring code only when the
-   changed Seam crosses into another contract.
-5. Check [Journey Coverage](journey-coverage.md) for end-to-end evidence; do
-   not infer coverage from a journey ID alone.
-
-Use this route when the request starts with a user outcome, issue, or proposed
-feature.
-
-Journey Coverage is the product-level router and evidence ledger. It does not
-replace focused contracts: journeys cut vertically across a user outcome,
-while contracts cut horizontally across shared Interfaces, invariants, and
-failure modes. Review the journey to establish what must be delivered and the
-selected contracts to establish how the implementation remains safe.
-
-## Journey-to-Evidence Review
-
-Use this route to accept a journey, feature slice, or release claim:
-
-1. Read the journey's Required Observable Results and meaningful recovery. Do
-   not reduce the journey to its happy path or title.
-2. Open [Journey Coverage](journey-coverage.md) and verify that its Area and
-   Contract route matches the behavior being accepted.
-3. For each Required result, identify the evidence type Journey Coverage
-   assigns to it. One evidence type does not substitute for another.
-4. Follow the owning contract's validation entry points and read the exact test
-   setup and assertions. A suite command, passing count, or `Jxx` label is not
-   proof by itself.
-5. Compare the evidence with Shipping code and classify the journey as Covered,
-   Partial, Release-dependent, or Gap. Record missing or contradictory evidence
-   instead of inferring it from adjacent tests.
-
-This route checks whether the product promise is implemented and proven.
-Focused evidence at several Seams is usually more decisive than one wide test,
-and it is never a reason to skip the journey's Required results.
+For a design discussion or feature audit:
+[product direction](../design-docs/overview.md) → corresponding
+[area](../design-docs/README.md#product-areas) → affected
+[user journey](../design-docs/user-journeys.md) → its row in
+[Journey Coverage](journey-coverage.md#traceability-map) → relevant boundary and code.
+Pin the checkout being audited. Read only the sections the task crosses.
 
 ## Diff-first Review
 
-Use this route when the input is a branch, commit, pull request, or working-tree
-diff:
+1. Pin the comparison commit/branch and list changed files. Include uncommitted
+   and new files when reviewing the working tree.
+2. Read the originating request. Use Journey Coverage to recover intent and
+   locate the implementation owners; follow callers for unnamed helpers.
+3. Read the affected Engineering Boundaries sections, then trace the diff through
+   callers, state changes, failures, and focused tests.
+4. Compare required results with actual evidence. A passing suite proves only
+   exercised paths; name missing runtime or real-provider evidence.
 
-1. Pin the comparison point and list changed files and commits. Do not review a
-   moving or ambiguous diff.
-2. For each changed stable Interface or entry path, search the Implementation
-   Maps in this directory. When a leaf file is not named, follow its import or
-   caller to the nearest named owner Module; do not expand the contracts into a
-   file inventory.
-3. Use [Choose by Change Surface](#choose-by-change-surface) for unmatched or
-   newly introduced behavior. A new review-significant external Interface or
-   cross-process Adapter must acquire an owning contract in the same change.
-4. Take the union of the owning contracts and their explicitly crossed Seams.
-   Map them back to product areas and journeys through
-   [Journey Coverage](journey-coverage.md).
-5. Read the originating issue or specification when one exists. Compare the
-   diff separately against product intent and engineering contracts.
-6. Inspect focused tests before broad suites. A test proves only its exercised
-   path; missing evidence is a review finding, not permission to infer safety.
-
-Useful local searches:
-
-```bash
-rg -F "server/file-save.ts" code-review
-rg -F "FilesystemPathModule" code-review
-rg -F "renderer/src/features/documents" code-review
-```
-
-The renderer lives under `renderer/`. A changed file there usually belongs to
-Renderer Architecture for its layer placement and to the feature contract that
-owns its behavior, so expect two owners rather than one.
-
-If `rg` is unavailable, use an equivalent fixed-string repository search.
-
-## Reverse Traceability Review
-
-Run this check over the diff after locating its owning contracts. Every changed
-user-visible behavior, stable Interface, and review-significant branch must
-have a reason to exist, but not every source line must map directly to a
-journey:
-
-- User-visible behavior maps to one or more documented journeys. If none owns
-  it, report a product-design or traceability gap.
-- Behavior outside the target journey may serve another journey. Add that
-  journey and its evidence to the review rather than treating the change as
-  local.
-- Shared infrastructure, security, migration, lifecycle, and recovery code may
-  be cross-cutting. It must still have an owning contract, a stated invariant
-  or failure mode, and focused evidence.
-- When behavior varies by format, client, or representation, trace it through
-  the owning Area's capability matrix. Preview, Workbench editing, prepared
-  text, Agent access, and file mutation are separate claims; evidence for one
-  surface does not establish another.
-- Code with no affected journey, owning contract, or necessary implementation
-  rationale is a scope finding: it may be unrequested behavior, premature
-  abstraction, or dead code.
-
-The reverse route is therefore:
-
-```text
-changed behavior → owning contract → journey or cross-cutting rationale
-→ exact evidence → product and engineering finding
-```
-
-Do not turn Journey Coverage into a source-file inventory to support this
-check. Trace code to its nearest stable Interface and contract first, then use
-the contract-to-journey map.
-
-## Choose by Change Surface
-
-| Change surface | Required contract |
-|---|---|
-| Runtime ownership or cross-process flow | [Architecture](architecture.md) |
-| Native windows, save-on-close, app shutdown | [Window Lifecycle](window-lifecycle.md) |
-| Bug-report collection, review, approval, handoff, privacy | [Bug Reporting](bug-reporting.md) |
-| Renderer folder, tab, search, or overlay coordination | [Renderer Workspace](renderer-workspace.md) |
-| Conversion, indexing, reconcile, cleanup | [Data Lifecycle](data-lifecycle.md) |
-| Import, save, rename, move, delete, conflicts | [File Transactions](file-transactions.md) |
-| PDF, DOCX, HTML, image, audio, or JSON viewers | [Document Viewers](document-viewers.md) |
-| Markdown parsing, assets, navigation, trust | [Markdown Rendering](markdown-rendering.md) |
-| App config, credentials, onboarding, appearance | [Settings and Config](settings-config.md) |
-| MCP tools, transports, credentials, scope | [MCP Access](mcp-access.md) |
-| Gallery index, copy, and outbound reach | [Gallery](gallery.md) |
-| CLI discovery, installation, native sessions, history | [Agent Runtime](agent-runtime.md) |
-| Chat renderer, transcript, composer, permissions | [Agent Panel](agent-panel.md) |
-| Renderer module boundaries and layer promotion | [Renderer Architecture](renderer-architecture.md) |
-| Theme tokens, primitives, CSS boundaries | [Renderer Styling](renderer-styling.md) |
-| Journey-to-test ownership and remaining gaps | [Journey Coverage](journey-coverage.md) |
-| Source CI, packaging, release gating | [Release Pipeline](release-pipeline.md) |
-
-Some changes require more than one contract. An Agent file write, for example,
-normally crosses Agent Runtime, MCP Access, File Transactions, and the affected
-journey. Read the smallest set that owns the changed Seams.
-
-## Trust Model
-
-Contract language must distinguish these states:
-
-- **Shipping** — evidence-backed current behavior. “Current Experience” in a
-  design doc has this meaning.
-- **Required** — an invariant new code and reviews must preserve. Unlabelled
-  invariant bullets in a review contract have this meaning.
-- **Known gap** — current code does not yet meet a Required invariant or a
-  journey lacks decisive evidence. Name the implementation location and the
-  missing validation; never rewrite the gap as Shipping.
-- **Direction** — desired product work that is not committed behavior. Durable
-  capability direction lives in Product Direction; area-specific work stays
-  under Next or Coordinate First, never in a review contract.
-
-When code, tests, and prose disagree, code is the implementation truth, tests
-are evidence of exercised behavior, and the docs must be corrected in the same
-change. A passing test never makes an uncovered claim true.
+For shared infrastructure, start at the ownership/validation table in Engineering
+Boundaries. A missing journey alone does not make infrastructure unnecessary.
 
 ## Review Output Contract
 
-Report Product and Engineering findings separately, covering necessity,
-simplicity, and correctness; passing one dimension never hides another:
+Answer three questions:
 
-- **Product and Spec** — the diff delivers the requested outcome, preserves the
-  related journey and experience contract, and introduces no unrequested
-  behavior, and has a current reason to exist.
-- **Engineering** — the diff crosses the correct Interface, preserves required
-  invariants and recovery behavior, avoids duplicate policy and state, keeps
-  adapters narrow, and supplies focused
-  evidence at the lowest useful layer.
+- **Necessity:** which current user task or infrastructure purpose needs this?
+  Apply the [previous-version data policy](../MAINTENANCE.md#previous-version-data-policy).
+- **Simplicity:** are there duplicate owners, rules, or state; dead branches; or
+  obsolete compatibility? Fewer lines alone do not establish a better design.
+- **Correctness:** do scope, permissions, concurrency, cancellation, and recovery
+  preserve the required behavior?
 
-Every finding names the code location, the violated requirement or invariant,
-the user or system consequence, and the missing or contradictory evidence.
-Separate hard contract violations from maintainability judgments. Report no
-finding for style already enforced mechanically unless the enforcement itself
-is missing or bypassed.
+Each finding needs a code location, violated requirement, consequence, and
+evidence. Separate confirmed defects, unproven behavior, and product proposals.
+Do not report mechanically enforced style as a product defect.
 
-## Contract Shape
-
-A focused contract contains only information needed to review its Seam:
-
-- scope, owners, invariants, state transitions, and recovery behavior;
-- an **Implementation Map** naming the public Interface, three to eight primary
-  owner modules, concrete Adapters, and focused tests or scripts;
-- exact validation commands and links to related journeys/contracts;
-- any Known gap where Shipping behavior violates the Required contract.
-
-A Module hides related state and decisions. Its Interface includes ordering,
-errors, configuration, performance bounds, and invariants—not just function
-signatures. An Adapter translates HTTP, MCP, Electron, native-process, iframe,
-or renderer events into that Interface. Keep internal Seams private unless an
-independent caller or test genuinely needs them.
-
-Do not add file-by-file inventories, test-case prose, exact line references, or
-implementation chronology. A path belongs here only when it is a stable review
-entry point. Exact fixtures and assertions belong in tests.
-
-Deepen an existing contract when behavior remains behind the same external
-Interface. Add a contract only when a distinct Seam has independent callers or
-Adapters, invariants, failure modes, and focused evidence. A new file, helper,
-route, or internal test Seam does not by itself justify another contract.
-
-## Maintenance Rules
-
-- Keep contracts concise, English-only, and current in the same change as the
-  implementation they govern.
-- One invariant has one primary home. Other contracts link to it.
-- Journey Coverage is the canonical Area and Contract traceability map. Area
-  documents summarize their local routes; this map resolves ambiguity.
-- A journey ID describes product coverage; a test path and assertion describe
-  implementation coverage. Do not substitute one for the other.
-- Journey Coverage owns the evidence vocabulary and the distinctions between
-  its types. Do not describe deterministic mechanics as proof of probabilistic
-  retrieval or Agent quality.
-- Add a regression at the lowest useful layer, then promote only
-  release-blocking cross-process behavior into the Electron smoke.
-- Run `pnpm test:docs` when changing this documentation system.
+Product behavior belongs in Design Docs. Local implementation rationale belongs
+beside code; lint rules and thresholds belong in executable configuration;
+fixtures and assertions belong in tests. Update an existing boundary or journey
+instead of adding a document for each module. [MAINTENANCE.md](../MAINTENANCE.md)
+owns documentation policy; [AGENTS.md](../AGENTS.md) owns execution gates.

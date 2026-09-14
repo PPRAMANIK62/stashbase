@@ -1,4 +1,4 @@
-# Release Pipeline
+# Release Runbook
 
 > Review contract for source CI, tag gating, platform packaging, packaged
 > native verification, and release handoff.
@@ -27,17 +27,23 @@ before its metadata and payloads coexist.
 
 ## Source CI
 
-- The macOS, Windows, and Linux source matrix covers type/build gates plus
-  release/update/signing contracts, config/account, scheduler, cancellation,
-  retrieval, renderer, server, MCP, Python, and real Electron lifecycle
-  behavior.
-- `pnpm check:web` is the release-blocking renderer gate. It is one CI step, and
-  `scripts/renderer/check-web.mjs` runs the whole renderer gate set behind it:
-  layer boundaries, file size, conventions, unused exports, duplication,
-  formatting, lint, the coverage floor, typecheck, the production build, and the
-  catalog build. Every gate runs to completion in its own process, so one run
-  reports every failure instead of stopping at the first. Do not add a second
-  per-gate CI step; deepen that runner instead.
+- The macOS, Windows, and Linux matrix retains renderer behavior tests,
+  host/Python suites, native OpenCode verification, platform builds, and real
+  Electron lifecycle smoke. Linux runs the complete renderer gate; Windows and
+  macOS run renderer behavior without repeating coverage or the Story sweep.
+- `pnpm check:web` is the release-blocking renderer gate, run once on Linux:
+  boundaries, size, conventions, unused exports, duplication, formatting, lint,
+  coverage, structural Story accessibility, typecheck, production build, and
+  catalog build. Every gate runs to completion and reports failures. Keep its
+  commands in the runner, not duplicated as extra CI steps.
+- Each platform builds the renderer and Electron boundary once, then reuses
+  those outputs for `test:electron:smoke:built`. Host type checks and service
+  builds do not repeat renderer work. Local `pnpm check` follows the same
+  build-once rule; standalone smoke builds its own prerequisites.
+- Source CI does not build installers or frozen sidecars. Windows package and
+  transcription verification remains mandatory in `release-windows.yml` before
+  upload. Packaging failures are therefore detected at the release stage;
+  source CI alone does not prove packaged delivery.
 - Linux source Electron may use `--no-sandbox` under hosted Xvfb. Packaged apps
   and non-Linux launches must not inherit that flag.
 
@@ -61,8 +67,9 @@ transitive resolution can drift, and recorded again in the source block of
 - Vite+ task-result caching is disabled repository-wide in the root
   `vite.config.ts` and again through the setup action's inputs. A green run
   must come from work that actually ran.
-- CI retains only pnpm's content-addressed dependency store cache. No workflow
-  adds a second cache for frontend artifacts.
+- Frontend builds retain only pnpm's content-addressed dependency store cache.
+  No workflow caches frontend build outputs or test results. Native component
+  reuse is separate and follows the input rules below.
 - The setup action is pinned by commit, requests the exact Vite+ version, and
   declines Node management and dependency installation. The Node and package
   manager runtimes are provisioned by their own earlier steps.
@@ -78,7 +85,8 @@ toolchain rather than the linter any gate runs.
 
 ## Native Packaging
 
-- Each platform builds the pinned transcription sidecar for its target. Native
+- Each platform restores an exact-input transcription sidecar or builds it for
+  its target. Native
   archives may use declared mirrors only when the accepted bytes match the
   pinned digest. The transcription build runs `scripts/check-transcription-media.mjs`
   against its staged binaries: an AVI fixture must probe successfully, decode
@@ -94,7 +102,7 @@ toolchain rather than the linter any gate runs.
   macOS signs every native component binary/framework with Developer ID and
   requires accepted notarization before hashing the archive. Windows/Linux
   use the exact archive digest carried by the installed app. Component runtime
-  installation is owned by [Data Lifecycle](data-lifecycle.md#pdfocr-component-installation).
+  installation is owned by [Data Lifecycle](architecture.md#optional-local-components).
 - Python packaging rejects inference/OCR modules in the index daemon. App
   packaging excludes source maps and SQLite development sources while retaining
   its native binary and runtime loaders. PyArrow/OpenCV and the independent
@@ -150,6 +158,41 @@ toolchain rather than the linter any gate runs.
   strokes so the mark survives those sizes. Regenerate after any change to the
   SVG and commit the rasters with it; the packagers read the rasters, not the
   SVG.
+
+### Native Component Reuse
+
+`native-components.yml` prepares unsigned Python and transcription bundles on
+each push to `main`, independently of source CI. It produces no installer and
+uses no signing credentials. The shared `prepare-native-components` action is
+also used by all three release Adapters. GitHub release tags can restore the
+default branch's caches; a cache written only under one tag is not shared with
+the next tag. Only `main` saves these component caches.
+
+Keys include OS, architecture, hosted image version, component inputs, and the
+shared build recipe; Python also includes the interpreter patch version and
+the full dependency constraints. They exclude the application version and use
+no fallback keys. Changed inputs, image rotation, eviction, or an unfinished
+warm-up result in an ordinary cold build. UI-only releases can reuse unchanged
+components. Cache hit status is recorded in the Actions job summary.
+
+Python runtime and isolated build dependencies use `python/constraints.txt`,
+generated with `pnpm lock:python` (requires `uv`). The input digest check rejects
+requirements edits without a refreshed resolution. Review dependency updates
+in the generated file; the resolver retains existing pins where compatible.
+The build reconciles its environment before freezing instead of accepting any
+already-installed PyInstaller version. Source setup uses the same constraints.
+
+Save Python bundles before macOS signing mutates the extractor. Every release
+still signs/notarizes its macOS components, creates its own versioned extractor
+archive and hash manifest, validates package inputs, and runs the packaged
+smoke. Transcription media checks also run after restoration. Cached binaries
+are build inputs, not evidence that the new assembled application passed.
+
+The compression policy remains electron-builder's default `normal`. Compare
+cold and warm release jobs and archive size/upload time before changing it;
+lower compression can trade build time for larger downloads. Actual Windows
+and Linux cache restoration, frozen Python execution, macOS signing after
+restoration, and end-to-end time savings require hosted release evidence.
 
 ## macOS Developer ID Distribution
 
@@ -219,6 +262,7 @@ credential-free and does not run this probabilistic check.
 | Tag gate Interface | `.github/workflows/release-ci-gate.yml` and `scripts/require-green-ci.mjs` |
 | Publication coordinator | `.github/workflows/release.yml` |
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
+| Native build reuse | `.github/workflows/native-components.yml`, `.github/actions/prepare-native-components/action.yml`, `python/constraints.txt`, `scripts/lock-python.mjs`; contracts in `scripts/packaging/native-cache.test.mjs` |
 | Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
 | Application icon | `scripts/icons/build.mjs` behind `pnpm build:icons`, rendering `build/icon.svg` in `scripts/icons/render.mjs` with the size table and containers in `scripts/icons/encode.mjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs` (including the explicit OpenCode resource version probe) and platform release verifiers |
@@ -236,25 +280,25 @@ choice:
 3. Commit only the bump as `chore: bump to <version>`.
 4. Push the release branch; wait for the `CI` workflow to succeed for that
    exact commit. Then create and push `v<version>` from the release branch.
-5. Dispatch `.github/workflows/release.yml` with the tag. It creates an empty
-   draft, runs all three platform workflows, verifies the complete update set,
-   publishes the release, and then updates Homebrew. Do not manually publish
-   the draft. `HOMEBREW_TAP_TOKEN` requires push access to
-   `liliu-z/homebrew-stashbase`.
-6. If a platform upload fails after writing assets, delete the incomplete draft
-   and dispatch the coordinator again. Never use clobber or replace a versioned
-   asset in place.
-7. After Actions finish, run `gh release view v<version>`. Verify macOS DMG/zip,
-   Linux deb/AppImage, Windows exe/zip, all three latest YAML update metadata
-   files and generated sidecars, and the tap update, then perform the
-   residual packaged UI sanity checks, including a real N→N+1 update on every
-   platform before calling the update path verified.
-8. If retrieval ranking, chunking, an embedding model, or provider integration
+5. If retrieval ranking, chunking, an embedding model, or provider integration
    changed, run and retain the J05 semantic retrieval report for OpenAI and
    OpenRouter as routed by the residual checklist. During calibration, collect
    the dataset's minimum run count for each provider. Stop publication on an
    `ACTIVE` threshold failure; label `CALIBRATION` results only as baseline
    evidence.
+6. Dispatch `.github/workflows/release.yml` with the tag. It creates an empty
+   draft, runs all three platform workflows, verifies the complete update set,
+   publishes the release, and then updates Homebrew. Do not manually publish
+   the draft. `HOMEBREW_TAP_TOKEN` requires push access to
+   `liliu-z/homebrew-stashbase`.
+7. If a platform upload fails after writing assets, delete the incomplete draft
+   and dispatch the coordinator again. Never use clobber or replace a versioned
+   asset in place.
+8. After Actions finish, run `gh release view v<version>`. Verify macOS DMG/zip,
+   Linux deb/AppImage, Windows exe/zip, all three latest YAML update metadata
+   files and generated sidecars, and the tap update, then perform the
+   residual packaged UI sanity checks, including a real N→N+1 update on every
+   platform before calling the update path verified.
 
 Release notes state that macOS is arm64-only, Developer ID-signed, and
 notarized. The macOS workflow requires the signing certificate secrets
@@ -262,6 +306,36 @@ notarized. The macOS workflow requires the signing certificate secrets
 key secrets `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`.
 Windows signing is optional; configure both `WIN_CSC_LINK` and
 `WIN_CSC_KEY_PASSWORD` together when it is introduced.
+
+### macOS signing credential setup
+
+Create a Developer ID Application identity, install its certificate with the
+matching private key, and export a password-protected `.p12` for
+`MAC_CSC_LINK` / `MAC_CSC_KEY_PASSWORD`. A certificate without its private key
+cannot sign a build. The separate App Store Connect Team API `.p8` key supplies
+notarization authentication via the three `APPLE_API_*` secrets above.
+The workflow decodes the key into a protected temporary file and supplies its
+absolute path as `APPLE_API_KEY`; it does not pass base64 key text as that path.
+See Apple's [certificate setup](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/)
+and [API-key setup](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api)
+when provisioning credentials. Never print or commit private keys.
+
+`build/entitlements.mac.plist` and its inherited/native-runtime variants own
+actual entitlements, including `com.apple.security.cs.disable-library-validation`.
+Narrowing this exception requires packaged native compatibility evidence.
+Current OpenCode executable-memory exceptions are described above; do not
+apply older general entitlement advice over the per-file signing contract.
+
+### Python index dependency readiness
+
+`python/requirements.txt` owns the exact MFS revision. Before release, verify
+that revision's upstream status and frozen process shutdown on each platform;
+source-runtime checks do not establish packaged readiness.
+
+No retained real-provider baseline establishes retrieval parity. Verify ranking
+across the dependency's flush boundary with J05's quality dataset, and measure
+fresh-install daemon cold starts on each platform. Cached source startup and
+historical bundle measurements do not establish a released startup budget.
 
 Local macOS package and cask preview only; it never uploads or publishes:
 

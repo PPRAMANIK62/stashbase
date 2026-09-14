@@ -34,7 +34,6 @@ import {
 } from './agent-contract.ts';
 import { onClose, ensureFolderHome, registeredFolderRoots } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { migrateLegacyEmbedderConfig, migrateRetiredEmbeddingSources } from './app-config.ts';
 import { bootBindAllFolders, reconcileProjectFolders, resetIndexerRuntime } from './state.ts';
 import { reapOrphanDaemons, reclaimStaleServerPort } from './stale-lock.ts';
 import { startParentWatchdog } from './parent-watchdog.ts';
@@ -77,13 +76,11 @@ import { mount as mountSessionsRoutes } from './routes/sessions.ts';
 import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
 import { mount as mountAgentInstructionsRoutes } from './routes/agent-instructions.ts';
-import { mount as mountOnboardingRoutes } from './routes/onboarding.ts';
 import { createRendererOriginPolicy } from './middleware/renderer-origin.ts';
 import { mount as mountAccountRoutes } from './routes/account.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from './agent-adapters.ts';
 import {
   cancelAgentRuntimeInstalls,
-  connectInstalledAgentMcpAfterBoot,
   connectInstalledAgentMcpOnStartup,
 } from './agent-runtime-installer.ts';
 import { createClientErrorHandler } from './client-error.ts';
@@ -141,11 +138,6 @@ const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
 const WEB_BUILD_DIR = path.resolve(APP_ROOT, 'dist', 'renderer');
 const PDFJS_DIST_DIR = path.resolve(APP_ROOT, 'node_modules', 'pdfjs-dist');
 
-// One-time migration from the old global-provider schema. Idempotent.
-migrateLegacyEmbedderConfig();
-// Retire the former local and hosted-account embedding sources before the
-// first daemon bind. Idempotent.
-migrateRetiredEmbeddingSources();
 // Establish the default folder home and seed the built-in manual on first use.
 // Unavailable folders retain their durable project registration.
 ensureFolderHome();
@@ -311,7 +303,6 @@ mountWindowContextRoutes(app);
 mountProjectRoutes(app);
 // Gallery browsing works before any folder is open too.
 mountGalleryRoutes(app);
-mountOnboardingRoutes(app);
 
 // Route-prefix gate: every API path under these roots needs an open
 // folder. Centralises the NO_FOLDER 412 response so individual handlers
@@ -398,18 +389,12 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   void mcpHttpService.start().catch((err: unknown) => {
     log.warn(`MCP HTTP startup failed: ${err instanceof Error ? err.message : String(err)}`);
   });
-  for (const { id, status } of connectInstalledAgentMcpOnStartup()) {
-    if (status.phase === 'ready') log.info(`connected StashBase MCP for installed ${id} runtime`);
-    else if (status.phase === 'failed') log.warn(`could not connect StashBase MCP for ${id}: ${status.failure?.message ?? 'unknown error'}`);
-  }
-  // Deferred second pass with the login-shell probe (spawns a shell, so it
-  // stays off the listen path): system runtimes on nvm/homebrew-style
-  // paths auto-connect too, instead of waiting for the first New Chat.
-  setTimeout(() => {
-    for (const { id, status } of connectInstalledAgentMcpAfterBoot()) {
-      if (status.phase === 'ready') log.info(`connected StashBase MCP for ${id} runtime (login-shell probe)`);
+  void connectInstalledAgentMcpOnStartup().then((results) => {
+    for (const { id, status } of results) {
+      if (status.phase === 'ready') log.info(`connected StashBase MCP for installed ${id} runtime`);
+      else if (status.phase === 'failed') log.warn(`could not connect StashBase MCP for ${id}: ${status.failure?.message ?? 'unknown error'}`);
     }
-  }, 3000).unref?.();
+  }).catch((error) => log.warn(`Agent startup check failed: ${String(error)}`));
   if (DEV_VITE) log.info(`dev-proxy → vite at http://localhost:${VITE_PORT}`);
   // We own :8090 now → we're THE server. Reap any orphan daemon left by a
   // previous server that died hard (kill -9 / crash / lost the startup

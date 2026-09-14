@@ -65,7 +65,7 @@ export function mount(app: express.Express, operations: ProjectOperations = crea
 
   app.use('/api/project', (req, res, next) => {
     try {
-      withAgentProjectScope(req.header(AGENT_SESSION_ID_HEADER)?.trim() || undefined, next);
+      withAgentProjectScope(req.header(AGENT_SESSION_ID_HEADER), next);
     } catch (error) {
       sendError(res, error);
     }
@@ -105,8 +105,8 @@ export function mount(app: express.Express, operations: ProjectOperations = crea
         wholeWord: req.body?.whole_word === true,
         // Session identity constrains project scope. Older native MCP hosts
         // may retain only the window id; the operation owns safe attribution.
-        agentSessionId: req.header(AGENT_SESSION_ID_HEADER)?.trim() || undefined,
-        windowId: req.header('x-stashbase-window-id')?.trim() || undefined,
+        agentSessionId: req.header(AGENT_SESSION_ID_HEADER),
+        windowId: req.header('x-stashbase-window-id'),
       });
       res.json({ ...result, mode: toSearchMode(result.mode) });
     } catch (err: unknown) {

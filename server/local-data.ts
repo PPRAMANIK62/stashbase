@@ -1,7 +1,5 @@
-import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { filesystemPath } from './filesystem-path.ts';
 
 const APP_NAME = 'StashBase';
 
@@ -16,30 +14,6 @@ export function appDataRoot(): string {
     return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), APP_NAME);
   }
   return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), APP_NAME);
-}
-
-export function localDataDirForRoot(root: string): string {
-  const resolved = canonicalRoot(root);
-  const hash = crypto.createHash('sha256').update(resolved).digest('hex').slice(0, 16);
-  const base = path.basename(resolved).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'folder';
-  return path.join(appDataRoot(), 'folders', `${base}-${hash}`);
-}
-
-function canonicalRoot(root: string): string {
-  const resolved = filesystemPath.absolute(root);
-  try {
-    // This legacy hash historically used native separators. Keep that byte
-    // representation while delegating realpath/platform semantics centrally.
-    return path.normalize(filesystemPath.real(resolved));
-  } catch {
-    return path.normalize(resolved);
-  }
-}
-
-/** Legacy per-root state DB path. Current conversion state is app-level
- *  (`appStateDbPath`); this remains only so old installs can migrate. */
-export function stateDbPathForRoot(root: string): string {
-  return path.join(localDataDirForRoot(root), 'state', 'state.db');
 }
 
 export function appStateDbPath(): string {

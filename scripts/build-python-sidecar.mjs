@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,8 +18,9 @@ const buildPath = path.join(root, 'dist', 'pyinstaller');
 const cachePath = path.join(root, 'python', 'pyinstaller-cache.nosync');
 const specPath = path.join(root, 'dist', 'pyinstaller');
 const buildReqs = path.join(root, 'python', 'build-requirements.txt');
-const extractReqs = path.join(root, 'python', 'requirements-extract.txt');
 const setupPython = path.join(root, 'scripts', 'setup-python.mjs');
+execFileSync(process.execPath, [path.join(root, 'scripts', 'lock-python.mjs'), '--check'], { cwd: root });
+process.env.PIP_CONSTRAINT = path.join(root, 'python', 'constraints.txt');
 const args = process.argv.slice(2);
 const buildExtractor = args.includes('--with-extract') || process.env.STASHBASE_BUILD_EXTRACT === '1';
 // Keep the console-enabled bootloader so Node can capture stderr progress and
@@ -146,37 +147,17 @@ function pruneDaemonBundle(bundleDir) {
   }
 }
 
-if (!fs.existsSync(python)) {
-  console.log('[build:python-sidecar] python/.venv.nosync is missing; running setup:python');
-  execFileSync(process.execPath, [setupPython], {
-    cwd: root,
-    stdio: 'inherit',
-  });
-}
-
-if (!fs.existsSync(python)) {
-  throw new Error(`python/.venv.nosync setup did not produce ${path.relative(root, python)}.`);
-}
-
-const probe = spawnSync(python, ['-m', 'PyInstaller', '--version'], {
+// Always reconcile an existing developer environment with the locked inputs;
+// release cache misses use a fresh environment. A successful version probe alone
+// does not prove the installed PyInstaller or runtime dependencies are current.
+execFileSync(process.execPath, [setupPython, ...(buildExtractor ? ['--with-extract'] : [])], {
   cwd: root,
-  encoding: 'utf8',
+  stdio: 'inherit',
 });
-if (probe.status !== 0) {
-  console.log('[build:python-sidecar] installing PyInstaller build dependency');
-  execFileSync(python, ['-m', 'pip', 'install', '-r', buildReqs], {
-    cwd: root,
-    stdio: 'inherit',
-  });
-}
-
-if (buildExtractor) {
-  console.log('[build:python-sidecar] installing optional extractor dependencies');
-  execFileSync(python, ['-m', 'pip', 'install', '-r', extractReqs], {
-    cwd: root,
-    stdio: 'inherit',
-  });
-}
+execFileSync(python, ['-m', 'pip', 'install', '-r', buildReqs], {
+  cwd: root,
+  stdio: 'inherit',
+});
 
 fs.rmSync(distPath, { recursive: true, force: true });
 fs.mkdirSync(distPath, { recursive: true });

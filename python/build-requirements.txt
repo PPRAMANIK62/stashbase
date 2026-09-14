@@ -1,1 +1,4 @@
 pyinstaller>=6.17,<7
+pip>=25.3
+# Build backend of the pinned MFS source distribution.
+hatchling==1.32.0

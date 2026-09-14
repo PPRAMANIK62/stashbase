@@ -57,7 +57,7 @@ accept/reject; those controls are not currently available.
 Some files can be listed without being searchable or editable. Muted files
 are excluded from Search and automatic Chat context. Preview, editing,
 retrieval text, and Agent file access vary by format; see the canonical
-[Format Capability Matrix](../design-docs/design/documents.md#format-capability-matrix).
+[Format Capability Matrix](../design-docs/design/writing-workspace.md#format-capability-matrix).
 
 ## Turn On Search by Meaning
 
@@ -97,7 +97,7 @@ transcription API cost and produces searchable timestamped text.
 Original media remain the visible files. They play directly when supported;
 otherwise, StashBase creates a compatible local audio preview. Extracted text
 and previews remain app-managed data. See
-[Preparation](../design-docs/design/preparation.md) for format behavior.
+[Project Context](../design-docs/design/project-context.md) for format behavior.
 
 ## Manage Access
 

@@ -82,7 +82,7 @@ async function runWithExplicitReadFolder(
   res: express.Response,
   fn: () => unknown | Promise<unknown>,
 ): Promise<void> {
-  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder : '';
   if (!rawFolder) {
     await fn();
     return;
@@ -101,7 +101,7 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
   const baseVersion = typeof (req.body ?? {}).baseVersion === 'string'
     ? (req.body ?? {}).baseVersion
     : undefined;
-  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder : '';
 
   if (rawFolder) {
     const overwrite = (req.body ?? {}).overwrite === true;
@@ -182,7 +182,7 @@ export function mount(
       // Application-level Workbench visibility applies only to the current
       // window listing. Explicit member listings are Agent-facing.
       const showHidden = getWorkspacePreferences().showHiddenFiles;
-      const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+      const rawFolder = typeof req.query.folder === 'string' ? req.query.folder : '';
       if (rawFolder) {
         const member = filesystemPath.isAbsolute(rawFolder)
           ? await exactRegisteredFolderRootAsync(rawFolder)
@@ -391,7 +391,7 @@ export function mount(
   // before launching.
   app.post('/api/reveal/*', async (req, res) => {
     const name = (req.params as any)[0] as string;
-    const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+    const rawFolder = typeof req.query.folder === 'string' ? req.query.folder : '';
     if (rawFolder) {
       const request = workspaceRevealRequestSchema.safeParse({ folderPath: rawFolder, path: name });
       if (!request.success) {

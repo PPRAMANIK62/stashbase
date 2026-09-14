@@ -59,8 +59,9 @@ export interface Indexer {
 
   /** Insert / replace one complete text projection. Empty / unchunkable
    *  content is valid: the document disappears from the index and no error
-   *  is raised. */
-  upsertFile(path: string, content: string): Promise<IndexUpsertResult>;
+   *  is raised. By default await indexing; source saves pass waitForIndex=false
+   *  to acknowledge revision acceptance without waiting for embeddings. */
+  upsertFile(path: string, content: string, options?: { waitForIndex?: boolean }): Promise<IndexUpsertResult>;
 
   /** Insert/replace chunks for a **converted source** (PDF/image/DOCX) whose
    *  searchable text comes from a separately-stored derived text file

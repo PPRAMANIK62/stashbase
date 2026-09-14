@@ -48,7 +48,7 @@ test('source and release renderer builds use the same pinned Vite+ setup', () =>
   }
 });
 
-test('source CI runs the replacement gate before the broader application matrix', () => {
+test('source CI runs the renderer checks before the application matrix', () => {
   const workflow = readWorkflow('.github/workflows/ci.yml');
   const steps = workflow.jobs?.['source-build']?.steps ?? [];
   const runs = steps
@@ -86,9 +86,8 @@ test('the one renderer CI step still covers every replacement check', () => {
     'check:renderer-dupes',
     'format:web',
     'lint:web',
-    // The renderer suite runs under the coverage gate rather than as
-    // `test:renderer`, which is the same suite plus its floor.
     'test:renderer:coverage',
+    'test:renderer:a11y',
     'typecheck:web',
     'build:web',
     'build:storybook',
@@ -100,4 +99,56 @@ test('the one renderer CI step still covers every replacement check', () => {
 test('Vite+ task-result caching is disabled repository-wide', () => {
   const config = fs.readFileSync(path.join(root, 'vite.config.ts'), 'utf8');
   assert.match(config, /run:\s*{[\s\S]*?cache:\s*false/);
+});
+
+// Count root-script invocations, expanding the aggregate renderer runner too.
+// This catches hidden rebuilds inside nested scripts, not just repeated CI steps.
+const scripts = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).scripts;
+function scriptCalls(command) {
+  const calls = [];
+  for (const match of command.matchAll(/(?:pnpm|npm run) ([\w:-]+)/g)) {
+    const name = match[1];
+    if (!scripts[name]) continue;
+    calls.push(name);
+    calls.push(...scriptCalls(scripts[name]));
+    if (name === 'check:web') {
+      for (const gate of gates) calls.push(...scriptCalls(`pnpm ${gate.args[0]}`));
+    }
+  }
+  return calls;
+}
+
+test('source validation builds each target once and reuses it for Electron smoke', () => {
+  const steps = readWorkflow('.github/workflows/ci.yml').jobs['source-build'].steps;
+  const platforms = ['Linux', 'Windows', 'macOS'];
+  const commands = platforms.map((os) => [os, steps.filter((step) => {
+    if (!step.if) return true;
+    if (step.if === "runner.os == 'Linux'") return os === 'Linux';
+    if (step.if === "runner.os != 'Linux'") return os !== 'Linux';
+    assert.fail(`Review the CI selection rule: ${step.if}`);
+  }).map((step) => step.run ?? '').join('\n')]);
+  commands.push(['local', 'pnpm check']);
+  for (const [platform, command] of commands) {
+    const calls = scriptCalls(command);
+    for (const name of ['build:web', 'build:electron-boundary', 'build:server', 'build:mcp', 'test:electron:smoke:built']) {
+      assert.equal(calls.filter((call) => call === name).length, 1, `${platform}: ${name} must run once`);
+    }
+    assert.ok(calls.indexOf('build:web') < calls.indexOf('test:electron:smoke:built'));
+    assert.ok(calls.indexOf('build:electron-boundary') < calls.indexOf('test:electron:smoke:built'));
+    const complete = platform === 'Linux' || platform === 'local';
+    for (const name of ['check:renderer-architecture', 'typecheck:web', 'test:renderer:coverage', 'test:renderer:a11y']) {
+      assert.equal(calls.filter((call) => call === name).length, complete ? 1 : 0, `${platform}: ${name}`);
+    }
+    assert.equal(calls.includes('test:renderer'), !complete, `${platform}: renderer behavior remains covered`);
+  }
+});
+
+test('Windows packaging verification stays in the release workflow', () => {
+  const source = readWorkflow('.github/workflows/ci.yml').jobs['source-build'].steps;
+  assert.ok(source.every((step) => !step.uses?.startsWith('msys2/')));
+  assert.doesNotMatch(source.map((step) => step.run ?? '').join('\n'), /dist:win|build:python-extract-sidecar|build:transcription/);
+  const release = readWorkflow('.github/workflows/release-windows.yml').jobs['windows-installer'].steps;
+  const runs = release.map((step) => step.run ?? '').join('\n');
+  assert.match(runs, /pnpm dist:win/);
+  assert.match(runs, /smoke-packaged-server\.mjs --require-transcription/);
 });

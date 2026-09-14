@@ -2,15 +2,10 @@
 
 Thanks for helping improve StashBase. Small focused PRs are easiest to review. For larger changes, please open or comment on an issue first so the scope and design direction can be discussed.
 
-Good places to start:
-
-- [Design docs guide and contribution areas](design-docs/README.md)
-- [Architecture](design-docs/architecture.md)
-- [User journeys and coverage IDs](design-docs/user-journeys.md)
-- [Journey coverage evidence](code-review/journey-coverage.md)
-- [Document design](design-docs/design/documents.md)
-- [Agent panel design](design-docs/design/agent-panel.md)
-- [Code review contracts](code-review/README.md)
+Start with the [design guide](design-docs/README.md) for product intent and
+[review guide](code-review/README.md) for scoped code review. The
+[journey map](code-review/journey-coverage.md) leads directly to implementation
+owners and evidence.
 
 ## Local Development
 
@@ -28,29 +23,43 @@ pnpm electron
 pnpm dev
 ```
 
-## Before Opening a PR
+## Testing
 
-Run the same source checks used by CI:
-
-```bash
-pnpm check
-pnpm test:docs
-```
-
-The check builds the renderer before launching the real Electron lifecycle
-smoke. Headless Linux environments need Xvfb; CI supplies it automatically.
-The isolated Linux source smoke also passes Chromium's `--no-sandbox` flag
-because hosted runners cannot install Electron's SUID sandbox helper as root.
-Packaged applications and macOS/Windows smoke launches retain their normal
-sandbox behavior.
-
-For Markdown renderer changes:
+During implementation, run the smallest suite that exercises the changed behavior:
 
 ```bash
-pnpm test:renderer
-pnpm typecheck
-pnpm build:web
+# Renderer feature or one file (paths are relative to renderer/)
+pnpm test:renderer src/features/documents
+pnpm test:renderer src/features/settings/domain/appearance.test.ts
+
+# One host regression; broader boundary suites are in the journey map
+node --import tsx --test server/text-file-transaction.test.ts
+
+# Story interactions and structural accessibility
+pnpm test:renderer:a11y
 ```
+
+`test:renderer` excludes the catalog accessibility sweep and does not build,
+check architecture, or collect coverage. `pnpm check:web` is the complete
+renderer gate, including coverage, accessibility, static checks, and both builds.
+Build and lint commands do only their named work.
+
+Before opening a PR, run `pnpm check` for the complete local source gate.
+It includes `check:web`, documentation validation, host suites, type checks,
+builds, and Electron smoke; do not repeat its constituent commands afterward.
+For a scoped change, follow [AGENTS.md](AGENTS.md) and the affected
+[journey](code-review/journey-coverage.md).
+
+The source gate builds each target once. `pnpm test:electron:smoke` builds its
+own prerequisites when run alone; `pnpm test:electron:smoke:built` is for a
+pipeline that already built the renderer and Electron boundary from the same
+checkout. Never use it against stale outputs as evidence for a change.
+Headless Linux needs Xvfb; CI supplies it and uses `--no-sandbox` for the isolated
+source smoke. Packaged apps and macOS/Windows retain their normal sandbox.
+
+Real-provider evaluations and packaged verification stay in the
+[release workflow](code-review/release-pipeline.md); a passing source gate does
+not establish model quality or a complete user journey.
 
 ## Debugging
 
@@ -62,22 +71,6 @@ API keys are configured in Settings, not environment variables.
 
 ## Release Notes for Maintainers
 
-Packaging is release-only. GitHub Actions builds and uploads macOS, Linux, and Windows installers from a release tag.
-
-Release workflow:
-
-1. Commit the code and version bump.
-2. Push `main` and wait for `CI` to succeed for the version-bump commit.
-3. Create and push the matching `vX.Y.Z` tag, then publish the GitHub Release for that tag.
-4. Let the macOS, Linux, and Windows release workflows verify that exact tag commit and attach installers.
-
-Release packaging fails closed when the tag commit has no successful `ci.yml` push run. If CI is still running, the release gate waits for it before packaging starts.
-
-Local macOS fallback:
-
-```bash
-pnpm release:verify:mac
-pnpm dist:brew
-```
-
-Do not commit packaged artifacts. Release outputs belong in `release.nosync/`.
+Follow the [Release Runbook](code-review/release-pipeline.md) for versioning,
+source-CI gating, signing, packaging, publication, and residual checks.
+Packaging is release-only; outputs stay in `release.nosync/` and are never committed.

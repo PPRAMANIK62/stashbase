@@ -6,7 +6,7 @@
  * Codex's app-server remain free to keep their native lifecycle details.
  */
 import type { WebSocket } from 'ws';
-import { CLIS, launchCommandFor } from './terminal.ts';
+import { CLIS } from './terminal.ts';
 import { resolveAgentCli } from './agent-cli.ts';
 import { agentExecutableSource } from './agent-runtime-paths.ts';
 import { agentBootstrapStatus } from './agent-runtime-installer.ts';
@@ -103,12 +103,11 @@ export function resolveAgentSessionFolder(
 ): AgentSessionFolderResolution {
   if (requested == null) return { ok: true };
   if (typeof requested !== 'string') return { ok: false, message: 'folder must be a project folder path' };
-  const trimmed = requested.trim();
-  if (!trimmed) return { ok: true };
-  if (!filesystemPath.isAbsolute(trimmed)) return { ok: false, message: 'folder must be an absolute project folder path' };
+  if (!requested.trim()) return { ok: true };
+  if (!filesystemPath.isAbsolute(requested)) return { ok: false, message: 'folder must be an absolute project folder path' };
   for (const root of memberRoots) {
     try {
-      if (filesystemPath.equal(root, trimmed)) return { ok: true, folder: root };
+      if (filesystemPath.equal(root, requested)) return { ok: true, folder: root };
     } catch {
       // A malformed candidate cannot equal a member root; keep checking.
     }
@@ -283,7 +282,7 @@ export function runtimeDescriptorFor(
     label: adapter.label,
     vendor: adapter.vendor,
     installHint: cli.installHint,
-    launchCommand: launchCommandFor(cli),
+    launchCommand: cli.bin,
     endpoint: '/ws/agent',
     installed,
     source: agentExecutableSource(adapter.id, executable),

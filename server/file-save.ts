@@ -37,29 +37,23 @@ export async function upsertSavedFile(name: string, content: string): Promise<st
   // are shown in the Workbench) stay outside the index. Delete any row from a
   // formerly visible identity immediately; waiting for reconcile would leave
   // hidden content available to Search or Chat after an edit.
-  if (!shouldIndexFilePath(name)) {
-    await indexer.deleteFile(toSourcePath(name)).catch((err) => {
-      log.warn(`save: failed to remove ineligible file from index ${name}: ${errorMessage(err)}`);
-    });
-    log.info(`save: removed/skipped index update for ${name} because the path is not indexable`);
-    return undefined;
-  }
-  if (!content.trim()) {
-    await indexer.deleteFile(toSourcePath(name)).catch((err) => {
-      log.warn(`save: failed to remove empty file from index ${name}: ${errorMessage(err)}`);
-    });
-    return undefined;
-  }
-  const tooLarge = contentSizeError(content);
-  if (tooLarge) {
-    await indexer.deleteFile(toSourcePath(name)).catch((err) => {
-      log.warn(`save: failed to remove oversized file from index ${name}: ${errorMessage(err)}`);
-    });
-    log.warn(`save: skipped index update for ${name}: ${tooLarge}`);
-    return `${tooLarge}. This file won't be searchable until you split or reduce it and run sync.`;
-  }
   try {
-    await indexer.upsertFile(toSourcePath(name), content);
+    if (!shouldIndexFilePath(name)) {
+      await indexer.deleteFile(toSourcePath(name));
+      log.info(`save: removed/skipped index update for ${name} because the path is not indexable`);
+      return undefined;
+    }
+    if (!content.trim()) {
+      await indexer.deleteFile(toSourcePath(name));
+      return undefined;
+    }
+    const tooLarge = contentSizeError(content);
+    if (tooLarge) {
+      await indexer.deleteFile(toSourcePath(name));
+      log.warn(`save: skipped index update for ${name}: ${tooLarge}`);
+      return `${tooLarge}. This file won't be searchable until you split or reduce it and run sync.`;
+    }
+    await indexer.upsertFile(toSourcePath(name), content, { waitForIndex: false });
     return undefined;
   } catch (err: unknown) {
     const message = errorMessage(err);
@@ -81,13 +75,15 @@ export async function saveFileContent(
       ? preserveTextSourceFormat(previous?.content ?? '', content)
       : content;
     // A byte-identical retry succeeds even if its original baseline is stale.
-    if (previous?.content === savedContent) return previous;
+    if (previous?.content === savedContent) {
+      return { ...previous, indexWarning: await upsertSavedFile(name, savedContent) };
+    }
     if (opts.baseVersion !== undefined && previous?.version !== opts.baseVersion) {
       throw fileChanged(previous?.version ?? null);
     }
     const saved = await replaceTextSnapshotAsync(name, savedContent, previous?.version ?? null);
-    const indexWarning = await upsertSavedFile(name, saved.content);
     noteTreeChanged();
+    const indexWarning = await upsertSavedFile(name, saved.content);
     return { ...saved, indexWarning };
   });
 }

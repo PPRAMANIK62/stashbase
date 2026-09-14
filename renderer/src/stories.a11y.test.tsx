@@ -15,9 +15,9 @@
  *  several axe rules read computed visibility, and a story judged without its
  *  CSS is not the story anyone sees.
  *
- *  Three environments per story, because a violation can live in exactly one
- *  of them: the default step, the compact step (smaller type and tighter
- *  targets), and dark. And each story's `play` runs first where it has one, so
+ *  Each story runs once at default size in light mode. Theme, target size and
+ *  contrast need a painted browser; repeating structural axe checks in
+ *  happy-dom does not prove them. Each story's `play` runs first, so
  *  the state a story exists to show — a menu open, a value picked — is the
  *  state that gets scored rather than the closed shell in front of it. */
 import { composeStories } from '@storybook/react-vite';
@@ -26,8 +26,7 @@ import axe from 'axe-core';
 import type { ComponentType } from 'react';
 import { afterEach, describe, expect, it } from 'vite-plus/test';
 
-import { type SizeVariant } from '@/lib/size-context';
-import { applyStoryTheme, StoryFrame, type StoryTheme } from '@/test/story-canvas';
+import { applyStoryTheme, StoryFrame } from '@/test/story-canvas';
 
 import '@/globals.css';
 
@@ -120,24 +119,10 @@ const composedByModule = modulePaths.map((modulePath) => {
   };
 });
 
-interface Environment {
-  label: string;
-  size: SizeVariant;
-  theme: StoryTheme;
-}
-
-/** The three the product actually ships in. A fourth (compact + dark) would
- *  cross two independent axes that no rule reads together. */
-const ENVIRONMENTS: readonly Environment[] = [
-  { label: 'default size, light', size: 'default', theme: 'light' },
-  { label: 'compact size, light', size: 'compact', theme: 'light' },
-  { label: 'default size, dark', size: 'default', theme: 'dark' },
-];
-
-async function scoreStory(Story: ComposedStory, environment: Environment): Promise<string[]> {
-  applyStoryTheme(environment.theme);
+async function scoreStory(Story: ComposedStory): Promise<string[]> {
+  applyStoryTheme('light');
   const view = render(
-    <StoryFrame ownsLandmarks={Story.parameters?.ownsLandmarks === true} size={environment.size}>
+    <StoryFrame ownsLandmarks={Story.parameters?.ownsLandmarks === true} size="default">
       <Story />
     </StoryFrame>,
   );
@@ -157,15 +142,8 @@ describe('story accessibility', () => {
 
   for (const { name, stories } of composedByModule) {
     for (const [storyName, Story] of stories) {
-      // Three axe environments per story under a fully parallel suite run
-      // regularly overrun the default 5s on the heaviest workspace stories;
-      // the timeout margin absorbs scheduler load, not slow scoring.
       it(`${name} · ${storyName} has no accessibility violations`, async () => {
-        for (const environment of ENVIRONMENTS) {
-          const violations = await scoreStory(Story, environment);
-          expect(violations, `${name} · ${storyName} (${environment.label})`).toEqual([]);
-          cleanup();
-        }
+        expect(await scoreStory(Story), `${name} · ${storyName}`).toEqual([]);
       }, 20_000);
     }
   }

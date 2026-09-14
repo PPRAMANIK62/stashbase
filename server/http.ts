@@ -54,7 +54,7 @@ export async function guardExplicitFolder(
   req: express.Request,
   res: express.Response,
 ): Promise<boolean> {
-  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
+  const rawFolder = typeof req.query.folder === 'string' ? req.query.folder : '';
   if (!rawFolder) return true;
   const current = getCurrentFolder();
   let matchesActiveFolder = false;

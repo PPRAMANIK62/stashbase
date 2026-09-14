@@ -113,15 +113,3 @@ test('a malformed Agent Instructions object cannot block a later strict save', (
     folders: [{ path: '/Work/Alpha', text: 'Recovered guidance' }],
   });
 });
-
-
-test('a saved pre-project Chat customization survives and compacts on write', () => {
-  const legacy = JSON.parse('{"agentInstructions":{"library":"Keep my wording."}}');
-  const { store, config } = fixture(legacy);
-  assert.equal(store.get({ kind: 'unbound' }).text, 'Keep my wording.');
-  store.set({ kind: 'folder', path: '/Work/Alpha' }, 'Project guidance.');
-  assert.deepEqual(config().agentInstructions, {
-    unbound: 'Keep my wording.',
-    folders: [{ path: '/Work/Alpha', text: 'Project guidance.' }],
-  });
-});

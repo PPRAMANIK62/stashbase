@@ -24,6 +24,7 @@ export const gates = [
   { name: 'format', command: 'pnpm', args: ['format:web'] },
   { name: 'lint', command: 'pnpm', args: ['lint:web'] },
   { name: 'coverage', command: 'pnpm', args: ['test:renderer:coverage'] },
+  { name: 'accessibility', command: 'pnpm', args: ['test:renderer:a11y'] },
   { name: 'typecheck', command: 'pnpm', args: ['typecheck:web'] },
   { name: 'build', command: 'pnpm', args: ['build:web'] },
   { name: 'storybook', command: 'pnpm', args: ['build:storybook'] },

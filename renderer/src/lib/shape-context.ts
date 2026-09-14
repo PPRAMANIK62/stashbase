@@ -1,19 +1,7 @@
-/** The kit's geometry: one radius per role, written once.
- *
- *  Rounded corners are the only geometry this product ships, which
- *  `code-review/renderer-styling.md` records, so there is no shape to choose
- *  and nothing to publish — the map
- *  below IS the shape. What used to be here (a one-member variant union, a
- *  provider holding it in state, a `setShape` nobody called, a forced-reflow
- *  `.transitioning` dance that cross-faded between the one option and itself,
- *  and a CSS custom property republishing a constant) was generality with no
- *  second case to serve.
- *
- *  `useShape()` survives unchanged so every call site reads the same way it
- *  did; it is a plain lookup now rather than a context read. The one value the
- *  old provider published to plain CSS — `--shape-input-radius`, which the
- *  focus-ring fallback and the Markdown viewer's stylesheet read — is a token
- *  in `globals.css` for the same reason. */
+/** Kit geometry: one radius per role.
+ * Rounded is the only supported geometry, so useShape is a plain lookup;
+ * no variant state or provider is needed. CSS-only consumers read the
+ * matching --shape-input-radius token from globals.css. */
 
 interface ShapeClasses {
   item: string;
@@ -27,7 +15,7 @@ interface ShapeClasses {
    *  importance, it scales with the box: `container` also dresses a 40px
    *  viewer toolbar and a 28px segmented track, and a card-sized radius on
    *  those is clamped by the UA to half their height, which turns them into
-   *  capsules — the one shape `visual-style.md` reserves for semantics. */
+   *  capsules rather than preserving the intended rounded rectangle. */
   card: string;
   input: string;
   /** A 16–24px box: a small badge, an inline mark. Below every other role

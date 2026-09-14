@@ -84,9 +84,8 @@ function storedFolders(config: AppConfigFile): StoredFolderInstructions[] {
 function storedUnbound(config: AppConfigFile): string {
   const value: unknown = config.agentInstructions;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
-  // Read the previous durable key once; every write compacts to the new shape.
-  const stored = value as { unbound?: unknown; library?: unknown };
-  return readableText(stored.unbound ?? stored.library);
+  const stored = value as { unbound?: unknown };
+  return readableText(stored.unbound);
 }
 
 function inputError(message: string): Error {

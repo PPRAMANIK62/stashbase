@@ -1,23 +1,97 @@
-# Agent maintenance contract for this repo
+# Working on StashBase
 
-The human/AI operating model is [`MAINTENANCE.md`](MAINTENANCE.md). Follow it
-for design, implementation, review, and evidence ownership.
+## Product Context
 
-Before writing code, consult the affected product area in `design-docs/` and
-the owning engineering contract in `code-review/`. For code review, pin the
-diff and follow the diff-first route in `code-review/README.md`, then use
-`code-review/journey-coverage.md` to recover product intent and evidence.
-Product docs define intent and observable behavior; review contracts define
-risky Interfaces, invariants, implementation entry points, and validation.
-Code remains the source of truth for the current implementation.
+StashBase is an **IDE for writing** in ordinary local projects. The main flow is:
+enter a project → brainstorm with an Agent → draft and revise → refine.
+An empty project is valid; references, search, and wiki building are optional.
 
-Keep the affected docs current in the same change as code. This is not a later
-documentation pass. All committed docs are English-only.
+- **Documents mode** is a VSCode-like files/editor workspace.
+- **Chat mode** is a Claude/ChatGPT-like conversation workspace.
+- Both share the project and preserve unfinished work. A folder is a project
+  scope and search namespace; the product has no global Library.
 
-The renderer under `renderer/` is the frontend. Its owning engineering
-contract is [`code-review/renderer-architecture.md`](code-review/renderer-architecture.md);
-read it before changing anything under `renderer/src`, and run
-`pnpm check:web`, which is the one gate CI runs for it.
+Local file handling, preparation, indexing, retrieval, and Agent-assisted writing
+are implemented. **Document-specific inline prose diff is coming soon**; existing
+file diffs and save-conflict comparisons do not implement it. Defects and missing
+evidence are not additional planned features.
+
+Search UI says **By keyword / By meaning**; grep/hybrid are implementation strategies.
+
+## Documentation Map
+
+Use this map to find an answer, then the task routes below to choose what to read.
+These documents are references, not a checklist to read in full for every task.
+
+| Document | Question it answers |
+|---|---|
+| [README.md](README.md) | What is StashBase, and how do I get started? The short external introduction. |
+| [Design Docs](design-docs/README.md) | What should the product do? Routes to product identity, direction, terminology, user journeys, area designs, and visual intent. |
+| [Review Guide](code-review/README.md) | How should I scope a review, inspect a change, and report findings? |
+| [Engineering Boundaries](code-review/architecture.md) | Which module or process owns a responsibility, and what rules must changes preserve? |
+| [Journey Coverage](code-review/journey-coverage.md) | Which code implements a user journey, what evidence exists, and what remains unproven or broken? |
+| [Release Runbook](code-review/release-pipeline.md) | How are source CI, packaging, signing, release verification, and publication performed? |
+| [MAINTENANCE.md](MAINTENANCE.md) | Who maintains each kind of document, when should it change, and how are status and compatibility decisions recorded? |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How do I set up development and run focused or complete checks? |
+| [User/operator guides](docs/) | How does a user or operator use and troubleshoot the product? |
+| [Release checklists](release-checklists/) | What still needs checking in the packaged application? |
+
+`CLAUDE.md` points to this file; `CONTEXT.md` points to the
+[Glossary](design-docs/glossary.md). They do not define separate policies.
+
+## Choose the Review Route
+
+Read only the affected sections, then inspect the implementation and tests.
+Respect the requested scope, including whether frontend UI is excluded.
+
+| Task | Starting point and route |
+|---|---|
+| Discuss a design or feature | Product overview → [owning area](design-docs/README.md#product-areas) → [user journey](design-docs/user-journeys.md) → engineering boundary → current code. Separate an agreed requirement from a proposed change. |
+| Review a user journey | Select its Jxx section in [Journey Coverage](code-review/journey-coverage.md). Follow its renderer and host/service entries through the operation, failure, cancellation, and recovery paths. Read the linked product intent and boundaries. |
+| Review a branch, commit, PR, or working tree | Pin the comparison point; include relevant uncommitted/new files. Follow the [diff-first route](code-review/README.md#diff-first-review), expanding through callers and crossed boundaries. |
+| Diagnose or fix a bug | Find the affected journey/boundary, reproduce the failure, and trace its state owner. Verify the fix at the lowest useful layer and through the affected runtime flow when needed. |
+| Simplify code or audit shared infrastructure | Start from [Engineering Boundaries](code-review/architecture.md). Trace real callers and the purpose they serve; absence from a journey map alone is not proof of dead code. |
+
+## Review Principles
+
+- **Necessity:** connect code to a current user task or required infrastructure.
+  Question assumptions inherited from the former knowledge-base/global-Library
+  model; optional wiki work must not become a prerequisite for writing.
+- **Simplicity:** prefer one owner for each rule, state, and operation. Remove
+  unused paths, duplicate logic, and unnecessary abstractions after checking
+  callers. Do not preserve complexity merely because it already exists.
+- **Correctness:** trace project scope, permissions, source versions, concurrent
+  work, cancellation, disposal, and recovery. Failures must not broaden access,
+  overwrite newer work, or silently report success.
+- **Evidence:** code establishes current behavior; product docs establish intent.
+  When they differ, record the mismatch. Tests prove only exercised paths;
+  controlled fixtures do not establish real-provider quality or packaged behavior.
+- **Compatibility:** remove historical-data-only migration/repair code under the
+  [previous-version data policy](MAINTENANCE.md#previous-version-data-policy).
+  Keep current validation, persistence, rollback, and crash recovery. User files
+  and active external protocols are separate concerns.
+
+Report findings with a code location, consequence, and supporting or missing
+evidence. Distinguish defects from product proposals and maintenance judgments.
+State what was reviewed, validated, and left unproven; do not equate a green
+command or a complete map with a complete review.
+
+## Documentation and Implementation
+
+Before writing code, read the affected product area and engineering boundary.
+Update them in the same change when behavior or constraints change; update the
+Jxx entry when code ownership, evidence, or gaps change. Preserve stable journey IDs.
+
+Keep each topic with its owner: product behavior in Design Docs, cross-module
+rules in Engineering Boundaries, local rationale beside code, exact checks in
+configuration, and assertions in tests. Keep the four-document review structure;
+do not create a document for every module or retain completed research as a
+second specification. All committed docs are English-only.
+
+The renderer under `renderer/` is the frontend. Read
+[the renderer boundary](code-review/architecture.md#renderer-boundaries) before
+changing anything under `renderer/src`, and run `pnpm check:web`, the single
+renderer gate used by CI. Exact rules live in the gate's configurations.
 
 ## GitHub access for this repository
 
@@ -49,74 +123,11 @@ undefined or a smoke fails at `app.setPath`, treat the inherited variable as
 environment setup, not a product regression. Do not remove the variable from
 flows that intentionally run Electron's embedded Node runtime.
 
-You are responsible for keeping the relevant docs under `design-docs/` and
-`code-review/` up to date. Update them as a side effect of relevant code
-changes — never as a standalone "documentation pass". If a change touches the
-surface area one of these docs covers, edit that doc in the same change.
-
-## Documentation route
-
-Start with [`design-docs/README.md`](design-docs/README.md).
-
-- `overview.md` and `principles.md` — product identity and durable rules.
-- `product-direction.md` — intended direction, not a promise list.
-- `product-scenarios.md` — high-level reasons people use StashBase.
-- `user-journeys.md` — observable Shipping flows with stable `Jxx` IDs.
-- `glossary.md` — shared product language.
-- `visual-style.md` — visual intent, with tokens and CSS mechanics owned by
-  the renderer-styling contract.
-- `architecture.md` — product-level ownership, flows, and trust boundaries.
-- `design/*.md` — Workspace, Documents, Preparation, Search and Retrieval,
-  Agent Panel, and Bug Reporting outcomes, current experience, contracts, and
-  contribution areas.
-
-Start engineering review with
-[`code-review/README.md`](code-review/README.md). It routes a change to:
-
-- `architecture.md` — cross-process ownership and system flow;
-- `window-lifecycle.md` — native windows, save barriers, retirement, shutdown;
-- `bug-reporting.md` — local report collection, review authorization, approval,
-  artifact handoff, and privacy;
-- `renderer-architecture.md` — renderer layers, state ownership, and the gates;
-- `renderer-workspace.md` — folder/tab/search transitions and renderer liveness;
-- `data-lifecycle.md` — preparation, indexing, reconcile, queues, cleanup;
-- `file-transactions.md` — paths, import, save, conflicts, mutations;
-- `document-viewers.md` and `markdown-rendering.md` — preview behavior and trust;
-- `settings-config.md` — durable preferences, credentials, reconfiguration;
-- `mcp-access.md` — MCP transports, credentials, and authorized scope;
-- `gallery.md` — published index, copying an entry into a folder, and the
-  bound on its outbound reach;
-- `agent-runtime.md` and `agent-panel.md` — native Agent and renderer behavior;
-- `renderer-styling.md` — styling mechanics;
-- `journey-coverage.md` — product journey to automated/release evidence;
-- `release-pipeline.md` — source CI, tag gating, packaging, and release runbook.
-
-`README.md` is the short external entry. `docs/` contains user/operator guides;
-`release-checklists/` contains residual packaged checks. Do not duplicate one
-topic across these layers.
-
-## Documentation rules
-
-- **Truth:** code > docs. Tests prove only what they exercise.
-- **Status:** Current means observed Shipping behavior; Required contracts may
-  be stricter. If they differ, record a Known Gap instead of rewriting intent
-  as implementation truth. Durable capability direction lives in
-  `product-direction.md`; area-specific direction stays under Next/Coordinate
-  First.
-- **Concision:** every paragraph should pay rent. Cross-reference the one
-  owning document.
-- **Boundary:** product docs contain no source-tree inventories. Review
-  contracts name only stable Interfaces, primary owner Modules, Adapters, and
-  validation entry points. Tests own exact fixtures and assertions.
-- **Maintenance:** update an area/journey when Shipping behavior changes and a
-  review contract when its Interface, invariant, risk, or validation changes.
-  Use issues and PRs for chronology, scheduling, and ownership.
-
 ## Development loop
 
 When the user reports a bug or asks for a feature, run the full loop:
 
-1. Locate and diagnose after reading the relevant design and review contracts.
+1. Locate and diagnose after reading the relevant design and engineering boundary sections.
 2. Implement while preserving these cross-cutting constraints: sync and
    conversion are folder-explicit; hidden derived notes never surface; one
    daemon owns the local index; credentials live only in Settings, never env.
@@ -129,14 +140,31 @@ When the user reports a bug or asks for a feature, run the full loop:
    of the pre-commit gate.
 5. Leave work uncommitted until the user asks to commit.
 
+## Test Selection
+
+Test an observable result or a consequential failure: source preservation,
+project isolation, permissions, concurrency, cancellation, and recovery.
+Do not add tests solely to repeat constants, file lists, trivial forwarding,
+or assertions already exercised by a Story. Keep one primary test owner per
+rule; multiple layers need tests only when they introduce distinct risks.
+Mocks prove local decisions, not a complete journey or real-provider quality.
+
+Use [focused commands](CONTRIBUTING.md#testing) while editing. Run the complete
+affected gate once after implementation, not after every edit. A completed
+`pnpm check` satisfies its constituent gates; do not run them again without
+new changes or a failed check. Build once and reuse those exact outputs within
+the same validation run. Keep genuine evidence gaps in Journey Coverage.
+
 ## Pre-commit verification
 
 Before creating commits, run the complete validation matrix for the pending
 change:
 
-- `pnpm typecheck` always;
-- `pnpm lint:web` and `pnpm build:web` for renderer changes;
-- focused commands from every crossed review contract;
+- `pnpm typecheck` for host and renderer types; if `check:web` has already
+  checked renderer types for this change, run only `pnpm typecheck:host`;
+- `pnpm check:web` for renderer changes; it includes lint, coverage, Story
+  accessibility, typecheck, architecture checks, and builds;
+- focused commands for every affected engineering boundary;
 - `pnpm test:docs` for documentation structure, links, contracts, or journey
   mapping changes;
 - `pnpm test:electron` and `pnpm test:electron:smoke` for release-blocking

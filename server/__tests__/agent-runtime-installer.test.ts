@@ -58,11 +58,21 @@ function fakeDependencies(overrides: Partial<AgentBootstrapDependencies> = {}) {
   };
 }
 
+async function prepare(coordinator: AgentBootstrapCoordinator, id: 'codex' | 'claude') {
+  coordinator.begin(id);
+  return coordinator.wait(id);
+}
+
+async function connect(coordinator: AgentBootstrapCoordinator, id: 'codex' | 'claude', options?: { probeLoginShell?: boolean }) {
+  coordinator.connectIfInstalled(id, options);
+  return coordinator.wait(id);
+}
+
 test('missing runtime moves through install and MCP configuration to ready', async () => {
   const fake = fakeDependencies();
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
 
-  assert.equal(coordinator.begin('codex').phase, 'installing');
+  assert.equal(coordinator.begin('codex').phase, 'configuring');
   const settled = await coordinator.wait('codex');
 
   assert.equal(settled.phase, 'ready');
@@ -70,7 +80,7 @@ test('missing runtime moves through install and MCP configuration to ready', asy
   assert.equal(fake.configured(), 1);
 });
 
-test('existing runtime skips download but still ensures MCP configuration', () => {
+test('existing runtime skips download but still ensures MCP configuration', async () => {
   let installs = 0;
   let configured = 0;
   const fake = fakeDependencies({
@@ -80,12 +90,12 @@ test('existing runtime skips download but still ensures MCP configuration', () =
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
 
-  assert.equal(coordinator.begin('claude').phase, 'ready');
+  assert.equal((await prepare(coordinator, 'claude')).phase, 'ready');
   assert.equal(installs, 0);
   assert.equal(configured, 1);
 });
 
-test('installed Codex stops at a distinct authentication failure before MCP configuration', () => {
+test('installed Codex stops at a distinct authentication failure before MCP configuration', async () => {
   let configured = 0;
   const fake = fakeDependencies({
     resolveExecutable: () => '/managed/codex',
@@ -94,7 +104,7 @@ test('installed Codex stops at a distinct authentication failure before MCP conf
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
 
-  const status = coordinator.begin('codex');
+  const status = await prepare(coordinator, 'codex');
 
   assert.equal(status.phase, 'failed');
   assert.equal(status.failure?.stage, 'authentication');
@@ -120,9 +130,10 @@ test('Codex browser login uses the discovered executable and resumes MCP prepara
     configureMcp: () => { configured += 1; },
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
-  assert.equal(coordinator.begin('codex').failure?.stage, 'authentication');
+  assert.equal((await prepare(coordinator, 'codex')).failure?.stage, 'authentication');
 
   assert.equal(coordinator.login('codex').phase, 'authenticating');
+  await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(loginExecutable, '/managed/codex');
   completeLogin();
   const settled = await coordinator.wait('codex');
@@ -143,14 +154,14 @@ test('Codex authentication commands use the selected executable', { skip: proces
   ].join('\n'));
   fs.chmodSync(executable, 0o755);
   try {
-    assert.equal(agentIsAuthenticated('codex', executable), false);
+    assert.equal(await agentIsAuthenticated('codex', executable), false);
     await loginToAgent('codex', executable, new AbortController().signal);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('startup connects MCP for discovered runtimes without installing missing ones', () => {
+test('startup connects MCP for discovered runtimes without installing missing ones', async () => {
   let installed = true;
   let installs = 0;
   let configured = 0;
@@ -161,9 +172,9 @@ test('startup connects MCP for discovered runtimes without installing missing on
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
 
-  assert.equal(coordinator.connectIfInstalled('codex').phase, 'ready');
+  assert.equal((await connect(coordinator, 'codex')).phase, 'ready');
   installed = false;
-  assert.equal(coordinator.connectIfInstalled('claude').phase, 'idle');
+  assert.equal((await connect(coordinator, 'claude')).phase, 'idle');
   assert.equal(installs, 0);
   assert.equal(configured, 1);
 });
@@ -182,18 +193,18 @@ test('recheck recovers a failed setup from an externally installed runtime witho
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
 
-  assert.equal(coordinator.begin('codex').phase, 'installing');
+  assert.equal(coordinator.begin('codex').phase, 'configuring');
   assert.equal((await coordinator.wait('codex')).phase, 'failed');
   externallyInstalled = true;
 
-  const checked = coordinator.connectIfInstalled('codex', { probeLoginShell: true });
+  const checked = await connect(coordinator, 'codex', { probeLoginShell: true });
 
   assert.equal(checked.phase, 'ready');
   assert.equal(installs, 1);
   assert.equal(configured, 1);
 });
 
-test('startup MCP repair does not consume the next explicit setup failure', () => {
+test('startup MCP repair does not consume the next explicit setup failure', async () => {
   let nextFailure: 'mcp' | null = 'mcp';
   let configured = 0;
   const fake = fakeDependencies({
@@ -207,10 +218,10 @@ test('startup MCP repair does not consume the next explicit setup failure', () =
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
 
-  assert.equal(coordinator.connectIfInstalled('codex').phase, 'ready');
+  assert.equal((await connect(coordinator, 'codex')).phase, 'ready');
   assert.equal(configured, 1);
   assert.equal(nextFailure, 'mcp');
-  assert.equal(coordinator.begin('codex').failure?.stage, 'mcp');
+  assert.equal((await prepare(coordinator, 'codex')).failure?.stage, 'mcp');
   assert.equal(nextFailure, null);
   assert.equal(configured, 1);
 });
@@ -225,18 +236,18 @@ test('an injected installation failure is classified and consumed before retry',
     },
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
-  const settled = coordinator.begin('codex');
+  const settled = await prepare(coordinator, 'codex');
   assert.equal(settled.phase, 'failed');
   assert.equal(settled.failure?.stage, 'installation');
   assert.equal(settled.failure?.code, 'simulated');
   assert.equal(settled.failure?.manualRecovery, undefined);
   assert.match(settled.failure?.message ?? '', /Simulated Agent installation failure/);
 
-  assert.equal(coordinator.begin('codex').phase, 'installing');
+  assert.equal(coordinator.begin('codex').phase, 'configuring');
   assert.equal((await coordinator.wait('codex')).phase, 'ready');
 });
 
-test('an injected MCP failure retries only MCP when the runtime exists', () => {
+test('an injected MCP failure retries only MCP when the runtime exists', async () => {
   let nextFailure: 'installation' | 'mcp' | null = 'mcp';
   let installs = 0;
   let configured = 0;
@@ -252,19 +263,19 @@ test('an injected MCP failure retries only MCP when the runtime exists', () => {
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
 
-  const failed = coordinator.begin('codex');
+  const failed = await prepare(coordinator, 'codex');
   assert.equal(failed.failure?.stage, 'mcp');
   assert.equal(failed.failure?.code, 'simulated');
   assert.equal(failed.failure?.manualRecovery, undefined);
   assert.equal(installs, 0);
   assert.equal(configured, 0);
 
-  assert.equal(coordinator.begin('codex').phase, 'ready');
+  assert.equal((await prepare(coordinator, 'codex')).phase, 'ready');
   assert.equal(installs, 0);
   assert.equal(configured, 1);
 });
 
-test('an injected signed-out simulation stops Codex at the sign-in gate once', () => {
+test('an injected signed-out simulation stops Codex at the sign-in gate once', async () => {
   let nextFailure: 'authentication' | null = 'authentication';
   let configured = 0;
   const fake = fakeDependencies({
@@ -278,14 +289,14 @@ test('an injected signed-out simulation stops Codex at the sign-in gate once', (
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
 
-  const failed = coordinator.begin('codex');
+  const failed = await prepare(coordinator, 'codex');
   assert.equal(failed.phase, 'failed');
   assert.equal(failed.failure?.stage, 'authentication');
   assert.equal(failed.failure?.code, 'authentication-required');
   assert.match(failed.failure?.message ?? '', /Simulated signed-out/);
   assert.equal(configured, 0);
 
-  assert.equal(coordinator.begin('codex').phase, 'ready');
+  assert.equal((await prepare(coordinator, 'codex')).phase, 'ready');
   assert.equal(configured, 1);
 });
 
@@ -299,7 +310,7 @@ test('the signed-out simulation never arms Claude and is not consumed by login v
       return true;
     },
   });
-  assert.equal(new AgentBootstrapCoordinator(claude.dependencies).begin('claude').phase, 'ready');
+  assert.equal((await prepare(new AgentBootstrapCoordinator(claude.dependencies), 'claude')).phase, 'ready');
   assert.equal(consumed, 0);
 
   // A completed Codex login verifies for real instead of consuming the gate
@@ -322,7 +333,7 @@ test('real installation and MCP errors advertise only their relevant manual reco
   const installFailure = new AgentBootstrapCoordinator(fakeDependencies({
     installRuntime: async () => { throw new Error('download unavailable'); },
   }).dependencies);
-  assert.equal(installFailure.begin('codex').phase, 'installing');
+  assert.equal(installFailure.begin('codex').phase, 'configuring');
   const failedInstall = await installFailure.wait('codex');
   assert.equal(failedInstall.failure?.stage, 'installation');
   assert.equal(failedInstall.failure?.manualRecovery, 'install-command');
@@ -331,7 +342,7 @@ test('real installation and MCP errors advertise only their relevant manual reco
     resolveExecutable: () => '/system/codex',
     configureMcp: () => { throw new Error('config is read-only'); },
   }).dependencies);
-  const failedMcp = mcpFailure.begin('codex');
+  const failedMcp = await prepare(mcpFailure, 'codex');
   assert.equal(failedMcp.failure?.stage, 'mcp');
   assert.equal(failedMcp.failure?.manualRecovery, 'mcp-settings');
 });
@@ -885,7 +896,7 @@ test('managed-only discovery ignores the global Agent without uninstalling it', 
   }
 });
 
-test('explicit readiness finds a version-manager Agent through the login shell', { skip: process.platform === 'win32' }, () => {
+test('explicit readiness finds a version-manager Agent through the login shell', { skip: process.platform === 'win32' }, async () => {
   const previousShell = process.env.SHELL;
   const previousFakeBin = process.env.STASHBASE_TEST_SHELL_AGENT;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-agent-shell-test-'));
@@ -899,7 +910,7 @@ test('explicit readiness finds a version-manager Agent through the login shell',
   process.env.STASHBASE_TEST_SHELL_AGENT = executable;
   try {
     assert.equal(
-      resolveAgentCliWithLoginShell({ name: `stashbase-test-agent-${process.pid}`, envNames: [], logLabel: 'Test Agent' }),
+      await resolveAgentCliWithLoginShell({ name: `stashbase-test-agent-${process.pid}`, envNames: [], logLabel: 'Test Agent' }),
       executable,
     );
   } finally {
@@ -911,7 +922,7 @@ test('explicit readiness finds a version-manager Agent through the login shell',
   }
 });
 
-test('the deferred startup pass probes the login shell; the boot pass never does', () => {
+test('login-shell discovery is requested explicitly; catalog discovery stays cheap', async () => {
   const probes: Array<{ probeLoginShell?: boolean } | undefined> = [];
   let configured = 0;
   const fake = fakeDependencies({
@@ -924,15 +935,54 @@ test('the deferred startup pass probes the login shell; the boot pass never does
   });
   const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
 
-  // Synchronous boot pass: no probe, runtime invisible, no connect — boot
-  // must stay quick and never spawn a shell.
-  assert.equal(coordinator.connectIfInstalled('codex').phase, 'idle');
-  assert.deepEqual(probes.at(-1), undefined);
+  // Cheap discovery does not launch a shell.
+  assert.equal((await connect(coordinator, 'codex')).phase, 'idle');
+  assert.equal(probes.at(-1)?.probeLoginShell, undefined);
   assert.equal(configured, 0);
 
-  // Deferred pass: probes the login shell, finds the runtime, connects —
-  // no waiting for the first New Chat.
-  assert.equal(coordinator.connectIfInstalled('codex', { probeLoginShell: true }).phase, 'ready');
-  assert.deepEqual(probes.at(-1), { probeLoginShell: true });
+  // Readiness explicitly requests login-shell discovery and finds the runtime.
+  assert.equal((await connect(coordinator, 'codex', { probeLoginShell: true })).phase, 'ready');
+  assert.equal(probes.at(-1)?.probeLoginShell, true);
   assert.equal(configured, 1);
+});
+
+test('pending authentication keeps the event loop live, deduplicates checks, and is cancelled on reset', async () => {
+  let started!: () => void;
+  const entered = new Promise<void>((resolve) => { started = resolve; });
+  let checks = 0;
+  let configured = 0;
+  const coordinator = new AgentBootstrapCoordinator(fakeDependencies({
+    resolveExecutable: async () => '/fixture/codex',
+    isAuthenticated: async (_id, _executable, signal) => {
+      checks += 1;
+      started();
+      await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve(), { once: true }));
+      return true;
+    },
+    configureMcp: () => { configured += 1; },
+  }).dependencies);
+  assert.equal(coordinator.connectIfInstalled('codex').phase, 'configuring');
+  await entered;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  coordinator.begin('codex');
+  coordinator.connectIfInstalled('codex');
+  assert.equal(checks, 1);
+  await coordinator.reset('codex');
+  assert.equal(configured, 0);
+  assert.equal(coordinator.status('codex').phase, 'idle');
+});
+
+test('CLI probes time out and cancel while unrelated event-loop work remains live', async () => {
+  const { probeAgentCommand } = await import('../agent-probe.ts');
+  const options = { env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined }, timeoutMs: 100 };
+  const stalled = probeAgentCommand(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], options);
+  const timeout = assert.rejects(stalled, /timed out/);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await timeout;
+  const controller = new AbortController();
+  const cancelled = assert.rejects(probeAgentCommand(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    ...options, timeoutMs: 10_000, signal: controller.signal,
+  }), /cancelled/);
+  controller.abort();
+  await cancelled;
 });

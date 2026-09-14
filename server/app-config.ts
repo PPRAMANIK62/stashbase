@@ -17,7 +17,6 @@ import type {
   AppearancePreferences,
   AppearanceScale,
   AppearanceTheme,
-  OnboardingPreferences,
   UpdatePreferences,
   WorkspacePreferences,
 } from '../shared/preferences.ts';
@@ -29,7 +28,6 @@ export type {
   AppearancePreferences,
   AppearanceScale,
   AppearanceTheme,
-  OnboardingPreferences,
   UpdatePreferences,
   WorkspacePreferences,
 } from '../shared/preferences.ts';
@@ -100,36 +98,17 @@ export function isEmbedderProvider(value: unknown): value is EmbedderProvider {
 }
 
 export interface AppConfigFile {
-  /** NOTE: the legacy `folderHome` field is no longer read or written — the
-   *  configurable folder-home concept is gone. Existing configs may still carry
-   *  it on disk; it is ignored. The default folder home is now a fixed,
-   *  non-configurable path (see `folder.ts:getFolderHome`). */
   recentFolders?: RecentFolder[];
-  /** Legacy field from when the concept was called "vault". Read for
-   *  back-compat (existing users keep their recents) and rewritten as
-   *  `recentFolders` on the next write. */
-  recentVaults?: RecentFolder[];
-  apiKey?: string;
-  /** Application-wide embedding provider configuration. `apiKey` at the top level and
-   *  `openaiKey` are legacy OpenAI-only fields; new writes use
-   *  `embedder.apiKey` so OpenRouter can be selected without overloading
-   *  the old name. */
+  /** Application-wide embedding provider configuration. */
   embedder?: {
     provider?: EmbedderProvider;
     apiKey?: string;
-    openaiKey?: string;
     model?: string;
     baseUrl?: string;
   };
-  /** Legacy source selection, read only for migration. The embedder provider
-   * and key now determine configuration; key writes remove this field. */
-  embeddingSource?: EmbedderProvider | 'stashbase-account' | 'local';
   account?: {
     session?: HostedAccountSession;
   };
-  /** Legacy last-used agent field. No longer written or read by the
-   *  chat panel; kept so old config files parse without churn. */
-  terminalCli?: string;
   /** Set once the bundled built-in folder (the product manual) has been
    *  seeded into a fresh folder home on first launch. A latch, not live state:
    *  it stays true even if the user later deletes the folder, so we
@@ -164,9 +143,8 @@ export interface AppConfigFile {
    * reads this through the local server so this process remains the sole
    * config writer. */
   updates?: Partial<UpdatePreferences>;
-  onboarding?: OnboardingPreferences;
   /** User-authored Chat guidance owned by StashBase. Folder entries use the
-   * exact spelling of project membership paths; `project` customizes the
+   * exact spelling of project membership paths; `unbound` customizes the
    * unbound default; no project file is created. */
   agentInstructions?: {
     folders?: Array<{ path: string; text: string }>;
@@ -186,11 +164,6 @@ export function readAppConfigStrict(): AppConfigFile {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error(`${CONFIG_FILE} must contain a JSON object`);
     }
-    // Migrate `recentVaults` → `recentFolders` on read so legacy users
-    // don't lose their list when the rename rolls out.
-    if (parsed.recentVaults && !parsed.recentFolders) {
-      parsed.recentFolders = parsed.recentVaults;
-    }
     return parsed as AppConfigFile;
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return {};
@@ -206,9 +179,6 @@ export async function readAppConfigStrictAsync(): Promise<AppConfigFile> {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error(`${CONFIG_FILE} must contain a JSON object`);
-    }
-    if (parsed.recentVaults && !parsed.recentFolders) {
-      parsed.recentFolders = parsed.recentVaults;
     }
     return parsed as AppConfigFile;
   } catch (err: unknown) {
@@ -359,8 +329,7 @@ export function getEmbedderConfig(): EmbedderConfig {
   const cfg = readAppConfig();
   const provider = isEmbedderProvider(cfg.embedder?.provider) ? cfg.embedder.provider : 'openai';
   const defaults = EMBEDDER_DEFAULTS[provider];
-  const rawKey = cfg.embedder?.apiKey
-    ?? (provider === 'openai' ? cfg.apiKey ?? cfg.embedder?.openaiKey : undefined);
+  const rawKey = cfg.embedder?.apiKey;
   const apiKey = typeof rawKey === 'string' && rawKey.trim() ? rawKey.trim() : undefined;
   const model = defaults.model;
   const baseUrl = defaults.baseUrl;
@@ -382,17 +351,12 @@ export function setEmbedderConfig(next: { provider: EmbedderProvider; apiKey?: s
   const cfg = readAppConfigStrict();
   const defaults = EMBEDDER_DEFAULTS[next.provider];
   cfg.embedder = {
-    ...(cfg.embedder ?? {}),
     provider: next.provider,
     model: defaults.model,
     ...(defaults.baseUrl ? { baseUrl: defaults.baseUrl } : {}),
   };
   if (next.apiKey && next.apiKey.trim()) cfg.embedder.apiKey = next.apiKey.trim();
   else delete cfg.embedder.apiKey;
-  delete cfg.embedder.openaiKey;
-  if (next.provider === 'openai' && cfg.embedder.apiKey) cfg.apiKey = cfg.embedder.apiKey;
-  else delete cfg.apiKey;
-  delete cfg.embeddingSource;
   writeAppConfigStrict(cfg);
   return getEmbedderConfig();
 }
@@ -553,51 +517,4 @@ export function getUpdatePreferences(): UpdatePreferences {
 
 export function setUpdatePreferences(next: Partial<UpdatePreferences>): UpdatePreferences {
   return updatePreferences.set(next);
-}
-
-/** One-time upgrade from the very first global-embedder schema, when
- *  the OpenAI key lived under `embedder.openaiKey` instead of the
- *  top-level `apiKey`. Migrates that key forward and drops the
- *  sub-field. Safe to call repeatedly. */
-export function migrateLegacyEmbedderConfig(): void {
-  const cfg = readAppConfig();
-  if (!cfg.embedder?.openaiKey) return;
-  const oldKey = cfg.embedder.openaiKey;
-  if (typeof oldKey === 'string' && oldKey.trim() && !cfg.embedder.apiKey && !cfg.apiKey) {
-    cfg.embedder.apiKey = oldKey.trim();
-    cfg.apiKey = oldKey.trim();
-  }
-  cfg.embedder.provider = 'openai';
-  cfg.embedder.model = EMBEDDER_DEFAULTS.openai.model;
-  delete cfg.embedder.openaiKey;
-  writeAppConfig(cfg);
-  log.info('migrated legacy embedder.openaiKey into active embedder config');
-}
-
-/** Retire former local and hosted-account embedding sources before the daemon
- * boots. Drop the obsolete selection while preserving the provider's stored
- * key and the independent account session used by the hosted Agent runtime. */
-export function migrateRetiredEmbeddingSources(): void {
-  const cfg = readAppConfigStrict();
-  if (cfg.embeddingSource !== 'local' && cfg.embeddingSource !== 'stashbase-account') return;
-
-  delete cfg.embeddingSource;
-  writeAppConfigStrict(cfg);
-  log.info('retired unsupported embedding source; provider configuration is authoritative');
-}
-
-export function getOnboardingPreferences(): OnboardingPreferences {
-  return readAppConfig().onboarding ?? {};
-}
-
-export function setOnboardingPreferences(next: Partial<OnboardingPreferences>): OnboardingPreferences {
-  const cfg = readAppConfigStrict();
-  const current = cfg.onboarding ?? {};
-  const updated = {
-    ...current,
-    ...next,
-  };
-  cfg.onboarding = updated;
-  writeAppConfigStrict(cfg);
-  return updated;
 }

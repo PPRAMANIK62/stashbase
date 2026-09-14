@@ -1,12 +1,10 @@
 /**
  * Claude session-history routes for the Chats navigator.
  *
- * These wrap the Agent SDK's on-disk session store (`~/.claude/projects/`,
- * the same transcripts the `claude` CLI writes). They sit OUTSIDE the
- * `requireFolder` gate (no 412 before a folder is open), but the LIST is filtered to
- * the current folder by session `cwd` — the panel belongs to one folder, so
- * its History shows only that folder's conversations (falls back to all
- * when no folder is open). `:id` reads/rename/delete stay global by id.
+ * These wrap the Agent SDK's on-disk session store (`~/.claude/projects/`).
+ * Listing, transcript reads, rename, and delete all use the shared history
+ * scope: the selected project, or unbound Chat history when no project is
+ * selected. They remain available outside the `requireFolder` gate.
  *
  *   GET    /api/agent/sessions             → list this folder's sessions
  *   GET    /api/agent/sessions/:id/messages→ a session's transcript as

@@ -30,7 +30,7 @@ import {
   type Retrieval,
   type RetrievalMode,
 } from '../retrieval/index.ts';
-import { attributedAgentSession, attributedSessionForWindow } from '../agent-session-registry.ts';
+import { attributedRequestSession } from '../agent-session-registry.ts';
 import type { IndexerStatus, SearchHit } from '../indexer.ts';
 import type { KeywordHitFile } from '../search-display.ts';
 import type { SyncResult } from '../sync.ts';
@@ -140,10 +140,8 @@ export function createProjectOperations(
       folder = folder?.trim() ? folder : undefined;
       // Scope must come from caller identity, never the app-wide sole active
       // turn: an unrelated external MCP client may search concurrently.
-      const session = agentSessionId
-        ? attributedAgentSession(agentSessionId)
-        : attributedSessionForWindow(windowId);
-      if (!session && (agentSessionId || (windowId && !folder))) {
+      const session = attributedRequestSession(agentSessionId, windowId);
+      if (!session && (agentSessionId != null || (windowId != null && !folder))) {
         throw routeError('search session is no longer available or is ambiguous', 409);
       }
       const defaultFolder = session?.boundFolder() ?? undefined;

@@ -137,6 +137,25 @@ test('project search validates and forwards file-type filters', async (t) => {
     assert.equal((searchInput as Record<string, unknown> | undefined)?.mode, 'grep');
     assert.equal((await policySearch.json() as { mode: string }).mode, 'semantic');
 
+    for (const id of ['', '   ', 'retired']) {
+      const invalidIdentity = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-stashbase-agent-session-id': id,
+          'x-stashbase-window-id': 'route-window',
+        },
+        body: JSON.stringify({ query: 'paper' }),
+      });
+      assert.equal(invalidIdentity.status, 409, `explicit invalid session: ${JSON.stringify(id)}`);
+    }
+    const windowIdentity = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-stashbase-window-id': 'route-window' },
+      body: JSON.stringify({ query: 'paper' }),
+    });
+    assert.equal(windowIdentity.status, 200);
+
     searchInput = undefined;
     const invalid = await fetch(url, {
       method: 'POST',

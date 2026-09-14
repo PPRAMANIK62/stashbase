@@ -6,9 +6,6 @@
  * rotation takes effect without restarting or rebuilding a transport.
  */
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import {
   readAppConfigStrict,
   writeAppConfigStrict,
@@ -117,33 +114,4 @@ function isDockerPort(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) >= 1024 && Number(value) <= 65_535;
 }
 
-const legacyTokenFile = path.join(os.homedir(), '.stashbase', 'mcp-http-token');
-const persistedStore = createMcpHttpSettingsStore(defaultIo, () => {
-  try {
-    const legacy = fs.readFileSync(legacyTokenFile, 'utf8').trim();
-    if (isToken(legacy)) return legacy;
-  } catch { /* no valid legacy token */ }
-  return crypto.randomBytes(32).toString('hex');
-});
-
-function removeLegacyTokenFile(): void {
-  try { fs.rmSync(legacyTokenFile, { force: true }); } catch { /* best effort migration cleanup */ }
-}
-
-let legacyCleanupDone = false;
-function finishLegacyMigration<T>(operation: () => T): T {
-  const result = operation();
-  if (!legacyCleanupDone) {
-    removeLegacyTokenFile();
-    legacyCleanupDone = true;
-  }
-  return result;
-}
-
-export const mcpHttpSettings: McpHttpSettingsStore = {
-  ensure: () => finishLegacyMigration(() => persistedStore.ensure()),
-  current: () => persistedStore.current(),
-  rotateToken: () => finishLegacyMigration(() => persistedStore.rotateToken()),
-  setDockerAccess: (enabled) => finishLegacyMigration(() => persistedStore.setDockerAccess(enabled)),
-  setDockerPort: (port) => finishLegacyMigration(() => persistedStore.setDockerPort(port)),
-};
+export const mcpHttpSettings = createMcpHttpSettingsStore();
