@@ -2,210 +2,146 @@ import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { LibraryPort } from '@/features/workspace/application/ports';
-import {
-  folderPicker,
-  githubImportApi,
-  libraryApi,
-  libraryLifecycle,
-  librarySnapshot,
-  pendingLibraryApi,
-} from '@/test/fakes/workspace';
+import type { ProjectRegistryPort } from '@/features/workspace/application/ports';
+import { projectApi, projectRegistrySnapshot, pendingProjectApi } from '@/test/fakes/workspace';
 import { withQueryClient } from '@/test/query';
 
-import { LibrarySidebar, type LibrarySidebarProps } from './sidebar';
+import { ProjectSidebar, type ProjectSidebarProps } from './sidebar';
 
-const emptyLibrary = librarySnapshot({
+const emptyProject = projectRegistrySnapshot({
   activeFolder: null,
-  homeDirectory: '/library',
-  members: [],
+  homeDirectory: '/project',
+  projects: [],
 });
 
-const RESEARCH = { name: 'Research', path: '/library/research' };
+const RESEARCH = { name: 'Research', path: '/project/research' };
 const researchMember = {
   favorite: false,
   openedAt: '2026-08-31T12:00:00.000Z',
   path: RESEARCH.path,
 };
-const activeLibrary = librarySnapshot({
-  ...emptyLibrary,
+const activeProject = projectRegistrySnapshot({
+  ...emptyProject,
   activeFolder: RESEARCH,
-  members: [researchMember],
+  projects: [researchMember],
 });
 
-type SidebarTestProps = Omit<
-  LibrarySidebarProps,
-  'api' | 'folderPicker' | 'githubImport' | 'lifecycle'
-> & {
-  api: Partial<LibraryPort>;
-  folderPicker?: LibrarySidebarProps['folderPicker'];
-  githubImport?: LibrarySidebarProps['githubImport'];
-  lifecycle?: LibrarySidebarProps['lifecycle'];
-};
+type SidebarTestProps = Omit<ProjectSidebarProps, 'api' | 'contentId' | 'onOpenChange' | 'open'> &
+  Partial<Pick<ProjectSidebarProps, 'contentId' | 'onOpenChange' | 'open'>> & {
+    api: Partial<ProjectRegistryPort>;
+  };
 
-function renderLibrary({
-  api,
-  folderPicker: picker,
-  githubImport,
-  lifecycle,
-  ...props
-}: SidebarTestProps) {
+function renderProject({ api, ...props }: SidebarTestProps) {
   return withQueryClient(
-    <LibrarySidebar
+    <ProjectSidebar
+      contentId="folder-content"
+      onOpenChange={vi.fn()}
+      open
       {...props}
-      api={libraryApi(api)}
-      folderPicker={picker ?? folderPicker()}
-      githubImport={githubImport ?? githubImportApi()}
-      lifecycle={lifecycle ?? libraryLifecycle()}
+      api={projectApi(api)}
     />,
   );
 }
 
 afterEach(cleanup);
 
-describe('library sidebar', () => {
-  it('does not claim the library is empty before membership resolves', () => {
-    renderLibrary({ api: pendingLibraryApi() });
+describe('project sidebar', () => {
+  it('does not claim the project is empty before membership resolves', () => {
+    renderProject({ api: pendingProjectApi() });
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('renders the authoritative active folder as a switcher, not a selected place', async () => {
-    renderLibrary({ api: { load: vi.fn(async () => activeLibrary) } });
+  it('renders the active folder as a section header that folds, with no way to switch folders', async () => {
+    const onOpenChange = vi.fn();
+    renderProject({ api: { load: vi.fn(async () => activeProject) }, onOpenChange });
 
-    const picker = await screen.findByRole('button', { name: 'Research' });
-    expect(picker.getAttribute('aria-haspopup')).toBe('menu');
-    expect(picker.getAttribute('aria-current')).toBeNull();
+    const header = await screen.findByRole('button', { name: 'Research' });
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    expect(header.getAttribute('aria-controls')).toBe('folder-content');
+    expect(header.getAttribute('aria-current')).toBeNull();
+    await userEvent.setup().click(header);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+
+    // A window keeps its folder; another folder is another window.
+    expect(screen.queryByRole('button', { name: 'Switch folder' })).toBeNull();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 
-  it('adds a non-color attention cue to the active folder when asked', async () => {
-    renderLibrary({ attention: true, api: { load: vi.fn(async () => activeLibrary) } });
+  it('offers New file and New folder on the header when the window can make them', async () => {
+    const onNewFile = vi.fn();
+    const onNewFolder = vi.fn();
+    renderProject({ api: { load: vi.fn(async () => activeProject) }, onNewFile, onNewFolder });
+    const user = userEvent.setup();
 
-    const button = await screen.findByRole('button', { name: 'Research Needs attention' });
-    // The accessible name above already proves the sr-only cue; `data-folder-attention` marks the
-    // separate visual dot, which carries no role or label of its own to query instead.
-    expect(button.querySelector('[data-folder-attention]')).not.toBeNull(); // dom-contract: see comment above
+    await user.click(await screen.findByRole('button', { name: 'New file' }));
+    expect(onNewFile).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole('button', { name: 'New folder' }));
+    expect(onNewFolder).toHaveBeenCalledOnce();
+  });
+
+  it('is the name alone, with no fold and no creates, while not foldable', async () => {
+    renderProject({
+      api: { load: vi.fn(async () => activeProject) },
+      foldable: false,
+      onNewFile: vi.fn(),
+      onNewFolder: vi.fn(),
+    });
+
+    expect(await screen.findByText('Research')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Research' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'New file' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
+  });
+
+  it('offers Collapse all beside the creates when the tree is showing', async () => {
+    const onCollapseAll = vi.fn();
+    renderProject({
+      api: { load: vi.fn(async () => activeProject) },
+      onCollapseAll,
+      onNewFile: vi.fn(),
+      onNewFolder: vi.fn(),
+    });
+
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Collapse all folders' }));
+    expect(onCollapseAll).toHaveBeenCalledOnce();
+  });
+
+  it('offers no creates on the header without a window to make them in', async () => {
+    renderProject({ api: { load: vi.fn(async () => activeProject) } });
+
+    await screen.findByRole('button', { name: 'Research' });
+    expect(screen.queryByRole('button', { name: 'New file' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
   });
 
   it('exposes local retry after membership failure', async () => {
     const load = vi
-      .fn<LibraryPort['load']>()
+      .fn<ProjectRegistryPort['load']>()
       .mockRejectedValueOnce(new Error('server offline'))
-      .mockResolvedValue(emptyLibrary);
-    renderLibrary({ api: { load } });
+      .mockResolvedValue(emptyProject);
+    renderProject({ api: { load } });
 
-    expect((await screen.findByRole('alert')).textContent).toContain('Library unavailable.');
+    // Unreachable projects are a lost capability, said quietly.
+    expect((await screen.findByRole('status')).textContent).toContain('Projects unavailable.');
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 
   it('does not represent an inactive member as the active folder', async () => {
-    renderLibrary({
+    renderProject({
       api: {
         load: vi.fn(async () =>
-          librarySnapshot({
-            ...emptyLibrary,
-            members: [{ ...researchMember, path: '/library/notes' }],
+          projectRegistrySnapshot({
+            ...emptyProject,
+            projects: [{ ...researchMember, path: '/project/notes' }],
           }),
         ),
       },
     });
     await waitFor(() => expect(screen.queryByRole('button')).toBeNull());
-  });
-
-  it('lists every member from the scoped query and selects another folder', async () => {
-    const listed = librarySnapshot({
-      ...activeLibrary,
-      members: [
-        researchMember,
-        { favorite: false, openedAt: '2026-08-30T12:00:00.000Z', path: '/library/notes' },
-      ],
-    });
-    const selectedLibrary = librarySnapshot({
-      ...listed,
-      activeFolder: { name: 'notes', path: '/library/notes' },
-    });
-    const openFolder = vi.fn(async () => selectedLibrary);
-    renderLibrary({ api: { load: vi.fn(async () => listed), openFolder } });
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Research' }));
-
-    expect(await screen.findByTitle('~/research')).not.toBeNull();
-    await user.click(screen.getByTitle('~/notes'));
-
-    expect(openFolder).toHaveBeenCalledWith('/library/notes', expect.any(AbortSignal));
-    expect(await screen.findByRole('button', { name: 'notes' })).not.toBeNull();
-    // The chooser closes with the choice: its member rows leave the screen.
-    await waitFor(() => expect(screen.queryByTitle('~/research')).toBeNull());
-  });
-
-  it('adds a subsequent folder from the active-folder chooser', async () => {
-    const addedLibrary = librarySnapshot({
-      ...activeLibrary,
-      activeFolder: { name: 'Writing', path: '/library/writing' },
-      members: [
-        { favorite: false, openedAt: '2026-08-31T12:05:00.000Z', path: '/library/writing' },
-        ...activeLibrary.members,
-      ],
-    });
-    const chooseFolder = vi.fn(async () => ({
-      status: 'selected' as const,
-      folderPath: '/library/writing',
-    }));
-    const openFolder = vi.fn(async () => addedLibrary);
-    renderLibrary({
-      api: { load: vi.fn(async () => activeLibrary), openFolder },
-      folderPicker: folderPicker({ chooseFolder }),
-    });
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Research' }));
-    await user.click(await screen.findByRole('menuitem', { hidden: true, name: 'Open folder' }));
-
-    expect(chooseFolder).toHaveBeenCalledWith(undefined);
-    expect(openFolder).toHaveBeenCalledWith('/library/writing', expect.any(AbortSignal));
-    expect(await screen.findByRole('button', { name: 'Writing' })).not.toBeNull();
-  });
-
-  it('uses a trailing folder action and confirms the complete retained path', async () => {
-    const homeLibrary = librarySnapshot({
-      activeFolder: { name: 'Research', path: '/home/person/Research' },
-      homeDirectory: '/home/person',
-      members: [
-        { favorite: false, openedAt: '2026-08-31T12:00:00.000Z', path: '/home/person/Research' },
-        { favorite: false, openedAt: '2026-08-30T12:00:00.000Z', path: '/home/person/Notes' },
-      ],
-    });
-    const removeFolder = vi.fn(async () =>
-      librarySnapshot({ ...homeLibrary, members: homeLibrary.members.slice(0, 1) }),
-    );
-    const prepareFolderRemoval = vi.fn(async () => true);
-    const notifyFolderRemoved = vi.fn(async () => undefined);
-    renderLibrary({
-      api: { load: vi.fn(async () => homeLibrary), removeFolder },
-      lifecycle: libraryLifecycle({ notifyFolderRemoved, prepareFolderRemoval }),
-    });
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Research' }));
-    expect(
-      (await screen.findByRole('menuitemradio', { name: 'Notes' })).getAttribute(
-        'aria-keyshortcuts',
-      ),
-    ).toBe('Delete');
-    await user.click(await screen.findByRole('button', { name: 'Remove Notes' }));
-
-    expect(await screen.findByRole('heading', { name: 'Remove this project?' })).not.toBeNull();
-    expect(screen.getByText('~/Notes').getAttribute('title')).toBe('/home/person/Notes');
-    expect(screen.getByText(/The folder and its files will stay on disk/u)).not.toBeNull();
-
-    await user.click(screen.getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(removeFolder).toHaveBeenCalledOnce());
-    expect(prepareFolderRemoval).toHaveBeenCalledWith('/home/person/Notes');
-    expect(removeFolder).toHaveBeenCalledWith('/home/person/Notes', expect.any(AbortSignal));
-    expect(notifyFolderRemoved).toHaveBeenCalledWith('/home/person/Notes');
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

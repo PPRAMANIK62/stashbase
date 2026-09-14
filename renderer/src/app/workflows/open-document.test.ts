@@ -7,7 +7,7 @@ import { openDocument } from './open-document';
 
 function createWorkspace() {
   return createWorkspaceRuntime({
-    folder: { name: 'Notes', path: '/library/notes' },
+    folder: { name: 'Notes', path: '/project/notes' },
     generation: 1,
     queries: { cancel: vi.fn(async () => undefined), remove: vi.fn() },
   });
@@ -22,7 +22,7 @@ function createDocuments() {
       remove: vi.fn(),
       replaceSource: vi.fn(),
     }),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
   });
 }
@@ -33,12 +33,12 @@ describe('open document workflow', () => {
     const documents = createDocuments();
 
     const opened = await openDocument(workspace, documents, {
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'plan.md',
     });
 
     expect(opened?.scope.source.path).toBe('plan.md');
-    expect(documents.activeSource()).toEqual({ folderPath: '/library/notes', path: 'plan.md' });
+    expect(documents.activeSource()).toEqual({ folderPath: '/project/notes', path: 'plan.md' });
   });
 
   it('rejects an open after either captured scope is disposed', async () => {
@@ -48,7 +48,7 @@ describe('open document workflow', () => {
 
     expect(
       await openDocument(workspace, documents, {
-        folderPath: '/library/notes',
+        folderPath: '/project/notes',
         path: 'late.md',
       }),
     ).toBeNull();
@@ -65,13 +65,13 @@ describe('open document workflow', () => {
         remove: vi.fn(),
         replaceSource: vi.fn(),
       }),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 2,
     });
 
     expect(
       await openDocument(workspace, documents, {
-        folderPath: '/library/notes',
+        folderPath: '/project/notes',
         path: 'late.md',
       }),
     ).toBeNull();

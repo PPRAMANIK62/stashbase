@@ -46,7 +46,7 @@ describe('AgentSessionRuntime turns', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
 
     runtime.setDraft('  Inspect the project  ');
@@ -93,7 +93,7 @@ describe('AgentSessionRuntime turns', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
     runtime.setDraft('Inspect the project');
     await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
@@ -106,12 +106,12 @@ describe('AgentSessionRuntime turns', () => {
     expect(runtime.editPrompt(prompt.id)).toBe(false);
     expect(runtime.store.getState().draft).toBe('');
 
-    test.listeners[0]?.onEvent({ delta: 'A small library.', kind: 'text' });
+    test.listeners[0]?.onEvent({ delta: 'A small project.', kind: 'text' });
     test.listeners[0]?.onEvent({ isError: false, kind: 'turn-ended' });
     expect(runtime.store.getState().transcript.at(-1)).toMatchObject({
       at: expect.any(Number),
       kind: 'assistant',
-      text: 'A small library.',
+      text: 'A small project.',
     });
 
     expect(runtime.editPrompt('not-a-prompt')).toBe(false);
@@ -134,19 +134,19 @@ describe('AgentSessionRuntime turns', () => {
       onFilesChanged,
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     const listener = test.listeners[0];
     listener?.onEvent({ kind: 'ready' });
     listener?.onEvent({
       id: 'write-1',
-      input: { content: '# Notes', file_path: '/library/Research/notes.md' },
+      input: { content: '# Notes', file_path: '/project/Research/notes.md' },
       kind: 'tool-started',
       name: 'Write',
     });
     listener?.onEvent({
       id: 'read-1',
-      input: { file_path: '/library/Research/notes.md' },
+      input: { file_path: '/project/Research/notes.md' },
       kind: 'tool-started',
       name: 'Read',
     });
@@ -175,15 +175,15 @@ describe('AgentSessionRuntime turns', () => {
       [
         {
           paths: ['plan.md'],
-          scope: { kind: 'folder', path: '/library/Research' },
-          sources: [{ folderPath: '/library/Research', path: 'plan.md' }],
+          scope: { kind: 'folder', path: '/project/Research' },
+          sources: [{ folderPath: '/project/Research', path: 'plan.md' }],
         },
       ],
       [
         {
           paths: ['new.md'],
-          scope: { kind: 'folder', path: '/library/Research' },
-          sources: [{ folderPath: '/library/Research', path: 'new.md' }],
+          scope: { kind: 'folder', path: '/project/Research' },
+          sources: [{ folderPath: '/project/Research', path: 'new.md' }],
         },
       ],
     ]);
@@ -200,7 +200,7 @@ describe('AgentSessionRuntime turns', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
     test.listeners[0]?.onEvent({ kind: 'ready' });
     test.listeners[0]?.onEvent({
@@ -234,7 +234,7 @@ describe('AgentSessionRuntime turns', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
     runtime.setAccessMode('default');
     test.listeners[0]?.onEvent({ kind: 'ready' });

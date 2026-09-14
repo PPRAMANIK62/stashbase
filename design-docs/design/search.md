@@ -2,8 +2,9 @@
 
 ## User Outcome
 
-People and Agents can find relevant evidence inside one selected authorized
-Folder and return to the user-visible source that supports it.
+People and Agents find relevant project material when discussion or writing
+calls for it, and return to the visible source. Retrieval is implemented within
+one authorized project; a conversation with no reference lookup is also valid.
 
 ## Scope and Non-goals
 
@@ -29,33 +30,41 @@ user-managed results.
   meaning. It is off until then, and nothing outside Settings names it before
   it is on. Product copy keeps the phrase lowercase; engineering terms such as
   semantic indexing and embeddings appear only where technically necessary.
-- Agent retrieval combines meaning-based similarity with text matching for
-  every Chat whose folder has a key on, and uses text matching alone
-  otherwise, including current prepared PDF, DOCX, image, and media
-  text. The strategy is per lookup and never pauses background Preparation or
-  semantic indexing.
+- Agent lookups without an explicit mode use text matching without an
+  embedding key and combine meaning-based similarity with text matching when
+  a key is configured. The choice is made on every lookup, including after
+  key removal, and covers current prepared document text. Explicit modes are
+  honored: requesting search by meaning without a key reports a configuration
+  error. Provider failures do not silently fall back to keyword search.
+  There is no per-Chat search switch; lookup selection never pauses background
+  Preparation or indexing.
 - Turning search by meaning on is one action: adding an OpenAI or OpenRouter
   key under **Settings → Search by Meaning**, billed to the person who adds
   it. There is no hosted source and no account path; the StashBase account
   buys OpenQuill's credits and nothing for search. Removing the key turns
   search by meaning off again and keeps keyword search.
-- Library search is a panel in the sidebar, reached from its navigator tab or
+  Building the semantic index runs in the background; keyword search remains
+  available in every project while that work is pending.
+- Project search is a panel in the sidebar, reached from its navigator tab or
   a keyboard shortcut. Both modes are folder-explicit. They search the active
   folder, and a match outside it is not offered. The panel keeps its query and
   mode while another panel is on screen and across folder switches, then
   refreshes results against current content.
-- MCP retrieval uses one `search_library` operation for one Folder. In an
-  attributed folder Chat it defaults to that Chat's Folder. A Library Chat or
-  external client first selects a Folder returned by `library_info` and passes
-  it explicitly. Empty results never broaden to another Folder.
+  A registered nested project owns its own search namespace; its sources do
+  not remain as stale results in an ancestor project's index. Both modes
+  discard deleted sources and unavailable or outdated prepared text before
+  returning evidence.
+- MCP retrieval uses one `search_project` operation for one Folder. In an
+  attributed folder Chat it defaults to that Chat's Folder. An external client selects a Folder returned by `list_projects` and passes
+  it explicitly. An unbound Chat must first open or create a project. Empty results never broaden to another Folder.
   Meaning-based and text-only strategies share the same visible source-hit
-  shape and may both narrow by path prefix and source file-type categories. An
-  attributed panel Chat's own retrieval policy resolves the operation's
-  strategy without asking the Agent to select a different tool.
+  shape and may both narrow by path prefix and source file-type categories.
+  The operation resolves an omitted mode from current key configuration;
+  session attribution constrains the project, not a separate retrieval toggle.
 - Search is keyword search alone until a key is on: one field, no mode
   chooser, and nothing that names the other mode. Once a key is on, the **By
   keyword** and **By meaning** modes share one query surface. Results
-  preserve rank while grouping evidence by folder when needed.
+  preserve relevance within the selected project.
 - A result always identifies a source file. Evidence may come from PDF, DOCX,
   OCR, or transcript text, but opening it never exposes AppData, and opening
   one never switches the active folder.
@@ -97,9 +106,9 @@ user-managed results.
 - Previewability alone never claims retrievable text. Each result comes from a
   direct-text or current prepared-text capability and resolves to the visible
   source.
-- Searching by meaning is a use-time retrieval choice. Turning it off must
-  neither make prepared documents unreadable nor stop, remove, or foreground
-  the background semantic-index lifecycle.
+- Choosing keyword matching for a lookup leaves background indexing alone.
+  Removing the embedding key disables meaning-based indexing and retains
+  keyword retrieval and prepared-document access. These are different actions.
 - The embedding key is managed only through Settings. Signing in to the
   StashBase account is not a search action and never changes the source.
   Browsing local files and serving an existing local index never depends on
@@ -125,9 +134,9 @@ user-managed results.
 
 ### Next
 
-- Clarify modes, partial readiness, and errors.
-- Improve ranking, snippets, source navigation, and useful filters.
-- Improve MCP and context diagnostics.
+Maintain the implemented capability's reliability, useful status, and recovery
+within the existing scope. No additional feature is committed here; the
+remaining product feature is [document-specific diff](../product-direction.md#document-specific-diff--remaining-feature).
 
 ### Coordinate First
 

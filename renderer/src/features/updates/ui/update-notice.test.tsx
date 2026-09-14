@@ -15,7 +15,7 @@ import { UpdateNotice } from './update-notice';
 afterEach(cleanup);
 
 const AVAILABLE: UpdateNoticeOffer = {
-  actionLabel: 'Download',
+  actionLabel: 'Update and restart',
   message: 'StashBase 1.5.0 is available.',
   releasePageLabel: "What's new",
 };
@@ -50,10 +50,10 @@ describe('UpdateNotice', () => {
     const notice = mount({ failure: null, offer: AVAILABLE });
 
     expect(screen.getByRole('status').textContent).toContain(AVAILABLE.message);
-    expect(controls()).toEqual(['Not now', "What's new", 'Download']);
+    expect(controls()).toEqual(['Not now', "What's new", 'Update and restart']);
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Download' }));
+    await user.click(screen.getByRole('button', { name: 'Update and restart' }));
     await user.click(screen.getByRole('button', { name: 'Not now' }));
     await user.click(screen.getByRole('button', { name: "What's new" }));
 
@@ -82,7 +82,7 @@ describe('UpdateNotice', () => {
     expect(row.textContent).toContain(UNREACHABLE.message);
     expect(row.textContent).not.toContain(AVAILABLE.message);
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(controls()).toEqual(['Not now', "What's new", 'Download']);
+    expect(controls()).toEqual(['Not now', "What's new", 'Update and restart']);
   });
 
   it('carries no controls for a refusal with no offer behind it', () => {

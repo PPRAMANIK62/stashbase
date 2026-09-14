@@ -33,9 +33,9 @@ const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
  * Keeping each as one packaged Markdown resource lets product changes edit the
  * exact bytes shown in the Agent Instructions surface. Runtime Adapters
  * preserve those bytes when composing their separate internal policy. There
- * are two: `default.md` for folder Chats, `library.md` for Library-wide Chats —
- * a Chat with no working folder is oriented toward finding and starting work,
- * not maintaining one folder's Wiki. */
+ * are two: `default.md` for folder Chats, `unbound.md` for unbound Chats —
+ * an unbound Chat supports discussion and explicit project creation without
+ * project-file access. */
 export function readDefaultAgentInstructions(
   file = path.join(RESOURCES_ROOT, 'assets', 'agent-instructions', 'default.md'),
 ): string {
@@ -47,9 +47,9 @@ export function readDefaultAgentInstructions(
   return text;
 }
 
-export function readDefaultLibraryAgentInstructions(): string {
+export function readDefaultUnboundAgentInstructions(): string {
   return readDefaultAgentInstructions(
-    path.join(RESOURCES_ROOT, 'assets', 'agent-instructions', 'library.md'),
+    path.join(RESOURCES_ROOT, 'assets', 'agent-instructions', 'unbound.md'),
   );
 }
 
@@ -81,12 +81,12 @@ function storedFolders(config: AppConfigFile): StoredFolderInstructions[] {
   ));
 }
 
-function storedLibrary(config: AppConfigFile): string {
+function storedUnbound(config: AppConfigFile): string {
   const value: unknown = config.agentInstructions;
-  const library = value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as { library?: unknown }).library
-    : undefined;
-  return readableText(library);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  // Read the previous durable key once; every write compacts to the new shape.
+  const stored = value as { unbound?: unknown; library?: unknown };
+  return readableText(stored.unbound ?? stored.library);
 }
 
 function inputError(message: string): Error {
@@ -104,7 +104,7 @@ export function createAgentInstructionsStore(io: {
   write(config: AppConfigFile): void;
   equalPath(left: string, right: string): boolean;
   defaultText: string;
-  defaultLibraryText: string;
+  defaultUnboundText: string;
 }): AgentInstructionsStore {
   const pathsEqual = (left: string, right: string): boolean => {
     try { return io.equalPath(left, right); }
@@ -112,13 +112,13 @@ export function createAgentInstructionsStore(io: {
   };
 
   const defaultFor = (scope: AgentInstructionsScope): string => (
-    scope.kind === 'library' ? io.defaultLibraryText : io.defaultText
+    scope.kind === 'unbound' ? io.defaultUnboundText : io.defaultText
   );
 
   function get(scope: AgentInstructionsScope): AgentInstructionsState {
     const config = io.read();
-    const text = scope.kind === 'library'
-      ? storedLibrary(config)
+    const text = scope.kind === 'unbound'
+      ? storedUnbound(config)
       : readableText(storedFolders(config).find((entry) => pathsEqual(entry.path, scope.path))?.text);
     return text ? { scope, text, customized: true } : { scope, text: defaultFor(scope), customized: false };
   }
@@ -126,16 +126,16 @@ export function createAgentInstructionsStore(io: {
   function set(scope: AgentInstructionsScope, rawText: string): AgentInstructionsState {
     const text = normalizedInput(rawText);
     const config = io.readStrict();
-    const folders = scope.kind === 'library'
+    const folders = scope.kind === 'unbound'
       ? storedFolders(config)
       : storedFolders(config).filter((entry) => !pathsEqual(entry.path, scope.path));
     if (scope.kind === 'folder' && text) folders.push({ path: scope.path, text });
-    const library = scope.kind === 'library' ? text : storedLibrary(config);
+    const unbound = scope.kind === 'unbound' ? text : storedUnbound(config);
 
-    if (folders.length || library) {
+    if (folders.length || unbound) {
       config.agentInstructions = {
         ...(folders.length ? { folders } : {}),
-        ...(library ? { library } : {}),
+        ...(unbound ? { unbound } : {}),
       };
     } else {
       delete config.agentInstructions;
@@ -148,7 +148,7 @@ export function createAgentInstructionsStore(io: {
 }
 
 const defaultAgentInstructions = readDefaultAgentInstructions();
-const defaultLibraryInstructions = readDefaultLibraryAgentInstructions();
+const defaultUnboundInstructions = readDefaultUnboundAgentInstructions();
 
 const store = createAgentInstructionsStore({
   // Reads used while starting an Agent fail soft, matching other optional
@@ -159,7 +159,7 @@ const store = createAgentInstructionsStore({
   write: writeAppConfigStrict,
   equalPath: filesystemPath.equal,
   defaultText: defaultAgentInstructions,
-  defaultLibraryText: defaultLibraryInstructions,
+  defaultUnboundText: defaultUnboundInstructions,
 });
 
 export function getAgentInstructions(scope: AgentInstructionsScope): AgentInstructionsState {
@@ -170,9 +170,9 @@ export function setAgentInstructions(scope: AgentInstructionsScope, text: string
   return store.set(scope, text);
 }
 
-/** Runtime-facing read. A Library Chat has no concrete working directory, so
- * it resolves the Library scope — its own packaged default, or the saved
- * Library-wide customization. */
+/** Runtime-facing read. An unbound Chat has no concrete working directory, so
+ * it resolves the unbound scope — its own packaged default, or the saved
+ * unbound customization. */
 export function resolveAgentInstructions(folderPath: string | null): string {
-  return store.get(folderPath ? { kind: 'folder', path: folderPath } : { kind: 'library' }).text;
+  return store.get(folderPath ? { kind: 'folder', path: folderPath } : { kind: 'unbound' }).text;
 }

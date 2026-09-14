@@ -33,7 +33,12 @@ test('live provider messages classify by their vocabulary', () => {
   // Plan exhaustion wins over an accompanying 429.
   assert.equal(classifyAgentTurnFailure("You've reached your usage limit. It resets at 5pm."), 'quota');
   assert.equal(classifyAgentTurnFailure('429 insufficient_quota: You exceeded your current quota'), 'quota');
+  assert.equal(classifyAgentTurnFailure('OpenQuill free credits are exhausted. Reset next week.'), 'allowance-exhausted');
+  // Old runtimes and persisted messages retain their wire vocabulary.
+  assert.equal(classifyAgentTurnFailure('StashBase weekly Agent allowance exhausted.'), 'allowance-exhausted');
   assert.equal(classifyAgentTurnFailure('quota_exhausted: StashBase weekly Agent allowance exhausted'), 'allowance-exhausted');
+  assert.equal(classifyAgentTurnFailure('This Agent turn reached its spending limit.'), 'quota');
+  assert.equal(classifyAgentTurnFailure('OpenAI credit balance is too low'), 'quota');
   assert.equal(classifyAgentTurnFailure('Hosted AI access is restricted for this account.'), 'access-restricted');
   // Transient rate limiting.
   assert.equal(classifyAgentTurnFailure('429 rate_limit_error: Too many requests'), 'rate-limit');

@@ -8,7 +8,7 @@ test('exact search accepts folder-qualified source evidence', () => {
     exactSearchResponseSchema.parse({
       files: [
         {
-          folder: '/library/research',
+          folder: '/project/research',
           matches: [
             {
               audioTimestampMs: 12_500,
@@ -24,7 +24,7 @@ test('exact search accepts folder-qualified source evidence', () => {
       totalMatches: 1,
       truncated: false,
     }).files[0]?.folder,
-    '/library/research',
+    '/project/research',
   );
 });
 
@@ -32,7 +32,7 @@ test('exact search requires a complete bounded request and ordered match ranges'
   assert.equal(
     exactSearchRequestSchema.safeParse({
       case_strict: false,
-      folder: '/library/research',
+      folder: '/project/research',
       query: 'answer',
       whole_word: false,
     }).success,
@@ -50,7 +50,7 @@ test('exact search requires a complete bounded request and ordered match ranges'
     exactSearchResponseSchema.safeParse({
       files: [
         {
-          folder: '/library/research',
+          folder: '/project/research',
           matches: [{ line: 1, ranges: [[8, 2]], text: 'answer' }],
           path: 'answer.md',
           totalMatches: 1,

@@ -70,7 +70,10 @@ describe('updateOffer', () => {
   });
 
   it('names what each phase invites, and invites nothing in the rest', () => {
-    expect(updateOffer(STATUS.available).action).toEqual({ kind: 'primary', label: 'Download' });
+    expect(updateOffer(STATUS.available).action).toEqual({
+      kind: 'primary',
+      label: 'Update and restart',
+    });
     expect(updateOffer(STATUS.ready).action).toEqual({
       kind: 'primary',
       label: 'Install and restart',

@@ -6,6 +6,7 @@ import type { UpdateRefusal, UpdateResult } from '@/features/updates/application
 import type { UpdateState, UpdateStatus } from '@/features/updates/domain/update-status';
 
 import { useSoftwareUpdate } from './use-software-update';
+import { useUpdateNotice } from './use-update-notice';
 
 /** The phases where main is already working, so the row must not offer a
  *  button that would only be refused. */
@@ -75,8 +76,8 @@ describe('useSoftwareUpdate', () => {
     await waitFor(() => expect(updates.port.read).toHaveBeenCalled());
 
     act(() => {
-      result.current.check();
-      result.current.check();
+      result.current.act();
+      result.current.act();
     });
     expect(updates.port.check).toHaveBeenCalledTimes(1);
     expect(result.current.busy).toBe(true);
@@ -108,7 +109,7 @@ describe('useSoftwareUpdate', () => {
     await act(async () => result.current.setAutoCheck(false));
     expect(updates.port.setAutoCheck).toHaveBeenCalledWith(false);
 
-    await act(async () => result.current.check());
+    await act(async () => result.current.act());
     expect(updates.port.check).toHaveBeenCalledTimes(1);
   });
 
@@ -117,7 +118,7 @@ describe('useSoftwareUpdate', () => {
     const { result } = renderHook(() => useSoftwareUpdate(updates.port));
     await waitFor(() => expect(updates.port.read).toHaveBeenCalled());
 
-    await act(async () => result.current.check());
+    await act(async () => result.current.act());
     await waitFor(() =>
       expect(result.current.failure).toEqual({
         message: 'StashBase could not reach the updater.',
@@ -125,14 +126,14 @@ describe('useSoftwareUpdate', () => {
       }),
     );
     expect(result.current.busy).toBe(false);
-    expect(result.current.status).toBe('StashBase has not looked for a new version yet.');
+    expect(result.current.status).toBe('No update check yet.');
   });
 
   it('is an inert row with no port behind it', () => {
     const { result } = renderHook(() => useSoftwareUpdate(null));
 
     act(() => {
-      result.current.check();
+      result.current.act();
       result.current.setAutoCheck(true);
     });
     expect(result.current.status).toBe('This build of StashBase does not check for updates.');
@@ -140,5 +141,25 @@ describe('useSoftwareUpdate', () => {
     expect(result.current.autoCheckEnabled).toBe(false);
     expect(result.current.busy).toBe(false);
     expect(result.current.failure).toBeNull();
+  });
+});
+
+describe('Settings recovery after dismissing the update notice', () => {
+  it.each([
+    { phase: 'available', label: 'Update and restart' },
+    { phase: 'ready', label: 'Install and restart' },
+  ] as const)('keeps the $phase action reachable', async ({ phase, label }) => {
+    const updates = harness(accepted({ phase, version: '1.5.0' }));
+    const { result } = renderHook(() => ({
+      notice: useUpdateNotice(updates.port),
+      settings: useSoftwareUpdate(updates.port),
+    }));
+    await waitFor(() => expect(result.current.notice.offer).not.toBeNull());
+    act(() => result.current.notice.dismiss());
+    expect(result.current.notice.offer).toBeNull();
+    expect(result.current.settings.actionLabel).toBe(label);
+    await act(async () => result.current.settings.act());
+    expect(updates.port.runPrimaryAction).toHaveBeenCalledTimes(1);
+    expect(updates.port.check).not.toHaveBeenCalled();
   });
 });

@@ -80,9 +80,20 @@
   --decision: light-dark(#b45309, #fbbf24);
   --decision-soft: light-dark(#fffbeb, #451a03);
 
-  /* Diff evidence: added lines read green, removed lines read red. */
+  /* Diff evidence: added lines read green, removed lines read red.
+     The wash behind a whole line and the stronger tint behind the changed
+     run within it are derived here rather than at each renderer: the same
+     diff is drawn twice — once by the CodeMirror merge view, once as a
+     plain unified patch — and those two cannot mix the same colour to two
+     different strengths. A Tailwind arbitrary value takes the property
+     directly (`bg-[var(--diff-add-line)]`), which a spelled-out color-mix
+     cannot do without retyping it with underscores. */
   --diff-add: light-dark(#15803d, #4ade80);
   --diff-remove: light-dark(#dc2626, #f87171);
+  --diff-add-line: color-mix(in oklab, var(--diff-add) 12%, transparent);
+  --diff-remove-line: color-mix(in oklab, var(--diff-remove) 10%, transparent);
+  --diff-add-token: color-mix(in oklab, var(--diff-add) 28%, transparent);
+  --diff-remove-token: color-mix(in oklab, var(--diff-remove) 22%, transparent);
 
   /* ── Focus indicator ──
      Every component focus ring reads var(--focus-ring, #6B97FF), so this is
@@ -119,7 +130,7 @@
      lib/shape-context). Plain CSS that cannot read the class map — the
      focus-ring fallback below, the Markdown viewer's stylesheet — reads it
      here; lib/tokens.test.ts holds it equal to `bgRadius` there. */
-  --shape-input-radius: 8px;
+  --shape-input-radius: 12px;
 
   /* ── Hairline ──
      The width every separating line draws at. 1px on standard displays; on
@@ -297,6 +308,26 @@
 ============================================================================ */
 
 @theme inline {
+  /* ── Radius scale ──
+     Tailwind's own ladder is replaced rather than lived beside, because a
+     corner written as `rounded-md` at a call site and a corner asked for as
+     `shape.item` have to be the same corner. Redefining the scale makes the
+     utilities and `lib/shape-context.ts` two spellings of ONE set of numbers,
+     so a literal that has not been converted yet still lands on the system's
+     value instead of Tailwind's.
+
+     The steps are box sizes, not ranks: a corner belongs to how big the thing
+     is. `sm` dresses a 16–24px chip, `lg` a row or a control or a piece of
+     chrome, `xl` the 36px control, `2xl` a framed list, `3xl` a card. Every
+     one of them is drawn as a continuous corner by the `corner-shape` rule in
+     section 4. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 32px;
+
   --font-mono:
     'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-sans: 'Inter Variable', system-ui, sans-serif;
@@ -437,7 +468,7 @@ html[data-size='compact'] {
   --fs-display: calc(20px * var(--ui-scale));
   --fs-title: calc(15px * var(--ui-scale));
   --fs-subtitle: calc(13px * var(--ui-scale));
-  --fs-body: calc(12px * var(--ui-scale));
+  --fs-body: calc(13px * var(--ui-scale));
   --fs-caption: calc(11px * var(--ui-scale));
 }
 
@@ -540,6 +571,51 @@ html[data-reading-text-size='large'] {
   }
 }
 
+/* Continuous corners. `border-radius` alone draws a circular arc, and a big
+   arc reads thin: it leaves the edge early and cuts straight across the
+   corner, so enlarging the radius deflates the corner instead of filling it.
+   `corner-shape: squircle` draws the superellipse Apple uses, which bulges
+   toward the corner point — at the same radius it keeps more of the corner,
+   which is what reads as full rather than scooped. Radius sets how big the
+   corner is; corner-shape sets how full it is, and this product wants both.
+
+   Declared on the universal selector rather than on the shape system's roles,
+   because a box's radius is written in three places (the shape tokens, the
+   `rounded-md` literals features still spell out, and the two per-viewer
+   stylesheets) and a corner language that covered only the first would be a
+   new inconsistency rather than fewer. It is inert wherever the radius is 0,
+   which is most elements.
+
+   Circles and capsules opt back out. `design-docs/visual-style.md` reserves
+   them for semantics that need them — a status dot, an avatar, a switch, a
+   badge — and a squircled circle is neither shape. The native scrollbar thumb
+   is the same case in plain CSS.
+
+   Chromium 139+ only, which is what this application ships (Electron 39 runs
+   Chromium 142). Elsewhere — Storybook in an older browser, the web build —
+   the declaration is dropped and the corner falls back to the arc, so nothing
+   depends on it. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    corner-shape: squircle;
+  }
+
+  .rounded-full {
+    corner-shape: round;
+  }
+
+  /* An element that inherits its radius inherits the corner it is drawn with.
+     The button's fill layer and the scroll area's viewport both sit inside a
+     host and take `rounded-[inherit]`; without this they kept the universal
+     squircle while their host drew something else, which is what made a
+     `rounded-full` send button read as a squircle with a round outline. */
+  [class*='rounded-[inherit]'] {
+    corner-shape: inherit;
+  }
+}
+
 /* Focus fallback — natively focusable elements no component styles (scroll
    containers Chrome makes tabbable, prose links, demo boxes) get the same
    token ring as the components instead of the UA default, which follows the
@@ -604,6 +680,8 @@ html[data-reading-text-size='large'] {
     border: 3px solid transparent;
     background-clip: content-box;
     border-radius: 9999px;
+    /* A capsule, not a squircled one — see the continuous-corner rule above. */
+    corner-shape: round;
   }
 
   ::-webkit-scrollbar-thumb:vertical {

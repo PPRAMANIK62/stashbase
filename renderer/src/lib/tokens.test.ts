@@ -127,6 +127,22 @@ describe('shape', () => {
     expect(radius).toBe(shapeTokens.bgRadius);
     expect(radius).toBe(shapeTokens.mergedRadius);
   });
+
+  // The pane card's radius rides a `peer-data-*` variant, so it cannot be
+  // composed from `shapeTokens.card` — Tailwind scans source for whole
+  // class names and would never emit one built by concatenation. The class is
+  // therefore written out, and this is what keeps the copy honest.
+  it('holds the pane card literal equal to the card role', () => {
+    const source = fs.readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../components/ui/sidebar-sections.tsx',
+      ),
+      'utf8',
+    );
+    const literal = source.match(/peer-data-\[variant=inset\]:(rounded-\[?[\w.]+\]?)/u)?.[1];
+    expect(literal).toBe(shapeTokens.card);
+  });
 });
 
 describe('focus ring', () => {
@@ -140,9 +156,12 @@ describe('focus ring', () => {
 });
 
 describe('type steps', () => {
+  // Keyed on the display step, the one size the two blocks never share:
+  // both steps read the same 13px body, so a body locator would find the
+  // root block twice over.
   const scopes: Record<SizeVariant, string> = {
-    default: blockContaining('--fs-body: calc(13px'),
-    compact: blockContaining('--fs-body: calc(12px'),
+    default: blockContaining('--fs-display: calc(22px'),
+    compact: blockContaining('--fs-display: calc(20px'),
   };
 
   it('keys the compact scope on the attribute SizeProvider stamps', () => {
@@ -168,13 +187,17 @@ describe('type steps', () => {
     );
   });
 
-  it('keeps the two steps one notch apart at both ends of the ladder', () => {
+  it('keeps caption a notch under text, and one body size across both steps', () => {
     // The pairs above would still pass if `text` and `caption` were equal;
-    // the ladder is a ladder because the steps differ.
+    // within a step the ladder is a ladder because they differ. Across the
+    // steps the body is shared on purpose: the label is what is read, and
+    // the compact box shrinks around it (the sidebar's 28px row keeps the
+    // same 13px label the default row does), so only caption steps down.
     for (const variant of ['default', 'compact'] as const) {
       expect(ladderPx(sizeMap[variant].text)).toBeGreaterThan(ladderPx(sizeMap[variant].caption));
     }
-    expect(ladderPx(sizeMap.default.text)).toBeGreaterThan(ladderPx(sizeMap.compact.text));
+    expect(ladderPx(sizeMap.default.text)).toBe(ladderPx(sizeMap.compact.text));
+    expect(ladderPx(sizeMap.default.caption)).toBeGreaterThan(ladderPx(sizeMap.compact.caption));
   });
 
   it('scales every declared step by the interface-size preference', () => {

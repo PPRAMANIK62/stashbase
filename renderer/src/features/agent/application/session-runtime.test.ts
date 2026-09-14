@@ -29,7 +29,7 @@ const historyEntry = (id: string, title: string) => ({
   hasContent: true,
   id,
   lastModified: 1,
-  scope: { kind: 'library' as const },
+  scope: { kind: 'unbound' as const },
   title,
 });
 
@@ -68,7 +68,7 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
 
     expect(runtime.store.getState().connection).toEqual({ kind: 'draft' });
@@ -87,7 +87,7 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
 
     expect(test.requests()[0]).toEqual({
@@ -96,7 +96,7 @@ describe('AgentSessionRuntime', () => {
       effort: undefined,
       model: undefined,
       resume: undefined,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({ kind: 'ready' });
     test.listeners[0]?.onEvent({ id: 'native-1', kind: 'identified' });
@@ -107,7 +107,7 @@ describe('AgentSessionRuntime', () => {
 
     runtime.dispose();
     test.listeners[0]?.onEvent({ kind: 'titled', title: 'Too late' });
-    expect(runtime.store.getState().title).toBe('New chat');
+    expect(runtime.store.getState().title).toBe('Untitled');
     expect(runtime.store.getState().connection).toEqual({ kind: 'disposed' });
   });
 
@@ -118,7 +118,7 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
     test.listeners[0]?.onEvent({
       activeModel: null,
@@ -145,7 +145,7 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
 
     const entry = {
@@ -153,7 +153,7 @@ describe('AgentSessionRuntime', () => {
       hasContent: true,
       id: 'native-2',
       lastModified: 42,
-      scope: { kind: 'library' as const },
+      scope: { kind: 'unbound' as const },
       title: 'Saved conversation',
     };
     await expect(runtime.restore(entry)).resolves.toBe(true);
@@ -179,7 +179,7 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
     test.listeners[0]?.onEvent({ id: 'native-3', kind: 'identified' });
     test.listeners[0]?.onEvent({ kind: 'ready' });
@@ -204,14 +204,14 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
 
     const capturedScope = runtime.capture();
     const applied = vi.fn();
     expect(runtime.accept(capturedScope, applied)).toBe(true);
 
-    runtime.retire('/library/Research');
+    runtime.retire('/project/Research');
     expect(runtime.accept(capturedScope, applied)).toBe(false);
     expect(applied).toHaveBeenCalledTimes(1);
   });
@@ -234,7 +234,7 @@ describe('AgentSessionRuntime', () => {
         }),
       }).port,
       scheduler: test.scheduler,
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
 
     const stale = runtime.restore(historyEntry('native-1', 'Stale'), false);
@@ -253,9 +253,9 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
-    runtime.retire('/library/Research');
+    runtime.retire('/project/Research');
     runtime.reconnect();
 
     expect(runtime.store.getState().connection).toEqual({ kind: 'retired' });

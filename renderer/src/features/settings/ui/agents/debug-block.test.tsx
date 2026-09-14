@@ -52,9 +52,9 @@ describe('DebugBlock', () => {
   it('marks itself development-only and says what it will not touch', () => {
     render(<DebugBlock runtimes={viewModel()} />);
 
-    expect(screen.getByText('Agent bootstrap testing')).not.toBeNull();
+    expect(screen.getByText('Agent setup testing')).not.toBeNull();
     expect(screen.getByText('Development only')).not.toBeNull();
-    expect(screen.getByText(/never uninstall a global Agent/u)).not.toBeNull();
+    expect(screen.getByText(/System installations and/u)).not.toBeNull();
   });
 
   it('resets a runtime first run through the view model', async () => {
@@ -69,7 +69,7 @@ describe('DebugBlock', () => {
   it('holds every control while a debug write is open', () => {
     render(<DebugBlock runtimes={viewModel({ debugBusy: true })} />);
 
-    expect(screen.getByRole('button', { name: 'Reset Claude first run' })).toHaveProperty(
+    expect(screen.getByRole('button', { name: 'Reset Claude Code first run' })).toHaveProperty(
       'disabled',
       true,
     );

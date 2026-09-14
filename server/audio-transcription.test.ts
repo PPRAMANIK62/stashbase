@@ -289,11 +289,11 @@ test('blocked readiness scan is reused until tree or provider state changes', as
     scans += 1;
     return ['meeting.wav'];
   };
-  assert.deepEqual(await cache.read('/tmp/library', 1, 'missing:small', scan), ['meeting.wav']);
-  assert.deepEqual(await cache.read('/tmp/library', 1, 'missing:small', scan), ['meeting.wav']);
+  assert.deepEqual(await cache.read('/tmp/project', 1, 'missing:small', scan), ['meeting.wav']);
+  assert.deepEqual(await cache.read('/tmp/project', 1, 'missing:small', scan), ['meeting.wav']);
   assert.equal(scans, 1);
-  await cache.read('/tmp/library', 2, 'missing:small', scan);
-  await cache.read('/tmp/library', 2, 'verifying:small', scan);
+  await cache.read('/tmp/project', 2, 'missing:small', scan);
+  await cache.read('/tmp/project', 2, 'verifying:small', scan);
   assert.equal(scans, 3);
 });
 

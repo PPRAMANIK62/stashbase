@@ -9,6 +9,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 
+import { settingsFailure } from '@/features/settings/application/failure-messages';
 import type { AccountPort } from '@/features/settings/application/ports';
 import { accountQuery, settingsQueryKeys } from '@/features/settings/application/queries';
 import type { HostedAccount } from '@/features/settings/domain/account';
@@ -34,6 +35,10 @@ export interface AccountViewModel {
   readonly loading: boolean;
   /** The browser round trip is open: started, and not yet reported finished. */
   readonly signInPending: boolean;
+  /** A browser flow is open and its local wait can be stopped. */
+  readonly canStopWaiting: boolean;
+  /** Stops local polling; it does not revoke authorization in the browser. */
+  stopWaiting(): void;
   /** Starts the flow and hands the URL to the browser. */
   signIn(): void;
   signOut(): void;
@@ -46,7 +51,7 @@ export function useAccount(
   const queryClient = useQueryClient();
   const account = useQuery(accountQuery(port));
   const [signInFlow, setSignInFlow] = useState<string | null>(null);
-  const [signInError, setSignInError] = useState<string | null>(null);
+  const [signInError, setSignInError] = useState<FailureView | null>(null);
 
   const flow = useQuery({
     enabled: signInFlow !== null,
@@ -61,15 +66,30 @@ export function useAccount(
   }, [queryClient]);
 
   useEffect(() => {
+    if (signInFlow && flow.isError) {
+      setSignInFlow(null);
+      setSignInError(settingsFailure(flow.error));
+      return;
+    }
     if (!signInFlow || !flow.data || flow.data.state === 'pending') return;
     setSignInFlow(null);
     if (flow.data.state === 'error') {
-      setSignInError(flow.data.error);
+      setSignInError({ message: flow.data.error, tone: 'input' });
       return;
     }
     void queryClient.invalidateQueries({ queryKey: settingsQueryKeys.account });
     invalidateDependents();
-  }, [flow.data, invalidateDependents, queryClient, signInFlow]);
+  }, [flow.data, flow.error, flow.isError, invalidateDependents, queryClient, signInFlow]);
+
+  const stopWaiting = () => {
+    if (!signInFlow) return;
+    void queryClient.cancelQueries({
+      queryKey: [...settingsQueryKeys.account, 'sign-in', signInFlow],
+      exact: true,
+    });
+    setSignInFlow(null);
+    setSignInError(null);
+  };
 
   const startSignIn = useSettingsCommand(
     'startSignIn',
@@ -97,13 +117,12 @@ export function useAccount(
   return {
     account: account.data ?? null,
     busy: signInPending || anyBusy(signOut),
-    failure:
-      signInError === null
-        ? firstCommandFailure(startSignIn, signOut)
-        : { message: signInError, tone: 'input' },
+    failure: signInError ?? firstCommandFailure(startSignIn, signOut),
     loading: account.isPending,
     signIn: () => startSignIn.run(),
     signInPending,
+    canStopWaiting: signInFlow !== null,
+    stopWaiting,
     signOut: () => signOut.run(),
   };
 }

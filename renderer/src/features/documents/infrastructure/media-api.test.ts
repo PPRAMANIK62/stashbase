@@ -5,7 +5,7 @@ import type { HttpClient } from '@/platform/http/client';
 
 import { createMediaAdapter } from './media-api';
 
-const source = { folderPath: '/library/research calls', path: 'weekly/demo #1.mp4' };
+const source = { folderPath: '/project/research calls', path: 'weekly/demo #1.mp4' };
 
 function readyTranscript() {
   return {
@@ -45,7 +45,7 @@ describe('media API', () => {
       },
     });
     expect(client.request).toHaveBeenCalledWith({
-      path: '/api/audio/transcript?folder=%2Flibrary%2Fresearch+calls&path=weekly%2Fdemo+%231.mp4',
+      path: '/api/audio/transcript?folder=%2Fproject%2Fresearch+calls&path=weekly%2Fdemo+%231.mp4',
       signal,
     });
   });
@@ -71,7 +71,7 @@ describe('media API', () => {
       totalMs: 4_000,
     });
     expect(client.request).toHaveBeenNthCalledWith(1, {
-      body: { folder: '/library/research calls', path: 'weekly/demo #1.mp4' },
+      body: { folder: '/project/research calls', path: 'weekly/demo #1.mp4' },
       method: 'POST',
       path: '/api/audio/preview/prepare',
       signal,
@@ -91,7 +91,7 @@ describe('media API', () => {
     await expect(api.reprocessTranscript(source, signal)).resolves.toBeUndefined();
     await expect(api.cancelTranscript(source, signal)).resolves.toBe(true);
     expect(client.request).toHaveBeenNthCalledWith(2, {
-      body: { folder: '/library/research calls', path: 'weekly/demo #1.mp4' },
+      body: { folder: '/project/research calls', path: 'weekly/demo #1.mp4' },
       method: 'POST',
       path: '/api/files/cancel-preparation',
       signal,
@@ -121,7 +121,7 @@ describe('media API', () => {
 
     await expect(
       api.loadTranscript(
-        { folderPath: '/library', path: 'notes.md' },
+        { folderPath: '/project', path: 'notes.md' },
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ kind: 'unavailable' });

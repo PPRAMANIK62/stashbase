@@ -27,7 +27,7 @@ describe('useBootProgress', () => {
     expect(document.body.dataset.bootSettled).toBe('1');
   });
 
-  it('holds the Agent back until the library has a folder', () => {
+  it('holds the Agent back until the project has a folder', () => {
     const { rerender, result } = renderHook(
       ({ memberCount }: { memberCount: number }) => useBootProgress({ memberCount, settled: true }),
       { initialProps: { memberCount: 0 } },

@@ -79,6 +79,8 @@ test('gallery image proxy refuses sources outside the gallery CDN prefixes', asy
   mount(proxyApp);
   const proxy = await listen(proxyApp);
   t.after(async () => close(proxy.server));
+  const realFetch = globalThis.fetch;
+  const outbound = t.mock.method(globalThis, 'fetch', async () => { throw new Error('must not fetch'); });
 
   // The guard is what keeps this from becoming a general-purpose proxy:
   // wrong host, prefix-lookalike host, scheme smuggling, and a missing
@@ -88,12 +90,97 @@ test('gallery image proxy refuses sources outside the gallery CDN prefixes', asy
     'https://assets.stashbase.ai.evil.example/shot.png',
     'http://assets.stashbase.ai/shot.png',
     'file:///etc/passwd',
+    'https://assets.stashbase.ai:8443/shot.png',
+    'https://user:password@assets.stashbase.ai/shot.png',
+    'https://cdn.jsdelivr.net/gh/0-bingwu-0/stashbase-gallery@main/../../attacker/repo@main/x.png',
+    'https://cdn.jsdelivr.net/gh/0-bingwu-0/stashbase-gallery@main/%2e%2e%2f%2e%2e%2fattacker/repo/x.png',
+    'https://cdn.jsdelivr.net/gh/0-bingwu-0/stashbase-gallery@main/%252e%252e%252fother/x.png',
+    'https://cdn.jsdelivr.net/gh/other/repository@main/x.png',
     '',
   ];
   for (const src of refused) {
-    const response = await fetch(
+    const response = await realFetch(
       `http://127.0.0.1:${proxy.port}/api/gallery/image?src=${encodeURIComponent(src)}`,
     );
     assert.equal(response.status, 400, `src ${JSON.stringify(src)} must be refused`);
   }
+  assert.equal(outbound.mock.callCount(), 0);
+});
+
+test('gallery image proxy serves allowed assets but refuses upstream redirects', async (t) => {
+  const upstreamApp = express();
+  let privateHits = 0;
+  upstreamApp.get('/image', (_req, res) => { res.type('png').send(Buffer.from([1, 2, 3])); });
+  upstreamApp.get('/redirect', (_req, res) => res.redirect('/private'));
+  upstreamApp.get('/private', (_req, res) => { privateHits++; res.send('must not be read'); });
+  const upstream = await listen(upstreamApp);
+  const app = express();
+  mount(app);
+  const proxy = await listen(app);
+  t.after(async () => { await close(proxy.server); await close(upstream.server); });
+  const realFetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', (input: string | URL | Request, options?: RequestInit) => {
+    const pathname = new URL(String(input)).pathname.endsWith('/redirect') ? '/redirect' : '/image';
+    return realFetch(`http://127.0.0.1:${upstream.port}${pathname}`, options);
+  });
+  for (const source of ['https://assets.stashbase.ai/screenshots/a.png',
+    'https://cdn.jsdelivr.net/gh/0-bingwu-0/stashbase-gallery@main/screenshots/a.png']) {
+    const response = await realFetch(`http://127.0.0.1:${proxy.port}/api/gallery/image?src=${encodeURIComponent(source)}`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') ?? '', /^image\/png/);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from([1, 2, 3]));
+  }
+  const response = await realFetch(`http://127.0.0.1:${proxy.port}/api/gallery/image?src=${encodeURIComponent('https://assets.stashbase.ai/redirect')}`);
+  assert.equal(response.status, 502);
+  await response.json();
+  assert.equal(privateHits, 0);
+});
+
+test('invalid gallery publications are not cached and recover on the next request', async (t) => {
+  resetGalleryProxyCacheForTests();
+  const upstreamApp = express();
+  let body: unknown;
+  let hits = 0;
+  upstreamApp.get('/gallery.json', (_req, res) => { hits++; res.json(body); });
+  const upstream = await listen(upstreamApp);
+  const app = express();
+  mount(app);
+  const proxy = await listen(app);
+  process.env.STASHBASE_GALLERY_INDEX_URL = `http://127.0.0.1:${upstream.port}/gallery.json`;
+  t.after(async () => {
+    delete process.env.STASHBASE_GALLERY_INDEX_URL;
+    resetGalleryProxyCacheForTests();
+    await close(proxy.server); await close(upstream.server);
+  });
+  for (const invalid of [{ schemaVersion: 999, wikis: [] }, { schemaVersion: 1, wikis: [{}] }]) {
+    resetGalleryProxyCacheForTests();
+    hits = 0;
+    body = invalid;
+    const url = `http://127.0.0.1:${proxy.port}/api/gallery/index`;
+    const failed = await fetch(url);
+    assert.equal(failed.status, 200);
+    assert.equal((await failed.json() as { schemaVersion: number }).schemaVersion, 0);
+    body = { schemaVersion: 1, wikis: [], futureField: 'strip me' };
+    assert.deepEqual(await fetch(url).then((res) => res.json()), { schemaVersion: 1, wikis: [] });
+    assert.deepEqual(await fetch(url).then((res) => res.json()), { schemaVersion: 1, wikis: [] });
+    assert.equal(hits, 2);
+  }
+});
+
+test('invalid primary index falls through to the published secondary mirror', async (t) => {
+  resetGalleryProxyCacheForTests();
+  const app = express(); mount(app);
+  const proxy = await listen(app);
+  t.after(async () => { resetGalleryProxyCacheForTests(); await close(proxy.server); });
+  const realFetch = globalThis.fetch;
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+    calls.push(String(input));
+    return Response.json({ schemaVersion: calls.length === 1 ? 999 : 1, wikis: [] });
+  });
+  const response = await realFetch(`http://127.0.0.1:${proxy.port}/api/gallery/index`);
+  assert.deepEqual(await response.json(), { schemaVersion: 1, wikis: [] });
+  assert.equal(calls.length, 2);
+  assert.ok(calls[0].startsWith('https://assets.stashbase.ai/'));
+  assert.ok(calls[1].startsWith('https://cdn.jsdelivr.net/gh/0-bingwu-0/stashbase-gallery@'));
 });

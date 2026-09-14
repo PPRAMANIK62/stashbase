@@ -1,7 +1,10 @@
 /** Every capability the Workspace feature asks of the host, and the failure
  *  ladders those requests come back on. Adapters implement these; nothing
  *  named here knows which transport answers. */
-import type { LibraryFailureKind, LibrarySnapshot } from '@/features/workspace/domain/library';
+import type {
+  ProjectFailureKind,
+  ProjectRegistrySnapshot,
+} from '@/features/workspace/domain/project';
 import type { WorkspaceSessionSnapshot } from '@/features/workspace/domain/session';
 import type { WorkspaceEntry, WorkspaceListing } from '@/features/workspace/domain/tree';
 import {
@@ -10,29 +13,29 @@ import {
   type FeatureFailureKind,
 } from '@/shared/domain/feature-error';
 
-type LibraryFolderPickerResult =
+type ProjectFolderPickerResult =
   | { status: 'cancelled' }
   | {
       status: 'failed';
       failure: {
-        kind: LibraryFailureKind | 'fatal';
+        kind: ProjectFailureKind | 'fatal';
         message: string;
       };
     }
   | { status: 'selected'; folderPath: string };
 
-export interface LibraryPort {
-  load(signal: AbortSignal): Promise<LibrarySnapshot>;
-  openFolder(path: string, signal: AbortSignal): Promise<LibrarySnapshot>;
-  removeFolder(path: string, signal: AbortSignal): Promise<LibrarySnapshot>;
+export interface ProjectRegistryPort {
+  load(signal: AbortSignal): Promise<ProjectRegistrySnapshot>;
+  openFolder(path: string, signal: AbortSignal): Promise<ProjectRegistrySnapshot>;
+  removeFolder(path: string, signal: AbortSignal): Promise<ProjectRegistrySnapshot>;
 }
 
 export interface FolderPickerOptions {
   defaultPath?: string;
 }
 
-export interface LibraryFolderPickerPort {
-  chooseFolder(options?: FolderPickerOptions): Promise<LibraryFolderPickerResult>;
+export interface ProjectFolderPickerPort {
+  chooseFolder(options?: FolderPickerOptions): Promise<ProjectFolderPickerResult>;
 }
 
 export interface WorkspaceQueryScope {
@@ -45,7 +48,7 @@ export interface WorkspaceSessionPort {
   save(snapshot: WorkspaceSessionSnapshot): Promise<void>;
 }
 
-export interface LibraryLifecyclePort {
+export interface ProjectLifecyclePort {
   /** The folder the desktop created this window to show, in the desktop's own
    *  spelling, or null when nobody named one. Idempotent for the life of this
    *  renderer: the transport answers once and the desktop then forgets, so the
@@ -69,7 +72,7 @@ export interface WorkspacePreferencesPort {
   setShowHiddenFiles(next: boolean, signal: AbortSignal): Promise<boolean>;
 }
 
-/** Acquire a public GitHub repository as a library folder. The server owns
+/** Acquire a public GitHub repository as a project folder. The server owns
  *  cloning, isolated staging, atomic publication, registration, and the
  *  background sync trigger; this only asks and reports. A refusal names a code
  *  the caller turns into a sentence, so no transport prose reaches a reader,
@@ -129,30 +132,8 @@ export interface UploadPort {
   upload(folderPath: string, files: readonly UploadFile[], signal: AbortSignal): Promise<string[]>;
 }
 
-/** An image the desktop found on the clipboard, offered for import. The
- *  transport's own encoding never reaches here: an offer that cannot be decoded
- *  is not an offer. */
-export interface ClipboardImageOffer {
-  /** Stable identity of the copied image, so one offer is settled exactly once. */
-  readonly id: string;
-  readonly bytes: Blob;
-  /** The file name the import should land under. */
-  readonly name: string;
-}
-
-export interface ClipboardCapturePort {
-  /** Re-reads the clipboard, so an offer can appear without waiting for the
-   *  next copy. */
-  refresh(): void;
-  /** Reports one offer settled — imported or dismissed — so the desktop does
-   *  not offer the same image again. */
-  settle(id: string): void;
-  /** Calls back with each image the desktop offers; answers an unsubscribe. */
-  subscribe(handler: (offer: ClipboardImageOffer) => void): () => void;
-}
-
-export type LibraryError = FeatureError;
-export const LibraryError = featureErrorClass('LibraryError');
+export type ProjectError = FeatureError;
+export const ProjectError = featureErrorClass('ProjectError');
 
 /** The saved-session bridge fails on the workspace ladder like every other
  *  workspace transport: the desktop refused the read or the write, and it

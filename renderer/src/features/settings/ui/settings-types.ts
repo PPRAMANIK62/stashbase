@@ -1,9 +1,9 @@
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import type {
   AccountPort,
+  LocalComponentPort,
   AgentRuntimePort,
   AppearancePort,
-  CapturePort,
   McpAccessPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
@@ -27,10 +27,8 @@ export interface SettingsProps {
   /** The StashBase account, which the Agents section owns. */
   accountApi: AccountPort;
   agentRuntimeApi: AgentRuntimePort;
-  /** Resolves true when the desktop watch matches the saved opt-in; absent outside Electron. */
-  applyCaptureWatch?: (expected: boolean) => Promise<boolean>;
   appearanceApi?: AppearancePort;
-  captureApi?: CapturePort;
+  localComponentApi?: LocalComponentPort;
   embedderApi?: EmbedderPort;
   mcpAccessApi?: McpAccessPort;
   onClose: () => void;

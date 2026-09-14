@@ -170,7 +170,7 @@ export function createAgentWorkspaceRuntime({
     agent: AgentId,
     scope: AgentScope,
     followsWindow: boolean,
-    title = 'New chat',
+    title = 'Untitled',
   ): MountedAgentSession => {
     const previous = sessions.get(id);
     previous?.unsubscribe();
@@ -316,7 +316,7 @@ export function createAgentWorkspaceRuntime({
         const state = session.store.getState();
         if (state.scope.kind !== 'folder' || state.scope.path !== retiredFolderPath) continue;
         if (session.isBlank()) {
-          mountSession(id, state.agent, { kind: 'library' }, true);
+          mountSession(id, state.agent, { kind: 'unbound' }, true);
         } else {
           session.retire(retiredFolderPath);
         }

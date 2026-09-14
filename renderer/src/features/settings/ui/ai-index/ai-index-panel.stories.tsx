@@ -13,14 +13,12 @@ function Queries({ children }: { children: ReactNode }) {
 }
 
 const keyed: EmbedderState = {
-  authorized: true,
   hasKey: true,
   model: 'text-embedding-3-small',
   provider: 'openai',
-  source: 'openai',
 };
 
-const notSetUp: EmbedderState = { ...keyed, authorized: false, hasKey: false };
+const notSetUp: EmbedderState = { ...keyed, hasKey: false };
 
 function port(state: EmbedderState): EmbedderPort {
   return {

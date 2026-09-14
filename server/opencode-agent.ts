@@ -16,6 +16,7 @@ import {
   type AgentClientEvent,
   type AgentHistoryActions,
   type AgentServerEvent,
+  type AgentSessionTermination,
 } from './agent-contract.ts';
 import {
   registerAttributedAgentSession,
@@ -225,7 +226,7 @@ export class OpenCodePanelSession {
   private readonly abort = new AbortController();
   private readonly translator = new OpenCodeEventTranslator();
   private readonly cwd: string;
-  private readonly libraryScoped: boolean;
+  private readonly unbound: boolean;
   private rebound: string | null = null;
   readonly agentId = 'stashbase' as const;
   readonly attributionId = randomUUID();
@@ -234,7 +235,6 @@ export class OpenCodePanelSession {
   private sessionId: string | null = null;
   private client: Awaited<ReturnType<typeof openCodeClient>> | null = null;
   private disposed = false;
-  private similaritySearch = true;
   private readonly stopRuntimeExitListener: () => void;
   private readonly onMessage = (data: RawData) => { void this.handleMessage(data); };
   private readonly onClose = () => this.dispose();
@@ -251,13 +251,13 @@ export class OpenCodePanelSession {
       folderHome: getFolderHome(),
     }));
     this.cwd = binding.cwd;
-    this.libraryScoped = binding.libraryScoped;
+    this.unbound = binding.unbound;
     this.windowId = options.windowId;
     this.runtime = runtime ?? createOpenCodeSessionRuntime({
       windowId: this.windowId,
       agentSessionId: this.attributionId,
       cwd: this.cwd,
-      scope: this.libraryScoped ? 'library' : 'folder',
+      scope: this.unbound ? 'unbound' : 'folder',
     });
     this.stopRuntimeExitListener = this.runtime.onExit((error) => {
       if (!this.disposed) this.fail(error, true);
@@ -268,23 +268,23 @@ export class OpenCodePanelSession {
     void this.initialize();
   }
 
-  boundFolder(): string | null { return this.rebound ?? (this.libraryScoped ? null : this.cwd); }
-  isLibraryScoped(): boolean { return this.libraryScoped && !this.rebound; }
+  boundFolder(): string | null { return this.rebound ?? (this.unbound ? null : this.cwd); }
+  isUnbound(): boolean { return this.unbound && !this.rebound; }
   turnInFlight(): boolean { return this.translator.isTurnActive(); }
-  similaritySearchEnabled(): boolean { return this.similaritySearch; }
   /** OpenCode cannot yet move a native session between directory projects,
    * so no durable history override is claimed during project creation. */
   nativeSessionId(): null { return null; }
   rebindToFolder(folderAbs: string): boolean {
-    if (this.disposed || !this.isLibraryScoped()) return false;
+    if (this.disposed || !this.isUnbound()) return false;
     this.rebound = folderAbs;
     send(this.ws, { t: 'scope-changed', scope: { kind: 'folder', path: folderAbs } });
     return true;
   }
   ownedByWindow(windowId: string): boolean { return this.options.windowId === windowId; }
 
-  dispose(): void {
+  dispose(termination?: AgentSessionTermination): void {
     if (this.disposed) return;
+    if (termination) send(this.ws, { t: 'exit', reason: termination.kind, folder: termination.folder });
     this.disposed = true;
     this.abort.abort();
     this.stopRuntimeExitListener();
@@ -345,10 +345,6 @@ export class OpenCodePanelSession {
     try { event = JSON.parse(raw.toString()) as AgentClientEvent; } catch { return; }
     if (event.t === 'close') { this.dispose(); return; }
     if (event.t === 'set-mode') return;
-    if (event.t === 'set-similarity-search') {
-      if (typeof event.enabled === 'boolean') this.similaritySearch = event.enabled;
-      return;
-    }
     if (!this.client || !this.sessionId) return;
     try {
       switch (event.t) {
@@ -367,7 +363,7 @@ export class OpenCodePanelSession {
             path: { id: this.sessionId },
             body: {
               model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' },
-              agent: this.libraryScoped ? 'stashbase-library' : 'stashbase-folder',
+              agent: this.unbound ? 'stashbase-unbound' : 'stashbase-folder',
               parts: [{ type: 'text', text: event.text }],
             },
           });

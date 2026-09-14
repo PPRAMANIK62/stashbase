@@ -1,5 +1,6 @@
 import type { GalleryEntry } from '@/features/gallery/domain/entry';
 import { focusRing } from '@/lib/focus-ring';
+import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
 /**
@@ -26,11 +27,13 @@ export function GalleryCard({
   entry: GalleryEntry;
   onOpen(entry: GalleryEntry): void;
 }) {
+  const shape = useShape();
   const hero = entry.screenshots?.[0] ?? null;
   return (
     <button
       className={cn(
-        'group relative block aspect-[4/3] w-full cursor-pointer overflow-hidden rounded-xl border border-border bg-surface-2 text-left shadow-surface-2 transition-colors duration-fast outline-none hover:border-foreground/25',
+        'group relative block aspect-[4/3] w-full cursor-pointer overflow-hidden border border-border bg-surface-2 text-left shadow-surface-2 transition-colors duration-fast outline-none hover:border-foreground/25',
+        shape.card,
         focusRing(),
       )}
       onClick={() => onOpen(entry)}

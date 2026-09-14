@@ -11,7 +11,7 @@ import {
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
-// A local slot instead of a primitive-library one so every part built on it
+// A local slot instead of a primitive-project one so every part built on it
 // exists in exactly one flavor-neutral copy: Radix's Slot would leak into the
 // Base UI flavor, and Base UI's useRender the other way around. One
 // substitution mechanism only: `render={<Link/>}`.

@@ -8,16 +8,14 @@ import {
   fileStatVersionAsync,
   getCurrentFolderBasename,
   listFilesAndFoldersAsync,
-  pathExists,
   pathExistsAsync,
-  readTextAsync,
   resolveExistingAsync,
   sanitizeFilename,
 } from '../files.ts';
 import { detectViewerFormat, isNoteName } from '../format.ts';
 import { getWorkspacePreferences } from '../app-config.ts';
 import {
-  exactMemberFolderRootAsync,
+  exactRegisteredFolderRootAsync,
   getCurrentFolder,
   getCurrentFolderLabel,
   runWithFolderRoot,
@@ -26,6 +24,7 @@ import { filesystemPath } from '../filesystem-path.ts';
 import { guardExplicitFolder, sendError, revealInOsFileManager } from '../http.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { saveFileContent, upsertSavedFile } from '../file-save.ts';
+import { readTextSnapshotAsync } from '../text-file-transaction.ts';
 import { readGenericFilePreview } from '../generic-file-preview.ts';
 import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
@@ -50,13 +49,6 @@ const defaultFileRouteAdapters: FileRouteAdapters = {
 export { prepareFileOperation } from '../file-operation-guard.ts';
 export { saveFileContent, validateEditableFileWrite } from '../file-save.ts';
 
-export function fileHeadStatus(name: string): number {
-  const format = detectViewerFormat(name);
-  if (!format) return 415;
-  if (!pathExists(name)) return 404;
-  return 204;
-}
-
 export async function fileHeadStatusAsync(name: string): Promise<number> {
   const format = detectViewerFormat(name);
   if (!format) return 415;
@@ -79,7 +71,7 @@ async function sendUnavailableExplicitFolder(
     });
     return;
   }
-  res.status(400).json({ error: 'folder is not a registered library folder' });
+  res.status(400).json({ error: 'folder is not a registered project folder' });
 }
 
 /** Run a non-mutating handler against an explicit `?folder=` member folder
@@ -95,7 +87,7 @@ async function runWithExplicitReadFolder(
     await fn();
     return;
   }
-  const member = filesystemPath.isAbsolute(rawFolder) ? await exactMemberFolderRootAsync(rawFolder) : null;
+  const member = filesystemPath.isAbsolute(rawFolder) ? await exactRegisteredFolderRootAsync(rawFolder) : null;
   if (!member) {
     await sendUnavailableExplicitFolder(res, rawFolder);
     return;
@@ -181,7 +173,7 @@ export function mount(
   adapters: FileRouteAdapters = defaultFileRouteAdapters,
 ): void {
   // ----- list -----
-  // Optional `?folder=` lists an explicit library-member folder for Agent
+  // Optional `?folder=` lists an explicit project-member folder for Agent
   // mention/attachment validation. It intentionally keeps the default-safe
   // listing regardless of the Workbench preference: showing hidden rows never
   // widens Agent discovery. Membership is still validated here.
@@ -193,7 +185,7 @@ export function mount(
       const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
       if (rawFolder) {
         const member = filesystemPath.isAbsolute(rawFolder)
-          ? await exactMemberFolderRootAsync(rawFolder)
+          ? await exactRegisteredFolderRootAsync(rawFolder)
           : null;
         if (!member) {
           await sendUnavailableExplicitFolder(res, rawFolder);
@@ -338,9 +330,9 @@ export function mount(
         // garbled UTF-8 to render.
         const format = detectFormat(name);
         if (!format) return res.status(415).json({ error: 'unsupported format' });
-        let content: string | null;
+        let snapshot;
         try {
-          content = await readTextAsync(name);
+          snapshot = await readTextSnapshotAsync(name);
         } catch (err: unknown) {
           if ((err as { code?: unknown })?.code !== 'UNSUPPORTED_ENCODING') throw err;
           return res.json(
@@ -356,7 +348,7 @@ export function mount(
             }),
           );
         }
-        if (content == null) return res.status(404).json({ error: 'not found' });
+        if (!snapshot) return res.status(404).json({ error: 'not found' });
         // Raw HTML in `content` (what the editor needs); the preview iframe
         // loads its prepared version via `/asset/*` — keeping injected ids +
         // bootstrap script out of the bytes that round-trip through the
@@ -365,8 +357,7 @@ export function mount(
           documentTextSourceResponseSchema.parse({
             name,
             format,
-            content,
-            version: (await fileVersionAsync(name)) ?? undefined,
+            ...snapshot,
           }),
         );
       } catch (err: unknown) {

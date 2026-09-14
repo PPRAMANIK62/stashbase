@@ -1,3 +1,4 @@
+import { createExtractorRuntime } from '../server/extractor-runtime.ts';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -317,7 +318,7 @@ async function assertPackagedUserFlow(port, home, options = {}) {
   writeDocxFixture(path.join(folderRoot, 'report smoke.docx'));
   if (options.requireTranscription) writeWavFixture(path.join(folderRoot, 'transcription smoke.wav'));
 
-  const opened = await requestApi(port, 'POST', '/api/folder', { path: folderRoot });
+  const opened = await requestApi(port, 'POST', '/api/projects/open', { path: folderRoot });
   if (opened?.current?.name !== 'StashBase Demo') {
     throw new Error(`open folder returned unexpected payload: ${JSON.stringify(opened)}`);
   }
@@ -751,7 +752,7 @@ async function smokeOcrExtractor(extractBin) {
     const image = path.join(tmp, 'smoke.png');
     const out = path.join(tmp, '.smoke.md');
     writeOcrFixture(image);
-    const probe = await runProcess(extractBin, ['ocr', image, out], { timeoutMs: 20_000 });
+    const probe = await runProcess(extractBin, ['ocr', image, out], { timeoutMs: 120_000 });
     if (probe.code !== 0) {
       throw new Error(`ocr extractor failed: exit=${probe.code}\n${probe.output.slice(-4_000)}`);
     }
@@ -772,7 +773,7 @@ async function smokePdfExtractor(extractBin) {
     const out = path.join(tmp, '.smoke.md');
     const bundle = path.join(tmp, '.smoke_files');
     writeTinyPdf(pdf);
-    const probe = await runProcess(extractBin, ['pdf', pdf, out, bundle], { timeoutMs: 15_000 });
+    const probe = await runProcess(extractBin, ['pdf', pdf, out, bundle], { timeoutMs: 120_000 });
     if (probe.code !== 0) {
       throw new Error(`pdf extractor failed: exit=${probe.code}\n${probe.output.slice(-4_000)}`);
     }
@@ -867,18 +868,16 @@ const layout = packagedLayout(appPath);
 const { resourcesPath, appRoot, electronBin } = layout;
 const serverEntry = path.join(appRoot, 'dist', 'server', 'index.mjs');
 const daemonBin = findSidecarExecutable(resourcesPath, 'stashbase-daemon');
-const extractBin = findSidecarExecutable(resourcesPath, 'stashbase-extract');
+const bundledExtractBin = findSidecarExecutable(resourcesPath, 'stashbase-extract');
+if (fs.existsSync(bundledExtractBin)) throw new Error('Base installer unexpectedly includes the downloadable extractor');
 const openCodeBin = findPackagedOpenCode(resourcesPath);
-const requireExtract = args.includes('--require-extract')
-  || process.env.STASHBASE_REQUIRE_EXTRACT === '1'
-  || process.env.STASHBASE_BUILD_EXTRACT === '1';
 const requireTranscription = args.includes('--require-transcription')
   || process.env.STASHBASE_REQUIRE_TRANSCRIPTION === '1';
 assertFile(electronBin, 'packaged Electron binary');
 assertFile(appRoot, 'app.asar');
 assertFile(openCodeBin, 'packaged OpenCode binary');
 assertFile(daemonBin, 'packaged Python daemon sidecar');
-if (requireExtract) assertFile(extractBin, 'packaged Python extractor sidecar');
+assertFile(path.join(resourcesPath, 'python', 'extractor-runtime.json'), 'pinned extractor component manifest');
 
 await smokeElectronMainDependencies(electronBin, appRoot, resourcesPath);
 const openCodeProbe = await runProcess(openCodeBin, ['--version'], { timeoutMs: 10_000 });
@@ -888,16 +887,32 @@ if (openCodeProbe.code !== 0 || openCodeProbe.output.trim() !== '1.18.19') {
 console.log('[smoke] packaged OpenCode binary is executable and pinned to 1.18.19');
 await smokePackagedOpenCode(openCodeBin);
 await smokeDaemon(daemonBin);
-if (fs.existsSync(extractBin)) {
-  const extractProbe = await runProcess(extractBin, [], { timeoutMs: 5_000 });
-  if (extractProbe.code !== 2 || !/usage: stashbase-extract/.test(extractProbe.output)) {
-    throw new Error(`unexpected extractor probe result: exit=${extractProbe.code}\n${extractProbe.output.slice(-4_000)}`);
+{
+  const componentHome = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-extractor-smoke-'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(resourcesPath, 'python', 'extractor-runtime.json'), 'utf8'));
+  const archive = path.join(releaseDir, manifest.asset);
+  assertFile(archive, 'release extractor component');
+  const fixtureServer = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Length': fs.statSync(archive).size });
+    fs.createReadStream(archive).pipe(res);
+  });
+  await new Promise((resolve) => fixtureServer.listen(0, '127.0.0.1', resolve));
+  try {
+    const runtime = createExtractorRuntime({
+      root: componentHome, manifest: async () => manifest,
+      fetch: (_url, options) => fetch(`http://127.0.0.1:${fixtureServer.address().port}/component`, options),
+    });
+    const extractBin = await runtime.ensure(AbortSignal.timeout(120_000));
+    await smokePdfExtractor(extractBin);
+    await smokeOcrExtractor(extractBin);
+    const offline = createExtractorRuntime({ root: componentHome, manifest: async () => manifest, fetch: async () => { throw new Error('offline'); } });
+    if (await offline.ensure() !== extractBin) throw new Error('Installed component was not reused offline');
+    console.log('[smoke] downloaded, verified, installed and reused the independent PDF/OCR component');
+  } finally {
+    fixtureServer.closeAllConnections();
+    await new Promise((resolve) => fixtureServer.close(resolve));
+    fs.rmSync(componentHome, { recursive: true, force: true });
   }
-  console.log('[smoke] python extractor responded');
-  await smokePdfExtractor(extractBin);
-  await smokeOcrExtractor(extractBin);
-} else {
-  console.log('[smoke] optional Python PDF/OCR extractor not bundled; skipping extractor smoke');
 }
 
 const port = Number(argValue('--port')) || 18_000 + Math.floor(Math.random() * 20_000);

@@ -5,7 +5,7 @@
  * process. The daemon underneath owns the MFS store in app data and gives
  * each Folder one Internal namespace. Boot binds every known Folder so it is
  * ready when selected; boot and Welcome can also reconcile known folders without opening them, so
- * interrupted conversion work is rediscovered library-wide.
+ * interrupted conversion work is rediscovered across registered projects.
  *
  * Extracted from `server/index.ts` so route modules can import the
  * indexer without picking up the whole route registration kitchen sink.
@@ -15,18 +15,13 @@ import type { Indexer, EmbedderRuntimeConfig } from './indexer.ts';
 import {
   getCurrentFolder,
   getRecentFolders,
-  isLibraryFolderRemovalInProgress,
+  isProjectFolderRemovalInProgress,
   onClose,
   onSwitch,
   runWithWindowId,
 } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { getEmbedderConfig } from './app-config.ts';
-import {
-  embeddingAvailability,
-  isEmbeddingAvailable,
-  type EmbeddingAvailability,
-} from './embedding-availability.ts';
 import { syncIndex, type SyncResult } from './sync.ts';
 import { getDaemon, isMfsDaemonRetiringError } from './mfs-daemon.ts';
 import { noteTreeChanged } from './watcher.ts';
@@ -50,16 +45,6 @@ export function clearIndexWarning(folder: string): void {
 }
 function recordIndexWarning(folder: string, message: string): void {
   indexWarnings.set(filesystemPath.identity(folder), { message, at: new Date().toISOString() });
-}
-
-export function embeddingRuntimeUnavailableMessage(
-  folderAbs: string,
-  availability: EmbeddingAvailability = embeddingAvailability(),
-): string {
-  if (!availability.configured) {
-    return `embedder: no provider key configured — ${folderAbs} bound but semantic retrieval is unavailable until an OpenAI or OpenRouter key is added`;
-  }
-  return `embedder: configured embedding runtime is not ready — ${folderAbs} bound for cleanup; semantic indexing will resume after runtime recovery`;
 }
 
 function hasLostIndexerBinding(result: SyncResult): boolean {
@@ -93,7 +78,6 @@ export async function deleteFolderRuntimeState(folderRoot: string): Promise<void
 
 /** Resolve the active BYOK runtime config, or null when no key is configured. */
 export function resolveEmbedderRuntime(): EmbedderRuntimeConfig | null {
-  if (!isEmbeddingAvailable()) return null;
   const cfg = getEmbedderConfig();
   if (!cfg.apiKey) return null;
   return {
@@ -105,12 +89,12 @@ export function resolveEmbedderRuntime(): EmbedderRuntimeConfig | null {
   };
 }
 
-/** Configure + spawn the daemon, then bind every folder in Your Folders.
+/** Collect the registered project roots for daemon binding and reconciliation.
  *  Idempotent on the bind side; safe to call once at server startup. Without
  *  an embedding key each Internal namespace is created with vector indexing
  *  off, so exact retrieval and projection maintenance stay available. */
-function libraryFolderRoots(): string[] {
-  // Membership = "Your Folders" (the recents list), which can live anywhere
+function projectFolderRoots(): string[] {
+  // Registered project folders can live anywhere
   // on disk. Bind every member's absolute root so its namespace can reconcile
   // without requiring the user to open it first.
   const members = new Map<string, string>();
@@ -123,42 +107,38 @@ function libraryFolderRoots(): string[] {
   return [...members.values()];
 }
 
-export async function bootBindAllFolders(
-  runtimeOverride?: EmbedderRuntimeConfig,
-  opts: { strict?: boolean } = {},
-): Promise<void> {
-  const roots = libraryFolderRoots();
+export async function bootBindAllFolders(): Promise<void> {
+  const roots = projectFolderRoots();
   if (roots.length === 0) {
     log.info('boot bind: no member folders');
     return;
   }
   log.info(`boot bind: ${roots.length} folder(s)`);
-  const cfg = runtimeOverride ?? resolveEmbedderRuntime() ?? {
+  const cfg = resolveEmbedderRuntime() ?? {
     provider: getEmbedderConfig().provider,
   };
   for (const root of roots) {
     try {
       await indexer.bindFolder(root, cfg);
     } catch (err: unknown) {
-      if (opts.strict) throw err;
       log.warn(`boot bind ${root} failed: ${errorMessage(err)}`);
     }
   }
 }
 
-/** Reconcile every library member without changing the active window folder.
- *  This is the library-level recovery hook: after a process restart, or when
+/** Reconcile every project member without changing the active window folder.
+ *  This is the project-level recovery hook: after a process restart, or when
  *  the user sits on Welcome, interrupted PDF/image conversions should resume
  *  even if no folder is opened into the editor. */
-export async function reconcileLibraryFolders(reason: string): Promise<void> {
-  const roots = libraryFolderRoots();
+export async function reconcileProjectFolders(reason: string): Promise<void> {
+  const roots = projectFolderRoots();
   if (roots.length === 0) return;
-  log.info(`library reconcile: ${roots.length} folder(s) (${reason})`);
+  log.info(`project reconcile: ${roots.length} folder(s) (${reason})`);
   for (const root of roots) {
     try {
       await syncFolderNow(root, { reason });
     } catch (err: unknown) {
-      log.warn(`library reconcile ${root} failed: ${errorMessage(err)}`);
+      log.warn(`project reconcile ${root} failed: ${errorMessage(err)}`);
     }
   }
 }
@@ -174,13 +154,13 @@ export async function resetIndexerRuntime(opts: { forgetBindings?: boolean } = {
 
 /** Bind the indexer to a folder using the configured embedder. Called on
  *  every folder switch (idempotent). Doesn't trigger sync — caller's
- *  responsibility via `scheduleIndexerSync`. With no active source the folder is
- *  still bound but indexing is disabled. */
+ *  responsibility via `scheduleIndexerSync`. Without a key the folder remains
+ *  bound for grep; vector indexing is disabled. */
 export async function bindIndexerForFolder(folderAbs: string): Promise<void> {
   const cfg = resolveEmbedderRuntime();
   const runtime = cfg ?? { provider: getEmbedderConfig().provider };
   if (!cfg) {
-    log.warn(embeddingRuntimeUnavailableMessage(folderAbs));
+    log.warn(`embedder: no provider key configured — ${folderAbs} bound for keyword search; add an OpenAI or OpenRouter key for search by meaning`);
   }
   await indexer.bindFolder(filesystemPath.absolute(folderAbs), runtime);
 }
@@ -280,7 +260,7 @@ export async function syncFolderNow(
   opts: { reason?: string; shouldContinue?: () => boolean } = {},
 ): Promise<SyncResult> {
   const syncFolderRoot = filesystemPath.absolute(folderRoot);
-  if (isLibraryFolderRemovalInProgress(syncFolderRoot)) {
+  if (isProjectFolderRemovalInProgress(syncFolderRoot)) {
     return { added: [], modified: [], removed: [], failed: [], cancelled: true };
   }
   const queueKey = filesystemPath.identity(syncFolderRoot);

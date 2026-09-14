@@ -8,7 +8,7 @@ const {
   registerWindowLifecycle,
 } = require('../../dist/electron/window/lifecycle.cjs');
 
-function harness({ load = true } = {}) {
+function harness({ load = true, timeoutMs = 1_000 } = {}) {
   const handlers = new Map();
   const windowHandlers = new Map();
   const webContentsHandlers = new Map();
@@ -18,16 +18,13 @@ function harness({ load = true } = {}) {
   const fullscreenSent = [];
   const frame = { url: 'app://renderer/' };
   let closeCalls = 0;
-  let reloadCalls = 0;
   let fullscreen = false;
+  let blocked = 0;
   const webContents = {
     id: 41,
     isDestroyed: () => false,
     mainFrame: frame,
     on: (event, handler) => webContentsHandlers.set(event, handler),
-    reload: () => {
-      reloadCalls += 1;
-    },
     send: (channel, payload) =>
       (channel === 'window:fullscreen' ? fullscreenSent : sent).push([channel, payload]),
   };
@@ -41,6 +38,7 @@ function harness({ load = true } = {}) {
     webContents,
   };
   const dependencies = {
+    onCloseBlocked: () => { blocked += 1; },
     BrowserWindow: { fromWebContents: (candidate) => (candidate === webContents ? window : null) },
     expectedOrigins: new Set(['app://renderer']),
     hasCapability: (_window, capability) => capability === WINDOW_LIFECYCLE_CAPABILITY,
@@ -49,7 +47,7 @@ function harness({ load = true } = {}) {
   };
   const lifecycle = registerWindowLifecycle(dependencies, {
     createRequestId: () => `request-${sent.length + 1}`,
-    timeoutMs: 1_000,
+    timeoutMs,
   });
   lifecycle.attach(window);
   const finishLoad = () => webContentsHandlers.get('did-finish-load')();
@@ -58,12 +56,12 @@ function harness({ load = true } = {}) {
   return {
     close: (payload) => windowHandlers.get('close')(payload),
     closeCalls: () => closeCalls,
+    blocked: () => blocked,
     event,
     finishLoad,
     fullscreenSent,
     handlers,
     lifecycle,
-    reloadCalls: () => reloadCalls,
     sent,
     setFullScreen: (value) => {
       fullscreen = value;
@@ -110,6 +108,7 @@ test('native close waits for the renderer barrier and remains open after failure
   await ready(setup.event, { ...request, ready: false });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(setup.closeCalls(), 0);
+  assert.equal(setup.blocked(), 1, 'a refusal revokes pending app-quit intent');
 
   setup.close({
     preventDefault: () => {
@@ -120,21 +119,32 @@ test('native close waits for the renderer barrier and remains open after failure
   await ready(setup.event, { ...retry, ready: true });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(setup.closeCalls(), 1);
+  assert.equal(setup.blocked(), 1, 'a successful retry does not revoke quit intent');
 });
 
-test('safe reload crosses the same barrier and excludes a competing close', async () => {
+test('the active save barrier rejects mismatched senders, request IDs, and reasons', async () => {
   const setup = harness();
-  const reload = setup.handlers.get('window:safe-reload');
-  const reloading = reload(setup.event);
+  const releasing = setup.lifecycle.requestContextRelease(setup.window, 'window-close');
   const request = setup.sent.at(-1)[1];
-
-  setup.close({ preventDefault: () => undefined });
   const ready = setup.handlers.get('window:context-release-ready');
+  let settled = false;
+  void releasing.then(() => { settled = true; });
+  await ready({ ...setup.event, sender: { id: 99 } }, { ...request, ready: true });
+  await ready(setup.event, { ...request, requestId: 'stale-request', ready: true });
+  await ready(setup.event, { ...request, reason: 'update-install', ready: true });
+  assert.equal(settled, false);
   await ready(setup.event, { ...request, ready: true });
+  assert.equal(await releasing, true);
+});
 
-  assert.deepEqual(await reloading, { ok: true, reloaded: true });
-  assert.equal(setup.reloadCalls(), 1);
+test('native close remains blocked when its save barrier times out', async () => {
+  const setup = harness({ timeoutMs: 10 });
+  let prevented = false;
+  setup.close({ preventDefault: () => { prevented = true; } });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(prevented, true);
   assert.equal(setup.closeCalls(), 0);
+  assert.equal(setup.handlers.has('window:safe-reload'), false);
 });
 
 test('the lifecycle service reports renderer readiness only after the first load', () => {

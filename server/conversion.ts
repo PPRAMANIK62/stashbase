@@ -35,7 +35,7 @@ import {
   type ConversionProgress,
 } from './conversion-status.ts';
 import { clearRecord } from './conversion-status.ts';
-import { fromSourcePath, getActiveFolders, memberRootForAbs, onClose, onSwitch } from './folder.ts';
+import { fromSourcePath, getActiveFolders, registeredRootForAbs, onClose, onSwitch } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import type { IndexUpsertResult } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
@@ -80,6 +80,9 @@ export interface ConversionSpec {
   /** Optional completeness check for formats whose derived note can be
    *  assembled from resumable partial work. */
   derivedReady?: (absPath: string, derivedAbsPath: string) => boolean;
+  /** Register format-owned resources for each new task, including automatic
+   * rediscovery. Coalesced requests do not transfer that ownership. */
+  onScheduled?: (sourceAbs: string, completion: Promise<void>, urgency: ConversionUrgency) => void;
   /** Run the extractor; resolve on success, reject with the stderr tail. */
   convert: (
     absPath: string,
@@ -216,8 +219,8 @@ export async function cancelAllConversions(timeoutMs = 2500): Promise<string[]> 
 /** Destructive folder operations require a real cancellation barrier rather
  * than the bounded shutdown/removal wait above. Returning means no child task
  * still owns a file handle or scheduler lane under the prefix. */
-export async function cancelConversionsUnderAndWait(sourcePathPrefix: string): Promise<string[]> {
-  const cancelled = scheduler.cancelUnder(filesystemPath.absolute(sourcePathPrefix), 'file-operation');
+export async function cancelConversionsUnderAndWait(sourcePathPrefix: string, excludedRoots: readonly string[] = []): Promise<string[]> {
+  const cancelled = scheduler.cancelUnder(filesystemPath.absolute(sourcePathPrefix), 'file-operation', excludedRoots);
   await Promise.allSettled(cancelled.map((item) => item.completion));
   return cancelled.map((item) => item.key);
 }
@@ -485,11 +488,12 @@ function runConversion(
       // Folder removal and source replacement both retire the old task first.
       // Re-check membership and disk state before safely enqueueing the current
       // source; delete/rename and permanently removed folders stay retired.
-      if (!existsSync(absPath) || memberRootForAbs(sourcePath) == null) return;
+      if (!existsSync(absPath) || registeredRootForAbs(sourcePath) == null) return;
       maybeConvert(absPath, spec, { urgency: 'background', cost: spec.cost });
     },
   });
   if (scheduled.created) {
+    spec.onScheduled?.(absPath, scheduled.completion, urgency);
     try { (spec.cleanupBeforeConvert ?? spec.cleanupDerived)?.(absPath); } catch (err: unknown) {
       log.warn(`${spec.kind}: enqueue cleanup failed for ${absPath}: ${errorMessage(err)}`);
     }

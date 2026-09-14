@@ -87,7 +87,7 @@ describe('Markdown document surface', () => {
         onOpenExternal={vi.fn(async () => true)}
         navigation={navigation}
         readOnly
-        source={{ folderPath: '/library/notes', path: 'plan.md' }}
+        source={{ folderPath: '/project/notes', path: 'plan.md' }}
         tabId="tab-1"
         value="# Plan"
       />,
@@ -114,7 +114,7 @@ describe('Markdown document surface', () => {
         onOpenExternal={vi.fn(async () => true)}
         navigation={navigation}
         readOnly={false}
-        source={{ folderPath: '/library/notes', path: 'plan.md' }}
+        source={{ folderPath: '/project/notes', path: 'plan.md' }}
         tabId="tab-1"
         value={'---\ntitle: Plan\n---\nbody'}
       />,
@@ -147,7 +147,7 @@ describe('Markdown document surface', () => {
         onOpenExternal={vi.fn(async () => true)}
         navigation={navigation}
         readOnly={false}
-        source={{ folderPath: '/library/notes', path: 'plan.md' }}
+        source={{ folderPath: '/project/notes', path: 'plan.md' }}
         tabId="tab-1"
         value="body"
       />,
@@ -169,7 +169,7 @@ describe('Markdown document surface', () => {
         onOpenExternal={vi.fn(async () => true)}
         navigation={navigation}
         readOnly
-        source={{ folderPath: '/library/notes', path: 'plan.md' }}
+        source={{ folderPath: '/project/notes', path: 'plan.md' }}
         tabId="tab-1"
         value="body"
       />,

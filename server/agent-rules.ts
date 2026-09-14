@@ -10,7 +10,7 @@ const log = logger('agent-rules');
  *  "working" until the user runs `claude` in a terminal and accepts —
  *  and Claude Code offers no trust flag or env override (the only
  *  narrow mechanism is the per-project `hasTrustDialogAccepted` flag in
- *  `~/.claude.json`). Adding a folder to the StashBase library is the
+ *  `~/.claude.json`). Adding a folder to the StashBase project is the
  *  user's explicit trust act, so pre-accept trust for the session
  *  folder before connecting.
  *

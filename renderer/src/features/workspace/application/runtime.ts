@@ -1,12 +1,14 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
 import type { WorkspaceQueryScope } from '@/features/workspace/application/ports';
-import type { ActiveLibraryFolder } from '@/features/workspace/domain/library';
+import type { ActiveProjectFolder } from '@/features/workspace/domain/project';
 import type { FolderSessionState } from '@/features/workspace/domain/session';
 import {
   createWorkspaceState,
   disposeWorkspaceState,
+  collapseAllTreeFolders,
   requestTreeCreate,
+  selectTreePath,
   type TreeCreateRequest,
   type WorkspaceScope,
   type WorkspaceState,
@@ -35,18 +37,24 @@ export interface WorkspaceRuntime {
   /** Asks the folder's tree to start naming a new entry. The tree decides
    *  where, beside its selection, and takes the request up when it is on
    *  screen. */
+  /** Folds every folder in the tree. */
+  collapseAll(): void;
   requestCreate(kind: TreeCreateRequest['kind']): void;
   retire(): void;
   /** Retires every operation in flight, so their completions are refused. The
    *  folder itself stays open: rebinding it re-reads the tree from scratch, and
    *  a completion aimed at the tree before that is no longer about this one. */
   retireOperations(): void;
+  /** Points the tree at `path`, or at no row with `null`. The window uses it
+   *  to keep the tree on the document in front of the reader; a gesture on a
+   *  row goes through the tree's own hook. */
+  selectPath(path: string | null): void;
   /** The folder's presentation state as of now, for the saved session. */
   toSession(): WorkspaceState;
 }
 
 export interface WorkspaceRuntimeOptions {
-  folder: ActiveLibraryFolder;
+  folder: ActiveProjectFolder;
   generation: number;
   queries: WorkspaceQueryScope;
   restored?: FolderSessionState | null;
@@ -101,6 +109,9 @@ export function createWorkspaceRuntime({
     dispose() {
       finish(false);
     },
+    collapseAll() {
+      store.setState(collapseAllTreeFolders);
+    },
     requestCreate(kind) {
       if (disposed) return;
       store.setState((state) => requestTreeCreate(state, kind));
@@ -109,6 +120,10 @@ export function createWorkspaceRuntime({
       finish(true);
     },
     retireOperations: guard.retireOperations,
+    selectPath(path) {
+      if (disposed) return;
+      store.setState((state) => selectTreePath(state, path));
+    },
     toSession() {
       return store.getState();
     },

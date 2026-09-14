@@ -16,8 +16,8 @@ import type { AgentId } from '@/features/agent/domain/session';
  *  resolved at the adapter rather than at every read. */
 export interface AgentAbilities {
   /** Whether this runtime can read transient uploaded bytes: an image or PDF
-   *  picked, pasted, or dragged in from outside the library. It says nothing
-   *  about referencing a library source, which is a path the agent reads back
+   *  picked, pasted, or dragged in from outside the project. It says nothing
+   *  about referencing a project source, which is a path the agent reads back
    *  through MCP and which every runtime can use. A text-only model reports
    *  false here and still takes mentions and source drags. */
   readonly attachments: boolean;
@@ -82,6 +82,28 @@ export const AGENT_ORDER: readonly AgentId[] = AGENT_RUNTIMES.map((entry) => ent
 
 export function agentLabel(id: AgentId): string {
   return AGENT_RUNTIMES.find((entry) => entry.id === id)?.label ?? id;
+}
+
+/** What a runtime that cannot carry a turn is waiting for. `AgentGate` below
+ *  answers the same question for the window; this one answers it for one
+ *  runtime, which is what a picker row has to say.
+ *
+ *  `account` is the StashBase account and nothing else: the bundled runtime
+ *  installs nothing and holds no model key, so the account is the only thing
+ *  that can stand between it and a turn. It is decided from the registry
+ *  rather than from `needsSignIn`, which the catalog can only report once a
+ *  bootstrap attempt has come back `authentication-required` — too late for a
+ *  reader looking at the runtime before anything has been tried, who would
+ *  otherwise be offered a setup step the runtime does not have.
+ *
+ *  `login` is a runtime's own provider sign-in, and `setup` its installation.
+ *  The three names are the ones `describeRuntime` already uses in Settings, so
+ *  the two surfaces say the same word for the same wait. */
+export type AgentRuntimeGate = 'account' | 'login' | 'setup';
+
+export function runtimeGate(agent: Pick<Agent, 'id' | 'needsSignIn'>): AgentRuntimeGate {
+  if (agent.id === BUILT_IN.id) return 'account';
+  return agent.needsSignIn ? 'login' : 'setup';
 }
 
 /**

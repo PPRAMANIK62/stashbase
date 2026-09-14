@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { parseGitHubRepositoryUrl } from '../../github-import';
 
 /**
- * The Gallery index: ready-made Wikis a reader can copy into the Library.
+ * The Gallery index: ready-made Wikis a reader can copy into a project folder.
  *
  * The whole service contract is one published JSON document, fetched through
  * the daemon's proxy because the renderer's CSP pins `connect-src` to `'self'`.
@@ -39,8 +40,10 @@ export const galleryEntrySchema = z
      *  surface for it. */
     contents: line(1_000),
     /** Public repository holding the whole wiki, copied by the same import
-     *  the Library switcher uses. */
-    repo: line(2_048),
+     *  the project switcher uses. */
+    repo: line(2_048).refine((value) => parseGitHubRepositoryUrl(value).ok, {
+      message: 'A public HTTPS GitHub repository URL is required.',
+    }),
     /** Optional deep-dive page on the site. Carried so a published entry
      *  round-trips whole even though the app renders no surface for it. */
     learnMore: line(2_048).optional(),

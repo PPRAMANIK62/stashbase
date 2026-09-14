@@ -3,7 +3,7 @@ import { z } from 'zod';
 const folderPathSchema = z.string().trim().min(1).max(4096);
 const relativePathSchema = z.string().trim().min(1).max(4096);
 
-/** `POST /api/library/search` in `semantic` mode. Every request names one
+/** `POST /api/project/search` in `semantic` mode. Every request names one
  *  member Folder. */
 export const semanticSearchRequestSchema = z
   .object({

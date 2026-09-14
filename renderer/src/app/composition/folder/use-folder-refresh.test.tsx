@@ -35,23 +35,6 @@ function mount(options: Partial<FolderRefreshOptions> = {}) {
 }
 
 describe('useFolderRefresh', () => {
-  it('re-reads the folder on demand', () => {
-    const { isStale, result } = mount();
-
-    act(() => result.current.refresh());
-
-    expect(isStale(workspaceQueryKeys.files(RESEARCH_FOLDER.path))).toBe(true);
-    expect(isStale(preparationQueryKeys.folderStatus(RESEARCH_FOLDER.path))).toBe(true);
-  });
-
-  it('does nothing on demand while no folder is open', () => {
-    const { isStale, result } = mount({ folderPath: null });
-
-    act(() => result.current.refresh());
-
-    expect(isStale(workspaceQueryKeys.files(RESEARCH_FOLDER.path))).toBe(false);
-  });
-
   it('ignores the first tree revision it sees for a folder', () => {
     const { isStale } = mount({ treeVersion: 4 });
 
@@ -111,11 +94,11 @@ describe('useFolderRefresh', () => {
     );
   });
 
-  it('leaves a library-scoped change alone', () => {
+  it('leaves a unbound change alone', () => {
     const { result, syncFolder } = mount();
 
     act(() =>
-      result.current.onAgentFilesChanged({ paths: [], scope: { kind: 'library' }, sources: [] }),
+      result.current.onAgentFilesChanged({ paths: [], scope: { kind: 'unbound' }, sources: [] }),
     );
 
     expect(syncFolder).not.toHaveBeenCalled();

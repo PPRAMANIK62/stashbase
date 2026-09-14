@@ -134,7 +134,7 @@ test('production Claude replay joins SDK-selected active UUIDs to raw JSONL effo
   });
 });
 
-test('scope=all merges the library bucket with every member folder, tagging member rows', async () => {
+test('scope=all merges the project bucket with every member folder, tagging member rows', async () => {
   const { listAllSessions } = sharedRoutes;
   const byCwd: Record<string, { id: string; lastModified: number }[]> = {
     '/home/lib': [{ id: 'lib-1', lastModified: 300 }],
@@ -149,7 +149,7 @@ test('scope=all merges the library bucket with every member folder, tagging memb
   };
   const rows = await listAllSessions(history, '/home/lib', ['/work/alpha', '/work/beta', '/work/broken']) as
     { id: string; folder?: string }[];
-  // Newest first across buckets; member rows tagged, library rows untagged;
+  // Newest first across buckets; member rows tagged, project rows untagged;
   // the broken bucket drops out without blanking the rest.
   assert.deepEqual(rows.map((row) => [row.id, row.folder ?? null]), [
     ['a-1', '/work/alpha'],

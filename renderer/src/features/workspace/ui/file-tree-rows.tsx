@@ -37,6 +37,10 @@ import {
 import { cn } from '@/lib/utils';
 import { writeSourceDrag } from '@/shared/utils/source-drag';
 
+// The tree sits on the sidebar's row, the compact step: 28px tall with the
+// 14px glyph and 13px label every other row in the column has, so the
+// folder header, New chat, the footer, and the tree read as one list. A
+// level indents by the glyph plus 12px.
 const TREE_ROOT_INSET = 8;
 const TREE_LEVEL_INDENT = 26;
 const TREE_ICON_RADIUS = 7;
@@ -101,7 +105,7 @@ export function rowIsRestricted(row: TreeRow): boolean {
   return row.node.type === 'folder' ? folderIsRestricted(row.node) : fileIsRestricted(row.node);
 }
 
-/** A file the library will not index, so it never joins Search or Chat context. */
+/** A file the project will not index, so it never joins Search or Chat context. */
 function rowIsGeneric(row: TreeRow): boolean {
   return row.node.type === 'file' && row.node.format === 'generic';
 }
@@ -220,12 +224,30 @@ export function FileTreeRow({
         aria-selected={selected}
         aria-setsize={row.setSize}
         className={cn(
-          'w-full justify-start',
+          // gap-2 over the compact button gap lands the label on the sidebar's
+          // menu rows' text line, 38px in, so the tree and the rows around it
+          // share one text edge.
+          'w-full justify-start gap-2',
           '[&>span:last-child]:w-full [&>span:last-child]:min-w-0 [&>span:last-child]:justify-start',
           '[&>span:last-child>span]:min-w-0 [&>span:last-child>span]:flex-1 [&>span:last-child>span]:truncate [&>span:last-child>span]:text-left [&>span:last-child>span]:[text-box:normal]',
-          // Hovered and selected are one treatment: ink and the heavier
-          // glyph stroke, over the one row tint.
-          (proximityActive || selected) && 'text-foreground [&_svg]:stroke-2',
+          // The row rests in ink, label and glyph alike, over the ghost
+          // button's grey, the way the sidebar's menu rows do; hovered and
+          // selected are one treatment, the one row tint, with neither colour
+          // nor stroke changing. The important stroke holds the button's own
+          // hover thickening off.
+          'text-foreground [&_svg]:stroke-[1.5]! [&_svg]:text-foreground',
+          // A trailing glyph sits on the row's action axis, 18px in from the
+          // edge (a 24px action box at right-1.5): 11px of padding centres the
+          // 14px glyph there, where the compact button's 12px would not.
+          trailingIcon !== undefined && 'pr-[11px]',
+          // The reveal glyph on a restricted row is a trailing control, and
+          // trailing controls in this column show under the pointer or focus,
+          // not at rest: the row already says what it is by carrying a folder
+          // glyph where a browsable folder carries its chevron. A preparation
+          // marker is a status and stays.
+          restricted &&
+            '[&_svg:last-of-type]:transition-opacity [&_svg:last-of-type]:duration-fast focus-visible:[&_svg:last-of-type]:opacity-100',
+          restricted && !(proximityActive || selected) && '[&_svg:last-of-type]:opacity-0',
         )}
         data-path={row.node.path}
         data-proximity-index={index}

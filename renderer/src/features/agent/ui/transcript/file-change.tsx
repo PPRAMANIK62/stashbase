@@ -18,6 +18,7 @@ import {
   fileBasename,
   type AgentFileChange,
 } from '@/features/agent/domain/file-change';
+import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { codeSyntaxHighlighting } from '@/shared/styling/code-highlight';
@@ -47,19 +48,19 @@ const diffTheme = EditorView.baseTheme({
     textAlign: 'right',
   },
   '&.cm-merge-b .cm-changedLine, .cm-inlineChangedLine': {
-    backgroundColor: 'color-mix(in oklab, var(--diff-add) 12%, transparent)',
+    backgroundColor: 'var(--diff-add-line)',
   },
   '.cm-deletedChunk': {
-    backgroundColor: 'color-mix(in oklab, var(--diff-remove) 10%, transparent)',
+    backgroundColor: 'var(--diff-remove-line)',
     paddingLeft: '8px',
   },
   '&light.cm-merge-b .cm-changedText, &dark.cm-merge-b .cm-changedText': {
-    background: 'color-mix(in oklab, var(--diff-add) 28%, transparent)',
+    background: 'var(--diff-add-token)',
     borderRadius: '2px',
   },
   '&light .cm-deletedChunk .cm-deletedText, &dark .cm-deletedChunk .cm-deletedText, &.cm-merge-b .cm-deletedText':
     {
-      background: 'color-mix(in oklab, var(--diff-remove) 22%, transparent)',
+      background: 'var(--diff-remove-token)',
       borderRadius: '2px',
     },
   '.cm-changeGutter': { paddingLeft: '1px', width: '3px' },
@@ -195,8 +196,8 @@ function PatchView({ label, patch }: { label: string; patch: string }) {
           <span
             className={cn(
               'block px-2',
-              kind === 'add' && 'bg-[color-mix(in_oklab,var(--diff-add)_12%,transparent)]',
-              kind === 'del' && 'bg-[color-mix(in_oklab,var(--diff-remove)_10%,transparent)]',
+              kind === 'add' && 'bg-[var(--diff-add-line)]',
+              kind === 'del' && 'bg-[var(--diff-remove-line)]',
               kind === 'meta' && 'text-muted-foreground',
             )}
             data-line={kind}
@@ -225,6 +226,7 @@ function Counts({ additions, deletions }: { additions: number; deletions: number
 
 /** One change as evidence: the file strip, then its diff or patch. */
 export function AgentFileChangeView({ change }: { change: AgentFileChange }) {
+  const shape = useShape();
   const name = fileBasename(change.path);
   const directory = change.path.slice(0, change.path.length - name.length).replace(/[\\/]$/u, '');
   const counts = useMemo(
@@ -237,7 +239,7 @@ export function AgentFileChangeView({ change }: { change: AgentFileChange }) {
   return (
     <section
       aria-label={label}
-      className="overflow-hidden rounded-md border border-border bg-surface-2"
+      className={cn('overflow-hidden border border-border bg-surface-2', shape.panel)}
     >
       <header className="flex h-7 items-center gap-1.5 border-b border-border px-2.5 text-[12px]">
         <FileTypeIcon
@@ -287,6 +289,7 @@ export function AgentChangedFiles({
   onOpenSource?: ((source: SourceReference) => void) | undefined;
   sourceFor?: ((path: string) => SourceReference | null) | undefined;
 }) {
+  const shape = useShape();
   if (changes.length === 0) return null;
   return (
     <ul aria-label="Changed files" className="m-0 flex list-none flex-col gap-0.5 p-0">
@@ -298,7 +301,7 @@ export function AgentChangedFiles({
         const source = onOpenSource && sourceFor ? sourceFor(change.path) : null;
         return (
           <li
-            className="flex min-h-8 items-center gap-2 rounded-md px-2 text-[12px]"
+            className={cn('flex min-h-8 items-center gap-2 px-2 text-[12px]', shape.item)}
             key={change.path}
           >
             <FileTypeIcon

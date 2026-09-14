@@ -16,7 +16,7 @@
  * embedding daemon crash later with "No module named 'mfs'".
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -86,10 +86,26 @@ if (!existsSync(VENV)) {
 console.log(`[setup:python] installing deps from ${REQS}`);
 execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip'], { stdio: 'inherit' });
 // The retired zilliztech distribution owns the same `mfs` import package.
-// Remove it before installing the new library so stale modules cannot survive
+// Remove it before installing the new project so stale modules cannot survive
 // an in-place development environment upgrade.
 execFileSync(VENV_PYTHON, ['-m', 'pip', 'uninstall', '-y', 'mfs-cli'], { stdio: 'inherit' });
+// Upstream can change its Git revision without changing the package version.
+// pip otherwise keeps the old code, even with --upgrade.
+const mfsRevision = readFileSync(REQS, 'utf8').match(/^mfs @ git\+.+@([a-f0-9]{40})\s*$/m)?.[1];
+if (!mfsRevision) throw new Error('requirements.txt must pin MFS to an exact Git revision');
+const installedMfsRevision = () => execFileSync(VENV_PYTHON, ['-c', `
+import importlib.metadata as metadata, json
+try:
+    installed = json.loads(metadata.distribution('mfs').read_text('direct_url.json') or '{}')
+    print(installed.get('vcs_info', {}).get('commit_id', ''))
+except metadata.PackageNotFoundError:
+    print('')
+`], { encoding: 'utf8' }).trim();
+if (installedMfsRevision() !== mfsRevision) {
+  execFileSync(VENV_PYTHON, ['-m', 'pip', 'uninstall', '-y', 'mfs'], { stdio: 'inherit' });
+}
 execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-r', REQS], { stdio: 'inherit' });
+if (installedMfsRevision() !== mfsRevision) throw new Error('Installed MFS does not match its pinned Git revision');
 if (WITH_EXTRACT) {
   console.log(`[setup:python] installing extraction deps from ${EXTRACT_REQS}`);
   execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-r', EXTRACT_REQS], { stdio: 'inherit' });

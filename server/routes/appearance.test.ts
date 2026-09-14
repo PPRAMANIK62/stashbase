@@ -1,9 +1,11 @@
+import '../__tests__/isolated-home.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import express from 'express';
 
 import { mount } from './appearance.ts';
+import { readAppConfigStrict, writeAppConfigStrict, normalizeAppearancePreferences } from '../app-config.ts';
 
 const THEMES: readonly unknown[] = ['system', 'light', 'dark'];
 const SCALES: readonly unknown[] = ['small', 'default', 'large'];
@@ -64,10 +66,20 @@ function presetsOf(value: unknown): AppearanceBody {
   };
 }
 
-// There is no accepted-write test: `CONFIG_DIR` in app config has no test
-// override, so the 200 path would rewrite the real user config. Each refusal is
-// also the proof the durable writer was never reached, because the route
-// answers before it calls into app config.
+test('partial appearance writes persist through the real route and preserve other configuration', async () => {
+  writeAppConfigStrict({ appearance: { uiScale: 'large' }, updates: { autoCheck: false } });
+  assert.equal(await put({ theme: 'dark', readingTextSize: 'small' }), 200);
+  assert.deepEqual((await get()).body, { theme: 'dark', uiScale: 'large', readingTextSize: 'small' });
+  const saved = readAppConfigStrict();
+  assert.deepEqual(saved.updates, { autoCheck: false });
+  for (const value of [[], { unknown: true }, { theme: 'light', unknown: true }]) {
+    assert.equal(await put(value), 400);
+    assert.deepEqual(readAppConfigStrict(), saved);
+  }
+  assert.deepEqual(normalizeAppearancePreferences({ theme: 'neon', uiScale: 'huge' }), {
+    theme: 'system', uiScale: 'default', readingTextSize: 'default',
+  });
+});
 test('a theme outside the three presets is refused rather than written', async () => {
   assert.equal(await put({ theme: 'midnight' }), 400);
 });

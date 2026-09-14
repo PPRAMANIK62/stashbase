@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { AGENT_RUNTIME_STAGES, type AgentRuntime } from '@/features/settings/domain/agent-catalog';
+import type { AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import { agentRuntime } from '@/test/fakes/settings';
 
-import { agentRuntimeStageIndex, describeRuntime } from './agent-runtime-status';
+import { describeRuntime } from './agent-runtime-status';
 
 /** A runtime nothing has run for yet: discovered, not installed, no ownership
  *  reported. Every case below names only the part it is about. */
@@ -22,7 +22,6 @@ describe('describeRuntime', () => {
   it('reports null stage while the catalog has not loaded this agent', () => {
     expect(describeRuntime(undefined, false)).toEqual({
       description: 'Checking…',
-      failed: false,
       stage: null,
       action: null,
     });
@@ -31,25 +30,19 @@ describe('describeRuntime', () => {
   it('offers Install for a not-yet-installed idle runtime, and withholds it while busy', () => {
     expect(describeRuntime(codex({ installed: false }), false)).toEqual({
       description: 'Not installed',
-      failed: false,
       stage: 'discover',
       action: { kind: 'install', label: 'Install' },
     });
     expect(describeRuntime(codex({ installed: false }), true)).toEqual({
       description: 'Not installed',
-      failed: false,
       stage: 'discover',
       action: null,
     });
   });
 
-  it.each([
-    ['install', 1],
-    ['authenticate', 2],
-    ['configure', 3],
-  ] as const)(
-    'reads a running %s preparation at track position %d with no action',
-    (stage, position) => {
+  it.each(['install', 'authenticate', 'configure'] as const)(
+    'reads a running %s preparation as its own note with no action',
+    (stage) => {
       const display = describeRuntime(
         codex({
           installed: true,
@@ -59,11 +52,9 @@ describe('describeRuntime', () => {
       );
       expect(display).toEqual({
         description: 'Setting things up…',
-        failed: false,
         stage,
         action: null,
       });
-      expect(agentRuntimeStageIndex(stage)).toBe(position);
     },
   );
 
@@ -84,7 +75,6 @@ describe('describeRuntime', () => {
     );
     expect(display).toEqual({
       description: 'An account is required to use OpenQuill.',
-      failed: true,
       stage: 'install',
       action: { kind: 'account', label: 'Sign in' },
     });
@@ -151,17 +141,16 @@ describe('describeRuntime', () => {
       true,
     );
     expect(display.action).toBeNull();
-    expect(display.failed).toBe(true);
+    expect(display.description).toBe('MCP failed.');
   });
 
-  it('treats an installed runtime with an idle preparation as already ready, without the "Ready for Chat" prefix', () => {
+  it('treats an installed runtime with an idle preparation as already ready, without the "Ready to chat" prefix', () => {
     const display = describeRuntime(
       codex({ installed: true, ownership: 'system', preparation: { kind: 'idle' } }),
       false,
     );
     expect(display).toEqual({
-      description: 'System runtime',
-      failed: false,
+      description: 'Installed on your system',
       stage: 'ready',
       action: null,
     });
@@ -169,25 +158,20 @@ describe('describeRuntime', () => {
 
   it.each([
     ['bundled', 'Included with StashBase'],
-    ['managed', 'StashBase-managed runtime'],
-    ['system', 'System runtime'],
+    ['managed', 'Managed by StashBase'],
+    ['system', 'Installed on your system'],
   ] as const)(
-    'describes a ready %s runtime with the "Ready for Chat" prefix and matching ownership text',
+    'describes a ready %s runtime with the "Ready to chat" prefix and matching ownership text',
     (ownership, label) => {
       const display = describeRuntime(
         codex({ installed: true, ownership, preparation: { kind: 'ready' } }),
         false,
       );
       expect(display).toEqual({
-        description: `Ready for Chat · ${label}`,
-        failed: false,
+        description: `Ready to chat · ${label}`,
         stage: 'ready',
         action: null,
       });
     },
   );
-
-  it('derives every stage position from the declared track order', () => {
-    expect(AGENT_RUNTIME_STAGES.map(agentRuntimeStageIndex)).toEqual([0, 1, 2, 3, 4]);
-  });
 });

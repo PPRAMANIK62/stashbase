@@ -15,14 +15,14 @@ import {
   BUILT_IN_AGENT,
   pendingAgentContextPort,
 } from '@/test/fakes/agent';
-import { appDependencies, captureBridge } from '@/test/fakes/app';
+import { appDependencies } from '@/test/fakes/app';
 import { documentAdapters, documentsApi, sourceApi } from '@/test/fakes/documents';
 import { preparationControlApi, preparationStatusApi } from '@/test/fakes/preparation';
 import { agentRuntime, agentRuntimePort } from '@/test/fakes/settings';
 import {
   filesApi,
-  libraryApi,
-  librarySnapshot,
+  projectApi,
+  projectRegistrySnapshot,
   listing,
   workspaceAdapters,
 } from '@/test/fakes/workspace';
@@ -108,7 +108,7 @@ vi.mock('@milkdown/crepe/builder', () => ({
 
 type AgentConnectionListener = Parameters<AgentSessionPort['connect']>[1];
 
-const FOLDER = '/library/notes';
+const FOLDER = '/project/notes';
 
 interface Harness {
   dependencies: AppDependencies;
@@ -138,7 +138,6 @@ function harness(): Harness {
       instructions: agentInstructionsApi(),
       session: session.port,
     },
-    capture: captureBridge(),
     documents: documentsApi({
       adapters: documentAdapters({
         source: sourceApi({
@@ -160,17 +159,17 @@ function harness(): Harness {
       }),
       createId: vi.fn(() => `id-${++nextId}`),
     }),
-    library: {
-      api: libraryApi({
+    project: {
+      api: projectApi({
         load: vi.fn(async () =>
-          librarySnapshot({
+          projectRegistrySnapshot({
             activeFolder: { name: 'Notes', path: FOLDER },
-            members: [{ favorite: false, openedAt: '2026-09-02T00:00:00.000Z', path: FOLDER }],
+            projects: [{ favorite: false, openedAt: '2026-09-02T00:00:00.000Z', path: FOLDER }],
           }),
         ),
       }),
-      folderPicker: base.library.folderPicker,
-      lifecycle: base.library.lifecycle,
+      folderPicker: base.project.folderPicker,
+      lifecycle: base.project.lifecycle,
     },
     preparation: {
       controlApi: preparationControlApi({ reprocess: vi.fn(async () => 'index' as const) }),
@@ -335,26 +334,5 @@ describe('J07 converge chat into a document', () => {
     expect(screen.getByRole('button', { name: 'Merge' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Overwrite' })).not.toBeNull();
     expect(test.saves).toEqual([]);
-  });
-
-  it('suppresses the clipboard import offer while the Agent composer holds focus', async () => {
-    const test = harness();
-    render(
-      <Providers>
-        <App dependencies={test.dependencies} />
-      </Providers>,
-    );
-    const composer = await messageEditor();
-    const { capture } = test.dependencies;
-    if (!capture) throw new Error('The harness always supplies a capture bridge.');
-    expect(capture.setComposerFocused).toHaveBeenCalledWith(false);
-
-    act(() => composer.focus());
-    await waitFor(() => expect(capture.setComposerFocused).toHaveBeenCalledWith(true));
-
-    act(() => composer.contentDOM.blur());
-    await waitFor(() =>
-      expect(vi.mocked(capture.setComposerFocused).mock.calls.at(-1)).toEqual([false]),
-    );
   });
 });

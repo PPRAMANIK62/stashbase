@@ -1,3 +1,8 @@
+import type { EmbedderFailureKind } from '@/features/settings/application/embedder-port';
+import type {
+  AgentRuntimeFailureKind,
+  SettingsFailureKind,
+} from '@/features/settings/application/ports';
 /**
  * How a Settings failure reaches the reader.
  *
@@ -7,11 +12,7 @@
  * consumed here instead: one sentence per kind, and one decision about whether
  * the reader is being told to fix something or told that a capability is gone.
  */
-import type { EmbedderFailureKind } from '@/features/settings/application/embedder-port';
-import type {
-  AgentRuntimeFailureKind,
-  SettingsFailureKind,
-} from '@/features/settings/application/ports';
+import type { LocalComponentStatus } from '@/features/settings/domain/local-component';
 import { readFailure, type FailureView } from '@/shared/domain/feature-error';
 
 /** Every failure kind any Settings capability can report. */
@@ -50,4 +51,25 @@ export function firstFailure(
 ): FailureView | null {
   const failed = errors.find((candidate) => candidate.isError);
   return failed ? settingsFailure(failed.error) : null;
+}
+
+const COMPONENT_FAILURES = {
+  network: 'The download could not finish. Check your connection and retry.',
+  verification: 'The download could not be verified. Retry to download a fresh copy.',
+  installation: 'The component could not be installed. Check available disk space and retry.',
+  manifest: 'Component information is invalid or missing. Update or reinstall StashBase.',
+  interrupted: 'The download was interrupted.',
+} as const;
+
+export function localComponentDescription(component: LocalComponentStatus): string {
+  switch (component.status) {
+    case 'not-installed':
+      return 'Not downloaded. Downloads automatically when first needed.';
+    case 'downloading':
+      return 'Downloading and installing… Waiting files will continue automatically.';
+    case 'installed':
+      return 'Installed. Ready for offline use.';
+    case 'failed':
+      return `${COMPONENT_FAILURES[component.error ?? 'interrupted']} Waiting files stay queued. Retry here or restart StashBase to try again.`;
+  }
 }

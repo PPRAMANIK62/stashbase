@@ -35,9 +35,9 @@ test('multipart import stages on disk and accepts long-recording size budgets', 
   closeStateDb = stateDb.closeStateDb;
   assert.ok(upload.MAX_UPLOAD_FILE_BYTES > 512 * 1024 * 1024);
 
-  const library = path.join(testHome, 'Library');
-  fs.mkdirSync(library, { recursive: true });
-  folder.setCurrentFolder(library);
+  const project = path.join(testHome, 'Library');
+  fs.mkdirSync(project, { recursive: true });
+  await folder.openProjectFolder(project);
   const app = express();
   upload.mount(app);
   server = app.listen(0, '127.0.0.1');
@@ -56,7 +56,7 @@ test('multipart import stages on disk and accepts long-recording size budgets', 
   body.append('paths', 'recording.wav');
   const response = await fetch(`http://127.0.0.1:${address.port}/api/upload`, { method: 'POST', body });
   assert.equal(response.status, 200, await response.text());
-  assert.deepEqual(fs.readFileSync(path.join(library, 'recording.wav')), bytes);
+  assert.deepEqual(fs.readFileSync(path.join(project, 'recording.wav')), bytes);
 
   const leftovers = fs.existsSync(tempRoot)
     ? fs.readdirSync(tempRoot).filter((name) => name.endsWith('.upload') && !stagedBefore.has(name))
@@ -67,15 +67,15 @@ test('multipart import stages on disk and accepts long-recording size budgets', 
 test('staged publication is asynchronous, cancellable, and removes its partial target', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-upload-copy-test-'));
   const staged = path.join(root, 'staged.upload');
-  const library = path.join(root, 'Library');
-  fs.mkdirSync(library);
+  const project = path.join(root, 'Library');
+  fs.mkdirSync(project);
   fs.closeSync(fs.openSync(staged, 'w'));
   fs.truncateSync(staged, 32 * 1024 * 1024);
   try {
     const { publishStagedImport } = await import('./import-publication.ts');
     const controller = new AbortController();
     const publication = publishStagedImport({
-      folderRoot: library,
+      folderRoot: project,
       relativePath: 'recording.wav',
       stagedPath: staged,
       signal: controller.signal,
@@ -84,8 +84,8 @@ test('staged publication is asynchronous, cancellable, and removes its partial t
     controller.abort(new Error('test cancelled'));
 
     await assert.rejects(publication, /abort|cancel/i);
-    assert.equal(fs.existsSync(path.join(library, 'recording.wav')), false);
-    assert.deepEqual(fs.readdirSync(library), []);
+    assert.equal(fs.existsSync(path.join(project, 'recording.wav')), false);
+    assert.deepEqual(fs.readdirSync(project), []);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -94,14 +94,14 @@ test('staged publication is asynchronous, cancellable, and removes its partial t
 test('large imported text is published without being loaded into the Node heap', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-upload-text-test-'));
   const staged = path.join(root, 'staged.upload');
-  const library = path.join(root, 'Library');
-  fs.mkdirSync(library);
+  const project = path.join(root, 'Library');
+  fs.mkdirSync(project);
   fs.closeSync(fs.openSync(staged, 'w'));
   fs.truncateSync(staged, 9 * 1024 * 1024);
   try {
     const { publishStagedImport } = await import('./import-publication.ts');
     const result = await publishStagedImport({
-      folderRoot: library,
+      folderRoot: project,
       relativePath: 'large.md',
       stagedPath: staged,
       signal: new AbortController().signal,
@@ -119,16 +119,16 @@ test('large imported text is published without being loaded into the Node heap',
 test('staged publication never replaces a target created after collision planning', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-upload-race-test-'));
   const staged = path.join(root, 'staged.upload');
-  const library = path.join(root, 'Library');
-  const target = path.join(library, 'recording.wav');
-  fs.mkdirSync(library);
+  const project = path.join(root, 'Library');
+  const target = path.join(project, 'recording.wav');
+  fs.mkdirSync(project);
   fs.writeFileSync(staged, 'new recording');
   fs.writeFileSync(target, 'existing recording');
   try {
     const { publishStagedImport } = await import('./import-publication.ts');
     await assert.rejects(
       publishStagedImport({
-        folderRoot: library,
+        folderRoot: project,
         relativePath: 'recording.wav',
         stagedPath: staged,
         signal: new AbortController().signal,
@@ -141,11 +141,11 @@ test('staged publication never replaces a target created after collision plannin
   }
 });
 
-test('staged publication falls back when the library filesystem rejects hard links', async () => {
+test('staged publication falls back when the project filesystem rejects hard links', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-upload-no-link-test-'));
   const staged = path.join(root, 'staged.upload');
-  const library = path.join(root, 'Library');
-  fs.mkdirSync(library);
+  const project = path.join(root, 'Library');
+  fs.mkdirSync(project);
   fs.writeFileSync(staged, 'portable recording');
   const originalLink = fs.promises.link;
   const originalCopyFile = fs.promises.copyFile;
@@ -160,18 +160,18 @@ test('staged publication falls back when the library filesystem rejects hard lin
   try {
     const { publishStagedImport } = await import('./import-publication.ts');
     const result = await publishStagedImport({
-      folderRoot: library,
+      folderRoot: project,
       relativePath: 'recording.wav',
       stagedPath: staged,
       signal: new AbortController().signal,
     });
     assert.equal(fs.readFileSync(result.path, 'utf8'), 'portable recording');
 
-    const occupied = path.join(library, 'occupied.wav');
+    const occupied = path.join(project, 'occupied.wav');
     fs.writeFileSync(occupied, 'existing user recording');
     await assert.rejects(
       publishStagedImport({
-        folderRoot: library,
+        folderRoot: project,
         relativePath: 'occupied.wav',
         stagedPath: staged,
         signal: new AbortController().signal,
@@ -188,15 +188,15 @@ test('staged publication falls back when the library filesystem rejects hard lin
 
 test('startup recovery removes an abandoned fallback reservation', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-upload-recovery-test-'));
-  const library = path.join(root, 'Library');
+  const project = path.join(root, 'Library');
   const stagingRoot = path.join(root, 'staging');
   const deadPid = 2147483647;
   const id = '00000000-0000-4000-8000-000000000000';
   const staged = path.join(stagingRoot, `${deadPid}-1-${id}.upload`);
-  const target = path.join(library, 'recording.wav');
-  const temporary = path.join(library, `.recording.wav.${deadPid}.${id}.tmp`);
+  const target = path.join(project, 'recording.wav');
+  const temporary = path.join(project, `.recording.wav.${deadPid}.${id}.tmp`);
   const recordPath = `${staged}.publication.json`;
-  fs.mkdirSync(library, { recursive: true });
+  fs.mkdirSync(project, { recursive: true });
   fs.mkdirSync(stagingRoot, { recursive: true });
   fs.writeFileSync(staged, 'staged recording');
   fs.writeFileSync(temporary, 'complete hidden recording');
@@ -227,15 +227,15 @@ test('startup recovery removes an abandoned fallback reservation', async () => {
 
 test('startup recovery preserves a committed fallback stream', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-upload-commit-recovery-test-'));
-  const library = path.join(root, 'Library');
+  const project = path.join(root, 'Library');
   const stagingRoot = path.join(root, 'staging');
   const deadPid = 2147483647;
   const id = '00000000-0000-4000-8000-000000000001';
   const staged = path.join(stagingRoot, `${deadPid}-1-${id}.upload`);
-  const target = path.join(library, 'recording.wav');
-  const temporary = path.join(library, `.recording.wav.${deadPid}.${id}.tmp`);
+  const target = path.join(project, 'recording.wav');
+  const temporary = path.join(project, `.recording.wav.${deadPid}.${id}.tmp`);
   const recordPath = `${staged}.publication.json`;
-  fs.mkdirSync(library, { recursive: true });
+  fs.mkdirSync(project, { recursive: true });
   fs.mkdirSync(stagingRoot, { recursive: true });
   fs.writeFileSync(staged, 'staged recording');
   fs.writeFileSync(target, 'complete published recording');
@@ -264,15 +264,15 @@ test('startup recovery preserves a committed fallback stream', async () => {
 
 test('startup recovery preserves a legacy completed fallback rename', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-upload-legacy-recovery-test-'));
-  const library = path.join(root, 'Library');
+  const project = path.join(root, 'Library');
   const stagingRoot = path.join(root, 'staging');
   const deadPid = 2147483647;
   const id = '00000000-0000-4000-8000-000000000002';
   const staged = path.join(stagingRoot, `${deadPid}-1-${id}.upload`);
-  const target = path.join(library, 'recording.wav');
-  const temporary = path.join(library, `.recording.wav.${deadPid}.${id}.tmp`);
+  const target = path.join(project, 'recording.wav');
+  const temporary = path.join(project, `.recording.wav.${deadPid}.${id}.tmp`);
   const recordPath = `${staged}.publication.json`;
-  fs.mkdirSync(library, { recursive: true });
+  fs.mkdirSync(project, { recursive: true });
   fs.mkdirSync(stagingRoot, { recursive: true });
   fs.writeFileSync(staged, 'staged recording');
   fs.writeFileSync(target, 'legacy complete published recording');
@@ -299,15 +299,15 @@ test('startup recovery preserves a legacy completed fallback rename', async () =
 
 test('startup recovery preserves a target without a durable ownership identity', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-upload-unknown-owner-test-'));
-  const library = path.join(root, 'Library');
+  const project = path.join(root, 'Library');
   const stagingRoot = path.join(root, 'staging');
   const deadPid = 2147483647;
   const id = '00000000-0000-4000-8000-000000000003';
   const staged = path.join(stagingRoot, `${deadPid}-1-${id}.upload`);
-  const target = path.join(library, 'recording.wav');
-  const temporary = path.join(library, `.recording.wav.${deadPid}.${id}.tmp`);
+  const target = path.join(project, 'recording.wav');
+  const temporary = path.join(project, `.recording.wav.${deadPid}.${id}.tmp`);
   const recordPath = `${staged}.publication.json`;
-  fs.mkdirSync(library, { recursive: true });
+  fs.mkdirSync(project, { recursive: true });
   fs.mkdirSync(stagingRoot, { recursive: true });
   fs.writeFileSync(staged, 'staged recording');
   fs.writeFileSync(temporary, 'complete hidden recording');

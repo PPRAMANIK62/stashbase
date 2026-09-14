@@ -55,13 +55,13 @@ function visibleLabel(tab: HTMLElement): HTMLElement {
 
 function renderTabs(onValueChange = vi.fn()) {
   const view = render(
-    <Tabs defaultValue="library" onValueChange={onValueChange}>
+    <Tabs defaultValue="project" onValueChange={onValueChange}>
       <TabsList aria-label="Workspace sections">
-        <TabItem label="Library" value="library" />
+        <TabItem label="Library" value="project" />
         <TabItem label="Recents" value="recents" />
         <TabItem label="Favorites" value="favorites" />
       </TabsList>
-      <TabPanel value="library">Documents from every folder.</TabPanel>
+      <TabPanel value="project">Documents from every folder.</TabPanel>
       <TabPanel value="recents">Files opened recently.</TabPanel>
       <TabPanel value="favorites">Starred documents.</TabPanel>
     </Tabs>,
@@ -79,15 +79,15 @@ describe('Tabs', () => {
     const { container, tabs, onValueChange } = renderTabs();
     await expectNoA11yViolations(container);
 
-    const [library, recents] = tabs;
-    if (!library || !recents) throw new Error('The harness renders three tabs.');
-    expect(library.getAttribute('aria-selected')).toBe('true');
+    const [project, recents] = tabs;
+    if (!project || !recents) throw new Error('The harness renders three tabs.');
+    expect(project.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tabpanel').textContent).toBe('Documents from every folder.');
 
     fireEvent.click(recents);
 
     expect(onValueChange).toHaveBeenLastCalledWith('recents');
-    expect(library.getAttribute('aria-selected')).toBe('false');
+    expect(project.getAttribute('aria-selected')).toBe('false');
     expect(recents.getAttribute('aria-selected')).toBe('true');
     await waitFor(() =>
       expect(screen.getByRole('tabpanel').textContent).toBe('Files opened recently.'),

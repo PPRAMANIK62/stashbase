@@ -224,7 +224,7 @@ function Tooltip({
   );
 
   // Fallback: without an ambient TooltipProvider, give this instance its own
-  // so a bare <Tooltip> keeps the library's default delay. Grouped skip-delay
+  // so a bare <Tooltip> keeps the project's default delay. Grouped skip-delay
   // needs the shared app-level TooltipProvider.
   if (hasAmbientProvider) return tooltip;
 

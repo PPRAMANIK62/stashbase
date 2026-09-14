@@ -110,7 +110,7 @@ export function documentTabsRuntimeOptions(
     api: pendingSourceApi(),
     createId: () => `tab-${++nextId}`,
     createQueries: () => documentQueryScope(),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
     ...overrides,
   };

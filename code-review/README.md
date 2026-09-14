@@ -16,6 +16,30 @@ every contract or expand an Implementation Map unless the change crosses the
 named Interface. This is the engineering half of the
 [coarse-to-fine documentation model](../design-docs/README.md#coarse-to-fine-model).
 
+## Product Baseline and Existing-code Review
+
+Use [Product Direction](../design-docs/product-direction.md) as the current
+necessity baseline: enter a project, brainstorm, write, and refine. Existing
+writing and context capabilities are implemented; document-specific diff for
+fine revision remains incomplete. A coverage gap is not a missing feature,
+and an old contract is not by itself a reason to retain a superseded behavior.
+
+For a module audit rather than a diff, fix the checkout/worktree snapshot and
+scope, then follow the same area, contract, and evidence routes. Assess three
+questions explicitly:
+
+1. **Necessity:** which current user task or required infrastructure purpose
+   justifies the behavior? Separate a product decision from proven dead code.
+2. **Simplicity:** do callers share one rule owner, or duplicate policy, state,
+   adapters, or obsolete compatibility paths? Fewer lines alone are not proof.
+3. **Correctness:** do scope, permissions, normal behavior, cancellation,
+   concurrency, failure, and recovery satisfy the applicable contract?
+
+Resolve an outdated product assumption before treating it as an engineering
+violation. Preserve necessary trust, data, and durability guarantees while
+updating intent. Proposed product changes, maintainability judgments, and
+confirmed defects remain distinct findings.
+
 ## Intent-first Review
 
 ```text
@@ -185,13 +209,15 @@ change. A passing test never makes an uncovered claim true.
 
 ## Review Output Contract
 
-Review both axes; passing one never hides failure in the other:
+Report Product and Engineering findings separately, covering necessity,
+simplicity, and correctness; passing one dimension never hides another:
 
 - **Product and Spec** — the diff delivers the requested outcome, preserves the
   related journey and experience contract, and introduces no unrequested
-  behavior.
+  behavior, and has a current reason to exist.
 - **Engineering** — the diff crosses the correct Interface, preserves required
-  invariants and recovery behavior, keeps adapters narrow, and supplies focused
+  invariants and recovery behavior, avoids duplicate policy and state, keeps
+  adapters narrow, and supplies focused
   evidence at the lowest useful layer.
 
 Every finding names the code location, the violated requirement or invariant,

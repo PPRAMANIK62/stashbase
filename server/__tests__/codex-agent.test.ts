@@ -13,7 +13,7 @@ import { codexAccessOptions, isStashbaseWorkspaceEdit, isWorkspaceFileChange, pe
 import { CodexRpcPeer } from '../codex-rpc-transport.ts';
 import { CodexSession } from '../codex-session-runtime.ts';
 import { resolveAgentInstructions, setAgentInstructions } from '../agent-instructions.ts';
-import { clearCurrentFolder, runWithWindowId, setCurrentFolder } from '../folder.ts';
+import { clearCurrentFolder, runWithWindowId, openProjectFolder } from '../folder.ts';
 
 class FakeCodexProcess extends EventEmitter {
   stdin = new PassThrough();
@@ -155,7 +155,7 @@ function manualRpcTimers() {
 
 test('Codex publishes its native model catalog before ready and forwards a selected model on the first turn', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
-  runWithWindowId('model-window', () => setCurrentFolder(folder));
+  await runWithWindowId('model-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('model-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess();
@@ -184,7 +184,7 @@ test('Codex publishes its native model catalog before ready and forwards a selec
 test('Codex keeps Agent Instructions user-visible while injecting hidden StashBase routing policy', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-instructions-'));
   const instructions = 'Prefer primary research notes.';
-  runWithWindowId('instructions-window', () => setCurrentFolder(folder));
+  await runWithWindowId('instructions-window', () => openProjectFolder(folder));
   setAgentInstructions({ kind: 'folder', path: folder }, instructions);
   t.after(() => {
     runWithWindowId('instructions-window', () => clearCurrentFolder());
@@ -218,7 +218,7 @@ test('Codex keeps Agent Instructions user-visible while injecting hidden StashBa
   assert.equal(resolveAgentInstructions(folder), instructions);
   assert.equal(typeof developerInstructions, 'string');
   assert.match(String(developerInstructions), /StashBase MCP/i);
-  assert.match(String(developerInstructions), /search_library/);
+  assert.match(String(developerInstructions), /search_project/);
   assert.match(String(developerInstructions), /read_file/);
   assert.match(String(developerInstructions), /Prefer primary research notes\./);
   assert.notEqual(developerInstructions, instructions);
@@ -226,7 +226,7 @@ test('Codex keeps Agent Instructions user-visible while injecting hidden StashBa
 
 test('Codex changes the model for the next turn without replacing its thread', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-switch-'));
-  runWithWindowId('model-switch-window', () => setCurrentFolder(folder));
+  await runWithWindowId('model-switch-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('model-switch-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess([
@@ -263,19 +263,6 @@ test('Codex changes the model for the next turn without replacing its thread', a
   session.dispose();
 });
 
-test('Codex applies the panel search-by-meaning policy live', () => {
-  const ws = new FakeWebSocket();
-  const session = new CodexSession(ws as unknown as WebSocket, 'similarity-policy-window');
-
-  assert.equal(session.similaritySearchEnabled(), true);
-  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: false }));
-  assert.equal(session.similaritySearchEnabled(), false);
-  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: true }));
-  assert.equal(session.similaritySearchEnabled(), true);
-
-  session.dispose();
-});
-
 test('Codex project rebind changes the next native turn cwd without replacing the thread', async (t) => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-rebound-'));
   t.after(() => fs.rmSync(project, { recursive: true, force: true }));
@@ -289,7 +276,7 @@ test('Codex project rebind changes the next native turn cwd without replacing th
     undefined,
     undefined,
     undefined,
-    'library',
+    'unbound',
     undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
@@ -318,8 +305,8 @@ test('Codex project rebind changes the next native turn cwd without replacing th
 
 test('Codex recovers unavailable selections to Default and never forwards an override while resuming', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
-  runWithWindowId('stale-window', () => setCurrentFolder(folder));
-  runWithWindowId('resume-window', () => setCurrentFolder(folder));
+  await runWithWindowId('stale-window', () => openProjectFolder(folder));
+  await runWithWindowId('resume-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('stale-window', () => clearCurrentFolder()); runWithWindowId('resume-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
 
   const staleWs = new FakeWebSocket();
@@ -350,7 +337,7 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
 
 test('Codex reports the native Default model after starting a new thread', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
-  runWithWindowId('default-window', () => setCurrentFolder(folder));
+  await runWithWindowId('default-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('default-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { threadModel: 'runtime-default' });
@@ -367,7 +354,7 @@ test('Codex reports the native Default model after starting a new thread', async
 
 test('Codex does not speculate about the active Default model before a new thread starts', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-default-truth-'));
-  runWithWindowId('default-truth-window', () => setCurrentFolder(folder));
+  await runWithWindowId('default-truth-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('default-truth-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess([
@@ -396,7 +383,7 @@ test('Codex does not speculate about the active Default model before a new threa
 
 test('Codex invokes an enabled selected skill and never publishes disabled skills', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-skills-'));
-  runWithWindowId('skills-window', () => setCurrentFolder(folder));
+  await runWithWindowId('skills-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('skills-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, {
@@ -425,8 +412,8 @@ test('Codex invokes an enabled selected skill and never publishes disabled skill
 
 test('Codex reports an empty or failed skill catalog without blocking the session', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-skills-'));
-  runWithWindowId('empty-skills-window', () => setCurrentFolder(folder));
-  runWithWindowId('failed-skills-window', () => setCurrentFolder(folder));
+  await runWithWindowId('empty-skills-window', () => openProjectFolder(folder));
+  await runWithWindowId('failed-skills-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('empty-skills-window', () => clearCurrentFolder()); runWithWindowId('failed-skills-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
 
   const emptyWs = new FakeWebSocket();
@@ -449,7 +436,7 @@ test('Codex reports an empty or failed skill catalog without blocking the sessio
 
 test('Codex forwards a runtime-native effort identifier without remapping it', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-effort-'));
-  runWithWindowId('native-effort-window', () => setCurrentFolder(folder));
+  await runWithWindowId('native-effort-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('native-effort-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess([{ id: 'native-model', displayName: 'Native model', supportedReasoningEfforts: [{ reasoningEffort: 'ultra' }] }]);
@@ -465,7 +452,7 @@ test('Codex forwards a runtime-native effort identifier without remapping it', a
 
 test('Codex retries a rejected selected model with Default and publishes recovery', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
-  runWithWindowId('reject-window', () => setCurrentFolder(folder));
+  await runWithWindowId('reject-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('reject-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { selectedTurnError: 'model unavailable' });
@@ -488,7 +475,7 @@ test('Codex retries a rejected selected model with Default and publishes recover
 
 test('Codex does not misclassify an unrelated turn failure as a model fallback', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
-  runWithWindowId('turn-error-window', () => setCurrentFolder(folder));
+  await runWithWindowId('turn-error-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('turn-error-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { selectedTurnError: 'sandbox service unavailable' });
@@ -507,7 +494,7 @@ test('Codex does not misclassify an unrelated turn failure as a model fallback',
 
 test('Codex combines every catalog page and preserves advertised effort options', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
-  runWithWindowId('pages-window', () => setCurrentFolder(folder));
+  await runWithWindowId('pages-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('pages-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess([], { pages: [
@@ -602,7 +589,7 @@ test('stale Codex process events and stdout cannot affect a replacement generati
 
 test('Codex app-server exit after ready fatally ends an idle session once', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
-  runWithWindowId('idle-exit-window', () => setCurrentFolder(folder));
+  await runWithWindowId('idle-exit-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('idle-exit-window', () => clearCurrentFolder());
@@ -625,7 +612,7 @@ test('Codex app-server exit after ready fatally ends an idle session once', asyn
 
 test('Codex app-server exit during startup retains its fatal cause on exit', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
-  runWithWindowId('startup-exit-window', () => setCurrentFolder(folder));
+  await runWithWindowId('startup-exit-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('startup-exit-window', () => clearCurrentFolder());
@@ -648,7 +635,7 @@ test('Codex app-server exit during startup retains its fatal cause on exit', asy
 
 test('Codex app-server exit while working emits no duplicate failed turn', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
-  runWithWindowId('busy-exit-window', () => setCurrentFolder(folder));
+  await runWithWindowId('busy-exit-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('busy-exit-window', () => clearCurrentFolder());
@@ -808,7 +795,7 @@ test('Codex RPC peer clears timers on response, write failure, and peer close', 
 
 test('Codex Session handles startup timeout by reaching fatal error path', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-timeout-'));
-  runWithWindowId('startup-timeout-window', () => setCurrentFolder(folder));
+  await runWithWindowId('startup-timeout-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('startup-timeout-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
@@ -837,7 +824,7 @@ test('Codex Session handles startup timeout by reaching fatal error path', async
 
 test('Codex Session handles turn/start timeout by sending error and clearing busy state', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-turn-timeout-'));
-  runWithWindowId('turn-timeout-window', () => setCurrentFolder(folder));
+  await runWithWindowId('turn-timeout-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('turn-timeout-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
@@ -883,7 +870,7 @@ test('Codex Session handles turn/start timeout by sending error and clearing bus
 
 test('Codex Session fences a timed-out turn/start generation before accepting another turn', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-turn-timeout-fence-'));
-  runWithWindowId('turn-timeout-fence-window', () => setCurrentFolder(folder));
+  await runWithWindowId('turn-timeout-fence-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('turn-timeout-fence-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
@@ -953,7 +940,7 @@ test('Codex Session fences a timed-out turn/start generation before accepting an
 
 test('Codex Session handles steer timeout without ending an active turn', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-steer-timeout-'));
-  runWithWindowId('steer-timeout-window', () => setCurrentFolder(folder));
+  await runWithWindowId('steer-timeout-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('steer-timeout-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
@@ -1004,7 +991,7 @@ test('Codex Session handles steer timeout without ending an active turn', async 
 
 test('Codex Session failed turn completed with message preserves it', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-preserve-'));
-  runWithWindowId('err-preserve-window', () => setCurrentFolder(folder));
+  await runWithWindowId('err-preserve-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('err-preserve-window', () => clearCurrentFolder());
@@ -1040,7 +1027,7 @@ test('Codex Session failed turn completed with message preserves it', async (t) 
 
 test('Codex Session suppresses successful automatic approval reviews but preserves actionable native warnings', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-notice-'));
-  runWithWindowId('notice-window', () => setCurrentFolder(folder));
+  await runWithWindowId('notice-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('notice-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
@@ -1125,7 +1112,7 @@ test('Codex Session suppresses successful automatic approval reviews but preserv
 
 test('Codex Session classified turn failure carries its failure kind', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-kind-'));
-  runWithWindowId('err-kind-window', () => setCurrentFolder(folder));
+  await runWithWindowId('err-kind-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('err-kind-window', () => clearCurrentFolder());
@@ -1158,7 +1145,7 @@ test('Codex Session classified turn failure carries its failure kind', async (t)
 
 test('Codex Session failed turn completed without message uses fallback', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-fallback-'));
-  runWithWindowId('err-fallback-window', () => setCurrentFolder(folder));
+  await runWithWindowId('err-fallback-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('err-fallback-window', () => clearCurrentFolder());
@@ -1194,7 +1181,7 @@ test('Codex Session failed turn completed without message uses fallback', async 
 
 test('Codex Session failed turn completed with a blank message uses fallback', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-blank-'));
-  runWithWindowId('err-blank-window', () => setCurrentFolder(folder));
+  await runWithWindowId('err-blank-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('err-blank-window', () => clearCurrentFolder());
@@ -1230,7 +1217,7 @@ test('Codex Session failed turn completed with a blank message uses fallback', a
 
 test('Codex Session error with willRetry: true stays active through successful completion', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-willretry-true-'));
-  runWithWindowId('willretry-true-window', () => setCurrentFolder(folder));
+  await runWithWindowId('willretry-true-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('willretry-true-window', () => clearCurrentFolder());
@@ -1274,7 +1261,7 @@ test('Codex Session error with willRetry: true stays active through successful c
 
 test('Codex Session terminal errors settle only their matching active turn once', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-willretry-false-'));
-  runWithWindowId('willretry-false-window', () => setCurrentFolder(folder));
+  await runWithWindowId('willretry-false-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('willretry-false-window', () => clearCurrentFolder());
@@ -1344,7 +1331,7 @@ test('Codex Session terminal errors settle only their matching active turn once'
 
 test('Codex Session retains a terminal error received before its turn/start continuation', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-early-terminal-'));
-  runWithWindowId('early-terminal-window', () => setCurrentFolder(folder));
+  await runWithWindowId('early-terminal-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('early-terminal-window', () => clearCurrentFolder());
@@ -1376,7 +1363,7 @@ test('Codex Session retains a terminal error received before its turn/start cont
 
 test('Codex Session user interruption stays non-error across terminal notification forms', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-cancel-'));
-  runWithWindowId('cancel-window', () => setCurrentFolder(folder));
+  await runWithWindowId('cancel-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('codex');
     runWithWindowId('cancel-window', () => clearCurrentFolder());
@@ -1429,7 +1416,7 @@ test('Codex Session user interruption stays non-error across terminal notificati
 
 test('Codex Session treats an already-idle interrupt rejection as a completed stop', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-already-idle-'));
-  runWithWindowId('already-idle-window', () => setCurrentFolder(folder));
+  await runWithWindowId('already-idle-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('already-idle-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
@@ -1464,7 +1451,7 @@ test('Codex Session treats an already-idle interrupt rejection as a completed st
 
 test('Codex Session keeps other interrupt rejections visible', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-interrupt-failure-'));
-  runWithWindowId('interrupt-failure-window', () => setCurrentFolder(folder));
+  await runWithWindowId('interrupt-failure-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('interrupt-failure-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
@@ -1498,7 +1485,7 @@ test('Codex Session keeps other interrupt rejections visible', async (t) => {
 
 test('Codex forwards which model and level run by default and drops hidden entries', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-catalog-default-'));
-  runWithWindowId('catalog-default-window', () => setCurrentFolder(folder));
+  await runWithWindowId('catalog-default-window', () => openProjectFolder(folder));
   t.after(() => { runWithWindowId('catalog-default-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess([

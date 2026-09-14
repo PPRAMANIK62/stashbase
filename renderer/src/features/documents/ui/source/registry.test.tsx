@@ -47,11 +47,11 @@ function renderWith(path: string, entry: DocumentViewerEntry) {
     api: sourceApi({ load: vi.fn(() => new Promise<never>(() => undefined)) }),
     createId: () => 'tab-1',
     createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
     restored: {
       activeTabId: 'tab-1',
-      tabs: [{ id: 'tab-1', source: { folderPath: '/library/notes', path } }],
+      tabs: [{ id: 'tab-1', source: { folderPath: '/project/notes', path } }],
     },
   });
   runtimes.push(runtime);

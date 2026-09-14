@@ -3,11 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { clearCurrentFolder, setCurrentFolder } from './folder.ts';
+import { clearCurrentFolder, openProjectFolder } from './folder.ts';
 import { decodeGenericText, readGenericFilePreview } from './generic-file-preview.ts';
 import { MAX_TEXT_READ_BYTES } from './active-file-operations.ts';
 
-test('generic preview strictly distinguishes readable text from binary and oversized files', () => {
+test('generic preview strictly distinguishes readable text from binary and oversized files', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-generic-preview-'));
   try {
     fs.writeFileSync(path.join(root, 'script.ts'), 'const greeting = "你好";\r\n');
@@ -20,7 +20,7 @@ test('generic preview strictly distinguishes readable text from binary and overs
     fs.truncateSync(path.join(root, 'huge.log'), MAX_TEXT_READ_BYTES + 1);
     fs.writeFileSync(path.join(root, 'huge.zip'), '');
     fs.truncateSync(path.join(root, 'huge.zip'), MAX_TEXT_READ_BYTES + 1);
-    setCurrentFolder(root);
+    await openProjectFolder(root);
 
     const text = readGenericFilePreview('script.ts');
     assert.equal(text.kind, 'text');
@@ -47,12 +47,12 @@ test('generic UTF-8 admission permits normal whitespace but rejects binary contr
   assert.equal(decodeGenericText(Buffer.from([0xff, 0xfe, 0x61])), null);
 });
 
-test('generic preview reports symlinks without following them', { skip: process.platform === 'win32' }, () => {
+test('generic preview reports symlinks without following them', { skip: process.platform === 'win32' }, async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-generic-symlink-'));
   try {
     fs.writeFileSync(path.join(root, 'target.ts'), 'secret');
     fs.symlinkSync('target.ts', path.join(root, 'alias.ts'));
-    setCurrentFolder(root);
+    await openProjectFolder(root);
     assert.equal(readGenericFilePreview('alias.ts').kind, 'symlink');
   } finally {
     clearCurrentFolder();

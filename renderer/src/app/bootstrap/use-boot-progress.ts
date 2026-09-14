@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 
 export interface BootProgressOptions {
-  /** How many folders the library holds; zero until one is authorized. */
+  /** How many folders the project holds; zero until one is authorized. */
   memberCount: number;
-  /** True once the library has loaded and no folder restore is still running. */
+  /** True once the project has loaded and no folder restore is still running. */
   settled: boolean;
 }
 
@@ -12,9 +12,9 @@ export interface BootProgressOptions {
  * when the Agent surface is allowed to exist.
  *
  * `data-boot-settled` on the body is what a driven runtime pass waits on, so
- * it is set exactly once the library has answered and no folder restore is
- * still in flight. Earlier and a screenshot catches a half-built shell. The Agent latch is separate and one-way: once a library has
- * ever held a folder the Agent workspace stays mounted, so emptying the library
+ * it is set exactly once the project has answered and no folder restore is
+ * still in flight. Earlier and a screenshot catches a half-built shell. The Agent latch is separate and one-way: once a project has
+ * ever held a folder the Agent workspace stays mounted, so emptying the project
  * does not tear down a running conversation.
  */
 export function useBootProgress({ memberCount, settled }: BootProgressOptions): boolean {

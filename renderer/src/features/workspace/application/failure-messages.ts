@@ -1,13 +1,13 @@
 /**
  * One reader-facing sentence per workspace failure kind.
  *
- * Both workspace ladders are answered here: the library's bare transport kinds
+ * Both workspace ladders are answered here: the project's bare transport kinds
  * and the files ladder that adds a name already taken and a name the server
  * refuses. A hook or a view selects by kind instead of forwarding an adapter's
  * own sentence or inventing a fallback, and each map covers the whole ladder,
  * so adding a kind fails the build here rather than shipping a silent blank.
  */
-import type { LibraryFailureKind } from '@/features/workspace/domain/library';
+import type { ProjectFailureKind } from '@/features/workspace/domain/project';
 import {
   readFailure,
   type FailureView,
@@ -27,11 +27,6 @@ const FILES_MESSAGES: Readonly<Record<FilesFailureKind, string>> = {
 
 /** A taken name and a refused name are the reader's own request coming back. */
 const FILES_INPUT_KINDS: readonly FilesFailureKind[] = ['conflict', 'rejected'];
-
-/** The sentence one files failure kind reads as. */
-export function failureMessage(kind: FilesFailureKind): string {
-  return FILES_MESSAGES[kind];
-}
 
 /** The sentence and tone a refused file mutation shows. Anything that is not a
  *  files failure — a transport that threw, or a bug — reads as the unavailable
@@ -61,22 +56,22 @@ export const REMOVAL_MESSAGES = {
   delayed: 'The folder was removed. Another window may take a moment to refresh.',
 } as const;
 
-/** The library picker reports one outcome the transport ladder cannot: the
+/** The project picker reports one outcome the transport ladder cannot: the
  *  desktop could not put a folder chooser on screen at all. */
-type LibraryCommandFailureKind = FeatureFailureKind<'fatal'>;
+type ProjectCommandFailureKind = FeatureFailureKind<'fatal'>;
 
-/** The sentence a refused library command shows. The verb names what did not
- *  happen; the kind decides why, so a `LibraryError`'s own transport sentence
+/** The sentence a refused project command shows. The verb names what did not
+ *  happen; the kind decides why, so a `ProjectError`'s own transport sentence
  *  never reaches the reader. */
-export function libraryFailureMessage(
-  kind: LibraryFailureKind | 'fatal' | undefined,
+export function projectFailureMessage(
+  kind: ProjectFailureKind | 'fatal' | undefined,
   verb: 'opened' | 'removed',
 ): string {
-  const messages: Readonly<Record<LibraryCommandFailureKind, string>> = {
+  const messages: Readonly<Record<ProjectCommandFailureKind, string>> = {
     fatal: `StashBase could not ask for a folder, so none was ${verb}.`,
     'invalid-response': `StashBase returned an unexpected response, so the folder was not ${verb}.`,
-    'scope-lost': `That folder is no longer in your library, so it could not be ${verb}.`,
-    unauthorized: `This window can no longer change your library, so the folder was not ${verb}.`,
+    'scope-lost': `That folder is no longer in your registered projects, so it could not be ${verb}.`,
+    unauthorized: `This window can no longer change your project, so the folder was not ${verb}.`,
     unavailable: `StashBase is unavailable, so the folder was not ${verb}.`,
   };
   return messages[kind ?? 'unavailable'];

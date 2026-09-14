@@ -47,10 +47,10 @@ describe('McpAccessPanel', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Rotate token…' }));
-    expect(await screen.findByText('Rotate the MCP bearer token?')).not.toBeNull();
+    expect(await screen.findByText('Rotate MCP token?')).not.toBeNull();
     expect(port.rotateToken).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: 'Rotate' }));
+    await user.click(screen.getByRole('button', { name: 'Rotate token' }));
     await waitFor(() => expect(port.rotateToken).toHaveBeenCalledWith(expect.any(AbortSignal)));
   });
 

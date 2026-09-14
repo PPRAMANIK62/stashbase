@@ -208,9 +208,9 @@ export function deleteDerivedForSource(sourceAbs: string): DerivedCleanupStats {
 }
 
 /** Best-effort cleanup for every convertible source currently visible under
- *  a folder. This is used when a folder leaves the library; user files stay
+ *  a folder. This is used when a folder leaves the project; user files stay
  *  in place, but AppData-derived text/assets for those sources should go. */
-export function deleteDerivedUnderFolder(folderAbs: string): DerivedCleanupStats {
+export function deleteDerivedUnderFolder(folderAbs: string, excludedRoots: readonly string[] = []): DerivedCleanupStats {
   const root = filesystemPath.absolute(folderAbs);
   const seen = new Set<string>();
   const totals: DerivedCleanupStats = { sources: 0, artifacts: 0 };
@@ -221,6 +221,7 @@ export function deleteDerivedUnderFolder(folderAbs: string): DerivedCleanupStats
   }
 
   function visit(absDir: string): void {
+    if (excludedRoots.some((root) => filesystemPath.contains(root, absDir))) return;
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(absDir, { withFileTypes: true });
@@ -246,6 +247,7 @@ export function deleteDerivedUnderFolder(folderAbs: string): DerivedCleanupStats
 
   if (fs.existsSync(root)) visit(root);
   for (const sourceAbs of knownDerivedSourcesUnderFolder(root)) {
+    if (excludedRoots.some((excluded) => filesystemPath.contains(excluded, sourceAbs))) continue;
     const sourceKey = filesystemPath.identity(sourceAbs);
     if (seen.has(sourceKey)) continue;
     seen.add(sourceKey);

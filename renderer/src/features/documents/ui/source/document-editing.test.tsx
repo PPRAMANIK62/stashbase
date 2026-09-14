@@ -36,14 +36,14 @@ function pending(): () => Promise<never> {
 
 function renderSource(
   api: DocumentSourcePort,
-  source = { folderPath: '/library/notes', path: 'plan.md' },
+  source = { folderPath: '/project/notes', path: 'plan.md' },
 ) {
   const queryClient = createTestQueryClient();
   const runtime = createDocumentTabsRuntime({
     api,
     createId: () => 'tab-1',
     createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
     restored: {
       activeTabId: 'tab-1',
@@ -80,12 +80,12 @@ describe('document text editing', () => {
     const api = sourceApi({
       load: vi.fn(async () => textSource({ content: 'literal text', format: 'txt' })),
     });
-    renderSource(api, { folderPath: '/library/archive', path: 'notes.txt' });
+    renderSource(api, { folderPath: '/project/archive', path: 'notes.txt' });
 
     await screen.findByLabelText('notes.txt source');
     const documentRegion = screen.getByRole('region', { name: 'notes.txt document' });
     expect(
-      within(documentRegion).getByText('Read-only source from another library folder'),
+      within(documentRegion).getByText('Read-only source from another project folder'),
     ).not.toBeNull();
   });
 
@@ -98,7 +98,7 @@ describe('document text editing', () => {
         )
         .mockResolvedValueOnce(textSource({ content: 'now utf-8', format: 'txt', version: 'v2' })),
     });
-    renderSource(api, { folderPath: '/library/notes', path: 'legacy.txt' });
+    renderSource(api, { folderPath: '/project/notes', path: 'legacy.txt' });
 
     expect((await screen.findByRole('alert')).textContent).toContain(
       DOCUMENT_SOURCE_MESSAGES['unsupported-encoding'],
@@ -134,7 +134,7 @@ describe('document text editing', () => {
       save: vi.fn(async () => textSource({ content: 'after\r\n', format: 'txt', version: 'v2' })),
     });
     const { runtime } = renderSource(api, {
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'notes.txt',
     });
     await screen.findByLabelText('notes.txt source');
@@ -154,7 +154,7 @@ describe('document text editing', () => {
     await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(api.save).toHaveBeenCalledOnce();
     expect(api.save).toHaveBeenCalledWith(
-      { folderPath: '/library/notes', path: 'notes.txt' },
+      { folderPath: '/project/notes', path: 'notes.txt' },
       { baseVersion: 'v1', content: 'after\n' },
       expect.any(AbortSignal),
     );
@@ -171,7 +171,7 @@ describe('document text editing', () => {
         .mockRejectedValueOnce(new Error('offline'))
         .mockResolvedValueOnce(textSource({ content: 'draft', format: 'txt', version: 'v2' })),
     });
-    const { runtime } = renderSource(api, { folderPath: '/library/notes', path: 'plan.txt' });
+    const { runtime } = renderSource(api, { folderPath: '/project/notes', path: 'plan.txt' });
     await screen.findByLabelText('plan.txt source');
     const editor = codeEditor('plan.txt source');
     editor.dispatch({ changes: { from: 0, insert: 'draft', to: editor.state.doc.length } });

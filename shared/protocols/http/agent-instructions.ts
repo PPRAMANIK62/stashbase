@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-/** The scope an instructions read or write is about: one library folder, or
- *  the Library as a whole for a Chat with no working folder. */
+/** The scope an instructions read or write is about: one project folder, or
+ *  an unbound conversation for a Chat with no working folder. */
 export const agentInstructionsScopeSchema = z.union([
-  z.object({ kind: z.literal('library') }).strict(),
+  z.object({ kind: z.literal('unbound') }).strict(),
   z.object({ kind: z.literal('folder'), path: z.string().min(1) }).strict(),
 ]);
 

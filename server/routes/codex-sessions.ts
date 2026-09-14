@@ -65,10 +65,10 @@ export function mount(app: express.Express): void {
   });
 }
 
-/** Codex's native thread store is cwd-keyed, so a library chat rebound to a
- * project by `create_project` still lives under the reserved library cwd.
+/** Codex's native thread store is cwd-keyed, so a project chat rebound to a
+ * project by `create_project` still lives under the historical unbound cwd.
  * The persisted session→folder override moves it: the project listing pulls
- * it in, the library listing drops it, and direct actions accept it for its
+ * it in, the project listing drops it, and direct actions accept it for its
  * override folder only. */
 export function codexHistoryActions(): AgentHistoryActions {
   return {
@@ -79,7 +79,7 @@ export function codexHistoryActions(): AgentHistoryActions {
       const visible = historyRowsForFolder(rows, overrides, folder);
       const missing = missingOverriddenSessionIds(visible, overrides, folder);
       if (missing.length) {
-        // Overridden sessions natively live under the reserved library cwd.
+        // Overridden sessions natively live under the historical unbound cwd.
         const home = getFolderHome();
         if (!pathsEqual(home, folder)) {
           const homeRows = (await listCodexSessions(home)) as Array<{ id: string; lastModified: number }>;

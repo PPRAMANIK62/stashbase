@@ -93,7 +93,7 @@ function isGeneratedPdfBatchCacheDir(seg: string): boolean {
 }
 
 /** Legacy agent-maintained sidecar files. The metadata subsystem was
- *  removed, but existing libraries may still have these on disk;
+ *  removed, but existing project folders may still have these on disk;
  *  keep them out of the index so they don't surface as bogus hits. */
 const EXCLUDED_BASENAMES = new Set<string>([
   'file-metadata.md',

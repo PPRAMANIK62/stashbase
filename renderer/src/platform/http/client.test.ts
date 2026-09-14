@@ -14,17 +14,17 @@ describe('HTTP client', () => {
     const client = createHttpClient('http://127.0.0.1:43123', fetchRequest);
 
     await client.request({
-      body: { path: '/library/notes' },
+      body: { path: '/project/notes' },
       method: 'POST',
-      path: '/api/library/folders/open',
+      path: '/api/projects/open',
     });
 
     const firstCall = fetchRequest.mock.calls[0];
     if (!firstCall) throw new Error('Expected the client to issue a fetch.');
     const [url, init] = firstCall;
-    expect(String(url)).toBe('http://127.0.0.1:43123/api/library/folders/open');
+    expect(String(url)).toBe('http://127.0.0.1:43123/api/projects/open');
     expect(init?.method).toBe('POST');
-    expect(init?.body).toBe(JSON.stringify({ path: '/library/notes' }));
+    expect(init?.body).toBe(JSON.stringify({ path: '/project/notes' }));
     expect(new Headers(init?.headers).get('x-stashbase-window-id')).toBeNull();
   });
 
@@ -33,7 +33,7 @@ describe('HTTP client', () => {
       'http://127.0.0.1:8090',
       vi.fn(async () => new Response('not-json', { status: 502 })),
     );
-    await expect(client.request({ path: '/api/library' })).resolves.toEqual({
+    await expect(client.request({ path: '/api/projects' })).resolves.toEqual({
       body: null,
       status: 502,
     });
@@ -49,7 +49,7 @@ describe('HTTP client', () => {
     await client.request({
       body: { baseVersion: 'v1', content: 'changed' },
       method: 'PUT',
-      path: '/api/files/notes.txt?folder=%2Flibrary%2Fnotes',
+      path: '/api/files/notes.txt?folder=%2Fproject%2Fnotes',
     });
 
     const firstCall = fetchRequest.mock.calls[0];

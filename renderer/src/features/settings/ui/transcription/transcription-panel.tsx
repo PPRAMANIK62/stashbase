@@ -6,7 +6,6 @@
  * same row, and only a running download draws a bar.
  */
 
-import { CircleAlert } from 'lucide-react';
 import { useId, useMemo, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -18,12 +17,12 @@ import {
   type TranscriptionModelDisplay,
 } from '@/features/settings/domain/transcription-status';
 import { useTranscription } from '@/features/settings/hooks/use-transcription';
+import { ChoiceList, ChoiceRow } from '@/features/settings/ui/choice-rows';
 import {
-  ChoiceList,
-  ChoiceRow,
   ProgressBar,
   SettingsGroup,
   SettingsList,
+  SettingsMessage,
   SettingsPane,
   SettingsRow,
   StatusChip,
@@ -41,6 +40,12 @@ const LANGUAGES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'es', label: 'Spanish' },
 ];
 
+/** The pane keeps its title and lede while the read is in flight or has
+ *  failed, so the section never collapses into a bare sentence. */
+const TITLE = 'Transcription';
+const LEDE =
+  'Turn speech in audio and video into searchable text. Transcription needs an available engine and model.';
+
 export interface TranscriptionPanelProps {
   transcriptionApi: TranscriptionPort;
 }
@@ -57,7 +62,7 @@ function modelControl(
     case 'verifying':
       return (
         <Button disabled loading size="compact" variant="tertiary">
-          Working…
+          {display.state === 'downloading' ? 'Downloading…' : 'Verifying…'}
         </Button>
       );
     case 'missing':
@@ -107,7 +112,6 @@ function ModelRow({
     <ChoiceRow
       checked={selected}
       detail={display.detail}
-      detailTone={display.state === 'failed' ? 'error' : 'muted'}
       firstTabStop={firstTabStop}
       label={model.label}
       onSelect={onSelect}
@@ -138,23 +142,20 @@ export function TranscriptionPanel({ transcriptionApi }: TranscriptionPanelProps
     [settings],
   );
 
-  if (transcription.loading) {
+  if (transcription.loading || !settings) {
     return (
-      <p className="text-caption text-muted-foreground" role="status">
-        Loading transcription settings…
-      </p>
-    );
-  }
-  if (!settings) {
-    return (
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-caption text-destructive" role="alert">
-          Transcription settings are unavailable.
-        </p>
-        <Button onClick={() => transcription.reload()} size="compact" variant="tertiary">
-          Retry
-        </Button>
-      </div>
+      <SettingsPane lede={LEDE} title={TITLE}>
+        <SettingsList>
+          {transcription.loading ? (
+            <SettingsMessage message="Loading transcription settings…" />
+          ) : (
+            <SettingsMessage
+              message="Could not load transcription settings."
+              onRetry={() => transcription.reload()}
+            />
+          )}
+        </SettingsList>
+      </SettingsPane>
     );
   }
 
@@ -162,10 +163,7 @@ export function TranscriptionPanel({ transcriptionApi }: TranscriptionPanelProps
   const selectedIsListed = models.some((model) => model.id === settings.modelId);
 
   return (
-    <SettingsPane
-      lede="Audio and video become searchable text with the model chosen here. Files wait until a model is installed."
-      title="Transcription"
-    >
+    <SettingsPane lede={LEDE} title={TITLE}>
       <SettingsGroup title="Engine">
         <SettingsList>
           <SettingsRow
@@ -193,14 +191,13 @@ export function TranscriptionPanel({ transcriptionApi }: TranscriptionPanelProps
           {provider?.runtimeError && (
             <SettingsRow
               detail={provider.runtimeError}
-              lead={<CircleAlert aria-hidden="true" className="size-4 text-destructive" />}
-              role="alert"
+              role="status"
               title="Transcription engine unavailable"
-              titleTone="error"
+              titleTone="muted"
             />
           )}
           <SettingsRow
-            detail="Auto-detect works for most recordings. Set it when a language is guessed wrong."
+            detail="Choose a language if automatic detection is incorrect."
             title={<label htmlFor={languageId}>Spoken language</label>}
             trail={
               <Select
@@ -226,7 +223,7 @@ export function TranscriptionPanel({ transcriptionApi }: TranscriptionPanelProps
 
       <SettingsGroup
         count={`${transcription.installedCount} of ${models.length} installed`}
-        hint="The selected model transcribes new files. Installed models stay on disk until you remove them."
+        hint="Applies to future transcription. Use Reprocess on a file to transcribe it again with these settings."
         title="Model"
       >
         <ChoiceList

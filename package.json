@@ -55,22 +55,22 @@
     "setup:python": "node scripts/setup-python.mjs",
     "setup:python-extract": "node scripts/setup-python.mjs --with-extract",
     "test:python": "node scripts/test-python.mjs",
-    "test:config": "node --import tsx --test server/app-config.test.ts server/agent-instructions.test.ts server/routes/onboarding.test.ts server/routes/workspace-preferences.test.ts server/routes/appearance.test.ts server/embedding-availability.test.ts server/hosted-account.test.ts server/account-route.test.ts",
+    "test:config": "node --import tsx --test server/app-config.test.ts server/agent-instructions.test.ts server/routes/onboarding.test.ts server/routes/workspace-preferences.test.ts server/routes/appearance.test.ts server/routes/local-components.test.ts server/hosted-account.test.ts server/account-route.test.ts",
     "lint:web": "vp run @stashbase/renderer#lint && pnpm check:renderer-architecture",
     "check:renderer-architecture": "depcruise --config dependency-cruiser.config.cjs renderer/src && node scripts/renderer/architecture.mjs",
     "test:renderer-architecture": "node --test scripts/electron/dev.test.mjs scripts/renderer/architecture.test.mjs scripts/renderer/check-web.test.mjs scripts/renderer/conventions.test.mjs scripts/renderer/size.test.mjs && pnpm check:renderer-architecture",
     "test:renderer": "vp run @stashbase/renderer#test && pnpm test:renderer-architecture",
     "test:protocols": "node --import tsx --test 'shared/protocols/**/*.test.ts'",
-    "test:electron-boundary": "pnpm build:electron-boundary && node --test --test-reporter=spec 'electron/{app-protocol,window-security}.test.cjs' 'electron/{bug-report,capture,external-navigation,library,renderer,updates,window,workspace}/*.test.cjs'",
+    "test:electron-boundary": "pnpm build:electron-boundary && node --test --test-reporter=spec 'electron/{app-protocol,window-security}.test.cjs' 'electron/{bug-report,external-navigation,project,renderer,updates,window,workspace}/*.test.cjs'",
     "test:electron-boundary:smoke": "pnpm build:web && pnpm build:electron-boundary && node electron/renderer/smoke-runner.cjs",
-    "test:electron": "pnpm test:protocols && pnpm test:electron-boundary && node --test --test-reporter=spec 'electron/{multi-window,clipboard-watch-policy,recovery-key,bug-report-*}.test.cjs'",
+    "test:electron": "pnpm test:protocols && pnpm test:electron-boundary && node --test --test-reporter=spec 'electron/{main-probe,multi-window,recovery-key,bug-report-*}.test.cjs'",
     "test:electron:smoke": "pnpm test:electron-boundary:smoke",
     "typecheck:web": "vp run @stashbase/renderer#typecheck",
     "test:docs": "node scripts/check-docs.mjs",
     "test:inventory": "node scripts/check-test-inventory.mjs",
     "test:toolchain": "node --test scripts/check-vite-plus-toolchain.test.mjs scripts/vite-plus-ci.test.mjs && node scripts/check-vite-plus-toolchain.mjs",
-    "test:conversion-scheduler": "node --import tsx --test server/html.test.ts server/filesystem-path.test.ts server/folder-relative-path.test.ts server/folder-window.test.ts server/window-context-route.test.ts server/internal-shutdown-route.test.ts server/middleware/renderer-origin.test.ts server/stale-lock.test.ts server/parent-watchdog.test.ts server/files.test.ts server/file-formats.test.ts server/file-hash.test.ts server/http.test.ts server/markdown-source-format.test.ts server/index-status.test.ts server/indexer-mfs-path.test.ts server/semantic-index-inputs.test.ts server/session-path.test.ts server/conversion-scheduler.test.ts server/conversion-auxiliary.test.ts server/conversion-status.test.ts server/conversion.test.ts server/extractor-process.test.ts server/audio-transcription.test.ts server/transcription-models.test.ts server/transcription-provider.test.ts server/transcription-runtime.test.ts server/transcription-tools.test.ts server/upload.test.ts server/client-error.test.ts server/semantic-indexing-state.test.ts",
-    "test:library-files": "node --import tsx --test server/library-file-mutations.test.ts server/library-operations/index.test.ts server/routes/library.test.ts server/routes/library-files.test.ts server/routes/gallery.test.ts server/routes/files.test.ts server/routes/file-mutations.test.ts server/routes/attach.test.ts server/__tests__/file-listing.test.ts server/__tests__/github-import.test.ts server/generic-file-preview.test.ts server/recovery-journal.test.ts server/routes/recovery-drafts.test.ts",
+    "test:conversion-scheduler": "node --import tsx --test server/html.test.ts server/filesystem-path.test.ts server/folder-relative-path.test.ts server/folder-window.test.ts server/window-context-route.test.ts server/websocket-upgrade.test.ts server/internal-shutdown-route.test.ts server/middleware/renderer-origin.test.ts server/stale-lock.test.ts server/parent-watchdog.test.ts server/files.test.ts server/file-formats.test.ts server/file-hash.test.ts server/http.test.ts server/markdown-source-format.test.ts server/index-status.test.ts server/indexer-mfs-path.test.ts server/semantic-index-inputs.test.ts server/session-path.test.ts server/conversion-scheduler.test.ts server/conversion-auxiliary.test.ts server/conversion-status.test.ts server/conversion.test.ts server/extractor-process.test.ts server/extractor-runtime.test.ts server/audio-transcription.test.ts server/audio-preview-handoff.test.ts server/audio-transcript.test.ts server/transcription-models.test.ts server/transcription-provider.test.ts server/transcription-runtime.test.ts server/transcription-tools.test.ts server/upload.test.ts server/client-error.test.ts server/semantic-indexing-state.test.ts",
+    "test:project-files": "node --import tsx --test server/text-file-transaction.test.ts server/routes/file-assets.test.ts server/folder-startup.test.ts server/project-open.test.ts server/project-removal.test.ts server/project-file-mutations.test.ts server/project-file-reader.test.ts server/project-operations/index.test.ts server/routes/project.test.ts server/routes/project-files.test.ts server/routes/gallery.test.ts server/routes/files.test.ts server/routes/file-mutations.test.ts server/routes/attach.test.ts server/__tests__/file-listing.test.ts server/__tests__/github-import.test.ts server/generic-file-preview.test.ts server/recovery-journal.test.ts server/routes/recovery-drafts.test.ts",
     "test:retrieval": "node --import tsx --test server/retrieval/index.test.ts scripts/semantic-retrieval-metrics.test.ts scripts/semantic-retrieval-dataset.test.ts scripts/semantic-retrieval-runner.test.ts",
     "eval:semantic-retrieval": "node --import tsx scripts/run-semantic-retrieval-eval.ts",
     "test:agent": "node --import tsx --test server/__tests__/agent.test.ts server/__tests__/agent-contract.test.ts server/__tests__/agent-history-routes.test.ts server/__tests__/agent-projects.test.ts server/__tests__/agent-runtime-installer.test.ts server/__tests__/agent-turn-failure.test.ts server/__tests__/codex-agent.test.ts server/__tests__/agent-model-catalog.test.ts server/__tests__/agent-cli.test.ts server/__tests__/opencode-agent.test.ts server/__tests__/hosted-agent-broker.test.ts server/codex-history.test.ts",
@@ -78,14 +78,14 @@
     "test:opencode:native": "node --import tsx --test server/__tests__/opencode-native-smoke.test.ts",
     "test:mcp": "node --import tsx --test server/__tests__/mcp-http-settings.test.ts server/__tests__/mcp-http-service.test.ts server/__tests__/mcp-http-transport.test.ts server/__tests__/shutdown-cleanup.test.ts",
     "test:release-gate": "node --test scripts/require-green-ci.test.mjs",
-    "test:package-inputs": "node --test scripts/packaging/inputs.test.mjs",
+    "test:package-inputs": "node --test scripts/packaging/inputs.test.mjs scripts/packaging/extractor-component.test.mjs",
     "test:icons": "node --test scripts/icons/encode.test.mjs",
     "test:macos-signing": "node --test scripts/macos-release-contract.test.mjs",
     "test:windows-signing": "node --test scripts/windows-release-contract.test.mjs",
     "test:updates": "node --test electron/update-manager.test.cjs electron/update-install-strategy.test.cjs electron/update-window-barrier.test.cjs scripts/github-release-api.test.mjs scripts/update-release-contract.test.mjs",
     "typecheck:electron-boundary": "tsc --noEmit -p electron/tsconfig.json",
     "typecheck": "tsc --noEmit && pnpm typecheck:web && pnpm typecheck:electron-boundary",
-    "check": "pnpm test:docs && pnpm test:inventory && pnpm test:python && pnpm test:release-gate && pnpm test:package-inputs && pnpm test:icons && pnpm test:macos-signing && pnpm test:windows-signing && pnpm test:updates && pnpm test:config && pnpm test:renderer && npm run test:electron && pnpm test:conversion-scheduler && pnpm test:library-files && pnpm test:retrieval && pnpm test:agent && pnpm test:opencode:native && pnpm test:mcp && pnpm typecheck && pnpm build && pnpm test:electron:smoke",
+    "check": "pnpm test:docs && pnpm test:inventory && pnpm test:python && pnpm test:release-gate && pnpm test:package-inputs && pnpm test:icons && pnpm test:macos-signing && pnpm test:windows-signing && pnpm test:updates && pnpm test:config && pnpm test:renderer && npm run test:electron && pnpm test:conversion-scheduler && pnpm test:project-files && pnpm test:retrieval && pnpm test:agent && pnpm test:opencode:native && pnpm test:mcp && pnpm typecheck && pnpm build && pnpm test:electron:smoke",
     "prestart": "pnpm build:web",
     "electron": "pnpm build:electron-boundary && electron .",
     "package:mac": "node scripts/package-desktop.mjs",
@@ -106,7 +106,8 @@
     "check:renderer-unused": "vp run @stashbase/renderer#check:unused",
     "check:renderer-dupes": "vp run @stashbase/renderer#check:dupes",
     "test:renderer:coverage": "vp run @stashbase/renderer#test:coverage",
-    "check:web": "node scripts/renderer/check-web.mjs"
+    "check:web": "node scripts/renderer/check-web.mjs",
+    "build:extractor-component": "node scripts/build-extractor-component.mjs"
   },
   "build": {
     "appId": "com.stashbase.app",
@@ -141,7 +142,11 @@
       "dist/renderer/**/*",
       "dist/electron/**/*",
       "node_modules/**/*",
-      "!dist/pyinstaller/**"
+      "!dist/pyinstaller/**",
+      "!**/*.map",
+      "!node_modules/better-sqlite3/deps/**",
+      "!node_modules/better-sqlite3/src/**",
+      "!node_modules/better-sqlite3/build/Release/obj/**"
     ],
     "extraResources": [
       {
@@ -149,23 +154,23 @@
         "to": "python",
         "filter": [
           "stashbase_daemon.py",
-          "pdf_extract.py",
-          "ocr_extract.py",
-          "requirements.txt",
-          "runtime/**/*"
+          "requirements.txt"
         ]
       },
       {
         "from": "python/sidecar.nosync",
-        "to": "python/sidecar"
+        "to": "python/sidecar",
+        "filter": [
+          "stashbase-daemon/**/*"
+        ]
       },
       {
         "from": "native/transcription/sidecar.nosync",
         "to": "transcription"
       },
       {
-        "from": "assets/builtin-library",
-        "to": "assets/builtin-library"
+        "from": "assets/builtin-project",
+        "to": "assets/builtin-project"
       },
       {
         "from": "assets/agent-instructions",
@@ -174,6 +179,10 @@
       {
         "from": "node_modules/opencode-ai/bin/opencode.exe",
         "to": "opencode/opencode.exe"
+      },
+      {
+        "from": "python/sidecar.nosync/extractor-runtime.json",
+        "to": "python/extractor-runtime.json"
       }
     ],
     "asar": true,
@@ -285,6 +294,7 @@
     "remark-math": "^6.0.0",
     "sanitize-html": "^2.17.6",
     "tailwind-merge": "^3.6.0",
+    "tar": "7.5.22",
     "ws": "^8.20.1",
     "yaml": "^2.9.0",
     "zod": "3.25.76"

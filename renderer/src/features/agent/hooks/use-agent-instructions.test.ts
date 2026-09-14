@@ -9,8 +9,8 @@ import { useAgentInstructions } from './use-agent-instructions';
 
 afterEach(cleanup);
 
-const LIBRARY: AgentScope = { kind: 'library' };
-const FOLDER: AgentScope = { kind: 'folder', path: '/library/notes' };
+const LIBRARY: AgentScope = { kind: 'unbound' };
+const FOLDER: AgentScope = { kind: 'folder', path: '/project/notes' };
 
 function mount(port = agentInstructionsApi(), scope: AgentScope | null = LIBRARY) {
   const wrapper = queryWrapper(createTestQueryClient());

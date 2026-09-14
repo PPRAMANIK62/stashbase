@@ -55,7 +55,7 @@ export function createExactSearchAdapter(client: HttpClient): ExactSearchPort {
             unavailable: 'Search is unavailable.',
           },
           method: 'POST',
-          path: '/api/library/keyword-search',
+          path: '/api/project/keyword-search',
           schema: exactSearchResponseSchema,
           signal,
         }),

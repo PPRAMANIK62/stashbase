@@ -4,7 +4,7 @@ import type { HttpClient } from '@/platform/http/client';
 
 import { createRecoveryDraftAdapter } from './recovery-draft-api';
 
-const source = { folderPath: '/library/research notes', path: 'drafts/plan #1.md' };
+const source = { folderPath: '/project/research notes', path: 'drafts/plan #1.md' };
 const wireSummary = {
   currentVersion: 'sha256:disk',
   expectedVersion: 'sha256:draft',
@@ -21,7 +21,7 @@ describe('recovery draft API', () => {
   it('lists the folder as candidates under the spelling the window asked with', async () => {
     const http = client({
       available: true,
-      drafts: [{ ...wireSummary, folderPath: '/library/Research Notes' }],
+      drafts: [{ ...wireSummary, folderPath: '/project/Research Notes' }],
     });
     const signal = new AbortController().signal;
 
@@ -39,7 +39,7 @@ describe('recovery draft API', () => {
       },
     );
     expect(http.request).toHaveBeenCalledWith({
-      path: '/api/recovery-drafts?folder=%2Flibrary%2Fresearch+notes',
+      path: '/api/recovery-drafts?folder=%2Fproject%2Fresearch+notes',
       signal,
     });
   });
@@ -64,7 +64,7 @@ describe('recovery draft API', () => {
       source,
     });
     expect(http.request).toHaveBeenCalledWith({
-      path: '/api/recovery-drafts/content?folder=%2Flibrary%2Fresearch+notes&path=drafts%2Fplan+%231.md',
+      path: '/api/recovery-drafts/content?folder=%2Fproject%2Fresearch+notes&path=drafts%2Fplan+%231.md',
       signal,
     });
 
@@ -103,7 +103,7 @@ describe('recovery draft API', () => {
     );
     expect(discarded.request).toHaveBeenCalledWith({
       method: 'DELETE',
-      path: '/api/recovery-drafts?folder=%2Flibrary%2Fresearch+notes&path=drafts%2Fplan+%231.md',
+      path: '/api/recovery-drafts?folder=%2Fproject%2Fresearch+notes&path=drafts%2Fplan+%231.md',
       signal,
     });
   });

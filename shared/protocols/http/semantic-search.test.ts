@@ -9,8 +9,8 @@ test('semantic search hits carry a folder-qualified identity beside the compatib
       {
         chunkIndex: 2,
         content: 'Chunk body',
-        fileName: '/library/research/papers/report.pdf',
-        folder: '/library/research',
+        fileName: '/project/research/papers/report.pdf',
+        folder: '/project/research',
         heading: 'Intro › Method',
         path: 'papers/report.pdf',
         pdfPage: 3,
@@ -20,13 +20,13 @@ test('semantic search hits carry a folder-qualified identity beside the compatib
     truncated: true,
   });
   assert.equal(parsed.hits[0]?.path, 'papers/report.pdf');
-  assert.equal(parsed.hits[0]?.folder, '/library/research');
+  assert.equal(parsed.hits[0]?.folder, '/project/research');
 });
 
 test('semantic search requires the semantic mode and a bounded top_k', () => {
   assert.equal(
     semanticSearchRequestSchema.safeParse({
-      folder: '/library/research',
+      folder: '/project/research',
       mode: 'semantic',
       query: 'idea',
       top_k: 30,
@@ -35,7 +35,7 @@ test('semantic search requires the semantic mode and a bounded top_k', () => {
   );
   assert.equal(
     semanticSearchRequestSchema.safeParse({
-      folder: '/library/research',
+      folder: '/project/research',
       mode: 'keyword',
       query: 'idea',
       top_k: 30,
@@ -44,7 +44,7 @@ test('semantic search requires the semantic mode and a bounded top_k', () => {
   );
   assert.equal(
     semanticSearchRequestSchema.safeParse({
-      folder: '/library/research',
+      folder: '/project/research',
       mode: 'semantic',
       query: 'idea',
       top_k: 0,

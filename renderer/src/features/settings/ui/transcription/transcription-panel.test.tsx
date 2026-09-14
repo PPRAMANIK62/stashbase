@@ -98,10 +98,10 @@ describe('TranscriptionPanel', () => {
     expect(
       within(screen.getByRole('radio', { name: 'Tiny' })).getByText('Installed'),
     ).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Working…' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Downloading…' })).not.toBeNull();
   });
 
-  it('reports a missing engine as an alert row and keeps the settings usable', async () => {
+  it('reports a missing engine as a quiet status row and keeps the settings usable', async () => {
     const port = transcriptionPort({
       load: vi.fn(async () =>
         transcriptionSettings({
@@ -116,9 +116,11 @@ describe('TranscriptionPanel', () => {
       ),
     });
     renderPanel(port);
-    const notice = await screen.findByRole('alert');
-    expect(notice.textContent).toContain('Transcription engine unavailable');
-    expect(notice.textContent).toContain('whisper-cli is missing; run the build.');
+    const notice = (await screen.findByText('Transcription engine unavailable')).closest(
+      '[role="status"]',
+    );
+    expect(notice?.textContent).toContain('whisper-cli is missing; run the build.');
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByRole('button', { name: 'Download' })).not.toBeNull();
   });
 

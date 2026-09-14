@@ -44,14 +44,14 @@ import {
   createAccountAdapter,
   createAgentRuntimeAdapter,
   createAppearanceAdapter,
-  createCaptureAdapter,
   createEmbedderAdapter,
   createMcpAccessAdapter,
   createTranscriptionAdapter,
+  createLocalComponentAdapter,
+  type LocalComponentPort,
   type AccountPort,
   type AgentRuntimePort,
   type AppearancePort,
-  type CapturePort,
   type EmbedderPort,
   type McpAccessPort,
   type TranscriptionPort,
@@ -60,22 +60,21 @@ import { createUpdatesAdapter, type UpdatesPort } from '@/features/updates/publi
 import {
   createWorkspaceAdapters,
   FileTree,
-  LibrarySidebar,
-  LibraryWelcome,
+  ProjectWelcome,
   type WorkspaceAdapters,
 } from '@/features/workspace/public';
 import { readBridge } from '@/platform/electron/bridge';
 import type { BugReportBridge } from '@/platform/electron/bug-report';
-import type { CaptureBridge } from '@/platform/electron/capture';
 import { createExternalNavigation } from '@/platform/electron/external-navigation';
 import { fileManagerLabel } from '@/platform/electron/file-manager';
 import { createFolderPicker } from '@/platform/electron/folder-picker';
-import { openedFolderWindow } from '@/platform/electron/library-lifecycle';
+import { openedFolderWindow } from '@/platform/electron/project-lifecycle';
 import { createHttpClient } from '@/platform/http/client';
 
-/** The folder chrome's dependencies, as the two components declare them. */
-type LibraryChrome = Pick<
-  ComponentProps<typeof LibrarySidebar> & ComponentProps<typeof LibraryWelcome>,
+/** The folder chrome's dependencies, as the welcome screen declares them;
+ *  the folder window's sidebar takes only the project port from the set. */
+type ProjectChrome = Pick<
+  ComponentProps<typeof ProjectWelcome>,
   'api' | 'folderPicker' | 'lifecycle'
 >;
 
@@ -90,8 +89,6 @@ export interface AppDependencies {
   };
   /** Opens the bug-report review for this window; null outside Electron. */
   bugReport: BugReportBridge | null;
-  /** Desktop clipboard capture; null outside Electron or when the capability is absent. */
-  capture: CaptureBridge | null;
   documents: {
     adapters: DocumentAdapters;
     createId: () => string;
@@ -99,7 +96,7 @@ export interface AppDependencies {
   };
   /** The shop, and the whole take-this-copy action it does not own itself. */
   gallery: GalleryPort;
-  library: LibraryChrome;
+  project: ProjectChrome;
   preparation: {
     controlApi: PreparationControlPort;
     statusApi: PreparationStatusPort;
@@ -113,10 +110,10 @@ export interface AppDependencies {
     accountApi: AccountPort;
     agentRuntimeApi: AgentRuntimePort;
     appearanceApi: AppearancePort;
-    captureApi: CapturePort;
     embedderApi: EmbedderPort;
     mcpAccessApi: McpAccessPort;
     transcriptionApi: TranscriptionPort;
+    localComponentApi: LocalComponentPort;
   };
   /** Keeping this build current; null outside Electron or when the build has no updater. */
   updates: UpdatesPort | null;
@@ -132,9 +129,8 @@ export function createDependencies(): AppDependencies {
   const http = createHttpClient(bridge.runtime.serverOrigin);
   const externalNavigation = createExternalNavigation(bridge.externalNavigation);
   const workspace = createWorkspaceAdapters({
-    capture: bridge.capture ?? null,
     http,
-    library: bridge.library,
+    project: bridge.project,
     serverOrigin: bridge.runtime.serverOrigin,
     workspaceSession: bridge.workspaceSession,
   });
@@ -146,7 +142,6 @@ export function createDependencies(): AppDependencies {
       session: createAgentSessionAdapter(http, bridge.runtime.serverOrigin),
     },
     bugReport: bridge.bugReport ?? null,
-    capture: bridge.capture ?? null,
     documents: {
       adapters: createDocumentAdapters({
         http,
@@ -157,10 +152,10 @@ export function createDependencies(): AppDependencies {
       openExternal: externalNavigation.open,
     },
     gallery: {
-      // Taking a copy is the Library's ordinary public import into folder
+      // Taking a copy is the project registry's ordinary public import into folder
       // home, then a window of its own. Neither is the shop's to own: the
-      // destination and the name rules belong to the Library, and the window
-      // belongs to the desktop. A copy the Library made but no window could
+      // destination and the name rules belong to the project registry, and the window
+      // belongs to the desktop. A copy the project registry made but no window could
       // show is still a folder in the switcher, so it says exactly that
       // rather than implying nothing happened.
       async copy(request, signal) {
@@ -170,16 +165,16 @@ export function createDependencies(): AppDependencies {
           nameIssue: workspace.githubImport.folderNameIssue(request.name),
         });
         const path = await workspace.githubImport.run(request.repo, folderName, signal);
-        if (!(await openedFolderWindow(bridge.library, path))) {
+        if (!(await openedFolderWindow(bridge.project, path))) {
           throw new Error('the copy was made but no window could open it');
         }
         return path;
       },
       ...createGalleryIndexAdapter(http),
     },
-    library: {
-      api: workspace.library,
-      folderPicker: createFolderPicker(bridge.library),
+    project: {
+      api: workspace.project,
+      folderPicker: createFolderPicker(bridge.project),
       lifecycle: workspace.lifecycle,
     },
     preparation: {
@@ -195,10 +190,10 @@ export function createDependencies(): AppDependencies {
       accountApi: createAccountAdapter(http, bridge.runtime.serverOrigin),
       agentRuntimeApi: createAgentRuntimeAdapter(http),
       appearanceApi: createAppearanceAdapter(http),
-      captureApi: createCaptureAdapter(http),
       embedderApi: createEmbedderAdapter(http),
       mcpAccessApi: createMcpAccessAdapter(http),
       transcriptionApi: createTranscriptionAdapter(http),
+      localComponentApi: createLocalComponentAdapter(http),
     },
     updates: bridge.updates ? createUpdatesAdapter(bridge.updates) : null,
     workspace: { adapters: workspace, revealLabel: fileManagerLabel() },

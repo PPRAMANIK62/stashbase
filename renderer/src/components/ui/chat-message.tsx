@@ -162,22 +162,26 @@ interface ChatMessageActionProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
  *  glyph, quiet until hovered, ringed on keyboard focus. The geometry is
  *  fixed here so the row's overhang can line the glyph up with the message. */
 const ChatMessageAction = forwardRef<HTMLButtonElement, ChatMessageActionProps>(
-  ({ icon: Icon, label, className, ...props }, ref) => (
-    <button
-      aria-label={label}
-      className={cn(
-        'inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast outline-none hover:bg-hover hover:text-foreground',
-        focusRing('focus-visible:ring-offset-0'),
-        className,
-      )}
-      ref={ref}
-      title={label}
-      type="button"
-      {...props}
-    >
-      <Icon aria-hidden size={14} strokeWidth={1.5} />
-    </button>
-  ),
+  ({ icon: Icon, label, className, ...props }, ref) => {
+    const shape = useShape();
+    return (
+      <button
+        aria-label={label}
+        className={cn(
+          'inline-flex size-5 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-fast outline-none hover:bg-hover hover:text-foreground',
+          shape.mark,
+          focusRing('focus-visible:ring-offset-0'),
+          className,
+        )}
+        ref={ref}
+        title={label}
+        type="button"
+        {...props}
+      >
+        <Icon aria-hidden size={14} strokeWidth={1.5} />
+      </button>
+    );
+  },
 );
 
 ChatMessageAction.displayName = 'ChatMessageAction';

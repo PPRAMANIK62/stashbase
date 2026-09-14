@@ -13,7 +13,7 @@ import {
 import { createWorkspaceState } from './workspace';
 
 const scope = {
-  folder: { name: 'Notes', path: '/library/notes' },
+  folder: { name: 'Notes', path: '/project/notes' },
   generation: 1,
 };
 
@@ -25,7 +25,7 @@ describe('workspace session state', () => {
       selectedPath: 'drafts/plan.md',
     };
     const snapshot = recordFolderSession(
-      setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/library/notes'),
+      setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/project/notes'),
       state,
       {
         activeTabId: 'tab-1',
@@ -34,18 +34,18 @@ describe('workspace session state', () => {
     );
 
     expect(snapshot).toEqual({
-      activeFolderPath: '/library/notes',
+      activeFolderPath: '/project/notes',
       folders: [
         {
           activeTabId: 'tab-1',
           expandedPaths: ['drafts'],
-          folderPath: '/library/notes',
+          folderPath: '/project/notes',
           selectedPath: 'drafts/plan.md',
           tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
         },
       ],
       // The window's first folder brings the sidebar with it.
-      shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 240 },
+      shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 288 },
       version: 1,
     });
     expect(snapshot).not.toHaveProperty('scope');
@@ -53,17 +53,17 @@ describe('workspace session state', () => {
   });
 
   it("brings the sidebar with a window's first folder and leaves later switches alone", () => {
-    const first = setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/library/notes');
+    const first = setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/project/notes');
     expect(first.shell.sidebarOpen).toBe(true);
 
     // Collapsing while working is a standing choice a folder switch keeps.
     const collapsed = setSessionSidebarOpen(first, false);
-    const switched = setSessionActiveFolder(collapsed, '/library/writing');
+    const switched = setSessionActiveFolder(collapsed, '/project/writing');
     expect(switched.shell.sidebarOpen).toBe(false);
   });
 
   it('arrives at the welcome screen with the sidebar collapsed, once', () => {
-    const inFolder = setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/library/notes');
+    const inFolder = setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/project/notes');
     const welcome = setSessionActiveFolder(inFolder, null);
     expect(welcome).toMatchObject({ activeFolderPath: null, shell: { sidebarOpen: false } });
 
@@ -73,8 +73,8 @@ describe('workspace session state', () => {
     expect(setSessionActiveFolder(reopened, null)).toBe(reopened);
   });
 
-  it('arrives at the welcome screen when the active folder leaves the library', () => {
-    const inFolder = setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/library/notes');
+  it('arrives at the welcome screen when the active folder leaves the project', () => {
+    const inFolder = setSessionActiveFolder(createWorkspaceSessionSnapshot(), '/project/notes');
     expect(inFolder.shell.sidebarOpen).toBe(true);
 
     expect(reconcileSessionMembership(inFolder, [])).toMatchObject({
@@ -93,7 +93,7 @@ describe('workspace session state', () => {
 
     // One still naming its folder keeps the reader's answer: a reload lands
     // back in that folder, and only a landing on the welcome screen collapses it.
-    const inFolder = setSessionActiveFolder(openOnWelcome, '/library/notes');
+    const inFolder = setSessionActiveFolder(openOnWelcome, '/project/notes');
     expect(normalizeWorkspaceSession(inFolder).shell.sidebarOpen).toBe(true);
   });
 
@@ -114,12 +114,12 @@ describe('workspace session state', () => {
 
   it('normalizes duplicate identities and invalid active references', () => {
     const normalized = normalizeWorkspaceSession({
-      activeFolderPath: '/library/missing',
+      activeFolderPath: '/project/missing',
       folders: [
         {
           activeTabId: 'missing-tab',
           expandedPaths: ['drafts', 'drafts'],
-          folderPath: '/library/notes',
+          folderPath: '/project/notes',
           selectedPath: null,
           tabs: [
             { id: 'tab-1', path: 'one.md' },
@@ -149,14 +149,14 @@ describe('workspace session state', () => {
 
   it('prunes only sessions whose durable membership disappeared', () => {
     let snapshot = createWorkspaceSessionSnapshot();
-    snapshot = setSessionActiveFolder(snapshot, '/library/notes');
-    snapshot = setSessionActiveFolder(snapshot, '/library/writing');
+    snapshot = setSessionActiveFolder(snapshot, '/project/notes');
+    snapshot = setSessionActiveFolder(snapshot, '/project/writing');
     snapshot = setSessionSidebarWidth(snapshot, 100);
 
-    expect(reconcileSessionMembership(snapshot, ['/library/writing'])).toMatchObject({
-      activeFolderPath: '/library/writing',
-      folders: [{ folderPath: '/library/writing' }],
-      shell: { sidebarWidth: 192 },
+    expect(reconcileSessionMembership(snapshot, ['/project/writing'])).toMatchObject({
+      activeFolderPath: '/project/writing',
+      folders: [{ folderPath: '/project/writing' }],
+      shell: { sidebarWidth: 272 },
     });
   });
 });

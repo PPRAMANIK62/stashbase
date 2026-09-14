@@ -25,7 +25,7 @@ export function ChatNavButtons({ runtime }: { runtime: AgentWorkspaceRuntime }) 
       <Tooltip content="Previous chat" side="bottom">
         <Button
           aria-label="Previous chat"
-          className="-ml-1"
+          className="ml-1"
           disabled={previous === undefined}
           onClick={() => {
             if (previous) runtime.activate(previous.id);
@@ -39,7 +39,7 @@ export function ChatNavButtons({ runtime }: { runtime: AgentWorkspaceRuntime }) 
       <Tooltip content="Next chat" side="bottom">
         <Button
           aria-label="Next chat"
-          className="-ml-1"
+          className="ml-1"
           disabled={next === undefined}
           onClick={() => {
             if (next) runtime.activate(next.id);

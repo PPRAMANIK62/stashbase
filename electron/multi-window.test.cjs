@@ -2,26 +2,20 @@
 
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const vm = require('node:vm');
 const test = require('node:test');
 const {
   terminateChildProcessTree,
   waitForChildExit,
 } = require('./smoke-process.cjs');
 const {
-  createServerArguments,
-  createServerChildEnvironment,
-  waitForStableServerProbe,
-  serverStartupTimeoutMs,
-} = require('./main-probe.cjs');
-const {
-  WINDOW_ID_ARG_PREFIX,
   applicationWindowChromeOptions,
   buildElectronSmokeArgs,
   classifyProtocolLaunch,
   createApplicationMenuTemplate,
-  createRendererFlushCoordinator,
-  createRendererFlushReadiness,
-  createSafeReloadCoordinator,
   createSingleFlight,
   createWindowRegistry,
   focusWindow,
@@ -31,7 +25,6 @@ const {
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
   windowLifecycleShortcutAction,
-  windowIdFromArgv,
 } = require('./multi-window.cjs');
 const { registerWindowLifecycle } = require('../dist/electron/window/lifecycle.cjs');
 const { createWindowLifecycleUpdateBarrier } = require('./update-window-barrier.cjs');
@@ -108,163 +101,6 @@ test('Electron smoke disables Chromium sandbox only on Linux CI hosts', () => {
     buildElectronSmokeArgs('win32', 'C:\\repo\\electron\\smoke.cjs', 43123),
     ['C:\\repo\\electron\\smoke.cjs', '--port=43123'],
   );
-});
-
-test('Electron-owned source server does not enable the Vite proxy without an inherited Vite marker', () => {
-  const environment = createServerChildEnvironment({
-    baseEnv: { PATH: '/test/bin' },
-    packaged: false,
-    packagedEnv: { STASHBASE_APP_ROOT: '/repo' },
-    shutdownToken: 'shutdown-token',
-    oauthReturnToken: 'oauth-token',
-    recoveryJournalKey: 'journal-key',
-  });
-
-  assert.equal(environment.STASHBASE_DEV_RUNTIME, '1');
-  assert.equal(environment.STASHBASE_DEV_VITE, undefined);
-  assert.equal(environment.STASHBASE_APP_ROOT, '/repo');
-  assert.equal(environment.STASHBASE_SHUTDOWN_TOKEN, 'shutdown-token');
-  assert.equal(environment.STASHBASE_OAUTH_RETURN_TOKEN, 'oauth-token');
-  assert.equal(environment.STASHBASE_RECOVERY_JOURNAL_KEY, 'journal-key');
-});
-
-test('the recovery journal key reaches the server only from the Electron provider', () => {
-  const shared = {
-    baseEnv: { STASHBASE_RECOVERY_JOURNAL_KEY: 'inherited-from-shell' },
-    packaged: true,
-    packagedEnv: {},
-    shutdownToken: 'shutdown-token',
-    oauthReturnToken: 'oauth-token',
-  };
-  const provided = createServerChildEnvironment({ ...shared, recoveryJournalKey: 'provided-key' });
-  assert.equal(provided.STASHBASE_RECOVERY_JOURNAL_KEY, 'provided-key');
-  const withoutKey = createServerChildEnvironment({ ...shared, recoveryJournalKey: null });
-  assert.equal(withoutKey.STASHBASE_RECOVERY_JOURNAL_KEY, undefined);
-  const omitted = createServerChildEnvironment(shared);
-  assert.equal(omitted.STASHBASE_RECOVERY_JOURNAL_KEY, undefined);
-});
-
-test('Electron-owned source server preserves an explicit Vite proxy marker', () => {
-  const environment = createServerChildEnvironment({
-    baseEnv: { STASHBASE_DEV_VITE: '1' },
-    packaged: false,
-    packagedEnv: { STASHBASE_APP_ROOT: '/repo' },
-    shutdownToken: 'shutdown-token',
-    oauthReturnToken: 'oauth-token',
-  });
-
-  assert.equal(environment.STASHBASE_DEV_RUNTIME, '1');
-  assert.equal(environment.STASHBASE_DEV_VITE, '1');
-});
-
-test('packaged server environment cannot inherit development runtime flags', () => {
-  const environment = createServerChildEnvironment({
-    baseEnv: {
-      STASHBASE_DEV_RUNTIME: '1',
-      STASHBASE_DEV_VITE: '1',
-    },
-    packaged: true,
-    packagedEnv: { ELECTRON_RUN_AS_NODE: '1' },
-    shutdownToken: 'shutdown-token',
-    oauthReturnToken: 'oauth-token',
-  });
-
-  assert.equal(environment.STASHBASE_DEV_RUNTIME, undefined);
-  assert.equal(environment.STASHBASE_DEV_VITE, undefined);
-  assert.equal(environment.ELECTRON_RUN_AS_NODE, '1');
-});
-
-test('Electron-owned server uses a single process unless Vite explicitly needs watch mode', () => {
-  const direct = createServerArguments({
-    entry: '/repo/server/index.ts',
-    portArgs: ['--port=4200'],
-    packaged: false,
-    vite: false,
-  });
-  const vite = createServerArguments({
-    entry: '/repo/server/index.ts',
-    portArgs: ['--port=4200'],
-    packaged: false,
-    vite: true,
-  });
-  const packaged = createServerArguments({
-    entry: '/app/dist/server/index.mjs',
-    portArgs: [],
-    packaged: true,
-    vite: false,
-  });
-
-  assert.deepEqual(direct, ['/repo/server/index.ts', '--port=4200']);
-  assert.deepEqual(vite, ['watch', '/repo/server/index.ts', '--port=4200']);
-  assert.deepEqual(packaged, ['/app/dist/server/index.mjs']);
-});
-
-test('source server startup covers cold TypeScript loading without weakening packaged failure bounds', () => {
-  assert.equal(serverStartupTimeoutMs({ packaged: false }), 30_000);
-  assert.equal(serverStartupTimeoutMs({ packaged: true }), 10_000);
-});
-
-test('Electron waits through a temporarily unresponsive server instead of spawning a competitor', async () => {
-  const probes = [
-    { compatible: false, occupied: true, transient: true },
-    { compatible: false, occupied: true, transient: true },
-    { compatible: true, occupied: true, transient: false },
-  ];
-  let now = 0;
-  let waits = 0;
-
-  const result = await waitForStableServerProbe(
-    async () => probes.shift(),
-    {
-      timeoutMs: 1_000,
-      retryMs: 100,
-      now: () => now,
-      sleep: async (ms) => { now += ms; waits += 1; },
-    },
-  );
-
-  assert.equal(result.compatible, true);
-  assert.equal(waits, 2);
-});
-
-test('Electron stops waiting when the transient port holder exits', async () => {
-  const probes = [
-    { compatible: false, occupied: true, transient: true },
-    { compatible: false, occupied: false, transient: false },
-  ];
-  let now = 0;
-
-  const result = await waitForStableServerProbe(
-    async () => probes.shift(),
-    {
-      timeoutMs: 1_000,
-      retryMs: 100,
-      now: () => now,
-      sleep: async (ms) => { now += ms; },
-    },
-  );
-
-  assert.equal(result.occupied, false, 'Electron may now start the one owned server');
-});
-
-test('Electron does not delay a responsive incompatible service', async () => {
-  let probes = 0;
-  let waits = 0;
-  const result = await waitForStableServerProbe(
-    async () => {
-      probes += 1;
-      return { compatible: false, occupied: true, transient: false };
-    },
-    {
-      timeoutMs: 1_000,
-      retryMs: 100,
-      sleep: async () => { waits += 1; },
-    },
-  );
-
-  assert.equal(result.compatible, false);
-  assert.equal(probes, 1);
-  assert.equal(waits, 0);
 });
 
 test('application menu exposes VS Code window commands on Windows and Linux', () => {
@@ -513,9 +349,11 @@ test('last-window behavior follows each desktop platform convention', () => {
   assert.equal(shouldQuitAfterLastWindow('darwin'), false);
   assert.equal(shouldQuitAfterLastWindow('win32'), true);
   assert.equal(shouldQuitAfterLastWindow('linux'), true);
+  assert.equal(shouldQuitAfterLastWindow('darwin', true), true);
+  assert.equal(shouldQuitAfterLastWindow('darwin', false), false);
 });
 
-test('folder registry finds an existing context, excludes the sender, and retires closed windows', () => {
+test('folder registry finds an existing context, excludes the sender, and retires closed windows', async () => {
   const registry = createWindowRegistry({ platform: 'win32' });
   const first = { name: 'first' };
   const second = { name: 'second' };
@@ -525,14 +363,14 @@ test('folder registry finds an existing context, excludes the sender, and retire
 
   assert.equal(registry.windowForId('window-1'), first);
   assert.equal(registry.windowForId('missing'), null);
-  assert.equal(registry.findByFolder('c:/users/ada/notes'), first);
-  assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes', { excludeWindowId: 'window-1' }), null);
+  assert.equal(await registry.findByFolder('c:/users/ada/notes'), first);
+  assert.equal(await registry.findByFolder('C:\\Users\\Ada\\Notes', { excludeWindowId: 'window-1' }), null);
 
   registry.remove('window-1');
-  assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes'), null);
+  assert.equal(await registry.findByFolder('C:\\Users\\Ada\\Notes'), null);
 });
 
-test('window registry answers the initial folder spelling once, then forgets it', () => {
+test('window registry answers the initial folder spelling once, then forgets it', async () => {
   const registry = createWindowRegistry({ platform: 'win32' });
   const created = { name: 'created-for-notes' };
   const bare = { name: 'bare' };
@@ -541,13 +379,13 @@ test('window registry answers the initial folder spelling once, then forgets it'
 
   // The match key lowercases on Windows and the claim does not: a window
   // created for a folder must reopen it under its reader's own spelling.
-  assert.equal(registry.findByFolder('c:/users/ada/notes'), created);
+  assert.equal(await registry.findByFolder('c:/users/ada/notes'), created);
   assert.equal(registry.claimInitialFolder('window-1'), 'C:\\Users\\Ada\\Notes');
 
   // One shot. The claim is spent, while the window stays matchable, so a
   // reload cannot land again on a folder its reader has since left.
   assert.equal(registry.claimInitialFolder('window-1'), null);
-  assert.equal(registry.findByFolder('C:\\Users\\Ada\\Notes'), created);
+  assert.equal(await registry.findByFolder('C:\\Users\\Ada\\Notes'), created);
 
   // A window nobody named a folder for, and a window that is already gone,
   // both answer the same ordinary "no folder".
@@ -686,118 +524,39 @@ test('single-flight startup coalesces simultaneous initial-window requests', asy
   assert.equal(starts, 2);
 });
 
-test('renderer flush coordinator waits for the matching save acknowledgement', async () => {
-  const sent = [];
-  const coordinator = createRendererFlushCoordinator({
-    createRequestId: () => 'request-1',
-    timeoutMs: 1000,
-  });
-  const win = {
-    isDestroyed: () => false,
-    webContents: {
-      id: 41,
-      isDestroyed: () => false,
-      send: (...args) => sent.push(args),
-    },
+test('native activation shares pending startup and opens again after all windows close', async () => {
+  // Execute the entrypoint's event registration, retaining its actual wiring
+  // while replacing the native app and slow server readiness with test doubles.
+  const source = fs.readFileSync(require.resolve('./main.cjs'), 'utf8');
+  const start = source.indexOf("  app.on('activate', () => {");
+  const end = source.indexOf("\n\n  app.on('window-all-closed'", start);
+  assert.ok(start >= 0 && end > start);
+  const app = new EventEmitter();
+  const mainWindows = new Set();
+  let release;
+  const ready = new Promise((resolve) => { release = resolve; });
+  let starts = 0;
+  const createWindow = async () => {
+    starts += 1;
+    await ready;
+    mainWindows.add({});
   };
-
-  const pending = coordinator.request(win, 'window-close');
-  assert.deepEqual(sent, [[
-    'window:prepare-context-release',
-    { requestId: 'request-1', reason: 'window-close' },
-  ]]);
-  assert.equal(coordinator.handleResponse(99, { requestId: 'request-1', ok: true }), false);
-  assert.equal(coordinator.handleResponse(41, { requestId: 'wrong', ok: true }), false);
-  assert.equal(coordinator.handleResponse(41, { requestId: 'request-1', ok: true }), true);
-  assert.equal(await pending, true);
-});
-
-test('safe reload waits for save acknowledgement and coalesces simultaneous requests', async () => {
-  let releaseSave;
-  const save = new Promise((resolve) => { releaseSave = resolve; });
-  const calls = [];
-  const win = {
-    isDestroyed: () => false,
-    webContents: { id: 51, isDestroyed: () => false },
-  };
-  const coordinator = createSafeReloadCoordinator({
-    requestFlush: async (_win, reason) => {
-      calls.push(`flush:${reason}`);
-      return save;
-    },
-    reloadWindow: () => calls.push('reload'),
-  });
-
-  const first = coordinator.request(win, { saveBarrierReady: true });
-  const second = coordinator.request(win, { saveBarrierReady: true });
-  assert.equal(first, second);
-  assert.deepEqual(calls, ['flush:window-reload']);
-  releaseSave(true);
-  assert.deepEqual(await first, { reloaded: true, reason: null });
-  assert.deepEqual(calls, ['flush:window-reload', 'reload']);
-});
-
-test('safe reload blocks failed saves and requires confirmation without a save barrier', async () => {
-  const calls = [];
-  const win = {
-    isDestroyed: () => false,
-    webContents: { id: 52, isDestroyed: () => false },
-  };
-  let confirm = false;
-  const coordinator = createSafeReloadCoordinator({
-    requestFlush: async () => false,
-    confirmWithoutSaveBarrier: async () => confirm,
-    reloadWindow: () => calls.push('reload'),
-  });
-
-  assert.deepEqual(
-    await coordinator.request(win, { saveBarrierReady: true }),
-    { reloaded: false, reason: 'save-failed' },
-  );
-  assert.deepEqual(
-    await coordinator.request(win, { saveBarrierReady: false }),
-    { reloaded: false, reason: 'unconfirmed' },
-  );
-  assert.deepEqual(calls, []);
-
-  confirm = true;
-  assert.deepEqual(
-    await coordinator.request(win, { saveBarrierReady: false }),
-    { reloaded: true, reason: null },
-  );
-  assert.deepEqual(calls, ['reload']);
-});
-
-test('window close does not request a save acknowledgement before the renderer installs its handler', () => {
-  const readiness = createRendererFlushReadiness();
-  readiness.markDocumentLoaded();
-  assert.equal(readiness.shouldRequest(), false);
-  readiness.markHandlerReady(true);
-  assert.equal(readiness.shouldRequest(), true);
-  readiness.markHandlerReady(false);
-  assert.equal(readiness.shouldRequest(), false);
-});
-
-test('renderer navigation requires the replacement save handler to announce readiness', () => {
-  const readiness = createRendererFlushReadiness();
-  readiness.markDocumentLoaded();
-  readiness.markHandlerReady(true);
-  assert.equal(readiness.shouldRequest(), true);
-
-  readiness.markDocumentLoaded();
-  assert.equal(readiness.shouldRequest(), false);
-});
-
-test('preload reads and bounds the main-process window identity', () => {
-  assert.equal(
-    windowIdFromArgv(['electron', `${WINDOW_ID_ARG_PREFIX}window-123`]),
-    'window-123',
-  );
-  assert.equal(windowIdFromArgv(['electron']), null);
-  assert.equal(
-    windowIdFromArgv([`${WINDOW_ID_ARG_PREFIX}${'x'.repeat(200)}`]).length,
-    128,
-  );
+  const initialWindowFlight = createSingleFlight(createWindow);
+  vm.runInNewContext(source.slice(start, end), { app, mainWindows, createWindow, initialWindowFlight });
+  const startup = initialWindowFlight.run();
+  app.emit('activate');
+  app.emit('activate');
+  assert.equal(starts, 1);
+  release();
+  await startup;
+  assert.equal(mainWindows.size, 1);
+  app.emit('activate');
+  assert.equal(starts, 1);
+  mainWindows.clear();
+  app.emit('activate');
+  await initialWindowFlight.run();
+  assert.equal(starts, 2);
+  assert.equal(mainWindows.size, 1);
 });
 
 function updateBarrierFixture({ installUpdate = () => {} } = {}) {
@@ -823,7 +582,10 @@ function updateBarrierFixture({ installUpdate = () => {} } = {}) {
         if (channel !== 'window:fullscreen') sent.push({ id, channel, payload });
       },
     };
+    let enabled = true;
     const win = {
+      isEnabled: () => enabled,
+      setEnabled: (value) => { enabled = value; },
       close: () => {},
       isDestroyed: () => false,
       isFullScreen: () => false,
@@ -962,4 +724,74 @@ test('an install that fails after every window approved stops pre-approving thei
   assert.equal(prevented, 1);
   assert.equal(setup.sent.length, 3);
   assert.equal(setup.sent.at(-1).payload.reason, 'window-close');
+});
+
+test('POSIX registry keeps distinct folder names with trailing spaces distinct', async () => {
+  for (const platform of ['darwin', 'linux']) {
+    const registry = createWindowRegistry({ platform });
+    const plain = {}, spaced = {};
+    registry.add('plain', plain, '/workspace/notes');
+    registry.add('spaced', spaced, '/workspace/notes ');
+    assert.equal(registry.claimInitialFolder('spaced'), '/workspace/notes ');
+    assert.equal(await registry.findByFolder('/workspace/notes '), spaced);
+    assert.deepEqual(await registry.windowsByFolder('/workspace/notes'), [plain]);
+    registry.setFolder('plain', '/workspace/other ');
+    assert.equal(await registry.findByFolder('/workspace/other'), null);
+  }
+});
+
+test('macOS folder matching follows real volume identity and keeps source spelling', async (t) => {
+  if (process.platform !== 'darwin') return t.skip('requires a macOS filesystem');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-window-path-'));
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const root = path.join(temp, 'CaseFolder');
+  const alias = path.join(temp, 'casefolder');
+  fs.mkdirSync(root);
+  const sameDirectory = fs.existsSync(alias) && fs.statSync(root).ino === fs.statSync(alias).ino;
+  const registry = createWindowRegistry({ platform: 'darwin' });
+  const existing = { isDestroyed: () => false, show() {}, focus() {} };
+  const sender = {};
+  registry.add('existing', existing, root);
+  registry.add('sender', sender);
+  const stat = t.mock.method(fs, 'statSync', () => { throw new Error('native matching must yield'); });
+  assert.equal(await registry.findByFolder(alias), sameDirectory ? existing : null);
+  assert.deepEqual(await registry.windowsByFolder(alias), sameDirectory ? [existing] : []);
+  assert.equal(registry.claimInitialFolder('existing'), root);
+  const result = await openOrFocusFolder({
+    registry, folder: alias, senderWindow: sender, createWindow: async () => ({}),
+  });
+  assert.equal(result.action, sameDirectory ? 'focused' : 'opened');
+  stat.mock.restore();
+
+  const composed = path.join(temp, 'Café'), decomposed = path.join(temp, 'Cafe\u0301');
+  fs.mkdirSync(composed);
+  const sameUnicodeDirectory = fs.existsSync(decomposed)
+    && fs.statSync(composed).ino === fs.statSync(decomposed).ino;
+  registry.setFolder('existing', composed);
+  assert.equal(await registry.findByFolder(decomposed), sameUnicodeDirectory ? existing : null);
+});
+
+test('a folder lookup discards a match that changed while a later disk probe waited', async (t) => {
+  if (process.platform !== 'darwin') return t.skip('requires macOS volume probes');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-window-race-'));
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const first = path.join(temp, 'First'), second = path.join(temp, 'Second');
+  fs.mkdirSync(first); fs.mkdirSync(second);
+  const registry = createWindowRegistry({ platform: 'darwin' });
+  registry.add('first', {}, first);
+  registry.add('second', {}, second);
+  let release, reached;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const started = new Promise((resolve) => { reached = resolve; });
+  const stat = fs.promises.stat;
+  let held = false;
+  t.mock.method(fs.promises, 'stat', async (...args) => {
+    if (args[0] === second && !held) { held = true; reached(); await gate; }
+    return stat(...args);
+  });
+  const pending = registry.findByFolder(first);
+  await started;
+  registry.setFolder('first', second);
+  release();
+  assert.equal(await pending, null);
 });

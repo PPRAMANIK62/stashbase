@@ -8,7 +8,7 @@ import express from "express";
 
 import { fileVersion } from "../files.ts";
 import { filesystemPath } from "../filesystem-path.ts";
-import { clearCurrentFolder, removeRecent, setCurrentFolder } from "../folder.ts";
+import { clearCurrentFolder, removeRecentAsync, openProjectFolder } from "../folder.ts";
 import { requireFolder } from "../http.ts";
 import { mount } from "./files.ts";
 
@@ -16,7 +16,7 @@ test("versioned document route accepts JSON through the shared source authority"
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-json-route-"));
   const source = '\uFEFF{\r\n  "value": 1\r\n}\r\n';
   fs.writeFileSync(path.join(root, "data.json"), source, "utf8");
-  setCurrentFolder(root);
+  await openProjectFolder(root);
 
   const app = express();
   app.use(express.json());
@@ -52,7 +52,7 @@ test("versioned document route accepts JSON through the shared source authority"
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearCurrentFolder();
-    removeRecent(root);
+    await removeRecentAsync(root);
     fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }
 });
@@ -66,8 +66,8 @@ test("reveal resolves the requested registered folder and rejects an unregistere
   // Reveal answers in source spelling with POSIX separators, which is not
   // what path.join produces on Windows.
   const revealedSource = filesystemPath.absolute(memberSource);
-  setCurrentFolder(memberRoot);
-  setCurrentFolder(activeRoot);
+  await openProjectFolder(memberRoot);
+  await openProjectFolder(activeRoot);
 
   const revealed: string[] = [];
   const app = express();
@@ -99,8 +99,8 @@ test("reveal resolves the requested registered folder and rejects an unregistere
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearCurrentFolder();
-    removeRecent(activeRoot);
-    removeRecent(memberRoot);
+    await removeRecentAsync(activeRoot);
+    await removeRecentAsync(memberRoot);
     fs.rmSync(activeRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
     fs.rmSync(memberRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
     fs.rmSync(outsiderRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
@@ -111,7 +111,7 @@ test("folder-scoped browser assets load without a window header", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-folder-asset-"));
   const content = Buffer.from("%PDF-1.7\nfolder-scoped viewer fixture\n", "utf8");
   fs.writeFileSync(path.join(root, "viewer.pdf"), content);
-  setCurrentFolder(root);
+  await openProjectFolder(root);
   clearCurrentFolder();
 
   const app = express();
@@ -151,7 +151,7 @@ test("folder-scoped browser assets load without a window header", async () => {
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearCurrentFolder();
-    removeRecent(root);
+    await removeRecentAsync(root);
     fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }
 });
@@ -159,7 +159,7 @@ test("folder-scoped browser assets load without a window header", async () => {
 test("folder-scoped DOCX fallback remains reachable without an active folder", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-folder-docx-fallback-"));
   fs.writeFileSync(path.join(root, "viewer.docx"), Buffer.from("PK fixture", "utf8"));
-  setCurrentFolder(root);
+  await openProjectFolder(root);
   clearCurrentFolder();
 
   const app = express();
@@ -189,7 +189,7 @@ test("folder-scoped DOCX fallback remains reachable without an active folder", a
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     clearCurrentFolder();
-    removeRecent(root);
+    await removeRecentAsync(root);
     fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }
 });

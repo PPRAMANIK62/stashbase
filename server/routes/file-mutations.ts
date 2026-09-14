@@ -8,10 +8,10 @@ import { detectViewerFormat } from '../format.ts';
 import { guardExplicitFolder, sendError } from '../http.ts';
 import { planRenameLinksAsync, type RenameEntry } from '../links.ts';
 import { bundleRenameEntryAsync } from '../rename-helpers.ts';
-import { deleteLibraryFile, moveLibraryFile } from '../library-file-mutations.ts';
+import { deleteProjectFile, moveProjectFile } from '../project-file-mutations.ts';
 
 export function mountFileMutationRoutes(app: express.Express): void {
-  // Active-folder HTTP is only an adapter. The shared library mutation module
+  // Active-folder HTTP is only an adapter. The shared project mutation module
   // owns disk changes, link cascades, derived cleanup, file order, and index
   // completion for both UI and MCP callers.
   app.patch('/api/files/*', async (req, res) => {
@@ -32,7 +32,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
     newName = renameTargetPath(oldName, newName);
     if (newName === oldName) return res.json({ name: oldName, linksUpdated: 0 });
     try {
-      const result = await moveLibraryFile(toSourcePath(oldName), toSourcePath(newName), {
+      const result = await moveProjectFile(toSourcePath(oldName), toSourcePath(newName), {
         cascade: req.body?.cascade !== false,
         allowOpaque: true,
       });
@@ -50,7 +50,7 @@ export function mountFileMutationRoutes(app: express.Express): void {
     if (!(await guardExplicitFolder(req, res))) return;
     const name = (req.params as any)[0] as string;
     try {
-      const result = await deleteLibraryFile(toSourcePath(name), { allowOpaque: true });
+      const result = await deleteProjectFile(toSourcePath(name), { allowOpaque: true });
       res.json({ alreadyGone: result.alreadyGone, indexWarning: result.indexWarning });
     } catch (err: unknown) {
       sendError(res, err);

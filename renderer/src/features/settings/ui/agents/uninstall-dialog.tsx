@@ -25,9 +25,8 @@ export function UninstallAgentDialog({
       confirmLabel="Uninstall"
       description={
         <>
-          Uninstall the StashBase-managed {label} runtime to free disk space? Any active {label}{' '}
-          chat ends now. Your provider login and history are not affected; the next New Chat
-          prepares the runtime again.
+          Remove the copy of {label} managed by StashBase and end its active chats. Your provider
+          sign-in and chat history are kept. Set up {label} again to start a new chat.
         </>
       }
       failure={failure}
@@ -35,7 +34,7 @@ export function UninstallAgentDialog({
       onConfirm={onConfirm}
       open={runtime !== null}
       pending={pending}
-      title={`Uninstall ${label} runtime?`}
+      title={`Uninstall ${label}?`}
     />
   );
 }

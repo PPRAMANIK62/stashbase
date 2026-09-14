@@ -10,7 +10,7 @@ import {
 
 describe('exact search domain', () => {
   const file: ExactSearchFile = {
-    id: '/library/research\u0000notes/answer.md',
+    id: '/project/research\u0000notes/answer.md',
     matches: [
       {
         line: 7,
@@ -21,12 +21,12 @@ describe('exact search domain', () => {
         text: 'The answer keeps answer.',
       },
     ],
-    source: { folderPath: '/library/research', path: 'notes/answer.md' },
+    source: { folderPath: '/project/research', path: 'notes/answer.md' },
     totalMatches: 1,
   };
 
   it('keeps source identity folder-qualified inside one Folder', () => {
-    expect(exactSearchFileId(file.source)).toBe('/library/research\u0000notes/answer.md');
+    expect(exactSearchFileId(file.source)).toBe('/project/research\u0000notes/answer.md');
     const occurrences = exactSearchOccurrences(file);
     expect(occurrences).toHaveLength(2);
     const second = occurrences[1];
@@ -34,7 +34,7 @@ describe('exact search domain', () => {
     expect(
       exactSearchNavigationIntent(second, {
         caseSensitive: false,
-        folderPath: '/library/research',
+        folderPath: '/project/research',
         query: 'answer',
         wholeWord: false,
       }),

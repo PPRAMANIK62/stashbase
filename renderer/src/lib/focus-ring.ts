@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
  * The one focus indicator recipe.
  *
  * `--focus-ring` is declared in globals.css, so the literal fallback is not
- * needed to render — it is here so a primitive copied out of this library
+ * needed to render — it is here so a primitive copied out of this project
  * still draws a ring in a project that has not defined the token yet. That
  * fallback is the single documented exception to the "no raw hex outside the
  * token layer" rule.

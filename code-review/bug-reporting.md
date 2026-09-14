@@ -52,7 +52,11 @@ COLLECTING → REVIEWABLE → REVIEWING
   Agent transcripts, environment variables, configuration, or credentials.
 - Log collection reads at most the final `32 KiB`, drops a leading partial
   line, removes internal runtime-path diagnostics, redacts the exact home path
-  and recognized credentials, and independently scans the result.
+  (including a quoted standalone home) and recognized credentials, and
+  independently scans the result. An incomplete value on a recognized
+  sensitive field fails the scan, including a log captured mid-write.
+  A standalone home also ends at prose whitespace or punctuation. Quoted
+  longer directory names and spaced path continuations must remain distinct.
 - The original screenshot buffer, unredacted log, paths, handles, source
   window identity, environment, configuration, and raw collection records do
   not cross the review Interface.
@@ -74,6 +78,10 @@ COLLECTING → REVIEWABLE → REVIEWING
 - Safe log preview is the exact read-only sanitized text eligible for
   approval. Screenshot preview uses the exact retained PNG and supports fit,
   full-size, wheel, and pinch inspection without cropping or changing bytes.
+- Attachment responses update selection without replacing unsaved description
+  edits. Preparation locks the form before its final description save and
+  approves only after that save succeeds; failure restores the pending text
+  for editing and retry.
 - Previews are collapsed until requested and never alter inclusion. Approved
   presentation locks fields and removes deselected resources from the approved
   view; **Back** explicitly restores mutable review.
@@ -88,7 +96,9 @@ COLLECTING → REVIEWABLE → REVIEWING
 - Text is scanned again after final formatting and immediately before an
   atomic write. Failure exposes no partial sensitive artifact.
 - Retries for one approval are idempotent. One approval reuses one Downloads
-  folder; a fresh approval receives a new destination.
+  folder; a fresh approval receives a new destination. Concurrent destination
+  requests share allocation and copying; a failed copy releases that operation
+  so retry can repair the same folder.
 - GitHub URLs contain only the approved Problem, optional Steps to reproduce,
   and Environment sections. Artifact bytes, logs, internal identifiers, and
   filesystem paths never enter the URL.
@@ -104,9 +114,9 @@ COLLECTING → REVIEWABLE → REVIEWING
 | Draft Interface | `createBugReportService` and lifecycle state in `electron/bug-report-service.cjs` |
 | Collection Modules | `electron/bug-report-screenshot.cjs`, `electron/bug-report-diagnostics.cjs`, `electron/bug-report-log.cjs`, `electron/bug-report-redaction.cjs` |
 | Approval/handoff Module | `electron/bug-report-handoff.cjs` |
-| Review-window Adapters | `electron/bug-report-review-window.cjs`, `electron/bug-report-review-ipc.cjs`, `electron/bug-report-review-preload.cjs` |
-| Presentation Adapters | `renderer/src/app/bootstrap/bug-report-startup.tsx` over `renderer/bug-report.html`, with the review surface in `renderer/src/features/bug-report/` (`ui/review-window.tsx`, `hooks/use-review-session.ts`, `application/review-runtime.ts`, `infrastructure/review-bridge-adapter.ts`), and the native menu in `electron/main.cjs`. Explicit Vite development instead loads `electron/bug-report-review.html` and the static page beside it |
-| Focused evidence | `electron/bug-report-service.test.cjs`, `electron/bug-report-collection.test.cjs`, `electron/bug-report-redaction.test.cjs`, `electron/bug-report-handoff.test.cjs`, `electron/bug-report-review.test.cjs`, and the colocated review tests under `renderer/src/features/bug-report/` |
+| Review-window Adapters | `electron/bug-report-review-window.cjs`, `electron/bug-report/review-ipc.ts`, `electron/bug-report/review-preload.ts`, and `electron/bug-report/review-window-preload.ts` |
+| Presentation Adapters | `renderer/src/app/bootstrap/bug-report-startup.tsx` over `renderer/bug-report.html`, with the review surface in `renderer/src/features/bug-report/` (`ui/review-window.tsx`, `hooks/use-review-session.ts`, `application/review-runtime.ts`, `infrastructure/review-bridge-adapter.ts`), and the native menu in `electron/main.cjs`. Every launch opens that one page; Vite development differs only in the origin serving it |
+| Focused evidence | `electron/bug-report-service.test.cjs`, `electron/bug-report-collection.test.cjs`, `electron/bug-report-redaction.test.cjs`, `electron/bug-report-handoff.test.cjs`, `electron/bug-report-review.test.cjs`, `electron/bug-report/review-ipc.test.cjs`, `electron/bug-report/review-preload.test.cjs`, `electron/renderer/bug-report-smoke.cjs`, and the colocated review tests under `renderer/src/features/bug-report/` |
 
 ## Validation
 
@@ -118,7 +128,9 @@ pnpm test:electron
 ```
 
 Add `pnpm test:renderer` and `pnpm check:web` when the review surface or the
-workspace entry changes.
+workspace entry changes. Run `pnpm test:electron:smoke` for review or handoff
+changes: the isolated report smoke drives the review presentation against the
+real service, validated IPC, and local filesystem.
 Native packaged capture, review presentation, Downloads handoff, and browser
 opening remain the residual [J09 release check](../release-checklists/ui-sanity.md).
 

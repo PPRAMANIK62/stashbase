@@ -1,13 +1,13 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Stdio MCP server exposing the local library to Claude Desktop / Claude Code.
+ * Stdio MCP server exposing the local project to Claude Desktop / Claude Code.
  *
- * The tool surface and handlers live in `library-server.ts`, shared with the
+ * The tool surface and handlers live in `project-server.ts`, shared with the
  * Streamable HTTP transport mounted on the app server
  * (`server/routes/mcp-http.ts`); this entry only owns the stdio transport.
  *
  * Single execution path: every tool forwards over HTTP to the StashBase
- * app server on :8090 (`/api/library/*` endpoints, absolute member paths). In
+ * app server on :8090 (`/api/project/*` endpoints, absolute member paths). In
  * V1 this MCP host does not start StashBase itself; the desktop app must
  * already be running.
  *
@@ -26,7 +26,7 @@
 import './stdio-guard.ts';
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { createLibraryMcpServer } from './library-server.ts';
+import { createProjectMcpServer } from './project-server.ts';
 
 function parsePortArg(argv: string[], fallback: number): number {
   for (let i = 0; i < argv.length; i++) {
@@ -41,7 +41,7 @@ function parsePortArg(argv: string[], fallback: number): number {
 // make every web call fail with ECONNREFUSED.
 const WEB_BASE = `http://127.0.0.1:${parsePortArg(process.argv.slice(2), 8090)}`;
 
-const server = createLibraryMcpServer({
+const server = createProjectMcpServer({
   webBase: WEB_BASE,
   windowId: process.env.STASHBASE_WINDOW_ID,
   // Set only when a built-in panel session spawned this host: lets

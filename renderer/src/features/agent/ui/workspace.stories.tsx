@@ -231,6 +231,7 @@ function WorkspacePreview({
             instructions={storyInstructions}
             onOpenExternal={() => undefined}
             onOpenAgentSettings={() => undefined}
+            onSignIn={() => undefined}
             runtime={runtime}
             scopeOutline={{
               files: ['MISSION.md', 'NOTES.md', 'screenshot-tools.md'],

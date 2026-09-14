@@ -6,7 +6,20 @@ export const SEARCH_TYPE_CATEGORIES = ['notes', 'data', 'pdf', 'image', 'docx', 
 
 export type SearchTypeCategory = (typeof SEARCH_TYPE_CATEGORIES)[number];
 
+/** Stable HTTP/MCP vocabulary, also used by the renderer. These wire names
+ * describe user intent; server algorithms are grep and hybrid. */
 export const SEARCH_MODES = ['semantic', 'keyword'] as const;
+export type RetrievalMode = 'grep' | 'hybrid';
+
+export function toRetrievalMode(mode: SearchMode): RetrievalMode;
+export function toRetrievalMode(mode: SearchMode | undefined): RetrievalMode | undefined;
+export function toRetrievalMode(mode: SearchMode | undefined): RetrievalMode | undefined {
+  return mode === undefined ? undefined : mode === 'keyword' ? 'grep' : 'hybrid';
+}
+
+export function toSearchMode(mode: RetrievalMode): SearchMode {
+  return mode === 'grep' ? 'keyword' : 'semantic';
+}
 
 export type SearchMode = (typeof SEARCH_MODES)[number];
 
@@ -20,11 +33,10 @@ export const SEARCH_TYPES_VALIDATION_ERROR =
 export const SEARCH_MODE_VALIDATION_ERROR =
   `unknown search mode; mode must be one of: ${SEARCH_MODES.join(', ')}`;
 
-/** Applies the semantic default only when the transport omits `mode`.
- *  Malformed and unknown values stay distinguishable from omission so an
- *  adapter never turns a typo into an embedding-dependent search. */
-export function parseSearchMode(raw: unknown): SearchMode | null {
-  if (raw == null) return 'semantic';
+/** Omission lets the server select a strategy from current key configuration.
+ * Invalid input is null and must never become an automatic search. */
+export function parseSearchMode(raw: unknown): SearchMode | undefined | null {
+  if (raw == null) return undefined;
   const value = typeof raw === 'string' ? raw.trim() : raw;
   return typeof value === 'string' && (SEARCH_MODES as readonly string[]).includes(value)
     ? (value as SearchMode)

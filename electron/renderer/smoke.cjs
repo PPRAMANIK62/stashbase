@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, protocol, session } = require('electron');
 
@@ -18,10 +20,11 @@ const {
 } = require('../window-security.cjs');
 const { installRequestAuthorization } = require('./requests.cjs');
 
+const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-boundary-'));
 registerAppScheme(protocol);
 
 const repositoryRoot = path.resolve(__dirname, '../..');
-let libraryServer;
+let projectServer;
 const timeout = setTimeout(() => {
   console.error('replacement Electron boundary smoke timed out');
   app.exit(1);
@@ -30,9 +33,9 @@ const timeout = setTimeout(() => {
 app
   .whenReady()
   .then(async () => {
-    let receivedLibraryRequest = null;
-    let libraryMembers = [];
-    libraryServer = http.createServer((request, response) => {
+    let receivedProjectRequest = null;
+    let projectMembers = [];
+    projectServer = http.createServer((request, response) => {
       response.setHeader('Access-Control-Allow-Origin', APP_ORIGIN);
       response.setHeader('Access-Control-Allow-Headers', 'content-type');
       response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS, POST');
@@ -42,18 +45,18 @@ app
         return;
       }
       response.setHeader('Content-Type', 'application/json');
-      receivedLibraryRequest = {
+      receivedProjectRequest = {
         method: request.method,
         origin: request.headers.origin,
         windowId: request.headers['x-stashbase-window-id'],
       };
-      response.end(JSON.stringify({ current: null, homeDir: '/library', recent: libraryMembers }));
+      response.end(JSON.stringify({ current: null, homeDir: '/project', recent: projectMembers }));
     });
     await new Promise((resolve, reject) => {
-      libraryServer.once('error', reject);
-      libraryServer.listen(0, '127.0.0.1', resolve);
+      projectServer.once('error', reject);
+      projectServer.listen(0, '127.0.0.1', resolve);
     });
-    const address = libraryServer.address();
+    const address = projectServer.address();
     assert.ok(address && typeof address === 'object');
     const serverOrigin = `http://127.0.0.1:${address.port}`;
 
@@ -65,19 +68,16 @@ app
     });
 
     const boundary = require(
-      path.join(repositoryRoot, 'dist', 'electron', 'library', 'dialog.cjs'),
+      path.join(repositoryRoot, 'dist', 'electron', 'project', 'dialog.cjs'),
     );
     const externalNavigation = require(
       path.join(repositoryRoot, 'dist', 'electron', 'external-navigation', 'handler.cjs'),
     );
     const lifecycle = require(
-      path.join(repositoryRoot, 'dist', 'electron', 'library', 'lifecycle.cjs'),
+      path.join(repositoryRoot, 'dist', 'electron', 'project', 'lifecycle.cjs'),
     );
     const workspaceSession = require(
       path.join(repositoryRoot, 'dist', 'electron', 'workspace', 'session.cjs'),
-    );
-    const capture = require(
-      path.join(repositoryRoot, 'dist', 'electron', 'capture', 'monitor.cjs'),
     );
     const bugReportOpen = require(
       path.join(repositoryRoot, 'dist', 'electron', 'bug-report', 'open.cjs'),
@@ -88,6 +88,9 @@ app
     const updates = require(
       path.join(repositoryRoot, 'dist', 'electron', 'updates', 'ipc.cjs'),
     );
+    const windowLifecycle = require(
+      path.join(repositoryRoot, 'dist', 'electron', 'window', 'lifecycle.cjs'),
+    );
     const authorizedWindows = new Set();
     const openedExternalUrls = [];
     const activeFolders = new WeakMap();
@@ -95,13 +98,17 @@ app
       authorizedWindows.has(window) && !window.isDestroyed();
     const hasCapability = (window, capability) =>
       isLiveWindow(window) &&
-      (capability === boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY ||
+      (capability === boundary.PROJECT_FOLDER_DIALOG_CAPABILITY ||
         capability === externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY ||
-        capability === lifecycle.LIBRARY_LIFECYCLE_CAPABILITY ||
+        capability === lifecycle.PROJECT_LIFECYCLE_CAPABILITY ||
         capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY ||
         capability === bugReportOpen.BUG_REPORT_CAPABILITY ||
         capability === updates.UPDATES_CAPABILITY ||
-        capability === capture.CAPTURE_CAPABILITY);
+        capability === windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY);
+    const windowLifecycleService = windowLifecycle.registerWindowLifecycle({
+      BrowserWindow, ipcMain, expectedOrigins: new Set([APP_ORIGIN]),
+      isLiveWindow, hasCapability,
+    });
     const openedBugReviews = [];
     bugReportOpen.registerBugReportOpen({
       BrowserWindow,
@@ -166,26 +173,12 @@ app
           (window) => isLiveWindow(window) && activeFolders.get(window) === folder,
         ),
     });
-    capture.registerCaptureMonitor({
-      BrowserWindow,
-      clipboard: { readImage: () => ({ isEmpty: () => true }) },
-      ipcMain,
-      expectedOrigins: new Set([APP_ORIGIN]),
-      focusedWindow: () => BrowserWindow.getFocusedWindow(),
-      isLiveWindow,
-      hasCapability,
-      readPreference: async () => false,
-      shouldOffer: ({ enabled, focused, composerFocused }) =>
-        enabled === true && focused === true && composerFocused !== true,
-    });
-    // The state below carries four fields no window may ever see, so the
+    // The state below carries diagnostics and simulation controls, so the
     // asserted snapshot is also the proof that the projection strips them.
     const updateManagerState = {
       phase: 'idle',
       currentVersion: '0.0.0-test',
       autoCheckEnabled: true,
-      platform: 'test',
-      releaseUrl: 'https://example.com/releases',
       message: 'never shown',
       simulation: { enabled: false, value: 'off' },
     };
@@ -209,18 +202,16 @@ app
       setAutoCheck: async () => {},
       windows: () => authorizedWindows,
     });
-    let persistedWorkspaceSession = null;
+    const sessionFile = path.join(smokeRoot, 'workspace-session.json');
+    const sessionStore = workspaceSession.createWorkspaceSessionStore({ filePath: sessionFile });
     workspaceSession.registerWorkspaceSession({
       BrowserWindow,
       ipcMain,
       expectedOrigins: new Set([APP_ORIGIN]),
       isLiveWindow,
       hasCapability,
-      claimRestore: () => true,
-      store: {
-        read: async () => persistedWorkspaceSession,
-        write: async (snapshot) => { persistedWorkspaceSession = snapshot; },
-      },
+      claimRestore: (candidate) => candidate === window,
+      store: sessionStore,
     });
 
     const webPreferences = applicationWindowWebPreferences({
@@ -250,6 +241,7 @@ app
           : null,
     });
     authorizedWindows.add(window);
+    windowLifecycleService.attach(window);
     secureApplicationWindow(window, APP_ORIGIN);
     await window.loadURL(APP_URL);
 
@@ -272,17 +264,14 @@ app
       return {
         bugReportFrozen: Object.isFrozen(window.stashbase.bugReport),
         bugReportOpen: await window.stashbase.bugReport.open(),
-        captureFrozen: Object.isFrozen(window.stashbase.capture),
-        captureKeys: Object.keys(window.stashbase.capture).sort(),
-        captureWatch: await window.stashbase.capture.refreshWatch(),
         externalNavigation: await window.stashbase.externalNavigation.open('https://example.com/docs'),
         externalNavigationFrozen: Object.isFrozen(window.stashbase.externalNavigation),
-        folderResult: await window.stashbase.library.chooseFolder(),
+        folderResult: await window.stashbase.project.chooseFolder(),
         globalKeys: Object.keys(window.stashbase),
-        librarySnapshot: await fetch(
-          window.stashbase.runtime.serverOrigin + '/api/library/folders/open',
+        projectRegistrySnapshot: await fetch(
+          window.stashbase.runtime.serverOrigin + '/api/projects/open',
           {
-            body: JSON.stringify({ path: '/library/notes' }),
+            body: JSON.stringify({ path: '/project/notes' }),
             headers: { 'content-type': 'application/json' },
             method: 'POST',
           },
@@ -302,7 +291,7 @@ app
           document.querySelector('[data-slot="sidebar-inset"]'),
         ).marginLeft,
         url: location.href,
-        libraryKeys: Object.keys(window.stashbase.library).sort(),
+        projectKeys: Object.keys(window.stashbase.project).sort(),
         workspaceSession: await window.stashbase.workspaceSession.read(),
         workspaceSessionFrozen: Object.isFrozen(window.stashbase.workspaceSession),
         windowLifecycleFrozen: Object.isFrozen(window.stashbase.windowLifecycle),
@@ -317,24 +306,14 @@ app
     assert.deepEqual(result, {
       bugReportFrozen: true,
       bugReportOpen: { ok: true },
-      captureFrozen: true,
-      captureKeys: [
-        'markCurrentImageHandled',
-        'markHandled',
-        'onImageAvailable',
-        'refreshWatch',
-        'setComposerFocused',
-      ],
-      captureWatch: false,
       externalNavigation: { ok: true },
       externalNavigationFrozen: true,
       folderResult: { ok: true, folderPath: null },
       globalKeys: [
         'bugReport',
-        'capture',
         'externalNavigation',
         'runtime',
-        'library',
+        'project',
         'workspaceSession',
         'windowLifecycle',
         'updates',
@@ -342,7 +321,7 @@ app
       nodeGlobal: 'undefined',
       popupDenied: true,
       preloadFrozen: true,
-      librarySnapshot: { current: null, homeDir: '/library', recent: [] },
+      projectRegistrySnapshot: { current: null, homeDir: '/project', recent: [] },
       runtime: { serverOrigin },
       runtimeFrozen: true,
       inlineScriptDenied: true,
@@ -352,7 +331,7 @@ app
       // and the collapsed rail leaves the inset its 8px margin.
       workspaceMarginLeft: '8px',
       url: APP_URL,
-      libraryKeys: [
+      projectKeys: [
         'chooseFolder',
         'claimInitialFolder',
         'notifyFolderRemoved',
@@ -365,7 +344,7 @@ app
       workspaceSession: { ok: true, session: null },
       workspaceSessionFrozen: true,
       windowLifecycleFrozen: true,
-      windowLifecycleKeys: ['onPrepareContextRelease', 'reload'],
+      windowLifecycleKeys: ['onPrepareContextRelease'],
       updatesFrozen: true,
       updatesKeys: [
         'check',
@@ -383,18 +362,18 @@ app
     });
     assert.deepEqual(openedExternalUrls, ['https://example.com/docs']);
     assert.deepEqual(openedBugReviews, [window]);
-    assert.deepEqual(receivedLibraryRequest, {
+    assert.deepEqual(receivedProjectRequest, {
       method: 'POST',
       origin: APP_ORIGIN,
       windowId: 'replacement-smoke-window',
     });
     assert.equal(activeFolders.get(window), null);
 
-    libraryMembers = [
+    projectMembers = [
       {
         favorite: false,
         openedAt: '2026-09-01T00:00:00.000Z',
-        path: '/library/engineering-blogs',
+        path: '/project/engineering-blogs',
       },
     ];
     const didReload = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
@@ -405,7 +384,7 @@ app
         const deadline = Date.now() + 5000;
         let row;
         while (!row && Date.now() < deadline) {
-          row = document.querySelector('button[title="/library/engineering-blogs"]');
+          row = document.querySelector('button[title="/project/engineering-blogs"]');
           if (!row) await new Promise((resolve) => setTimeout(resolve, 25));
         }
         return row ? getComputedStyle(row).cursor : null;
@@ -413,6 +392,62 @@ app
     `);
     assert.equal(folderCursor, 'pointer');
     assert.equal(activeFolders.get(window), null);
+
+    // Two real renderers keep local state, but one window's welcome-screen
+    // layout write must not erase another folder's durable tab record.
+    const savedSession = {
+      version: 1, activeFolderPath: null,
+      folders: [{
+        folderPath: '/project/engineering-blogs', expandedPaths: ['drafts'],
+        selectedPath: 'note.md', activeTabId: 'note', tabs: [{ id: 'note', path: 'note.md' }],
+      }],
+      shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 288 },
+    };
+    assert.deepEqual(await window.webContents.executeJavaScript(
+      `window.stashbase.workspaceSession.write(${JSON.stringify(savedSession)})`,
+    ), { ok: true });
+    const peer = new BrowserWindow({ show: false, webPreferences });
+    authorizedWindows.add(peer);
+    windowLifecycleService.attach(peer);
+    installRequestAuthorization({
+      rendererOrigins: new Set([APP_ORIGIN]), serverOrigin, session: session.defaultSession,
+      windowRegistrationForWebContentsId: (id) => {
+        const candidate = [...authorizedWindows].find((item) => item.webContents.id === id);
+        return candidate ? { windowId: String(id), window: candidate } : null;
+      },
+    });
+    secureApplicationWindow(peer, APP_ORIGIN);
+    await peer.loadURL(APP_URL);
+    await peer.webContents.executeJavaScript(`(async () => {
+      const deadline = Date.now() + 5000;
+      while (document.body.dataset.bootSettled !== '1' && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      const toggle = document.querySelector('button[aria-label="Show files sidebar"]');
+      if (!toggle) throw new Error('new window did not reach Welcome');
+      toggle.click();
+      while (Date.now() < deadline) {
+        const response = await window.stashbase.workspaceSession.read();
+        if (response.session?.shell.sidebarOpen === true) return;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error('sidebar change was not persisted');
+    })()`);
+    const reopenedStore = workspaceSession.createWorkspaceSessionStore({ filePath: sessionFile });
+    assert.deepEqual((await reopenedStore.read()).folders, savedSession.folders);
+    assert.deepEqual((await window.webContents.executeJavaScript(
+      'window.stashbase.workspaceSession.read()',
+    )).session, savedSession);
+    assert.deepEqual((await peer.webContents.executeJavaScript(
+      'window.stashbase.workspaceSession.read()',
+    )).session.folders, []);
+    const { runUpdateInstallSmoke } = require('./update-install-smoke.cjs');
+    await runUpdateInstallSmoke({
+      windows: [window, peer], lifecycle: windowLifecycleService, isLiveWindow,
+    });
+    authorizedWindows.delete(peer);
+    peer.destroy();
+    console.log('real two-window session persistence smoke passed');
 
     const reviewWindow = new BrowserWindow({
       show: false,
@@ -466,16 +501,19 @@ app
     console.log('replacement Electron boundary smoke passed');
     clearTimeout(timeout);
     window.destroy();
-    libraryServer.closeAllConnections();
-    await new Promise((resolve) => libraryServer.close(resolve));
+    projectServer.closeAllConnections();
+    await new Promise((resolve) => projectServer.close(resolve));
+    fs.rmSync(smokeRoot, { recursive: true, force: true });
     app.quit();
   })
   .catch((error) => {
     console.error(error);
     clearTimeout(timeout);
-    if (libraryServer?.listening) {
-      libraryServer.closeAllConnections();
-      libraryServer.close();
+    if (projectServer?.listening) {
+      projectServer.closeAllConnections();
+      projectServer.close();
     }
+    for (const window of BrowserWindow.getAllWindows()) window.destroy();
+    fs.rmSync(smokeRoot, { recursive: true, force: true });
     app.exit(1);
   });

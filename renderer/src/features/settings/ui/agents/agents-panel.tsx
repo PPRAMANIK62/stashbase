@@ -4,9 +4,9 @@
  *
  * Sign-in lives here because the account exists for OpenQuill. A runtime row
  * that reports it needs an account starts the same browser sign-in the account
- * row does, so the two can never disagree about what signing in means.
+ * row does, so the two can never disagree about what signing in means. One
+ * command, one button: both wear the row idiom every action here wears.
  */
-import { LogIn, LogOut } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import { useAgentRuntimes } from '@/features/settings/hooks/use-agent-runtimes';
 import {
   SettingsGroup,
   SettingsList,
+  SettingsMessage,
   SettingsPane,
   SettingsRow,
 } from '@/features/settings/ui/rows';
@@ -46,14 +47,13 @@ function AccountRow({ account }: { account: AccountViewModel }) {
             ? [account.account.displayName, account.account.email]
                 .filter((part): part is string => part !== null)
                 .join(' · ') || accountLabel(account.account)
-            : 'Sign in to use OpenQuill with free credits. Codex and Claude Code need no account.'
+            : 'Sign in for free OpenQuill credits.'
       }
       title="StashBase account"
       trail={
         signedIn ? (
           <Button
             disabled={account.busy}
-            leadingIcon={LogOut}
             onClick={() => account.signOut()}
             size="compact"
             variant="ghost"
@@ -61,16 +61,22 @@ function AccountRow({ account }: { account: AccountViewModel }) {
             Sign out
           </Button>
         ) : (
-          <Button
-            disabled={account.busy || account.account === null}
-            leadingIcon={LogIn}
-            loading={account.signInPending}
-            onClick={() => account.signIn()}
-            size="compact"
-            variant="secondary"
-          >
-            {account.signInPending ? 'Waiting for browser…' : 'Sign in'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              disabled={account.busy || account.account === null}
+              loading={account.signInPending}
+              onClick={() => account.signIn()}
+              size="compact"
+              variant="tertiary"
+            >
+              {account.signInPending ? 'Waiting for browser…' : 'Sign in'}
+            </Button>
+            {account.canStopWaiting && (
+              <Button onClick={account.stopWaiting} size="compact" variant="ghost">
+                Stop waiting
+              </Button>
+            )}
+          </div>
         )
       }
     >
@@ -104,7 +110,7 @@ export function AgentRuntimesPanel({
 
   return (
     <SettingsPane
-      lede="OpenQuill is included and runs on free credits from your StashBase account. Codex and Claude Code remain available as bring-your-own runtimes."
+      lede="Use OpenQuill with free StashBase credits, or connect Codex and Claude Code with their own sign-ins."
       title="Agents"
     >
       <SettingsGroup title="Account">
@@ -119,37 +125,24 @@ export function AgentRuntimesPanel({
             {allowance.allowance ? (
               <AllowanceRow allowance={allowance.allowance} onRefresh={runtimes.refreshAllowance} />
             ) : (
-              <SettingsRow
-                title={
-                  <span className="font-normal text-muted-foreground">
-                    Credits are temporarily unavailable.
-                  </span>
-                }
-                trail={
-                  <Button onClick={runtimes.refreshAllowance} size="compact" variant="ghost">
-                    Retry
-                  </Button>
-                }
+              <SettingsMessage
+                message="Could not load your credit balance."
+                onRetry={runtimes.refreshAllowance}
               />
             )}
           </SettingsList>
         </SettingsGroup>
       )}
 
-      <SettingsGroup title="Runtimes">
+      <SettingsGroup title="Chat agents">
         <SettingsList as="ul">
-          {catalog.loading && (
-            <li className="px-3.5 py-2.5 text-caption text-muted-foreground">
-              Checking agent runtimes…
-            </li>
-          )}
+          {catalog.loading && <SettingsMessage as="li" message="Checking agents…" />}
           {catalog.failed && (
-            <li className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-caption text-muted-foreground">
-              <span>Agent runtimes are unavailable.</span>
-              <Button onClick={runtimes.refreshCatalog} size="compact" variant="ghost">
-                Retry
-              </Button>
-            </li>
+            <SettingsMessage
+              as="li"
+              message="Could not load agents."
+              onRetry={runtimes.refreshCatalog}
+            />
           )}
           {catalog.runtimes.map((runtime) => (
             <RuntimeRow

@@ -5,10 +5,10 @@
  * permission prompts), so the renderer can paint a VSCode-style chat
  * panel instead of a terminal. One session per chat tab. Every session
  * is pinned to an explicit scope at connect time — a member folder (its
- * cwd) or the whole library (cwd = the folder home) — so a window-folder
+ * cwd) or the unbound conversation (cwd = the folder home) — so a window-folder
  * switch leaves it running. The one deliberate scope transition is an
- * attributed Library Chat creating a project; its next native prompt resumes
- * from that project cwd. Teardown happens on window close, library folder
+ * attributed unbound Chat creating a project; its next native prompt resumes
+ * from that project cwd. Teardown happens on window close, project folder
  * removal (folder-bound sessions only), and app quit.
  *
  * Auth: the SDK reads the same credential store the user's `claude`
@@ -55,7 +55,7 @@ import {
   type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk';
 import { logger, errorMessage } from './log.ts';
-import { getCurrentFolder, getFolderHome, memberRootForAbs, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, getFolderHome, registeredRootForAbs, runWithWindowId } from './folder.ts';
 import { resolveAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeFolderTrust } from './agent-rules.ts';
@@ -76,7 +76,7 @@ import {
 } from './agent-runtime-paths.ts';
 import { agentTurnErrorEvent } from './agent-turn-failure.ts';
 import { detectViewerFormat } from './format.ts';
-import { isAgentReadableDerivedTextReady } from './library-file-reader.ts';
+import { currentPreparedTextPathAsync } from './conversion-dispatch.ts';
 
 type ClaudeSkillCommand = { name: string; description: string; argumentHint: string };
 type ClaudeResultMessage = Extract<SDKMessage, { type: 'result' }>;
@@ -165,16 +165,17 @@ function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
   });
 }
 
-/** Tools we run without prompting — reads, searches, listings. Anything
- *  that writes (Edit / Write / Bash / MCP mutations) falls through to a
- *  permission prompt so the user sees a diff and approves. Keeping the
- *  prompt set small is what makes the panel pleasant instead of a
- *  click-through wall. */
+// Only known reads, discovery, and app-owned reindex work bypass the callback's
+// approval round trip. New or renamed tools must never become implicitly safe.
+const LOW_RISK_TOOLS = new Set([
+  'Read', 'Glob', 'Grep', 'LS', 'ToolSearch',
+  'ListMcpResourcesTool', 'ReadMcpResourceTool',
+  ...['list_projects', 'list_directory', 'read_file', 'search_project', 'reindex']
+    .map((name) => `mcp__stashbase__${name}`),
+]);
+
 function needsPrompt(name: string): boolean {
-  if (['Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(name)) return true;
-  // MCP mutations: mcp__stashbase__write_file / delete_file / rename_file / …
-  if (/^mcp__/.test(name) && /(write|delete|rename|update|set_|create)/i.test(name)) return true;
-  return false;
+  return !LOW_RISK_TOOLS.has(name);
 }
 
 type AgentReadableDerivedFormat = 'pdf' | 'docx' | 'audio';
@@ -197,21 +198,21 @@ function nativeReadPath(input: Record<string, unknown>, cwd: string): string | n
   }
 }
 
-function nativeDerivedReadRedirect(
+async function nativeDerivedReadRedirect(
   name: string,
   input: Record<string, unknown>,
   cwd: string,
   alreadyRedirected: Set<string>,
-): PermissionResult | null {
+): Promise<PermissionResult | null> {
   if (name !== 'Read') return null;
   const abs = nativeReadPath(input, cwd);
   if (!abs) return null;
-  const folderRoot = memberRootForAbs(abs);
+  const folderRoot = registeredRootForAbs(abs);
   if (!folderRoot) return null;
   const rel = filesystemPath.relative(folderRoot, abs);
   if (!rel) return null;
   const sourceFormat = agentReadableDerivedFormat(detectViewerFormat(rel));
-  if (!sourceFormat || !isAgentReadableDerivedTextReady(abs, sourceFormat)) return null;
+  if (!sourceFormat || !await currentPreparedTextPathAsync(abs)) return null;
   const key = filesystemPath.identity(abs);
   if (alreadyRedirected.has(key)) return null;
   alreadyRedirected.add(key);
@@ -281,17 +282,16 @@ export class AgentSession implements AttributedAgentSession {
   private sessionId: string | null = null;
   /** The folder this session is bound to, captured at start. */
   private cwd: string | null = null;
-  /** True for a library-wide session: cwd is the folder home and the
+  /** True for an unbound session: cwd is the folder home and the
    *  session is NOT bound to any member folder — member-folder removal
    *  never tears it down (window close / app quit still do). */
-  private libraryScoped = false;
-  /** Member folder this LIBRARY session was migrated to by `create_project`.
+  private unbound = false;
+  /** Member folder this unbound session was migrated to by `create_project`.
    *  The next prompt resumes the same native session from this cwd; binding,
    *  teardown scope, and history move immediately. */
   private rebound: string | null = null;
   private models: AgentModel[] = [];
   private skills = new Set<string>();
-  private similaritySearch = true;
   private pumpTask: Promise<void> | null = null;
   private nativeMigrationTask: Promise<void> | null = null;
   private retirementTask: Promise<void> | null = null;
@@ -308,11 +308,11 @@ export class AgentSession implements AttributedAgentSession {
     private resolveBinary: () => string | null = resolveClaudeBinary,
     private resumeBelongsToFolder: typeof resumeMatchesCwd = resumeMatchesCwd,
     /** Explicit, membership-validated session folder. Undefined with no
-     *  library scope follows the window's current folder at connect time
-     *  (legacy clients), else the library. */
+     *  unbound scope follows the window's current folder at connect time
+     *  (legacy clients), else an unbound conversation. */
     private folder?: string,
-    /** Explicit library-wide scope (`scope=library` on the connect URL). */
-    private scope?: 'library',
+    /** Explicit unbound scope (`scope=unbound` on the connect URL). */
+    private scope?: 'unbound',
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
     registerAttributedAgentSession(this.attributionId, this);
@@ -330,12 +330,12 @@ export class AgentSession implements AttributedAgentSession {
 
   /** The member folder this session is (or will be) bound to. `cwd` is the
    *  authoritative binding once the session started; before that, the
-   *  explicit connect-time folder is the best answer. A library-scoped
+   *  explicit connect-time folder is the best answer. An unbound
    *  session is bound to no member folder and reports null — unless
    *  `create_project` rebound it to the new project. */
   boundFolder(): string | null {
     if (this.rebound) return this.rebound;
-    if (this.libraryScoped || this.scope === 'library') return null;
+    if (this.unbound || this.scope === 'unbound') return null;
     return this.cwd ?? this.folder ?? null;
   }
 
@@ -343,23 +343,20 @@ export class AgentSession implements AttributedAgentSession {
     return this.turnActive;
   }
 
-  isLibraryScoped(): boolean {
-    return !this.rebound && (this.libraryScoped || this.scope === 'library');
+  isUnbound(): boolean {
+    return !this.rebound && (this.unbound || this.scope === 'unbound');
   }
 
   nativeSessionId(): string | null {
     return this.sessionId;
   }
 
-  similaritySearchEnabled(): boolean {
-    return this.similaritySearch;
-  }
 
-  /** Migrate this LIBRARY-scoped session to a member folder (create_project).
-   *  The current turn finishes in the library process; the next prompt
+  /** Migrate this unbound session to a member folder (create_project).
+   *  The current turn finishes in the original process; the next prompt
    *  resumes the same native session from the project cwd. */
   rebindToFolder(folderAbs: string): boolean {
-    if (this.closed || !this.isLibraryScoped()) return false;
+    if (this.closed || !this.isUnbound()) return false;
     this.rebound = folderAbs;
     this.send({ t: 'scope-changed', scope: { kind: 'folder', path: folderAbs } });
     return true;
@@ -376,8 +373,8 @@ export class AgentSession implements AttributedAgentSession {
 
   private async start(beforeNativeStart?: () => Promise<boolean>): Promise<void> {
     if (this.closed) return;
-    // An explicit folder pins the session; an explicit library scope (or
-    // no folder anywhere) binds the folder home as the reserved library
+    // An explicit folder pins the session; an explicit unbound scope (or
+    // no folder anywhere) binds the folder home as the historical unbound
     // cwd. Ordinary window navigation never changes it; an attributed
     // create_project transition is the one deliberate exception.
     const binding = resolveSessionBinding({
@@ -387,7 +384,7 @@ export class AgentSession implements AttributedAgentSession {
       folderHome: getFolderHome(),
     });
     const cwd = binding.cwd;
-    this.libraryScoped = binding.libraryScoped;
+    this.unbound = binding.unbound;
     this.cwd = cwd;
     if (this.closed) return;
     if (this.resume && !(await this.resumeBelongsToFolder(this.resume, cwd))) {
@@ -406,9 +403,9 @@ export class AgentSession implements AttributedAgentSession {
       if (!mayStart || this.closed) return;
       // Legacy clients inherit the window folder at connect time, so a
       // folder switch during ownership handoff invalidates that start.
-      // Explicit folder/library scopes are pinned independently of later
+      // Explicit folder/unbound scopes are pinned independently of later
       // window navigation and must survive it.
-      if (!this.folder && this.scope !== 'library') {
+      if (!this.folder && this.scope !== 'unbound') {
         const activeFolder = getCurrentFolder();
         if (!activeFolder || !filesystemPath.equal(activeFolder, cwd)) {
           this.finish('The folder changed before the session started.');
@@ -421,12 +418,12 @@ export class AgentSession implements AttributedAgentSession {
       this.finish(missingClaudeMessage());
       return;
     }
-    // Pre-accept Claude's folder-trust gate for the session cwd (library
+    // Pre-accept Claude's folder-trust gate for the session cwd (project
     // sessions run in the folder home — same gate). Without this a NEW
     // folder's headless session hangs at "working" with no visible prompt.
     ensureClaudeFolderTrust(cwd);
     try {
-      this.q = this.createNativeQuery(cwd, this.resume, this.libraryScoped ? 'library' : 'folder', claudeCodeExecutable);
+      this.q = this.createNativeQuery(cwd, this.resume, this.unbound ? 'unbound' : 'folder', claudeCodeExecutable);
     } catch (err: unknown) {
       reportAgentRuntimeFailure('claude', err);
       this.finish(errorMessage(err));
@@ -445,7 +442,7 @@ export class AgentSession implements AttributedAgentSession {
   private createNativeQuery(
     cwd: string,
     resume: string | undefined,
-    scope: 'library' | 'folder',
+    scope: 'unbound' | 'folder',
     claudeCodeExecutable: string,
   ): Query {
     return this.queryFactory({
@@ -457,12 +454,12 @@ export class AgentSession implements AttributedAgentSession {
           // Later changes still use the SDK's live setPermissionMode API.
           permissionMode: this.access,
           // Preserve Claude Code's native preset, then append the resolved
-          // user-visible Agent Instructions plus StashBase's internal library
+          // user-visible Agent Instructions plus StashBase's internal project
           // routing policy. The policy is never stored in the editable text.
           systemPrompt: {
             type: 'preset',
             preset: 'claude_code',
-            append: resolveAgentRuntimeInstructions(scope === 'library' ? null : cwd),
+            append: resolveAgentRuntimeInstructions(scope === 'unbound' ? null : cwd),
           },
           // Resuming a past session loads its conversation history so the
           // user can continue it. The transcript itself is rendered from
@@ -480,7 +477,7 @@ export class AgentSession implements AttributedAgentSession {
           pathToClaudeCodeExecutable: claudeCodeExecutable,
           // Load the user's global config + the folder's project/local
           // settings so the panel sees the same CLAUDE.md, skills, and
-          // MCP servers the terminal Claude does (incl. StashBase's library
+          // MCP servers the terminal Claude does (incl. StashBase's project
           // MCP wired into ~/.claude.json). Without this the SDK runs
           // bare — no project context, no MCP.
           settingSources: ['user', 'project', 'local'],
@@ -695,7 +692,7 @@ export class AgentSession implements AttributedAgentSession {
 
   /** SDK permission callback. Auto-allow reads; round-trip writes/exec to
    *  the client and await the user's approve/reject. */
-  private onPermission(
+  private async onPermission(
     name: string,
     input: Record<string, unknown>,
     opts: { signal: AbortSignal; suggestions?: PermissionUpdate[]; toolUseID: string; title?: string },
@@ -704,11 +701,12 @@ export class AgentSession implements AttributedAgentSession {
     // current folder — the redirect must reflect the cwd the agent runs in.
     const cwd = this.cwd ?? getCurrentFolder();
     if (cwd) {
-      const redirect = nativeDerivedReadRedirect(name, input, cwd, this.nativeDerivedReadRedirected);
-      if (redirect) return Promise.resolve(redirect);
+      const redirect = await nativeDerivedReadRedirect(name, input, cwd, this.nativeDerivedReadRedirected);
+      if (redirect) return redirect;
     }
+    if (opts.signal.aborted || this.closed) return { behavior: 'deny', message: 'Interrupted.' };
     if (!needsPrompt(name)) {
-      return Promise.resolve({ behavior: 'allow', updatedInput: input });
+      return { behavior: 'allow', updatedInput: input };
     }
     return new Promise<PermissionResult>((resolve) => {
       const id = randomUUID();
@@ -763,7 +761,7 @@ export class AgentSession implements AttributedAgentSession {
       const nextQuery = this.createNativeQuery(target, resume, 'folder', claudeCodeExecutable);
       this.q = nextQuery;
       this.cwd = target;
-      this.libraryScoped = false;
+      this.unbound = false;
       await this.publishSkills();
       if (this.closed || this.q !== nextQuery) return;
       this.pumpTask = this.pump(nextQuery);
@@ -862,10 +860,6 @@ export class AgentSession implements AttributedAgentSession {
               ...(requested ? { activeModel: requested } : {}),
             });
           });
-        break;
-      }
-      case 'set-similarity-search': {
-        if (typeof msg.enabled === 'boolean') this.similaritySearch = msg.enabled;
         break;
       }
       case 'interrupt': {
@@ -977,7 +971,7 @@ export class AgentSession implements AttributedAgentSession {
 }
 
 export async function resumeMatchesCwd(sessionId: string, cwd: string): Promise<boolean> {
-  // A library session migrated to a project by create_project keeps its
+  // A project session migrated to a project by create_project keeps its
   // native cwd (the folder home) while its history lists under the project
   // (the persisted override). Resuming it from that project's History must
   // therefore accept the override folder as a match.
@@ -1091,7 +1085,7 @@ export function attachAgentWebSocket(
   access?: AgentAccessMode,
   model?: string,
   folder?: string,
-  scope?: 'library',
+  scope?: 'unbound',
 ): void {
   const session = new AgentSession(
     ws,
@@ -1128,7 +1122,7 @@ export function killActiveAgent(windowId?: string): void {
 }
 
 /** Kill the live agent sessions bound to one member folder, across all
- *  windows. Library folder removal calls this so a removed folder cannot
+ *  windows. Project removal calls this so a removed folder cannot
  *  keep running sessions. */
 export function killAgentSessionsForFolder(folderAbs: string): void {
   disposeSessionsBoundToFolder(sessions, folderAbs);

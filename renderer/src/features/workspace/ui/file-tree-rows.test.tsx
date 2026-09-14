@@ -128,7 +128,7 @@ describe('file tree row model', () => {
     expect(entryOf(rowFor('docs'))).toEqual({ kind: 'folder', path: 'docs' });
   });
 
-  it('calls an entry restricted only when the library cannot read through it', () => {
+  it('calls an entry restricted only when the project cannot read through it', () => {
     expect(rowIsRestricted(rowFor('vendor'))).toBe(true);
     expect(rowIsRestricted(rowFor('linked-file'))).toBe(true);
     expect(rowIsRestricted(rowFor('docs'))).toBe(false);

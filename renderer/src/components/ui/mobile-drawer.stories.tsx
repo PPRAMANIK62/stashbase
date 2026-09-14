@@ -16,7 +16,7 @@ function DrawerExample() {
         <p className="mb-4 px-3 text-sm font-semibold">StashBase</p>
         <nav aria-label="Project navigation" className="flex flex-col gap-1">
           <Button className="w-full justify-start" leadingIcon={SquareLibrary} variant="ghost">
-            Library
+            Projects
           </Button>
           <Button className="w-full justify-start" leadingIcon={Folder} variant="ghost">
             Projects
@@ -53,7 +53,7 @@ export const Open: Story = {
       <p className="mb-4 px-3 text-sm font-semibold">StashBase</p>
       <nav aria-label="Project navigation" className="flex flex-col gap-1">
         <Button className="w-full justify-start" leadingIcon={SquareLibrary} variant="ghost">
-          Library
+          Projects
         </Button>
         <Button className="w-full justify-start" leadingIcon={Folder} variant="ghost">
           Projects

@@ -1,12 +1,8 @@
 'use strict';
 
-const path = require('node:path');
-const crypto = require('node:crypto');
 // Shared JSON keeps native and renderer surfaces on one external-link source;
 // this file runs unbuilt and cannot require a .ts module.
 const LINKS = require('../shared/links.json');
-
-const WINDOW_ID_ARG_PREFIX = '--stashbase-window-id=';
 
 function buildElectronSmokeArgs(platform, script, port) {
   const appArgs = [script, `--port=${port}`];
@@ -14,14 +10,6 @@ function buildElectronSmokeArgs(platform, script, port) {
   // helper as root with mode 4755. This affects only the isolated source
   // smoke under Xvfb; production Electron launches retain their sandbox.
   return platform === 'linux' ? ['--no-sandbox', ...appArgs] : appArgs;
-}
-
-function windowIdFromArgv(argv) {
-  const arg = Array.isArray(argv)
-    ? argv.find((value) => typeof value === 'string' && value.startsWith(WINDOW_ID_ARG_PREFIX))
-    : undefined;
-  const id = typeof arg === 'string' ? arg.slice(WINDOW_ID_ARG_PREFIX.length).trim() : '';
-  return id ? id.slice(0, 128) : null;
 }
 
 function applicationWindowChromeOptions(platform = process.platform) {
@@ -151,8 +139,8 @@ function windowLifecycleShortcutAction(input, platform = process.platform) {
   const shiftedPrimary = primary && input.shift === true && input.alt !== true;
 
   // Electron's stock View menu and Chromium both expose reload chords. A
-  // reload tears down the renderer, so it may only happen through the awaited
-  // main-process save barrier used by the recovery UI.
+  // reload tears down the renderer and its live edits. Recovery currently
+  // remounts the React subtree; no native reload capability is exposed.
   const windowsReloadKey = platform !== 'darwin'
     && key === 'f5'
     && input.alt !== true
@@ -174,32 +162,44 @@ function windowLifecycleShortcutAction(input, platform = process.platform) {
   return null;
 }
 
-function shouldQuitAfterLastWindow(platform) {
-  return platform !== 'darwin';
-}
-
-function folderKey(folder, platform) {
-  if (typeof folder !== 'string' || !folder.trim()) return null;
-  const raw = folder.trim();
-  const normalized = platform === 'win32'
-    ? path.win32.resolve(raw.replaceAll('/', '\\')).toLowerCase()
-    : path.resolve(raw);
-  return normalized;
+function shouldQuitAfterLastWindow(platform, quitRequested = false) {
+  return quitRequested || platform !== 'darwin';
 }
 
 function createWindowRegistry({ platform = process.platform } = {}) {
+  const { createFilesystemPath } = require('../dist/electron/project/filesystem-path.cjs');
+  const paths = createFilesystemPath({
+    platform: platform === 'win32' || platform === 'darwin' ? platform : 'posix',
+  });
+  const folderPath = (folder) => typeof folder === 'string' && folder.trim()
+    ? paths.absolute(folder) : null;
   const records = new Map();
+
+  async function matchingWindows(folder, excludeWindowId = null) {
+    const wanted = folderPath(folder);
+    if (!wanted) return [];
+    const matches = [];
+    for (const [windowId, record] of [...records]) {
+      const candidate = record.folder;
+      if (windowId === excludeWindowId || !candidate) continue;
+      const matchesFolder = await paths.equalAsync(candidate, wanted);
+      if (matchesFolder) matches.push({ windowId, record, folder: candidate });
+    }
+    // Recheck every result after all probes: a later probe may yield long
+    // enough for an earlier matching window to close or switch folders.
+    return matches
+      .filter(({ windowId, record, folder }) => records.get(windowId) === record && record.folder === folder)
+      .map(({ record }) => record.win);
+  }
 
   return {
     add(windowId, win, folder = null) {
-      const raw = typeof folder === 'string' ? folder.trim() : '';
+      const raw = typeof folder === 'string' && folder.trim() ? folder : '';
       records.set(windowId, {
         win,
-        folderKey: folderKey(folder, platform),
-        // The spelling this window was created for, kept exactly as the caller
-        // wrote it. `folderKey` is for matching and lowercases on Windows;
-        // handing that to the renderer would reopen the folder under a rewritten
-        // name, which is the one thing an equivalent spelling may never do.
+        folder: folderPath(folder),
+        // A comparison identity never replaces the source spelling handed to
+        // the renderer when it claims the initial folder.
         initialFolder: raw || null,
       });
     },
@@ -236,24 +236,14 @@ function createWindowRegistry({ platform = process.platform } = {}) {
     setFolder(windowId, folder) {
       const record = records.get(windowId);
       if (!record) return false;
-      record.folderKey = folderKey(folder, platform);
+      record.folder = folderPath(folder);
       return true;
     },
-    findByFolder(folder, { excludeWindowId = null } = {}) {
-      const wanted = folderKey(folder, platform);
-      if (!wanted) return null;
-      for (const [windowId, record] of records) {
-        if (windowId === excludeWindowId) continue;
-        if (record.folderKey === wanted) return record.win;
-      }
-      return null;
+    async findByFolder(folder, { excludeWindowId = null } = {}) {
+      return (await matchingWindows(folder, excludeWindowId))[0] ?? null;
     },
     windowsByFolder(folder) {
-      const wanted = folderKey(folder, platform);
-      if (!wanted) return [];
-      return [...records.values()]
-        .filter((record) => record.folderKey === wanted)
-        .map((record) => record.win);
+      return matchingWindows(folder);
     },
   };
 }
@@ -302,7 +292,7 @@ async function openOrFocusFolder({
   createWindow,
 }) {
   const senderId = registry.idForWindow(senderWindow);
-  const existing = registry.findByFolder(folder, { excludeWindowId: senderId });
+  const existing = await registry.findByFolder(folder, { excludeWindowId: senderId });
   if (focusWindow(existing)) return { ok: true, action: 'focused', win: existing };
   const created = await createWindow(folder);
   return { ok: Boolean(created), action: created ? 'opened' : 'failed', win: created ?? null };
@@ -348,163 +338,14 @@ function createSingleFlight(factory) {
       );
       return current;
     },
-    isRunning() {
-      return pending !== null;
-    },
-  };
-}
-
-function createRendererFlushCoordinator({
-  createRequestId = () => crypto.randomUUID(),
-  timeoutMs = 5000,
-} = {}) {
-  const pendingByWebContents = new Map();
-
-  function settle(webContentsId, ok) {
-    const pending = pendingByWebContents.get(webContentsId);
-    if (!pending) return false;
-    pendingByWebContents.delete(webContentsId);
-    clearTimeout(pending.timer);
-    pending.resolve(ok === true);
-    return true;
-  }
-
-  return {
-    request(win, reason) {
-      if (!win || win.isDestroyed?.() || win.webContents?.isDestroyed?.()) {
-        return Promise.resolve(true);
-      }
-      const webContentsId = win.webContents.id;
-      const existing = pendingByWebContents.get(webContentsId);
-      if (existing) return existing.promise;
-
-      const requestId = createRequestId();
-      let resolve;
-      const promise = new Promise((done) => { resolve = done; });
-      const timer = setTimeout(() => settle(webContentsId, false), timeoutMs);
-      timer.unref?.();
-      pendingByWebContents.set(webContentsId, {
-        promise,
-        requestId,
-        resolve,
-        timer,
-      });
-      win.webContents.send('window:prepare-context-release', { requestId, reason });
-      return promise;
-    },
-    handleResponse(webContentsId, payload) {
-      const pending = pendingByWebContents.get(webContentsId);
-      if (
-        !pending
-        || !payload
-        || payload.requestId !== pending.requestId
-        || typeof payload.ok !== 'boolean'
-      ) {
-        return false;
-      }
-      return settle(webContentsId, payload.ok);
-    },
-    cancel(webContentsId) {
-      return settle(webContentsId, false);
-    },
-  };
-}
-
-/** Coordinates the only product-owned renderer reload path. Normal reloads
- * must first pass the renderer save barrier. If the renderer has already lost
- * that barrier (for example, a root error unmounted it), main may proceed only
- * after an explicit risk confirmation. */
-function createSafeReloadCoordinator({
-  requestFlush,
-  confirmWithoutSaveBarrier = async () => false,
-  reloadWindow = (win) => win.webContents.reload(),
-}) {
-  if (typeof requestFlush !== 'function') {
-    throw new TypeError('requestFlush must be a function');
-  }
-  const pendingByWebContents = new Map();
-
-  return {
-    request(win, { saveBarrierReady = false } = {}) {
-      if (!win || win.isDestroyed?.() || win.webContents?.isDestroyed?.()) {
-        return Promise.resolve({ reloaded: false, reason: 'window-unavailable' });
-      }
-      const webContentsId = win.webContents.id;
-      const existing = pendingByWebContents.get(webContentsId);
-      if (existing) return existing;
-
-      const pending = (async () => {
-        if (saveBarrierReady) {
-          let saved = false;
-          try {
-            saved = await requestFlush(win, 'window-reload');
-          } catch {
-            saved = false;
-          }
-          if (!saved) return { reloaded: false, reason: 'save-failed' };
-        } else {
-          let confirmed = false;
-          try {
-            confirmed = await confirmWithoutSaveBarrier(win);
-          } catch {
-            confirmed = false;
-          }
-          if (!confirmed) return { reloaded: false, reason: 'unconfirmed' };
-        }
-
-        if (win.isDestroyed?.() || win.webContents?.isDestroyed?.()) {
-          return { reloaded: false, reason: 'window-unavailable' };
-        }
-        try {
-          reloadWindow(win);
-          return { reloaded: true, reason: null };
-        } catch {
-          return { reloaded: false, reason: 'reload-failed' };
-        }
-      })();
-      pendingByWebContents.set(webContentsId, pending);
-      void pending.finally(() => {
-        if (pendingByWebContents.get(webContentsId) === pending) {
-          pendingByWebContents.delete(webContentsId);
-        }
-      });
-      return pending;
-    },
-  };
-}
-
-/** Tracks whether a renderer can answer the awaited save barrier. Kept as a
- * separate seam because BrowserWindow `did-finish-load` precedes React effect
- * registration, and closing inside that gap must not manufacture a save
- * failure. */
-function createRendererFlushReadiness() {
-  let documentLoaded = false;
-  let handlerReady = false;
-  return {
-    markDocumentLoaded() {
-      documentLoaded = true;
-      // A navigation/reload destroys the previous renderer's handlers. The
-      // replacement must announce its own save barrier before main awaits it.
-      handlerReady = false;
-    },
-    markHandlerReady(ready) {
-      handlerReady = ready === true;
-    },
-    shouldRequest() {
-      return documentLoaded && handlerReady;
-    },
   };
 }
 
 module.exports = {
-  WINDOW_ID_ARG_PREFIX,
   applicationWindowChromeOptions,
   buildElectronSmokeArgs,
   classifyProtocolLaunch,
   createApplicationMenuTemplate,
-  createRendererFlushCoordinator,
-  createRendererFlushReadiness,
-  createSafeReloadCoordinator,
   createSingleFlight,
   createWindowRegistry,
   focusWindow,
@@ -514,5 +355,4 @@ module.exports = {
   releaseWindowContextWithRetry,
   shouldQuitAfterLastWindow,
   windowLifecycleShortcutAction,
-  windowIdFromArgv,
 };

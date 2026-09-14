@@ -17,7 +17,7 @@ function harness(overrides: Partial<AgentSessionPort> = {}) {
   let state: AgentSessionState = createAgentSessionState({
     agent: 'codex',
     id: 'chat-1',
-    scope: { kind: 'library' },
+    scope: { kind: 'unbound' },
   });
   const actions: AgentSessionAction[] = [];
   const listeners: AgentConnectionListener[] = [];
@@ -77,7 +77,7 @@ describe('agent transport', () => {
 
     expect(test.state().connection).toEqual({ attempt: 0, kind: 'connecting' });
     expect(test.port.connect).toHaveBeenCalledWith(
-      expect.objectContaining({ agent: 'codex', resume: 'native-2', scope: { kind: 'library' } }),
+      expect.objectContaining({ agent: 'codex', resume: 'native-2', scope: { kind: 'unbound' } }),
       expect.anything(),
     );
   });

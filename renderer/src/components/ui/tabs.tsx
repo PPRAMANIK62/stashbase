@@ -315,13 +315,20 @@ const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
           />
         )}
         <TabsStripLabel label={label} isActive={isActive} />
+        {/* The close glyph rests muted and turns to ink under its own pointer,
+         *  at the same stroke, and stands in ink on the selected tab: a
+         *  glyph darkens when it is the thing hovered, not when its row is,
+         *  the rule the sidebar's rows keep, and it never thickens. */}
         {TrailingIcon && (
           <span
             aria-hidden="true"
-            className="flex size-4 items-center justify-center text-muted-foreground"
+            className={cn(
+              'flex size-4 items-center justify-center transition-colors duration-fast',
+              isSelected ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
             data-tab-trailing=""
           >
-            <TrailingIcon size={12} strokeWidth={isActive ? 2 : 1.5} />
+            <TrailingIcon size={12} strokeWidth={1.5} />
           </span>
         )}
       </TabsPrimitive.Tab>

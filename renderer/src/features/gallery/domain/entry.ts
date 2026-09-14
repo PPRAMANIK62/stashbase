@@ -30,7 +30,7 @@ export interface GalleryEntry {
 
 /** What Make a copy asks for. The gallery names the entry and its repository
  *  and nothing else: where a copy lands and what it may be called are the
- *  Library's rules, not the shop's. */
+ *  project registry's rules, not the shop's. */
 export interface GalleryCopyRequest {
   readonly name: string;
   readonly repo: string;
@@ -60,7 +60,7 @@ export function enrichedFromSnapshot(
 /**
  * Which folder name a copy takes.
  *
- * The entry's own name wins whenever the Library's rule accepts it, because
+ * The entry's own name wins whenever the project registry's rule accepts it, because
  * that is the name the reader just read on the card. The repository's derived
  * segment is the fallback, and the entry name is the last resort so a caller
  * always has something to send and the server owns the refusal.

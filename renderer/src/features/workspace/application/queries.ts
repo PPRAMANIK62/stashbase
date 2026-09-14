@@ -1,18 +1,18 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import type { FilesPort, LibraryPort, WorkspaceQueryScope } from './ports';
+import type { FilesPort, ProjectRegistryPort, WorkspaceQueryScope } from './ports';
 
 export const workspaceQueryKeys = {
   all: ['workspace'] as const,
   files: (folderPath: string) => [...workspaceQueryKeys.folder(folderPath), 'files'] as const,
   folder: (folderPath: string) => ['workspace', 'folder', folderPath] as const,
-  library: ['library', 'membership'] as const,
+  project: ['project', 'membership'] as const,
 };
 
-export function libraryQuery(api: LibraryPort) {
+export function projectQuery(api: ProjectRegistryPort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => api.load(signal),
-    queryKey: workspaceQueryKeys.library,
+    queryKey: workspaceQueryKeys.project,
     retry: false,
     staleTime: 10_000,
   } as const;

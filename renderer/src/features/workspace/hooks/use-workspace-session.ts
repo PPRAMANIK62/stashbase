@@ -13,11 +13,11 @@ import { useStore } from 'zustand';
 
 import { openFolder } from '@/features/workspace/application/open-folder';
 import type {
-  LibraryLifecyclePort,
-  LibraryPort,
+  ProjectLifecyclePort,
+  ProjectRegistryPort,
   WorkspaceSessionPort,
 } from '@/features/workspace/application/ports';
-import { libraryQuery, workspaceQueryKeys } from '@/features/workspace/application/queries';
+import { projectQuery, workspaceQueryKeys } from '@/features/workspace/application/queries';
 import {
   createWorkspaceSessionRuntime,
   type WorkspaceSessionRuntime,
@@ -56,9 +56,9 @@ export interface WorkspaceSessionController {
 }
 
 export function useWorkspaceSession(
-  api: LibraryPort,
+  api: ProjectRegistryPort,
   persistence: WorkspaceSessionPort,
-  lifecycle: Pick<LibraryLifecyclePort, 'claimInitialFolder'>,
+  lifecycle: Pick<ProjectLifecyclePort, 'claimInitialFolder'>,
 ): WorkspaceSessionController {
   const queryClient = useQueryClient();
   const runtime = useRetainedRuntime(
@@ -66,7 +66,7 @@ export function useWorkspaceSession(
     (session) => session.dispose(),
   );
   const state = useStore(runtime.store);
-  const library = useQuery(libraryQuery(api)).data;
+  const project = useQuery(projectQuery(api)).data;
   const attemptedRestore = useRef<string | null>(null);
   // One lane: reopening a different folder replaces the attempt in flight.
   const signalFor = useRequestSignals<'restore-folder'>();
@@ -99,8 +99,8 @@ export function useWorkspaceSession(
   }, [initialFolder.kind, lifecycle]);
 
   const memberPaths = useMemo(
-    () => library?.members.map((member) => member.path) ?? [],
-    [library?.members],
+    () => project?.projects.map((member) => member.path) ?? [],
+    [project?.projects],
   );
 
   // The saved session is not consulted here. It carries each folder's tabs and
@@ -108,16 +108,16 @@ export function useWorkspaceSession(
   const landing = useMemo(
     () =>
       chooseFolderLanding({
-        activeFolder: library?.activeFolder?.path ?? null,
+        activeFolder: project?.activeFolder?.path ?? null,
         initialFolder,
       }),
-    [initialFolder, library?.activeFolder?.path],
+    [initialFolder, project?.activeFolder?.path],
   );
   // A landing that still owes an open request, for the status below.
   const unopened = landingToOpen(landing);
 
   useEffect(() => {
-    if (!library || state.restoreStatus !== 'ready') return;
+    if (!project || state.restoreStatus !== 'ready') return;
     runtime.reconcileMembership(memberPaths);
 
     // Still asking the desktop which folder this window was made for. Opening
@@ -141,24 +141,24 @@ export function useWorkspaceSession(
     const wanted = landing.path;
     if (attemptedRestore.current === wanted) return;
     attemptedRestore.current = wanted;
-    const capturedLibrary = library;
+    const capturedProject = project;
     setPendingPath(wanted);
     void openFolder(api, wanted, signalFor('restore-folder')).then((result) => {
       if (
         result.status === 'opened' &&
-        queryClient.getQueryData(workspaceQueryKeys.library) === capturedLibrary
+        queryClient.getQueryData(workspaceQueryKeys.project) === capturedProject
       ) {
-        queryClient.setQueryData(workspaceQueryKeys.library, result.snapshot);
+        queryClient.setQueryData(workspaceQueryKeys.project, result.snapshot);
       } else if (result.status === 'failed') {
         runtime.setActiveFolder(null);
       }
       setPendingPath((current) => (current === wanted ? null : current));
     });
     return () => setPendingPath((current) => (current === wanted ? null : current));
-  }, [api, landing, library, memberPaths, queryClient, runtime, signalFor, state.restoreStatus]);
+  }, [api, landing, project, memberPaths, queryClient, runtime, signalFor, state.restoreStatus]);
 
   // Read off the same landing the effect acts on, so the two can never
-  // disagree. A folder the library already has open is not being restored,
+  // disagree. A folder the project already has open is not being restored,
   // whatever else still names one: the attempt marker is a ref, so a window
   // that never has to open anything would otherwise stay "restoring" with no
   // render left to correct it. A window created for a folder counts as
@@ -184,8 +184,8 @@ export function useWorkspaceSession(
       ? { kind: 'restoring' }
       : {
           kind: 'ready',
-          restoredFolder: library?.activeFolder
-            ? restoreFolderSession(state.snapshot, library.activeFolder.path)
+          restoredFolder: project?.activeFolder
+            ? restoreFolderSession(state.snapshot, project.activeFolder.path)
             : null,
         },
   };

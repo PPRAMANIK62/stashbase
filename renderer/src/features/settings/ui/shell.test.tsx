@@ -21,7 +21,7 @@ const sections: SettingsSectionDef[] = [
 afterEach(cleanup);
 
 describe('SettingsShell', () => {
-  it('renders the active section and disables an unavailable one with a Soon tag', async () => {
+  it('renders the active section and disables an unavailable one with an Unavailable tag', async () => {
     render(
       <SettingsShell
         onClose={vi.fn()}
@@ -35,7 +35,7 @@ describe('SettingsShell', () => {
     expect(await screen.findByText('Agent runtimes content')).not.toBeNull();
     const generalItem = screen.getByRole('button', { name: /General/ });
     expect(generalItem).toHaveProperty('disabled', true);
-    expect(screen.getByText('Soon')).not.toBeNull();
+    expect(screen.getByText('Unavailable')).not.toBeNull();
   });
 
   it('switches sections through the wide-window nav rail', async () => {
@@ -70,7 +70,7 @@ describe('SettingsShell', () => {
     );
 
     expect(screen.queryByRole('navigation')).toBeNull();
-    const openSectionsButton = screen.getByRole('button', { name: 'Open sections' });
+    const openSectionsButton = screen.getByRole('button', { name: 'Open settings sections' });
     await user.click(openSectionsButton);
     expect(await screen.findByRole('button', { name: 'Agents' })).not.toBeNull();
   });

@@ -23,11 +23,11 @@ afterEach(() => {
 
 function renderSurface(
   api: DocumentSourcePort,
-  source = { folderPath: '/library/notes', path: 'plan.txt' },
+  source = { folderPath: '/project/notes', path: 'plan.txt' },
 ) {
   const queryClient = createTestQueryClient();
   const runtime = createDocumentRuntime({
-    activeFolderPath: '/library/notes',
+    activeFolderPath: '/project/notes',
     generation: 1,
     id: 'tab-1',
     queries: createDocumentQueryScope(queryClient, {
@@ -109,12 +109,12 @@ describe('text document surface', () => {
   it('marks a source from another folder read-only and never opens an editor session', async () => {
     const runtime = renderSurface(
       sourceApi({ load: vi.fn(async () => textSource({ content: 'read me', format: 'txt' })) }),
-      { folderPath: '/library/archive', path: 'plan.txt' },
+      { folderPath: '/project/archive', path: 'plan.txt' },
     );
 
     const body = await screen.findByLabelText('plan.txt body');
     expect(body.getAttribute('data-read-only')).toBe('true');
-    expect(screen.getByText('Read-only source from another library folder')).not.toBeNull();
+    expect(screen.getByText('Read-only source from another project folder')).not.toBeNull();
     expect(runtime.store.getState().editor).toBeNull();
   });
 

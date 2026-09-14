@@ -35,7 +35,7 @@ export class WhisperCppAdapter implements TranscriptionProvider {
       id: this.id,
       label: 'Local whisper.cpp',
       kind: 'local' as const,
-      description: 'Runs entirely on this device with downloaded Whisper weights.',
+      description: 'Transcribes on this device using downloaded Whisper models.',
       models: listTranscriptionModels().map((model) => ({
         id: model.id,
         label: model.label,

@@ -16,7 +16,7 @@ const config = `{
   "mcpServers": {
     "stashbase": {
       "command": "/Users/ada/Library/Application Support/StashBase/bin/stashbase-mcp",
-      "args": ["--library", "default"]
+      "args": ["--project", "default"]
     }
   }
 }`;

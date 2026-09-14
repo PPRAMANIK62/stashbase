@@ -26,7 +26,7 @@ function resolveFailure({ response, serverMessage }: TransportFailure): AgentCon
     : null;
 }
 
-/** Library source resolution through the JSON client and transient uploads
+/** Project source resolution through the JSON client and transient uploads
  *  through the server origin directly, because the JSON client cannot carry
  *  multipart bodies. */
 export function createAgentContextAdapter(
@@ -46,7 +46,7 @@ export function createAgentContextAdapter(
           'invalid-response': 'File resolution returned an invalid response.',
           unavailable: 'StashBase could not resolve that file.',
         },
-        path: `/api/library/agent-context-file?${query}`,
+        path: `/api/project/agent-context-file?${query}`,
         schema: agentContextFileResponseSchema,
         signal,
       });

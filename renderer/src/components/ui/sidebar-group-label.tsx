@@ -1,7 +1,14 @@
 /** A section header. Static text on its own; inside a `collapsible` group it
  *  becomes the group's toggle without changing its design treatment — hover
- *  only raises the label's contrast and reveals a chevron, which stays visible
- *  while collapsed as the reopen cue.
+ *  only raises the label's contrast and reveals a chevron right after the
+ *  name, which stays visible while collapsed as the reopen cue. The chevron
+ *  follows the name because it is the section's state, not an action: the
+ *  row's end is where actions sit. (A tree node's disclosure leads its label
+ *  instead; that is `TreeDisclosure`.) The cue answers the `group/group-header`
+ *  wrapper's hover and focus; an ancestor may also carry
+ *  `group/group-header-hover` to widen the hover cue alone, so a whole column
+ *  can show its headers' chevrons under the pointer without a focused row
+ *  elsewhere in it counting as "in the header".
  *
  *  Only the leading text truncates: element children (count badges, trailing
  *  controls) stay flex siblings so the row's gap keeps spacing them — the same
@@ -101,25 +108,29 @@ const SidebarGroupLabel = forwardRef<HTMLDivElement, SidebarGroupLabelProps>(
         },
         <>
           {labelContent}
-          {/* The chevron occupies an action-sized box, so it reads as one more
-              icon in the row rather than a smaller glyph tacked on the end.
-              One chevron-right glyph for both states, sprung 90° to point
-              down while the group is open — the motion wrapper is what
-              animates: Tailwind's rotate-* sets the standalone CSS `rotate`
-              property, which transition-transform never covers. While open
-              the whole box collapses to zero width at rest so the label text
-              keeps the full row; hover/focus (or an open action popup)
-              reveals it. Collapsed keeps it visible as the reopen cue. */}
-          {/* No width/opacity transition: animating the box's width slides
-              the glyph in from the side — the chevron should simply be
-              there once the header is hovered. */}
+          {/* The chevron sits right after the name, 4px behind it (the row's
+              gap less -ml-1), so it reads as the name's own mark. One
+              chevron-right glyph for both states, sprung 90° to point down
+              while the group is open — the motion wrapper is what animates:
+              Tailwind's rotate-* sets the standalone CSS `rotate` property,
+              which transition-transform never covers. While open the whole
+              box collapses to zero width at rest so the name stands alone;
+              the column's hover, a keyboard focus inside the header
+              (focus-visible, so a click does not leave it standing), or an
+              open action popup reveals it. Collapsed keeps it visible as
+              the reopen cue. */}
+          {/* The box is the glyph's own width, so the chevron sits 4px behind
+              the name like the folder header's, and only its opacity toggles:
+              no transition, the chevron should simply be there once the
+              header is hovered. */}
           <span
             className={cn(
-              'ml-auto flex h-6 shrink-0 items-center justify-center overflow-hidden',
+              '-ml-1 flex h-6 shrink-0 items-center justify-center',
               group.open
-                ? 'w-0 opacity-0 group-focus-within/group-header:w-6 group-focus-within/group-header:opacity-100 group-hover/group-header:w-6 group-hover/group-header:opacity-100 group-has-[[data-sidebar=group-action]:is([data-state=open],[data-popup-open],[aria-expanded=true])]/group-header:w-6 group-has-[[data-sidebar=group-action]:is([data-state=open],[data-popup-open],[aria-expanded=true])]/group-header:opacity-100 pointer-coarse:w-6 pointer-coarse:opacity-100'
-                : 'w-6 opacity-100',
+                ? 'opacity-0 group-hover/group-header:opacity-100 group-hover/group-header-hover:opacity-100 group-has-[:focus-visible]/group-header:opacity-100 group-has-[[data-sidebar=group-action]:is([data-state=open],[data-popup-open],[aria-expanded=true])]/group-header:opacity-100 pointer-coarse:opacity-100'
+                : 'opacity-100',
             )}
+            style={{ width: sizeClasses.icon }}
           >
             <motion.span
               className="inline-flex"

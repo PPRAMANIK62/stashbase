@@ -1,5 +1,5 @@
 /**
- * Settings → MCP: what an external client needs to reach this library, and the
+ * Settings → MCP: what an external client needs to reach this project, and the
  * two ways it can reach it. StashBase never writes another client's
  * configuration, so every row here is something to read or copy, beside the
  * three writes that change how the listener is reached.
@@ -10,7 +10,7 @@
  * their own word instead of colliding on one boolean.
  */
 
-import { Check, CircleAlert, Copy } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ import {
   Disclosure,
   SettingsGroup,
   SettingsList,
+  SettingsMessage,
   SettingsPane,
   SettingsRow,
   StatusChip,
@@ -39,6 +40,12 @@ export interface McpAccessPanelProps {
 }
 
 const PORT_ERROR = `Enter a port from ${MCP_DOCKER_PORT_RANGE.min} to ${MCP_DOCKER_PORT_RANGE.max}.`;
+
+/** The pane keeps its title and lede while the read is in flight or has
+ *  failed, so the section never collapses into a bare sentence. */
+const TITLE = 'MCP';
+const LEDE =
+  'Connect external AI apps to search, read, and edit supported files in your registered projects.';
 
 /** Fixed width rather than one dot per character: the row must not change
  *  shape when a rotation lands, and a mask that counts out the credential is
@@ -128,26 +135,19 @@ function DockerPortForm({
 }
 
 /** The listener row, resolved from the one state word rather than from a
- *  chain of checks against the opt-in and the live listener. */
+ *  chain of checks against the opt-in and the live listener. The chip carries
+ *  the state; the sentence beside it only says what happened. */
 function dockerListener(
   state: McpDockerState,
   error: string | null,
-): { chip: ReactNode; detail: ReactNode; detailTone: 'error' | 'muted' } | null {
+): { chip: ReactNode; detail: ReactNode } | null {
   switch (state) {
     case 'active':
-      return { chip: <StatusChip>Listening</StatusChip>, detail: null, detailTone: 'muted' };
+      return { chip: <StatusChip>Listening</StatusChip>, detail: null };
     case 'starting':
-      return {
-        chip: <StatusChip tone="muted">Starting…</StatusChip>,
-        detail: null,
-        detailTone: 'muted',
-      };
+      return { chip: <StatusChip tone="muted">Starting…</StatusChip>, detail: null };
     case 'failed':
-      return {
-        chip: <StatusChip tone="warn">Not listening</StatusChip>,
-        detail: error,
-        detailTone: 'error',
-      };
+      return { chip: <StatusChip tone="warn">Not listening</StatusChip>, detail: error };
     case 'off':
       return null;
   }
@@ -159,23 +159,17 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
   const [confirming, setConfirming] = useState(false);
   const access = mcp.access;
 
-  if (mcp.loading) {
+  if (mcp.loading || !access) {
     return (
-      <p className="text-caption text-muted-foreground" role="status">
-        Loading MCP access…
-      </p>
-    );
-  }
-  if (!access) {
-    return (
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-caption text-destructive" role="alert">
-          MCP access is unavailable.
-        </p>
-        <Button onClick={() => mcp.reload()} size="compact" variant="tertiary">
-          Retry
-        </Button>
-      </div>
+      <SettingsPane lede={LEDE} title={TITLE}>
+        <SettingsList>
+          {mcp.loading ? (
+            <SettingsMessage message="Loading MCP settings…" />
+          ) : (
+            <SettingsMessage message="Could not load MCP settings." onRetry={() => mcp.reload()} />
+          )}
+        </SettingsList>
+      </SettingsPane>
     );
   }
 
@@ -184,18 +178,15 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
   const listener = dockerListener(mcp.dockerState, http.dockerError);
 
   return (
-    <SettingsPane
-      lede="External MCP clients read your authorized library through the same operations the built-in Agent uses. StashBase never writes another client's configuration; copy what that client needs from this page."
-      title="MCP"
-    >
+    <SettingsPane lede={LEDE} title={TITLE}>
       <SettingsGroup
-        hint="Paste this into an external client's MCP settings, then restart that client."
+        hint="Copy this JSON into your client's MCP settings, then restart the client."
         title="Standard configuration"
       >
         <SettingsList>
           <SettingsRow
             detail={<Mono>{access.command}</Mono>}
-            title="MCP JSON configuration"
+            title="JSON configuration"
             trail={
               <CopyButton
                 copied={mcp.copied === 'config'}
@@ -212,17 +203,16 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
       </SettingsGroup>
 
       <SettingsGroup
-        hint="For MCP clients that cannot launch the local command. Every request carries the bearer token; rotating it invalidates the old one without a restart."
+        hint="Use the local URL and bearer token for clients that connect over HTTP."
         title="URL access"
       >
         <SettingsList>
           {http.settingsError !== null && (
             <SettingsRow
               detail={http.settingsError}
-              lead={<CircleAlert aria-hidden="true" className="size-4 text-destructive" />}
-              role="alert"
+              role="status"
               title="MCP settings are unavailable"
-              titleTone="error"
+              titleTone="muted"
             />
           )}
           <SettingsRow
@@ -239,7 +229,7 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
           <SettingsRow
             detail={
               http.token === null ? (
-                'Unavailable while the credential store cannot be read.'
+                'Could not read the saved token.'
               ) : (
                 <Mono>{revealed ? http.token : TOKEN_MASK}</Mono>
               )
@@ -277,12 +267,12 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
       </SettingsGroup>
 
       <SettingsGroup
-        hint="Off by default. Turning it on opens a separate token-gated listener on host interfaces that serves only MCP; no other StashBase API is exposed."
+        hint="Opens a network port that requires the bearer token. Other StashBase APIs stay local."
         title="Docker access"
       >
         <SettingsList>
           <SettingsRow
-            detail="A container on this machine reaches MCP over the host-facing listener only while this is on."
+            detail="Allow containers on this computer to connect to MCP."
             title="Docker access"
             trail={
               <Switch
@@ -298,7 +288,7 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
             detail={
               http.dockerAccess
                 ? 'Turn Docker access off to change the port.'
-                : 'The host-facing listener binds this port when Docker access is on.'
+                : 'Port used when Docker access is enabled.'
             }
             title="Port"
             trail={
@@ -325,7 +315,6 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
               />
               <SettingsRow
                 detail={listener.detail}
-                detailTone={listener.detailTone}
                 role="status"
                 title="Listener"
                 trail={listener.chip}
@@ -335,22 +324,22 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
         </SettingsList>
         <Disclosure summary="Native Linux Docker Engine">
           <p className="text-caption text-muted-foreground">
-            A container there resolves <Mono>host.docker.internal</Mono> only with{' '}
-            <Mono>--add-host=host.docker.internal:host-gateway</Mono>, or the equivalent Compose{' '}
+            On Linux, add <Mono>host.docker.internal</Mono> using{' '}
+            <Mono>--add-host=host.docker.internal:host-gateway</Mono> or a Compose{' '}
             <Mono>extra_hosts</Mono> entry.
           </p>
         </Disclosure>
       </SettingsGroup>
 
       <ConfirmDialog
-        confirmLabel="Rotate"
-        description="Clients using the current token stop working until you give them the new one."
+        confirmLabel="Rotate token"
+        description="The current token will stop working immediately. Update connected clients with the new token."
         destructive
         onCancel={() => setConfirming(false)}
         onConfirm={() => mcp.rotateToken(() => setConfirming(false))}
         open={confirming}
         pending={mcp.rotating}
-        title="Rotate the MCP bearer token?"
+        title="Rotate MCP token?"
       />
 
       {mcp.failure && <FailureNotice failure={mcp.failure} />}

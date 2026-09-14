@@ -1,186 +1,123 @@
 # Design Docs
-This directory is the committed source of truth for StashBase product intent:
-why the product exists, what users can observe, and which experience rules a
-change must preserve. Code remains the source of truth for the current
-implementation; tests are evidence only for the behavior they exercise.
-The repository-wide human/AI workflow lives in
-[`MAINTENANCE.md`](../MAINTENANCE.md); this directory owns its product layer.
 
-The documentation is deliberately organized for bounded review context. Start
-coarse, descend only through the affected product area and engineering Seam,
-and stop when the current question is answered. A reader should not need to
-load every document or inspect the whole source tree before making a focused
-change.
+StashBase is an **IDE for writing**. The primary journey is **enter a project
+→ discuss ideas and brainstorm → write → refine**. The sequence
+describes how work develops, not which stages have shipped. These capabilities
+are implemented; document-specific diff for fine revision is the remaining
+product feature.
 
-## Coarse-to-fine Model
-
-| Level            | Question                                                     | Read                                                   |
-| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------ |
-| Product identity | What is StashBase, and which durable rules constrain it?     | Overview, Principles, Product Direction                |
-| User outcome     | Why does this work matter, and what does the user observe?   | One scenario and journey, then the owning area design  |
-| Engineering Seam | Which Interface owns the behavior and what must remain true? | One or more focused `code-review/` contracts           |
-| Implementation   | Where does the behavior live?                                | The contract's Interface, owner Modules, and Adapters  |
-| Evidence         | What proves the behavior without reading unrelated code?     | Focused validation and Journey Coverage                |
-
-Each level has one job. Do not copy an implementation rule upward as product
-direction or copy exact test assertions into a contract. Move downward only as
-needed and sideways only when a named cross-area Seam requires another
-contract.
-
-To review current product capability, read two complementary views: User
-Journeys are the vertical end-to-end outcomes, while the Area designs below
-are the horizontal Shipping feature surfaces and experience contracts. Use
-Product Direction for intended direction, not as a current feature inventory;
-use Journey Coverage only after the behavior is understood, to inspect its
-evidence and gaps.
+This directory owns product intent and observable behavior. Code establishes
+what the application currently does, and evidence establishes which claims
+have been exercised. The maintenance model lives in
+[MAINTENANCE.md](../MAINTENANCE.md).
 
 ## Reading Paths
 
-For product orientation:
+For product orientation, read [Overview](overview.md),
+[Principles](principles.md), and [Product Direction](product-direction.md).
+[Product Scenarios](product-scenarios.md) explains why people use the product;
+[User Journeys](user-journeys.md) describes the observable tasks.
 
-1. [Overview](overview.md) — what StashBase is and who it serves.
-2. [Principles](principles.md) — durable decision rules.
-3. [Product Direction](product-direction.md) — intended shape and investment
-   themes.
-4. [Product Scenarios](product-scenarios.md) — high-level reasons people use
-   the product.
+For a design or implementation change:
 
-For understanding or extending a product area:
+1. Select the user outcome and narrowest product area below.
+2. Read its current behavior, required contract, and known limitations. Consult
+   [Glossary](glossary.md) when a term or scope is ambiguous.
+3. Follow its owning [review contract](../code-review/README.md) to the
+   implementation boundary and focused validation.
+4. Use [Journey Coverage](../code-review/journey-coverage.md) to check what the
+   evidence actually establishes for the affected outcome.
+5. Update the affected records in the same change. A local refactor does not
+   require rewriting every layer.
 
-1. Identify the motivating [Product Scenario](product-scenarios.md) and the
-   affected [User Journey](user-journeys.md). A new user-visible capability
-   must change an existing journey or define a distinct end-to-end outcome.
-2. Find the narrowest owning [product area](#product-areas). For a focused
-   change to established behavior, starting from the area is acceptable, but
-   still resolve the affected journey before implementation.
-3. Read [Architecture](architecture.md) when the change crosses ownership,
-   lifecycle, or trust boundaries.
-4. Read the matching maintainer contract in
-   [`code-review/`](../code-review/README.md) before changing code.
-5. Follow that contract's Implementation Map and focused validation instead of
-   inventorying the repository.
+For an existing-code audit, assess necessity against product intent, simplicity
+against actual responsibilities and callers, and correctness against contracts
+and evidence. For a branch or working-tree change, use the
+[diff-first route](../code-review/README.md#diff-first-review) with a fixed
+comparison point. A code map helps find files; it does not justify retaining a
+feature or establish coverage.
 
-For reviewing an implementation or diff, start with the
-[`code-review/` diff-first route](../code-review/README.md#diff-first-review).
-It leads back to the same area and journey before descending into changed
-code. The canonical Journey → Area → Contract → Evidence relationships live in
-[Journey Coverage](../code-review/journey-coverage.md).
-
-User Journeys are the product-behavior backbone, not a feature inventory. Each
-journey defines an observable outcome, required results, and meaningful
-recovery. Area designs and system contracts protect rules shared by several
-journeys; they should not be duplicated into every flow.
+## Primary Journey and Supporting Capabilities
 
 [J01 Onboarding](user-journeys.md#j01-complete-onboarding-and-reach-first-value)
-and the [J10 Core Loop](user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
-are the critical product-level journeys. J01 owns understanding, minimum setup,
-first value, and clean return; J10 owns durable repeated value after onboarding.
-[J11 Conversation to Project](user-journeys.md#j11-turn-a-conversation-into-a-project)
-is the Chat-first activation route between them. Capability journeys define the
-focused behavior and recovery they compose.
+leads into a project and a useful first discussion.
+[J10 Core Loop](user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
+combines project entry, brainstorming, and optional document work. An empty
+project is valid; source inspection, search, and wiki building are available
+when useful rather than prerequisites.
 
-For terminology and UI work, use [Glossary](glossary.md) and
-[Visual Style](visual-style.md).
-
-## Document Types
-
-| Type            | Purpose                                              | Changes when                                           |
-| --------------- | ---------------------------------------------------- | ------------------------------------------------------ |
-| Intent          | Overview, principles, and product direction          | Positioning, scope, or a durable decision rule changes |
-| Scenario        | High-level user motivation and desired outcome       | The product begins or stops supporting a class of work |
-| Journey         | Stable, observable shipping workflow with a `Jxx` ID | A user-visible step, outcome, or recovery path changes |
-| Area design     | Current experience and contribution direction        | Shipping behavior or area guidance changes             |
-| System contract | Cross-cutting ownership and trust boundaries         | A major runtime or data-flow contract changes          |
-
-Journeys are not test cases. They give automated and manual checks a stable
-product vocabulary; the test suite owns exact setup and assertions.
-
-## Capabilities and Product Areas
-
-StashBase is a **Wiki** for local files, delivered through three product
-capabilities. The **Document Workbench** spans the Workspace and Documents
-areas; the Wiki's **local RAG layer** spans Preparation and Search and
-Retrieval; visible **Wiki Pages** are built through the **Agent Panel**, which
-is also a product area. Product capabilities describe what StashBase is.
-Product areas divide design and contribution ownership.
+The other journeys describe implemented capabilities used by that loop.
+[J11](user-journeys.md#j11-turn-a-conversation-into-a-project) retains the
+secondary unbound-conversation creation contract and its unavailable in-app
+entry. [J12](user-journeys.md#j12-build-wiki-pages-from-a-local-folder) and
+[J13](user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery) describe
+optional wiki and Gallery workflows. Neither defines the product as a whole.
 
 ## Product Areas
 
-| Area                 | User outcome                                                   | Design document                          |
-| -------------------- | -------------------------------------------------------------- | ---------------------------------------- |
-| Workspace            | Work directly in ordinary local folders                        | [Workspace](design/workspace.md)         |
-| Documents            | Read, edit, and navigate supported source files                | [Documents](design/documents.md)         |
-| Preparation          | Make difficult formats searchable without replacing the source | [Preparation](design/preparation.md)     |
-| Search and Retrieval | Find source evidence for people and Agents                     | [Search and Retrieval](design/search.md) |
-| Agent Panel          | Collaborate with OpenQuill or bring-your-own Agents in scope  | [Agent Panel](design/agent-panel.md)     |
-| Bug Reporting        | Prepare a local, user-reviewed report without telemetry        | [Bug Reporting](design/bug-reporting.md) |
+| Area | User outcome | Design document |
+|---|---|---|
+| Workspace | Enter and work within ordinary local projects | [Workspace](design/workspace.md) |
+| Documents | Read, draft, edit, save, and inspect local documents | [Documents](design/documents.md) |
+| Agent Panel | Brainstorm, draft, and revise with an Agent in project scope | [Agent Panel](design/agent-panel.md) |
+| Preparation | Make difficult reference formats usable without replacing them | [Preparation](design/preparation.md) |
+| Search and Retrieval | Find relevant project material and return to its source | [Search and Retrieval](design/search.md) |
+| Bug Reporting | Prepare and hand off a reviewed local report | [Bug Reporting](design/bug-reporting.md) |
 
-Each area document uses the same shape: user outcome, scope and non-goals,
-current experience, experience contract, cross-area seams, contribution
-direction, and related journeys/contracts.
+[Architecture](architecture.md) owns product-level data, process, and trust
+boundaries. [Visual Style](visual-style.md) owns visual intent; the renderer
+styling contract owns implementation mechanics.
 
-## Extending the Model
+## Coarse-to-fine Model
 
-Extend the narrowest existing owner first:
+Product identity → user outcome → area contract → implementation → evidence.
+Each layer answers a different question; a reviewer follows only the affected
+path.
 
-- Add behavior to an existing area when it serves the same user outcome and
-  preserves that area's scope.
-- Add a journey when users gain a distinct end-to-end outcome or recovery path,
-  not for a UI variant or test case. Assign the next stable `Jxx` ID and add its
-  Area, Contract, and Evidence route to Journey Coverage.
-- Add a product area only when one outcome needs independent scope, non-goals,
-  and contribution direction. A screen or navigation entry is not an area by
-  itself.
-- Add a review contract only for a review-significant Seam with independent
-  invariants and focused evidence. Files, helper Modules, or one-off Adapters do
-  not each earn a contract.
-- Change Overview, Principles, or Product Direction only when product identity
-  or a durable decision changes.
+## Document Types
 
-Prefer deepening an existing Module and its Interface over layering another
-document or pass-through Seam. If a change cannot be routed without reading
-unrelated areas or contracts, repair the ownership or traceability as part of
-that change.
+| Record | Owns | Update when |
+|---|---|---|
+| Overview, Principles, Product Direction | Identity, durable choices, remaining feature direction | A product decision changes |
+| Scenarios and User Journeys | Motivation, observable tasks, recovery | A user outcome or flow changes |
+| Area design | Capability scope, current experience, required behavior | An area's behavior or boundary changes |
+| Glossary | Shared product vocabulary | A term or relationship is settled |
+| Engineering contract in `code-review/` | Interfaces, ownership, invariants, implementation entry points | A technical boundary or required guarantee changes |
+| Journey Coverage | Traceability and evidence limits | A journey or its evidence changes |
 
 ## Status Labels
 
-* **Current** — observed shipping experience.
+- **Current / Shipping:** implemented behavior, described within the limits of
+  the available implementation and evidence.
+- **Experience contract / Required:** behavior that the implementation must
+  preserve. A mismatch is a Known Gap, not a reason to pretend it ships.
+- **Known Gap:** a defect, implementation limitation, or unproven guarantee in
+  an existing capability. It does not mean that the whole feature is missing.
+- **Direction:** an approved product direction not yet complete. At present,
+  the feature-level item is document-specific diff.
+- **Next:** maintenance focus within the area's existing capability, or a link
+  to that document-diff direction; not a second feature backlog.
+- **Coordinate First / Not Planned:** changes needing a product or boundary
+  decision, and work intentionally outside the scope.
 
-* **Experience contract** — required product behavior. If current code violates
-  it, add a plainly named Known Gap and link to the owning review contract.
-
-* **Next** — useful contribution direction, not a release promise.
-
-* **Coordinate first** — valuable cross-cutting work that needs alignment.
-
-* **Not planned** — intentionally outside the current product shape.
-
-Never combine Current, Required, and Direction in one claim. Product Direction
-contains durable choices, not Shipping UI state. A reader must be able to tell
-what the product does now without reconstructing code history.
+Coverage labels such as Partial and Release-dependent belong to the evidence
+ledger. They must not be read as a percentage of feature implementation.
 
 ## Maintenance Rules
 
-* Keep these documents concise and in English.
-
-* Give each rule one primary home and cross-reference it elsewhere. Repetition
-  may summarize intent but must not duplicate state-machine or recovery detail.
-
-* Update affected journeys and area design in the same change as shipping
-  behavior. Update intent documents only when the underlying intent changes.
-
-* Keep implementation inventories, state-machine detail, and validation
-  matrices in `code-review/`; keep exact assertions in tests.
-
-* Keep a cross-journey product capability matrix in the narrowest owning area
-  when behavior varies by source type, client, or representation. Journeys
-  reference its stable capability classes and observable results rather than
-  duplicating the inventory. Exact fixtures and assertions remain in tests.
-
-* Keep coverage ownership in
-  [`code-review/journey-coverage.md`](../code-review/journey-coverage.md); a
-  journey ID alone does not claim that the flow is automated. Keep its Area and
-  Contract routes current as the canonical traceability map.
-
-* Use issues and pull requests for schedules, owners, and implementation
-  chronology. These documents are not ticket trackers or changelogs.
+- Keep committed docs concise and English-only. Give every rule one primary
+  home and link to it elsewhere.
+- Start from the narrowest existing area. A new screen, helper, or file does
+  not require a new area, journey, or contract.
+- Preserve stable journey IDs and links. When a journey changes, re-evaluate
+  its evidence; an old pass does not automatically prove the new flow.
+- Keep one qualified format-capability matrix in [Documents](design/documents.md#format-capability-matrix).
+  Preview, editing, retrieval, and Agent access are separate claims.
+- Product docs contain no source-tree inventory. Review contracts name stable
+  implementation entry points; code maps are navigation snapshots; tests own
+  exact fixtures and assertions.
+- A documentation update does not change UI copy, packaged Agent Instructions,
+  permissions, or runtime behavior. Record material mismatches rather than
+  silently treating new intent as implemented behavior.
+- Use issues and change records for chronology, task ownership, and review
+  progress. Run `pnpm test:docs` for changes to these contracts and links.

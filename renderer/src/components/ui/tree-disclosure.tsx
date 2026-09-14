@@ -1,6 +1,7 @@
 import { Collapsible } from '@base-ui/react/collapsible';
 import { useId, useState, type ReactNode } from 'react';
 
+import { Disclosure } from '@/components/ui/disclosure';
 import { focusRing } from '@/lib/focus-ring';
 import { useIcon } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
@@ -37,9 +38,13 @@ export function TreeDisclosure({ children, label }: { children: ReactNode; label
           </button>
         }
       />
-      <Collapsible.Panel className="ml-[15px] border-l border-border pl-1" id={panelId}>
+      {/* The branch folds through the kit's measured region rather than Base
+          UI's Panel, which shows and hides in one frame. The rule joining the
+          panel to its trigger travels with the height, so the branch rolls up
+          into the row it hangs from. */}
+      <Disclosure className="ml-[15px] border-l border-border pl-1" id={panelId} open={open}>
         {children}
-      </Collapsible.Panel>
+      </Disclosure>
     </Collapsible.Root>
   );
 }

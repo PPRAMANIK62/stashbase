@@ -67,6 +67,7 @@ function renderWorkspace(
         instructions={agentInstructionsApi()}
         onOpenAgentSettings={vi.fn()}
         onOpenExternal={vi.fn()}
+        onSignIn={vi.fn()}
         onReprocess={onReprocess}
         runtime={runtime}
         scopeOutline={{ files: ['MISSION.md', 'notes.md'], folders: ['lessons'] }}

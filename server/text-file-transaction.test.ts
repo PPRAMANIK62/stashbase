@@ -1,0 +1,115 @@
+import './__tests__/isolated-home.ts';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import test, { after } from 'node:test';
+import { runWithFolderRoot } from './folder.ts';
+import { saveFileContent } from './file-save.ts';
+import { indexer } from './state.ts';
+import { readTextSnapshotAsync, textVersion } from './text-file-transaction.ts';
+import { applyRenamePlanAsync, planRenameLinksAsync } from './links.ts';
+
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-text-transactions-'));
+after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+const folder = () => fs.mkdtempSync(path.join(scratch, 'project-'));
+
+test('concurrent versioned saves accept one edit and reject the other without mixing response versions', async (t) => {
+  t.mock.method(indexer, 'upsertFile', async () => ({ outcome: 'unchanged' }));
+  const root = folder();
+  fs.writeFileSync(path.join(root, 'note.md'), 'original');
+  const results = await Promise.all(['first', 'second'].map((content) =>
+    runWithFolderRoot(root, () => saveFileContent('note.md', content, { baseVersion: textVersion('original') })),
+  ).map((operation) => operation.then((value) => ({ value }), (error) => ({ error }))));
+  const successes = results.filter((result) => 'value' in result);
+  const failures = results.filter((result) => 'error' in result);
+  assert.equal(successes.length, 1);
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].error.code, 'FILE_CHANGED');
+  const saved = successes[0].value;
+  assert.equal(saved.version, textVersion(saved.content));
+  assert.equal(fs.readFileSync(path.join(root, 'note.md'), 'utf8'), saved.content);
+});
+
+test('an external edit during save staging is preserved and the failed transaction releases its queue', async (t) => {
+  t.mock.method(indexer, 'upsertFile', async () => ({ outcome: 'unchanged' }));
+  const root = folder();
+  const target = path.join(root, 'note.md');
+  fs.writeFileSync(target, 'original');
+  const writeFile = fs.promises.writeFile;
+  let injected = false;
+  const staging = t.mock.method(fs.promises, 'writeFile', async (...args: Parameters<typeof writeFile>) => {
+    await writeFile(...args);
+    if (!injected && String(args[0]).endsWith('.tmp')) {
+      injected = true;
+      await writeFile(target, 'external edit');
+    }
+  });
+  await runWithFolderRoot(root, async () => {
+    await assert.rejects(saveFileContent('note.md', 'my edit', { baseVersion: textVersion('original') }),
+      { code: 'FILE_CHANGED' });
+    assert.equal(fs.readFileSync(target, 'utf8'), 'external edit');
+    assert.deepEqual(fs.readdirSync(root), ['note.md']);
+    staging.mock.restore();
+    const saved = await saveFileContent('note.md', 'resolved edit', { baseVersion: textVersion('external edit') });
+    assert.equal(saved.version, textVersion('resolved edit'));
+  });
+});
+
+test('a source snapshot hashes the exact BOM and CRLF bytes returned as content', async () => {
+  const root = folder();
+  const content = '\uFEFF{\r\n  "value": 1\r\n}\r\n';
+  fs.writeFileSync(path.join(root, 'data.json'), content);
+  await runWithFolderRoot(root, async () => {
+    assert.deepEqual(await readTextSnapshotAsync('data.json'), { content, version: textVersion(content) });
+  });
+});
+
+test('a rename plan refuses a newer source instead of replacing the new paragraph', async () => {
+  const root = folder();
+  fs.writeFileSync(path.join(root, 'target.md'), 'target');
+  fs.writeFileSync(path.join(root, 'ref.md'), '[target](target.md)\n');
+  await runWithFolderRoot(root, async () => {
+    const plan = await planRenameLinksAsync([{ kind: 'file', old: 'target.md', new: 'renamed.md' }]);
+    fs.renameSync(path.join(root, 'target.md'), path.join(root, 'renamed.md'));
+    const edited = '[target](target.md)\nnew user paragraph\n';
+    fs.writeFileSync(path.join(root, 'ref.md'), edited);
+    const applied = await applyRenamePlanAsync(plan);
+    assert.equal(applied.failed.length, 1);
+    assert.deepEqual(applied.updated, []);
+    assert.equal(fs.readFileSync(path.join(root, 'ref.md'), 'utf8'), edited);
+  });
+});
+
+test('link rollback restores only unchanged rewrites and preserves later user edits', async () => {
+  const root = folder();
+  fs.writeFileSync(path.join(root, 'target.md'), 'target');
+  for (const name of ['ref.md', 'edited.md']) fs.writeFileSync(path.join(root, name), '[target](target.md)\n');
+  await runWithFolderRoot(root, async () => {
+    const plan = await planRenameLinksAsync([{ kind: 'file', old: 'target.md', new: 'renamed.md' }]);
+    fs.renameSync(path.join(root, 'target.md'), path.join(root, 'renamed.md'));
+    const applied = await applyRenamePlanAsync(plan);
+    assert.equal(applied.updated.length, 2);
+    assert.deepEqual(applied.failed, []);
+    const edited = '[target](renamed.md)\nnew user paragraph\n';
+    fs.writeFileSync(path.join(root, 'edited.md'), edited);
+    await applied.rollback();
+    assert.equal(fs.readFileSync(path.join(root, 'ref.md'), 'utf8'), '[target](target.md)\n');
+    assert.equal(fs.readFileSync(path.join(root, 'edited.md'), 'utf8'), edited);
+  });
+});
+
+test('two folder aliases serialize writes to the same source directory entry', async (t) => {
+  t.mock.method(indexer, 'upsertFile', async () => ({ outcome: 'unchanged' }));
+  const root = folder();
+  const alias = path.join(scratch, 'alias');
+  try { fs.symlinkSync(root, alias, process.platform === 'win32' ? 'junction' : 'dir'); }
+  catch { t.skip('directory symlinks unavailable'); return; }
+  fs.writeFileSync(path.join(root, 'note.md'), 'original');
+  const results = await Promise.allSettled([root, alias].map((scope, index) =>
+    runWithFolderRoot(scope, () => saveFileContent('note.md', `edit ${index}`, { baseVersion: textVersion('original') })),
+  ));
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+  const failure = results.find((result) => result.status === 'rejected');
+  assert.equal(failure?.reason.code, 'FILE_CHANGED');
+});

@@ -40,7 +40,7 @@ interface TriggerRowProps extends HTMLAttributes<HTMLButtonElement> {
 /**
  * Trigger row: hover background, dual-layer variable-weight label, and a
  * chevron that rotates from right (closed) to down (open). Mirrors the
- * library's accordion trigger styling.
+ * project's accordion trigger styling.
  */
 const TriggerRow = forwardRef<HTMLButtonElement, TriggerRowProps>(
   ({ open, children, className, ...props }, ref) => {

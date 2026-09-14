@@ -31,7 +31,7 @@ describe('embedder API', () => {
           },
     );
     const api = createEmbedderAdapter({ request });
-    expect((await api.load(signal)).authorized).toBe(false);
+    expect((await api.load(signal)).hasKey).toBe(false);
     const saved = await api.saveKey('openai', 'sk-test', signal);
     expect(saved.warning).toBe('offline');
     expect(request).toHaveBeenLastCalledWith({
@@ -39,6 +39,20 @@ describe('embedder API', () => {
       method: 'PUT',
       path: '/api/embedder/key',
       signal,
+    });
+  });
+
+  it('uses provider and key presence even when legacy aliases disagree', async () => {
+    const api = createEmbedderAdapter({
+      request: vi.fn(async () => ({
+        body: { ...state, hasKey: true, authorized: false, source: 'openrouter' },
+        status: 200,
+      })),
+    });
+    expect(await api.load(signal)).toEqual({
+      hasKey: true,
+      model: state.model,
+      provider: 'openai',
     });
   });
 

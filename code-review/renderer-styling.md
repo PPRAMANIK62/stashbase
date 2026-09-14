@@ -42,7 +42,11 @@ with a shadow recipe. `@theme inline` publishes both as the `bg-surface-1..8`
 and `shadow-surface-1..8` utilities. Semantic roles sit on top of the ladder:
 background, foreground, card, muted, accent, selected, border, destructive, the
 status voices `--working` and `--decision`, the diff pair, and a five-hue badge
-palette. `--working` is plain ink (an alias of `--foreground`); only
+palette. The diff pair publishes its derived strengths as tokens of their own
+(`--diff-*-line` behind a whole line, `--diff-*-token` behind the changed run
+inside it), because the same diff is drawn by two renderers in two syntaxes —
+a CodeMirror theme object and a Tailwind arbitrary value — and a mix spelled
+out at each one is a mix the two can get wrong differently. `--working` is plain ink (an alias of `--foreground`); only
 `--decision` keeps a hue. Of the two overlay tints, `--hover` is the one a
 row wears for hovered, selected, current, and keyboard-highlighted alike, so
 one gray carries one meaning; `--active` is the pressed step only. Hovered
@@ -60,7 +64,8 @@ its frame gray is fixed.
 `renderer/src/lib/focus-ring.ts`, where it exists so a primitive copied out of
 the kit still draws a ring in a project without the token. `--shape-input-radius`
 is the one radius published to plain CSS, for the rules that cannot read the
-class map.
+class map; the radius ladder itself lives in `@theme` and reaches source as the
+`rounded-*` utilities, which the Shape section below governs.
 
 `--hairline` is the width every separating line draws at: 1px on standard
 displays, half a logical pixel (one device pixel) on hi-DPI panels. The
@@ -96,7 +101,11 @@ feature and the kit.
 `renderer/src/components/internal/` holds the parts a primitive is built out of,
 such as the measured collapse, the proximity highlight, the tab strip
 machinery, and the sliding sheet. Product code never imports from it. A part a
-feature wants was public all along and moves to `components/ui`.
+feature wants was public all along and moves to `components/ui`. The measured
+collapse is reached that way: `components/ui/disclosure.tsx` is the region a
+product surface installs, taking the measurement itself so a caller states only
+what is open, while the internal part stays internal for the wrappers that must
+measure something other than their own child.
 
 Installed registry files are reviewed first-party source after generation. One
 host adaptation is deliberate and narrow.
@@ -116,10 +125,63 @@ consume goes under `renderer/src/lib/local/`. Product code goes under
 `renderer/src/shared/utils`. `renderer/src/lib/README.md` states the same rule
 where an author of a new module will read it.
 
-Rounded is the only supported geometry. `renderer/src/lib/shape-context.ts` is a
-fixed map from role to radius class rather than a variant union, `useShape()` is
-a plain lookup, and the upstream pill variation is not exposed. Nothing chooses a
-shape, so nothing publishes one.
+A `Button`'s label box gives ground. Both content wrappers the primitive draws
+around a label carry `min-w-0`, so a caller that bounds the button, with a
+`max-w-*` on a trigger or a row that squeezes it, narrows the label instead of
+leaving the content to spill past the button's own edge and over whatever sits
+beside it. The primitive supplies the room, not the ellipsis: a caller that
+wants the narrowed label to read as truncated puts `truncate` on the span it
+owns, which the composer's model-and-thinking trigger does around the model
+name while the level stays whole.
+
+Rounded is the only supported geometry, and a corner is two independent
+decisions: how big it is, and how full it is.
+
+Size comes from one ladder. `renderer/src/globals.css` replaces Tailwind's own
+radius scale inside `@theme` rather than living beside it, so `rounded-lg` at a
+call site and `shape.item` through the context resolve to the same number. The
+six steps are box sizes, not ranks: `sm` for a 16–24px chip, `md` for a small
+block, `lg` for a row, a 28px control or a piece of chrome, `xl` for the 36px
+control, `2xl` for a framed list, `3xl` for a card. Replacing the scale rather
+than adding to it is what keeps a literal that has not been converted yet from
+drifting away from the system.
+
+Readers take values off that ladder and nothing spells a number.
+`renderer/src/lib/shape-context.ts` is a fixed map from role to radius class
+rather than a variant union, and `useShape()` is a plain lookup. Its roles
+mirror the scale one for one — `mark`, `chip`, `item`/`container`/`input`/`bg`/
+`mergedBg`, `panel`, `card` — plus `circle`, `glyph`, and `focusRing`, which
+name shapes rather than steps. `renderer/src/lib/size-context.tsx` carries the
+corners that move with density, because a control's radius steps with its
+height the way its padding and glyph do: `radius` for the bounded control, and
+`segmentRadius` for a segmented item, which is the shortest box a highlight
+lands on and cannot borrow the row's. A class string built outside a component
+— a module-scope constant, a ProseMirror widget — reads `shapeTokens`
+directly, since `useShape()` only returns it and the whole class name still
+lives in `shape-context.ts` where Tailwind's scanner finds it.
+
+Fullness is one rule for the whole application. `corner-shape: squircle` on the
+universal selector draws a superellipse instead of the circular arc
+`border-radius` would, because an arc leaves the edge early and reads thinner as
+the radius grows. It is declared on `*` rather than on the shape roles, since a
+radius is written in three places and a corner language covering only one of
+them would be a new inconsistency; it is inert wherever the radius is zero,
+which is most elements. Two exits are deliberate. `.rounded-full` returns to
+`round`, so the shapes that mean something — a status dot, an avatar, a switch,
+a badge, the composer's send — stay true circles rather than approximations,
+and the native scrollbar thumb takes the same exit in plain CSS. Anything
+carrying `rounded-[inherit]` takes `corner-shape: inherit`, because `corner-shape`
+is not an inherited property: the button's fill layer and the scroll area's
+viewport sit inside a host, and without it a circular button drew a squircled
+fill inside a round outline. The property is Chromium 139+, which is what this
+application ships; elsewhere the declaration is dropped and the corner falls
+back to the arc, so nothing depends on it.
+
+One invariant bounds the ladder. A radius at or past half its box is clamped by
+the UA into a capsule, and `design-docs/visual-style.md` reserves that shape for
+semantics. It is why the control radius stops at 12 rather than following the
+card upward — the compact icon-only button is a 28px square, where 14 is a
+circle — and why a segmented item at 24px takes its own smaller step.
 
 The renderer keeps a primitive only while product code reaches it, directly or
 through another primitive. A primitive that loses its last caller is deleted
@@ -177,7 +239,9 @@ product ships. The shape ladder needs no provider.
 
 Density is one object, not one number. `renderer/src/lib/size-context.tsx` holds
 two steps, `default` at a 36px control height and `compact` at 28px, and each
-step carries every measurement that moves with it. A component reads the fields
+step carries every measurement that moves with it; both read the 13px label,
+since the label is what is read and the compact box shrinks around it, and
+`globals.css` holds the same body size for `data-size='compact'`. A component reads the fields
 it needs and never keeps its own two-entry map of a height, a type step, a
 padding, a gap, a glyph size, or a switch geometry. `useSize(override)` resolves
 explicit prop, then provider, then default, which is what lets one control be
@@ -187,17 +251,28 @@ step, so a pinned region decides its own subtree and not the page's chrome. The
 stamp lands in a layout effect, so the first frame is never a step off.
 
 Which step a surface sits on is decided where the surface is composed, not
-inside the primitive. The titlebar and the sidebar's titlebar band read
-`useSizeVariant` and draw their squares at the default step
-(`renderer/src/app/composition/layout/workspace-titlebar.tsx`,
-`workspace-sidebar.tsx`, and the Documents and Workspace buttons they place).
-Pane and panel surfaces pin the compact step: the sidebar's navigator strip
-and the Markdown mode switch pass `size="compact"` to `TabsSubtle`, the Files
-tree's rows are `Button size="compact"`, the Chat header's actions are
-`Button size="icon-compact"`, and the Chats panel and the header's history
-popover wrap their whole subtree in `SizeProvider size="compact"`, which is
-what puts `SidebarMenuButton` rows and the palette primitives on the 28px
-rhythm without a prop on each. A glyph-only `TabsSubtleItem` takes
+inside the primitive. The workspace titlebar's row reads the default step;
+its sidebar-mirroring corners, the reopening trigger with the arrows and the
+Chat toggle, pin `size="compact"` so they hold the same square the sidebar's
+band draws (`renderer/src/app/composition/layout/workspace-titlebar.tsx`).
+Pane and panel surfaces pin the compact step: `WorkspaceSidebar` wraps its
+whole column, the titlebar band, the folder header, the navigator, and the
+footer, in `SizeProvider size="compact"`, which sets the band's toggle and
+arrows on the compact square, which is what puts the `SidebarMenuButton`
+rows of the Chats panel, the outline, New chat, and the footer on the 28px
+rhythm without a prop on each; the Files tree's rows are `Button
+size="compact"` with `gap-2` so their label meets the menu rows' text line;
+the account menu the footer row opens inherits that compact step through its
+portal, and its rows pass `gap-2 px-2` — the inset and glyph gap
+`sidebar-menu-button` writes — so a menu label lands on the column's text line
+rather than on the compact step's tighter menu one;
+the folder header sits one step taller at `h-8` with the rows' 13px label;
+the sidebar's mode switch and navigator strip and the Markdown mode switch
+pass `size="compact"` to `TabsSubtle`, and the two mode switches draw its
+`track`, the segmented look, with 30px items so the sidebar's runs at the
+band's 32px pitch; the Chat header's actions are `Button
+size="icon-compact"`; and the header's history popover wraps its subtree in
+`SizeProvider size="compact"` for the palette primitives. A glyph-only `TabsSubtleItem` takes
 `sizeClasses.square` rather than the control height and its padding, so it
 is the same square an icon button is. A ghost `Button`'s hover fill is inset
 by one pixel and ringed by one pixel of the same tint, so it reads as the
@@ -253,8 +328,35 @@ PDF sheet owns the text-layer geometry pdf.js requires and tints selection from
 `renderer/src/lib/springs.ts` is the one place a duration is written. It holds
 three entry steps, the matching exit steps, which run shorter because a leaving
 element is already understood, three spring tiers built from those steps, the
-deliberate waits such as hover intent and the acknowledge hold, and the ambient
-loop times. Nothing outside that module writes a duration literal.
+eased collapse tiers, the deliberate waits such as hover intent and the
+acknowledge hold, and the ambient loop times. Nothing outside that module
+writes a duration literal or an easing curve.
+
+Expand and collapse is the one travel that is not a spring, and the one that
+does not take the ladder above. A region's size is a box of space opening and
+closing rather than an object arriving, and a spring's launch reads as a shove
+when what it displaces is every row below it or the whole column beside it, so
+`collapseTween` eases. It carries its own two steps because a region is read
+while it travels rather than once it lands, and they are the host platform's
+numbers: 0.25s is AppKit's default animation length, 0.35s is SwiftUI's default
+for `.easeInOut`, and the curve is Core Animation's ease-in-ease-out,
+`0.42, 0, 0.58, 1`. Unlike the spring tiers, a collapse does not shorten on the
+way out. A leaving object is already understood and need not be waited on; a
+region is not an object, and AppKit closes one over the length it opened it, so
+a close that outran its open would read as a second control rather than the
+same reversible state.
+
+Every region that opens and closes reads it, on whichever of the two steps
+matches its travel. The `moderate` step is a region inside a pane: the measured
+`Collapse`, the file tree's expanded group, and the navigator's fold, which
+travels a flex share rather than a height. The `slow` step is a whole column or
+a pane-wide seam: the sidebar shell's open and close, and the seam between the
+Agent and the document. That seam takes one transition for both panes, chosen
+by the direction of the sweep rather than per pane, because the two are halves
+of one rule and a direction read per pane would land them a frame apart. The
+sidebar's drag-resize keeps the spring: a drag that has flipped past its
+threshold is continuing a movement the pointer started, which is what momentum
+is for.
 
 The same three numbers are published to CSS as `--motion-fast`, `--motion-base`,
 and `--motion-slow`, and reachable as the `duration-fast/base/slow` and
@@ -285,16 +387,40 @@ Every primitive asks for an icon by role through `useIcon` in
 asked for. Adding a role means adding the name, giving it a default, and having a
 caller, in that order. `IconProvider` lets a host swap the whole set or a single
 entry. Glyph size comes from the size ladder's `icon` field rather than a
-literal, and stroke weight is the primitive's own hover affordance: a glyph
-rests at 1.5 in `--muted-foreground` and goes to 2 in `--foreground` when its
-control is hovered, selected, or active, whether the control is a button, a
-tab, a tree row, or a disclosure header. A brand mark keeps its own strokes;
-the OpenQuill feather alone is a lucide glyph, and where it stands beside a
-title rather than beside vendor marks it takes the chrome's stroke.
+literal. A surface that carries a scale of its own is the exception and says so
+at the call site: a transcript chip on a 12px text line, a tile glyph measured
+off its thumbnail.
 
-Two icon sets stay separate because they are not product controls.
-`renderer/src/components/ui/file-type-icon.tsx` maps a file extension to its own
-lucide file glyph, and `renderer/src/shared/brand/logo.tsx` draws the mark.
+Which glyph answers the pointer follows from which element wears the hover tint,
+because one element lights at a time. Where the glyph is itself the control and
+nothing beneath it lights — a button, a tab, a select item, a disclosure header
+— it rests at 1.5 in `--muted-foreground` and goes to 2 in `--foreground` when
+it is hovered, selected, or active. Where it rides a row that wears the tint, it
+is a label rather than a control: it rests in `--foreground` at 1.5 and never
+changes colour, stroke, or weight, since the row has a persistent selected state
+and hovered and selected are one treatment, so a reacting glyph would leave the
+current row permanently emphasized. `RowIcon` in
+`renderer/src/components/ui/sidebar-menu-label.tsx` holds that for the menu rows
+and `renderer/src/features/workspace/ui/file-tree-rows.tsx` for the tree, the
+latter with an `!important` stroke that keeps the button primitive's own
+thickening off a row it composes. A row's trailing control
+(`renderer/src/components/ui/sidebar-menu-action.tsx`) takes neither recipe
+whole: the row beneath it already draws the fill, so the action draws none and
+darkens its glyph alone. `design-docs/visual-style.md` states the same rule as
+product intent, and the two are maintained together.
+
+Resting at 1.5 is a choice every glyph has to make, because lucide's own default
+is 2 and a glyph that names no weight is not neutral — it is a step heavier than
+everything a primitive drew beside it. A standalone glyph in a feature therefore
+names its `strokeWidth`, and the one glyph set drawn from data carries the
+defaults itself: `renderer/src/components/ui/file-type-icon.tsx` maps a file
+extension to its own lucide file glyph at the ladder's size and the resting
+stroke, so one Markdown file draws the same mark in a search result, a mention
+row, and a transcript chip. `renderer/src/shared/brand/logo.tsx` draws the product mark
+and stays separate for the same reason: neither set is a product control. A brand
+mark keeps its own strokes; the OpenQuill feather alone is a lucide glyph, and
+where it stands beside a title rather than beside vendor marks it takes the
+chrome's stroke.
 
 ## Accessibility
 
@@ -353,6 +479,16 @@ is reached only by the token gate below. The styling rules are:
 - No `dark:` variant in source. Themes go through `light-dark()` tokens.
 - No motion literal in source, meaning neither a numeric `duration-<n>` utility
   nor a `duration: 0.x` transition object. Durations are the named steps.
+- No `rounded-*` literal in source. Corners come from a `useShape()` role,
+  from the size ladder, or from `shapeTokens` where no component wraps the
+  string, because a radius spelled at a call site cannot follow any of them and
+  is what lets one surface fall behind when a step moves. The check exempts the
+  two modules that own the values and the story canvas. Four structural cases
+  carry a `shape-literal:` note on their own line instead, the way a selector
+  query carries `dom-contract:`: a corner inherited from a host, a radius being
+  removed rather than chosen, a variant prefix no class variable can ride, and
+  a descendant variant. `radiusLiteralsPending` is the escape for a file not
+  converted yet and is empty; the check asserts it stays empty.
 - Class-name assertions, `toHaveClass` and `className).toContain`, only in
   `components/ui` tests, where the class is the primitive's observable contract.
   Every other test asserts behavior.

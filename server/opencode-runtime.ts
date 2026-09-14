@@ -180,17 +180,16 @@ export function buildOpenCodeConfig(
     },
     agent: {
       'stashbase-folder': {
-        description: 'StashBase OpenQuill for one authorized library folder.',
+        description: 'StashBase OpenQuill for one authorized project folder.',
         mode: 'primary',
         prompt: runtimeInstructions,
       },
-      'stashbase-library': {
-        description: 'StashBase OpenQuill for the authorized library.',
+      'stashbase-unbound': {
+        description: 'StashBase OpenQuill for a conversation without a project.',
         mode: 'primary',
         prompt: runtimeInstructions,
-        // A Library chat spans a non-contiguous set of registered folders.
-        // Native cwd tools cannot express that membership boundary, so this
-        // mode reaches files only through the scoped StashBase MCP server.
+        // Unbound conversations do not access local project files. Disable
+        // native filesystem tools; StashBase MCP enforces the live binding.
         tools: {
           read: false,
           write: false,
@@ -272,7 +271,7 @@ class OpenCodeRuntime {
           failure: {
             stage: 'authentication',
             code: 'account-required',
-            message: 'Sign in to StashBase to use the included weekly Agent allowance.',
+            message: 'Sign in to StashBase to use OpenQuill and its free credits.',
             retryable: true,
           },
         },
@@ -444,14 +443,14 @@ export function createOpenCodeSessionRuntime(
     windowId: string;
     agentSessionId: string;
     cwd: string;
-    scope: 'folder' | 'library';
+    scope: 'folder' | 'unbound';
   },
 ): OpenCodeSessionRuntime {
   const sessionRuntime = new OpenCodeRuntime({
     STASHBASE_WINDOW_ID: context.windowId,
     STASHBASE_AGENT_SESSION_ID: context.agentSessionId,
   }, resolveAgentInstructions(
-    context.scope === 'library' ? null : context.cwd,
+    context.scope === 'unbound' ? null : context.cwd,
   ), true, context.agentSessionId);
   return {
     client: (directory) => sessionRuntime.client(directory),

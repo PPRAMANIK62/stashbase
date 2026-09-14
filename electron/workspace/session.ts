@@ -4,6 +4,8 @@ import type { BrowserWindow, IpcMain } from 'electron';
 import { promises as fs } from 'node:fs';
 
 import {
+  MAX_WORKSPACE_SESSION_BYTES,
+  MAX_WORKSPACE_SESSION_FOLDERS,
   WORKSPACE_SESSION_CAPABILITY,
   WORKSPACE_SESSION_READ_CHANNEL,
   WORKSPACE_SESSION_WRITE_CHANNEL,
@@ -13,10 +15,11 @@ import {
   workspaceSessionSnapshotSchema,
   workspaceSessionWriteResponseSchema,
 } from '../../shared/protocols/electron/workspace-session.ts';
-import { authorizeSender, type SenderAuthorization } from '../library/dialog.ts';
+import { authorizeSender, type SenderAuthorization } from '../project/dialog.ts';
 
 export { WORKSPACE_SESSION_CAPABILITY };
 
+/** File adapter; the IPC owner serializes complete read/merge/write transactions. */
 export interface WorkspaceSessionStore {
   read(): Promise<WorkspaceSessionSnapshotWire | null>;
   write(snapshot: WorkspaceSessionSnapshotWire): Promise<void>;
@@ -51,8 +54,6 @@ export function createWorkspaceSessionStore({
   filePath: string;
   fileSystem?: WorkspaceSessionFileSystem;
 }): WorkspaceSessionStore {
-  let writeQueue = Promise.resolve();
-
   const write = async (snapshot: WorkspaceSessionSnapshotWire) => {
     const validated = workspaceSessionSnapshotSchema.parse(snapshot);
     await fileSystem.mkdir(path.dirname(filePath), { mode: 0o700, recursive: true });
@@ -63,20 +64,9 @@ export function createWorkspaceSessionStore({
         flag: 'wx',
         mode: 0o600,
       });
-      try {
-        await fileSystem.rename(temporary, filePath);
-      } catch (error) {
-        if (
-          typeof error !== 'object' ||
-          error === null ||
-          !('code' in error) ||
-          (error.code !== 'EEXIST' && error.code !== 'EPERM')
-        ) {
-          throw error;
-        }
-        await fileSystem.rm(filePath, { force: true });
-        await fileSystem.rename(temporary, filePath);
-      }
+      // A failed replacement must retain the last valid snapshot, including
+      // sharing/permission failures on Windows. Never unlink it to retry.
+      await fileSystem.rename(temporary, filePath);
     } finally {
       await fileSystem.rm(temporary, { force: true });
     }
@@ -84,7 +74,6 @@ export function createWorkspaceSessionStore({
 
   return {
     async read() {
-      await writeQueue.catch(() => undefined);
       let raw: string;
       try {
         raw = await fileSystem.readFile(filePath, 'utf8');
@@ -99,20 +88,60 @@ export function createWorkspaceSessionStore({
         return null;
       }
     },
-    write(snapshot) {
-      writeQueue = writeQueue.catch(() => undefined).then(() => write(snapshot));
-      return writeQueue;
-    },
+    write,
   };
 }
 
 const failure = (kind: 'unauthorized' | 'unavailable' | 'invalid-response', message: string) =>
   workspaceSessionFailureSchema.parse({ ok: false, failure: { kind, message } });
 
+/** Apply only this window's changes, so a cached folder in another window is
+ * neither a replacement for newer state nor authority to resurrect a removal. */
+function mergeWindowSnapshot(
+  durable: WorkspaceSessionSnapshotWire | null,
+  previous: WorkspaceSessionSnapshotWire | null,
+  next: WorkspaceSessionSnapshotWire,
+): WorkspaceSessionSnapshotWire {
+  const folders = new Map(durable?.folders.map((folder) => [folder.folderPath, folder]));
+  const before = new Map(previous?.folders.map((folder) => [folder.folderPath, folder]));
+  const present = new Set(next.folders.map((folder) => folder.folderPath));
+  for (const folderPath of before.keys()) {
+    if (!present.has(folderPath)) folders.delete(folderPath);
+  }
+  for (const folder of next.folders) {
+    if (JSON.stringify(before.get(folder.folderPath)) === JSON.stringify(folder)) continue;
+    folders.delete(folder.folderPath);
+    folders.set(folder.folderPath, folder);
+  }
+  const merged = {
+    ...next,
+    folders: [...folders.values()].slice(-MAX_WORKSPACE_SESSION_FOLDERS),
+  };
+  // Keep the most recently changed records under the same wire/disk budget.
+  // Every incoming snapshot is already valid, so eviction can always fit it.
+  while (Buffer.byteLength(JSON.stringify(merged)) > MAX_WORKSPACE_SESSION_BYTES) {
+    merged.folders.shift();
+  }
+  return workspaceSessionSnapshotSchema.parse(merged);
+}
+
 export function registerWorkspaceSession(
   dependencies: WorkspaceSessionDependencies,
 ): void {
   const snapshotByWindow = new WeakMap<BrowserWindow, WorkspaceSessionSnapshotWire | null>();
+  let durable: WorkspaceSessionSnapshotWire | null | undefined;
+  let pending = Promise.resolve();
+  // Serialize the entire read/merge/write transaction, including each window's
+  // delta baseline. Atomic file replacement alone cannot prevent lost updates.
+  const serialize = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = pending.then(operation);
+    pending = result.then(() => undefined, () => undefined);
+    return result;
+  };
+  const readDurable = async () => {
+    if (durable === undefined) durable = await dependencies.store.read();
+    return durable;
+  };
 
   dependencies.ipcMain.handle(WORKSPACE_SESSION_READ_CHANNEL, async (event) => {
     const senderWindow = authorizeSender(event, dependencies, WORKSPACE_SESSION_CAPABILITY);
@@ -120,16 +149,14 @@ export function registerWorkspaceSession(
       return failure('unauthorized', 'This window cannot restore workspace session state.');
     }
     try {
-      let session = snapshotByWindow.get(senderWindow);
-      if (!snapshotByWindow.has(senderWindow)) {
-        session = dependencies.claimRestore(senderWindow)
-          ? await dependencies.store.read()
-          : null;
-        snapshotByWindow.set(senderWindow, session);
-      }
-      return workspaceSessionReadResponseSchema.parse({
-        ok: true,
-        session,
+      return await serialize(async () => {
+        if (!snapshotByWindow.has(senderWindow)) {
+          snapshotByWindow.set(senderWindow, dependencies.claimRestore(senderWindow)
+            ? await readDurable() : null);
+        }
+        return workspaceSessionReadResponseSchema.parse({
+          ok: true, session: snapshotByWindow.get(senderWindow),
+        });
       });
     } catch {
       return failure('unavailable', 'Workspace session state could not be restored.');
@@ -146,9 +173,15 @@ export function registerWorkspaceSession(
       return failure('invalid-response', 'The workspace session state was invalid.');
     }
     try {
-      snapshotByWindow.set(senderWindow, snapshot.data);
-      await dependencies.store.write(snapshot.data);
-      return workspaceSessionWriteResponseSchema.parse({ ok: true });
+      return await serialize(async () => {
+        const merged = mergeWindowSnapshot(
+          await readDurable(), snapshotByWindow.get(senderWindow) ?? null, snapshot.data,
+        );
+        await dependencies.store.write(merged);
+        durable = merged;
+        snapshotByWindow.set(senderWindow, snapshot.data);
+        return workspaceSessionWriteResponseSchema.parse({ ok: true });
+      });
     } catch {
       return failure('unavailable', 'Workspace session state could not be persisted.');
     }

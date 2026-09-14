@@ -41,7 +41,7 @@ describe('Agent context API', () => {
     expect(resolved).toMatchObject({ kind: 'derived', readPath: '/app-data/derived/report.md' });
     const request = vi.mocked(http.request).mock.calls[0]?.[0];
     expect(request?.path).toBe(
-      `/api/library/agent-context-file?${new URLSearchParams({ path: '/Library/Research/papers/report.pdf' })}`,
+      `/api/project/agent-context-file?${new URLSearchParams({ path: '/Library/Research/papers/report.pdf' })}`,
     );
   });
 

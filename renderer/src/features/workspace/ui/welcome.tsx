@@ -1,4 +1,4 @@
-/** What a window shows before any folder is open: the library's recent
+/** What a window shows before any folder is open: the project's recent
  *  folders, the three ways to add one, and the Gallery band the caller
  *  composes in. */
 import { useQuery } from '@tanstack/react-query';
@@ -8,36 +8,39 @@ import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import type {
   GitHubImportPort,
-  LibraryFolderPickerPort,
-  LibraryLifecyclePort,
-  LibraryPort,
+  ProjectFolderPickerPort,
+  ProjectLifecyclePort,
+  ProjectRegistryPort,
 } from '@/features/workspace/application/ports';
-import { libraryQuery } from '@/features/workspace/application/queries';
+import { projectQuery } from '@/features/workspace/application/queries';
 import {
   displayFolderPath,
   folderName,
   isTemporaryFolderPath,
   parentFolderPath,
-} from '@/features/workspace/domain/library';
+} from '@/features/workspace/domain/project';
 import { useFolders } from '@/features/workspace/hooks/use-folders';
 import { useGitHubImportDialog } from '@/features/workspace/hooks/use-github-import-dialog';
 import { useRemoveFolder } from '@/features/workspace/hooks/use-remove-folder';
 import { focusRing } from '@/lib/focus-ring';
+import { useShape } from '@/lib/shape-context';
+import { useSize } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/shared/brand/logo';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 import { ImportGitHubDialog } from './import-github-dialog';
 import { RemoveFolderDialog } from './remove-folder-dialog';
 
-export interface LibraryWelcomeProps {
-  api: LibraryPort;
-  folderPicker: LibraryFolderPickerPort;
+export interface ProjectWelcomeProps {
+  api: ProjectRegistryPort;
+  folderPicker: ProjectFolderPickerPort;
   /** The Gallery band. Composed rather than owned here: the shop is its own
    *  feature, and this screen is only one of the two ways in. */
   gallery?: ReactNode;
   githubImport: GitHubImportPort;
   isRestoringSession?: boolean;
-  lifecycle: LibraryLifecyclePort;
+  lifecycle: ProjectLifecyclePort;
 }
 
 /** The row's one action, shown on hover: a direct ✕ that asks the remove
@@ -45,7 +48,7 @@ export interface LibraryWelcomeProps {
  *  menu. It is a sibling of the row rather than a child, because the row is
  *  itself a button and a button cannot hold another. A bare button rather
  *  than the kit's ghost: its hover fill would nest a second gray box inside
- *  the row's own tint, so the hover feedback here is ink weight alone, and
+ *  the row's own tint, so the hover feedback here is ink alone, and
  *  only the press paints a fill. */
 function RecentFolderActions({
   disabled,
@@ -56,14 +59,16 @@ function RecentFolderActions({
   name: string;
   onRemove(): void;
 }) {
+  const shape = useShape();
   return (
     <button
       aria-label={`Remove ${name}`}
       className={cn(
-        'absolute top-1/2 right-2 flex size-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[color,opacity] duration-fast outline-none',
+        'absolute top-1/2 right-2 flex size-7 -translate-y-1/2 cursor-pointer items-center justify-center text-muted-foreground opacity-0 transition-[color,opacity] duration-fast outline-none',
+        shape.item,
         'group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100',
         'hover:text-foreground active:bg-hover disabled:pointer-events-none',
-        '[&_svg]:size-4 [&_svg]:stroke-[1.5] [&_svg]:transition-[stroke-width] [&_svg]:duration-fast hover:[&_svg]:stroke-2',
+        '[&_svg]:size-4 [&_svg]:stroke-[1.5]',
         focusRing(),
       )}
       disabled={disabled}
@@ -75,26 +80,28 @@ function RecentFolderActions({
   );
 }
 
-export function LibraryWelcome({
+export function ProjectWelcome({
   api,
   folderPicker,
   gallery,
   githubImport,
   isRestoringSession = false,
   lifecycle,
-}: LibraryWelcomeProps) {
-  const library = useQuery(libraryQuery(api));
+}: ProjectWelcomeProps) {
+  const project = useQuery(projectQuery(api));
   const folders = useFolders(api, folderPicker);
   const removal = useRemoveFolder(api, lifecycle);
   const importDialog = useGitHubImportDialog(githubImport, folders.select);
+  const shape = useShape();
+  const sizeClasses = useSize();
 
-  if (!library.data || library.data.activeFolder || isRestoringSession) return null;
+  if (!project.data || project.data.activeFolder || isRestoringSession) return null;
 
-  const { homeDirectory } = library.data;
+  const { homeDirectory } = project.data;
   // The list is a memory of the places the reader works, so the scratch
   // directories a smoke test or an import registers stay out of it. They
-  // remain members, and the sidebar's chooser still lists them.
-  const recent = library.data.members.filter((member) => !isTemporaryFolderPath(member.path));
+  // remain projects, and the sidebar's chooser still lists them.
+  const recent = project.data.projects.filter((member) => !isTemporaryFolderPath(member.path));
   const creating = folders.pendingRequest?.kind === 'create';
   const opening = folders.pendingRequest?.kind === 'open';
 
@@ -186,7 +193,12 @@ export function LibraryWelcome({
              * app, so the inset lives on the rows rather than the frame. The
              * header mirrors Recent's, so the two framed columns read as one
              * titled pair. */}
-            <div className="flex min-w-0 flex-col rounded-xl border border-border bg-surface-2 shadow-surface-2">
+            <div
+              className={cn(
+                'flex min-w-0 flex-col border border-border bg-surface-2 shadow-surface-2',
+                shape.card,
+              )}
+            >
               <h2 className="border-b border-border px-4 py-3 text-body font-medium">Start</h2>
               <ul aria-label="Add a folder" className="flex flex-1 flex-col divide-y divide-border">
                 {ways.map((way) => (
@@ -208,7 +220,12 @@ export function LibraryWelcome({
              * not however long the reader's paths happen to be: a short path
              * no longer leaves the right half empty, and a long one truncates
              * at the frame instead of running off. */}
-            <div className="flex min-w-0 flex-col rounded-xl border border-border bg-surface-2 shadow-surface-2">
+            <div
+              className={cn(
+                'flex min-w-0 flex-col border border-border bg-surface-2 shadow-surface-2',
+                shape.card,
+              )}
+            >
               <h2 className="border-b border-border px-4 py-3 text-body font-medium">Recent</h2>
               {recent.length > 0 ? (
                 /* Five 2.75rem rows plus the ring padding, so the list ends on
@@ -233,7 +250,14 @@ export function LibraryWelcome({
                             // path sits at the far edge in the caption
                             // voice — the two-line stack read as a dense
                             // text block against the card's empty right.
-                            'flex h-11 w-full cursor-pointer items-center gap-3 rounded-lg pr-12 pl-4 text-left transition-colors duration-fast outline-none hover:bg-hover disabled:pointer-events-none disabled:opacity-50',
+                            // group-hover, not hover: the remove control is the row's sibling,
+                            // outside this button, so the tint follows the pointer
+                            // over the whole row, the ✕ included.
+                            'flex h-11 w-full cursor-pointer items-center gap-3 pr-12 pl-4 text-left transition-colors duration-fast outline-none group-hover:bg-hover disabled:pointer-events-none disabled:opacity-50',
+                            // The row is 44px, taller than the 28px sidebar
+                            // row `shape.item` is cut for, so it takes the
+                            // ladder's own corner for a full-size control.
+                            sizeClasses.radius,
                             focusRing(),
                           )}
                           disabled={folders.isPending}
@@ -248,6 +272,7 @@ export function LibraryWelcome({
                             <LoaderCircle
                               aria-label="Opening"
                               className="size-3.5 shrink-0 motion-safe:animate-spin"
+                              strokeWidth={1.5}
                             />
                           )}
                           {/* The path trails the name in the caption voice —
@@ -276,9 +301,9 @@ export function LibraryWelcome({
             </div>
           </div>
           {folders.failure && (
-            <p className="mt-3 text-caption text-destructive" role="alert">
+            <FailureLine className="mt-3" tone="input">
               {folders.failure}
-            </p>
+            </FailureLine>
           )}
           {removal.warning && (
             <p className="mt-3 text-caption text-muted-foreground" role="status">

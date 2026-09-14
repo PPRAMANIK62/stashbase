@@ -1,6 +1,6 @@
 # StashBase
 
-**Turn your local files into a Wiki for your agents.**
+**Like an IDE, but for writing.**
 
 [![Website](https://img.shields.io/badge/website-stashbase.ai-0a66c2.svg)](https://stashbase.ai)
 [![Release](https://img.shields.io/github/v/release/liliu-z/stashbase?label=release)](https://github.com/liliu-z/stashbase/releases/latest)
@@ -8,14 +8,18 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-support%20%26%20chat-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/zsRZH4PTq9)
 
-StashBase is an open-source, local-first app that helps your agents find and
-reuse context across personal notes, research libraries, project docs, and
-knowledge bases.
+StashBase is an open-source, local-first IDE for writing. Enter a project,
+brainstorm with an Agent, and turn your ideas into drafts and revisions in
+ordinary files you own.
 
-Build linked Markdown Wiki Pages from your sources, make difficult formats
-searchable, and work with OpenQuill, Claude Code, Codex, or other MCP clients.
-Your original files stay in place, and the Wiki Pages remain ordinary files
-you own.
+Start with an empty folder or bring your own notes, papers, documents, and
+recordings. Use OpenQuill, Claude Code, or Codex to explore an idea, draw on
+relevant material, and write alongside your sources. File preparation, indexing,
+search, and MCP supply context when you need it; building a wiki is optional.
+
+**Available now:** projects, brainstorming, drafting and editing, Agent
+collaboration, local-file preparation, indexing, search, and MCP.
+**Coming soon:** document-specific inline diff for fine revision.
 
 ## Demo
 
@@ -24,24 +28,34 @@ uses the bundled guides to answer **“How do I use StashBase?”**
 
 ![StashBase demo: browsing local guides and asking OpenQuill how to use StashBase](assets/readme/demo.gif)
 
-## From Files to Context
+## From Ideas to Writing
 
-Giving an Agent access to a folder is a starting point. Useful evidence may be
-buried in a long document, use different words from your question, or live in a
-scan or recording. StashBase helps turn that material into reusable context:
+- **Enter a project.** Open an existing local folder, create an empty project,
+  or take a copy from GitHub or the Gallery. Your files stay yours.
+- **Brainstorm with an Agent.** Discuss an idea, challenge an outline, or
+  explore alternatives before writing. No source file, wiki, or completed
+  index is required to begin.
+- **Draft and revise.** Ask your Agent to create or edit a document, or write
+  directly in the editor. Read references beside Chat, inspect the result,
+  and save your changes. Drafting and ordinary revision are available today.
+- **Use your own material.** Search supported project files, including text
+  extracted from PDFs, DOCX files, scans, and recordings. Optional search by
+  meaning helps when the wording differs. Results lead back to the source.
+- **Work with your agents.** OpenQuill is included; Claude Code and Codex are
+  supported alternatives. External MCP clients can use the same authorized
+  project context and file operations.
 
-- **Build a Wiki from your sources.** Ask an Agent to create a linked overview
-  and focused pages that explain what's inside, with links back to the original
-  files. Those pages become context for later work.
-- **Find the material that matters.** Keyword search over everything, with
-  text extracted from PDFs, DOCX files, images, and recordings, and search by
-  meaning once you add your own embedding key. Results lead back to the
-  source files.
-- **Work with your agents.** Use the included OpenQuill, bring Claude Code or
-  Codex into Chat, or connect an external MCP client to the same library.
-- **Keep your files yours.** Browse, read, and edit supported files alongside
-  the conversation. Sources keep their original layout; Wiki Pages are visible
-  Markdown you can open and use outside StashBase.
+### Document Diff — Coming soon
+
+Review suggested edits directly in the document as you read it. The planned
+experience keeps paragraphs and formatting in place, marks deleted words and
+phrases with red strikethrough, and highlights additions in green. Revisions
+appear within the surrounding prose rather than in a line-by-line code patch.
+
+Accept or reject individual changes, or use **Accept All** and **Reject All**
+to review the whole set. This writing-focused, tracked-changes experience is
+**not yet available**. Existing Agent file diffs and editor save-conflict
+comparisons already work; they are separate from this coming feature.
 
 ## Get Started
 
@@ -65,53 +79,63 @@ Or [download the latest release](https://github.com/liliu-z/stashbase/releases/l
 See [Installation](docs/installation.md) for platform steps, updates, and
 troubleshooting.
 
+### Start Writing
+
+1. **Enter a project.** Open or create a folder from Welcome. An empty project
+   is fine; you can also import a public GitHub repository or copy a Gallery
+   example.
+2. **Choose an Agent.** OpenQuill is included and selected initially; sign in
+   to StashBase to use its free credits. Alternatively, select Claude Code or
+   Codex and complete that runtime's setup with your provider account.
+3. **Discuss your idea.** Try: “I'd like to write about what makes a good
+   research question. Help me explore a few angles before we draft.”
+4. **Start writing when ready.** Ask the Agent to create an outline or draft
+   in the project, or create a new draft yourself. Open the document beside
+   Chat to read, edit, and continue the discussion.
+
+You can already write and revise this way. The [document diff](#document-diff--coming-soon)
+for reviewing fine edits inside the prose is coming soon.
+
+See [Using StashBase](docs/using-stashbase.md) for everyday document, search,
+and transcription workflows. Open the bundled **Start Here** project for
+local guides, then ask its Chat **“How do I use StashBase?”**
+
 ### Build Your First Wiki
 
-1. **Choose your material.** Open your own folder, or explore the Gallery in
-   the app and choose **Make a copy** to download and open a ready-made Wiki.
-2. **Choose an Agent.** OpenQuill is included and selected initially; sign in
-   to StashBase to use its free credits. You can also select
-   Claude Code or Codex and use your own provider account.
-3. **Build and use the Wiki.** In a Chat scoped to your folder, try:
+If your project contains reference material, a linked wiki can help organize
+it. This is an optional Agent task, not a prerequisite for writing. Try:
 
-   > Build a Wiki from the sources in this folder. Create an overview, organize
-   > the main topics, and link back to the source files.
+> Build a wiki from the sources in this folder. Create wiki/index.md as an
+> overview, add focused pages under wiki/ where useful, and link back to the
+> sources. Preserve the original files.
 
-   Then ask a question about the material, open its sources beside the Chat,
-   and ask the Agent to improve the pages as you learn more.
-
-A Build Wiki request creates or improves `wiki/index.md` and, when useful,
-pages beside it, preserving Sources outside `wiki/`. Building or updating
-these pages is an explicit Agent request; opening a folder does not
-schedule automatic Wiki maintenance.
+Review the generated files and continue the conversation. Building or updating
+wiki pages is an explicit request; opening a folder does not schedule automatic
+wiki maintenance.
 
 **Search by meaning** is off until you add your own OpenAI or OpenRouter key
-under **Settings → Search by Meaning**. Keyword search works without it, and
-turning it on is independent of building Wiki Pages.
-
-See [Using StashBase](docs/using-stashbase.md) for search, transcription, and
-everyday file workflows. You can also ask Chat **“How do I use StashBase?”**
+under **Settings → Search by Meaning**. Keyword search works without it;
+neither setting is required to brainstorm or write.
 
 ## Explore the Gallery
 
-Start with a real folder that already has a Wiki built from it. Gallery entries
-include starter prompts, and entries with a build request let you copy it for
-your own material.
+Find inspiration in a ready-made project with linked wiki pages. Make a copy,
+discuss its material, and build on it in your own writing. Entries with a build
+request let you copy that prompt for your own material.
 
 For example, [How to Start a Startup](https://stashbase.ai/examples/cs183b/)
 brings together Stanford CS183B lecture transcripts and a founder playbook.
 Use it to explore questions about startup ideas, product-market fit, and growth.
 
-Your own starting point might be a research collection, project documents, or
-personal notes. Build an overview of the topics, decisions, and sources, then
-use it with your Agent as the work continues.
+Gallery copies, your own reference collections, and empty projects all use the
+same writing workspace.
 
 [Explore the Gallery →](https://stashbase.ai/gallery/)
 
 ## Your Files and Your Data
 
-Sources and Wiki Pages stay in ordinary local folders. Extracted text and
-search indexes are app-managed data. Removing a folder from the Library clears
+References, drafts, and wiki pages stay in ordinary local folders. Extracted text and
+search indexes are app-managed data. Removing a registered project clears
 StashBase's state for it without deleting your files.
 
 Local browsing, editing, preview, and keyword search need no cloud account.
@@ -119,10 +143,15 @@ OCR and optional audio/video transcription run locally. With your own
 embedding key added, search by meaning sends relevant text to that provider
 for indexing and queries for retrieval.
 
+PDF/OCR preparation downloads its local component automatically on first use;
+after installation it works offline. A failed download waits for the next launch
+or **Retry download** in **Settings → General → Local components**. Preview
+does not wait for that download.
+
 OpenQuill runs locally, with prompts and necessary model context sent through
 StashBase's hosted model gateway. Claude Code and Codex use their own provider
-accounts. Local-first means you retain your files and control which folders
-join the Library; model-backed features can still use cloud services.
+accounts. Local-first means you retain your files and control which project folders
+StashBase can access; model-backed features can still use cloud services.
 
 ## Connect Your Agents
 
@@ -131,9 +160,8 @@ Claude Code or Codex used in the built-in Chat. You can review tool calls and
 file edits in the app.
 
 To use an external MCP client, keep StashBase running and copy the connection
-configuration from **Settings → MCP** into that client. It can search the
-library, read prepared source content, and use bounded file operations within
-the authorized folders.
+configuration from **Settings → MCP** into that client. It searches one explicitly selected project at a time, reads prepared source
+content, and uses bounded file operations within registered project folders.
 
 See [MCP Configuration](docs/mcp-configuration.md) for client examples,
 transports, and access settings.
@@ -165,7 +193,7 @@ env -u ELECTRON_RUN_AS_NODE pnpm electron
 # Development mode
 env -u ELECTRON_RUN_AS_NODE pnpm dev
 
-# Optional: include the local PDF/OCR extractor sidecar
+# Build the independent local PDF/OCR component payload
 pnpm build:python-extract-sidecar
 ```
 
@@ -201,9 +229,9 @@ and direction can be discussed first.
 
 ## Status
 
-**Early alpha.** Feedback and contributions are welcome, especially around
-Agent workflows, search quality, preparation and recovery, and cross-platform
-reliability.
+**Early alpha.** The project, Agent, writing, and reference workflows are
+available. **Document diff is coming soon.** Feedback is welcome on these
+workflows, preparation and recovery, and cross-platform reliability.
 
 [Report an issue](https://github.com/liliu-z/stashbase/issues) or
 [join the Discord community](https://discord.gg/zsRZH4PTq9) for support and discussion.
@@ -212,6 +240,6 @@ reliability.
 
 StashBase is an independent open-source project built by
 [Li Liu](https://github.com/liliu-z), bringing vector-retrieval experience to
-making local knowledge useful to Agents.
+helping people turn ideas and local source material into writing with Agents.
 
 Licensed under [Apache 2.0](LICENSE).

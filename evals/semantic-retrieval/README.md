@@ -10,10 +10,12 @@ pnpm eval:semantic-retrieval --out release.nosync/j05-openai-1.txt
 
 The command uses the OpenAI or OpenRouter key already saved in **StashBase
 Settings > Search by Meaning**. It does not read credentials from environment variables,
-launch Electron, touch the user's library, or reuse the product vector store.
-It creates an isolated temporary library and store, indexes the versioned
+launch Electron, touch the user's projects, or reuse the product vector store.
+It creates an isolated temporary project and store, indexes the versioned
 fixtures through `MfsIndexer`, and searches through the production Retrieval
-Interface. The temporary data is removed after the run. `--out` additionally
+Interface. Prepared PDF fixtures also publish completed text under isolated
+AppData so retrieval exercises the production source-availability checks.
+The temporary data is removed after the run. `--out` additionally
 writes the report to a file for release evidence; the report never contains a
 credential.
 

@@ -44,7 +44,7 @@ executable with `chmod +x`, and run it directly.
 Quit StashBase before updating. For Homebrew installations, run
 `brew upgrade --cask stashbase`. Otherwise, run the newer installer over the
 existing installation; on Linux, repeat the `apt install` command with the new
-package. Your Library and settings are preserved.
+package. Your Projects and settings are preserved.
 
 To uninstall:
 
@@ -86,7 +86,7 @@ any error message and your platform when asking the community for help.
 ### Disk space is running low
 
 Prepared text, media previews, downloaded speech models, and search indexes
-need local disk space. Removing a folder from the Library clears its
+need local disk space. Removing a folder from the project registry clears its
 StashBase-owned index and derived data without deleting the source files.
 
-Continue with [Build Your First Wiki](../README.md#build-your-first-wiki).
+Continue with [Start Writing](../README.md#start-writing).

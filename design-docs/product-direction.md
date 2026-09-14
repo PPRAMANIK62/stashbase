@@ -1,125 +1,124 @@
 # Product Direction
 
-StashBase is evolving as one Wiki for local files, delivered through
-three connected capabilities:
+StashBase is an **IDE for writing**. Its primary sequence is:
 
-> A VS Code-like Document Workbench, a Codex-like Agent Panel, and a local
-> RAG layer for document retrieval.
+```text
+Enter a project → discuss ideas and brainstorm → write → refine
+```
 
-Sources and visible Wiki Pages are complementary parts of the Wiki. Wiki Pages
-help people and Agents navigate durable knowledge; searching by meaning
-retrieves relevant material when wording and file layout are insufficient.
-None of these capabilities replaces the local files as source of truth.
+This is an order of work, not a delivery roadmap. The existing project,
+conversation, document, and context capabilities are implemented. The remaining
+product feature is document-specific diff. Defects and evidence gaps are
+maintained separately from that feature status.
 
 ## AI-native Product Scope
 
-StashBase is not constrained to one isolated AI feature. Its value comes from
-continuous assistance across an existing local-file workflow: more formats
-become understandable, evidence becomes easier to retrieve, Agents receive
-stable context, and accepted results return to ordinary files. Adding breadth
-is consistent with the product when the new capability deepens this same
-environment and reuses its source identity, library scope, permission, and
-recovery model.
+People should be able to start from an idea, a question, or existing material.
+An ordinary local folder gives the work a scope. Agent conversation helps them
+explore alternatives and develop a direction; documents hold whatever they
+choose to write and keep. Moving between discussion and document work should
+preserve that continuity.
 
-The limiting resource is product coherence, not generated code. A new format,
-provider, or Agent may extend an existing capability without adding a new user
-concept. A second knowledge store, document model, authorization world, or
-unrelated work surface changes the product model and requires explicit
-direction before implementation.
+Reference preparation, indexing, search, MCP, and wiki building support this
+workflow. They need no separate mandatory onboarding before a conversation.
+Build Wiki is an optional source-organization task, not the product identity or
+a required project activation step. Gallery copies are another way to enter
+with useful material; existing folders and empty projects remain equal entry
+paths.
+
+New work must reuse the local-file, project, permission, and recovery model.
+This direction does not introduce proprietary document storage, a global
+cross-project search scope, or automatic acceptance of Agent edits.
 
 ## Document Workbench
 
-StashBase should provide a workbench for browsing, reading, editing, navigating,
-and organizing documents across ordinary local folders. Like a code workbench,
-it uses a file tree, persistent tabs, quick navigation, and format-appropriate
-surfaces, but it remains centered on documents rather than code. It works with
-the user's existing files without replacing them with a database, block editor,
-or proprietary storage model.
+Browsing, creating drafts, reading, editing, saving, resolving conflicts, and
+navigating documents already form the writing workspace. The
+[Documents capability matrix](design/documents.md#format-capability-matrix)
+records which operations each format supports. IDE for writing does not mean
+that every previewable format is content-editable.
+
+### Document-specific diff — remaining feature
+
+**Coming soon.** The unfinished feature is an inline, tracked-changes
+experience for fine revision. Review happens in the readable document, with
+its paragraph structure and formatting retained. Deleted words and phrases
+appear in red with strikethrough; additions are highlighted in green at their
+place in the prose. The person reads the surrounding sentence and paragraph
+instead of switching to a line-oriented source patch.
+
+The intended interaction supports accepting or rejecting individual suggested
+changes and accepting or rejecting the full set. These are product-direction
+requirements, not claims about the current editor or a live approval gate over
+all Agent writes. Existing Agent file diffs and editor/disk conflict comparisons
+remain separate implemented mechanisms.
+
+This is a presentation and review model, not a claim that an algorithm can
+judge whether a wording change is better. Supported formats, exact change
+segmentation, how suggestions remain pending before application, persistence,
+and integration with save/version conflicts still need concrete design and
+validation. The Documents area owns the experience; Agent Panel and File
+Transactions own the integration boundaries. This reference establishes the
+inline revision behavior, not a requirement to reproduce another editor's
+entire toolbar or layout.
 
 ## Agent Panel
 
-The Agent Panel works against an explicit library or folder scope.
-Before a document is opened, Chat is the primary working surface; once a
-document appears, the same Chat adapts into a side panel alongside the source.
-It is a convenient client of StashBase context, not a separate AI workspace
-and not a replacement for external Agent clients.
+Agent collaboration is available for brainstorming, reference questions,
+drafting, and revision. The main product entry is a project-bound Chat; it can
+start without any source files. Opening a document can dock the same Chat
+beside it. A discussion need not produce a file to be useful, and a file is
+written only through the requested work and applicable permission rules.
 
-Building a wiki over the user's own folder is a plain Build Wiki request
-in Chat; the **Gallery** teaches it by example — every entry is a real
-folder with a wiki built from it, downloadable as a copy, its detail page
-showing the exact request that produced it.
-The request asks the selected Agent to create or improve source-linked
-`wiki/index.md` and, only when needed, focused pages beside it. The first
-release does not infer a
-persistent built/stale state or schedule refreshes. It preserves source files:
-moving, renaming, deletion, and broad source rewrites require a separate
-explicit user decision.
+OpenQuill is the included runtime, with account sign-in for its model service.
+Claude Code and Codex remain supported alternatives with their own readiness
+and authentication. Choosing a runtime is distinct from entering a project.
+Source-grounded work can also use authorized external MCP clients.
 
-OpenQuill is the included path: a pinned local OpenCode runtime uses the
-signed-in account's free credits without asking the user to install an Agent
-or configure a model key. It remains the initial selection while the
-picker lists Codex and Claude Code before it as first-class bring-your-own
-alternatives. Sessions, file access, commands, MCP, permissions,
-and Diff handling stay local whichever path is selected; the included path
-sends only model requests through the hosted gateway.
+The backend's unbound-conversation and create-project route remains documented
+as a secondary implemented boundary with a currently unreachable in-app entry.
+It is not the primary journey or a newly promised no-project Chat feature.
+See [Agent Panel](design/agent-panel.md#no-surface-for-an-unbound-chat).
 
-Work may begin before a project exists. When an exploratory Library Chat
-becomes worth continuing, the user can explicitly turn it into an ordinary
-local project. The same conversation follows the new scope; project files
-receive only content deliberately written from the conversation.
+The packaged project Instructions and new Start Here guide copies lead with
+brainstorming and requested writing. Current greetings and suggested requests
+still include wiki-first language; the remaining mismatch is recorded under
+[Agent Panel](design/agent-panel.md#product-language-alignment).
 
 ## Local RAG Layer
 
-Opened folders become retrievable context. The local RAG layer prepares
-difficult formats, supports exact and meaning-based retrieval, and delivers
-source-grounded evidence to Agents. It should explain readiness and failures
-clearly without becoming a search or vector-database administration console.
+Preparation and retrieval are implemented context infrastructure for writing
+and discussion. They let Agents use text from supported documents, scans, and
+recordings and return to the visible source. A source-linked wiki is ordinary
+project content and enters the same file and retrieval lifecycle.
 
-Code repositories give Agents strong lexical structure through paths, symbols,
-imports, and stable identifiers, so iterative grep and file reads can often
-locate relevant code without a persistent semantic index. Document libraries
-are less predictable: a question may not share the wording of its sources, and
-evidence may span long-form files, OCR, or transcripts. StashBase therefore
-treats preparation, a persistent meaning-based index, and source-grounded
-retrieval as one first-class RAG layer instead of relying on exact terms alone.
+An Agent need not search before every brainstorm. Retrieval is useful when a
+question or requested change depends on project material. Missing or still
+preparing references must not be mistaken for evidence that was actually read.
 
 ### Search by meaning is opt-in
 
-Keyword search is the search StashBase ships with, and it is complete on its
-own. Search by meaning is an optional capability a person turns on
-deliberately, by adding an embedding key of their own under Settings; nothing
-in the product introduces it first. No launch, folder, or window offers it,
-no notice invites setup, and no surface names the mode before it is on. This
-is a choice about attention: a person arriving with a folder should reach
-their files and their Agent without being asked to learn a second retrieval
-concept, and the people who want meaning-based retrieval already know what an
-embedding key is.
-The StashBase account is not part of this. Signing in exists for OpenQuill's
-free credits and buys nothing for search, so sign-in never turns search by
-meaning on and never carries a search quota.
-Turning search by meaning on prepares Library folders and keeps eligible
-files synchronized; Build Wiki remains an independent visible-file action.
-A bring-your-own key is a choice, not a gate to local files. Browsing,
-editing, preview, exact retrieval, and an existing local index must remain
-usable through provider, network, or key failure.
+Keyword search works independently. A user enables search by meaning by adding
+an embedding key under Settings. It is not introduced or offered by onboarding,
+project entry, or other surfaces while disabled. Account sign-in serves
+OpenQuill; it does not enable search by meaning or provide a search quota.
 
-This document owns that durable choice. Shipping behavior lives in
+Adding a key enables background indexing for eligible registered projects;
+queries still target one project. Build Wiki is independent of this setting.
+Switching a lookup to keyword matching does not pause background indexing;
+removing the embedding key disables meaning-based indexing and retains keyword
+search. Local file access is not gated on either service.
+
+This document owns the durable opt-in decision. Shipping behavior lives in
 [Search and Retrieval](design/search.md),
 [J01](user-journeys.md#j01-complete-onboarding-and-reach-first-value), and
 [J05](user-journeys.md#j05-search-and-open-source-evidence). Credential and
-runtime invariants live in
-[Settings and Config](../code-review/settings-config.md) and
-[Data Lifecycle](../code-review/data-lifecycle.md).
+runtime invariants live in [Settings and Config](../code-review/settings-config.md)
+and [Data Lifecycle](../code-review/data-lifecycle.md).
 
 ## Current Investment Themes
 
-The current direction favours contributions that improve:
-
-- Markdown authoring and preview fidelity.
-- The clarity and reliability of preparation, indexing, and retrieval.
-- The usability and safety of the Agent Panel.
-- The Document Workbench's everyday reading and maintenance workflows.
-- Cross-platform reliability and an approachable contributor experience.
-
-These themes guide prioritisation; they are not release commitments. Area-level
-work and its status live in the [design documents](README.md).
+Complete the document-specific diff experience and maintain the implemented
+project, conversation, writing, and reference capabilities. Improvements to
+reliability, clarity, performance, and accessibility belong to those existing
+capabilities; they are not a second list of unimplemented product features.

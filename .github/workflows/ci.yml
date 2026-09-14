@@ -104,8 +104,8 @@ jobs:
       - name: Test conversion scheduler
         run: pnpm test:conversion-scheduler
 
-      - name: Test library file transactions
-        run: pnpm test:library-files
+      - name: Test project file transactions
+        run: pnpm test:project-files
 
       - name: Test retrieval
         run: pnpm test:retrieval
@@ -137,6 +137,10 @@ jobs:
         if: runner.os == 'Windows'
         run: pnpm build:python-extract-sidecar
 
+      - name: Build PDF/OCR download component
+        if: runner.os == 'Windows'
+        run: pnpm build:extractor-component
+
       - name: Build Windows transcription sidecar
         if: runner.os == 'Windows'
         shell: msys2 {0}
@@ -145,13 +149,10 @@ jobs:
       - name: Build packaged Windows app
         if: runner.os == 'Windows'
         env:
-          STASHBASE_REQUIRE_EXTRACT: '1'
           STASHBASE_SKIP_SIDECAR_BUILD: '1'
           STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1'
         run: pnpm dist:win
 
       - name: Smoke packaged Windows server
         if: runner.os == 'Windows'
-        env:
-          STASHBASE_REQUIRE_EXTRACT: '1'
-        run: node scripts/smoke-packaged-server.mjs --require-extract --require-transcription
+        run: node scripts/smoke-packaged-server.mjs --require-transcription

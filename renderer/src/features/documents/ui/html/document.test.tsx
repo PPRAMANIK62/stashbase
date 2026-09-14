@@ -34,7 +34,7 @@ describe('HTML document', () => {
           url: 'data:text/html,archive',
           version: 'one',
         }}
-        source={{ folderPath: '/library', path: 'archive.html' }}
+        source={{ folderPath: '/project', path: 'archive.html' }}
         tabId="tab-1"
       />,
     );
@@ -80,7 +80,7 @@ describe('HTML document', () => {
           url: 'data:text/html,archive',
           version: 'one',
         }}
-        source={{ folderPath: '/library', path: 'pages/archive.html' }}
+        source={{ folderPath: '/project', path: 'pages/archive.html' }}
         tabId="tab-1"
       />,
     );
@@ -137,7 +137,7 @@ describe('HTML document', () => {
     });
     expect(onNavigate).toHaveBeenCalledWith({
       anchor: 'details',
-      source: { folderPath: '/library', path: 'pages/next.html' },
+      source: { folderPath: '/project', path: 'pages/next.html' },
     });
     expect(onOpenExternal).toHaveBeenCalledWith('https://example.com/guide');
 

@@ -2,7 +2,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { useWorkspaceSession } from '@/features/workspace/public';
-import { libraryApi, libraryLifecycle, sessionPersistence } from '@/test/fakes/workspace';
+import { projectApi, projectLifecycle, sessionPersistence } from '@/test/fakes/workspace';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
 
 import { useWorkspaceCommands } from './use-workspace-commands';
@@ -18,12 +18,12 @@ function mountCommands() {
   const spies: Array<ReturnType<typeof vi.spyOn>> = [];
   const view = renderHook(
     () => {
-      const session = useWorkspaceSession(libraryApi(), sessionPersistence(), libraryLifecycle());
+      const session = useWorkspaceSession(projectApi(), sessionPersistence(), projectLifecycle());
       if (spies.length === 0) spies.push(vi.spyOn(session.runtime, 'setSidebarOpen'));
       return useWorkspaceCommands({
         documents: null,
         hostFailure: null,
-        library: null,
+        project: null,
         preparation: { dismissFailure: vi.fn(), failure: null },
         session,
         workspace: null,
@@ -35,13 +35,13 @@ function mountCommands() {
 }
 
 describe('workspace commands: Settings', () => {
-  it('opens to the default Agents section when no section is requested', () => {
+  it('opens to the first section, General, when no section is requested', () => {
     const { result } = mountCommands();
 
     act(() => result.current.settings.openSettings());
 
     expect(result.current.settings.open).toBe(true);
-    expect(result.current.settings.section).toBe('agents');
+    expect(result.current.settings.section).toBe('general');
   });
 
   it('opens directly to a requested section and lets onSectionChange move between sections', () => {
@@ -105,7 +105,7 @@ describe('workspace commands: sidebar navigator', () => {
     expect(result.current.navigator.focusRevision).toBe(first + 1);
   });
 
-  it('keeps the window unstarted until a library has settled', () => {
+  it('keeps the window unstarted until a project has settled', () => {
     const { result } = mountCommands();
 
     expect(result.current.started).toBe(false);

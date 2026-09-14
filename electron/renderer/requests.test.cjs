@@ -132,7 +132,7 @@ test('server request authorization denies other origins, targets, and windows', 
   );
 });
 
-test('server request authorization installs exact HTTP and Agent socket filters', () => {
+test('server request authorization observes every server HTTP and WebSocket path', () => {
   let filter;
   let listener;
   installRequestAuthorization({
@@ -147,7 +147,7 @@ test('server request authorization installs exact HTTP and Agent socket filters'
     },
   });
   assert.deepEqual(filter, {
-    urls: ['http://127.0.0.1:8090/api/*', 'ws://127.0.0.1:8090/ws/agent*'],
+    urls: ['http://127.0.0.1:8090/*', 'ws://127.0.0.1:8090/*'],
   });
   let result;
   listener(
@@ -164,4 +164,56 @@ test('server request authorization installs exact HTTP and Agent socket filters'
     cancel: false,
     requestHeaders: { 'x-stashbase-window-id': 'registered-window' },
   });
+});
+
+test('case variants and retired socket routes never gain window authority', () => {
+  for (const url of [
+    'http://127.0.0.1:8090/API/folder?windowId=other',
+    'http://127.0.0.1:8090/Api/folder?windowId=other',
+    'ws://127.0.0.1:8090/ws/codex',
+    'ws://127.0.0.1:8090/ws/agent-extra',
+    'ws://127.0.0.1:8090/',
+  ]) {
+    assert.deepEqual(authorizeRequest({
+      frame: mainFrame,
+      requestHeaders: {},
+      url,
+      webContents: registeredWebContents,
+      webContentsId: 41,
+    }, dependencies), { cancel: true });
+  }
+});
+
+test('read-only document and PDF resources retain their separate asset authorization', () => {
+  for (const prefix of ['asset', 'asset-derived', 'asset-audio-preview', 'pdfjs-assets']) {
+    const details = {
+      method: 'GET',
+      requestHeaders: { 'X-StashBase-Window-Id': 'forged', Accept: '*/*' },
+      url: `http://127.0.0.1:8090/${prefix}/resource`,
+    };
+    assert.deepEqual(authorizeRequest(details, dependencies), {
+      cancel: false, requestHeaders: { Accept: '*/*' },
+    });
+    assert.deepEqual(authorizeRequest({ ...details, method: 'POST' }, dependencies), { cancel: true });
+  }
+});
+
+test('only explicit Vite windows get static resources and the root HMR socket', () => {
+  const viteWebContents = { ...registeredWebContents, getURL: () => 'http://127.0.0.1:8090/' };
+  const vite = {
+    ...dependencies,
+    rendererOrigins: new Set(['http://127.0.0.1:8090']),
+    windowRegistrationForWebContentsId: (id) => id === 41
+      ? { windowId: 'vite-window', window: { webContents: viteWebContents } } : null,
+  };
+  assert.equal(authorizeRequest({ method: 'GET', url: 'http://127.0.0.1:8090/@vite/client' }, vite).cancel, false);
+  const socket = {
+    frame: mainFrame, webContents: viteWebContents, webContentsId: 41,
+    url: 'ws://127.0.0.1:8090/?token=fixture', requestHeaders: {},
+  };
+  assert.equal(authorizeRequest(socket, vite).cancel, false);
+  assert.equal(authorizeRequest({ ...socket, webContentsId: 99 }, vite).cancel, true);
+  assert.equal(authorizeRequest({ ...socket, url: 'ws://127.0.0.1:8090/ws/codex' }, vite).cancel, true);
+  assert.equal(authorizeRequest({ method: 'GET', url: 'http://127.0.0.1:8090/API/folder' }, vite).cancel, true);
+  assert.equal(authorizeRequest({ method: 'GET', url: 'http://127.0.0.1:8090/mcp' }, vite).cancel, true);
 });

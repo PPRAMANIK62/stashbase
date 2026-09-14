@@ -55,9 +55,9 @@ test('window cleanup route retires its header identity and cannot be undone by a
   const app = express();
   app.use(express.json());
   app.use(withWindowContext);
-  app.post('/api/test/open', (req, res) => {
+  app.post('/api/test/open', async (req, res) => {
     try {
-      folder.setCurrentFolder(req.body.path);
+      await folder.openProjectFolder(req.body.path);
       res.json({ ok: true });
     } catch (err: unknown) {
       if ((err as { code?: string }).code === 'WINDOW_CLOSED') {

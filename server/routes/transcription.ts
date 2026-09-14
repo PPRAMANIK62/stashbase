@@ -26,11 +26,11 @@ import { getScheduledConversion } from '../conversion.ts';
 import { listPreparationProblems, readProgress } from '../conversion-status.ts';
 import { isAudioFile } from '../format.ts';
 import { resolveExistingAsync } from '../files.ts';
-import { exactMemberFolderRootAsync, runWithFolderRoot } from '../folder.ts';
+import { exactRegisteredFolderRootAsync, runWithFolderRoot } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError } from '../http.ts';
 import { errorMessage, logger } from '../log.ts';
-import { reconcileLibraryFolders } from '../state.ts';
+import { reconcileProjectFolders } from '../state.ts';
 import { normalizeTranscriptionLanguage } from '../../shared/transcription.ts';
 
 const log = logger('routes/transcription');
@@ -63,7 +63,7 @@ export function mount(app: express.Express): void {
         preferences.providerId !== LOCAL_TRANSCRIPTION_PROVIDER_ID
         || installedTranscriptionModelPath(requireModelId(preferences.modelId))
       ) {
-        void reconcileLibraryFolders('transcription preferences changed').catch((err: unknown) => {
+        void reconcileProjectFolders('transcription preferences changed').catch((err: unknown) => {
           log.warn(`transcription preference reconcile failed: ${errorMessage(err)}`);
         });
       }
@@ -102,8 +102,8 @@ export function mount(app: express.Express): void {
       const rawFolder = typeof req.query.folder === 'string' ? req.query.folder.trim() : '';
       let sourceAbs: string | null;
       if (rawFolder) {
-        const member = await exactMemberFolderRootAsync(rawFolder);
-        if (!member) return res.status(400).json({ error: 'folder is not a registered library folder' });
+        const member = await exactRegisteredFolderRootAsync(rawFolder);
+        if (!member) return res.status(400).json({ error: 'folder is not a registered project folder' });
         sourceAbs = await runWithFolderRoot(member, () => resolveExistingAsync(rel));
       } else {
         sourceAbs = await resolveExistingAsync(rel);

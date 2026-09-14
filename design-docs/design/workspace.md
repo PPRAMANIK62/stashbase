@@ -2,12 +2,14 @@
 
 ## User Outcome
 
-People work directly in ordinary local folders, moving between files, Chat,
-and windows without adopting a StashBase-specific storage model.
+People enter a local project and start discussing an idea, then write and
+refine documents when useful. An empty project is a complete starting state.
+Files, Chat, and windows keep their identities without requiring a separate
+StashBase storage model.
 
 ## Scope and Non-goals
 
-This area owns library membership, folder navigation, the Files sidebar,
+This area owns project registration, folder navigation, the Files sidebar,
 tabs, window behavior, and explicit source-file operations. Together with the
 Documents area, it forms the Document Workbench. It does not own format
 rendering, preparation correctness, retrieval ranking, or Agent session
@@ -18,232 +20,105 @@ manager, or a primary graph-navigation tool.
 
 ## Current Experience
 
-- Open documents sit in one horizontally scrolling tab strip, each tab
-  naming its source and marking unsaved changes. A tab is a drag source for
-  its file, which is how a document is handed to the Agent composer beside it.
-  There are two kinds of tab. A single click on a file, a search hit, a link,
-  Quick Open, and a file named in a Chat each open a
-  [preview tab](../glossary.md#preview-tab), whose name is set in italics:
-  a window holds at most one, and the next browse reuses it in place, so
-  looking around never piles up tabs. A double click on the file or on the
-  tab, or Enter on the focused tab, keeps it as an ordinary tab; the first
-  edit keeps it too, and a draft the tree just created opens kept. Browsing
-  to a source that already has a tab switches to that tab. Only kept tabs
-  come back on relaunch.
+### Enter a project
 
-- A window with no folder open shows the welcome screen: the mark and its
-  one-line promise centered at the top, then everything else on one shared
-  left edge. A card on the left explains the three ways in, one row each with
-  its own button: open a folder as a project, create a new project, or import
-  a project from GitHub. **Recent**,
-  on the right, lists the library's members newest first; a row opens its
-  folder, and a hover **×** on the row asks to remove the project, confirmed
-  before anything is forgotten (the project/library naming split is the
-  glossary's). Folders under
-  the system's temporary directory stay members but are left out of the
-  list. A pane too narrow for both stacks the card above the list. The
-  Gallery band follows under its own heading, with the same invitation to find
-  inspiration and build on a copy as the Gallery overlay. The window never silently
-  restores a folder, installs an Agent runtime, or opens account sign-in. A
-  relaunch and a new window land here too; a
-  folder opened from **Recent** comes back with the tabs and tree state it
-  had. However the window got here, at launch, as a new window, or because
-  its folder left the library, the sidebar arrives collapsed: the bare column
-  offers nothing this screen lacks. Its corner toggle brings the footer back
-  while here, and the first folder opened brings the column back with its
-  tree.
-- On first launch with a brand-new empty default folder home, StashBase seeds
-  the ordinary local **👋 Start Here** folder and adds it to the library
-  without automatically opening it. Its `00 Welcome.html` is the human entry;
-  the remaining guides use a stable numbered order while the Agent-discovery
-  file remains `AGENTS.md`. Detailed user-owned Markdown makes grounded
-  product, workflow, capability, comparison, and recovery context available to
-  Agent retrieval once that folder is open. An existing folder home is never
-  modified,
-  deleting the seeded folder does not recreate it, and application updates
-  never overwrite the user's copy.
-- The sidebar is the window's left column. Its titlebar band carries its own
-  collapse toggle and, while a folder is open, back and forward arrows beside
-  it that follow the navigator below. With Files, Document outline, or Search
-  showing they step through the window's
-  [document history](../glossary.md#document-history): each names the file
-  it would reach and waits disabled at its end of the history, a source
-  still open is switched to, and one whose preview was since replaced comes
-  back as the preview again, so stepping never adds a kept tab. With Chats
-  showing the same pair steps through the window's open Chats in tab order,
-  disabled at either end. With no folder open the band holds the toggle
-  alone. **New draft**, a file with a plus,
-  is not in the band: it makes a document, so it sits at the left end of
-  the workspace titlebar, ahead of the tabs, in every sidebar state. The band carries no
-  wordmark: the welcome screen owns the brand, and a folder window's first
-  row beneath the band is the folder itself. The column ends in a footer set
-  off by rules: a standing **Gallery** row, then the account row; **Settings**
-  lives inside the signed-in account menu rather than as a standing row, and
-  signed out — where there is no menu — it stays a standing row above **Sign
-  in**, because signed out is a complete local-workspace state.
-  On macOS the window's traffic lights sit in that top-left corner and the
-  toggle starts to their right; with the sidebar collapsed the workspace
-  titlebar shows the reopening toggle in the same corner room, and native
-  fullscreen, which hides the lights, gives it back. With a
-  folder
-  open it adds the active-folder picker and, centred beneath it as one
-  control, a navigator of four icon tabs, in order Files, Document outline,
-  Search, and Chats. Files
-  and Document outline share the scrolling tree region; Search and Chats take
-  the whole column instead. The column resizes by dragging its inner edge and
-  collapses by clicking the same edge; it never goes narrower than its
-  titlebar controls — dragged past that floor it collapses instead of
-  clipping them.
-- While a folder is open, the top-right titlebar icon mirrors the left
-  sidebar toggle and hides or shows the Chat panel. Hiding it preserves the
-  conversation and composer draft, and gives open documents the full width.
-  The same icon remains available to reopen Chat, and it is alone in that
-  corner: **New chat** lives in the Chat pane's own header and leaves with
-  it, so starting a chat while the panel is hidden means showing the panel
-  first. A hidden Chat is not named
-  in the titlebar: with no document open, the shared slot stays empty until
-  the panel is shown again, because the chat it would name is off screen.
-- With no folder open the picker and the navigator are absent, so the bare
-  sidebar is the titlebar band and the footer. Browsing members, creating a folder, and
-  importing a repository belong to the welcome screen there, and no folder is
-  required to browse or download a Gallery entry.
-- The **Gallery** row raises the shop as a near-fullscreen overlay over a
-  folder window. It is the same shop the welcome screen carries as a band, and
-  it never takes a chat tab. Its subtitle invites people to find inspiration,
-  make a copy, and build on it. The entries and their downloads are the Gallery's
-  own contract (see [Agent Panel](agent-panel.md)).
-- The Document Outline is one of the navigator's tabs rather than a second
-  dock beside the tree. A format that publishes no headings says so instead of
-  reading as an outline that has not arrived yet.
-- A strip between the titlebar and the workspace carries what the window has
-  to say about work the reader did not ask for directly: refusals of the
-  reader's own requests and capabilities that could not answer. It never
-  carries an offer; nothing in the workspace invites setup of anything.
-  With a folder open, a second strip below it offers the unsaved drafts a
-  previous session left for that folder, which [Documents](documents.md) owns.
-- Packaged builds check the official stable release channel on a schedule when
-  the default-on preference permits it. The check and its installation
-  authority belong to the desktop application rather than to any window.
-- **Report a bug** is a row in Settings, under General, disabled with a plain
-  explanation when the desktop bridge is absent. The native Help menu carries
-  the same report entry alongside the product website, the community Discord,
-  and the external issue tracker.
-- The account row at the foot of the sidebar is where a person signs in and
-  where a signed-in person is recognizable. Signed out it reads **Sign in**
-  and one click starts the browser sign-in; signed in the row and its menu
-  wear the same initials disc — the theme's ink around the display name's
-  first letters, never a provider picture — beside the name and email, and
-  the menu shows OpenQuill's free credits as one line and a bar, opens
-  Settings, and signs out. The
-  same person is named again under
-  **Settings → Agents** with
-  the full email, and missing profile display data falls back to a stable
-  label without changing the controls beside it. Signing in exists for
-  OpenQuill and changes nothing else; signed out is a complete
-  local-workspace state.
-- Users can open or create a local folder, import a public GitHub repository
-  directly into the default folder home, switch folders in place, or remove a
-  folder from the library. A created folder or imported repository is an
-  ordinary directory, and removing membership clears only StashBase-owned
-  state. A second window comes from the native File menu, and folder sync runs
-  as part of ordinary refresh rather than as a per-member action.
-- The sidebar's active-folder row keeps the window's folder identity visible
-  and opens the full library membership, with pinned **Open folder**, **Create
-  folder**, and **Import from GitHub…** actions beneath it. It is drawn as
-  the column's head with the selected-row treatment: the standing fill and
-  the heavier weight beside a chevron, one block with the navigator beneath
-  it, and hovering it changes nothing. It is a switcher, not a place the
-  reader is at, so it carries no current-page semantics. A member sharing a
-  basename with another is qualified by its path so the two stay tellable
-  apart, and the row shows an attention mark when preparation needs the user.
-  A name wider than the sidebar column truncates within that column. Only
-  while the sidebar is collapsed does the titlebar carry the sidebar's
-  reopening toggle and, while a folder is open, the document history arrows
-  beside it, ahead of the standing **New draft**; its one shared slot holds
-  the open document tabs. With no
-  folder open the slot says **Welcome**, because that is what is on screen,
-  and otherwise it stays empty, since the Chat pane names its own
-  conversation in its header.
-  Folder-level actions remain attributable to the active folder.
-- Multiple windows share one library and runtime services while retaining
-  independent active folders, tabs, search presentation, and Chat tabs.
-- Folder switches reset folder-scoped documents but preserve library search
-  state and scope-pinned chats. A blank welcome chat may follow the new folder;
-  started work and unsent requests never silently rebind to another folder.
-- Removing a member preserves Chat tabs. A completely blank Chat returns to
-  Library scope without interruption. A Chat containing user work stays
-  readable, says the folder was removed and the transcript is preserved, and
-  reports how many queued messages were cancelled with it.
-- The active folder tree truthfully reports ordinary source entries rather
-  than filtering unknown formats. Generic files are muted with one stable
-  explanation—Search and automatic Chat context do not consume them—and still
-  open through Quick Open or their tree row. Ordinary user dotfiles remain
-  visible, while dot-notes retain the established hidden-note namespace;
-  exact app-derived artifacts, bundle resources, junk metadata, and
-  dot-directories remain infrastructure rather than workspace content by
-  default.
-- The file tree's own context menu, on the empty space below the last row,
-  offers a checkable **Show hidden files** action. It is an application-level
-  preference. Every window applies the same durable value, and a missing or
-  invalid stored value recovers to the safe default view. When enabled,
-  eligible user-owned dot-directories such as `.github` and `.vscode` and
-  their descendants join the tree and Quick Open with normal capability.
-  Ordinary dotfiles are listed either way, so the option governs hidden
-  directories rather than hidden files. VCS databases such as `.git`, StashBase-owned `.stashbase` and
-  `.stashbase-*` state, other derived state, dot-notes,
-  bundle resources, and junk metadata never surface in either mode, and
-  hidden excluded caches keep their bounded non-expandable rows. Turning the
-  option off removes hidden rows from the tree, keyboard order, selection,
-  and Quick Open without closing open tabs. Visibility here is a Workbench
-  choice only: hidden-directory content stays outside Preparation, indexing,
-  Search, automatic Chat context, and Agent/MCP discovery.
-- Dependency caches and generated build directories such as `node_modules`
-  appear as non-expandable excluded-folder rows. StashBase does not recurse
-  into them, so a project can explain their presence without paying the cost
-  of rendering or indexing their contents. These rows are never presented as
-  dead: row hover or keyboard focus reveals an external-action arrow whose
-  delayed tooltip says **Show in Finder / File Explorer**. Row activation and
-  the context menu provide the same system-file-manager exit.
-- Files use the surface declared in the
-  [Documents format matrix](documents.md#format-capability-matrix) and open in
-  preview or kept tabs with Quick Open, document history, and
-  platform-appropriate shortcuts. **New draft** at the titlebar's left end
-  creates `Untitled.md` beside the tree's selection, or `Untitled 2.md` and on when
-  that name is taken, and opens it at once as a kept tab. The sidebar opens
-  on Files if it was not showing, and the new row starts the tree's ordinary
-  rename with the stem selected, so the name is the first thing typed;
-  Escape keeps `Untitled.md`. A new folder stays in the tree's own menu,
-  where its place is explicit. Symlinks and special or unavailable entries
-  are shown but never followed; their only file action is reveal.
-- Search or Agent links to a file in another member folder open a read-only
-  out-of-folder tab without switching the current folder. The user can open
-  that folder in another window for full editing.
-- File create, rename, import, and delete are explicit, and destructive
-  operations confirm intent. Library-removal
-  confirmation names the complete
-  home-shortened member path that remains on disk. Runtime-native instruction
-  files such as `AGENTS.md` and `CLAUDE.md` remain visible and user-owned;
-  hidden tool infrastructure and derived data do not surface as workspace
-  content.
-- Durable guidance for StashBase Chats lives in the Agent panel's **Agent
-  Instructions** editor as application metadata: each working folder edits its
-  own, and Library-wide Chats edit one Library-scope guidance with its own
-  packaged default oriented toward finding work and starting new projects.
-  Opening a folder never creates, migrates, or edits instruction files in the
-  user's source tree.
+- Welcome offers opening a folder, creating a project, importing public GitHub
+  content, and browsing Gallery copies. Recent lists registered projects;
+  removal forgets app-owned state and leaves the folder on disk.
+- New windows and app relaunches start at Welcome. The app does not silently
+  select a folder, send a prompt, install an Agent, or open sign-in. Entering
+  a project restores its saved kept tabs and tree state where available.
+- A window keeps one project; another project opens in another window. Windows
+  share the registry and services but retain their own work. Equivalent paths
+  can resolve to the window already displaying the same project.
+- Opening an existing folder preserves its contents. New projects are ordinary
+  folders; GitHub imports stage and publish before registration and entry.
+  Failed entry retains the previous valid state, and failed publication does
+  not remove concurrent user changes.
+- A pristine default folder home receives the optional Start Here project.
+  Existing homes are not modified, incomplete seeds remain retryable, and
+  deleting the seed or updating the app does not recreate or overwrite it.
+  Newly seeded guides describe project entry, brainstorming, and writing;
+  existing user-owned guide copies retain their original content.
+
+### Discuss and write
+
+- Project Chat starts as the leading work surface while no document is open.
+  It can discuss an idea in an empty folder. Actual send depends on the
+  selected Agent's readiness, not on the presence of source files or a wiki.
+- Documents and Chats are two sidebar modes. Files, outline, and project search
+  support document work; Chats lists the project's conversations. Opening a
+  document can dock the same conversation beside it. Hiding Chat keeps its
+  work; reopening it restores that same context.
+- New tab offers Create new draft. It creates an available Untitled Markdown
+  filename beside the selected tree location, opens a kept tab, and starts
+  inline naming. Existing writing can be opened and edited directly.
+- Browsing uses one reusable preview tab; explicitly keeping or editing it
+  makes it persistent. Tabs, document history, Quick Open, links, and outlines
+  provide navigation without changing file identity. Back/forward follows the
+  sidebar mode: document visits or open Chats.
+- Agent-created files refresh the tree and become selectable without taking
+  focus. Agent links to another authorized project's file can open a read-only
+  out-of-folder tab; editing it requires its own project context.
+- Removing a project retires its scoped work and returns affected windows to
+  Welcome. Started conversation state is not silently reassigned to a different
+  project. The unbound internal state is described in [Agent Panel](agent-panel.md).
+
+### Work with project files
+
+- The file tree, Quick Open, and previews follow the
+  [Documents matrix](documents.md#format-capability-matrix). Muted generic files
+  remain visible but are excluded from retrieval and automatic Agent context.
+  Restricted or unavailable entries remain identifiable and can be revealed in
+  the system file manager.
+- Create, rename, import, and delete are explicit. Agent/MCP tools also expose
+  bounded moves. Runtime-native instruction files remain user-owned.
+- Ordinary dotfiles remain visible. Show hidden files controls eligible hidden
+  directories across windows; it does not expose product-derived state, VCS
+  databases, hidden notes, or excluded infrastructure to retrieval.
+- Dependency caches and build trees remain bounded excluded rows rather than
+  recursive work. Visibility, preparation eligibility, and Agent access are
+  separate capabilities.
+- Background preparation and indexing do not hold project entry open. Status
+  describes actionable failures or readiness; optional setup is not promoted
+  as a prerequisite for local work. Recovery drafts have their own restore and
+  discard flow, owned by [Documents](documents.md).
+
+### Supporting surfaces
+
+- Gallery is a band on Welcome and an overlay within a project. It supplies
+  examples and local copies, never a Chat tab or an automatically sent prompt.
+- Settings owns appearance, Agents and account, transcription, optional search
+  by meaning, MCP access, app updates, local components, and reporting.
+  Signing in enables OpenQuill; local document work remains usable signed out.
+- Packaged app updates use a quiet check when enabled and an explicit install
+  action with a save barrier. Report a bug starts the dedicated local review
+  flow from Settings or native Help.
+
+Exact control placement, visual tokens, and renderer mechanics are maintained
+in [Renderer Workspace](../../code-review/renderer-workspace.md) and
+[Renderer Styling](../../code-review/renderer-styling.md).
 
 ## Experience Contract
 
-- Folder entry is navigation first; listing, preparation, and indexing continue
+- Removing a project preserves independently registered projects nested inside
+  it, including their preparation and search availability. Source files remain
+  on disk. Every Agent bound to the removed project retires with that scope.
+- Explicit Quit finishes after all window saves succeed. A failed save leaves
+  the application open and cancels that quit request; normal macOS window
+  closing can still leave the application running without windows.
+
+- Folder entry makes discussion and navigation available first; listing, preparation, and indexing continue
   in the background. Code-heavy project infrastructure that cannot surface in
   the Workbench does not make those background scans hold navigation closed.
-  The switcher leaves its **Opening…** state when the local server confirms the
+  The project entry action leaves its **Opening…** state when the local server confirms the
   window-folder binding; a delayed list, ordering read, preparation pass, or
   semantic reconcile cannot extend that state indefinitely.
 - GitHub import accepts one public repository URL and one portable folder-home
-  child name. Import fields remain locked while Git runs; cancellation leaves
-  no partial published folder. A completed clone is retained and its local path
-  stays actionable if the later folder-open transition fails.
+  child name. Import fields remain locked while Git runs; cancellation cleans
+  the import's unchanged partial content and preserves concurrent user additions
+  or edits. A successful import is registered before opening, so its project
+  remains available from Welcome / Recent if the later window transition fails.
 - Closing a window either makes its live edit durable or leaves the window open
   with an actionable failure. Closing one window never tears down another.
 - Folder removal never deletes user files. Every affected window saves first
@@ -258,7 +133,7 @@ manager, or a primary graph-navigation tool.
   index rows, ordering, folder-scoped Agent Instructions, and folder-bound
   runtime state have finished cleanup.
 - Folder membership and favorites never replace unreadable settings with
-  fallback defaults. A durable library change fails instead, preserving the
+  fallback defaults. A durable project registry change fails instead, preserving the
   user's existing configuration for recovery.
 - Source and derived state remain distinguishable. The tree and tabs show
   source files, not generated representations.
@@ -271,7 +146,7 @@ manager, or a primary graph-navigation tool.
 - Repeated or concurrent navigation to one source focuses its existing tab,
   preview or kept, and a window never holds more than one preview tab. A
   preview never outlives the session, and an edit always keeps its tab. The
-  same relative path in different Library folders remains a distinct source.
+  same relative path in different registered projects remains a distinct source.
 - Back and forward follow the navigator: the document history unless Chats
   is showing, when they step the open Chats. Either way they never change
   the panel or the set of kept tabs.
@@ -285,12 +160,19 @@ manager, or a primary graph-navigation tool.
   automation.
 - Update discovery is quiet, dismissible, and never blocks local work. One
   explicit Update action consents to download, installation, and relaunch;
-  every open renderer
-  crosses the normal save barrier before an installer may retire the
-  application. Linux package installs may also require system administrator
+  Settings keeps that action available after an announcement is dismissed.
+  Every open renderer crosses the normal save barrier before an installer may
+  retire the application. Windows stop accepting input during saving and
+  installation, including native installer preparation; a refused save or
+  failed installation restores interaction and leaves work open. Linux package installs may also require system administrator
   approval.
 
 ## Known Gaps
+
+These are current surface limitations or maintenance issues, not a committed
+list of additional product features. They do not make project entry,
+brainstorming, or writing incomplete. Document-specific diff is tracked by
+[Documents](documents.md#contribution-direction).
 
 - Moving a file has no Workbench control. Create, rename, and delete are
   offered on a tree row; moving one is reachable only through Agent and MCP
@@ -303,20 +185,20 @@ manager, or a primary graph-navigation tool.
   opened at, not the reading position within it. A retained Markdown surface
   keeps its own place while its tab stays open; every other return starts
   from the top or the anchor.
-- No window surfaces an available update. Packaged builds still check the
-  release channel on schedule, but the dismissible announcement and the one
-  explicit Update action the contract above requires have no control, so a
-  discovered update reaches nobody and
-  [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-value)'s
-  return step cannot be completed in the app.
-- Favoriting a member and opening one in a second window from the library have
+- Favoriting a member and opening one in a second window from the project registry have
   no control. The membership row offers removal only.
+- With a folder open the column offers no way to switch to another member or
+  to open, create, or import a folder; those actions live on the welcome
+  screen, which shows only while no folder is open.
+- Preparation that needs the user is signalled only inside the Search panel;
+  the folder header carries no attention mark, so a reader in Files or Chats
+  is not told until they look.
 
 ## Cross-area Seams
 
 - [Documents](documents.md) owns the surface inside a source tab.
 - [Preparation](preparation.md) owns background derivation and readiness.
-- [Search](search.md) owns cross-library evidence and out-of-folder result
+- [Search](search.md) owns project evidence and out-of-folder result
   behavior.
 - [Agent Panel](agent-panel.md) owns Chat tabs and scope-pinned sessions.
 - Window retirement and file mutation details live in
@@ -327,9 +209,10 @@ manager, or a primary graph-navigation tool.
 
 ### Next
 
-- Clarify loading, empty, and operation-failure states.
-- Improve tree and tab behavior for large folders.
-- Improve creation, rename, move, import, and attachment workflows.
+Maintain the implemented project-first workflow, empty-project discussion,
+file operations, navigation, and recovery. Keep failures understandable and
+large folders responsive. Multi-root windows and new navigation models are
+not commitments in the current direction.
 
 ### Coordinate First
 
@@ -353,8 +236,8 @@ Journeys: [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-valu
 Cross-area
 routes also include [J05](../user-journeys.md#j05-search-and-open-source-evidence)
 and [J08](../user-journeys.md#j08-connect-an-external-agent-through-mcp).
-Chat-first project entry is
-[J11](../user-journeys.md#j11-turn-a-conversation-into-a-project). Folder-first
+The retained secondary unbound-Chat creation boundary is
+[J11](../user-journeys.md#j11-turn-a-conversation-into-a-project). Optional
 Wiki Page building is
 [J12](../user-journeys.md#j12-build-wiki-pages-from-a-local-folder).
 

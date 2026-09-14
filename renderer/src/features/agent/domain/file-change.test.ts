@@ -6,14 +6,14 @@ describe('Agent file changes', () => {
   it('reads Claude edits and writes as fragments and whole files', () => {
     expect(
       fileChangesForTool('Edit', {
-        file_path: '/library/Research/notes.md',
+        file_path: '/project/Research/notes.md',
         new_string: 'b',
         old_string: 'a',
       }),
     ).toEqual([
       {
         action: 'edited',
-        path: '/library/Research/notes.md',
+        path: '/project/Research/notes.md',
         text: { after: 'b', before: 'a', extent: 'fragment' },
       },
     ]);
@@ -37,12 +37,12 @@ describe('Agent file changes', () => {
   it('unwraps MCP mutation arguments and ignores reads', () => {
     expect(
       fileChangesForTool('mcp__stashbase__edit_file', {
-        arguments: { new_text: 'after', old_text: 'before', path: '/library/Research/notes.md' },
+        arguments: { new_text: 'after', old_text: 'before', path: '/project/Research/notes.md' },
       }),
     ).toEqual([
       {
         action: 'edited',
-        path: '/library/Research/notes.md',
+        path: '/project/Research/notes.md',
         text: { after: 'after', before: 'before', extent: 'fragment' },
       },
     ]);
@@ -107,21 +107,21 @@ describe('Agent file changes', () => {
   });
 
   it('resolves changed paths to sources only inside the scoped folder', () => {
-    const scope = { kind: 'folder' as const, path: '/library/Research' };
-    expect(changedSource(scope, '/library/Research/notes/a.md')).toEqual({
-      folderPath: '/library/Research',
+    const scope = { kind: 'folder' as const, path: '/project/Research' };
+    expect(changedSource(scope, '/project/Research/notes/a.md')).toEqual({
+      folderPath: '/project/Research',
       path: 'notes/a.md',
     });
     expect(changedSource(scope, 'notes/a.md')).toEqual({
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       path: 'notes/a.md',
     });
     expect(changedSource(scope, './a.md')).toEqual({
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       path: 'a.md',
     });
-    expect(changedSource(scope, '/library/Other/a.md')).toBeNull();
-    expect(changedSource(scope, '/library/Research')).toBeNull();
+    expect(changedSource(scope, '/project/Other/a.md')).toBeNull();
+    expect(changedSource(scope, '/project/Research')).toBeNull();
     expect(changedSource(scope, '../a.md')).toBeNull();
     expect(changedSource(scope, 'C:/Users/a.md')).toBeNull();
     expect(
@@ -133,11 +133,11 @@ describe('Agent file changes', () => {
       folderPath: 'C:\\Library\\Research',
       path: 'a.md',
     });
-    expect(changedSource({ kind: 'library' }, 'a.md')).toBeNull();
+    expect(changedSource({ kind: 'unbound' }, 'a.md')).toBeNull();
   });
 
   it('names a file by its last segment on either separator', () => {
-    expect(fileBasename('/library/Research/notes/a.md')).toBe('a.md');
+    expect(fileBasename('/project/Research/notes/a.md')).toBe('a.md');
     expect(fileBasename('C:\\Library\\a.md')).toBe('a.md');
     expect(fileBasename('a.md')).toBe('a.md');
   });

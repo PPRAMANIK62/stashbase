@@ -45,15 +45,20 @@
   fixed seven-day window timestamps. Neither endpoint exposes account tokens,
   model pricing, or monetary balances to the renderer or OpenCode state.
 - The hosted service owns DeepSeek routing, picodollar cost accounting,
-  fixed seven-day windows, and allowance enforcement in a ledger separate
-  from the one for search by meaning. It pre-reserves before every call and
+  fixed seven-day windows, and OpenQuill credit enforcement. Search by meaning
+  uses the user's separate provider key and has no hosted search credits. The
+  hosted Agent service pre-reserves before every call and
   settles provider usage exactly once without making an account balance
   negative. The first call of
   a submitted prompt pins policy and model versions for that turn; all later
   model calls caused by the same prompt reuse its turn identity and $0.20
   ceiling. It does not own Agent processes, sessions, tools, permission
-  decisions, or files. A 402 becomes the structured
-  `allowance-exhausted` turn failure and routes recovery to Agent Settings.
+  decisions, or files. Credit exhaustion becomes the structured
+  `allowance-exhausted` turn failure; the per-turn spending ceiling remains a
+  distinct `quota` failure. Application-authored messages say OpenQuill free
+  credits, while legacy wire codes and older runtime messages retain their
+  classification. Current renderer recovery limits are recorded in
+  [Agent Panel](agent-panel.md#known-gaps).
   Active hosted-account restrictions block Agent reservations atomically.
   Reset or expiry closes a window to new calls immediately; reservations
   already in flight still settle against that original window, while a later
@@ -65,7 +70,7 @@
   File Diffs, cumulative text/reasoning, tool states, permissions, titles,
   history, abort, and errors normalize through the shared protocol. OpenCode
   tool names are normalized once at this Adapter boundary.
-- Library sessions disable OpenCode's native read/write/edit/search/command
+- Unbound sessions disable OpenCode's native read/write/edit/search/command
   tools and reach files only through the membership-checked StashBase MCP
   operations. Folder sessions may use native tools inside their exact cwd;
   edits, commands, web access, and doom-loop recovery ask, while external
@@ -204,28 +209,39 @@
 
 ## Session Scope and Lifetime
 
-An Agent session binds to `{ kind: 'library' }` or an authorized member folder.
-Missing scope uses the window's current folder or Library when none is active;
+Agent sockets use the exact `/ws/agent` endpoint, with runtime selection in the
+query. Retired aliases, suffixes, and alternate case spellings are rejected
+before upgrade. Explicit Vite development owns only the root HMR socket;
+unrecognized Agent paths cannot fall through to it. The proxy never installs
+a second automatic upgrade listener. Electron's window identity
+checks are owned by [Architecture](architecture.md#cross-process-contracts).
+
+An Agent session binds to `{ kind: 'unbound' }` or an authorized member folder.
+Missing scope uses the window's current folder or an unbound context when none is active;
 it is not a third scope.
 
-- A library session uses the reserved folder-home cwd and retrieves through
-  library MCP. Its Runtime Adapter resolves the Library scope's exact
-  user-visible Agent Instructions — the saved Library-wide customization, or
-  the packaged Library default — before composing the internal routing policy.
+- An unbound session retains the reserved folder-home cwd for existing
+  history, but cannot retrieve project files before binding. Its Runtime Adapter resolves the unbound scope's exact
+  user-visible Agent Instructions — the saved unbound customization, or
+  the packaged unbound default — before composing the internal routing policy.
 - A folder session uses that folder's cwd. Its Runtime Adapter injects that
   exact member's resolved Agent Instructions plus the internal routing policy.
   Runtime startup never creates `AGENTS.md`, `CLAUDE.md`, or another source
   file; existing runtime-native files remain visible, user-owned inputs under
   that runtime's native rules.
-- `assets/agent-instructions/default.md` (folder Chats) and `library.md`
-  (Library-wide Chats) are the two packaged defaults. The Agent Instructions
-  Interface resolves the session scope's default or its saved customization;
+- `assets/agent-instructions/default.md` (folder Chats) and `unbound.md`
+  (unbound Chats) are the two packaged defaults. The project default supports
+  empty-project discussion, requested drafting and revision, and source-backed
+  answers when relevant; wiki creation and maintenance require a wiki task.
+  It does not gate discussion on references or indexing. Prompt wording does
+  not enforce permissions, and store/Adapter tests do not prove model adherence.
+  The Agent Instructions Interface resolves the session scope's default or its saved customization;
   the editor and HTTP Adapter expose only that exact text. At native session
   startup, each Runtime Adapter composes it with the product-owned policy from
   `server/agent-runtime-instructions.ts`. That policy prefers StashBase MCP for
-  library orientation and prepared PDF, DOCX, audio, or video reads. It directs
-  search to use the Chat scope unless the user explicitly requests global
-  search; server-side defaults belong to [MCP Access](mcp-access.md). It avoids a
+  project discovery and prepared PDF, DOCX, audio, or video reads. It directs
+  search to use only the bound project and requires an unbound Chat to open
+  or create a project before file access; enforcement belongs to [MCP Access](mcp-access.md). It avoids a
   redundant parser unless original-source analysis was explicitly requested or
   prepared text is unavailable. Codex receives the composition as
   `developerInstructions`, Claude as the native preset append, and OpenQuill
@@ -234,21 +250,29 @@ it is not a third scope.
   place or grows a live setter, so a saved edit reaches the next session that
   mounts under that scope rather than the conversation already running. They
   are guidance, not authorization or a security boundary.
-- Each live panel session owns one policy for search by meaning. The
-  normalized protocol carries it and every Adapter implements the event;
-  attributed MCP search reads the session's answer from the registry. It
-  changes retrieval strategy only and never owns Preparation or index
-  lifecycle.
+- Sessions own project attribution, not retrieval configuration. Project
+  Operations resolves an omitted mode on each lookup: grep without an
+  embedding key, hybrid with one. Explicit modes are honored and provider
+  failures are never silently downgraded. No runtime stores a second switch
+  or handles a retrieval-policy event; lookup strategy does not own indexing.
 - Window folder switching does not tear down or rebind started sessions.
+- Codex history reads, renames, and deletes validate native thread ownership
+  against the requested project before mutation. A persisted rebind override
+  is checked first and authorizes only its destination project. Rename returns
+  native thread metadata, never a fabricated row from a limited history list.
 - Folder removal ends every session bound to that member across windows but
-  does not end library sessions. Before closing each affected transport, the
+  does not end unbound sessions. Before closing each affected transport, the
   Adapter emits the structured `scope-removed` exit with the retired member
   path; renderer behavior must not depend on membership refresh timing or a
   raw close. Window close ends that window's sessions; app quit ends all
   sessions through the cleanup ladder.
-- `create_project` may migrate only the attributed live library session.
+  The removal owner iterates the registered Adapters; OpenQuill participates
+  in the same structured retirement and sends it before closing its socket.
+- `create_project` may migrate only the attributed live unbound session.
   Persist the session-to-folder override before emitting the scope change so
-  history never lists the session in both scopes. Preserve native session
+  history never lists the session in both scopes. Persistence errors propagate
+  to the creation owner, which returns the registered project with
+  `rebound: false` and leaves the live binding intact. Preserve native session
   identity while moving subsequent execution to the project cwd: Codex keeps
   its thread and changes the next turn cwd; Claude lets the creating turn
   finish, then resumes the same native session from the project cwd before
@@ -330,11 +354,13 @@ assumed CLI versions.
   thread. The Adapter ignores model changes while a turn is active; returning
   to `Default` omits the next turn's model override.
 - Attachments are explicit; the current source is never implicit context.
-- `set-similarity-search` changes the session's product retrieval policy for
-  subsequent attributed `search_library` calls. Every Adapter implements the
-  event, while the operation layer owns the semantic-to-keyword resolution.
 - Permission callbacks normalize into one renderer approval flow. Access policy
   remains outside transport/process modules.
+  Claude's callback bypass is an explicit allowlist of local reads, discovery,
+  and StashBase reindexing. Editing, moving, execution, and unknown tools wait
+  for a user reply; abort or disposal denies a pending request. Native mode
+  decisions remain owned by the SDK. Its one-time prepared-read hint uses the
+  shared current-output check and never redirects toward stale text.
 - Runtime errors settle only the matching active turn once. Retry-in-progress
   signals do not become permanent failures; repeated or late terminal events
   are ignored.
@@ -386,30 +412,27 @@ assumed CLI versions.
 Required behavior is stricter than Current behavior in each of these. Every
 gap below is observed in Shipping.
 
-- **OpenCode directory rebind.** An attributed OpenQuill Library chat
+- **OpenCode directory rebind.** An attributed OpenQuill unbound chat
   participates in `create_project`. The live panel scope changes and subsequent
   MCP operations remain attached to that session and window. OpenCode 1.18.19
   has no supported operation for moving the same native session between
   directory projects, so the Adapter claims no durable session-folder override.
-  Restored history remains under Library, and the continued chat stays on its
+  Restored history remains under unbound history, and the continued chat stays on its
   safe MCP-only agent profile rather than enabling native commands against the
   old folder-home cwd.
 - **An instruction edit does not reach a running session.** Resolved
   instructions are injected once, when a native session mounts, and no Adapter
   grows a live setter for them. A save is therefore effective for the next
   session that mounts under that scope. Nothing remounts a conversation that is
-  already open, so the surface says a save applies from the next conversation
-  rather than promising the running one.
-- **Retrieval policy runs on its Adapter default.** Every Adapter implements
-  the search-by-meaning event and defaults to enabled, and attributed MCP
-  search reads that answer from the session registry. No renderer surface
-  sends the event, so every live session searches by meaning.
+  already open, so a save never reaches the conversation whose composer opened
+  the editor.
 
 ## Implementation Map
 
 | Role | Stable entry points |
 |---|---|
 | Agent Interface | `AgentAdapter`, normalized client/server events, scope resolution, attach, and stop in `server/agent-contract.ts` |
+| Socket upgrade Adapter | `server/websocket-upgrade.ts`, composed by `server/index.ts`; real upgrade routing is exercised by `server/websocket-upgrade.test.ts` in `pnpm test:conversion-scheduler` |
 | Adapter registry | `server/agent-adapters.ts` |
 | StashBase/OpenCode Adapter | `server/opencode-runtime.ts`, `server/opencode-agent.ts`, and `server/hosted-agent-broker.ts` |
 | Turn failure classification | `classifyAgentTurnFailure` in `server/agent-turn-failure.ts` over the shared kinds in `shared/agent-protocol.ts`. The kind crosses the socket schema in `shared/protocols/websocket/agent-session.ts` and reaches renderer transcript state; what the renderer currently does with it is a Known Gap in [Agent Panel](agent-panel.md#known-gaps) |
@@ -419,7 +442,7 @@ gap below is observed in Shipping.
 | Codex Adapter | `server/codex-session-runtime.ts`, `codex-rpc-transport.ts`, `codex-protocol.ts`, and `codex-history.ts`; `codex-model-catalog.ts` is the one reading of `model/list` a session and the runtime-level read share |
 | Model catalog memory | `server/agent-model-catalog.ts` remembers each runtime's catalog and observed default and reads Codex's without a session; `server/claude-model-catalog.ts` reads Claude's from a bare SDK handshake plus its user settings; `server/routes/terminal.ts` primes the memory before the listing answers |
 | Scope/history owners | `server/agent-session-registry.ts`, `agent-session-folders.ts`, `agent-projects.ts`, and session routes |
-| Agent Instructions Interface | `assets/agent-instructions/default.md` and `assets/agent-instructions/library.md` own the two product defaults; `server/agent-instructions.ts` owns scope matching, defensive reads, clearing, and config compaction; `server/routes/agent-instructions.ts` is the authorized HTTP Adapter over the wire shapes in `shared/agent-instructions.ts` and `shared/protocols/http/agent-instructions.ts`; `server/agent-runtime-instructions.ts` owns the separate internal routing policy and native-session composition |
+| Agent Instructions Interface | `assets/agent-instructions/default.md` and `assets/agent-instructions/unbound.md` own the two product defaults; `server/agent-instructions.ts` owns scope matching, defensive reads, clearing, and config compaction; `server/routes/agent-instructions.ts` is the authorized HTTP Adapter over the wire shapes in `shared/agent-instructions.ts` and `shared/protocols/http/agent-instructions.ts`; `server/agent-runtime-instructions.ts` owns the separate internal routing policy and native-session composition |
 | Renderer Adapters | `renderer/src/features/agent/infrastructure/catalog-api.ts` maps the runtime catalog to whether a conversation can send, `renderer/src/features/agent/infrastructure/session-api.ts` maps the socket and history vocabulary, and `renderer/src/features/agent/infrastructure/agent-instructions-api.ts` maps the instructions routes. Session and tab lifetime is `renderer/src/features/agent/application/workspace-runtime.ts`. Renderer-side rules are [Agent Panel](agent-panel.md) |
 | Focused evidence | `server/agent-instructions.test.ts`, `server/__tests__/agent-contract.test.ts`, `opencode-agent.test.ts`, `hosted-agent-broker.test.ts`, `opencode-native-smoke.test.ts`, `agent-runtime-installer.test.ts`, `agent-turn-failure.test.ts`, `agent-projects.test.ts`, `codex-agent.test.ts`, and `agent.test.ts` |
 

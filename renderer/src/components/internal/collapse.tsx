@@ -7,9 +7,9 @@
  *  each had rewritten the same three decisions. Never `height: "auto"`:
  *  framer resolves an auto target from the element's VISUAL size, which a
  *  scaled ancestor gets wrong, so the caller measures with `useMeasuredSize`
- *  and hands the pixels in. Never a spring on a height that moved underneath
- *  the animation: the box would chase its own child and land late. And never
- *  a fade that outruns the space closing under it.
+ *  and hands the pixels in. Never travel a height that moved underneath the
+ *  animation: the box would chase its own child and land late. And never a
+ *  fade that outruns the space closing under it.
  *
  *  What genuinely differed between them was one thing — whether a closed
  *  region keeps its children mounted — which is `presence`. The rest are
@@ -21,7 +21,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { spring } from '@/lib/springs';
+import { collapseTween } from '@/lib/springs';
 import { useMeasuredSize } from '@/lib/use-measured-size';
 import { instant, useMotionTier } from '@/lib/use-motion-tier';
 import { cn } from '@/lib/utils';
@@ -52,14 +52,14 @@ interface CollapseProps {
    *  hold back, so `enter` reads as `both` under `keep`. `none` leaves opacity
    *  to the caller — a box whose content fades on its own timing.  */
   fade?: 'both' | 'enter' | 'none';
-  /** The spring tier. `slow` is for a box opening space for content that has
+  /** The motion tier. `slow` is for a box opening space for content that has
    *  just arrived, where the travel is the arrival. */
   tier?: 'moderate' | 'slow';
   /** How the box answers a height change that is NOT a toggle. `snap` is for
    *  a collapse that can contain another one: when the nested section resizes
-   *  the content, this box jumps to the new height instead of springing to it
-   *  and landing after everything below has already moved. */
-  retarget?: 'spring' | 'snap';
+   *  the content, this box jumps to the new height instead of easing to it and
+   *  landing after everything below has already moved. */
+  retarget?: 'ease' | 'snap';
   /** Animate open from zero on first mount, rather than starting settled.
    *  Implied by `presence="unmount"`, which mounts nothing until it opens. */
   animateIn?: boolean;
@@ -90,7 +90,7 @@ export function Collapse({
   regionKey,
   fade = 'both',
   tier = 'moderate',
-  retarget = 'spring',
+  retarget = 'ease',
   animateIn = false,
   hideWhenClosed = false,
   unclipWhenSettled = false,
@@ -99,8 +99,8 @@ export function Collapse({
   id,
   slot,
 }: CollapseProps) {
-  const settle = useMotionTier(spring[tier]);
-  const retract = useMotionTier(spring[tier].exit);
+  const settle = useMotionTier(collapseTween[tier]);
+  const retract = useMotionTier(collapseTween[tier].exit);
   const measured = height !== null;
 
   const [settled, setSettled] = useState(open);
@@ -109,15 +109,15 @@ export function Collapse({
   }, [open]);
 
   // Tracked with a ref so a controlled `open` is covered too, and cleared once
-  // the toggle's own animation lands. Under `retarget: "spring"` every change
-  // is a toggle as far as the transition is concerned.
+  // the toggle's own animation lands. Under `retarget: "ease"` every change is
+  // a toggle as far as the transition is concerned.
   const prevOpenRef = useRef(open);
-  const togglingRef = useRef(retarget === 'spring' || animateIn);
+  const togglingRef = useRef(retarget === 'ease' || animateIn);
   if (prevOpenRef.current !== open) {
     prevOpenRef.current = open;
     togglingRef.current = true;
   }
-  const toggling = retarget === 'spring' || togglingRef.current;
+  const toggling = retarget === 'ease' || togglingRef.current;
 
   if (presence === 'unmount') {
     return (

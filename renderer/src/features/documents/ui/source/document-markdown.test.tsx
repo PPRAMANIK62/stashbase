@@ -29,7 +29,7 @@ function pending(): () => Promise<never> {
 
 function renderSource(
   api: DocumentSourcePort,
-  source = { folderPath: '/library/notes', path: 'plan.md' },
+  source = { folderPath: '/project/notes', path: 'plan.md' },
   options: {
     onNavigate?: Parameters<typeof DocumentWorkspace>[0]['onNavigate'];
     onOpenExternal?: Parameters<typeof DocumentWorkspace>[0]['onOpenExternal'];
@@ -40,7 +40,7 @@ function renderSource(
     api,
     createId: () => 'tab-1',
     createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
     restored: {
       activeTabId: 'tab-1',
@@ -86,7 +86,7 @@ describe('document Markdown source', () => {
     expect(source.querySelector('[contenteditable="true"]')).not.toBeNull(); // dom-contract: Milkdown/ProseMirror internals
     expect(screen.queryByLabelText('plan.md source')).toBeNull();
     expect(api.load).toHaveBeenCalledWith(
-      { folderPath: '/library/notes', path: 'plan.md' },
+      { folderPath: '/project/notes', path: 'plan.md' },
       expect.any(AbortSignal),
     );
     await waitFor(() =>
@@ -109,7 +109,7 @@ describe('document Markdown source', () => {
     });
     const { runtime } = renderSource(
       api,
-      { folderPath: '/library/notes', path: 'guides/plan.md' },
+      { folderPath: '/project/notes', path: 'guides/plan.md' },
       { onNavigate, onOpenExternal },
     );
     await screen.findByRole('heading', { name: 'Plan' }, { timeout: 5_000 });
@@ -125,7 +125,7 @@ describe('document Markdown source', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Details' }));
     expect(onNavigate).toHaveBeenCalledWith({
       anchor: 'part',
-      source: { folderPath: '/library/notes', path: 'guides/details.md' },
+      source: { folderPath: '/project/notes', path: 'guides/details.md' },
     });
     fireEvent.click(screen.getByRole('link', { name: 'Website' }));
     await waitFor(() => expect(onOpenExternal).toHaveBeenCalledWith('https://example.com/docs'));

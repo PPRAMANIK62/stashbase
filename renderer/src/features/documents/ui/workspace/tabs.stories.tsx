@@ -13,7 +13,7 @@ import { documentQueryScope, sourceApi, textSource } from '@/test/fakes/document
 
 import { DocumentTabs } from './tabs';
 
-const FOLDER_PATH = '/library/notes';
+const FOLDER_PATH = '/project/notes';
 
 const RESTORED = {
   activeTabId: 'tab-1',

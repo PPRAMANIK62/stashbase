@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const WORKSPACE_SESSION_CAPABILITY = 'workspace.session';
 export const WORKSPACE_SESSION_READ_CHANNEL = 'workspace-session:read';
 export const WORKSPACE_SESSION_WRITE_CHANNEL = 'workspace-session:write';
+export const MAX_WORKSPACE_SESSION_FOLDERS = 32;
 export const MAX_WORKSPACE_SESSION_BYTES = 1_048_576;
 
 const persistedPathSchema = z
@@ -34,7 +35,7 @@ export const workspaceSessionFolderSchema = z
 export const workspaceSessionSnapshotSchema = z
   .object({
     activeFolderPath: absolutePathSchema.nullable(),
-    folders: z.array(workspaceSessionFolderSchema).max(32),
+    folders: z.array(workspaceSessionFolderSchema).max(MAX_WORKSPACE_SESSION_FOLDERS),
     shell: z
       .object({
         sidebarOpen: z.boolean(),

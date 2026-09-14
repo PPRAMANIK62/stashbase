@@ -6,7 +6,7 @@ describe('Workspace runtime', () => {
   it('rejects an invalid runtime generation at construction', () => {
     expect(() =>
       createWorkspaceRuntime({
-        folder: { name: 'Notes', path: '/library/notes' },
+        folder: { name: 'Notes', path: '/project/notes' },
         generation: 0,
         queries: { cancel: vi.fn(async () => undefined), remove: vi.fn() },
       }),
@@ -16,7 +16,7 @@ describe('Workspace runtime', () => {
   it('owns one folder generation and accepts only its current completions', () => {
     const queries = { cancel: vi.fn(async () => undefined), remove: vi.fn() };
     const runtime = createWorkspaceRuntime({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 7,
       queries,
     });
@@ -28,7 +28,7 @@ describe('Workspace runtime', () => {
       pendingCreate: null,
       selectedPath: null,
       scope: {
-        folder: { name: 'Notes', path: '/library/notes' },
+        folder: { name: 'Notes', path: '/project/notes' },
         generation: 7,
       },
     });
@@ -51,7 +51,7 @@ describe('Workspace runtime', () => {
         {
           ...captured,
           scope: {
-            folder: { name: 'Writing', path: '/library/writing' },
+            folder: { name: 'Writing', path: '/project/writing' },
             generation: runtime.scope.generation,
           },
         },
@@ -63,7 +63,7 @@ describe('Workspace runtime', () => {
 
   it('refuses a completion for work retired while it was in flight', () => {
     const runtime = createWorkspaceRuntime({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 1,
       queries: { cancel: vi.fn(async () => undefined), remove: vi.fn() },
     });
@@ -85,7 +85,7 @@ describe('Workspace runtime', () => {
   it('aborts work, retires state, and cancels queries exactly once on disposal', () => {
     const queries = { cancel: vi.fn(async () => undefined), remove: vi.fn() };
     const runtime = createWorkspaceRuntime({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 1,
       queries,
     });
@@ -108,7 +108,7 @@ describe('Workspace runtime', () => {
   it('evicts scoped queries when authorization retires the runtime', () => {
     const queries = { cancel: vi.fn(async () => undefined), remove: vi.fn() };
     const runtime = createWorkspaceRuntime({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 1,
       queries,
     });
@@ -123,7 +123,7 @@ describe('Workspace runtime', () => {
   it('upgrades ordinary disposal to query eviction when authorization is later lost', () => {
     const queries = { cancel: vi.fn(async () => undefined), remove: vi.fn() };
     const runtime = createWorkspaceRuntime({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 1,
       queries,
     });

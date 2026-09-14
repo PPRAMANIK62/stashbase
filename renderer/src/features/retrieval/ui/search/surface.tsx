@@ -23,11 +23,11 @@ import {
 } from '@/features/retrieval/domain/semantic-readiness';
 import { useDebouncedQuery } from '@/features/retrieval/hooks/use-debounced-query';
 import { useIndexDecisions } from '@/features/retrieval/hooks/use-index-decisions';
-import { listNavigationTarget } from '@/features/retrieval/ui/list-navigation';
 import {
   PreparationReadinessNotice,
   SemanticReadinessNotice,
 } from '@/features/retrieval/ui/readiness-notices';
+import { listNavigationTarget } from '@/shared/utils/list-cursor';
 
 import {
   backendReady,

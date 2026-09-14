@@ -29,7 +29,7 @@ export type AgentHistoryMutation =
   | { kind: 'refused'; reason: AgentContextErrorKind };
 
 function scopeKey(scope: AgentScope): string {
-  return scope.kind === 'library' ? 'library' : `folder:${scope.path}`;
+  return scope.kind === 'unbound' ? 'unbound' : `folder:${scope.path}`;
 }
 
 function historyQueryKey(agent: AgentId, scope: AgentScope) {
@@ -103,10 +103,24 @@ export function useConversationHistory(runtime: AgentWorkspaceRuntime, scope: Ag
   const queryClient = useQueryClient();
   const signalFor = useRequestSignals<'remove' | 'rename'>();
   const [mutationFailure, setMutationFailure] = useState<string | null>(null);
+  // The Chats panel is the one sidebar pane that unmounts when another is
+  // chosen, so these queries lose their last observer every time the reader
+  // switches to Documents. `gcTime: Infinity` is what makes coming back free:
+  // without it the default five-minute collection drops the rows, and the
+  // panel that reopens has nothing to paint and says "Loading chats…" while a
+  // native listing is read off disk again. Kept for the window's life rather
+  // than a longer finite span, because what bounds this cache is the number of
+  // folder scopes a window ever opens, not time.
+  //
+  // `staleTime` stays short on purpose: it is standing in for an invalidation
+  // this hook does not have, so a chat written by a `claude` run outside the
+  // app still turns up. With rows retained that refetch now happens BEHIND the
+  // list the reader is already looking at instead of in front of it.
   const queries = useQueries({
     queries: AGENT_ORDER.map((agent) => ({
       queryKey: historyQueryKey(agent, scope),
       queryFn: ({ signal }: { signal: AbortSignal }) => runtime.listHistory(agent, scope, signal),
+      gcTime: Infinity,
       retry: false,
       staleTime: 5_000,
     })),

@@ -12,13 +12,13 @@ import { scoreRankedQueries, type RankedQueryResult } from './semantic-retrieval
 export const CHUNK_FETCH_MULTIPLIER = 10;
 
 export interface SemanticEvalBackend {
-  bind(libraryRoot: string): Promise<void>;
+  bind(projectRoot: string): Promise<void>;
   indexDirect(sourcePath: string, content: string): Promise<void>;
   indexPrepared(sourcePath: string, preparedText: string): Promise<void>;
   /** `chunkBudget` is a chunk count, deliberately larger than the dataset's
    *  `topK`; the runner reduces the reply to distinct sources. */
-  semanticSearch(query: string, chunkBudget: number, libraryRoot: string): Promise<string[]>;
-  exactSearch(query: string, chunkBudget: number, libraryRoot: string): Promise<string[]>;
+  semanticSearch(query: string, chunkBudget: number, projectRoot: string): Promise<string[]>;
+  exactSearch(query: string, chunkBudget: number, projectRoot: string): Promise<string[]>;
   close(): Promise<void>;
 }
 
@@ -40,7 +40,7 @@ export interface SemanticEvalRunnerOptions {
    *  report is release evidence, so it must not name a commit that is not
    *  what actually ran. */
   workingTreeDirty?: boolean;
-  createBackend(context: { libraryRoot: string; appDataRoot: string }): Promise<SemanticEvalBackend>;
+  createBackend(context: { projectRoot: string; appDataRoot: string }): Promise<SemanticEvalBackend>;
   makeScratch?: () => Promise<string>;
   removeScratch?: (scratch: string) => Promise<void>;
 }
@@ -49,22 +49,22 @@ export function semanticEvalExitCode(result: Pick<SemanticEvalRunResult, 'gateRe
   return result.gateReady && !result.passed ? 1 : 0;
 }
 
-function relativeSource(libraryRoot: string, source: string): string {
-  const root = path.resolve(libraryRoot);
+function relativeSource(projectRoot: string, source: string): string {
+  const root = path.resolve(projectRoot);
   const resolved = path.resolve(source);
   const rel = path.relative(root, resolved);
   if (!rel || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
-    throw new Error(`retrieval returned a source outside the evaluation library: ${source}`);
+    throw new Error(`retrieval returned a source outside the evaluation project: ${source}`);
   }
   return rel.split(path.sep).join('/');
 }
 
 /** Chunk/match hits → distinct sources in first-seen rank order. */
-function distinctSources(libraryRoot: string, hits: readonly string[]): string[] {
+function distinctSources(projectRoot: string, hits: readonly string[]): string[] {
   const seen = new Set<string>();
   const sources: string[] = [];
   for (const hit of hits) {
-    const source = relativeSource(libraryRoot, hit);
+    const source = relativeSource(projectRoot, hit);
     if (seen.has(source)) continue;
     seen.add(source);
     sources.push(source);
@@ -80,16 +80,16 @@ export async function runSemanticRetrievalEval(options: SemanticEvalRunnerOption
   let failure: unknown = null;
   try {
     scratch = await makeScratch();
-    const libraryRoot = path.join(scratch, 'library');
+    const projectRoot = path.join(scratch, 'project');
     const appDataRoot = path.join(scratch, 'app-data');
-    await fs.mkdir(libraryRoot, { recursive: true });
-    backend = await options.createBackend({ libraryRoot, appDataRoot });
-    await backend.bind(libraryRoot);
+    await fs.mkdir(projectRoot, { recursive: true });
+    backend = await options.createBackend({ projectRoot, appDataRoot });
+    await backend.bind(projectRoot);
 
     for (const document of options.dataset.documents) {
       const fixture = resolveDatasetPath(options.datasetRoot, document.path, `document ${document.path}`);
-      const destination = path.resolve(libraryRoot, document.path);
-      relativeSource(libraryRoot, destination);
+      const destination = path.resolve(projectRoot, document.path);
+      relativeSource(projectRoot, destination);
       await fs.mkdir(path.dirname(destination), { recursive: true });
       await fs.copyFile(fixture, destination);
       if (document.kind === 'direct') {
@@ -104,16 +104,16 @@ export async function runSemanticRetrievalEval(options: SemanticEvalRunnerOption
     const chunkBudget = options.dataset.topK * CHUNK_FETCH_MULTIPLIER;
     const ranked: RankedQueryResult[] = [];
     for (const query of options.dataset.queries) {
-      const semantic = await backend.semanticSearch(query.text, chunkBudget, libraryRoot);
+      const semantic = await backend.semanticSearch(query.text, chunkBudget, projectRoot);
       const exact = query.compareExact
-        ? await backend.exactSearch(query.text, chunkBudget, libraryRoot)
+        ? await backend.exactSearch(query.text, chunkBudget, projectRoot)
         : null;
       ranked.push({
         id: query.id,
         query: query.text,
         relevant: query.relevant,
-        ranked: distinctSources(libraryRoot, semantic),
-        ...(exact ? { exactRanked: distinctSources(libraryRoot, exact) } : {}),
+        ranked: distinctSources(projectRoot, semantic),
+        ...(exact ? { exactRanked: distinctSources(projectRoot, exact) } : {}),
       });
     }
 

@@ -14,8 +14,8 @@ describe('semantic search API', () => {
           {
             chunkIndex: 3,
             content: 'A   long\nchunk body',
-            fileName: '/library/research/notes/idea.md',
-            folder: '/library/research',
+            fileName: '/project/research/notes/idea.md',
+            folder: '/project/research',
             heading: 'Ideas',
             path: 'notes/idea.md',
             score: 0.7,
@@ -26,13 +26,13 @@ describe('semantic search API', () => {
       status: 200,
     }));
     const result = await createSemanticSearchAdapter({ request }).search(
-      { folderPath: '/library/research', query: 'idea', topK: 30 },
+      { folderPath: '/project/research', query: 'idea', topK: 30 },
       signal,
     );
     expect(request).toHaveBeenCalledWith({
-      body: { folder: '/library/research', mode: 'semantic', query: 'idea', top_k: 30 },
+      body: { folder: '/project/research', mode: 'semantic', query: 'idea', top_k: 30 },
       method: 'POST',
-      path: '/api/library/search',
+      path: '/api/project/search',
       signal,
     });
     expect(result).toEqual({
@@ -41,10 +41,10 @@ describe('semantic search API', () => {
           chunkIndex: 3,
           content: 'A   long\nchunk body',
           heading: 'Ideas',
-          id: '/library/research\u0000notes/idea.md\u00003',
+          id: '/project/research\u0000notes/idea.md\u00003',
           score: 0.7,
           snippet: 'A long chunk body',
-          source: { folderPath: '/library/research', path: 'notes/idea.md' },
+          source: { folderPath: '/project/research', path: 'notes/idea.md' },
           startLine: 12,
         },
       ],
@@ -61,7 +61,7 @@ describe('semantic search API', () => {
     };
     await expect(
       createSemanticSearchAdapter(keyless).search(
-        { folderPath: '/library/research', query: 'idea', topK: 8 },
+        { folderPath: '/project/research', query: 'idea', topK: 8 },
         signal,
       ),
     ).rejects.toMatchObject({ kind: 'not-set-up' });
@@ -78,7 +78,7 @@ describe('semantic search API', () => {
     };
     await expect(
       createSemanticSearchAdapter(client).search(
-        { folderPath: '/library/research', query: 'idea', topK: 8 },
+        { folderPath: '/project/research', query: 'idea', topK: 8 },
         controller.signal,
       ),
     ).rejects.toBe(abortError);

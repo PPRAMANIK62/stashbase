@@ -37,8 +37,8 @@ describe('UninstallAgentDialog', () => {
       />,
     );
 
-    const dialog = await screen.findByRole('dialog', { name: 'Uninstall Claude Code runtime?' });
-    expect(dialog.textContent).toContain('chat ends now');
+    const dialog = await screen.findByRole('dialog', { name: 'Uninstall Claude Code?' });
+    expect(dialog.textContent).toContain('end its active chats');
     await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Uninstall' }));
     expect(onConfirm).toHaveBeenCalled();
   });

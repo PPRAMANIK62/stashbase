@@ -66,8 +66,8 @@ describe('useAgentEnvironment', () => {
 
     expect(result.current.outline).not.toBeNull();
     expect(result.current.environment).toBeNull();
-    // Nothing is selected, so a new chat is scoped to the whole library.
-    expect(result.current.scope).toEqual({ kind: 'library' });
+    // Nothing is selected, so a new chat is unbound.
+    expect(result.current.scope).toEqual({ kind: 'unbound' });
   });
 
   it('hides derived folders from what the Agent can see', () => {

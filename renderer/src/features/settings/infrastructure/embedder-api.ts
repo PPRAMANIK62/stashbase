@@ -27,11 +27,9 @@ import {
 
 function toEmbedderState(wire: EmbedderStateWire): EmbedderState {
   return {
-    authorized: wire.authorized,
     hasKey: wire.hasKey,
     model: wire.model,
     provider: wire.provider,
-    source: wire.source,
   };
 }
 

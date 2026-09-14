@@ -7,7 +7,6 @@
 import fs from 'node:fs';
 import {
   configuredTranscriptionBlock,
-  currentDerivedTextPathForAudio,
   currentDerivedTextPathForAudioAsync,
   derivedTranscriptPathForAudio,
   discoverNewAudio,
@@ -15,13 +14,13 @@ import {
   maybeConvertAudio,
   resetAudioTranscription,
 } from './audio-transcription.ts';
-import { collectSourceCandidates, promoteConversion } from './conversion.ts';
+import { collectSourceCandidates, isConversionTextUnavailable, promoteConversion } from './conversion.ts';
 import { clearRecord } from './conversion-status.ts';
-import { currentDerivedTextPathForDocx, currentDerivedTextPathForDocxAsync, derivedHtmlPathForDocx, discoverNewDocx, indexFreshDocx, maybeConvertDocx } from './docx.ts';
+import { currentDerivedTextPathForDocxAsync, derivedHtmlPathForDocx, discoverNewDocx, indexFreshDocx, maybeConvertDocx } from './docx.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { isAudioFile, isDocxFile, isImageFile } from './format.ts';
-import { currentDerivedTextPathForImage, currentDerivedTextPathForImageAsync, derivedNotePathForImage, discoverNewImages, indexFreshImage, maybeConvertImage } from './image.ts';
-import { currentDerivedTextPathForPdf, currentDerivedTextPathForPdfAsync, derivedPathsForPdf, discoverNewPdfs, indexFreshPdf, maybeConvertPdf } from './pdf.ts';
+import { currentDerivedTextPathForImageAsync, derivedNotePathForImage, discoverNewImages, indexFreshImage, maybeConvertImage } from './image.ts';
+import { currentDerivedTextPathForPdfAsync, derivedPathsForPdf, discoverNewPdfs, indexFreshPdf, maybeConvertPdf } from './pdf.ts';
 import type { ConfiguredTranscriptionBlock } from '../shared/transcription.ts';
 import type { IndexUpsertResult } from './indexer.ts';
 
@@ -43,7 +42,6 @@ interface ConvertibleFormatAdapter {
   reset(sourceAbs: string): void;
   interactive: boolean;
   reprocessBlock?(): ConfiguredTranscriptionBlock | null;
-  currentTextPath(sourceAbs: string, known?: { sourceMtimeMs: number; derivedMtimeMs: number }): string | null;
   currentTextPathAsync(sourceAbs: string, known: { sourceMtimeMs: number; derivedMtimeMs: number }): Promise<string | null>;
   textCandidatePath(sourceAbs: string): string;
 }
@@ -60,7 +58,6 @@ const FORMATS: readonly ConvertibleFormatAdapter[] = [
       fs.rmSync(bundleDir, { recursive: true, force: true });
     },
     interactive: false,
-    currentTextPath: currentDerivedTextPathForPdf,
     currentTextPathAsync: currentDerivedTextPathForPdfAsync,
     textCandidatePath: (source) => derivedPathsForPdf(source).notePath,
   },
@@ -71,7 +68,6 @@ const FORMATS: readonly ConvertibleFormatAdapter[] = [
     indexFresh: indexFreshImage,
     reset: (sourceAbs) => fs.rmSync(derivedNotePathForImage(sourceAbs), { force: true }),
     interactive: false,
-    currentTextPath: currentDerivedTextPathForImage,
     currentTextPathAsync: currentDerivedTextPathForImageAsync,
     textCandidatePath: derivedNotePathForImage,
   },
@@ -82,7 +78,6 @@ const FORMATS: readonly ConvertibleFormatAdapter[] = [
     indexFresh: indexFreshDocx,
     reset: (sourceAbs) => fs.rmSync(derivedHtmlPathForDocx(sourceAbs), { force: true }),
     interactive: true,
-    currentTextPath: currentDerivedTextPathForDocx,
     currentTextPathAsync: currentDerivedTextPathForDocxAsync,
     textCandidatePath: derivedHtmlPathForDocx,
   },
@@ -93,7 +88,6 @@ const FORMATS: readonly ConvertibleFormatAdapter[] = [
     indexFresh: indexFreshAudio,
     reset: resetAudioTranscription,
     interactive: true,
-    currentTextPath: currentDerivedTextPathForAudio,
     currentTextPathAsync: currentDerivedTextPathForAudioAsync,
     textCandidatePath: derivedTranscriptPathForAudio,
     reprocessBlock: configuredTranscriptionBlock,
@@ -152,20 +146,26 @@ export function indexFreshConvertibleSource(
   return findFormat(displayName)?.indexFresh(sourceAbs) ?? Promise.resolve(null);
 }
 
-export function currentPreparedTextPath(
+export async function currentPreparedTextPathAsync(
   sourceAbs: string,
   displayName = sourceAbs,
   known?: { sourceMtimeMs: number; derivedMtimeMs: number },
-): string | null {
-  return findFormat(displayName)?.currentTextPath(sourceAbs, known) ?? null;
-}
-
-export function currentPreparedTextPathAsync(
-  sourceAbs: string,
-  displayName: string,
-  known: { sourceMtimeMs: number; derivedMtimeMs: number },
 ): Promise<string | null> {
-  return findFormat(displayName)?.currentTextPathAsync(sourceAbs, known) ?? Promise.resolve(null);
+  const format = findFormat(displayName);
+  if (!format || isConversionTextUnavailable(sourceAbs)) return null;
+  try {
+    if (!known) {
+      const [source, derived] = await Promise.all([
+        fs.promises.stat(sourceAbs), fs.promises.stat(format.textCandidatePath(sourceAbs)),
+      ]);
+      if (!source.isFile() || !derived.isFile()) return null;
+      known = { sourceMtimeMs: source.mtimeMs, derivedMtimeMs: derived.mtimeMs };
+    }
+    const current = await format.currentTextPathAsync(sourceAbs, known);
+    return isConversionTextUnavailable(sourceAbs) ? null : current;
+  } catch {
+    return null;
+  }
 }
 
 export function preparedTextCandidatePath(sourceAbs: string, displayName = sourceAbs): string | null {

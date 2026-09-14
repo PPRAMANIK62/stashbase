@@ -26,7 +26,7 @@ describe('document commands composition', () => {
       documentTabsRuntimeOptions({
         restored: {
           activeTabId: 'tab-1',
-          tabs: [{ id: 'tab-1', source: { folderPath: '/library/notes', path: 'plan.md' } }],
+          tabs: [{ id: 'tab-1', source: { folderPath: '/project/notes', path: 'plan.md' } }],
         },
       }),
     );
@@ -64,7 +64,7 @@ describe('document commands composition', () => {
         createId: () => 'tab-2',
         restored: {
           activeTabId: 'tab-1',
-          tabs: [{ id: 'tab-1', source: { folderPath: '/library/notes', path: 'plan.md' } }],
+          tabs: [{ id: 'tab-1', source: { folderPath: '/project/notes', path: 'plan.md' } }],
         },
       }),
     );

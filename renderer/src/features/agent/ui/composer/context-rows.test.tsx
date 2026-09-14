@@ -118,7 +118,7 @@ describe('mention suggestion rows', () => {
     expect(view().rows.map((row) => row.key)).toContain('folder:docs');
   });
 
-  it('never suggests a file the library will not index', () => {
+  it('never suggests a file the project will not index', () => {
     const { open, view } = setup();
     open(mention('archive'));
 

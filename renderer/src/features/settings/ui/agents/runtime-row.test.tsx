@@ -57,19 +57,19 @@ describe('RuntimeRow', () => {
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull();
   });
 
-  it('draws the staged track until a runtime is ready, then drops it', () => {
+  it('says where preparation stands in one sentence, with no progress ornament', () => {
     renderRow(
       codex({
         installed: true,
-        preparation: { kind: 'running', note: null, stage: 'configure' },
+        preparation: { kind: 'running', note: 'Connecting…', stage: 'configure' },
       }),
     );
-    expect(screen.getByText('Configure')).not.toBeNull();
+    expect(screen.getByText('Connecting…')).not.toBeNull();
+    expect(screen.queryByText('Connect')).toBeNull();
 
     cleanup();
     renderRow(codex({ installed: true, ownership: 'system', preparation: { kind: 'ready' } }));
-    expect(screen.queryByText('Configure')).toBeNull();
-    expect(screen.getByText('Ready for Chat · System runtime')).not.toBeNull();
+    expect(screen.getByText('Ready to chat · Installed on your system')).not.toBeNull();
   });
 
   it('keeps a command failure on the row it belongs to', () => {

@@ -34,7 +34,7 @@ describe('ChatHeader', () => {
       />,
     );
 
-    const heading = screen.getByRole('heading', { name: /^New chat, / });
+    const heading = screen.getByRole('heading', { name: /^Untitled, / });
     // The mark beside the name is drawn at the chrome's stroke, not the
     // heavier one it wears beside the vendor logos.
     const mark = heading.previousElementSibling; // dom-contract: the mark is the svg right before the name

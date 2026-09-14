@@ -48,7 +48,7 @@ function isLegacyTextlessOcrFailure(entry: ConversionStatusEntry): boolean {
 
 /** Before textless images became a successful OCR outcome, the extractor
  * persisted exit 3 as a durable failure. Retire only that exact legacy shape
- * on read so upgraded libraries stop showing Reprocess and reconcile can
+ * on read so upgraded projects stop showing Reprocess and reconcile can
  * create the new marker-only completion result. */
 function actionableStatus(sourcePath: string): ConversionStatusEntry | undefined {
   const entry = getConversionStatus(sourcePath);
@@ -121,14 +121,14 @@ export function clearRecord(sourcePath: string): void {
   clearConversionStatus(sourcePath);
 }
 
-export function clearRecordsUnder(sourcePathPrefix: string): void {
+export function clearRecordsUnder(sourcePathPrefix: string, excludedRoots: readonly string[] = []): void {
   for (const key of [...inFlight]) {
-    if (filesystemPath.contains(sourcePathPrefix, key)) {
+    if (filesystemPath.contains(sourcePathPrefix, key) && !excludedRoots.some((root) => filesystemPath.contains(root, key))) {
       inFlight.delete(key);
       progress.delete(key);
     }
   }
-  clearConversionStatusUnder(sourcePathPrefix);
+  clearConversionStatusUnder(sourcePathPrefix, excludedRoots);
 }
 
 export function listFailed(): Array<{ path: string; entry: ConversionStatusEntry }> {

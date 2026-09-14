@@ -36,7 +36,7 @@ const NETWORK_PATTERN =
 export function classifyAgentTurnFailure(message: string): AgentTurnFailureKind | null {
   if (AUTH_PATTERN.test(message)) return 'auth-expired';
   if (/hosted_access_restricted|hosted ai access is restricted|agent access is restricted/i.test(message)) return 'access-restricted';
-  if (/agent_allowance_exhausted|quota_exhausted|stashbase.{0,30}(agent )?allowance|(weekly|monthly) agent allowance/i.test(message)) return 'allowance-exhausted';
+  if (/openquill free credits are exhausted|agent_allowance_exhausted|quota_exhausted|stashbase.{0,30}(agent )?allowance|(weekly|monthly) agent allowance/i.test(message)) return 'allowance-exhausted';
   if (QUOTA_PATTERN.test(message)) return 'quota';
   if (RATE_LIMIT_PATTERN.test(message)) return 'rate-limit';
   if (NETWORK_PATTERN.test(message)) return 'network';

@@ -22,7 +22,6 @@ function createUpdateManager(options) {
   const {
     updater,
     currentVersion,
-    platform = 'unknown',
     isPackaged,
     readAutoCheck,
     beforeInstall,
@@ -40,15 +39,14 @@ function createUpdateManager(options) {
   let state = {
     phase: isPackaged ? 'idle' : 'unsupported',
     currentVersion,
-    platform,
     autoCheckEnabled: true,
-    releaseUrl: DEFAULT_RELEASE_URL,
     ...(isPackaged ? {} : { message: 'Update checks are available in packaged builds.' }),
   };
   let timer = null;
   let disposed = false;
   let started = false;
   let updateSimulation = 'off';
+  let installAttempt = null;
 
   function snapshot() {
     const simulation = { enabled: debugEnabled, value: updateSimulation };
@@ -58,8 +56,6 @@ function createUpdateManager(options) {
     const simulated = {
       ...state,
       availableVersion,
-      releaseName: 'Development update simulation',
-      releaseDate: undefined,
       percent: undefined,
       message: undefined,
       simulation,
@@ -105,8 +101,6 @@ function createUpdateManager(options) {
     publish({
       phase: 'available',
       availableVersion: typeof info.version === 'string' ? info.version : state.availableVersion,
-      releaseName: typeof info.releaseName === 'string' ? info.releaseName : undefined,
-      releaseDate: typeof info.releaseDate === 'string' ? info.releaseDate : undefined,
       percent: undefined,
       message: undefined,
     });
@@ -116,8 +110,6 @@ function createUpdateManager(options) {
     publish({
       phase: 'current',
       availableVersion: undefined,
-      releaseName: undefined,
-      releaseDate: undefined,
       percent: undefined,
       message: undefined,
     });
@@ -140,7 +132,10 @@ function createUpdateManager(options) {
   }
 
   function onError(error) {
-    if (state.phase === 'installing') afterInstallFailure();
+    if (state.phase === 'installing') {
+      installAttempt = null;
+      afterInstallFailure();
+    }
     publish({ phase: 'error', message: errorMessage(error), percent: undefined });
   }
 
@@ -220,9 +215,13 @@ function createUpdateManager(options) {
 
   async function installReadyUpdate() {
     if (state.phase !== 'ready') return snapshot();
+    const attempt = {};
+    installAttempt = attempt;
     publish({ phase: 'installing', message: undefined });
     try {
       const mayInstall = await beforeInstall();
+      // An updater error can arrive while the save replies are pending.
+      if (installAttempt !== attempt) return snapshot();
       if (!mayInstall) {
         publish({ phase: 'ready' });
         return snapshot();
@@ -232,7 +231,7 @@ function createUpdateManager(options) {
       // Platform adapters may both emit electron-updater's error event and
       // throw the same synchronous failure. onError already rolled back the
       // close approvals in that case.
-      if (state.phase !== 'error') onError(error);
+      if (installAttempt === attempt && state.phase !== 'error') onError(error);
     }
     return snapshot();
   }

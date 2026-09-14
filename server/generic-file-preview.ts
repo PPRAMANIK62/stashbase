@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { GenericFilePreview } from '../shared/library-files.ts';
+import type { GenericFilePreview } from '../shared/project-files.ts';
 import { fileStatVersion, MAX_TEXT_READ_BYTES } from './active-file-operations.ts';
 import { resolveSafe } from './file-paths.ts';
 import { detectViewerFormat } from './format.ts';

@@ -8,7 +8,7 @@ import { readBridge } from './bridge';
 const externalNavigation = {
   open: async () => ({ ok: true as const }),
 };
-const library = {
+const project = {
   chooseFolder: async () => ({ ok: true as const, folderPath: null }),
   claimInitialFolder: async () => ({ folderPath: null, ok: true as const }),
   notifyFolderRemoved: async () => ({ ok: true as const }),
@@ -24,7 +24,6 @@ const workspaceSession = {
 };
 const windowLifecycle = {
   onPrepareContextRelease: () => () => undefined,
-  reload: async () => ({ ok: true as const, reloaded: false }),
 };
 const runtime = { serverOrigin: 'http://127.0.0.1:8090' };
 
@@ -33,17 +32,17 @@ afterEach(() => {
 });
 
 describe('Electron bridge', () => {
-  it('returns only the validated library and runtime capabilities', () => {
+  it('returns only the validated project and runtime capabilities', () => {
     window.stashbase = {
       externalNavigation,
-      library,
+      project,
       runtime,
       workspaceSession,
       windowLifecycle,
     };
     expect(readBridge()).toEqual({
       externalNavigation,
-      library,
+      project,
       runtime,
       workspaceSession,
       windowLifecycle,
@@ -55,11 +54,11 @@ describe('Electron bridge', () => {
     expect(() => readBridge()).toThrow(/"message": "Required"/u);
 
     window.stashbase = { externalNavigation, runtime, workspaceSession, windowLifecycle };
-    expect(() => readBridge()).toThrow('The library folder picker is unavailable.');
+    expect(() => readBridge()).toThrow('The project folder picker is unavailable.');
 
     window.stashbase = {
       externalNavigation,
-      library,
+      project,
       runtime: { ...runtime, windowId: 'renderer-owned' },
       workspaceSession,
       windowLifecycle,
@@ -72,7 +71,7 @@ describe('Electron bridge', () => {
     window.stashbase = {
       bugReport,
       externalNavigation,
-      library,
+      project,
       runtime,
       workspaceSession,
       windowLifecycle,
@@ -82,7 +81,7 @@ describe('Electron bridge', () => {
     window.stashbase = {
       bugReport: {},
       externalNavigation,
-      library,
+      project,
       runtime,
       workspaceSession,
       windowLifecycle,
@@ -101,7 +100,7 @@ describe('Electron bridge', () => {
     };
     window.stashbase = {
       externalNavigation,
-      library,
+      project,
       runtime,
       updates,
       workspaceSession,
@@ -113,7 +112,7 @@ describe('Electron bridge', () => {
     // capability is no capability at all rather than one that throws later.
     window.stashbase = {
       externalNavigation,
-      library,
+      project,
       runtime,
       updates: { read: async () => undefined },
       workspaceSession,

@@ -42,11 +42,11 @@ function readyMediaApi(overrides: Partial<MediaPort> = {}): MediaPort {
 
 function renderMedia(path: string, api = readyMediaApi(), strict = false) {
   const runtime = createDocumentRuntime({
-    activeFolderPath: '/library',
+    activeFolderPath: '/project',
     generation: 1,
     id: 'tab-1',
     queries: documentQueryScope(),
-    source: { folderPath: '/library', path },
+    source: { folderPath: '/project', path },
   });
   const navigation = createDocumentNavigationRuntime('tab-1');
   const client = createTestQueryClient();
@@ -130,7 +130,7 @@ describe('media document', () => {
       screen.getByText('Video playback is unavailable. Playing its audio track instead.'),
     ).not.toBeNull();
     expect(api.preparePreview).toHaveBeenCalledWith(
-      { folderPath: '/library', path: 'recordings/interview.mp4' },
+      { folderPath: '/project', path: 'recordings/interview.mp4' },
       expect.any(AbortSignal),
     );
     rendered.runtime.dispose();
@@ -172,7 +172,7 @@ describe('media document', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText('First result')).not.toBeNull();
     expect(api.reprocessTranscript).toHaveBeenCalledWith(
-      { folderPath: '/library', path: 'recordings/interview.m4a' },
+      { folderPath: '/project', path: 'recordings/interview.m4a' },
       expect.any(AbortSignal),
     );
     rendered.runtime.dispose();

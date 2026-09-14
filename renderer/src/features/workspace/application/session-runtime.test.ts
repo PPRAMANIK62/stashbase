@@ -10,12 +10,12 @@ describe('Workspace session runtime', () => {
     const save = vi.fn(async (_snapshot: WorkspaceSessionSnapshot) => undefined);
     const runtime = createWorkspaceSessionRuntime({
       load: async () => ({
-        activeFolderPath: '/library/notes',
+        activeFolderPath: '/project/notes',
         folders: [
           {
             activeTabId: 'missing',
             expandedPaths: ['drafts', 'drafts'],
-            folderPath: '/library/notes',
+            folderPath: '/project/notes',
             selectedPath: 'drafts/plan.md',
             tabs: [],
           },
@@ -32,7 +32,7 @@ describe('Workspace session runtime', () => {
       lifecycle: 'active',
       restoreStatus: 'ready',
       snapshot: {
-        activeFolderPath: '/library/notes',
+        activeFolderPath: '/project/notes',
         folders: [{ activeTabId: null, expandedPaths: ['drafts'] }],
         shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 288 },
       },
@@ -64,10 +64,10 @@ describe('Workspace session runtime', () => {
     const save = vi.fn(async (_snapshot: WorkspaceSessionSnapshot) => undefined);
     const runtime = createWorkspaceSessionRuntime({ load: async () => null, save });
     await runtime.restore();
-    runtime.setActiveFolder('/library/notes');
+    runtime.setActiveFolder('/project/notes');
     runtime.recordWorkspace({
       ...createWorkspaceState({
-        folder: { name: 'Notes', path: '/library/notes' },
+        folder: { name: 'Notes', path: '/project/notes' },
         generation: 4,
       }),
       expanded: { drafts: true },

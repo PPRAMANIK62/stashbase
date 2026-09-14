@@ -57,7 +57,7 @@ function browserSocket(url: string): SocketLike {
 
 function scopeQuery(scope: AgentScope): URLSearchParams {
   const query = new URLSearchParams();
-  if (scope.kind === 'library') query.set('scope', 'library');
+  if (scope.kind === 'unbound') query.set('scope', 'unbound');
   else query.set('folder', scope.path);
   return query;
 }
@@ -230,7 +230,7 @@ function socketUrl(serverOrigin: string, request: AgentConnectRequest): string {
     resume: request.resume,
     ...(request.scope.kind === 'folder'
       ? { folder: request.scope.path }
-      : { scope: 'library' as const }),
+      : { scope: 'unbound' as const }),
   });
   for (const [key, value] of Object.entries(wire)) {
     if (value !== undefined) url.searchParams.set(key, value);

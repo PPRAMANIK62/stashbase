@@ -10,8 +10,8 @@ import { validatePreparedAudioTranscript } from './prepared-validation.ts';
 import { hasNoExtractableText, indexableFileSizeError, MAX_INDEXABLE_BYTES } from './indexable.ts';
 
 for (const [source, content] of [
-  ['/library/Data.JSON', '\uFEFF{\r\n  "z": 1,\r\n  "broken":\r\n'],
-  ['/library/README.TXT', '\uFEFFheading-like # source\r\n[link](note.md)\r\n'],
+  ['/project/Data.JSON', '\uFEFF{\r\n  "z": 1,\r\n  "broken":\r\n'],
+  ['/project/README.TXT', '\uFEFFheading-like # source\r\n[link](note.md)\r\n'],
 ] as const) {
   test(`${path.extname(source).toLowerCase()} indexing keeps literal UTF-8`, () => {
     const prepared = prepareForIndex(source, content);

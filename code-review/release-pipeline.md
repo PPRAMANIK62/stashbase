@@ -88,10 +88,25 @@ toolchain rather than the linter any gate runs.
 
 - Each platform builds the pinned transcription sidecar for its target. Native
   archives may use declared mirrors only when the accepted bytes match the
-  pinned digest.
-- The packaged PDF/OCR extractor keeps its console-enabled stderr channel for
+  pinned digest. The transcription build runs `scripts/check-transcription-media.mjs`
+  against its staged binaries: an AVI fixture must probe successfully, decode
+  inference audio, and produce a single Opus playback stream. System FFmpeg is
+  not evidence for the staged toolchain.
+- The independently downloaded PDF/OCR extractor keeps its console-enabled stderr channel for
   progress and failure reporting, while its Windows bootloader hides consoles
   owned by both the entry process and frozen multiprocessing workers.
+- Base installers contain only the Python index daemon and an embedded
+  extractor manifest. `scripts/build-extractor-component.mjs` publishes an
+  independent tar.gz and matching JSON manifest per app version/platform;
+  packaging verifies their hash, size, and target before embedding the manifest.
+  macOS signs every native component binary/framework with Developer ID and
+  requires accepted notarization before hashing the archive. Windows/Linux
+  use the exact archive digest carried by the installed app. Component runtime
+  installation is owned by [Data Lifecycle](data-lifecycle.md#pdfocr-component-installation).
+- Python packaging rejects inference/OCR modules in the index daemon. App
+  packaging excludes source maps and SQLite development sources while retaining
+  its native binary and runtime loaders. PyArrow/OpenCV and the independent
+  Python environments are preserved.
 - Packaging rejects missing/empty binaries, licenses, or notices; wrong binary
   formats; version/build-option drift; unacceptable FFmpeg licensing/features;
   and target ABI or minimum-OS drift.
@@ -116,6 +131,8 @@ toolchain rather than the linter any gate runs.
 - Artifact upload gates fail closed unless macOS has DMG, ZIP, and metadata;
   Windows has NSIS EXE, ZIP, blockmap, and metadata; and Linux has deb,
   AppImage, and latest metadata carrying its embedded blockmap size.
+  All three platform extractor archives and manifests must also exist before
+  the coordinator publishes the release.
 - Versioned release assets are immutable. Platform Adapters upload only to a
   draft and never overwrite an existing name. If a coordinated run leaves an
   incomplete draft, delete that draft and rerun from the same tag rather than
@@ -126,7 +143,10 @@ toolchain rather than the linter any gate runs.
 - Windows provisions the manifest-reading Node runtime and compiler tools inside
   MINGW64. Linux preserves the documented glibc/glibc++ baseline. macOS targets
   12.0 and retains the generic CPU fallback alongside supported acceleration.
-- Packaged smoke starts the server, exercises PDF/OCR/DOCX helpers, explicitly
+- Packaged smoke checks that the extractor is absent from the base installer,
+  installs the release archive through the production download/verification
+  owner using a local HTTP transport, exercises real PDF/OCR, and checks offline
+  reuse. It also starts the server, exercises DOCX, explicitly
   loads the Electron main-process dependency graph from app.asar, downloads and
   verifies the Tiny speech model, transcodes media, runs local inference,
   validates transcript output, and serves the compatible preview before

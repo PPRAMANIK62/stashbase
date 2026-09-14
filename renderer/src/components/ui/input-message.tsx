@@ -220,7 +220,7 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
         className={cn(
           'flex flex-col gap-1 p-2 transition-[box-shadow,color] duration-fast',
           surfaceClasses(2, 2),
-          shape.container,
+          shape.card,
           clickToFocus && !disabled && 'cursor-text',
           disabled && 'pointer-events-none opacity-50',
           className,

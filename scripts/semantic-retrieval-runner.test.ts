@@ -51,7 +51,7 @@ test('runner stages direct and prepared evidence, reports results, and cleans is
     model: 'fake-model',
     commit: 'abc123',
     makeScratch: async () => { await fs.mkdir(scratch); return scratch; },
-    async createBackend({ libraryRoot, appDataRoot }): Promise<SemanticEvalBackend> {
+    async createBackend({ projectRoot, appDataRoot }): Promise<SemanticEvalBackend> {
       observedAppData = appDataRoot;
       return {
         bind: async () => {},
@@ -61,7 +61,7 @@ test('runner stages direct and prepared evidence, reports results, and cleans is
         },
         semanticSearch: async (query, chunkBudget) => {
           chunkBudgets.push(chunkBudget);
-          return [path.join(libraryRoot, query.startsWith('direct') ? 'corpus/direct.md' : 'corpus/source.pdf')];
+          return [path.join(projectRoot, query.startsWith('direct') ? 'corpus/direct.md' : 'corpus/source.pdf')];
         },
         exactSearch: async () => [],
         close: async () => { closed = true; },
@@ -95,15 +95,15 @@ test('runner collapses repeated chunk hits so K counts distinct sources', async 
     provider: 'fake-provider',
     model: 'fake-model',
     commit: 'abc123',
-    async createBackend({ libraryRoot }): Promise<SemanticEvalBackend> {
+    async createBackend({ projectRoot }): Promise<SemanticEvalBackend> {
       // A long source returning three chunks must not consume three slots.
-      const noise = path.join(libraryRoot, 'corpus/source.pdf');
+      const noise = path.join(projectRoot, 'corpus/source.pdf');
       return {
         bind: async () => {}, indexDirect: async () => {}, indexPrepared: async () => {},
         semanticSearch: async (query) => (query.startsWith('direct')
-          ? [noise, noise, noise, path.join(libraryRoot, 'corpus/direct.md')]
+          ? [noise, noise, noise, path.join(projectRoot, 'corpus/direct.md')]
           : [noise, noise]),
-        exactSearch: async () => [path.join(libraryRoot, 'corpus/direct.md'), path.join(libraryRoot, 'corpus/direct.md')],
+        exactSearch: async () => [path.join(projectRoot, 'corpus/direct.md'), path.join(projectRoot, 'corpus/direct.md')],
         close: async () => {},
       };
     },
@@ -126,10 +126,10 @@ test('runner surfaces a close failure when the run itself succeeded', async (t) 
     model: 'fake-model',
     commit: 'abc123',
     makeScratch: async () => { await fs.mkdir(scratch); return scratch; },
-    async createBackend({ libraryRoot }): Promise<SemanticEvalBackend> {
+    async createBackend({ projectRoot }): Promise<SemanticEvalBackend> {
       return {
         bind: async () => {}, indexDirect: async () => {}, indexPrepared: async () => {},
-        semanticSearch: async (query) => [path.join(libraryRoot, query.startsWith('direct') ? 'corpus/direct.md' : 'corpus/source.pdf')],
+        semanticSearch: async (query) => [path.join(projectRoot, query.startsWith('direct') ? 'corpus/direct.md' : 'corpus/source.pdf')],
         exactSearch: async () => [],
         close: async () => { throw new Error('daemon close failed'); },
       };
@@ -154,7 +154,7 @@ test('runner keeps the primary failure when close also fails', async (t) => {
         close: async () => { throw new Error('daemon close failed'); },
       };
     },
-  }), /outside the evaluation library/);
+  }), /outside the evaluation project/);
 });
 
 test('runner marks a report produced from a dirty working tree', async (t) => {
@@ -167,10 +167,10 @@ test('runner marks a report produced from a dirty working tree', async (t) => {
     model: 'fake-model',
     commit: 'abc123',
     workingTreeDirty: true,
-    async createBackend({ libraryRoot }): Promise<SemanticEvalBackend> {
+    async createBackend({ projectRoot }): Promise<SemanticEvalBackend> {
       return {
         bind: async () => {}, indexDirect: async () => {}, indexPrepared: async () => {},
-        semanticSearch: async (query) => [path.join(libraryRoot, query.startsWith('direct') ? 'corpus/direct.md' : 'corpus/source.pdf')],
+        semanticSearch: async (query) => [path.join(projectRoot, query.startsWith('direct') ? 'corpus/direct.md' : 'corpus/source.pdf')],
         exactSearch: async () => [],
         close: async () => {},
       };
@@ -195,7 +195,7 @@ test('runner cleans scratch when backend initialization fails', async (t) => {
   await assert.rejects(fs.stat(scratch));
 });
 
-test('runner rejects retrieval sources outside the isolated library and still closes', async (t) => {
+test('runner rejects retrieval sources outside the isolated project and still closes', async (t) => {
   const fixture = await runnerFixture();
   t.after(() => fs.rm(fixture.root, { recursive: true, force: true }));
   let closed = false;
@@ -212,7 +212,7 @@ test('runner rejects retrieval sources outside the isolated library and still cl
         close: async () => { closed = true; },
       };
     },
-  }), /outside the evaluation library/);
+  }), /outside the evaluation project/);
   assert.equal(closed, true);
 });
 

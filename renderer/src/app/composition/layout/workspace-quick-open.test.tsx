@@ -71,7 +71,7 @@ describe('workspace Quick Open composition', () => {
       save: vi.fn(),
     };
     workspace = createWorkspaceRuntime({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 1,
       queries: {
         cancel: () => queryClient.cancelQueries(),
@@ -86,7 +86,7 @@ describe('workspace Quick Open composition', () => {
         remove: vi.fn(),
         replaceSource: vi.fn(),
       }),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
 
@@ -115,7 +115,7 @@ describe('workspace Quick Open composition', () => {
     await userEvent.setup().click(option);
     await waitFor(() =>
       expect(documents.openSources()).toEqual([
-        { folderPath: '/library/notes', path: '.github/workflows/ci.md' },
+        { folderPath: '/project/notes', path: '.github/workflows/ci.md' },
       ]),
     );
 
@@ -127,7 +127,7 @@ describe('workspace Quick Open composition', () => {
     // in the documents runtime reads the listing.
     await waitFor(() => expect(screen.queryByRole('option', { name: /ci\.md/ })).toBeNull());
     expect(documents.openSources()).toEqual([
-      { folderPath: '/library/notes', path: '.github/workflows/ci.md' },
+      { folderPath: '/project/notes', path: '.github/workflows/ci.md' },
     ]);
   });
 
@@ -172,7 +172,7 @@ describe('workspace Quick Open composition', () => {
       save: vi.fn(),
     };
     workspace = createWorkspaceRuntime({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 1,
       queries: {
         cancel: () => queryClient.cancelQueries(),
@@ -187,7 +187,7 @@ describe('workspace Quick Open composition', () => {
         remove: vi.fn(),
         replaceSource: vi.fn(),
       }),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
 
@@ -222,7 +222,7 @@ describe('workspace Quick Open composition', () => {
 
     await waitFor(() =>
       expect(documents.openSources()).toEqual([
-        { folderPath: '/library/notes', path: 'archive.bin' },
+        { folderPath: '/project/notes', path: 'archive.bin' },
       ]),
     );
 
@@ -237,7 +237,7 @@ describe('workspace Quick Open composition', () => {
     );
 
     expect(filesApi.reveal).toHaveBeenCalledWith(
-      '/library/notes',
+      '/project/notes',
       'linked.bin',
       expect.any(AbortSignal),
     );

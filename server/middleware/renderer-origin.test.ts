@@ -13,7 +13,7 @@ test('renderer origin policy allows the exact app origin and answers preflight',
       new Set(['app://renderer', 'http://127.0.0.1:8090']),
     ),
   );
-  app.get('/api/library', (_req, res) => {
+  app.get('/api/projects', (_req, res) => {
     res.setHeader('x-stashbase-file-version', 'fixture-version');
     res.json({ ok: true });
   });
@@ -33,7 +33,7 @@ test('renderer origin policy allows the exact app origin and answers preflight',
   assert.ok(address && typeof address === 'object');
   const baseUrl = `http://127.0.0.1:${address.port}`;
 
-  const allowed = await fetch(`${baseUrl}/api/library`, {
+  const allowed = await fetch(`${baseUrl}/api/projects`, {
     headers: { Origin: 'app://renderer' },
   });
   assert.equal(allowed.status, 200);
@@ -44,7 +44,7 @@ test('renderer origin policy allows the exact app origin and answers preflight',
   );
   assert.equal(allowed.headers.get('vary'), 'Origin');
 
-  const preflight = await fetch(`${baseUrl}/api/library`, {
+  const preflight = await fetch(`${baseUrl}/api/projects`, {
     method: 'OPTIONS',
     headers: {
       'Access-Control-Request-Headers': 'content-type',
@@ -60,7 +60,7 @@ test('renderer origin policy allows the exact app origin and answers preflight',
     /x-stashbase-window-id/u,
   );
 
-  const denied = await fetch(`${baseUrl}/api/library`, {
+  const denied = await fetch(`${baseUrl}/api/projects`, {
     headers: { Origin: 'https://example.com' },
   });
   assert.equal(denied.status, 403);

@@ -20,7 +20,7 @@ const reportSource: AgentContextItem = {
   boundVersion: 4,
   format: 'pdf',
   kind: 'source',
-  source: { folderPath: '/library/Research', path: 'papers/report.pdf' },
+  source: { folderPath: '/project/Research', path: 'papers/report.pdf' },
 };
 
 /** The PDF this suite attaches is only readable through its derived text, so
@@ -80,7 +80,7 @@ describe('AgentSessionRuntime context', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({ kind: 'ready' });
     runtime.addContext(reportSource);
@@ -98,7 +98,7 @@ describe('AgentSessionRuntime context', () => {
         'Summarize @papers/report.pdf',
         '',
         'Attached files:',
-        '- papers/report.pdf (for text context, use mcp__stashbase__read_file with path /library/Research/papers/report.pdf; it returns the derived text representation for this pdf)',
+        '- papers/report.pdf (for text context, use mcp__stashbase__read_file with path /project/Research/papers/report.pdf; it returns the derived text representation for this pdf)',
       ].join('\n'),
     });
     expect(runtime.store.getState()).toMatchObject({ context: [], draft: '' });
@@ -126,7 +126,7 @@ describe('AgentSessionRuntime context', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({ kind: 'ready' });
     runtime.addContext(reportSource);
@@ -157,7 +157,7 @@ describe('AgentSessionRuntime context', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({ kind: 'ready' });
     runtime.addContext(reportSource);
@@ -175,7 +175,7 @@ describe('AgentSessionRuntime context', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({ kind: 'ready' });
     await runtime.sendPrompt('First');
@@ -213,7 +213,7 @@ describe('AgentSessionRuntime context', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     runtime.addContext(reportSource);
     runtime.setQueue([{ id: 'queued-1', text: 'Later' }]);
@@ -244,7 +244,7 @@ describe('AgentSessionRuntime context', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
 
     const notes = new File(['a'], 'notes.txt', { type: 'text/plain' });
@@ -289,14 +289,14 @@ describe('AgentSessionRuntime context', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({ kind: 'ready' });
     runtime.addContext({
       boundVersion: null,
       format: 'md',
       kind: 'source',
-      source: { folderPath: '/library/Research', path: 'notes.md' },
+      source: { folderPath: '/project/Research', path: 'notes.md' },
     });
 
     const send = runtime.sendPrompt('Summarize the notes');
@@ -304,7 +304,7 @@ describe('AgentSessionRuntime context', () => {
     // the completion belongs to the conversation that has since left.
     test.listeners[0]?.onEvent({
       kind: 'scope-changed',
-      scope: { kind: 'folder', path: '/library/Plans' },
+      scope: { kind: 'folder', path: '/project/Plans' },
     });
     for (const resolveNow of pending.splice(0)) resolveNow();
 

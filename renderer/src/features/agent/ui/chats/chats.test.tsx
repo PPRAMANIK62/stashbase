@@ -65,6 +65,7 @@ function renderWorkspace(
         instructions={agentInstructionsApi()}
         onOpenAgentSettings={vi.fn()}
         onOpenExternal={vi.fn()}
+        onSignIn={vi.fn()}
         onReprocess={onReprocess}
         runtime={runtime}
         scopeOutline={{ files: ['MISSION.md', 'notes.md'], folders: ['lessons'] }}
@@ -318,7 +319,7 @@ describe('AgentChats', () => {
     // New chat is set off from the history by a rule, and the history is
     // named before its day groups.
     expect(screen.getByRole('separator')).not.toBeNull();
-    expect(screen.getByText('Recent')).not.toBeNull();
+    expect(screen.getByText('Chats')).not.toBeNull();
     expect(screen.queryByText('Open', { exact: true })).toBeNull();
     expect(screen.queryByText('History', { exact: true })).toBeNull();
     expect(screen.queryByRole('button', { name: /^New Chat$/u })).toBeNull();
@@ -338,7 +339,9 @@ describe('AgentChats', () => {
     const chatLabels = Array.from(conversationRows).map((item) => item.getAttribute('title'));
     expect(chatLabels).toEqual(['Today newer', 'Today older', 'Yesterday chat', 'Earlier chat']);
 
+    // A folded branch rolls up rather than vanishing, so its rows leave the
+    // tree when the close lands rather than on the click.
     await userEvent.click(screen.getByRole('button', { name: 'Today' }));
-    expect(screen.queryByRole('button', { name: 'Today newer' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Today newer' })).toBeNull());
   });
 });

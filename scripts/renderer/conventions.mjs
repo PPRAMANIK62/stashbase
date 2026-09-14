@@ -24,13 +24,42 @@ const basename = (file) => file.relative.slice(file.relative.lastIndexOf('/') + 
 const inFeatureLayers = (file, layers) =>
   new RegExp(`^features/[^/]+/(?:${layers.join('|')})/`).test(file.relative);
 
-export const checks = [
+export // Files that still spell a radius instead of asking the shape system for one.
+// It is empty, and the check asserts that it stays so: every corner in the
+// renderer now comes from a `useShape()` role, from the size ladder, or from
+// `shapeTokens` where the class string is built outside a component. The
+// structural exceptions carry a `shape-literal:` note on their own line
+// instead. The list only shrinks; a new file may not be added.
+const radiusLiteralsPending = new Set([]);
+
+const checks = [
   {
     rule: 'Colors come from tokens in globals.css; the focus-ring fallback lives in lib/focus-ring.ts',
     applies: (file) =>
       isSource(file) &&
       !['globals.css', 'lib/focus-ring.ts', 'shared/brand/logo.tsx'].includes(file.relative),
     pattern: /#[0-9a-fA-F]{3,8}\b/g,
+  },
+  {
+    // A radius belongs to the size of the box, and the two modules below are
+    // where that judgement is written down once. A `rounded-*` spelled at a
+    // call site cannot follow them, so enlarging a card leaves its neighbours
+    // behind — the drift this rule exists to stop.
+    rule: 'Radii come from useShape() roles or the size ladder, not rounded-* literals',
+    applies: (file) =>
+      isSource(file) &&
+      !['lib/shape-context.ts', 'lib/size-context.tsx', 'test/story-canvas.tsx'].includes(
+        file.relative,
+      ) &&
+      !radiusLiteralsPending.has(file.relative),
+    pattern: /\brounded-(?:none|sm|md|lg|xl|2xl|3xl|\[)/g,
+    // A structural radius is the exception the note names: a corner inherited
+    // from a host, a radius being removed rather than chosen, a variant prefix
+    // no class variable can carry, or a string built outside React where no
+    // hook can run. The note sits on the line so a reader of that line sees
+    // why, the way `dom-contract:` does for a selector query.
+    exempt: (line, previous) =>
+      /shape-literal:/.test(line) || /shape-literal:/.test(previous),
   },
   {
     rule: 'Themes use light-dark() tokens, never dark: classes',

@@ -15,7 +15,11 @@ export function DocumentPending({ label }: { label: string }) {
       className="flex min-h-0 flex-1 items-center justify-center gap-2 text-caption text-muted-foreground"
       role="status"
     >
-      <LoaderCircle aria-hidden="true" className="size-4 motion-safe:animate-spin" />
+      <LoaderCircle
+        aria-hidden="true"
+        className="size-4 motion-safe:animate-spin"
+        strokeWidth={1.5}
+      />
       {label}
     </div>
   );
@@ -33,7 +37,11 @@ export function DocumentFailure({
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
       <div className="max-w-md">
-        <TriangleAlert aria-hidden="true" className="mx-auto size-8 text-muted-foreground" />
+        <TriangleAlert
+          aria-hidden="true"
+          className="mx-auto size-8 text-muted-foreground"
+          strokeWidth={1.5}
+        />
         <h2 className="mt-3 text-body font-medium">Could not open {name}</h2>
         <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role="alert">
           {message}

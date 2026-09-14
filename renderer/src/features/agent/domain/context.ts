@@ -1,5 +1,5 @@
 /**
- * Bound Agent context: library sources a prompt mentions or attaches, and
+ * Bound Agent context: project sources a prompt mentions or attaches, and
  * transient uploads the runtime reads from a temp path. Every item is bound
  * to explicit identity, so a send can re-check it against the live scope
  * instead of trusting a path typed minutes ago.
@@ -11,6 +11,7 @@ import {
 } from '@/contracts/file-formats';
 import type { AgentScope } from '@/features/agent/domain/session';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { basePathName } from '@/shared/utils/file-path';
 
 type AgentSourceFormat = ViewerFormat;
 
@@ -39,11 +40,6 @@ export type AgentContextItem =
       previewUrl?: string | undefined;
     };
 
-function basename(path: string): string {
-  const trimmed = path.replace(/[\\/]+$/u, '');
-  return trimmed.split(/[\\/]/u).at(-1) || trimmed;
-}
-
 export function contextItemKey(item: AgentContextItem): string {
   return item.kind === 'source'
     ? `source:${item.source.folderPath}/${item.source.path}`
@@ -51,7 +47,9 @@ export function contextItemKey(item: AgentContextItem): string {
 }
 
 export function contextItemName(item: AgentContextItem): string {
-  return item.kind === 'source' ? basename(item.source.path) : item.name || basename(item.path);
+  return item.kind === 'source'
+    ? basePathName(item.source.path)
+    : item.name || basePathName(item.path);
 }
 
 export function addContextItem(
@@ -87,7 +85,7 @@ function normalizeMentionText(value: string): string {
 
 function mentionScore(path: string, query: string): number | null {
   if (!query) return 5;
-  const fileName = normalizeMentionText(basename(path));
+  const fileName = normalizeMentionText(basePathName(path));
   const lowerPath = normalizeMentionText(path);
   if (fileName === query) return 0;
   if (fileName.startsWith(query)) return 1;
@@ -130,7 +128,7 @@ export function rankMentionSuggestions(
     (a, b) =>
       a.score - b.score ||
       openRank(a.suggestion) - openRank(b.suggestion) ||
-      basename(a.suggestion.path).length - basename(b.suggestion.path).length ||
+      basePathName(a.suggestion.path).length - basePathName(b.suggestion.path).length ||
       comparePaths(a.suggestion.path, b.suggestion.path),
   );
   return ranked.slice(0, limit).map((candidate) => candidate.suggestion);

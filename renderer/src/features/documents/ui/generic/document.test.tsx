@@ -13,7 +13,7 @@ import { createTestQueryClient, withQueryClient } from '@/test/query';
 
 import { GenericFileDocument, type GenericFileDocumentProps } from './document';
 
-const FOLDER = '/library';
+const FOLDER = '/project';
 
 /** A preview call that never settles, for the pending panel. */
 function pendingPreviewApi(): GenericFilePreviewPort {

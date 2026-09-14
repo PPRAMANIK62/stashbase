@@ -1,7 +1,7 @@
 /**
  * The signed-in StashBase account used by the hosted Agent runtime.
  *
- * An account is optional throughout the product — the library works
+ * An account is optional throughout the product — the project works
  * anonymously — so every consumer has to be able to render "no account"
  * without treating it as an error.
  */

@@ -14,7 +14,7 @@ import {
 const summary = {
   currentVersion: 'sha256:disk',
   expectedVersion: 'sha256:draft',
-  folderPath: '/library/notes',
+  folderPath: '/project/notes',
   path: 'drafts/plan.md',
   savedAt: '2026-09-10T08:00:00.000Z',
 };
@@ -68,20 +68,20 @@ test('draft content and writes are bound to one source and one version', () => {
     recoveryDraftWriteRequestSchema.parse({
       content: '# Draft',
       expectedVersion: 'sha256:draft',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/plan.md',
     }),
     {
       content: '# Draft',
       expectedVersion: 'sha256:draft',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/plan.md',
     },
   );
   assert.equal(
     recoveryDraftWriteRequestSchema.safeParse({
       content: '# Draft',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/plan.md',
     }).success,
     false,
@@ -91,7 +91,7 @@ test('draft content and writes are bound to one source and one version', () => {
     recoveryDraftWriteRequestSchema.safeParse({
       content: 'x'.repeat(RECOVERY_DRAFT_MAX_CONTENT_BYTES + 1),
       expectedVersion: 'sha256:draft',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/plan.md',
     }).success,
     false,

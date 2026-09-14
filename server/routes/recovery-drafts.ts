@@ -1,5 +1,5 @@
 /** Folder-explicit crash-recovery draft routes. Every request names its
- *  library folder; membership is checked the same way as `/api/files?folder=`
+ *  project folder; membership is checked the same way as `/api/files?folder=`
  *  and the journal itself lives outside every folder. Listing responses carry
  *  metadata only; content is fetched per draft. */
 import express from 'express';
@@ -7,7 +7,7 @@ import type { z } from 'zod';
 import { fileVersionAsync } from '../active-file-operations.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError } from '../http.ts';
-import { exactMemberFolderRootAsync, runWithFolderRoot } from '../folder.ts';
+import { exactRegisteredFolderRootAsync, runWithFolderRoot } from '../folder.ts';
 import { normalizeFolderRelativePath } from '../folder-relative-path.ts';
 import {
   recoveryDraftContentResponseSchema,
@@ -33,7 +33,7 @@ export function createRecoveryDraftRouteDeps(journal: RecoveryJournal): Recovery
   return {
     journal,
     memberFolderRoot: (rawFolder) =>
-      filesystemPath.isAbsolute(rawFolder) ? exactMemberFolderRootAsync(rawFolder) : Promise.resolve(null),
+      filesystemPath.isAbsolute(rawFolder) ? exactRegisteredFolderRootAsync(rawFolder) : Promise.resolve(null),
     currentVersion: (folderRoot, relativePath) =>
       runWithFolderRoot(folderRoot, () => fileVersionAsync(relativePath)),
   };
@@ -48,7 +48,7 @@ type Resolution<T> = { ok: true; value: T } | { ok: false; refusal: Refusal };
 
 const FOLDER_UNAVAILABLE: Refusal = {
   status: 400,
-  body: { code: 'FOLDER_UNAVAILABLE', error: 'folder is not a registered library folder' },
+  body: { code: 'FOLDER_UNAVAILABLE', error: 'folder is not a registered project folder' },
 };
 const RECOVERY_UNAVAILABLE: Refusal = {
   status: 503,
@@ -86,8 +86,7 @@ function handle(handler: AsyncHandler): express.RequestHandler {
 }
 
 async function resolveFolder(deps: RecoveryDraftRouteDeps, rawFolder: string): Promise<Resolution<string>> {
-  const trimmed = rawFolder.trim();
-  const member = trimmed ? await deps.memberFolderRoot(trimmed) : null;
+  const member = rawFolder.trim() ? await deps.memberFolderRoot(rawFolder) : null;
   return member ? { ok: true, value: member } : { ok: false, refusal: FOLDER_UNAVAILABLE };
 }
 

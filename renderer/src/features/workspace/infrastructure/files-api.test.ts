@@ -29,7 +29,7 @@ describe('files API', () => {
     };
     const signal = new AbortController().signal;
 
-    await expect(createFilesAdapter(client).load('/library/research', signal)).resolves.toEqual(
+    await expect(createFilesAdapter(client).load('/project/research', signal)).resolves.toEqual(
       listing(
         [
           listingFile({
@@ -44,7 +44,7 @@ describe('files API', () => {
       ),
     );
     expect(client.request).toHaveBeenCalledWith({
-      path: '/api/files?folder=%2Flibrary%2Fresearch',
+      path: '/api/files?folder=%2Fproject%2Fresearch',
       signal,
     });
   });
@@ -54,7 +54,7 @@ describe('files API', () => {
       request: vi.fn(async () => ({ body: { files: [], folder: 'Notes' }, status: 200 })),
     });
 
-    await expect(api.load('/library/notes', new AbortController().signal)).rejects.toMatchObject({
+    await expect(api.load('/project/notes', new AbortController().signal)).rejects.toMatchObject({
       kind: 'invalid-response',
     });
   });
@@ -65,11 +65,11 @@ describe('files API', () => {
     };
     const signal = new AbortController().signal;
 
-    await createFilesAdapter(client).reveal('/library/notes', 'drafts/a #1.md', signal);
+    await createFilesAdapter(client).reveal('/project/notes', 'drafts/a #1.md', signal);
 
     expect(client.request).toHaveBeenCalledWith({
       method: 'POST',
-      path: '/api/reveal/drafts/a%20%231.md?folder=%2Flibrary%2Fnotes',
+      path: '/api/reveal/drafts/a%20%231.md?folder=%2Fproject%2Fnotes',
       signal,
     });
   });
@@ -91,7 +91,7 @@ describe('files API', () => {
       })),
     });
 
-    await expect(api.load('/library/notes', new AbortController().signal)).rejects.toMatchObject({
+    await expect(api.load('/project/notes', new AbortController().signal)).rejects.toMatchObject({
       kind: 'scope-lost',
       message: 'This folder is no longer available in this window.',
     });
@@ -108,25 +108,25 @@ describe('files API', () => {
     const api = createFilesAdapter(client);
 
     await expect(
-      api.createEntry('/library/notes', 'file', 'drafts', 'Plan', signal),
+      api.createEntry('/project/notes', 'file', 'drafts', 'Plan', signal),
     ).resolves.toEqual({ path: 'drafts/Plan.md' });
     expect(client.request).toHaveBeenNthCalledWith(1, {
       body: { dir: 'drafts', name: 'Plan' },
       method: 'POST',
-      path: '/api/files?folder=%2Flibrary%2Fnotes',
+      path: '/api/files?folder=%2Fproject%2Fnotes',
       signal,
     });
     await expect(
-      api.createEntry('/library/notes', 'folder', 'drafts', 'archive', signal),
+      api.createEntry('/project/notes', 'folder', 'drafts', 'archive', signal),
     ).resolves.toEqual({ path: 'drafts/archive' });
     expect(client.request).toHaveBeenNthCalledWith(2, {
       body: { path: 'drafts/archive' },
       method: 'POST',
-      path: '/api/folders?folder=%2Flibrary%2Fnotes',
+      path: '/api/folders?folder=%2Fproject%2Fnotes',
       signal,
     });
     await expect(
-      api.createEntry('/library/notes', 'file', '', 'a/b', signal),
+      api.createEntry('/project/notes', 'file', '', 'a/b', signal),
     ).rejects.toMatchObject({ kind: 'rejected' });
     expect(client.request).toHaveBeenCalledTimes(2);
   });
@@ -150,7 +150,7 @@ describe('files API', () => {
 
     await expect(
       api.renameEntry(
-        '/library/notes',
+        '/project/notes',
         { kind: 'file', path: 'drafts/a #1.md' },
         'Outline',
         signal,
@@ -159,37 +159,37 @@ describe('files API', () => {
     expect(client.request).toHaveBeenNthCalledWith(1, {
       body: { new_name: 'Outline' },
       method: 'PATCH',
-      path: '/api/files/drafts/a%20%231.md?folder=%2Flibrary%2Fnotes',
+      path: '/api/files/drafts/a%20%231.md?folder=%2Fproject%2Fnotes',
       signal,
     });
     await expect(
-      api.renameEntry('/library/notes', { kind: 'folder', path: 'drafts' }, 'archive', signal),
+      api.renameEntry('/project/notes', { kind: 'folder', path: 'drafts' }, 'archive', signal),
     ).resolves.toEqual({ path: 'archive' });
     expect(client.request).toHaveBeenNthCalledWith(2, {
       body: { new_name: 'archive' },
       method: 'PATCH',
-      path: '/api/folders/drafts?folder=%2Flibrary%2Fnotes',
+      path: '/api/folders/drafts?folder=%2Fproject%2Fnotes',
       signal,
     });
     await expect(
-      api.deleteEntry('/library/notes', { kind: 'folder', path: 'archive' }, signal),
+      api.deleteEntry('/project/notes', { kind: 'folder', path: 'archive' }, signal),
     ).resolves.toBeUndefined();
     expect(client.request).toHaveBeenNthCalledWith(3, {
       method: 'DELETE',
-      path: '/api/folders/archive?folder=%2Flibrary%2Fnotes',
+      path: '/api/folders/archive?folder=%2Fproject%2Fnotes',
       signal,
     });
     await expect(
-      api.renameEntry('/library/notes', { kind: 'file', path: 'a.md' }, 'b', signal),
+      api.renameEntry('/project/notes', { kind: 'file', path: 'a.md' }, 'b', signal),
     ).rejects.toMatchObject({
       kind: 'conflict',
       message: 'Something with that name already exists.',
     });
     await expect(
-      api.deleteEntry('/library/notes', { kind: 'file', path: 'a.md' }, signal),
+      api.deleteEntry('/project/notes', { kind: 'file', path: 'a.md' }, signal),
     ).rejects.toMatchObject({ kind: 'scope-lost' });
     await expect(
-      api.renameEntry('/library/notes', { kind: 'file', path: 'a.md' }, 'b', signal),
+      api.renameEntry('/project/notes', { kind: 'file', path: 'a.md' }, 'b', signal),
     ).rejects.toMatchObject({ kind: 'rejected' });
   });
 });

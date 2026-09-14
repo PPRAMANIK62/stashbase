@@ -1,6 +1,6 @@
 /** Live layout measurement of one element, in pixels.
  *
- *  Every collapse in this library animates to a measured pixel value rather
+ *  Every collapse in this project animates to a measured pixel value rather
  *  than `height: "auto"` / `width: "auto"`: framer resolves an "auto" target
  *  from the element's *visual* (transformed) size, so under a scaled ancestor
  *  the region springs out to scale × its real size and snaps back when the

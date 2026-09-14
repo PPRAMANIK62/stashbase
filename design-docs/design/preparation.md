@@ -2,16 +2,17 @@
 
 ## User Outcome
 
-Hard-to-read local formats become usable as search and Agent context while the
-original file remains visible, openable, and authoritative.
+Project references in hard-to-read formats become usable during discussion
+and writing while their original files remain visible and authoritative.
+Preparation is implemented supporting infrastructure, not a stage a person
+must complete before brainstorming.
 
 ## Scope and Non-goals
 
 Preparation covers PDF extraction, image OCR, durable DOCX text derivation,
 audio/video transcription, compatible audio preview generation, progress, and
-recovery. An opt-in clipboard screenshot becomes an ordinary image source only
-after explicit acceptance, then follows the same OCR path. Together with Search
-and Retrieval, preparation forms the local RAG layer. It does not own the
+recovery. Together with Search and Retrieval, preparation forms the local RAG
+layer. It does not own the
 visible source preview, content-editing capability, or semantic ranking. The
 [Documents format matrix](documents.md#format-capability-matrix) is the
 canonical product-facing boundary between direct-text, prepared-text, and
@@ -29,21 +30,31 @@ artifacts.
 - PDF, image, DOCX, audio, and supported video sources may gain AppData-derived
   text. PDF and media derived text also serves Agent reading; source identity
   remains unchanged.
-- Clipboard-image offers are disabled by default. When enabled in Settings,
-  StashBase notices copied images only while focused and asks before importing;
-  dismissal writes nothing. Accepted screenshots remain visible image sources
-  while OCR stays derived.
 - Preparation runs in the background with interactive and open-folder work
-  preferred over library background work.
+  preferred over project registry background work.
+- The first PDF/image preparation automatically downloads its local extraction
+  component in the background, without a confirmation dialog. Waiting sources
+  continue when installation succeeds; browsing and other preparation work stay
+  available. A failed download stops for the current app session and leaves
+  sources waiting. The next launch tries the unfinished download once. Settings
+  → General → Local components shows its status and failure reason, with an
+  explicit Retry action. The installed component works offline. Reading Settings
+  never starts an unused download; source bytes are never part of the download.
 - Direct DOCX preview and ordinary media playback do not wait for durable
   search preparation.
 - Users see preparing, ready, blocked, failed, cancelled, and retryable states
   only when they change the next action. Missing optional capabilities do not
   turn the source itself into a failed file. An image with no recognizable text
   is a normal completed OCR result, not a failure or a reason to Reprocess.
+- Transcription Settings identifies the engine, spoken language, and model.
+  The local Whisper engine uses downloaded models on the device. Preferences
+  apply to future transcription; **Reprocess** applies them again to an
+  already prepared file.
 - Reprocess is explicit. Large PDF and media work can reuse valid resumable
   checkpoints after transient interruption while manual retry resets the work
-  that must be recomputed.
+  that must be recomputed. A playback fallback temporarily interrupting media
+  transcription retains that attempt's model and language, including an explicit
+  language override; changing Settings during playback does not retarget it.
 
 ## Experience Contract
 
@@ -65,10 +76,10 @@ artifacts.
   interruption is rediscoverable.
 - Optional native tools and state stores degrade to actionable status rather
   than blocking folder entry.
+- Cancelling or removing a source while its component is downloading must not
+  resume that source later. Other waiting sources can still use the shared download.
 - PDF and image OCR helpers must not surface console windows or take focus from
   the user's current work.
-- Ambient capture remains opt-in and reversible. Failure to read the setting or
-  clipboard fails closed rather than enabling monitoring or creating a source.
 
 ## Cross-area Seams
 
@@ -82,9 +93,9 @@ artifacts.
 
 ### Next
 
-- Make progress, partial readiness, cancellation, and recovery clearer.
-- Improve diagnostics and format-specific fallbacks.
-- Add a format only when it materially improves local Agent context.
+Maintain the implemented capability's reliability, useful status, and recovery
+within the existing scope. No additional feature is committed here; the
+remaining product feature is [document-specific diff](../product-direction.md#document-specific-diff--remaining-feature).
 
 ### Coordinate First
 

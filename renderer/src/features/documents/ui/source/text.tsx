@@ -21,6 +21,8 @@ import {
   type DocumentSaveState,
 } from '@/features/documents/domain/document';
 import { useDocumentSource } from '@/features/documents/hooks/use-document-source';
+import { useShape } from '@/lib/shape-context';
+import { cn } from '@/lib/utils';
 
 import { DocumentFailure, DocumentPending } from './status';
 import type { DocumentViewerStatus } from './viewer';
@@ -51,19 +53,31 @@ export interface TextSurfaceProps {
 }
 
 function SaveFeedback({ retry, save }: { retry: () => void; save: DocumentSaveState }) {
+  const shape = useShape();
   if (save.kind !== 'failed' && save.kind !== 'warned') return null;
   const failed = save.kind === 'failed';
   const text = documentSaveMessage(save) ?? '';
 
   return (
     <div
-      className="absolute right-4 bottom-3 flex max-w-[min(32rem,calc(100%-2rem))] items-center gap-2 rounded-md border border-border bg-surface-2/95 px-2.5 py-1.5 text-caption shadow-sm"
+      className={cn(
+        'absolute right-4 bottom-3 flex max-w-[min(32rem,calc(100%-2rem))] items-center gap-2 border border-border bg-surface-2/95 px-2.5 py-1.5 text-caption shadow-sm',
+        shape.item,
+      )}
       data-save-state={save.kind}
     >
       {failed ? (
-        <AlertCircle aria-hidden="true" className="size-3.5 shrink-0 text-destructive" />
+        <AlertCircle
+          aria-hidden="true"
+          className="size-3.5 shrink-0 text-destructive"
+          strokeWidth={1.5}
+        />
       ) : (
-        <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+        <TriangleAlert
+          aria-hidden="true"
+          className="size-3.5 shrink-0 text-muted-foreground"
+          strokeWidth={1.5}
+        />
       )}
       <span
         className={
@@ -122,8 +136,8 @@ export function TextSurface({
     <div className="flex min-h-0 flex-1 flex-col" data-document-access={access}>
       {access === 'read-only' && (
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2 text-caption text-muted-foreground">
-          <LockKeyhole aria-hidden="true" className="size-3.5" />
-          Read-only source from another library folder
+          <LockKeyhole aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
+          Read-only source from another project folder
         </div>
       )}
       {source.isFetching && (

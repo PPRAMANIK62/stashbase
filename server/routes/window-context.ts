@@ -1,4 +1,4 @@
-/** Native BrowserWindow lifecycle routes. Kept independent from folder/library
+/** Native BrowserWindow lifecycle routes. Kept independent from folder/project
  * setup so closing a renderer can always retire its request identity quickly. */
 import express from 'express';
 import { retireWindow } from '../folder.ts';

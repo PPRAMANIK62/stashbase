@@ -33,11 +33,11 @@ describe('document native save barrier', () => {
       api,
       createId: vi.fn(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
       restored: {
         activeTabId: 'plan',
-        tabs: [{ id: 'plan', source: { folderPath: '/library/notes', path: 'plan.md' } }],
+        tabs: [{ id: 'plan', source: { folderPath: '/project/notes', path: 'plan.md' } }],
       },
     });
     const document = runtime.getDocument('plan');

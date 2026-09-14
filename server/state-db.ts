@@ -1,5 +1,5 @@
 /**
- * Library-level transactional state in the per-machine app data directory.
+ * Application-level transactional state in the per-machine app data directory.
  *
  * This is StashBase-owned state, separate from the MFS store.
  * schema. It holds non-derivable workflow decisions: durable file preparation
@@ -11,7 +11,7 @@
  * Other derived indexing truth lives at its authoritative source: MFS owns
  * accepted document revisions and index state, the filesystem answers "does
  * this file exist", and `~/.stashbase/config.json` holds
- * library folders and embedder config. (Earlier `files` and `index_queue`
+ * project folders and embedder config. (Earlier `files` and `index_queue`
  * tables duplicated daemon/reconcile state write-only and were removed.)
  */
 import { createRequire } from 'node:module';
@@ -413,14 +413,15 @@ export function clearConversionStatus(pathKey: string): void {
     .run(filesystemPath.identity(pathKey));
 }
 
-export function clearConversionStatusUnder(pathKey: string): void {
+export function clearConversionStatusUnder(pathKey: string, excludedRoots: readonly string[] = []): void {
   const conn = getStateDb();
   if (!conn) return;
   const rows = conn.prepare('SELECT path_identity AS pathIdentity FROM conversions')
     .all() as Array<{ pathIdentity: string }>;
   const matches = rows
     .map((row) => row.pathIdentity)
-    .filter((identity) => filesystemPath.contains(pathKey, identity));
+    .filter((identity) => filesystemPath.contains(pathKey, identity)
+      && !excludedRoots.some((root) => filesystemPath.contains(root, identity)));
   if (matches.length === 0) return;
   const remove = conn.prepare('DELETE FROM conversions WHERE path_identity = ?');
   conn.transaction((identities: string[]) => {

@@ -15,7 +15,7 @@ test("agent session history accepts scoped rows and protocol-v2 replay", () => {
         title: "Research notes",
         lastModified: 1_725_000_000_000,
         hasContent: true,
-        folder: "/library/research",
+        folder: "/project/research",
       },
     ]),
     [
@@ -24,7 +24,7 @@ test("agent session history accepts scoped rows and protocol-v2 replay", () => {
         title: "Research notes",
         lastModified: 1_725_000_000_000,
         hasContent: true,
-        folder: "/library/research",
+        folder: "/project/research",
       },
     ],
   );

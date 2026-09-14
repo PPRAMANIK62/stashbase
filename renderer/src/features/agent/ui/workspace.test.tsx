@@ -74,6 +74,7 @@ function renderWorkspace(
         instructions={agentInstructionsApi()}
         onOpenAgentSettings={vi.fn()}
         onOpenExternal={vi.fn()}
+        onSignIn={vi.fn()}
         onReprocess={onReprocess}
         runtime={runtime}
         scopeOutline={{ files: ['MISSION.md', 'notes.md'], folders: ['lessons'] }}
@@ -98,14 +99,29 @@ describe('Agent workspace', () => {
     // The request is written, and stays written: a gate that took the canvas
     // away to ask for setup would take the request with it.
     expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Set up OpenQuill' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Sign in to OpenQuill' })).not.toBeNull();
     // Nothing the runtime cannot do is advertised while it cannot carry a turn.
     expect(screen.queryByRole('button', { name: 'Attach files' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Provider: / })).toBeNull();
   });
 
   it('names sign-in rather than installation for a runtime that only needs it', async () => {
-    renderWorkspace(idleAgentSessionPort(), [agentDefinition({ needsSignIn: true, ready: false })]);
+    renderWorkspace(idleAgentSessionPort(), [
+      agentDefinition({ id: 'codex', label: 'Codex', needsSignIn: true, ready: false }),
+    ]);
+    await agentGateLifted();
+
+    expect(await screen.findByRole('button', { name: 'Sign in to Codex' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set up Codex' })).toBeNull();
+  });
+
+  it('offers the bundled runtime sign-in before any attempt has named the account', async () => {
+    // The catalog only reports `needsSignIn` once a bootstrap has come back
+    // authentication-required. The bundled runtime has no setup step to offer
+    // in the meantime, so the offer must not invent one.
+    renderWorkspace(idleAgentSessionPort(), [
+      agentDefinition({ needsSignIn: false, ready: false }),
+    ]);
     await agentGateLifted();
 
     expect(await screen.findByRole('button', { name: 'Sign in to OpenQuill' })).not.toBeNull();
@@ -135,7 +151,7 @@ describe('Agent workspace', () => {
   });
 
   it('carries a waiting request into the runtime the reader sets up', async () => {
-    const notReady = agentDefinition({ ready: false });
+    const notReady = agentDefinition({ id: 'claude', label: 'Claude Code', ready: false });
     const { runtime } = renderWorkspace(idleAgentSessionPort(), [notReady], undefined, undefined, {
       prepareAgent: vi.fn(async () => ({ agents: [CODEX_AGENT] })),
     });
@@ -145,7 +161,7 @@ describe('Agent workspace', () => {
       await screen.findByRole('textbox', { name: 'Message' }),
       'Build wiki pages for this folder',
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Set up OpenQuill' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Set up Claude Code' }));
 
     // The runtime that arrived is not the one this chat opened on, so the chat
     // follows it — and finds the same request waiting.
@@ -408,18 +424,18 @@ describe('Chat header', () => {
     // label has no comma, so the pattern reaches only the header. Before
     // anything is said there is nothing to rename, so the name is not a
     // control.
-    expect(await screen.findByRole('heading', { name: /^New chat, / })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /^New chat, / })).toBeNull();
+    expect(await screen.findByRole('heading', { name: /^Untitled, / })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: /^Untitled, / })).toBeNull();
 
     typeInto(screen.getByRole('textbox', { name: 'Message' }), 'Inspect the workspace');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     act(() => listeners[0]?.onEvent({ kind: 'ready' }));
     await screen.findByText('Inspect the workspace');
 
-    const header = await screen.findByRole('button', { name: /^New chat, / });
-    expect(screen.queryByRole('heading', { name: /^New chat, / })).toBeNull();
+    const header = await screen.findByRole('button', { name: /^Untitled, / });
+    expect(screen.queryByRole('heading', { name: /^Untitled, / })).toBeNull();
     pressKey(header, 'F2');
-    const field = screen.getByRole('textbox', { name: 'Rename New chat' });
+    const field = screen.getByRole('textbox', { name: 'Rename Untitled' });
     await userEvent.clear(field);
     await userEvent.type(field, 'Reading list{Enter}');
 

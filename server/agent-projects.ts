@@ -1,14 +1,14 @@
 /**
  * `create_project` — host-side project creation for Agent callers.
  *
- * During a library-scoped chat an attributed Agent Panel session can call the
+ * During an unbound chat an attributed Agent Panel session can call the
  * `create_project` MCP tool to get a fresh working context. This module owns
  * the semantics: validate the name, create the directory (under the default
  * folder home unless an explicit valid location is given), register it into
- * library membership so every window's sidebar lists it, and — ONLY when the
- * calling live session is library-scoped — migrate that session's binding to
+ * project membership so every window's sidebar lists it, and — ONLY when the
+ * calling live session is unbound — migrate that session's binding to
  * the new project and persist the history override that moves its native
- * session record from the library listing to the project's.
+ * session record from unbound history to the project history.
  *
  * A chat already bound to a folder is NEVER rebound: the tool still creates
  * and registers the project, and the result tells the agent the chat stays
@@ -17,11 +17,10 @@
  */
 import fs from 'node:fs';
 import {
-  ensureFolderHome,
-  assertLibraryFolderAvailableAsync,
+  assertProjectFolderAvailableAsync,
   getFolderHome,
-  memberFolderRootsAsync,
-  registerLibraryFolderAsync,
+  registeredFolderRootsAsync,
+  registerProjectFolderAsync,
   validateFolderName,
 } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
@@ -29,9 +28,7 @@ import { noteTreeChanged } from './watcher.ts';
 import { syncFolderNow } from './state.ts';
 import { logger, errorMessage } from './log.ts';
 import {
-  attributedAgentSession,
-  attributedSessionForWindow,
-  attributedTurnActiveSession,
+  attributedRequestSession,
   createProjectRebindPlan,
   type AttributedAgentSession,
 } from './agent-session-registry.ts';
@@ -59,13 +56,13 @@ export interface CreateProjectResult {
   name: string;
   registered: true;
   /** True when the CALLING chat session migrated its binding to the new
-   * project (library-scoped callers only). */
+   * project (unbound callers only). */
   rebound: boolean;
   note: string;
 }
 
 export type CreateProjectTargetResolution =
-  | { ok: true; parent: string; target: string; name: string }
+  | { ok: true; parent: string; target: string; name: string; owner: string }
   | { ok: false; message: string };
 
 function operationError(message: string, status: number, code?: string): Error {
@@ -73,41 +70,6 @@ function operationError(message: string, status: number, code?: string): Error {
   err.status = status;
   if (code) err.code = code;
   return err;
-}
-
-/** Pure target resolution: a validated cross-platform-safe name, and a
- * parent that is the default folder home unless an explicit valid location
- * is given. A valid location is an absolute directory path that stays
- * within surfaces StashBase already owns — the folder home (or inside it)
- * or a registered member folder (or inside one). Arbitrary host paths are
- * rejected: an agent must not be able to register folders anywhere on
- * disk. */
-export function resolveCreateProjectTarget(
-  name: unknown,
-  location: unknown,
-  deps: { folderHome: string; memberRoots: readonly string[] },
-): CreateProjectTargetResolution {
-  if (typeof name !== 'string' || !name.trim()) return { ok: false, message: '`name` is required' };
-  const trimmed = name.trim();
-  const bad = validateFolderName(trimmed);
-  if (bad) return { ok: false, message: `invalid project name: ${bad}` };
-
-  let parent = deps.folderHome;
-  if (location != null && `${location}`.trim() !== '') {
-    if (typeof location !== 'string') return { ok: false, message: '`location` must be an absolute directory path' };
-    const raw = location.trim();
-    if (!filesystemPath.isAbsolute(raw)) return { ok: false, message: '`location` must be an absolute directory path' };
-    const abs = filesystemPath.absolute(raw);
-    const allowed = withinAnyRoot(abs, [deps.folderHome, ...deps.memberRoots]);
-    if (!allowed) {
-      return {
-        ok: false,
-        message: '`location` must be the folder home, inside it, or inside a library folder',
-      };
-    }
-    parent = abs;
-  }
-  return { ok: true, parent, target: filesystemPath.join(parent, trimmed), name: trimmed };
 }
 
 /** Request-path target resolution with async mounted-volume identity checks. */
@@ -124,54 +86,16 @@ export async function resolveCreateProjectTargetAsync(
   let parent = deps.folderHome;
   if (location != null && `${location}`.trim() !== '') {
     if (typeof location !== 'string') return { ok: false, message: '`location` must be an absolute directory path' };
-    const raw = location.trim();
+    const raw = location;
     if (!filesystemPath.isAbsolute(raw)) return { ok: false, message: '`location` must be an absolute directory path' };
     const abs = filesystemPath.absolute(raw);
-    const allowed = await withinAnyRootAsync(abs, [deps.folderHome, ...deps.memberRoots]);
-    if (!allowed) {
-      return {
-        ok: false,
-        message: '`location` must be the folder home, inside it, or inside a library folder',
-      };
-    }
     parent = abs;
   }
-  return { ok: true, parent, target: filesystemPath.join(parent, trimmed), name: trimmed };
-}
-
-function withinAnyRoot(abs: string, roots: readonly string[]): boolean {
-  for (const root of roots) {
-    try {
-      if (filesystemPath.equal(root, abs) || filesystemPath.contains(root, abs)) return true;
-    } catch {
-      // A malformed root cannot contain the candidate; keep checking.
-    }
+  const owner = await owningRootAsync(parent, [deps.folderHome, ...deps.memberRoots]);
+  if (!owner) {
+    return { ok: false, message: '`location` must be the folder home, inside it, or inside a project folder' };
   }
-  return false;
-}
-
-function owningRoot(abs: string, roots: readonly string[]): string | null {
-  let owner: string | null = null;
-  for (const root of roots) {
-    try {
-      if (!filesystemPath.equal(root, abs) && !filesystemPath.contains(root, abs)) continue;
-      if (!owner || filesystemPath.contains(owner, root)) owner = filesystemPath.absolute(root);
-    } catch {
-      // A malformed persisted root cannot authorize filesystem access.
-    }
-  }
-  return owner;
-}
-
-async function withinAnyRootAsync(abs: string, roots: readonly string[]): Promise<boolean> {
-  for (const root of roots) {
-    try {
-      if (await filesystemPath.containsAsync(root, abs)) return true;
-    } catch {
-      // A malformed root cannot contain the candidate; keep checking.
-    }
-  }
-  return false;
+  return { ok: true, parent, target: filesystemPath.join(parent, trimmed), name: trimmed, owner };
 }
 
 async function owningRootAsync(abs: string, roots: readonly string[]): Promise<string | null> {
@@ -190,60 +114,47 @@ async function owningRootAsync(abs: string, roots: readonly string[]): Promise<s
 export interface CreateProjectDeps {
   folderHome(): string;
   memberRoots(): string[] | Promise<string[]>;
-  /** Register into library membership (the sidebar list source). */
+  /** Register into project membership (the sidebar list source). */
   register(abs: string): void | Promise<void>;
   noteTreeChanged(): void;
   /** Bind + reconcile the new folder in the background. */
   syncFolder(abs: string): Promise<unknown>;
-  session(attributionId: string | undefined): AttributedAgentSession | null;
-  /** Window-fallback attribution for MCP hosts that don't forward the
-   * session header (stale installed binaries) — the window's one session
-   * with a turn in flight. */
-  sessionForWindow(windowId: string | undefined): AttributedAgentSession | null;
-  /** Last-resort attribution when no identity survived the MCP spawn
-   * chain (Codex sanitizes the env): the app-wide single turn-active
-   * session, or null on any ambiguity. */
-  turnActiveSession(): AttributedAgentSession | null;
+  /** Resolve trusted request identity; stale identities never fall through. */
+  session(attributionId: string | undefined, windowId: string | undefined): AttributedAgentSession | null;
   setOverride(agent: AttributedAgentSession['agentId'], nativeSessionId: string, folderAbs: string): void;
   clearOverride(agent: AttributedAgentSession['agentId'], nativeSessionId: string): void;
   assertAvailable(abs: string): void | Promise<void>;
 }
 
 const productionDeps: CreateProjectDeps = {
-  folderHome: () => {
-    ensureFolderHome();
-    return getFolderHome();
-  },
-  memberRoots: memberFolderRootsAsync,
-  register: registerLibraryFolderAsync,
+  folderHome: getFolderHome,
+  memberRoots: registeredFolderRootsAsync,
+  register: registerProjectFolderAsync,
   noteTreeChanged,
   syncFolder: (abs) => syncFolderNow(abs, { reason: 'create_project' }),
-  session: (attributionId) => attributedAgentSession(attributionId),
-  sessionForWindow: (windowId) => attributedSessionForWindow(windowId),
-  turnActiveSession: () => attributedTurnActiveSession(),
+  session: attributedRequestSession,
   setOverride: setAgentSessionFolderOverride,
   clearOverride: clearAgentSessionFolderOverride,
-  assertAvailable: assertLibraryFolderAvailableAsync,
+  assertAvailable: assertProjectFolderAvailableAsync,
 };
 
 export async function createProjectFolder(
   input: CreateProjectInput,
   deps: CreateProjectDeps = productionDeps,
 ): Promise<CreateProjectResult> {
-  const initialMemberRoots = await deps.memberRoots();
+  const folderHome = deps.folderHome();
   const resolved = await resolveCreateProjectTargetAsync(input.name, input.location, {
-    folderHome: deps.folderHome(),
-    memberRoots: initialMemberRoots,
+    folderHome,
+    memberRoots: await deps.memberRoots(),
   });
   if (!resolved.ok) throw operationError(resolved.message, 400, 'INVALID_PROJECT');
-
-  const roots = [deps.folderHome(), ...(await deps.memberRoots())];
-  const owner = await owningRootAsync(resolved.parent, roots);
-  if (!owner) throw operationError('`location` is outside the owned folder scope', 400, 'INVALID_PROJECT');
+  const { owner } = resolved;
 
   let parentStat: fs.Stats;
   let target: string;
   try {
+    // Creating the default home is explicit; introduction seeding belongs to startup.
+    if (owner === filesystemPath.absolute(folderHome)) await fs.promises.mkdir(folderHome, { recursive: true });
     const parentRel = await filesystemPath.relativeAsync(owner, resolved.parent);
     const targetRel = await filesystemPath.relativeAsync(owner, resolved.target);
     if (parentRel == null || targetRel == null) throw new Error('path is outside the owned folder scope');
@@ -267,10 +178,18 @@ export async function createProjectFolder(
 
   // Membership is the commit record. Persist it before starting background
   // work so a config/removal failure can retire the still-empty directory.
+  let created: fs.Stats | undefined;
   try {
+    created = await fs.promises.lstat(target);
     await deps.register(target);
   } catch (err) {
-    try { await fs.promises.rmdir(target); } catch { /* keep a raced/non-empty folder */ }
+    try {
+      const current = await fs.promises.lstat(target);
+      if (created?.isDirectory() && current.isDirectory() && created.ino !== 0
+        && current.dev === created.dev && current.ino === created.ino) {
+        await fs.promises.rmdir(target);
+      }
+    } catch { /* Preserve non-empty folders and paths whose identity is uncertain. */ }
     throw err;
   }
   // Agent Instructions are app metadata edited from the Agent-panel toolbar, so
@@ -289,42 +208,48 @@ function applyRebind(
   target: string,
   deps: CreateProjectDeps,
 ): { rebound: boolean; note: string } {
-  const session = deps.session(input.agentSessionId)
-    ?? deps.sessionForWindow(typeof input.windowId === 'string' ? input.windowId : undefined)
-    ?? deps.turnActiveSession();
+  const session = deps.session(input.agentSessionId, input.windowId);
   const plan = createProjectRebindPlan(session);
   if (plan.kind === 'none') {
     if (plan.reason === 'folder-bound') {
       return {
         rebound: false,
-        note: `The project was created and added to the library. This chat stays bound to its folder "${path.basename(plan.folder)}" — open a new chat in the project to work inside it.`,
+        note: `The project was created and registered. This chat stays bound to its folder "${path.basename(plan.folder)}" — open a new chat in the project to work inside it.`,
       };
     }
     return {
       rebound: false,
-      note: 'The project was created and added to the library. No calling chat session was rebound.',
+      note: 'The project was created and registered. No calling chat session was rebound.',
     };
   }
   // Persist the history override BEFORE flipping the live binding: the
   // renderer reacts to `scope-changed` by opening the project and reading
   // its History, which must already include this session.
   const nativeId = session!.nativeSessionId();
-  if (nativeId) deps.setOverride(session!.agentId, nativeId, target);
+  try {
+    if (nativeId) deps.setOverride(session!.agentId, nativeId, target);
+  } catch (err) {
+    log.warn(`create_project: history ownership could not be saved: ${errorMessage(err)}`);
+    return {
+      rebound: false,
+      note: 'The project was created and registered, but history ownership could not be saved. This chat has not moved; open the project to start a new chat.',
+    };
+  }
   const flipped = session!.rebindToFolder(target);
   if (!flipped) {
     // Raced with session close/teardown — undo the override; the record
-    // stays a library session.
+    // stays a project session.
     if (nativeId) deps.clearOverride(session!.agentId, nativeId);
     return {
       rebound: false,
-      note: 'The project was created and added to the library, but the calling chat session had ended and was not rebound.',
+      note: 'The project was created and registered, but the calling chat session had ended and was not rebound.',
     };
   }
   if (!nativeId) {
-    log.warn(`create_project: session rebound to ${target} before a native session id existed — history stays under the library listing`);
+    log.warn(`create_project: session rebound to ${target} before a native session id existed — history stays under the project listing`);
   }
   return {
     rebound: true,
-    note: 'The project was created, added to the library, and this chat is now bound to it. Work with files inside the project from here on.',
+    note: 'The project was created, registered, and this chat is now bound to it. Work with files inside the project from here on.',
   };
 }

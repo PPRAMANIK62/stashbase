@@ -18,7 +18,7 @@ function entry(id: string, title: string): AgentHistoryEntry {
     hasContent: true,
     id,
     lastModified: 1,
-    scope: { kind: 'folder', path: '/library/Research' },
+    scope: { kind: 'folder', path: '/project/Research' },
     title,
   };
 }

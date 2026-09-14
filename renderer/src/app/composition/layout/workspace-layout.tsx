@@ -19,9 +19,9 @@ import { WorkspaceNotices } from './workspace-notices';
 import '@/app/shell.css';
 
 export interface WorkspaceComposition {
-  /** Quick open, Settings, and the clipboard offer. */
+  /** Quick open and Settings. */
   dialogs: ReactNode;
-  /** True while the library has a folder open to show. */
+  /** True while the project has a folder open to show. */
   hasActiveFolder: boolean;
   /** Refusals raised by work the reader did not ask about directly. */
   notices: readonly WorkspaceNotice[];
@@ -31,7 +31,7 @@ export interface WorkspaceComposition {
   recovery: ReactNode;
   session: WorkspaceSessionController;
   sidebar: ReactNode;
-  /** True once the window has a library and the Agent may be shown. */
+  /** True once the window has a project and the Agent may be shown. */
   started: boolean;
   titlebar: ReactNode;
   /** The offer to take a new version, already bound, which is why it arrives
@@ -39,7 +39,7 @@ export interface WorkspaceComposition {
    *  something the reader tried is more urgent than an offer of something they
    *  did not ask for, and a waiting update is the latter. */
   updateNotice: ReactNode;
-  /** The empty-library invitation, shown while no folder is open. */
+  /** The empty-project invitation, shown while no folder is open. */
   welcome: ReactNode;
 }
 

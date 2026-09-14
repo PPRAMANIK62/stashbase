@@ -7,25 +7,25 @@
  */
 import { useEffect, useState } from 'react';
 
-import { useAgentComposerFocused, useAgentWorkspaceRuntime } from '@/features/agent/public';
+import { useAgentWorkspaceRuntime } from '@/features/agent/public';
 import {
   RecoveryDrafts,
   useDocumentCommands,
   useDocumentSaveBarrier,
+  useNewTab,
 } from '@/features/documents/public';
 import { useFolderStatus } from '@/features/preparation/public';
-import { useSearchKeyConfigured } from '@/features/settings/public';
+import { AccountProvider, useSearchKeyConfigured } from '@/features/settings/public';
 import { UpdateNotice, useUpdateNotice } from '@/features/updates/public';
 import {
-  LibraryWelcome,
+  ProjectWelcome,
   useFiles,
   useHiddenFiles,
-  useLibrary,
+  useProject,
   useWorkspace,
   useWorkspaceSession,
 } from '@/features/workspace/public';
 
-import { useComposerFocusSignal } from './composition/commands/use-capture-focus';
 import { usePreparationCommands } from './composition/commands/use-preparation-commands';
 import { useWorkspaceCommands } from './composition/commands/use-workspace-commands';
 import { DependencyProvider, useDependencies } from './composition/dependency-context';
@@ -35,6 +35,7 @@ import { useDocumentWorkspace } from './composition/folder/use-document-workspac
 import { useFolderReadiness } from './composition/folder/use-folder-readiness';
 import { useFolderRefresh } from './composition/folder/use-folder-refresh';
 import { useRecoveryDrafts } from './composition/folder/use-recovery-drafts';
+import { useTreeFollowsDocument } from './composition/folder/use-tree-follows-document';
 import { useGalleryShop } from './composition/gallery/use-gallery-shop';
 import { WorkspaceDialogs } from './composition/layout/workspace-dialogs';
 import { WorkspaceLayout } from './composition/layout/workspace-layout';
@@ -70,12 +71,12 @@ function WorkspaceWindow() {
   const { documents: docs, workspace: workspaceDeps } = dependencies;
   useAppearanceSurface(dependencies.settings.appearanceApi);
   const session = useWorkspaceSession(
-    workspaceDeps.adapters.library,
+    workspaceDeps.adapters.project,
     workspaceDeps.adapters.session,
     workspaceDeps.adapters.lifecycle,
   );
-  const library = useLibrary(workspaceDeps.adapters.library).data ?? null;
-  const workspace = useWorkspace(workspaceDeps.adapters.library, session);
+  const project = useProject(workspaceDeps.adapters.project).data ?? null;
+  const workspace = useWorkspace(workspaceDeps.adapters.project, session);
   const documents = useDocumentWorkspace(
     workspace,
     session,
@@ -85,10 +86,15 @@ function WorkspaceWindow() {
   );
   useDocumentCommands(documents?.navigation ?? null, documents);
   useDocumentSaveBarrier(documents, docs.adapters.windowLifecycle);
+  const newTab = useNewTab(documents);
   const sources = useDocumentSources(workspaceDeps.adapters, workspace, documents);
   const recovery = useRecoveryDrafts(workspace, documents, docs.adapters.recovery);
+  // The tree's selection is the document in front of the reader, not the
+  // last row that was clicked, so a tab switch, a reused preview, or the last
+  // tab closing all show in the sidebar.
+  useTreeFollowsDocument(workspace, documents);
 
-  const activeFolder = library?.activeFolder ?? null;
+  const activeFolder = project?.activeFolder ?? null;
   const selectedPath = activeFolder?.path ?? null;
   const folderPath = workspace?.scope.folder.path ?? null;
   const listing = useFiles(workspace, workspaceDeps.adapters.files).data;
@@ -123,12 +129,11 @@ function WorkspaceWindow() {
     subscribeFolderRemoved: workspaceDeps.adapters.lifecycle.onFolderRemoved,
   });
   useEffect(() => runtime.setScopeEnvironment(agent.environment), [agent.environment, runtime]);
-  useComposerFocusSignal(dependencies.capture, useAgentComposerFocused());
 
   const chrome = useWorkspaceCommands({
     documents,
     hostFailure: sources.hostFailure,
-    library,
+    project,
     preparation,
     session,
     workspace,
@@ -138,7 +143,8 @@ function WorkspaceWindow() {
   const updateNotice = useUpdateNotice(dependencies.updates);
   // A new draft is the tree's to make, beside its selection, and its name is
   // typed in the tree, so the request brings the Files panel on screen
-  // before the tree takes it up.
+  // before the tree takes it up. It starts from the New tab's page; the
+  // draft opening in front is what closes that tab.
   const newDraft = () => {
     session.runtime.setSidebarOpen(true);
     chrome.navigator.select('files');
@@ -146,81 +152,90 @@ function WorkspaceWindow() {
   };
 
   return (
-    <WorkspaceLayout
-      dialogs={
-        <>
-          {gallery.surfaces}
-          <WorkspaceDialogs
-            activeFolderPath={selectedPath}
+    // One account for the window: the sidebar's footer row, the composer's
+    // runtime picker, and Settings all read the same open sign-in rather than
+    // each starting one of their own.
+    <AccountProvider
+      openExternal={(href) => void dependencies.documents.openExternal(href)}
+      port={dependencies.settings.accountApi}
+    >
+      <WorkspaceLayout
+        dialogs={
+          <>
+            {gallery.surfaces}
+            <WorkspaceDialogs
+              documents={documents}
+              quickOpen={chrome.quickOpen}
+              settings={chrome.settings}
+              workspace={workspace}
+            />
+          </>
+        }
+        hasActiveFolder={activeFolder !== null}
+        notices={chrome.notices}
+        recovery={recovery ? <RecoveryDrafts runtime={recovery} /> : null}
+        panes={
+          <WorkspacePanes
+            chatPaneOpen={chatPaneOpen}
+            agent={{ outline: agent.outline, runtime }}
             documents={documents}
-            onImported={refresh.refresh}
-            quickOpen={chrome.quickOpen}
+            mode={chrome.navigator.mode}
+            newTab={newTab}
+            onCreateDraft={newDraft}
+            onPrepare={preparation.prepare}
+            onReprocess={refresh.reprocess}
+            session={session}
             settings={chrome.settings}
+            sources={sources}
+            status={status}
+          />
+        }
+        session={session}
+        sidebar={
+          <WorkspaceSidebar
+            activeFolder={activeFolder}
+            agent={{ runtime, scope: agent.scope }}
+            documents={documents}
+            folder={{
+              ...folder,
+              hiddenFiles: listing
+                ? {
+                    disabled: hiddenFiles.pending,
+                    shown: hiddenFiles.showHiddenFiles,
+                    toggle: hiddenFiles.toggle,
+                  }
+                : null,
+            }}
+            navigator={chrome.navigator}
+            onBrowseGallery={gallery.browse}
+            onReprocess={refresh.reprocess}
+            settings={chrome.settings}
+            sources={sources}
             workspace={workspace}
           />
-        </>
-      }
-      hasActiveFolder={activeFolder !== null}
-      notices={chrome.notices}
-      recovery={recovery ? <RecoveryDrafts runtime={recovery} /> : null}
-      panes={
-        <WorkspacePanes
-          chatPaneOpen={chatPaneOpen}
-          agent={{ outline: agent.outline, runtime }}
-          documents={documents}
-          onPrepare={preparation.prepare}
-          onReprocess={refresh.reprocess}
-          session={session}
-          settings={chrome.settings}
-          sources={sources}
-          status={status}
-        />
-      }
-      session={session}
-      sidebar={
-        <WorkspaceSidebar
-          activeFolder={activeFolder}
-          agent={{ runtime, scope: agent.scope }}
-          documents={documents}
-          folder={{
-            ...folder,
-            hiddenFiles: listing
-              ? {
-                  disabled: hiddenFiles.pending,
-                  shown: hiddenFiles.showHiddenFiles,
-                  toggle: hiddenFiles.toggle,
-                }
-              : null,
-          }}
-          navigator={chrome.navigator}
-          onBrowseGallery={gallery.browse}
-          onReprocess={refresh.reprocess}
-          settings={chrome.settings}
-          sources={sources}
-          workspace={workspace}
-        />
-      }
-      started={chrome.started}
-      titlebar={
-        <WorkspaceTitlebar
-          agent={runtime}
-          chatPaneOpen={chatPaneOpen}
-          onNewDraft={newDraft}
-          onToggleChatPane={() => setChatPaneOpen((open) => !open)}
-          documents={documents}
-          hasActiveFolder={activeFolder !== null}
-          panel={chrome.navigator.selected}
-        />
-      }
-      updateNotice={<UpdateNotice notice={updateNotice} />}
-      welcome={
-        <LibraryWelcome
-          {...dependencies.library}
-          gallery={gallery.band}
-          githubImport={workspaceDeps.adapters.githubImport}
-          isRestoringSession={session.status.kind === 'restoring'}
-        />
-      }
-    />
+        }
+        started={chrome.started}
+        titlebar={
+          <WorkspaceTitlebar
+            agent={runtime}
+            chatPaneOpen={chatPaneOpen}
+            newTab={newTab}
+            onToggleChatPane={() => setChatPaneOpen((open) => !open)}
+            documents={documents}
+            hasActiveFolder={activeFolder !== null}
+            mode={chrome.navigator.mode}
+          />
+        }
+        updateNotice={<UpdateNotice notice={updateNotice} />}
+        welcome={
+          <ProjectWelcome
+            {...dependencies.project}
+            gallery={gallery.band}
+            githubImport={workspaceDeps.adapters.githubImport}
+            isRestoringSession={session.status.kind === 'restoring'}
+          />
+        }
+      />
+    </AccountProvider>
   );
 }

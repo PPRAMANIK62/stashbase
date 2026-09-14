@@ -1,10 +1,10 @@
 import fs from 'node:fs';
-import { embeddingAvailability } from './embedding-availability.ts';
+import { isEmbeddingConfigured } from './app-config.ts';
 import { getConversionSchedulerSnapshot, getInFlightConversions } from './conversion.ts';
 import { clearRecord, listPreparationProblems, readProgress, type ConversionProgress } from './conversion-status.ts';
 import { blockedAudioSourcesForFolder } from './audio-transcription.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { isLibraryFolderRemovalInProgress } from './folder.ts';
+import { isProjectFolderRemovalInProgress } from './folder.ts';
 import { hasNoExtractableText, shouldIndexFilePath } from './indexable.ts';
 import { displayPathForHit } from './pdf.ts';
 import { getFsChangeCounter } from './watcher.ts';
@@ -57,13 +57,13 @@ export async function readIndexerStatusForFolder(
   folderRoot: string,
   readStatus: () => Promise<IndexerStatus> = () => indexer.status(folderRoot),
 ): Promise<IndexerStatus> {
-  if (isLibraryFolderRemovalInProgress(folderRoot)) {
+  if (isProjectFolderRemovalInProgress(folderRoot)) {
     return { ...RETIRING_FOLDER_INDEX_STATUS };
   }
   try {
     return await readStatus();
   } catch (err: unknown) {
-    if (!isLibraryFolderRemovalInProgress(folderRoot)) throw err;
+    if (!isProjectFolderRemovalInProgress(folderRoot)) throw err;
     return { ...RETIRING_FOLDER_INDEX_STATUS };
   }
 }
@@ -72,18 +72,15 @@ export async function buildIndexStatus(folderRoot: string): Promise<IndexStatus>
   const curRoot = filesystemPath.absolute(folderRoot);
   const status = await readIndexerStatusForFolder(curRoot);
   const treeVersion = getFsChangeCounter();
-  const availability = embeddingAvailability();
-  const semanticEnabled = availability.configured;
-  const semanticAvailable = availability.available;
-  const unavailableReason = availability.available ? null : availability.reason;
-  const pending = semanticAvailable ? pendingVisibleFiles(status.pending, curRoot, folderRoot) : [];
+  const keyConfigured = isEmbeddingConfigured();
+  const pending = keyConfigured ? pendingVisibleFiles(status.pending, curRoot, folderRoot) : [];
   const orphaned = status.orphaned
     .map((p) => filesystemPath.relative(curRoot, p))
     .filter((p): p is string => p != null);
   const schedulerSnapshot = getConversionSchedulerSnapshot();
   const indexWarning = getIndexWarning(curRoot);
   const semanticState = semanticIndexingState({
-    enabled: semanticEnabled,
+    enabled: keyConfigured,
     indexed: status.indexed,
     pending: pending.length,
     failed: indexWarning != null,
@@ -92,16 +89,17 @@ export async function buildIndexStatus(folderRoot: string): Promise<IndexStatus>
   return {
     folder: curRoot,
     ...status,
-    semanticEnabled,
-    semanticAvailable,
-    ...(!semanticAvailable ? {
-      semanticDisabledReason: 'Embedding source required',
+    // Legacy wire aliases describe key configuration, not provider health.
+    semanticEnabled: keyConfigured,
+    semanticAvailable: keyConfigured,
+    ...(!keyConfigured ? {
+      semanticDisabledReason: 'Embedding provider key required',
     } : {}),
     pending,
     pendingCount: pending.length,
     orphaned,
     orphanedCount: orphaned.length,
-    visibleIndexingSettled: !semanticAvailable || pending.length === 0,
+    visibleIndexingSettled: !keyConfigured || pending.length === 0,
     semanticIndexing: { state: semanticState },
     pendingConversions: getInFlightConversions(curRoot),
     blockedConversions: await blockedAudioSourcesForFolder(curRoot, treeVersion),

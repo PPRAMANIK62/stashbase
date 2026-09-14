@@ -75,7 +75,7 @@ export function createSemanticSearchAdapter(client: HttpClient): SemanticSearchP
             unavailable: 'Search is unavailable.',
           },
           method: 'POST',
-          path: '/api/library/search',
+          path: '/api/project/search',
           schema: semanticSearchResponseSchema,
           signal,
         }),

@@ -21,6 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { WebSocketServer } from 'ws';
+import { createWebSocketUpgradeHandler, type WebSocketUpgrade } from './websocket-upgrade.ts';
 import {
   attachAgentRuntime,
   isAgentAccessMode,
@@ -31,10 +32,10 @@ import {
   type AgentAccessMode,
   type AgentConnectionOptions,
 } from './agent-contract.ts';
-import { onClose, ensureFolderHome, memberFolderRoots } from './folder.ts';
+import { onClose, ensureFolderHome, registeredFolderRoots } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { migrateLegacyEmbedderConfig, migrateRetiredEmbeddingSources } from './app-config.ts';
-import { bootBindAllFolders, reconcileLibraryFolders, resetIndexerRuntime } from './state.ts';
+import { bootBindAllFolders, reconcileProjectFolders, resetIndexerRuntime } from './state.ts';
 import { reapOrphanDaemons, reclaimStaleServerPort } from './stale-lock.ts';
 import { startParentWatchdog } from './parent-watchdog.ts';
 import { logger } from './log.ts';
@@ -53,20 +54,21 @@ import { mountInternalShutdownRoute } from './routes/internal-shutdown.ts';
 import { createRecoveryDraftRouteDeps, mount as mountRecoveryDraftRoutes } from './routes/recovery-drafts.ts';
 import { RECOVERY_JOURNAL_KEY_BYTES, createRecoveryJournal } from './recovery-journal.ts';
 import { recoveryJournalDir } from './local-data.ts';
-import { mount as mountLibraryRoutes } from './routes/library.ts';
+import { mount as mountProjectRoutes } from './routes/project.ts';
 import { mount as mountGalleryRoutes } from './routes/gallery.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
 import { mount as mountAppearanceRoutes } from './routes/appearance.ts';
 import { mount as mountWorkspacePreferenceRoutes } from './routes/workspace-preferences.ts';
-import { mount as mountCaptureRoutes } from './routes/capture.ts';
 import { mount as mountUpdateRoutes } from './routes/updates.ts';
+import { mount as mountLocalComponentRoutes } from './routes/local-components.ts';
+import { resumeExtractorDownload, closeExtractorRuntime } from './python-host.ts';
 import { mount as mountTranscriptionRoutes } from './routes/transcription.ts';
 import { mount as mountFilesRoutes } from './routes/files.ts';
 import { mount as mountFoldersRoutes } from './routes/folders.ts';
 import { mount as mountUploadRoutes } from './routes/upload.ts';
 import { mount as mountAttachRoutes } from './routes/attach.ts';
 import { mount as mountIndexingRoutes } from './routes/indexing.ts';
-import { mount as mountLibraryFileRoutes } from './routes/library-files.ts';
+import { mount as mountProjectFileRoutes } from './routes/project-files.ts';
 import { mount as mountTerminalRoutes } from './routes/terminal.ts';
 import { mount as mountMcpRoutes } from './routes/mcp.ts';
 import { createMcpHttpService } from './mcp-http-service.ts';
@@ -144,9 +146,8 @@ migrateLegacyEmbedderConfig();
 // Retire the former local and hosted-account embedding sources before the
 // first daemon bind. Idempotent.
 migrateRetiredEmbeddingSources();
-// Ensure the default folder home exists and seed the built-in manual, and
-// prune any stale recent entries. There is no first-run picker — the home
-// is a fixed path, always ready.
+// Establish the default folder home and seed the built-in manual on first use.
+// Unavailable folders retain their durable project registration.
 ensureFolderHome();
 // NB: the daemon is NOT spawned here — `bootBindAllFolders` runs from the
 // `listen` success callback below, i.e. only AFTER we win the `:8090`
@@ -248,6 +249,7 @@ app.get('/api/health', (_req, res) => {
     appRoot: APP_ROOT,
     resourcesPath: RESOURCES_ROOT,
     pid: process.pid,
+    instanceId: process.env.STASHBASE_SERVER_INSTANCE_ID,
   });
 });
 
@@ -303,10 +305,10 @@ if (!DEV_VITE) {
   }
 }
 
-// Folder/library routes include Welcome-screen operations that must work
+// Folder/project routes include Welcome-screen operations that must work
 // before a window has an open folder, so mount them before the gate.
 mountWindowContextRoutes(app);
-mountLibraryRoutes(app);
+mountProjectRoutes(app);
 // Gallery browsing works before any folder is open too.
 mountGalleryRoutes(app);
 mountOnboardingRoutes(app);
@@ -333,13 +335,13 @@ app.use([
 // ----- mount routes -------------------------------------------------------
 mountAppearanceRoutes(app);
 mountWorkspacePreferenceRoutes(app);
-mountCaptureRoutes(app);
 mountUpdateRoutes(app);
 mountAccountRoutes(app, {
   appReturnToken: process.env.STASHBASE_OAUTH_RETURN_TOKEN ?? '',
 });
 mountEmbedderRoutes(app);
 mountTranscriptionRoutes(app);
+mountLocalComponentRoutes(app);
 // Register exact `/api/files/prepare` and `/api/files/reprocess` endpoints
 // before the generic file-content wildcard routes.
 mountIndexingRoutes(app);
@@ -348,7 +350,7 @@ mountRecoveryDraftRoutes(app, createRecoveryDraftRouteDeps(recoveryJournal));
 mountFoldersRoutes(app);
 mountUploadRoutes(app);
 mountAttachRoutes(app);
-mountLibraryFileRoutes(app);
+mountProjectFileRoutes(app);
 mountTerminalRoutes(app);
 mountMcpRoutes(app, mcpHttpService);
 mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in and MCP-only
@@ -372,7 +374,8 @@ const viteProxy = DEV_VITE
   ? createProxyMiddleware({
       target: `http://localhost:${VITE_PORT}`,
       changeOrigin: true,
-      ws: true,
+      // Socket upgrades are dispatched explicitly below; do not let the
+      // proxy attach a second, unfiltered upgrade listener after an HTTP read.
       logger: undefined,
     })
   : null;
@@ -380,6 +383,7 @@ if (viteProxy) app.use(viteProxy);
 
 const server = app.listen(PORT, '127.0.0.1', () => {
   log.info(`listening on http://127.0.0.1:${PORT}`);
+  void resumeExtractorDownload().catch((error) => log.warn(`component recovery failed: ${String(error)}`));
   try {
     const recovered = recoverTranscriptionRuntimeAfterServerBind();
     if (recovered.modelDownloads.length || recovered.audioPreviews.length) {
@@ -420,9 +424,9 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   // open it. Background.
   Promise.resolve()
     .then(() => bootBindAllFolders())
-    .then(() => reconcileLibraryFolders('app boot'))
+    .then(() => reconcileProjectFolders('app boot'))
     .catch((err) =>
-      log.warn(`boot library bind/reconcile failed: ${err?.message ?? err}`),
+      log.warn(`boot project bind/reconcile failed: ${err?.message ?? err}`),
     );
   log.info('waiting for the user to pick a folder');
 });
@@ -472,12 +476,12 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 // because we share the existing http.Server with Vite's HMR proxy.
 const agentWss = new WebSocketServer({ noServer: true });
 agentWss.on('connection', (ws, req) => {
-  // An explicit session scope must be `scope=library` or a registered
-  // library folder; reject anything else before a runtime process can be
+  // An explicit session scope must be `scope=unbound` or a registered
+  // project folder; reject anything else before a runtime process can be
   // bound to it.
-  const resolved = resolveAgentSessionScope(rawScopeOf(req), rawFolderOf(req), memberFolderRoots());
+  const resolved = resolveAgentSessionScope(rawScopeOf(req), rawFolderOf(req), registeredFolderRoots());
   if (!resolved.ok) {
-    ws.send(JSON.stringify({ t: 'error', message: 'That folder is not part of your library.' }));
+    ws.send(JSON.stringify({ t: 'error', message: 'That folder is not a registered project.' }));
     ws.close();
     return;
   }
@@ -485,14 +489,14 @@ agentWss.on('connection', (ws, req) => {
   attachAgentRuntime(agentIdOf(req), ws, {
     ...connectionOptionsOf(req),
     ...(scope?.kind === 'folder' ? { folder: scope.path } : {}),
-    ...(scope?.kind === 'library' ? { scope: 'library' as const } : {}),
+    ...(scope?.kind === 'unbound' ? { scope: 'unbound' as const } : {}),
   });
 });
 
 function agentIdOf(req: import('node:http').IncomingMessage): string {
   try {
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
-    return u.searchParams.get('agent') || (u.pathname === '/ws/codex' ? 'codex' : 'claude');
+    return u.searchParams.get('agent') || 'claude';
   } catch {
     return 'claude';
   }
@@ -522,7 +526,7 @@ function rawFolderOf(req: import('node:http').IncomingMessage): string | undefin
   }
 }
 
-/** Raw explicit-scope request off the WS URL (`scope=library`). */
+/** Raw explicit-scope request off the WS URL (`scope=unbound`). */
 function rawScopeOf(req: import('node:http').IncomingMessage): string | undefined {
   try {
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
@@ -578,53 +582,30 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
 }
 
 // Agent sessions are pinned to an explicit scope (a member folder, or
-// the whole library), so a window switching folders does NOT tear them
+// the unbound conversation), so a window switching folders does NOT tear them
 // down — the chat tabs and their running sessions survive the switch. An
-// attributed Library Chat's explicit create_project action is the one scope
+// attributed unbound Chat's explicit create_project action is the one scope
 // migration and is owned inside the runtime/session registry.
-// Teardown remains on window close/retire (below), library folder
-// removal (routes/library.ts via stopAgentRuntimeForFolder — which only
-// matches folder-bound sessions, never library-scoped ones), and app
+// Teardown remains on window close/retire (below), project folder
+// removal (routes/project.ts via stopAgentRuntimesForFolder — which only
+// matches folder-bound sessions, never unbound ones), and app
 // shutdown.
 onClose((_oldRoot, windowId) => {
   stopAgentRuntime('claude', windowId);
   stopAgentRuntime('codex', windowId);
   stopAgentRuntime('stashbase', windowId);
 });
-// Hook WebSocket upgrades. `/ws/agent` and `/ws/codex` go to our
-// structured chat bridges; everything else (Vite HMR in dev) falls
-// through to the existing
-// proxy upgrade handler.
-server.on('upgrade', (req, socket, head) => {
-  // Same origin gate as the HTTP middleware — a webpage shouldn't be
-  // able to open a WebSocket to our agent bridge any more than it can
-  // hit our HTTP routes. Missing Origin is allowed for non-browser
-  // tools (browsers always send it on WS upgrade).
-  const origin = req.headers.origin;
-  if (origin && !ALLOWED_ORIGINS.has(origin)) {
-    socket.destroy();
-    return;
-  }
-  const url = req.url ?? '';
-  if (url.startsWith('/ws/agent') || url.startsWith('/ws/codex')) {
-    agentWss.handleUpgrade(req, socket, head, (ws) => {
-      agentWss.emit('connection', ws, req);
+server.on('upgrade', createWebSocketUpgradeHandler({
+  allowedOrigins: ALLOWED_ORIGINS,
+  agentUpgrade: (request, socket, head) => {
+    agentWss.handleUpgrade(request, socket, head, (ws) => {
+      agentWss.emit('connection', ws, request);
     });
-    return;
-  }
-  if (viteProxy && 'upgrade' in viteProxy) {
-    // `http.Server` types the upgrade socket as `Duplex` whereas
-    // http-proxy-middleware's typed handler expects a `net.Socket`.
-    // At runtime they're the same object — cast through unknown.
-    (viteProxy.upgrade as unknown as (
-      req: import('node:http').IncomingMessage,
-      socket: unknown,
-      head: Buffer,
-    ) => void)(req, socket, head);
-  } else {
-    socket.destroy();
-  }
-});
+  },
+  // Node exposes the upgrade socket as Duplex; the proxy types its runtime
+  // Socket subclass more narrowly. Both handlers receive the same socket.
+  ...(viteProxy ? { viteUpgrade: viteProxy.upgrade as unknown as WebSocketUpgrade } : {}),
+}));
 
 // ----- graceful shutdown --------------------------------------------------
 //
@@ -655,7 +636,11 @@ async function shutdown(reason: string): Promise<void> {
       closeBundledAgent: stopOpenCodeRuntime,
       cancelGitHubImports: cancelAllGitHubImports,
       cancelModelDownloads: cancelAllTranscriptionModelDownloads,
-      cancelConversions: cancelAllConversions,
+      cancelConversions: async () => {
+        const cancelled = await cancelAllConversions();
+        await closeExtractorRuntime();
+        return cancelled;
+      },
       closeStateDb,
       closeIndexer: () => indexer.close(),
       onCancelled: (cancelled) => {

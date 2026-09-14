@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { createAgentSessionState, MAX_QUEUED_PROMPTS } from './session-state';
 
-const scope = { kind: 'folder', path: '/library/Research' } as const;
+const scope = { kind: 'folder', path: '/project/Research' } as const;
 
 describe('createAgentSessionState', () => {
   it('opens a conversation as an unconnected draft with nothing bound to it', () => {
@@ -26,7 +26,7 @@ describe('createAgentSessionState', () => {
       scope,
       skill: null,
       skillCatalog: { kind: 'empty' },
-      title: 'New chat',
+      title: 'Untitled',
       transcript: [],
     });
   });
@@ -34,7 +34,7 @@ describe('createAgentSessionState', () => {
   it('falls back to the default title for one that is blank', () => {
     expect(
       createAgentSessionState({ agent: 'codex', id: 'chat-1', scope, title: '  ' }).title,
-    ).toBe('New chat');
+    ).toBe('Untitled');
     expect(
       createAgentSessionState({ agent: 'codex', id: 'chat-1', scope, title: ' Saved ' }).title,
     ).toBe('Saved');

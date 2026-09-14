@@ -97,6 +97,10 @@ test('review IPC derives the draft from its sender and returns only the safe rev
   const logPreview = await handlers.getArtifactPreview(event, log.id);
 
   assert.match(screenshotPreview.preview.dataUrl, /^data:image\/png;base64,/u);
+  assert.deepEqual(
+    Buffer.from(screenshotPreview.preview.dataUrl.split(',')[1], 'base64'),
+    Buffer.from('approved-lossless-png'),
+  );
   assert.equal(screenshotPreview.preview.width, 1280);
   assert.equal(logPreview.preview.text, 'INFO MCP_BEARER_TOKEN=[REDACTED]\nINFO ready\n');
   const serialized = JSON.stringify({ logPreview, result, screenshotPreview });
@@ -224,9 +228,11 @@ test('Back reopens the approved review and a later prepare claims a fresh snapsh
 
   assert.equal((await handlers.openGitHub(event)).error.code, 'INVALID_STATE');
   assert.equal((await handlers.reopen(event)).error.code, 'INVALID_STATE');
+  assert.equal((await handlers.updateDescription(event, { problem: 'Second pass.', reproduction: '' })).ok, true);
   assert.equal((await handlers.includeArtifact(event, restored.id)).ok, true);
   assert.equal((await handlers.prepare(event)).ok, true);
   assert.equal(snapshots[1].artifacts.some((item) => item.kind === 'screenshot'), true);
+  assert.equal(snapshots[1].description.problem, 'Second pass.');
   assert.equal((await handlers.discard(event)).ok, true);
 });
 

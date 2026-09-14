@@ -101,6 +101,25 @@ describe('lazySurface', () => {
     expect((await screen.findByText('Agent')).isConnected).toBe(true);
   });
 
+  it('renders straight through when a settled surface is mounted again', async () => {
+    const { load, release } = heldLoader();
+    const Surface = lazySurface(load, { fallback: <p>Loading…</p> });
+
+    const view = render(<Surface open title="Agent" />);
+    release();
+    expect((await screen.findByText('Agent')).isConnected).toBe(true);
+
+    // Swapped out and back, the way the sidebar's Chats panel is when the
+    // reader crosses to Documents and returns. The chunk is already here, so
+    // there is nothing to wait for and nothing to import again.
+    view.rerender(<p>Elsewhere</p>);
+    view.rerender(<Surface open title="Agent" />);
+
+    expect(screen.queryByText('Loading…')).toBeNull();
+    expect(screen.getByText('Agent').isConnected).toBe(true);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   it('hands the boundary a retry that reloads a chunk that failed', async () => {
     let attempt = 0;
     const load = vi.fn(() => {

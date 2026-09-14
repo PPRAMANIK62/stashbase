@@ -1,29 +1,35 @@
 # Principles
 
-These are the stable rules used to evaluate product and technical decisions.
+These rules guide product design and code review.
 
-1. **Agent-native** — StashBase exists to make local files stable context that
-   agents can read, search, and reuse.
-2. **File-first** — Local files are the source of truth. Previews, extracted
-   text, indexes, and app state are derived from them.
-3. **Local-first** — The core path runs on the user's computer. Optional cloud
-   capabilities must not be required to browse, prepare, or retrieve local
-   context.
-4. **Bring your own agent** — The included OpenQuill removes setup as a
-   prerequisite; it does not create lock-in. The same library and MCP operation
-   layer continue to work with Codex, Claude Code, and external MCP clients.
-5. **User-controlled access** — Agents only receive the file access the user
-   has explicitly authorized. Context tools are not a general host-filesystem
-   escape hatch.
-6. **Machine-derived data stays invisible** — Extracted representations,
-   chunks, and vectors can support reading and search without becoming
-   user-managed files. Agent-authored Wiki Page Markdown is different: it is a
-   visible, ordinary, user-owned file that links back to Sources.
-7. **Useful before perfect** — Browsing, editing, and keyword search should
-   remain useful while preparation is incomplete or searching by meaning is
-   unavailable.
-8. **Broad capability, few concepts** — AI can improve many parts of the
-   workflow, so capability breadth is welcome when it strengthens the same
-   local-file-to-agent-context loop. New work must reuse the product's source,
-   library, scope, permission, and recovery concepts rather than creating a
-   second world for users to understand.
+1. **Writing is the purpose.** Features should help people explore ideas,
+   develop documents, or understand and control changes. File preparation,
+   search, wiki building, and MCP support that work.
+2. **Project first, discussion next.** An empty project is a valid starting
+   point. People can brainstorm before collecting sources, opening a document,
+   building a wiki, or completing background preparation.
+3. **File-first.** Ordinary local files are durable content. Previews,
+   extracted text, indexes, and application state do not replace them.
+4. **Local ownership, explicit services.** Local reading, editing, and keyword
+   search remain useful without account sign-in. Agent and embedding requests
+   use their configured services with clear credentials and access boundaries.
+5. **User-controlled changes.** Exploration does not automatically become an
+   accepted document or permission for unrelated edits. File writes follow the
+   user's request and the selected permission mode. Review must describe what
+   the available comparison can actually establish.
+6. **One project scope.** Each folder is its own search namespace. Agents use
+   authorized context; empty results or unavailable sources never expand
+   access to other projects or the host filesystem.
+7. **Bring your own agent.** Included OpenQuill and supported external runtimes
+   share the project and file model. The included path must not create a
+   separate content store or lock-in.
+8. **Derived data stays invisible.** Extracted text, checkpoints, and indexes
+   are application-managed. Agent-written documents, including wiki pages,
+   are ordinary visible files and follow the same save and access rules.
+9. **Keep work continuous.** Discussion and document work remain available
+   while unrelated background tasks run. Failures retain user work and offer
+   recovery at the failing stage; they do not silently lose drafts or rebind
+   conversations.
+10. **Earn the complexity.** Prefer one owner for each rule and reuse existing
+    project, file, permission, and recovery concepts. Existing code or an old
+    requirement alone is not evidence that a feature still belongs.

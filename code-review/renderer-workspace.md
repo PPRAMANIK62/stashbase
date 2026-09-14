@@ -6,7 +6,7 @@
 ## Scope and Ownership
 
 A window is one folder scope, the documents open on it, and the panels that
-read them. The Workspace feature owns library membership presentation, the
+read them. The Workspace feature owns project registration presentation, the
 Files tree, folder mutations, and the folder's own transitions behind
 `renderer/src/features/workspace/public.ts`. Nothing outside that barrel
 reaches into the feature.
@@ -83,7 +83,7 @@ untrusted input on the way back in.
   snapshot that names no folder, from `setSessionActiveFolder(null)`, and
   from `reconcileSessionMembership` dropping the active folder, and a repeat
   of the same "no folder" state is a no-op, so a reader's toggle on the
-  welcome screen survives a later library refetch. `use-workspace-session.ts`
+  welcome screen survives a later project registry refetch. `use-workspace-session.ts`
   reports the column collapsed during the render before that transition
   lands, so a relaunch never paints it open first. A snapshot that still
   names its folder keeps the reader's answer, which is what a reload lands
@@ -100,7 +100,17 @@ untrusted input on the way back in.
   two windows never restore the same folder and tabs. Membership,
   active-folder binding, and the folder's tree revision are read back from the
   server or the host rather than mirrored between windows. A window never
-  merges another window's snapshot.
+  merges another window's live snapshot. Main owns the durable folder-history
+  aggregate: each save applies only folder records changed or removed relative
+  to that window's last successful snapshot. A blank window's layout save
+  cannot clear another folder, and an unchanged stale record cannot overwrite
+  a peer's newer record or resurrect its removal. The read/merge/write and
+  per-window baseline advance together in one serialized transaction. Concurrent
+  edits to the same folder record use the latest successful change. Failure
+  retains the baseline for retry. Oldest changed records are evicted to stay
+  within the existing folder-count and byte bounds. The latest successful
+  writer supplies the shell preferences for the next startup; live windows
+  retain their own arrangements.
 - Telling the host which folder this window is on can itself fail, and a window
   whose host disagrees about its folder can no longer reconcile anything. That
   refusal is reported as a notice rather than swallowed.
@@ -124,7 +134,7 @@ untrusted input on the way back in.
   directly, because the reader just asked for it; other windows converge on the
   ordinary preparation-status poll, whose idle interval is the upper bound on
   that convergence.
-- Public repository import is a folder-explicit request from a Library surface.
+- Public repository import is a folder-explicit request from a Projects surface.
   The server owns cloning, isolated staging, atomic publication, registration,
   and the background sync trigger. The renderer owns validation feedback and
   the request lifecycle only. URL and destination-name feedback comes from the
@@ -144,7 +154,7 @@ untrusted input on the way back in.
   and occurrences outside the searched folder are dropped before they reach the
   reader whatever the daemon answered. Quick Open ranks only the open folder's
   listing and refuses an intent whose folder is not the open one. There is no
-  Library-wide retrieval scope in this renderer, so no surface has a scope
+  unbound retrieval scope in this renderer, so no surface has a scope
   selection to inherit or retain.
 - Ways to search a folder are a registry, not a branch. `SearchBackend` in
   `renderer/src/features/retrieval/ui/search/backend.ts` carries a backend's
@@ -214,8 +224,37 @@ untrusted input on the way back in.
 - Sidebar panels are a registry too.
   `renderer/src/app/composition/layout/sidebar-panels.tsx` is the whole
   definition of the navigator, in tab order, and nothing downstream counts tabs
-  or compares indices. A panel declares whether it replaces the scrolling tree
-  region, and a panel expensive to mount stays unmounted until it is selected.
+  or compares indices. A panel declares its mode and whether it replaces the
+  scrolling tree region, and a panel expensive to mount stays unmounted until
+  it is selected. The same module lists the modes the band's switch offers
+  (`sidebarModes`): a mode with several panels gets the tab strip beneath the
+  folder row, inside the region the row folds, and a mode with one (Chats)
+  has no strip; the folder row (the navigator's `head`) sits right under the
+  band in both modes, so a mode switch never moves it. Beneath that row the
+  modes are screens on one track: switching slides the mode being left off one
+  edge while the one chosen walks on from the other, in the registry's own
+  panel order, so the band's switch reads as a place in a row. Both screens
+  stay mounted, for their scroll positions and their trees, and the one off
+  the track is hidden outright once the travel lands rather than held aside by
+  a clip the rows' focus rings would be shaved by; the pane a switch leaves
+  stays live until then, so a mode that mounts only when chosen slides off
+  with its content rather than as a blank column. The row is
+  `ProjectSidebar`'s own toggle button with an inline chevron after the
+  name, and its header actions at the rows' 24px action size are the creates
+  and, while the tree shows, Collapse all (`collapseAll` on
+  `WorkspaceRuntime`, `collapseAllTreeFolders` in the workspace domain); the region it
+  folds is the navigator's pane column, which fills the sidebar down to the
+  footer, so the fold is a flex share travelling 1 → 0 against a spacer
+  rather than the kit's measured-height `Collapse`, and the folded region is
+  `inert` and hidden from assistive technology while its panes stay mounted.
+  The fold state is window-local (`WorkspaceSidebar`), not part of the
+  session snapshot, and applies in both modes; only the creates are
+  Documents mode's (`ProjectSidebar` still accepts `foldable={false}` for
+  a plain, unfoldable name). The mode is
+  derived from the selected panel (`sidebarModeOf` in
+  `renderer/src/app/composition/commands/use-workspace-commands.ts`), never
+  stored beside it, and `selectMode` returns Documents to the panel it left
+  on.
   The document outline is one of those panels and carries no geometry of its
   own. It shares the sidebar's width and the tree's scrolling region, so the
   only resizable seams in the window are the sidebar rail and the Agent seam.
@@ -227,6 +266,11 @@ untrusted input on the way back in.
 - The titlebar's right-hand Chat toggle owns window-local visibility in app
   composition. A hidden Chat stays mounted and inert, its resize handle is
   absent, and reopening retains the remembered pane width and composer draft.
+  The sidebar mode overrides it: `WorkspacePanes` hands
+  `AgentDocumentWorkspace` `documentsShown` from the mode, and in Chats the
+  document slot is zero wide and inert while the Agent takes the row whatever
+  the toggle says, the titlebar swaps its tabs for `ChatTitle` and rests the
+  corner as a spacer, and `AgentWorkspace` runs with `header={false}`.
   The Chat pane names its own conversation in its header, so a hidden pane
   takes the name with it; the titlebar's shared slot carries document tabs
   only, and stays empty otherwise. New chat lives only in the Chat pane's
@@ -236,27 +280,39 @@ untrusted input on the way back in.
   arrows while it is open, and the workspace titlebar hosts them only while
   the sidebar is collapsed; the collapsed column stays mounted off screen,
   so the band drops its arrows as the titlebar takes them up and one pair is
-  on offer at a time. The pair follows the navigator's selected panel:
-  `ChatNavButtons` from the Agent feature while Chats is showing, otherwise
-  `DocumentHistoryButtons` from the Documents feature; the collapsed
-  titlebar reads the same selection through its `panel` prop. `NewDraftButton`
-  from the Workspace feature sits at the titlebar's left end in every sidebar
-  state, ahead of the tabs, because a draft is a document and the card is
-  where documents show. Neither carries a chat control. New draft is a
+  on offer at a time. The pair follows the sidebar mode: `ChatNavButtons`
+  from the Agent feature in Chats, otherwise `DocumentHistoryButtons` from
+  the Documents feature; the collapsed titlebar reads the same mode through
+  its `mode` prop. The mode switch (`SidebarModeSwitch`) holds the band's far
+  end while a folder is open and changes the sidebar only; the Chat pane's
+  visibility stays with the titlebar's own toggle. The band's whole row sets
+  the sidebar's minimum width, mirrored in the rail's drag clamp and the
+  session's width clamp. The strip (`DocumentTabs`) ends in a plus that
+  opens the New tab, window-local state from `useNewTab`
+  (`renderer/src/features/documents/hooks/use-new-tab.ts`): never a member
+  of the open set, seated last and selected in the strip, its `NewTabPage`
+  laid over the document slot (`WorkspacePanes`), counted as a document by
+  `AgentDocumentWorkspace` so the slot opens for it, and closed by any
+  document coming in front. A draft starts from that page, because a draft
+  is a document and the card is where documents show. Neither band nor
+  titlebar carries a chat control. New draft is a
   typed request on the workspace store (`requestCreate` on
   `WorkspaceRuntime`, `pendingCreate` in
-  `renderer/src/features/workspace/domain/workspace.ts`) that the tree takes
-  up once its listing is present: it places the draft beside the selection
+  `renderer/src/features/workspace/domain/workspace.ts`, kinds `draft` and
+  `folder`; the folder header's New file and New folder raise the same two,
+  and a `folder` request starts the tree's name-first create at the
+  selection's parent) that the tree takes up once its listing is present: it places the draft beside the selection
   through `treeCreationParent`, names it Untitled, or the first free
   numbered Untitled, through `untitledDraftName`, creates it, opens it kept the
   moment it exists, refreshes the listing, and once the new row shows hands
   it the tree's ordinary rename (`renamePath`, the pair to `settledPath`,
   consumed by the tree with the stem selected), so the name is the first
   thing typed; the shell opens the sidebar on Files before asking, because
-  that is where the name is typed. The Markdown viewer's mode items and the
-  Chat header's New chat are the same 28px square at the same inset, so
-  their hover fills match on the line they share and the Reading glyph sits
-  under the panel toggle while the Chat is hidden.
+  that is where the name is typed. The Markdown viewer's mode
+  track and the Chat header's actions both end on the titlebar's 8px inset,
+  so the Reading glyph and the New chat glyph sit on the panel toggle's
+  column (22px in) on the line they share, and the header's squares keep
+  the 32px glyph pitch the sidebar band keeps.
 - Pane geometry is durable, held in the session snapshot and clamped by the
   same bounds in both directions. The Agent seam is a named ARIA separator with
   arrow-key steps and a double-click reset, and every path reports a width
@@ -286,8 +342,20 @@ untrusted input on the way back in.
   refreshed listing actually shows that row. Expansion and selection move with
   a renamed entry and are dropped under one that left the tree, so a renamed
   folder stays open and its selected descendant stays selected.
+- The tree's selection names the document in front of the reader, not the last
+  row that was clicked. The open set moves for reasons the tree never sees, so
+  the window binds the two in composition
+  (`useTreeFollowsDocument` in
+  `renderer/src/app/composition/folder/use-tree-follows-document.ts`), which is
+  the only writer of the selection outside the tree's own gestures and its
+  creates. A document coming in front selects its row; a source outside this
+  folder selects none; and when the active document goes the selection leaves
+  with it only while it is still the row that hook put there, so a folder the
+  reader expanded survives the last tab closing. Deciding this from the
+  selection alone, or leaving the tree to the click that last touched it, is
+  the defect this replaces.
 - Tabs, trees, overlays, and dialogs expose semantic selection and focus state.
-  Destructive confirmation identifies the complete subject. Library removal
+  Destructive confirmation identifies the complete subject. Project removal
   names the home-shortened member path, and entry deletion names the
   folder-relative path, both in a copyable monospace block beside the sentence.
 - The strip above the workspace carries only things the reader did not ask
@@ -314,9 +382,9 @@ untrusted input on the way back in.
   the folder's own query key, so retiring a folder cancels and drops the poll
   with the listing. Late results cannot repopulate reset state.
 - The window declares when its first paint is trustworthy. `data-boot-settled`
-  is set exactly once the library has answered and no folder restore is still
+  is set exactly once the project registry has answered and no folder restore is still
   in flight, which is what the desktop harness waits on. The Agent latch is
-  separate and one-way, so emptying the library does not tear down a running
+  separate and one-way, so emptying the project registry does not tear down a running
   conversation.
 - The blank-chat lifecycle follows [Agent Panel](agent-panel.md). The workspace
   may reveal or dock the Agent but does not redefine Agent session scope.
@@ -342,7 +410,12 @@ failure anywhere inside it remounts that subtree and offers to reopen the
 workspace rather than leaving an empty window. Deferred surfaces are the third.
 `lazySurface` in `renderer/src/shared/runtime/lazy-surface.tsx` names the three
 decisions every code-split surface makes, and the Agent workspace and Quick
-Open each pass it a boundary with their own recovery.
+Open each pass it a boundary with their own recovery. Its lazy component is
+made once per surface and replaced only by a retry, never remade from the
+component's own state on each mount: a surface that unmounts and returns — the
+sidebar's Chats panel is the pane that does — would otherwise suspend for a
+tick with the module already cached and paint its fallback again, in the middle
+of the travel that brought it back.
 
 The shell recovery's wording is deliberately narrow, because the guarantee is.
 Journaled snapshots survive the remount, since the server sealed them to disk
@@ -383,23 +456,23 @@ records.
 | Role | Stable entry points |
 |---|---|
 | Interface | `renderer/src/features/workspace/public.ts`, with `WorkspaceRuntime` in `renderer/src/features/workspace/application/runtime.ts` as the folder's own transition seam |
-| Primary owners | `renderer/src/features/workspace/domain/tree.ts`, `domain/workspace.ts`, `domain/library.ts`, `domain/session.ts`, and the `application/runtime.ts`, `application/session-runtime.ts`, `application/open-folder.ts`, `application/add-folder.ts`, `application/remove-folder.ts`, `application/queries.ts`, `application/failure-messages.ts` Modules over the Ports in `application/ports.ts` |
-| Feature hooks | `renderer/src/features/workspace/hooks/use-workspace.ts`, `use-workspace-session.ts`, `use-library.ts`, `use-library-lifecycle.ts`, `use-files.ts`, `use-tree.ts`, `use-hidden-files.ts`, `use-folders.ts`, `use-file-operations.ts`, `use-github-import.ts`, `use-github-import-dialog.ts`, `use-remove-folder.ts`, `use-reveal.ts` |
-| Feature views | `renderer/src/features/workspace/ui/sidebar.tsx`, `ui/welcome.tsx`, `ui/file-tree.tsx` with its `file-tree-model.ts`, `file-tree-keyboard.ts`, `file-tree-focus.ts`, `file-tree-rows.tsx`, `file-tree-menu.tsx`, `file-tree-naming.tsx`, `file-tree-space-menu.ts` concerns, `ui/new-draft-button.tsx`, `ui/import-github-dialog.tsx`, `ui/remove-folder-dialog.tsx`, `ui/delete-entry-dialog.tsx`, `ui/clipboard-offer.tsx` |
+| Primary owners | `renderer/src/features/workspace/domain/tree.ts`, `domain/workspace.ts`, `domain/project.ts`, `domain/session.ts`, and the `application/runtime.ts`, `application/session-runtime.ts`, `application/open-folder.ts`, `application/add-folder.ts`, `application/remove-folder.ts`, `application/queries.ts`, `application/failure-messages.ts` Modules over the Ports in `application/ports.ts` |
+| Feature hooks | `renderer/src/features/workspace/hooks/use-workspace.ts`, `use-workspace-session.ts`, `use-project.ts`, `use-project-lifecycle.ts`, `use-files.ts`, `use-tree.ts`, `use-hidden-files.ts`, `use-folders.ts`, `use-file-operations.ts`, `use-github-import.ts`, `use-github-import-dialog.ts`, `use-remove-folder.ts`, `use-reveal.ts` |
+| Feature views | `renderer/src/features/workspace/ui/sidebar.tsx`, `ui/welcome.tsx`, `ui/file-tree.tsx` with its `file-tree-model.ts`, `file-tree-keyboard.ts`, `file-tree-focus.ts`, `file-tree-rows.tsx`, `file-tree-menu.tsx`, `file-tree-naming.tsx`, `file-tree-space-menu.ts` concerns, `ui/import-github-dialog.tsx`, `ui/remove-folder-dialog.tsx`, `ui/delete-entry-dialog.tsx` |
 | Document tabs, history, and barrier | `renderer/src/features/documents/domain/tabs.ts`, `domain/history.ts`, `domain/location.ts`, `application/tabs-runtime.ts`, `application/history-runtime.ts`, `application/document-runtime.ts`, `hooks/use-document-tabs.ts`, `hooks/use-document-commands.ts`, `hooks/use-document-save-barrier.ts`, `ui/workspace/tabs.tsx`, `ui/workspace/history-buttons.tsx` |
-| Retrieval surfaces | `renderer/src/features/retrieval/ui/library-search.tsx`, `ui/search/surface.tsx`, `ui/search/backend.ts`, `ui/search/backends.ts`, `ui/quick-open.tsx`, `ui/managed-quick-open.tsx`, `ui/readiness-notices.tsx` |
+| Retrieval surfaces | `renderer/src/features/retrieval/ui/project-search.tsx`, `ui/search/surface.tsx`, `ui/search/backend.ts`, `ui/search/backends.ts`, `ui/quick-open.tsx`, `ui/managed-quick-open.tsx`, `ui/readiness-notices.tsx` |
 | Composition root | `renderer/src/app/shell.tsx`, `renderer/src/app/providers.tsx`, `renderer/src/app/dependencies.ts`, `renderer/src/app/composition/dependency-context.tsx` |
-| Window chrome and layout | `renderer/src/app/composition/commands/use-workspace-commands.ts`, `use-window-command.ts`, `use-quick-open-command.ts`, `use-sidebar-search-command.ts`, `use-preparation-commands.ts`, `use-capture-focus.ts`, and `renderer/src/app/composition/layout/workspace-layout.tsx`, `workspace-sidebar.tsx`, `sidebar-navigator.tsx`, `sidebar-panels.tsx`, `workspace-panes.tsx`, `agent-document-workspace.tsx`, `workspace-titlebar.tsx`, `workspace-notices.tsx`, `workspace-dialogs.tsx`, `workspace-quick-open.tsx` |
+| Window chrome and layout | `renderer/src/app/composition/commands/use-workspace-commands.ts`, `use-window-command.ts`, `use-quick-open-command.ts`, `use-sidebar-search-command.ts`, `use-preparation-commands.ts`, and `renderer/src/app/composition/layout/workspace-layout.tsx`, `workspace-sidebar.tsx`, `sidebar-navigator.tsx`, `sidebar-panels.tsx`, `workspace-panes.tsx`, `agent-document-workspace.tsx`, `workspace-titlebar.tsx`, `workspace-notices.tsx`, `workspace-dialogs.tsx`, `workspace-quick-open.tsx` |
 | Folder-scoped binders | `renderer/src/app/composition/folder/use-document-workspace.ts`, `use-document-sources.ts`, `use-folder-readiness.ts`, `use-folder-refresh.ts`, `use-workspace-notices.ts`, `use-recovery-drafts.ts`, `refresh-folder.ts` |
 | Named workflows | `renderer/src/app/workflows/open-document.ts` and `renderer/src/app/workflows/retire-documents.ts` |
 | Scope and liveness mechanics | `renderer/src/shared/runtime/scope-guard.ts`, `use-scoped-runtime.ts`, `use-retained-runtime.ts`, `use-request-signals.ts`, `use-command-surface.ts`, `lazy-surface.tsx`, and `renderer/src/app/bootstrap/startup.tsx`, `startup-failure.tsx`, `use-boot-progress.ts` |
 | Server transport Adapter | `renderer/src/features/workspace/infrastructure/api.ts`, `files-api.ts`, `workspace-preferences-api.ts`, `github-import-api.ts`, `upload-api.ts` over `renderer/src/platform/http/client.ts` and `renderer/src/platform/http/classify.ts`, against `server/routes/files.ts`, `server/routes/workspace-preferences.ts`, and `server/file-listing.ts` |
-| Desktop lifecycle Adapter | `renderer/src/features/workspace/infrastructure/library-lifecycle.ts`, `capture-api.ts`, and `renderer/src/features/documents/infrastructure/window-lifecycle.ts` over `renderer/src/platform/electron/bridge.ts`, `library-lifecycle.ts`, `window-lifecycle.ts`, `folder-picker.ts`, `capture.ts`, `file-manager.ts` |
+| Desktop lifecycle Adapter | `renderer/src/features/workspace/infrastructure/project-lifecycle.ts`, and `renderer/src/features/documents/infrastructure/window-lifecycle.ts` over `renderer/src/platform/electron/bridge.ts`, `project-lifecycle.ts`, `window-lifecycle.ts`, `folder-picker.ts`, `file-manager.ts` |
 | Session store | `renderer/src/features/workspace/infrastructure/session-persistence.ts` over `shared/protocols/electron/workspace-session.ts`, persisted by `electron/workspace/session.ts` and claimed for exactly one window in `electron/main.cjs` |
-| Focused evidence | `renderer/src/features/workspace/application/runtime.test.ts`, `session-runtime.test.ts`, `open-folder.test.ts`, `remove-folder.test.ts`, `queries.test.ts`, `renderer/src/features/workspace/domain/session.test.ts`, `domain/tree.test.ts`, `domain/workspace.test.ts`, `renderer/src/features/workspace/hooks/use-workspace-session.test.ts`, `use-library-lifecycle.test.ts`, `use-hidden-files.test.ts`, `use-github-import.test.ts`, `use-file-operations.test.tsx`, `use-tree.test.ts`, `renderer/src/features/workspace/ui/file-tree.test.tsx`, `file-tree-keyboard.test.ts`, `file-tree-menu.test.tsx`, `sidebar.test.tsx`, `welcome.test.tsx`, `renderer/src/features/documents/domain/tabs.test.ts`, `domain/history.test.ts`, `renderer/src/features/documents/application/tabs-runtime.test.ts`, `renderer/src/features/documents/ui/workspace/tabs.test.tsx`, `ui/workspace/history-buttons.test.tsx`, `renderer/src/features/workspace/ui/file-tree-rows.test.tsx`, `file-tree-naming.test.tsx`, `renderer/src/features/retrieval/ui/search/surface.test.tsx`, `ui/search/exact-backend.test.tsx`, `renderer/src/app/composition/layout/workspace-layout.test.tsx`, `workspace-sidebar.test.tsx`, `workspace-titlebar.test.tsx`, `workspace-quick-open.test.tsx`, `agent-document-workspace.test.tsx`, `renderer/src/app/composition/commands/use-workspace-commands.test.tsx`, `use-quick-open-command.test.tsx`, `renderer/src/app/workflows/open-document.test.ts`, `retire-documents.test.ts`, `renderer/src/app/bootstrap/startup.test.tsx`, `use-boot-progress.test.tsx`, `server/routes/workspace-preferences.test.ts`, `server/__tests__/github-import.test.ts`, `server/routes/files.test.ts`, and `electron/workspace/session.test.cjs` |
+| Focused evidence | `renderer/src/features/workspace/application/runtime.test.ts`, `session-runtime.test.ts`, `open-folder.test.ts`, `remove-folder.test.ts`, `queries.test.ts`, `renderer/src/features/workspace/domain/session.test.ts`, `domain/tree.test.ts`, `domain/workspace.test.ts`, `renderer/src/features/workspace/hooks/use-workspace-session.test.ts`, `use-project-lifecycle.test.ts`, `use-hidden-files.test.ts`, `use-github-import.test.ts`, `use-file-operations.test.tsx`, `use-tree.test.ts`, `renderer/src/features/workspace/ui/file-tree.test.tsx`, `file-tree-keyboard.test.ts`, `file-tree-menu.test.tsx`, `sidebar.test.tsx`, `welcome.test.tsx`, `renderer/src/features/documents/domain/tabs.test.ts`, `domain/history.test.ts`, `renderer/src/features/documents/application/tabs-runtime.test.ts`, `renderer/src/features/documents/ui/workspace/tabs.test.tsx`, `ui/workspace/history-buttons.test.tsx`, `renderer/src/features/workspace/ui/file-tree-rows.test.tsx`, `file-tree-naming.test.tsx`, `renderer/src/features/retrieval/ui/search/surface.test.tsx`, `ui/search/exact-backend.test.tsx`, `renderer/src/app/composition/layout/workspace-layout.test.tsx`, `workspace-sidebar.test.tsx`, `workspace-titlebar.test.tsx`, `workspace-quick-open.test.tsx`, `agent-document-workspace.test.tsx`, `renderer/src/app/composition/commands/use-workspace-commands.test.tsx`, `use-quick-open-command.test.tsx`, `renderer/src/app/workflows/open-document.test.ts`, `retire-documents.test.ts`, `renderer/src/app/bootstrap/startup.test.tsx`, `use-boot-progress.test.tsx`, `server/routes/workspace-preferences.test.ts`, `server/__tests__/github-import.test.ts`, `server/routes/files.test.ts`, and `electron/workspace/session.test.cjs` |
 
 Only part of the Feature hooks row is public. `use-workspace.ts`,
-`use-workspace-session.ts`, `use-library.ts`, `use-library-lifecycle.ts`,
+`use-workspace-session.ts`, `use-project.ts`, `use-project-lifecycle.ts`,
 `use-files.ts`, `use-hidden-files.ts`, and `use-reveal.ts` are re-exported and
 are what the app composes with. The rest are private Seams inside the feature,
 reached only by its own views. Exporting one of those would create a second

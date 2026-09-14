@@ -67,7 +67,7 @@ function renderSurface(backends: readonly [SearchBackend, ...SearchBackend[]]) {
           backends={backends}
           decisionApi={indexDecisionApi()}
           focusRevision={0}
-          folderPath="/library/research"
+          folderPath="/project/research"
           onNavigate={onNavigate}
           onOpenSettings={vi.fn()}
           preparation={noPreparation}

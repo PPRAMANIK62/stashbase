@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { mapFolderSelection } from './folder-picker';
 
-describe('library folder picker adapter', () => {
+describe('project folder picker adapter', () => {
   it('maps selected, cancelled, and classified failure responses', () => {
-    expect(mapFolderSelection({ ok: true, folderPath: '/library/notes' })).toEqual({
+    expect(mapFolderSelection({ ok: true, folderPath: '/project/notes' })).toEqual({
       status: 'selected',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
     });
     expect(mapFolderSelection({ ok: true, folderPath: null })).toEqual({
       status: 'cancelled',

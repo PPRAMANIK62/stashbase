@@ -2,8 +2,8 @@ import { z } from "zod";
 
 const boundedText = (maximum: number) => z.string().max(maximum);
 
-/** `GET /api/library/agent-context-file?path=<folder>/<relative>` — what an
- *  Agent should read for one library source: the source itself, or its
+/** `GET /api/project/agent-context-file?path=<folder>/<relative>` — what an
+ *  Agent should read for one project source: the source itself, or its
  *  current prepared text when the format is prepared. */
 export const agentContextFileResponseSchema = z
   .object({
@@ -33,7 +33,7 @@ const agentAttachOutcomeSchema = z
   })
   .strict();
 
-/** `POST /api/agent/attach` — transient uploads written outside every library
+/** `POST /api/agent/attach` — transient uploads written outside every project
  *  folder, answered in request order. */
 export const agentAttachResponseSchema = z
   .object({ files: z.array(agentAttachOutcomeSchema).max(50) })

@@ -21,7 +21,7 @@ export interface ImportGitHubDialogProps {
 }
 
 /**
- * Import one public GitHub repository as a library folder.
+ * Import one public GitHub repository as a project folder.
  *
  * The URL and the destination name are refused inline by the same rules the
  * request will meet, so a reader is not told a URL is fine and then refused by
@@ -48,7 +48,7 @@ export function ImportGitHubDialog({
         <DialogHeader>
           <DialogTitle>Import from GitHub</DialogTitle>
           <DialogDescription>
-            Copy a public repository into your library. The original is never changed.
+            Copy a public repository into your project. The original is never changed.
           </DialogDescription>
         </DialogHeader>
         {/* One group, not two: the group is a proximity row, and a lone field

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import concurrent.futures
+import threading
 import subprocess
 import sys
 import tempfile
@@ -171,6 +173,74 @@ class StashbaseMfsTests(unittest.TestCase):
             finally:
                 service.close()
 
+    def test_registering_nested_folder_retires_old_parent_rows_in_either_bind_order(self) -> None:
+        for reopen in (False, True):
+            with self.subTest(reopen=reopen), tempfile.TemporaryDirectory() as data, tempfile.TemporaryDirectory() as folder:
+                nested = str(Path(folder) / "nested")
+                source = str(Path(nested) / "note.md")
+                service = stashbase_daemon.StashbaseMFS(data)
+                try:
+                    service.bind_folder({"folder": folder})
+                    service.upsert({"path": source, "content": "oldneedle"})
+                    if reopen:
+                        service.close()
+                        service = stashbase_daemon.StashbaseMFS(data)
+                        service.bind_folder({"folder": nested})
+                        service.bind_folder({"folder": folder})
+                    else:
+                        service.bind_folder({"folder": nested})
+                    service.upsert({"path": source, "content": "newneedle"})
+                    self.assertEqual(service.list_documents(folder), [])
+                    self.assertEqual(service.status(folder)["total"], 0)
+                    self.assertEqual(service.grep({"folder": folder, "query": "oldneedle"})["files"], [])
+                    self.assertEqual(service.grep({"folder": nested, "query": "newneedle"})["total_matches"], 1)
+                    service.delete({"path": source})
+                    self.assertEqual(service.list_documents(), [])
+                finally:
+                    service.close()
+
+    def test_embedding_activation_keeps_keyword_and_status_responsive(self) -> None:
+        entered, release = threading.Event(), threading.Event()
+
+        class SlowEmbedder(TinyEmbedder):
+            def embed_documents(self, texts):
+                entered.set()
+                if not release.wait(15):
+                    raise TimeoutError("test embedder was not released")
+                return super().embed_documents(texts)
+
+        with tempfile.TemporaryDirectory() as data, tempfile.TemporaryDirectory() as folder:
+            other = str(Path(folder) / "other")
+            service = stashbase_daemon.StashbaseMFS(data)
+            try:
+                binding = service.bind_folder({"folder": folder})
+                service.bind_folder({"folder": other})
+                for root in (folder, other):
+                    service.upsert({"path": str(Path(root) / "note.md"), "content": "needle"})
+                with concurrent.futures.ThreadPoolExecutor() as pool, mock.patch.object(
+                    stashbase_daemon, "make_embedder", return_value=SlowEmbedder()
+                ):
+                    try:
+                        activation = pool.submit(service.bind_folder, {"folder": folder, "api_key": "test-key"})
+                        self.assertTrue(entered.wait(8))
+                        activation.result(timeout=2)
+                        for root in (folder, other):
+                            result = pool.submit(service.grep, {"folder": root, "query": "needle"}).result(timeout=2)
+                            self.assertEqual(result["total_matches"], 1)
+                        pending = pool.submit(service.status, folder).result(timeout=2)
+                        self.assertEqual(pending["indexed"], 0)
+                        self.assertEqual(pending["pending_count"], 1)
+                        self.assertFalse(pending["up_to_date"])
+                        self.assertTrue(pool.submit(service.status, other).result(timeout=2)["up_to_date"])
+                    finally:
+                        release.set()
+                service._mfs.wait(binding["namespace"], 15)
+                self.assertEqual(service.status(folder)["indexed"], 1)
+                self.assertTrue(service.status(folder)["up_to_date"])
+            finally:
+                release.set()
+                service.close()
+
     def test_grep_uses_mfs_text_without_an_embedding_provider(self) -> None:
         with tempfile.TemporaryDirectory() as data, tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -237,6 +307,7 @@ class StashbaseMfsTests(unittest.TestCase):
                     service.bind_folder({
                         "folder": folder, "provider": "openai", "api_key": "new-key"
                     })
+                service._mfs.wait(binding["namespace"], 15)
                 self.assertEqual(
                     service._mfs.namespace_configuration(binding["namespace"]).indexing,
                     "hybrid",
@@ -263,6 +334,40 @@ class StashbaseMfsTests(unittest.TestCase):
                 api_key="secret", base_url="https://openrouter.ai/api/v1", timeout=60.0
             )
             self.assertEqual(calls, [{"model": "openai/text-embedding-3-small", "input": ["query"]}])
+
+    def test_removing_key_supersedes_pending_semantic_activation(self) -> None:
+        entered, release = threading.Event(), threading.Event()
+
+        class SlowEmbedder(TinyEmbedder):
+            def embed_documents(self, texts):
+                entered.set()
+                if not release.wait(15):
+                    raise TimeoutError("test embedder was not released")
+                return super().embed_documents(texts)
+
+        with tempfile.TemporaryDirectory() as data, tempfile.TemporaryDirectory() as folder:
+            service = stashbase_daemon.StashbaseMFS(data)
+            try:
+                binding = service.bind_folder({"folder": folder})
+                service.upsert({"path": str(Path(folder) / "note.md"), "content": "needle"})
+                with mock.patch.object(stashbase_daemon, "make_embedder", return_value=SlowEmbedder()):
+                    service.bind_folder({"folder": folder, "api_key": "test-key"})
+                self.assertTrue(entered.wait(8))
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    try:
+                        pool.submit(service.bind_folder, {"folder": folder}).result(timeout=2)
+                        self.assertEqual(service.status(folder)["pending_count"], 0)
+                        self.assertEqual(service.grep({"folder": folder, "query": "needle"})["total_matches"], 1)
+                    finally:
+                        release.set()
+                service._mfs.wait(binding["namespace"], 15)
+                self.assertEqual(service._mfs.namespace_configuration(binding["namespace"]).indexing, "off")
+                self.assertEqual(service.status(folder)["indexed"], 0)
+                service.upsert({"path": str(Path(folder) / "note.md"), "content": "newneedle"})
+                self.assertEqual(service.grep({"folder": folder, "query": "newneedle"})["total_matches"], 1)
+            finally:
+                release.set()
+                service.close()
 
     def test_only_byok_providers_are_accepted(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires api_key"):

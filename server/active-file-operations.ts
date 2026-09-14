@@ -34,22 +34,29 @@ export function readUtf8FileBounded(absPath: string, maxBytes = MAX_TEXT_READ_BY
   }
 }
 
-export async function readUtf8FileBoundedAsync(
-  absPath: string,
-  maxBytes = MAX_TEXT_READ_BYTES,
-): Promise<string> {
+export async function readUtf8FileBoundedAsync(absPath: string, maxBytes = MAX_TEXT_READ_BYTES): Promise<string> {
+  return (await readFileBytesBoundedAsync(absPath, maxBytes)).toString('utf8');
+}
+
+/** Bounded, complete reads shared by source snapshots and text consumers. */
+export async function readFileBytesBoundedAsync(absPath: string, maxBytes = MAX_TEXT_READ_BYTES): Promise<Buffer> {
   const handle = await fs.promises.open(absPath, 'r');
   try {
-    const st = await handle.stat();
-    if (!st.isFile()) throw new Error('path is not a file');
-    if (st.size > maxBytes) throw textReadSizeError(st.size, maxBytes);
-    const buffer = Buffer.alloc(Math.min(maxBytes + 1, st.size + 1));
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    if (bytesRead > maxBytes) throw textReadSizeError(bytesRead, maxBytes);
-    return buffer.subarray(0, bytesRead).toString('utf8');
-  } finally {
-    await handle.close();
-  }
+    const stat = await handle.stat();
+    if (!stat.isFile()) throw new Error('path is not a file');
+    if (stat.size > maxBytes) throw textReadSizeError(stat.size, maxBytes);
+    const chunks: Buffer[] = [];
+    let total = 0;
+    while (total <= maxBytes) {
+      const bytes = Buffer.alloc(Math.min(64 * 1024, maxBytes + 1 - total));
+      const { bytesRead } = await handle.read(bytes, 0, bytes.length, total);
+      if (!bytesRead) break;
+      chunks.push(bytes.subarray(0, bytesRead));
+      total += bytesRead;
+    }
+    if (total > maxBytes) throw textReadSizeError(total, maxBytes);
+    return Buffer.concat(chunks, total);
+  } finally { await handle.close(); }
 }
 
 function textReadSizeError(actual: number, max: number): Error {
@@ -138,11 +145,11 @@ export function saveBytes(relPath: string, bytes: Buffer): void {
   }
 }
 
-export async function saveTextAsync(relPath: string, content: string): Promise<void> {
-  await saveBytesAsync(relPath, Buffer.from(content, 'utf8'));
+export async function saveTextAsync(relPath: string, content: string, beforePublish?: () => Promise<void>): Promise<void> {
+  await saveBytesAsync(relPath, Buffer.from(content, 'utf8'), beforePublish);
 }
 
-export async function saveBytesAsync(relPath: string, bytes: Buffer): Promise<void> {
+export async function saveBytesAsync(relPath: string, bytes: Buffer, beforePublish?: () => Promise<void>): Promise<void> {
   const target = await resolveSafeAsync(relPath, 'creatable');
   await fs.promises.mkdir(path.dirname(target), { recursive: true });
   await resolveSafeAsync(relPath, 'creatable');
@@ -152,6 +159,7 @@ export async function saveBytesAsync(relPath: string, bytes: Buffer): Promise<vo
   );
   try {
     await fs.promises.writeFile(tmp, bytes);
+    await beforePublish?.();
     await fs.promises.rename(tmp, target);
   } catch (err) {
     try { await fs.promises.rm(tmp, { force: true }); } catch { /* best-effort */ }
@@ -298,18 +306,7 @@ async function readDirectTextFileBoundedAsync(
   sourceName: string,
   maxBytes = MAX_TEXT_READ_BYTES,
 ): Promise<string> {
-  const handle = await fs.promises.open(absPath, 'r');
-  try {
-    const st = await handle.stat();
-    if (!st.isFile()) throw new Error('path is not a file');
-    if (st.size > maxBytes) throw textReadSizeError(st.size, maxBytes);
-    const buffer = Buffer.alloc(Math.min(maxBytes + 1, st.size + 1));
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    if (bytesRead > maxBytes) throw textReadSizeError(bytesRead, maxBytes);
-    return decodeDirectTextBytes(sourceName, buffer.subarray(0, bytesRead));
-  } finally {
-    await handle.close();
-  }
+  return decodeDirectTextBytes(sourceName, await readFileBytesBoundedAsync(absPath, maxBytes));
 }
 
 /** True if a file or directory exists at the folder-relative path. */

@@ -16,9 +16,12 @@ import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 export function useSoftwareUpdate(port: UpdatesPort | null): SoftwareUpdateRow {
   const { failure, run, running, state } = useUpdates(port);
 
-  const check = useCallback(() => {
-    run((updater) => updater.check());
-  }, [run]);
+  const offer = updateOffer(state.status);
+  const action = offer.action;
+  const act = useCallback(() => {
+    if (action?.kind === 'primary') run((updater) => updater.runPrimaryAction());
+    else run((updater) => updater.check());
+  }, [action, run]);
 
   const setAutoCheck = useCallback(
     (enabled: boolean) => {
@@ -30,10 +33,11 @@ export function useSoftwareUpdate(port: UpdatesPort | null): SoftwareUpdateRow {
   return {
     autoCheckEnabled: state.autoCheckEnabled,
     busy: running || updateInProgress(state.status),
-    check,
+    act,
+    actionLabel: action?.label ?? 'Check for updates',
     failure,
     setAutoCheck,
-    status: updateOffer(state.status).sentence,
+    status: offer.sentence,
     version: state.currentVersion,
   };
 }

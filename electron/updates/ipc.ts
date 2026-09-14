@@ -3,9 +3,9 @@
  * machine's internal state into the snapshot a window may see, the authorized
  * channels that answer with it, and the push to live windows.
  *
- * Main's own state carries the installer's diagnostic sentence, the platform,
- * the release URL and the development simulation block, and several keys are
- * present with the value `undefined`. None of that crosses. The projection is
+ * Main's own state carries installer diagnostics and the development
+ * simulation block, and several keys have the value `undefined`. None of that
+ * crosses. The projection is
  * the only place that knowledge lives, so a state it cannot describe is
  * refused rather than sent, and main can never push a payload the renderer
  * would reject.
@@ -31,7 +31,7 @@ import {
   updatesSetSimulationRequestSchema,
   updatesSnapshotSchema,
 } from '../../shared/protocols/electron/updates.ts';
-import { authorizeSender, type SenderAuthorization } from '../library/dialog.ts';
+import { authorizeSender, type SenderAuthorization } from '../project/dialog.ts';
 
 export { UPDATES_CAPABILITY };
 
@@ -63,8 +63,8 @@ export interface UpdatesIpc {
 const version = z.string().trim().min(1).max(64);
 
 /** Only the keys the projection reads. A plain object schema strips the rest,
- *  which is where the installer message, the platform, the release URL, the
- *  simulation block and every `undefined`-valued key stop. */
+ *  which is where installer diagnostics, simulation controls, and future
+ *  unowned metadata stop. */
 const managerStateSchema = z.object({
   autoCheckEnabled: z.boolean(),
   availableVersion: version.optional(),

@@ -2,8 +2,10 @@
 
 ## User Outcome
 
-People can read, inspect, edit, and navigate supported local source files while
-the source remains the durable object shared with other tools and Agents.
+People turn ideas into local documents, read their references, revise text,
+and inspect and save the result. Files remain durable user-owned content
+shared with other tools and Agents. Drafting and ordinary revision are already
+implemented; document-specific diff for fine revision is the remaining feature.
 
 ## Scope and Non-goals
 
@@ -19,6 +21,11 @@ editor, a media editor, or a proprietary document format.
 
 ## Current Experience
 
+Writing can follow a project brainstorm or start directly from a new draft.
+Existing editing and save-conflict comparisons are usable today. They do not
+claim a completed writing-oriented diff or a universal accept/reject gate over
+Agent writes.
+
 - Recent Markdown tabs retain ready surfaces across common switches; other tabs
   reopen through an explicit loading state. Activating a clean tab observes
   external changes, and failed opens remain identifiable and retryable.
@@ -26,9 +33,10 @@ editor, a media editor, or a proprietary document format.
   same document model while changing the interaction boundary.
 - Common Markdown structures, local assets, links, Find, outlines, and search
   navigation work without turning rendered output into source truth.
-- A Markdown document may serve as a [Canvas](../glossary.md#canvas): Chat is
-  for exploring, while accepted decisions are explicitly written into the
-  ordinary source file.
+- A new Markdown draft or existing editable document can hold an outline,
+  prose, or a revision requested from the Agent. A document may also serve as
+  a [Canvas](../glossary.md#canvas) for decisions; that role is optional and
+  does not limit writing to already settled conclusions.
 - Valid JSON offers an accessible tree over the exact source text. Source mode
   remains available for malformed, incomplete, duplicate-key, or bounded-out
   content. Structured edits use the shared source-preserving save path rather
@@ -60,7 +68,7 @@ editor, a media editor, or a proprietary document format.
 - Restoring writes nothing. It opens the document when it is not already open
   and returns the text as an unsaved draft carrying the version it was typed
   over, so the ordinary save and conflict decisions still choose what reaches
-  disk. Drafts are application state held outside every library folder, so
+  disk. Drafts are application state held outside every project folder, so
   folder sync, backups, indexing, and Search never see them. Signing out of an
   account leaves them alone, because they belong to local files rather than to
   the account. Without operating-system key protection the journal is off and
@@ -73,13 +81,15 @@ editor, a media editor, or a proprietary document format.
   independently prepared fallback is pending or available. Image and media
   viewers keep source identity while adding format-appropriate navigation,
   playback, or transcript evidence.
+  A prepared DOCX fallback is shown only while complete and current. An asset
+  becoming unavailable fails that preview without terminating the shared service.
 - Safe workspace-relative links stay in StashBase. HTTP(S) links use the
   system browser. Markdown, DOCX, and Agent-rendered executable content stays
   inert.
 - The file tree's Copy Link action puts a ready-to-paste Markdown link to a
   file on the clipboard, relative to the open note when one exists.
 - The Markdown editor's slash menu offers a **Link to file…** item that
-  inserts a ready Markdown link to a picked library file, relative to the
+  inserts a ready Markdown link to a picked project file, relative to the
   open note; it is not offered on out-of-folder tabs.
 
 ## Format Capability Matrix
@@ -103,6 +113,9 @@ assertions.
 | Audio | `.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.opus`, `.aac`, `.aiff`, `.aif` | Source playback or compatible local audio preview | Preview-only | Prepared timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
 | Video container | `.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv`, `.avi` | Media playback when compatible, otherwise a local audio preview | Preview-only | Audio track prepared as timestamped transcript Markdown | `read_file` returns the current transcript; content writes are rejected |
 | Generic workspace file | Any other regular file, plus restricted filesystem entries | Strict UTF-8 text is read-only; otherwise an explicit binary, oversized, unavailable, symlink, special-entry, or cloud-placeholder state | No content editing | None; the muted tree state means Search and automatic Chat context exclude it | Not listed, read, written, moved, or deleted through Agent/MCP file tools |
+
+The local media fallback can demux AVI and extract its supported audio track;
+video-container support does not imply that every embedded codec is decodable.
 
 Rename and delete are file-mutation capabilities over regular files in the
 active Workbench, including generic regular files, and moving a file is
@@ -134,7 +147,7 @@ and never silently substituted for a whole read.
   on disk enters the ordinary conflict decision instead of overwriting newer
   bytes.
 - A recovered draft is application state for the whole life of the journal
-  entry. It never joins a library folder, Search, Preparation, indexing, or
+  entry. It never joins a project folder, Search, Preparation, indexing, or
   Agent access, and it does not outlive a confirmed save or an explicit
   discard.
 - Parsing or preview failure keeps the source identity visible and offers a
@@ -154,6 +167,11 @@ and never silently substituted for a whole read.
 
 ## Known Gaps
 
+These are limits or unsettled guarantees in the implemented document and
+recovery capabilities. They remain distinct from the unfinished
+[document-specific diff](#contribution-direction) and do not turn ordinary
+writing and revision into future features.
+
 - Executable local HTML and its remote subresources currently have a weaker
   boundary than the experience contract. The compatibility tradeoff and
   required confinement work are owned by
@@ -170,7 +188,7 @@ and never silently substituted for a whole read.
 - Nothing distinguishes a draft an interrupted session left from one a clean
   exit left behind, so a normal quit can still offer a draft whose text
   already matches the file. Drafts belonging to a folder that has left the
-  library are never offered at all and wait for the retention window.
+  project registry are never offered at all and wait for the retention window.
 
 ## Cross-area Seams
 
@@ -184,14 +202,23 @@ and never silently substituted for a whole read.
 
 ### Next
 
-- Improve narrow layouts, large tables, image captions, and large-document
-  continuity.
-- Improve navigation continuity among outlines, anchors, Find, and search.
-- Improve format-specific fallback and accessibility without hiding source
-  identity.
+**Document-specific diff — Coming soon.** Complete inline revision review in
+the readable document: retain paragraph formatting, mark deleted words and
+phrases with red strikethrough, highlight additions in green, and offer
+individual and whole-set accept/reject. The owning direction is
+[Product Direction](../product-direction.md#document-specific-diff--remaining-feature).
+Supported formats, change segmentation, pending-suggestion persistence, and
+save/conflict integration still need concrete design. Existing line comparisons
+do not establish this experience as complete.
+
+Maintain the implemented editor, navigation, format fallback, conflict, and
+recovery behavior while developing it. Reliability and accessibility gaps are
+maintenance of those capabilities, not missing drafting or revision features.
 
 ### Coordinate First
 
+- Document-diff decisions that cross Agent changes, save/version semantics,
+  revision storage, or per-change acceptance.
 - Schema, serializer, local asset, raw HTML, or link-handling changes.
 - Save/version semantics or a new editable source format.
 - Executable content, remote resource loading, or trust-boundary changes.

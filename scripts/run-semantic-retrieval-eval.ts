@@ -52,23 +52,31 @@ const result = await runSemanticRetrievalEval({
       import('../server/mfs-daemon.ts'),
     ]);
     const indexer = new MfsIndexer();
+    const { derivedPathsForPdf } = await import('../server/pdf.ts');
     const retrieval = createRetrieval({
       hasEmbeddingKey: () => true,
-      vectorSearch: (query, topK, folderRoot, pathPrefix, extensions) =>
+      hybridSearch: (query, topK, folderRoot, pathPrefix, extensions) =>
         indexer.search(query, topK, folderRoot, pathPrefix, extensions),
+      grep: (query, folderRoot, options) => indexer.grep(query, folderRoot, options),
     });
     return {
-      bind: (libraryRoot) => indexer.bindFolder(libraryRoot, embedder),
+      bind: (projectRoot) => indexer.bindFolder(projectRoot, embedder),
       indexDirect: async (sourcePath, content) => { await indexer.upsertFile(sourcePath, content); },
       indexPrepared: async (sourcePath, preparedText) => {
+        // The synthetic corpus supplies finished PDF text, bypassing the
+        // extractor but preserving Retrieval's production freshness boundary.
+        if (path.extname(sourcePath).toLowerCase() !== '.pdf') throw new Error('Prepared eval fixtures must be PDF sources');
+        const { notePath } = derivedPathsForPdf(sourcePath);
+        await fs.mkdir(path.dirname(notePath), { recursive: true });
+        await fs.writeFile(notePath, `${preparedText}\n<!-- stashbase-pdf-conversion: complete -->\n`);
         await indexer.upsertConvertedFile(sourcePath, preparedText);
       },
-      semanticSearch: async (query, chunkBudget, libraryRoot) => {
-        const found = await retrieval.search({ mode: 'semantic', query, folderRoot: libraryRoot, topK: chunkBudget });
+      semanticSearch: async (query, chunkBudget, projectRoot) => {
+        const found = await retrieval.search({ mode: 'hybrid', query, folderRoot: projectRoot, topK: chunkBudget });
         return found.evidence.map((item) => item.sourcePath);
       },
-      exactSearch: async (query, chunkBudget, libraryRoot) => {
-        const found = await retrieval.search({ mode: 'keyword', query, folderRoot: libraryRoot, topK: chunkBudget });
+      exactSearch: async (query, chunkBudget, projectRoot) => {
+        const found = await retrieval.search({ mode: 'grep', query, folderRoot: projectRoot, topK: chunkBudget });
         return found.evidence.map((item) => item.sourcePath);
       },
       close: () => getDaemon().close(),

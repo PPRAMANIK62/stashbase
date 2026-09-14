@@ -46,7 +46,7 @@ export interface InputMessageFileProps {
   /** Side of each preview tile in pixels. Defaults to 80. */
   filePreviewSize?: number;
   /** Extra tiles rendered in the preview row ahead of the attached files,
-   *  for attachments the consumer binds itself (a library mention, say).
+   *  for attachments the consumer binds itself (a project mention, say).
    *  Pass it only when there is something to show; the row collapses when
    *  both it and `files` are empty. */
   previewSlot?: ReactNode;

@@ -125,6 +125,11 @@ export function ComposerActions({
           type="button"
           variant="primary"
           size="icon-compact"
+          // A circle in both modes. Send and Stop are the same control — the
+          // glyph swaps, the box does not — and a terminal action is one of
+          // the two semantics `design-docs/visual-style.md` lets a box become
+          // a circle for, so the shape is chosen rather than inherited.
+          className={shape.circle}
           onClick={mode === 'stop' ? () => onStop?.() : onSend}
           disabled={mode === 'stop' ? disabled : !canSend}
           aria-label={label}

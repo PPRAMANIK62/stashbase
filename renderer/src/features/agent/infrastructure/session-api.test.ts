@@ -83,7 +83,7 @@ describe('Agent session API', () => {
           hasContent: true,
           id: 'session-1',
           lastModified: 42,
-          scope: { kind: 'library' },
+          scope: { kind: 'unbound' },
           title: 'Research',
         },
         new AbortController().signal,
@@ -113,7 +113,7 @@ describe('Agent session API', () => {
       send: () => undefined,
     };
     createAgentSessionAdapter(httpClient(), 'http://127.0.0.1:1', () => socket).connect(
-      { agent: 'stashbase', scope: { kind: 'library' } },
+      { agent: 'stashbase', scope: { kind: 'unbound' } },
       { onClose: vi.fn(), onEvent: (event) => events.push(event), onInvalidResponse: invalid },
     );
     messageListeners[0]?.({ data: JSON.stringify({ t: 'unknown' }) });
@@ -205,7 +205,7 @@ describe('Agent session API', () => {
       'http://127.0.0.1:1',
       () => socket,
     ).connect(
-      { access: 'default', agent: 'codex', scope: { kind: 'library' } },
+      { access: 'default', agent: 'codex', scope: { kind: 'unbound' } },
       { onClose: vi.fn(), onEvent: (event) => events.push(event), onInvalidResponse: vi.fn() },
     );
 

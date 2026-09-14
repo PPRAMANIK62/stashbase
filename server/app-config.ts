@@ -3,7 +3,7 @@
  * Writes enforce owner-only POSIX permissions; Windows relies on the user's
  * profile ACL. This module owns the file primitives and the user-preference
  * accessors (API keys, Agent Instructions, terminal CLI, embedder provider); `folder.ts`
- * reuses the same primitives for library membership. Extracted from folder.ts:
+ * reuses the same primitives for project membership. Extracted from folder.ts:
  * credentials and preferences have nothing to do with the folder registry, and
  * routes that only need a key shouldn't import the whole window-context machinery.
  */
@@ -17,12 +17,11 @@ import type {
   AppearancePreferences,
   AppearanceScale,
   AppearanceTheme,
-  CapturePreferences,
   OnboardingPreferences,
   UpdatePreferences,
   WorkspacePreferences,
 } from '../shared/preferences.ts';
-import type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
+import type { EmbedderProvider } from '../shared/embedding.ts';
 import type { LocalTranscriptionModelId } from '../shared/transcription.ts';
 import { normalizeHostedDisplayName, parseGoogleAvatarUrl } from './hosted-account-profile.ts';
 
@@ -30,12 +29,11 @@ export type {
   AppearancePreferences,
   AppearanceScale,
   AppearanceTheme,
-  CapturePreferences,
   OnboardingPreferences,
   UpdatePreferences,
   WorkspacePreferences,
 } from '../shared/preferences.ts';
-export type { EmbedderProvider, EmbeddingSource } from '../shared/embedding.ts';
+export type { EmbedderProvider } from '../shared/embedding.ts';
 import type { AgentModelCatalog } from '../shared/agent-runtime.ts';
 
 const log = logger('app-config');
@@ -46,7 +44,7 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 export interface RecentFolder {
   path: string;
   openedAt: string;
-  /** User-starred in the Welcome library list. Absent = not a favorite. */
+  /** User-starred in the Welcome project list. Absent = not a favorite. */
   favorite?: boolean;
 }
 
@@ -55,10 +53,6 @@ export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
   theme: 'system',
   uiScale: 'default',
   readingTextSize: 'default',
-};
-
-export const DEFAULT_CAPTURE_PREFERENCES: CapturePreferences = {
-  clipboardImageImport: false,
 };
 
 export const DEFAULT_UPDATE_PREFERENCES: UpdatePreferences = {
@@ -116,7 +110,7 @@ export interface AppConfigFile {
    *  `recentFolders` on the next write. */
   recentVaults?: RecentFolder[];
   apiKey?: string;
-  /** Library-wide embedding endpoint. `apiKey` at the top level and
+  /** Application-wide embedding provider configuration. `apiKey` at the top level and
    *  `openaiKey` are legacy OpenAI-only fields; new writes use
    *  `embedder.apiKey` so OpenRouter can be selected without overloading
    *  the old name. */
@@ -127,9 +121,9 @@ export interface AppConfigFile {
     model?: string;
     baseUrl?: string;
   };
-  /** Active BYOK provider. Retired values remain accepted here only so the
-   * startup migration can read old config files. */
-  embeddingSource?: EmbeddingSource | 'stashbase-account' | 'local';
+  /** Legacy source selection, read only for migration. The embedder provider
+   * and key now determine configuration; key writes remove this field. */
+  embeddingSource?: EmbedderProvider | 'stashbase-account' | 'local';
   account?: {
     session?: HostedAccountSession;
   };
@@ -163,9 +157,6 @@ export interface AppConfigFile {
   /** Bounded, user-wide presentation preferences. These deliberately avoid
    * arbitrary theme, font, spacing, and layout customization. */
   appearance?: Partial<AppearancePreferences>;
-  /** Explicit opt-ins for ambient capture. Absent and invalid values fail
-   * closed so upgrades never begin reading the clipboard automatically. */
-  capture?: Partial<CapturePreferences>;
   /** Application-level Workbench visibility preferences. Absent and invalid
    * values fail closed to the default safe view. */
   workspace?: Partial<WorkspacePreferences>;
@@ -175,11 +166,11 @@ export interface AppConfigFile {
   updates?: Partial<UpdatePreferences>;
   onboarding?: OnboardingPreferences;
   /** User-authored Chat guidance owned by StashBase. Folder entries use the
-   * exact spelling of library membership paths; `library` customizes the
-   * Library-wide default; no project file is created. */
+   * exact spelling of project membership paths; `project` customizes the
+   * unbound default; no project file is created. */
   agentInstructions?: {
     folders?: Array<{ path: string; text: string }>;
-    library?: string;
+    unbound?: string;
   };
   /** Each native runtime's last-read model catalog and the model it last ran
    * with nothing chosen. A memory rather than a preference: losing it costs
@@ -350,28 +341,18 @@ export function setHostedAccountSession(session: HostedAccountSession | undefine
   writeAppConfigStrict(cfg);
 }
 
-export function getEmbeddingSource(): EmbeddingSource {
-  const cfg = readAppConfig();
-  const direct = getEmbedderConfig();
-  if (isEmbedderProvider(cfg.embeddingSource) && cfg.embeddingSource === direct.provider) {
-    return cfg.embeddingSource;
-  }
-  return direct.provider;
-}
-
-export function setEmbeddingSource(source: EmbeddingSource): EmbeddingSource {
-  const cfg = readAppConfigStrict();
-  const direct = getEmbedderConfig();
-  if (!direct.apiKey || direct.provider !== source) throw new Error(`Add ${source === 'openrouter' ? 'an OpenRouter' : 'an OpenAI'} key before selecting it.`);
-  cfg.embeddingSource = source;
-  writeAppConfigStrict(cfg);
-  return source;
-}
-
+/** Key presence only; authentication, connectivity, and index readiness are separate. */
 export function isEmbeddingConfigured(): boolean {
-  const source = getEmbeddingSource();
-  const direct = getEmbedderConfig();
-  return direct.provider === source && !!direct.apiKey;
+  return !!getEmbedderConfig().apiKey;
+}
+
+/** Request backfill on first key setup or a provider change; rotation preserves vectors. */
+export function shouldBackfillAfterKeyChange(
+  previous: EmbedderProvider,
+  next: EmbedderProvider,
+  previouslyConfigured: boolean,
+): boolean {
+  return previous !== next || !previouslyConfigured;
 }
 
 export function getEmbedderConfig(): EmbedderConfig {
@@ -411,10 +392,7 @@ export function setEmbedderConfig(next: { provider: EmbedderProvider; apiKey?: s
   delete cfg.embedder.openaiKey;
   if (next.provider === 'openai' && cfg.embedder.apiKey) cfg.apiKey = cfg.embedder.apiKey;
   else delete cfg.apiKey;
-  if (cfg.embedder.apiKey) cfg.embeddingSource = next.provider;
-  else if (cfg.embeddingSource === next.provider) {
-    delete cfg.embeddingSource;
-  }
+  delete cfg.embeddingSource;
   writeAppConfigStrict(cfg);
   return getEmbedderConfig();
 }
@@ -484,37 +462,8 @@ export function normalizeAppearancePreferences(value: unknown): AppearancePrefer
   };
 }
 
-export interface AppearancePreferencesStore {
-  get(): AppearancePreferences;
-  set(next: Partial<AppearancePreferences>): AppearancePreferences;
-}
-
-/** The small injected seam keeps preference recovery and persistence testable
- * without coupling tests to the user's actual config file. */
-export function createAppearancePreferencesStore(io: {
-  read(): AppConfigFile;
-  write(config: AppConfigFile): void;
-}): AppearancePreferencesStore {
-  return {
-    get: () => normalizeAppearancePreferences(io.read().appearance),
-    set(next) {
-      const current = normalizeAppearancePreferences(io.read().appearance);
-      const resolved = normalizeAppearancePreferences({ ...current, ...next });
-      const config = io.read();
-      config.appearance = resolved;
-      io.write(config);
-      return resolved;
-    },
-  };
-}
-
-const appearancePreferences = createAppearancePreferencesStore({
-  read: readAppConfig,
-  write: writeAppConfigStrict,
-});
-
 export function getAppearancePreferences(): AppearancePreferences {
-  return appearancePreferences.get();
+  return normalizeAppearancePreferences(readAppConfig().appearance);
 }
 
 export function setAppearancePreferences(next: Partial<AppearancePreferences>): AppearancePreferences {
@@ -522,61 +471,6 @@ export function setAppearancePreferences(next: Partial<AppearancePreferences>): 
   const current = normalizeAppearancePreferences(cfg.appearance);
   const resolved = normalizeAppearancePreferences({ ...current, ...next });
   cfg.appearance = resolved;
-  writeAppConfigStrict(cfg);
-  return resolved;
-}
-
-export function normalizeCapturePreferences(value: unknown): CapturePreferences {
-  const raw = value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Partial<CapturePreferences>
-    : {};
-  return {
-    clipboardImageImport: typeof raw.clipboardImageImport === 'boolean'
-      ? raw.clipboardImageImport
-      : DEFAULT_CAPTURE_PREFERENCES.clipboardImageImport,
-  };
-}
-
-export interface CapturePreferencesStore {
-  get(): CapturePreferences;
-  set(next: Partial<CapturePreferences>): CapturePreferences;
-}
-
-export function createCapturePreferencesStore(io: {
-  read(): AppConfigFile;
-  write(config: AppConfigFile): void;
-}): CapturePreferencesStore {
-  return {
-    get: () => normalizeCapturePreferences(io.read().capture),
-    set(next) {
-      const config = io.read();
-      const resolved = normalizeCapturePreferences({
-        ...normalizeCapturePreferences(config.capture),
-        ...next,
-      });
-      config.capture = resolved;
-      io.write(config);
-      return resolved;
-    },
-  };
-}
-
-const capturePreferences = createCapturePreferencesStore({
-  read: readAppConfig,
-  write: writeAppConfigStrict,
-});
-
-export function getCapturePreferences(): CapturePreferences {
-  return capturePreferences.get();
-}
-
-export function setCapturePreferences(next: Partial<CapturePreferences>): CapturePreferences {
-  const cfg = readAppConfigStrict();
-  const resolved = normalizeCapturePreferences({
-    ...normalizeCapturePreferences(cfg.capture),
-    ...next,
-  });
-  cfg.capture = resolved;
   writeAppConfigStrict(cfg);
   return resolved;
 }
@@ -681,19 +575,15 @@ export function migrateLegacyEmbedderConfig(): void {
 }
 
 /** Retire former local and hosted-account embedding sources before the daemon
- * boots. A stored BYOK credential is restored when present; otherwise the
- * explicit source is removed. The account session itself remains available
- * to the hosted Agent runtime. */
+ * boots. Drop the obsolete selection while preserving the provider's stored
+ * key and the independent account session used by the hosted Agent runtime. */
 export function migrateRetiredEmbeddingSources(): void {
   const cfg = readAppConfigStrict();
   if (cfg.embeddingSource !== 'local' && cfg.embeddingSource !== 'stashbase-account') return;
 
-  const direct = getEmbedderConfig();
-  const next: EmbeddingSource | undefined = direct.apiKey ? direct.provider : undefined;
-  if (next) cfg.embeddingSource = next;
-  else delete cfg.embeddingSource;
+  delete cfg.embeddingSource;
   writeAppConfigStrict(cfg);
-  log.info(`retired unsupported embedding source${next ? `; selected ${next}` : '; no embedding source configured'}`);
+  log.info('retired unsupported embedding source; provider configuration is authoritative');
 }
 
 export function getOnboardingPreferences(): OnboardingPreferences {

@@ -74,6 +74,7 @@ const InlineInput = forwardRef<HTMLInputElement, InlineInputProps>(
       <input
         {...props}
         className={cn(
+          // shape-literal: removes a radius rather than choosing one.
           'block w-full rounded-none bg-transparent p-0 text-foreground outline-none',
           className,
         )}

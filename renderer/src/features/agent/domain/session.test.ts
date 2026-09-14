@@ -15,7 +15,7 @@ describe('Agent session domain', () => {
     const session = createAgentSessionState({
       agent: 'stashbase',
       id: 'chat-1',
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
     expect(session.connection).toEqual({ kind: 'draft' });
     expect(agentSessionIsBlank(session)).toBe(true);
@@ -32,7 +32,7 @@ describe('Agent session domain', () => {
     const draft = createAgentSessionState({
       agent: 'codex',
       id: 'chat-1',
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
     const connecting = transitionAgentSession(draft, { attempt: 0, kind: 'connect' });
     const restored = transitionAgentSession(connecting, {
@@ -54,18 +54,18 @@ describe('Agent session domain', () => {
     });
   });
 
-  it('resolves and labels explicit Library and folder scopes', () => {
-    expect(scopeForWindowFolder(null)).toEqual({ kind: 'library' });
-    expect(scopeForWindowFolder('/library/Research')).toEqual({
+  it('resolves and labels explicit unbound and folder scopes', () => {
+    expect(scopeForWindowFolder(null)).toEqual({ kind: 'unbound' });
+    expect(scopeForWindowFolder('/project/Research')).toEqual({
       kind: 'folder',
-      path: '/library/Research',
+      path: '/project/Research',
     });
-    expect(scopeLabel({ kind: 'library' })).toBe('Library');
-    expect(scopeLabel({ kind: 'folder', path: '/library/Research/' })).toBe('Research');
+    expect(scopeLabel({ kind: 'unbound' })).toBe('Chat');
+    expect(scopeLabel({ kind: 'folder', path: '/project/Research/' })).toBe('Research');
     expect(
       agentScopesEqual(
-        { kind: 'folder', path: '/library/Research' },
-        { kind: 'folder', path: '/library/Research' },
+        { kind: 'folder', path: '/project/Research' },
+        { kind: 'folder', path: '/project/Research' },
       ),
     ).toBe(true);
   });
@@ -74,7 +74,7 @@ describe('Agent session domain', () => {
     const initial = createAgentSessionState({
       agent: 'codex',
       id: 'chat-1',
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
     const awaiting = transitionAgentSession(initial, {
       id: 'permission-1',
@@ -151,7 +151,7 @@ describe('Agent session domain', () => {
     const initial = createAgentSessionState({
       agent: 'stashbase',
       id: 'chat-1',
-      scope: { kind: 'library' },
+      scope: { kind: 'unbound' },
     });
     const queued = transitionAgentSession(initial, {
       queue: Array.from({ length: 25 }, (_, index) => ({
@@ -169,7 +169,7 @@ describe('Agent session domain', () => {
 
   it('records a native file diff once as settled work', () => {
     const live = transitionAgentSession(
-      createAgentSessionState({ agent: 'stashbase', id: 'chat-1', scope: { kind: 'library' } }),
+      createAgentSessionState({ agent: 'stashbase', id: 'chat-1', scope: { kind: 'unbound' } }),
       { kind: 'ready' },
     );
     const change = {
@@ -204,14 +204,14 @@ describe('Agent session domain', () => {
     const initial = createAgentSessionState({
       agent: 'codex',
       id: 'chat-1',
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     const context = [
       {
         boundVersion: 3,
         format: 'pdf' as const,
         kind: 'source' as const,
-        source: { folderPath: '/library/Research', path: 'papers/report.pdf' },
+        source: { folderPath: '/project/Research', path: 'papers/report.pdf' },
       },
     ];
     const bound = transitionAgentSession(initial, { context, kind: 'set-context' });
@@ -242,7 +242,7 @@ describe('Agent session domain', () => {
     const initial = createAgentSessionState({
       agent: 'claude',
       id: 'chat-1',
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     expect(initial.skillCatalog).toEqual({ kind: 'empty' });
 
@@ -306,19 +306,19 @@ describe('Agent session domain', () => {
 
 describe('agent scope identity', () => {
   it('names each kind of scope once, so two readers cannot disagree', () => {
-    expect(agentScopeKey({ kind: 'library' })).toBe('library');
-    expect(agentScopeKey({ kind: 'folder', path: '/library/notes' })).toBe('/library/notes');
+    expect(agentScopeKey({ kind: 'unbound' })).toBe('unbound');
+    expect(agentScopeKey({ kind: 'folder', path: '/project/notes' })).toBe('/project/notes');
   });
 
-  it('separates folders from each other and from the Library', () => {
+  it('separates folders from each other and from an unbound conversation', () => {
     expect(agentScopeKey({ kind: 'folder', path: '/a' })).not.toBe(
       agentScopeKey({ kind: 'folder', path: '/b' }),
     );
     // Folder paths are absolute, which is what keeps them clear of the
-    // Library's literal spelling; a bare `library` would collide, and the
+    // unbound scope's literal spelling; a bare `unbound` would collide, and the
     // route refuses one for the same reason.
-    expect(agentScopeKey({ kind: 'folder', path: '/library' })).not.toBe(
-      agentScopeKey({ kind: 'library' }),
+    expect(agentScopeKey({ kind: 'folder', path: '/unbound' })).not.toBe(
+      agentScopeKey({ kind: 'unbound' }),
     );
   });
 });

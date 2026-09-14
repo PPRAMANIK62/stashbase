@@ -85,8 +85,10 @@ function connectionNotice(connection: AgentConnection): { settled: boolean; text
 function ChatWorkspace({
   catalog,
   catalogPort,
+  header = true,
   instructions: instructionsApi,
   onOpenAgentSettings,
+  onSignIn,
   onOpenExternal,
   onOpenSource,
   onReprocess,
@@ -187,7 +189,13 @@ function ChatWorkspace({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-surface-2">
+      {/* The name row is drawn in both layouts. With the whole card the
+       *  titlebar names the chat and the Chats panel beside it manages the
+       *  history and New chat, so the row has nothing to say and stands empty
+       *  rather than absent: a row that came and went with the layout would
+       *  move everything under it, the composer included, on every crossing. */}
       <ChatHeader
+        blank={!header}
         failure={renaming.failure}
         onRename={(session, title) => void renaming.rename(session, title)}
         session={active}
@@ -300,11 +308,19 @@ function ChatWorkspace({
                   {readyAgent && (
                     <AgentProviderControl
                       activeAgent={readyAgent}
-                      agents={catalog.readyAgents}
+                      // The whole catalog, so a runtime waiting on sign-in or
+                      // setup is still named. The gate below only appears when
+                      // nothing at all is ready, so this control is the one
+                      // place an unprepared runtime is offered.
+                      agents={catalog.agents}
                       disabled={activeTurn}
                       onAgentChange={(agent) => {
                         if (agent !== state.agent) runtime.newChat(agent, state.scope);
                       }}
+                      onPrepare={catalog.prepare}
+                      // The bundled runtime waits on the StashBase account,
+                      // which no catalog command starts.
+                      onSignIn={onSignIn}
                     />
                   )}
                   {readyAgent && readyAgent.abilities.modes.length > 0 && (
@@ -345,6 +361,7 @@ function ChatWorkspace({
           error={catalog.error}
           onOpenSettings={onOpenAgentSettings}
           onPrepare={catalog.prepare}
+          onSignIn={onSignIn}
           pending={gate.kind === 'setup' ? gate.pending : []}
           preparingAgentId={catalog.preparingAgentId}
         />

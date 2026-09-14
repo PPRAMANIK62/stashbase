@@ -35,7 +35,7 @@ export interface GitHubImportOptions {
 }
 
 /**
- * One public GitHub repository, acquired as a library folder.
+ * One public GitHub repository, acquired as a project folder.
  *
  * The URL and folder-name rules are the same modules the server validates
  * with, so a reader is refused inline by the rule that would refuse them

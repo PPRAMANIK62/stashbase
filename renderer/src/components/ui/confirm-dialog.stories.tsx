@@ -32,7 +32,7 @@ export const Destructive: Story = {
     destructive: true,
     details: (
       <div className="max-w-full rounded-md bg-muted px-2.5 py-2 font-mono text-caption break-all text-muted-foreground">
-        /library/notes/archive
+        /project/notes/archive
       </div>
     ),
     onCancel: noop,
@@ -46,12 +46,12 @@ export const Failed: Story = {
   args: {
     confirmLabel: 'Add',
     cancelLabel: 'Dismiss',
-    description: 'There is an image on your clipboard. Add it to this folder?',
-    failure: 'Could not save the clipboard image.',
+    description: 'Add the selected file to this folder?',
+    failure: 'Could not save the file.',
     onCancel: noop,
     onConfirm: noop,
     open: true,
-    title: 'Add image to StashBase?',
+    title: 'Add file to StashBase?',
   },
 };
 

@@ -12,6 +12,7 @@ import type {
   AppearanceChange,
   AppearancePreferences,
 } from '@/features/settings/domain/appearance';
+import type { LocalComponentStatus } from '@/features/settings/domain/local-component';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
 import type {
   TranscriptionModelOperation,
@@ -61,15 +62,6 @@ export interface AppearancePort {
   update(change: AppearanceChange, signal: AbortSignal): Promise<AppearancePreferences>;
 }
 
-export interface CapturePreferences {
-  readonly clipboardImageImport: boolean;
-}
-
-export interface CapturePort {
-  load(signal: AbortSignal): Promise<CapturePreferences>;
-  update(preferences: CapturePreferences, signal: AbortSignal): Promise<CapturePreferences>;
-}
-
 /** The StashBase account, which exists for OpenQuill's free credits. A
  *  sign-in is a browser round trip the server owns: the renderer starts it,
  *  hands the URL to the browser, and polls until the server says the flow
@@ -99,3 +91,8 @@ export type SettingsFailureKind = FeatureFailureKind<'invalid-request'>;
 
 export type SettingsError = FeatureError<'invalid-request'>;
 export const SettingsError = featureErrorClass<'invalid-request'>('SettingsError');
+
+export interface LocalComponentPort {
+  load(signal: AbortSignal): Promise<LocalComponentStatus>;
+  retry(signal: AbortSignal): Promise<LocalComponentStatus>;
+}

@@ -96,10 +96,10 @@ export interface AgentUploadOutcome {
 }
 
 export interface AgentContextPort {
-  /** Resolves one library source to what the Agent should read. A missing
+  /** Resolves one project source to what the Agent should read. A missing
    *  file is `not-found`; a format the Agent cannot read is `unsupported`. */
   resolve(source: SourceReference, signal: AbortSignal): Promise<ResolvedContextFile>;
-  /** Uploads transient files outside every library folder; outcomes follow
+  /** Uploads transient files outside every project folder; outcomes follow
    *  request order. */
   upload(files: File[], signal: AbortSignal): Promise<AgentUploadOutcome[]>;
 }

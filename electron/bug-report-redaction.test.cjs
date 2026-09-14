@@ -14,6 +14,19 @@ const {
 const POSIX_HOME = '/Users/Jane Doe';
 const WINDOWS_HOME = 'C:\\Users\\Jane Doe';
 
+test('standalone home paths terminate at prose whitespace and punctuation', () => {
+  for (const homeDir of [POSIX_HOME, WINDOWS_HOME]) {
+    for (const suffix of [' (permission denied)', '\tfailed', ')', ']', ',', ';', ': failed', '!']) {
+      const text = `Failed in ${homeDir}${suffix}`;
+      assert.equal(scanBugReportText(text, { homeDir }).safe, false);
+      const prepared = prepareBugReportText(text, { homeDir });
+      assert.equal(prepared.ok, true);
+      assert.equal(prepared.text, `Failed in ~${suffix}`);
+      assert.equal(scanBugReportText(prepared.text, { homeDir }).safe, true);
+    }
+  }
+});
+
 function logRedaction(input, result, label) {
   console.log('\n' + '='.repeat(80));
   console.log('[' + label + ']');
@@ -453,4 +466,28 @@ test('fail-closed preparation allows content that scans clean after redaction', 
       redactionCount: 1,
     }
   );
+});
+test('an unfinished quoted sensitive field cannot pass the independent scan or preparation', () => {
+  for (const text of [
+    '{"accessToken":"sample-private-value',
+    "password='sample-private-value",
+    'clientSecret="sample-private-value\\',
+  ]) {
+    assert.equal(scanBugReportText(text).safe, false);
+    const prepared = prepareBugReportText(text);
+    assert.equal(prepared.ok, false);
+    assert.equal('text' in prepared, false);
+  }
+});
+
+test('quoted standalone homes are redacted without matching a longer directory name', () => {
+  for (const homeDir of [POSIX_HOME, WINDOWS_HOME]) {
+    const text = JSON.stringify({ cwd: homeDir, other: homeDir + ' other' });
+    assert.equal(scanBugReportText(text, { homeDir }).safe, false);
+    const prepared = prepareBugReportText(text, { homeDir });
+    assert.equal(prepared.ok, true);
+    assert.deepEqual(JSON.parse(prepared.text), { cwd: '~', other: homeDir + ' other' });
+    assert.equal(scanBugReportText(prepared.text, { homeDir }).safe, true);
+    assert.equal(prepareBugReportText(`cwd='${homeDir}'`, { homeDir }).text, "cwd='~'");
+  }
 });

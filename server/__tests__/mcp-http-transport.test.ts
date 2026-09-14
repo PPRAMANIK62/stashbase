@@ -5,8 +5,8 @@ import express from 'express';
 import { mount } from '../routes/mcp-http.ts';
 import { createDockerMcpApp, createMcpHttpService } from '../mcp-http-service.ts';
 import type { McpHttpSettingsStore } from '../mcp-http-settings.ts';
-import { createLibraryOperations } from '../library-operations/index.ts';
-import { applyLineRange } from '../library-file-reader.ts';
+import { createProjectOperations } from '../project-operations/index.ts';
+import { applyLineRange } from '../project-file-reader.ts';
 
 const initRequest = {
   jsonrpc: '2.0',
@@ -25,11 +25,12 @@ const listRequest = {
 
 const callRequest = {
   jsonrpc: '2.0', id: 3, method: 'tools/call',
-  params: { name: 'library_info', arguments: {} },
+  params: { name: 'list_projects', arguments: {} },
 };
 
 test('HTTP transport enforces the live Settings token and preserves the shared tool surface', async () => {
   let token = 'a'.repeat(64);
+  let configured = false;
   let searchInput: Record<string, unknown> | undefined;
   let stdioSearchBody: Record<string, unknown> | undefined;
   let readInput: { path: unknown; range: unknown } | undefined;
@@ -39,10 +40,10 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
   let stdioCreateProjectAttribution: string | undefined;
   const app = express();
   app.use(express.json());
-  app.get('/api/library/info', (_req, res) => {
+  app.get('/api/project/info', (_req, res) => {
     res.json({ folder_home: '/tmp', folders: [] });
   });
-  app.get('/api/library/file', (req, res) => {
+  app.get('/api/project/file', (req, res) => {
     stdioReadQuery = req.query as Record<string, unknown>;
     res.json(applyLineRange({
       path: String(req.query.path),
@@ -54,11 +55,11 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       limit: req.query.limit == null ? undefined : Number(req.query.limit),
     }));
   });
-  app.post('/api/library/search', (req, res) => {
+  app.post('/api/project/search', (req, res) => {
     stdioSearchBody = req.body as Record<string, unknown>;
-    res.json({ hits: [] });
+    res.json({ mode: req.body.mode ?? 'keyword', folder: req.body.folder, hits: [] });
   });
-  app.post('/api/library/create-project', (req, res) => {
+  app.post('/api/project/create-project', (req, res) => {
     stdioCreateProjectBody = req.body as Record<string, unknown>;
     stdioCreateProjectAttribution = req.header('x-stashbase-agent-session-id') ?? undefined;
     res.json({ path: '/tmp/Project', name: 'Project', registered: true, rebound: true, note: 'ok' });
@@ -75,8 +76,9 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
   mount(app, {
     webBase: base,
     getToken: () => token,
-    operations: createLibraryOperations({
-      getLibraryInfo: () => ({ folder_home: '/tmp', folders: [] }),
+    operations: createProjectOperations({
+      hasEmbeddingKey: () => configured,
+      getProjectInfo: () => ({ folder_home: '/tmp', folders: [] }),
       normalizeSearchScope: async (_folder, pathPrefix) => ({
         folderRoot: '/tmp',
         pathPrefix: typeof pathPrefix === 'string' ? pathPrefix : undefined,
@@ -116,7 +118,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     const listed = await post(base, listRequest, token);
     assert.equal(listed.status, 200);
     assert.equal(listed.body.result.tools.length, 10);
-    const searchTool = listed.body.result.tools.find((tool: any) => tool.name === 'search_library');
+    const searchTool = listed.body.result.tools.find((tool: any) => tool.name === 'search_project');
     assert.deepEqual(
       searchTool.inputSchema.properties.types.items.enum,
       ['notes', 'data', 'pdf', 'image', 'docx', 'audio'],
@@ -179,7 +181,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       id: 4,
       method: 'tools/call',
       params: {
-        name: 'search_library',
+        name: 'search_project',
         arguments: {
           query: 'ExactMatch',
           mode: 'keyword',
@@ -194,7 +196,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     }, token);
     assert.equal(searched.status, 200);
     assert.deepEqual(searchInput, {
-      mode: 'keyword',
+      mode: 'grep',
       query: 'ExactMatch',
       topK: 3,
       folderRoot: '/tmp',
@@ -208,12 +210,23 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.equal(searchPayload.top_k, 3);
     assert.deepEqual(searchPayload.types, ['pdf', 'docx']);
 
+    for (const hasKey of [false, true, false]) {
+      configured = hasKey;
+      const automatic = await post(base, {
+        jsonrpc: '2.0', id: 40, method: 'tools/call',
+        params: { name: 'search_project', arguments: { query: 'draft', folder: '/tmp' } },
+      }, token);
+      assert.equal(automatic.status, 200);
+      assert.equal(searchInput?.mode, hasKey ? 'hybrid' : 'grep');
+      assert.equal(JSON.parse(automatic.body.result.content[0].text).mode, hasKey ? 'semantic' : 'keyword');
+    }
+
     const invalidSearch = await post(base, {
       jsonrpc: '2.0',
       id: 5,
       method: 'tools/call',
       params: {
-        name: 'search_library',
+        name: 'search_project',
         arguments: { query: 'paper', types: ['spreadsheet'] },
       },
     }, token);
@@ -226,7 +239,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       id: 7,
       method: 'tools/call',
       params: {
-        name: 'search_library',
+        name: 'search_project',
         arguments: { query: 'paper', mode: 'typo' },
       },
     }, token);
@@ -268,6 +281,9 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.equal(stdioPayload.mode, 'keyword');
     assert.equal(stdioPayload.top_k, 4);
     assert.deepEqual(stdioPayload.types, ['image']);
+    const automaticStdio = await runStdio(address.port, true);
+    assert.equal('mode' in (stdioSearchBody ?? {}), false);
+    assert.equal(JSON.parse(automaticStdio.searched.result.content[0].text).mode, 'keyword');
     assert.deepEqual(stdioReadQuery, { path: '/tmp/notes.md', offset: '2', limit: '1' });
     const stdioReadPayload = JSON.parse(stdio.read.result.content[0].text);
     assert.deepEqual(stdioReadPayload, {
@@ -362,7 +378,7 @@ async function waitForJsonLines(read: () => string, count: number): Promise<any[
   throw new Error(`timed out waiting for ${count} JSON lines: ${read()}`);
 }
 
-async function runStdio(port: number): Promise<{
+async function runStdio(port: number, omitMode = false): Promise<{
   initialized: any;
   listed: any;
   called: any;
@@ -391,10 +407,10 @@ async function runStdio(port: number): Promise<{
     id: 4,
     method: 'tools/call',
     params: {
-      name: 'search_library',
+      name: 'search_project',
       arguments: {
         query: 'diagram',
-        mode: 'keyword',
+        ...(omitMode ? {} : { mode: 'keyword' }),
         folder: '/tmp',
         types: ['image'],
         case_strict: true,

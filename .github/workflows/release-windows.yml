@@ -45,6 +45,10 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
       - uses: voidzero-dev/setup-vp@1b32467adbe183473499fd9d5d372c3ed9641754 # v1.18.0
         with:
           version: '0.3.0'
@@ -89,6 +93,9 @@ jobs:
       - name: Build Windows Python sidecars
         run: pnpm build:python-extract-sidecar
 
+      - name: Build PDF/OCR download component
+        run: pnpm build:extractor-component
+
       - name: Build Windows transcription sidecar
         shell: msys2 {0}
         run: bash scripts/build-transcription-sidecar.sh
@@ -97,7 +104,6 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-          STASHBASE_REQUIRE_EXTRACT: '1'
           STASHBASE_SKIP_SIDECAR_BUILD: '1'
           STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1'
         run: pnpm dist:win
@@ -141,9 +147,7 @@ jobs:
           }
 
       - name: Smoke packaged Windows server
-        env:
-          STASHBASE_REQUIRE_EXTRACT: '1'
-        run: node scripts/smoke-packaged-server.mjs --require-extract --require-transcription
+        run: node scripts/smoke-packaged-server.mjs --require-transcription
 
       - name: Upload Windows assets to release
         env:
@@ -151,7 +155,7 @@ jobs:
         shell: pwsh
         run: |
           $artifacts = Get-ChildItem -Path release.nosync -File |
-            Where-Object { $_.Name -match '(\.(exe|zip|blockmap)$|^latest.*\.ya?ml$)' -and $_.Length -gt 0 }
+            Where-Object { $_.Name -match '(\.(exe|zip|blockmap)$|^latest.*\.ya?ml$|^stashbase-extract-.*\.(tar\.gz|json)$)' -and $_.Length -gt 0 }
 
           if (-not ($artifacts | Where-Object { $_.Name -eq 'latest.yml' })) {
             Write-Error "Missing latest.yml Windows update metadata"

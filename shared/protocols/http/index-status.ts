@@ -65,6 +65,7 @@ export const indexStatusResponseSchema = z
     pendingConversions: z.array(relativePathSchema).max(100_000),
     pendingCount: countSchema,
     preparationFailures: z.array(preparationFailureSchema).max(100_000),
+    // Compatibility alias of semanticEnabled; both report key presence only.
     semanticAvailable: z.boolean(),
     semanticDisabledReason: z.string().max(500).optional(),
     semanticEnabled: z.boolean(),

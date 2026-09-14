@@ -120,9 +120,9 @@ export function mount(app: express.Express): void {
 
 /** Claude's compatibility adapter delegates the panel's history actions to
  * the SDK store without exposing those SDK details to routes or renderer.
- * A persisted session→folder override (create_project rebinding a library
+ * A persisted session→folder override (create_project rebinding a project
  * chat) wins over the native cwd: the overridden session lists under its
- * project folder and no longer under the library's reserved cwd. */
+ * project folder and no longer under the project's reserved cwd. */
 interface ClaudeHistoryDependencies {
   getMessages: typeof getSessionMessages;
   readNativeTranscript: typeof readClaudeNativeTranscript;

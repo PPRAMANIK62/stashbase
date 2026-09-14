@@ -51,7 +51,7 @@ async function waitForRenderer(win) {
       }, 25);
     })
   `);
-  // Boot auto-opens the most recent library folder and pushes its own
+  // Boot auto-opens the most recent project folder and pushes its own
   // window-folder registration. Wait for that push to settle before this
   // harness assigns folders, so the boot push cannot clobber ours.
   await win.webContents.executeJavaScript(`
@@ -75,7 +75,7 @@ async function openFolder(win, folder) {
     (async () => {
       const folder = ${JSON.stringify(folder)};
       const windowId = window.electron.windowId;
-      const response = await fetch('/api/folder', {
+      const response = await fetch('/api/projects/open', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -94,7 +94,7 @@ async function openFolder(win, folder) {
 
 async function currentFolder(win) {
   return win.webContents.executeJavaScript(`
-    fetch('/api/folder', {
+    fetch('/api/projects/open', {
       headers: { 'x-stashbase-window-id': window.electron.windowId },
     }).then((response) => response.json()).then((payload) => payload.current?.path ?? null)
   `);

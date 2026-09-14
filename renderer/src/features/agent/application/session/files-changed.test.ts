@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { filesChanged } from './files-changed';
 
-const folder = { kind: 'folder', path: '/library/Research' } as const;
+const folder = { kind: 'folder', path: '/project/Research' } as const;
 
 describe('filesChanged', () => {
   it('reports nothing when a settled write named no paths', () => {
@@ -29,10 +29,10 @@ describe('filesChanged', () => {
     expect(change?.sources).toEqual([]);
   });
 
-  it('names no source at all for a library-scoped write', () => {
-    const change = filesChanged({ kind: 'library' }, ['notes.md']);
+  it('names no source at all for a unbound write', () => {
+    const change = filesChanged({ kind: 'unbound' }, ['notes.md']);
 
-    expect(change?.scope).toEqual({ kind: 'library' });
+    expect(change?.scope).toEqual({ kind: 'unbound' });
     expect(change?.sources).toEqual([]);
   });
 });

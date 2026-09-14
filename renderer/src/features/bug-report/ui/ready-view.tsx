@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { failureMessage } from '@/features/bug-report/application/failure-messages';
 import type { BugReportReviewRuntime } from '@/features/bug-report/application/review-runtime';
 import type { ReadySession } from '@/features/bug-report/domain/review-session';
+import { useShape } from '@/lib/shape-context';
+import { cn } from '@/lib/utils';
 
 import { UNPREPARED_TEXT } from './labels';
 
@@ -13,6 +15,7 @@ export interface ReadyViewProps {
 }
 
 export function ReadyView({ runtime, session }: ReadyViewProps) {
+  const shape = useShape();
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const prepared = session.handoff.kind === 'prepared';
   const busy = session.pending !== null;
@@ -34,7 +37,12 @@ export function ReadyView({ runtime, session }: ReadyViewProps) {
         </p>
       </header>
       {session.handoff.kind !== 'prepared' && (
-        <section className="flex flex-col gap-2 rounded-md border border-destructive bg-surface-1 p-3">
+        <section
+          className={cn(
+            'flex flex-col gap-2 border border-destructive bg-surface-1 p-3',
+            shape.panel,
+          )}
+        >
           <p className="text-body">
             {session.handoff.kind === 'failed'
               ? failureMessage(session.handoff.failure.kind)
@@ -51,7 +59,9 @@ export function ReadyView({ runtime, session }: ReadyViewProps) {
         </section>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        <section className="flex flex-col gap-2 rounded-md border border-border bg-surface-1 p-3">
+        <section
+          className={cn('flex flex-col gap-2 border border-border bg-surface-1 p-3', shape.panel)}
+        >
           <p className="text-body text-muted-foreground">
             The report files will be saved to your Downloads folder, and a prefilled GitHub issue
             will open. Attach the files to the issue.
@@ -65,7 +75,9 @@ export function ReadyView({ runtime, session }: ReadyViewProps) {
             Open GitHub
           </Button>
         </section>
-        <section className="flex flex-col gap-2 rounded-md border border-border bg-surface-1 p-3">
+        <section
+          className={cn('flex flex-col gap-2 border border-border bg-surface-1 p-3', shape.panel)}
+        >
           <p className="text-body text-muted-foreground">
             Save the report files to your Downloads folder without opening GitHub.
           </p>

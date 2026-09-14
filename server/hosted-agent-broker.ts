@@ -244,7 +244,7 @@ export class HostedAgentBroker {
       const upstreamCode = nested?.code ?? payload?.code;
       const allowanceMessage = upstreamCode === 'agent_turn_budget_exhausted'
         ? `This Agent turn reached its spending limit. ${upstreamMessage}`
-        : `StashBase weekly Agent allowance exhausted. ${upstreamMessage}`;
+        : `OpenQuill free credits are exhausted. ${upstreamMessage}`;
       writeJson(response, upstream.status, {
         error: {
           message: upstream.status === 402

@@ -1,11 +1,11 @@
 /**
- * Streamable HTTP transport for the library MCP server.
+ * Streamable HTTP transport for the project MCP server.
  *
  * URL-only server clients attach at `POST /mcp`. Transport plumbing only:
  * each request gets a stateless server instance from the shared factory in
- * `mcp/library-server.ts`, backed directly by the app's Library Operations
+ * `mcp/project-server.ts`, backed directly by the app's Project Operations
  * module. The separately spawned stdio shim reaches those operations through
- * the `/api/library/*` HTTP adapter.
+ * the `/api/project/*` HTTP adapter.
  *
  * Every request must carry the Settings-managed bearer token. The loopback
  * route is mounted on the app server; an optional Docker-facing listener
@@ -18,9 +18,9 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createLibraryMcpServer } from '../../mcp/library-server.ts';
+import { createProjectMcpServer } from '../../mcp/project-server.ts';
 import { logger, errorMessage } from '../log.ts';
-import { createLibraryOperations, type LibraryOperations } from '../library-operations/index.ts';
+import { createProjectOperations, type ProjectOperations } from '../project-operations/index.ts';
 
 const log = logger('mcp-http');
 
@@ -28,7 +28,7 @@ export interface McpHttpTransportOptions {
   webBase: string;
   getToken(): string;
   /** Test-only or composition-root override for the in-process adapter. */
-  operations?: LibraryOperations;
+  operations?: ProjectOperations;
 }
 
 export function mount(app: express.Express, options: McpHttpTransportOptions): void {
@@ -64,9 +64,9 @@ async function handleMcpPost(
     });
     return;
   }
-  const server = createLibraryMcpServer({
+  const server = createProjectMcpServer({
     webBase: options.webBase,
-    operations: options.operations ?? createLibraryOperations(),
+    operations: options.operations ?? createProjectOperations(),
   });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,

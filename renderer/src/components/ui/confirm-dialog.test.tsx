@@ -59,8 +59,8 @@ describe('ConfirmDialog', () => {
   });
 
   it('shows the extra detail a question carries', async () => {
-    renderDialog({ details: <p>/library/notes/draft.md</p> });
+    renderDialog({ details: <p>/project/notes/draft.md</p> });
     const panel = await screen.findByRole('dialog', { name: 'Delete file?' });
-    expect(panel.textContent).toContain('/library/notes/draft.md');
+    expect(panel.textContent).toContain('/project/notes/draft.md');
   });
 });

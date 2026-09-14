@@ -39,7 +39,7 @@ interface SidebarMenuSubButtonProps extends AnchorHTMLAttributes<HTMLAnchorEleme
 const SidebarMenuSubButton = forwardRef<HTMLAnchorElement, SidebarMenuSubButtonProps>(
   ({ isActive = false, icon: Icon, label, render, className, children, ...props }, ref) => {
     const buttonRef = useRef<HTMLAnchorElement | null>(null);
-    const { lit, itemShape, compact, iconSize, textClass, gutterVars } = useRowButton(
+    const { itemShape, compact, iconSize, textClass, gutterVars } = useRowButton(
       buttonRef,
       isActive,
     );
@@ -65,10 +65,10 @@ const SidebarMenuSubButton = forwardRef<HTMLAnchorElement, SidebarMenuSubButtonP
         style: { ...gutterVars, ...props.style },
       },
       <>
-        {Icon && <RowIcon icon={Icon} lit={lit} size={iconSize} />}
+        {Icon && <RowIcon icon={Icon} size={iconSize} />}
         {/* Sub-rows keep the parent rows' type size — only the row height
             steps down. */}
-        <MenuRowLabel extras={content} label={label} lit={lit} textClass={textClass} />
+        <MenuRowLabel extras={content} label={label} textClass={textClass} />
       </>,
     );
   },

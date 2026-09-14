@@ -11,7 +11,7 @@ describe('exact search API', () => {
         body: {
           files: [
             {
-              folder: '/library/research',
+              folder: '/project/research',
               matches: [{ line: 4, ranges: [[0, 6]], text: 'answer text' }],
               path: 'notes/answer.md',
               totalMatches: 1,
@@ -29,7 +29,7 @@ describe('exact search API', () => {
       createExactSearchAdapter(client).search(
         {
           caseSensitive: false,
-          folderPath: '/library/research',
+          folderPath: '/project/research',
           query: 'answer',
           wholeWord: false,
         },
@@ -38,20 +38,20 @@ describe('exact search API', () => {
     ).resolves.toMatchObject({
       files: [
         {
-          id: '/library/research\u0000notes/answer.md',
-          source: { folderPath: '/library/research', path: 'notes/answer.md' },
+          id: '/project/research\u0000notes/answer.md',
+          source: { folderPath: '/project/research', path: 'notes/answer.md' },
         },
       ],
     });
     expect(client.request).toHaveBeenCalledWith({
       body: {
         case_strict: false,
-        folder: '/library/research',
+        folder: '/project/research',
         query: 'answer',
         whole_word: false,
       },
       method: 'POST',
-      path: '/api/library/keyword-search',
+      path: '/api/project/keyword-search',
       signal,
     });
   });
@@ -64,7 +64,7 @@ describe('exact search API', () => {
       malformed.search(
         {
           caseSensitive: false,
-          folderPath: '/library/research',
+          folderPath: '/project/research',
           query: 'answer',
           wholeWord: false,
         },
@@ -82,7 +82,7 @@ describe('exact search API', () => {
       unavailable.search(
         {
           caseSensitive: false,
-          folderPath: '/library/research',
+          folderPath: '/project/research',
           query: 'answer',
           wholeWord: false,
         },

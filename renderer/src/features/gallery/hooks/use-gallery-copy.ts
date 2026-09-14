@@ -31,7 +31,7 @@ export function useGalleryCopy(port: Pick<GalleryPort, 'copy'>): GalleryCopyStat
         try {
           await port.copy({ name: entry.name, repo: entry.repo }, signal);
         } catch (error) {
-          // The Library is unchanged by a failed copy, so the entry stays on
+          // The project registry is unchanged by a failed copy, so the entry stays on
           // screen and the same button retries it.
           setIssue(copyFailureMessage(error));
         } finally {

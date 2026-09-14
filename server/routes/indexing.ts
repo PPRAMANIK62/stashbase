@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import { logger } from '../log.ts';
 import {
   getCurrentFolder,
-  exactMemberFolderRootAsync,
+  exactRegisteredFolderRootAsync,
   resolveFolderRootAsync,
 } from '../folder.ts';
 import {
@@ -54,7 +54,7 @@ function parseFolderParam(value: unknown): string | undefined {
 
 async function requireMemberFolderRoot(ref: string): Promise<string> {
   const root = await resolveFolderRootAsync(ref);
-  const memberRoot = await exactMemberFolderRootAsync(root);
+  const memberRoot = await exactRegisteredFolderRootAsync(root);
   if (!memberRoot) {
     const err = new Error('folder is not in your folders');
     (err as any).status = 404;
@@ -84,7 +84,7 @@ function sourcePathForAbs(absPath: string): string {
 }
 
 /** Resolve an explicit-folder request without allowing a symlink inside the
- * library folder to redirect preparation/extraction outside that folder.
+ * project folder to redirect preparation/extraction outside that folder.
  *
  * Uses the promise-based resolver so canonicalization, realpath, existence,
  * and type checks can move off the single Node request-handling event loop. */
@@ -279,7 +279,7 @@ export function mount(app: express.Express): void {
       const prefixAbs = await resolveScopePrefix(folderRoot, req.body?.path_prefix);
       if (prefixAbs === false) return res.status(400).json({ error: 'path_prefix must be a folder-relative subfolder' });
       const result = await retrieval.search({
-        mode: 'semantic', query, topK, folderRoot, pathPrefix: prefixAbs, types,
+        mode: 'hybrid', query, topK, folderRoot, pathPrefix: prefixAbs, types,
       });
       if (result.availability.state === 'unavailable') {
         return res.status(412).json({
@@ -321,7 +321,7 @@ export function mount(app: express.Express): void {
       const prefixAbs = await resolveScopePrefix(folderDir, rawPrefix);
       if (prefixAbs === false) return res.status(400).json({ error: 'path_prefix must be a folder-relative subfolder' });
       const result = await retrieval.search({
-        mode: 'keyword', query, folderRoot: folderDir, pathPrefix: prefixAbs,
+        mode: 'grep', query, folderRoot: folderDir, pathPrefix: prefixAbs,
         caseStrict, wholeWord, types,
       });
       // Keep the same visible-source remap as semantic retrieval. Internal
@@ -361,7 +361,7 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // File preparation status: full map, library-wide. Used by rich
+  // File preparation status: full map across registered projects. Used by rich
   // viewers to render per-file failure banners (cheaper than polling
   // folder-scoped /api/index-status when the viewer just needs one
   // file's status).

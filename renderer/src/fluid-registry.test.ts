@@ -68,6 +68,7 @@ const publicComponentStories = [
   'command-menu.stories.tsx',
   'confirm-dialog.stories.tsx',
   'dialog.stories.tsx',
+  'disclosure.stories.tsx',
   'dropdown.stories.tsx',
   'elevated.stories.tsx',
   'file-thumbnail.stories.tsx',

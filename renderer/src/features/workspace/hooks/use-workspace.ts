@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef } from 'react';
 
-import type { LibraryPort } from '@/features/workspace/application/ports';
-import { createWorkspaceQueryScope, libraryQuery } from '@/features/workspace/application/queries';
+import type { ProjectRegistryPort } from '@/features/workspace/application/ports';
+import { createWorkspaceQueryScope, projectQuery } from '@/features/workspace/application/queries';
 import {
   createWorkspaceRuntime,
   type WorkspaceRuntime,
@@ -12,7 +12,7 @@ import { useScopedRuntime } from '@/shared/runtime/use-scoped-runtime';
 import type { WorkspaceSessionController } from './use-workspace-session';
 
 /**
- * The workspace runtime for the folder the library says is active.
+ * The workspace runtime for the folder the project says is active.
  *
  * A runtime is built per folder and per generation and never outlives either,
  * so nothing can act on a folder the reader has already left. The session is
@@ -22,7 +22,7 @@ import type { WorkspaceSessionController } from './use-workspace-session';
  * than a runtime plus a persistence hook a caller could forget.
  */
 export function useWorkspace(
-  api: LibraryPort,
+  api: ProjectRegistryPort,
   session?: WorkspaceSessionController,
 ): WorkspaceRuntime | null {
   const status = session?.status ?? null;
@@ -30,7 +30,7 @@ export function useWorkspace(
   const sessionReady = status === null || status.kind === 'ready';
   const queryClient = useQueryClient();
   const folder = useQuery({
-    ...libraryQuery(api),
+    ...projectQuery(api),
     select: (snapshot) => snapshot.activeFolder,
   }).data;
   const nextGeneration = useRef(0);

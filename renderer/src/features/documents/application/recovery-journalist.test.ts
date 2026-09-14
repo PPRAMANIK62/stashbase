@@ -15,7 +15,7 @@ import {
 } from './recovery-journalist';
 import { createDocumentTabsRuntime } from './tabs-runtime';
 
-const source = { folderPath: '/library/notes', path: 'plan.md' };
+const source = { folderPath: '/project/notes', path: 'plan.md' };
 const notYet = () => undefined;
 
 function harness(api: RecoveryDraftPort = recoveryApi()) {

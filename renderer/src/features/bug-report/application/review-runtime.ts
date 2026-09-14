@@ -2,8 +2,8 @@
  * The review window's one runtime: the session store, and the commands the
  * form and the ready view call.
  *
- * Mutating commands run on one serialized chain, as the legacy page queued
- * them, so a selection and a description commit never interleave on main.
+ * Mutating commands run on one serialized chain so a selection and a
+ * description commit never interleave on main.
  * Each command captures the session generation before its first await and
  * stamps its events with it; the reducer drops whatever a reopen made stale.
  * Preview reads stay off the chain: they change nothing on main.
@@ -81,7 +81,11 @@ export function createBugReportReviewRuntime(
    *  confirmed, so a prepare can stop before approving unconfirmed text. */
   async function commit(generation: number): Promise<boolean> {
     const state = current();
-    if (state.kind !== 'reviewing' || state.generation !== generation) return false;
+    if (
+      (state.kind !== 'reviewing' && state.kind !== 'preparing') ||
+      state.generation !== generation
+    )
+      return false;
     if (!state.dirty) return true;
     dispatch({ generation, type: 'description-commit-started' });
     try {
@@ -170,8 +174,9 @@ export function createBugReportReviewRuntime(
         const state = current();
         if (state.kind !== 'reviewing') return;
         const { generation } = state;
-        if (!(await commit(generation))) return;
+        // Lock before the final save, including its IPC round trip.
         dispatch({ generation, type: 'prepare-started' });
+        if (!(await commit(generation))) return;
         try {
           const outcome = await port.prepare();
           dispatch(

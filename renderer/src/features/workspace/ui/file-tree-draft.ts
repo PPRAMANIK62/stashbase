@@ -1,9 +1,10 @@
 /**
- * The draft the window asked the tree to make. The request waits in the
- * folder's store until the listing is here to place and name it, an Untitled
- * beside the selection made at once, and the new row takes the rename the
+ * The create the window asked the tree to make. The request waits in the
+ * folder's store until the listing is here to place it beside the selection:
+ * a draft is an Untitled made at once, whose new row takes the rename the
  * moment the refreshed listing shows it, so the name is the first thing
- * typed.
+ * typed; a folder starts the tree's own name-first create where the
+ * selection sits.
  */
 import { useEffect } from 'react';
 import { useStore } from 'zustand';
@@ -34,6 +35,7 @@ export function useTreeDraft({
   listing: WorkspaceListing | undefined;
   /** The tree's create and rename verbs, and the row waiting for a rename. */
   operations: {
+    beginCreate(entryKind: WorkspaceEntry['kind'], parentPath: string): void;
     beginRename(entry: WorkspaceEntry): void;
     consumeRenamePath(): void;
     createDraft(parentPath: string, name: string): Promise<void>;
@@ -46,7 +48,7 @@ export function useTreeDraft({
   setRenameCaret(offset: number | undefined): void;
   setRovingPath(path: string): void;
 }): void {
-  const { beginRename, consumeRenamePath, createDraft, renamePath } = operations;
+  const { beginCreate, beginRename, consumeRenamePath, createDraft, renamePath } = operations;
   const pendingCreate = useStore(runtime.store, (state) => state.pendingCreate);
 
   // The request is cleared as it is taken up, so the same ask can be made
@@ -57,9 +59,13 @@ export function useTreeDraft({
     runtime.accept(captured, () => {
       runtime.store.setState(clearTreeCreate);
       const parent = treeCreationParent(listing, runtime.store.getState().selectedPath);
+      if (pendingCreate.kind === 'folder') {
+        beginCreate('folder', parent);
+        return;
+      }
       void createDraft(parent, untitledDraftName(listing, parent));
     });
-  }, [createDraft, listing, pendingCreate, runtime]);
+  }, [beginCreate, createDraft, listing, pendingCreate, runtime]);
 
   // The row is selected and renamed with the stem of its name ready to be
   // typed over; the rename row focuses itself when it mounts.

@@ -4,7 +4,7 @@
  * active folder, where files are indexed + tree-visible + tracked by git),
  * these are written to a throwaway OS temp dir and referenced by absolute
  * path: the agent reads them via its Read tool, but they never land in
- * the user's library.
+ * the user's project.
  */
 import express from 'express';
 import multer from 'multer';

@@ -12,7 +12,7 @@ import { agentContextPort, agentSessionPort, type FakeAgentSession } from '@/tes
 
 import { AgentContextComposer } from './context-composer';
 
-const SCOPE = { kind: 'folder', path: '/library/Research' } as const;
+const SCOPE = { kind: 'folder', path: '/project/Research' } as const;
 
 const environment: AgentScopeEnvironment = {
   folderPath: SCOPE.path,
@@ -167,7 +167,7 @@ describe('Agent context composer', () => {
         boundVersion: null,
         format: 'md',
         kind: 'source',
-        source: { folderPath: '/library/Plans', path: 'gone.md' },
+        source: { folderPath: '/project/Plans', path: 'gone.md' },
       });
     });
     await act(async () => {

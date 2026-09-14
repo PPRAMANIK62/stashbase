@@ -19,10 +19,10 @@ export function AppearancePanel({ appearanceApi }: AppearancePanelProps) {
   const preferences = appearance.preferences;
 
   return (
-    <SettingsPane lede="Choices that apply to every StashBase window." title="Appearance">
+    <SettingsPane lede="Customize the appearance of all StashBase windows." title="Appearance">
       <SettingsGroup
         hint={appearance.failure ? <FailureNotice failure={appearance.failure} /> : undefined}
-        title="Presentation"
+        title="Display"
       >
         <SettingsList>
           {APPEARANCE_ROWS.map((row) => (

@@ -11,7 +11,7 @@ import {
   type DocumentHistoryState,
 } from './history';
 
-const source = (path: string) => ({ folderPath: '/library/notes', path });
+const source = (path: string) => ({ folderPath: '/project/notes', path });
 const paths = (state: DocumentHistoryState) => state.entries.map((entry) => entry.source.path);
 
 describe('document history', () => {

@@ -11,17 +11,17 @@ const sources: QuickOpenSource[] = [
   {
     action: 'open',
     retrievalAccess: 'included',
-    source: { folderPath: '/library/notes', path: 'notes/plan.md' },
+    source: { folderPath: '/project/notes', path: 'notes/plan.md' },
   },
   {
     action: 'open',
     retrievalAccess: 'excluded',
-    source: { folderPath: '/library/notes', path: 'archive/report.bin' },
+    source: { folderPath: '/project/notes', path: 'archive/report.bin' },
   },
   {
     action: 'reveal',
     retrievalAccess: 'excluded',
-    source: { folderPath: '/library/notes', path: 'linked/report.bin' },
+    source: { folderPath: '/project/notes', path: 'linked/report.bin' },
   },
 ];
 
@@ -83,7 +83,7 @@ describe('Quick Open', () => {
     await user.keyboard('{ArrowDown}{Enter}');
     expect(onNavigate).toHaveBeenCalledWith({
       type: 'reveal-source',
-      source: { folderPath: '/library/notes', path: 'linked/report.bin' },
+      source: { folderPath: '/project/notes', path: 'linked/report.bin' },
     });
     expect(onNavigate).toHaveBeenCalledOnce();
   });
@@ -109,7 +109,7 @@ describe('Quick Open', () => {
     expectFocused(input);
     expect(onNavigate).toHaveBeenCalledWith({
       type: 'reveal-source',
-      source: { folderPath: '/library/notes', path: 'linked/report.bin' },
+      source: { folderPath: '/project/notes', path: 'linked/report.bin' },
     });
   });
 

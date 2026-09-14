@@ -4,7 +4,7 @@ import type { HttpClient } from '@/platform/http/client';
 
 import { createPreparationControlAdapter } from './control-api';
 
-const source = { folderPath: '/library/research', path: 'talks/keynote.mp3' };
+const source = { folderPath: '/project/research', path: 'talks/keynote.mp3' };
 const signal = new AbortController().signal;
 
 describe('preparation control API', () => {
@@ -18,7 +18,7 @@ describe('preparation control API', () => {
     expect(mode).toBe('conversion');
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: { folder: '/library/research', language: 'en', path: 'talks/keynote.mp3' },
+        body: { folder: '/project/research', language: 'en', path: 'talks/keynote.mp3' },
         method: 'POST',
         path: '/api/files/reprocess',
       }),
@@ -58,14 +58,14 @@ describe('preparation control API', () => {
       status: 200,
     }));
     await expect(
-      createPreparationControlAdapter({ request }).sync('/library/research', signal),
+      createPreparationControlAdapter({ request }).sync('/project/research', signal),
     ).resolves.toBe(true);
     expect(request).toHaveBeenCalledWith(
-      expect.objectContaining({ method: 'POST', path: '/api/sync?folder=%2Flibrary%2Fresearch' }),
+      expect.objectContaining({ method: 'POST', path: '/api/sync?folder=%2Fproject%2Fresearch' }),
     );
     const cancelled = vi.fn(async () => ({ body: { cancelled: true }, status: 200 }));
     await expect(
-      createPreparationControlAdapter({ request: cancelled }).sync('/library/research', signal),
+      createPreparationControlAdapter({ request: cancelled }).sync('/project/research', signal),
     ).resolves.toBe(false);
   });
 });

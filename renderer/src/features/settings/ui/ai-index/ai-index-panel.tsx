@@ -5,7 +5,6 @@
  * Agents section and buys OpenQuill's credits, not search.
  */
 
-import { KeyRound, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -24,11 +23,18 @@ import { useEmbedder, type EmbedderViewModel } from '@/features/settings/hooks/u
 import {
   SettingsGroup,
   SettingsList,
+  SettingsMessage,
   SettingsPane,
   SettingsRow,
   StatusChip,
 } from '@/features/settings/ui/rows';
 import { FailureNotice } from '@/shared/ui/failure-notice';
+
+/** The pane keeps its title and lede while the read is in flight or has
+ *  failed, so the section never collapses into a bare sentence. */
+const TITLE = 'Search by Meaning';
+const LEDE =
+  'Find files by meaning, even when the words differ. Add an API key to enable this for your projects. Keyword search works without a key.';
 
 export interface AiIndexPanelProps {
   embedderApi: EmbedderPort;
@@ -61,12 +67,12 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
     <SettingsRow
       detail={
         state.hasKey
-          ? `${label} key stored`
-          : 'OpenAI or OpenRouter, billed to you. Used only for search by meaning.'
+          ? `${label} API key saved`
+          : 'Use an OpenAI or OpenRouter key. Your provider bills indexing and search to your account.'
       }
       title={
         <>
-          Your own API key
+          API key
           {active && <StatusChip>Active</StatusChip>}
         </>
       }
@@ -78,7 +84,6 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
             </Button>
             <Button
               disabled={busy}
-              leadingIcon={Trash2}
               onClick={() => embedder.removeKey()}
               size="compact"
               variant="ghost"
@@ -87,13 +92,7 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
             </Button>
           </>
         ) : (
-          <Button
-            disabled={busy}
-            leadingIcon={KeyRound}
-            onClick={openEditor}
-            size="compact"
-            variant="tertiary"
-          >
+          <Button disabled={busy} onClick={openEditor} size="compact" variant="tertiary">
             Add key
           </Button>
         )
@@ -111,25 +110,29 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
               <TabsSubtleItem key={candidate} label={EMBEDDER_PROVIDER_LABELS[candidate]} />
             ))}
           </TabsSubtle>
-          <InputGroup className="w-full" size="compact">
-            <InputField
-              autoComplete="off"
-              filled
-              label={`${EMBEDDER_PROVIDER_LABELS[provider]} API key`}
-              onChange={setKey}
-              placeholder="Paste the key"
-              spellCheck={false}
-              type="password"
-              value={key}
-            />
-          </InputGroup>
-          <div className="flex items-center gap-1">
+          {/* Field and submit on one line, the shape every short form in
+              Settings takes. The row already says "API key", so the field
+              carries its label for assistive tech only. */}
+          <div className="flex w-full items-start gap-1.5">
+            <InputGroup className="flex-1" size="compact">
+              <InputField
+                autoComplete="off"
+                filled
+                label={`${EMBEDDER_PROVIDER_LABELS[provider]} API key`}
+                labelHidden
+                onChange={setKey}
+                placeholder="Paste your API key"
+                spellCheck={false}
+                type="password"
+                value={key}
+              />
+            </InputGroup>
             <Button
               disabled={busy || key.trim().length === 0}
               loading={embedder.savingKey}
               size="compact"
               type="submit"
-              variant="secondary"
+              variant="tertiary"
             >
               Save key
             </Button>
@@ -148,7 +151,7 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
       )}
       {embedder.keyWarning && (
         <p className="mt-1.5 text-caption text-muted-foreground" role="status">
-          Saved, but the key could not be verified yet: {embedder.keyWarning}
+          Key saved, but could not be verified: {embedder.keyWarning}
         </p>
       )}
       {embedder.keyFailure && <FailureNotice className="mt-1.5" failure={embedder.keyFailure} />}
@@ -160,31 +163,25 @@ export function AiIndexPanel({ embedderApi }: AiIndexPanelProps) {
   const embedder = useEmbedder(embedderApi);
   const state = embedder.state;
 
-  if (embedder.loading) {
+  if (embedder.loading || !state) {
     return (
-      <p className="text-caption text-muted-foreground" role="status">
-        Loading settings for search by meaning…
-      </p>
-    );
-  }
-  if (!state) {
-    return (
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-caption text-destructive" role="alert">
-          Settings for search by meaning are unavailable.
-        </p>
-        <Button onClick={() => embedder.reload()} size="compact" variant="tertiary">
-          Retry
-        </Button>
-      </div>
+      <SettingsPane lede={LEDE} title={TITLE}>
+        <SettingsList>
+          {embedder.loading ? (
+            <SettingsMessage message="Loading search settings…" />
+          ) : (
+            <SettingsMessage
+              message="Could not load search settings."
+              onRetry={() => embedder.reload()}
+            />
+          )}
+        </SettingsList>
+      </SettingsPane>
     );
   }
 
   return (
-    <SettingsPane
-      lede="Search by meaning finds files even when the wording differs. It is off until you add an embedding key here. Keyword search and every local workflow work without it."
-      title="Search by Meaning"
-    >
+    <SettingsPane lede={LEDE} title={TITLE}>
       <SettingsGroup hint={describeEmbedderSource(state)} title="Embedding key">
         <SettingsList>
           <KeyRow embedder={embedder} state={state} />

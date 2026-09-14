@@ -14,7 +14,7 @@ import type { AgentId } from '@/shared/domain/agent-id';
 
 export type { AgentId };
 
-export type AgentScope = { kind: 'library' } | { kind: 'folder'; path: string };
+export type AgentScope = { kind: 'unbound' } | { kind: 'folder'; path: string };
 
 export const MAX_QUEUED_PROMPTS = 20;
 
@@ -111,7 +111,7 @@ export function createAgentSessionState(options: {
     id: options.id,
     agent: options.agent,
     scope: options.scope,
-    title: options.title?.trim() || 'New chat',
+    title: options.title?.trim() || 'Untitled',
     accessMode: 'auto',
     connection: { kind: 'draft' },
     draft: '',

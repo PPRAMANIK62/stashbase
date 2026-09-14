@@ -8,7 +8,7 @@ const { waitForChildExit } = require('../smoke-process.cjs');
 const environment = { ...process.env };
 delete environment.ELECTRON_RUN_AS_NODE;
 
-const electronArguments = [path.join(__dirname, 'smoke.cjs')];
+const electronArguments = [];
 // GitHub's Linux hosts cannot install Electron's setuid helper. Local Linux,
 // macOS, and Windows retain the process sandbox so this smoke exercises the
 // effective BrowserWindow boundary whenever the host supports it.
@@ -16,18 +16,23 @@ if (process.platform === 'linux' && environment.CI === 'true') {
   electronArguments.unshift('--no-sandbox');
 }
 
-const child = spawn(
-  require('electron'),
-  electronArguments,
-  {
-    cwd: path.resolve(__dirname, '../..'),
-    env: environment,
-    stdio: 'inherit',
-    detached: process.platform !== 'win32',
-  },
-);
+async function run() {
+  for (const script of ['smoke.cjs', 'request-authorization-smoke.cjs', 'bug-report-smoke.cjs']) {
+    const child = spawn(
+      require('electron'),
+      [...electronArguments, path.join(__dirname, script)],
+      {
+        cwd: path.resolve(__dirname, '../..'),
+        env: environment,
+        stdio: 'inherit',
+        detached: process.platform !== 'win32',
+      },
+    );
+    await waitForChildExit(child, { launch: script, timeoutMs: 45_000 });
+  }
+}
 
-waitForChildExit(child, { launch: 'replacement-boundary', timeoutMs: 45_000 }).catch((error) => {
+run().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

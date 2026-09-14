@@ -2,7 +2,6 @@ import { vi } from 'vite-plus/test';
 
 import type { AppDependencies } from '@/app/dependencies';
 import type { GalleryPort } from '@/features/gallery/public';
-import type { CaptureBridge } from '@/platform/electron/capture';
 
 import {
   agentCatalogPort,
@@ -17,32 +16,18 @@ import {
   accountPort,
   agentRuntimePort,
   appearancePort,
-  capturePort,
   embedderPort,
   mcpAccessPort,
   transcriptionPort,
 } from './settings';
 import { folderPicker, workspaceAdapters } from './workspace';
 
-/** The desktop clipboard bridge. `appDependencies` leaves `capture` null, as
- *  it is outside Electron; a test that exercises the import offer passes this. */
-export function captureBridge(overrides: Partial<CaptureBridge> = {}): CaptureBridge {
-  return {
-    markCurrentImageHandled: vi.fn(),
-    markHandled: vi.fn(),
-    onImageAvailable: vi.fn(() => () => undefined),
-    refreshWatch: vi.fn(async () => true),
-    setComposerFocused: vi.fn(),
-    ...overrides,
-  };
-}
-
 /** The shop's port. The index answers null by default, so a test that does not
  *  care about the gallery still renders the bundled snapshot rather than an
  *  empty shelf. */
 export function galleryPort(overrides: Partial<GalleryPort> = {}): GalleryPort {
   return {
-    copy: vi.fn(async () => '/library/Copy'),
+    copy: vi.fn(async () => '/project/Copy'),
     loadIndex: vi.fn(async () => null),
     ...overrides,
   };
@@ -61,10 +46,9 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       session: agentSessionPort().port,
     },
     bugReport: null,
-    capture: null,
     documents: documentsApi(),
     gallery: galleryPort(),
-    library: { api: adapters.library, folderPicker: folderPicker(), lifecycle: adapters.lifecycle },
+    project: { api: adapters.project, folderPicker: folderPicker(), lifecycle: adapters.lifecycle },
     preparation: { controlApi: preparationControlApi(), statusApi: preparationStatusApi() },
     retrieval: {
       decisionApi: indexDecisionApi(),
@@ -75,9 +59,12 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       accountApi: accountPort(),
       agentRuntimeApi: agentRuntimePort(),
       appearanceApi: appearancePort(),
-      captureApi: capturePort(),
       embedderApi: embedderPort(),
       mcpAccessApi: mcpAccessPort(),
+      localComponentApi: {
+        load: async () => ({ status: 'not-installed', error: null }),
+        retry: async () => ({ status: 'downloading', error: null }),
+      },
       transcriptionApi: transcriptionPort(),
     },
     // Outside Electron, so there is no updater to reach.

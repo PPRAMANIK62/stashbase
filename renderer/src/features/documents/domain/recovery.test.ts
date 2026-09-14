@@ -18,7 +18,7 @@ import {
   toRecoveryCandidate,
 } from './recovery';
 
-const source = { folderPath: '/library/notes', path: 'drafts/plan.md' };
+const source = { folderPath: '/project/notes', path: 'drafts/plan.md' };
 
 describe('recovery candidates', () => {
   it('derives staleness from the version pair', () => {
@@ -60,13 +60,13 @@ describe('recovery candidates', () => {
       currentVersion: 'v1',
       expectedVersion: 'v1',
       savedAt: '2026-09-09T08:00:00.000Z',
-      source: { folderPath: '/library/notes', path: 'a.md' },
+      source: { folderPath: '/project/notes', path: 'a.md' },
     });
     const newer = toRecoveryCandidate({
       currentVersion: 'v1',
       expectedVersion: 'v1',
       savedAt: '2026-09-10T08:00:00.000Z',
-      source: { folderPath: '/library/notes', path: 'b.md' },
+      source: { folderPath: '/project/notes', path: 'b.md' },
     });
     const input = [older, newer];
     expect(sortRecoveryCandidates(input)).toEqual([newer, older]);
@@ -79,7 +79,7 @@ describe('restoring a draft into its document', () => {
     const scope = {
       generation: 1,
       id: 'tab-1',
-      source: { folderPath: '/library/notes', path: 'plan.md' },
+      source: { folderPath: '/project/notes', path: 'plan.md' },
     };
     const loaded = reconcileDocumentSource(
       createDocumentState(scope, 'editable'),

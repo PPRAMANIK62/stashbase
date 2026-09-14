@@ -19,14 +19,14 @@ type Story = StoryObj;
 
 export const WorkspaceSections: Story = {
   render: () => (
-    <Tabs className="mx-auto w-full max-w-xl" defaultValue="library">
+    <Tabs className="mx-auto w-full max-w-xl" defaultValue="project">
       <TabsList>
-        <TabItem icon={SquareLibrary} label="Library" value="library" />
+        <TabItem icon={SquareLibrary} label="Projects" value="project" />
         <TabItem icon={Clock} label="Recents" value="recents" />
         <TabItem icon={Star} label="Favorites" value="favorites" />
         <TabItem icon={Settings} label="Settings" value="settings" />
       </TabsList>
-      <TabPanel className="pt-4 text-muted-foreground" value="library">
+      <TabPanel className="pt-4 text-muted-foreground" value="project">
         Documents from every folder in this workspace.
       </TabPanel>
       <TabPanel className="pt-4 text-muted-foreground" value="recents">
@@ -53,7 +53,7 @@ export const Controlled: Story = {
       <div className="mx-auto flex w-full max-w-xl flex-col gap-3">
         <Tabs onValueChange={setValue} value={value}>
           <TabsList aria-label="Workspace sections">
-            <TabItem icon={SquareLibrary} label="Library" value="library" />
+            <TabItem icon={SquareLibrary} label="Projects" value="project" />
             <TabItem icon={Clock} label="Recents" value="recents" />
             <TabItem icon={Star} label="Favorites" value="favorites" />
           </TabsList>
@@ -112,9 +112,9 @@ export const Closable: Story = {
 export const Compact: Story = {
   render: () => (
     <SizeProvider size="compact">
-      <Tabs className="mx-auto w-full max-w-xl" defaultValue="library">
+      <Tabs className="mx-auto w-full max-w-xl" defaultValue="project">
         <TabsList aria-label="Workspace sections">
-          <TabItem icon={SquareLibrary} label="Library" value="library" />
+          <TabItem icon={SquareLibrary} label="Projects" value="project" />
           <TabItem icon={Clock} label="Recents" value="recents" />
           <TabItem icon={Settings} label="Settings" value="settings" />
         </TabsList>

@@ -10,8 +10,8 @@ import {
 
 test("media requests require explicit folder and source identities", () => {
   assert.deepEqual(
-    mediaRequestSchema.parse({ folderPath: "/library/interviews", path: "calls/weekly.m4a" }),
-    { folderPath: "/library/interviews", path: "calls/weekly.m4a" },
+    mediaRequestSchema.parse({ folderPath: "/project/interviews", path: "calls/weekly.m4a" }),
+    { folderPath: "/project/interviews", path: "calls/weekly.m4a" },
   );
   assert.equal(mediaRequestSchema.safeParse({ folderPath: "", path: "weekly.m4a" }).success, false);
 });

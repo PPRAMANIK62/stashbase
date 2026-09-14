@@ -1,53 +1,53 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { LibrarySnapshot } from '@/features/workspace/domain/library';
-import { libraryApi, librarySnapshot } from '@/test/fakes/workspace';
+import type { ProjectRegistrySnapshot } from '@/features/workspace/domain/project';
+import { projectApi, projectRegistrySnapshot } from '@/test/fakes/workspace';
 
-import { libraryFailureMessage } from './failure-messages';
+import { projectFailureMessage } from './failure-messages';
 import { openFolder } from './open-folder';
-import { LibraryError } from './ports';
+import { ProjectError } from './ports';
 
-const snapshot = librarySnapshot({
-  activeFolder: { name: 'Notes', path: '/library/notes' },
-  homeDirectory: '/library',
-  members: [],
+const snapshot = projectRegistrySnapshot({
+  activeFolder: { name: 'Notes', path: '/project/notes' },
+  homeDirectory: '/project',
+  projects: [],
 });
 
-describe('open library folder', () => {
+describe('open project folder', () => {
   it('returns the authoritative snapshot', async () => {
-    const api = libraryApi({ openFolder: vi.fn(async () => snapshot) });
+    const api = projectApi({ openFolder: vi.fn(async () => snapshot) });
 
-    await expect(openFolder(api, '/library/notes', new AbortController().signal)).resolves.toEqual({
+    await expect(openFolder(api, '/project/notes', new AbortController().signal)).resolves.toEqual({
       status: 'opened',
       snapshot,
     });
   });
 
   it('keeps a classified failure local to the operation', async () => {
-    const api = libraryApi({
+    const api = projectApi({
       openFolder: vi.fn(async () => {
-        throw new LibraryError('unavailable', 'HTTP 503 from /api/library');
+        throw new ProjectError('unavailable', 'HTTP 503 from /api/project');
       }),
     });
 
-    await expect(openFolder(api, '/library/notes', new AbortController().signal)).resolves.toEqual({
+    await expect(openFolder(api, '/project/notes', new AbortController().signal)).resolves.toEqual({
       status: 'failed',
-      message: libraryFailureMessage('unavailable', 'opened'),
+      message: projectFailureMessage('unavailable', 'opened'),
     });
   });
 
   it('rejects a completion that arrives after its operation was cancelled', async () => {
-    let resolveOpen: ((value: LibrarySnapshot) => void) | undefined;
+    let resolveOpen: ((value: ProjectRegistrySnapshot) => void) | undefined;
     const controller = new AbortController();
-    const api = libraryApi({
+    const api = projectApi({
       openFolder: vi.fn(
         () =>
-          new Promise<LibrarySnapshot>((resolve) => {
+          new Promise<ProjectRegistrySnapshot>((resolve) => {
             resolveOpen = resolve;
           }),
       ),
     });
-    const result = openFolder(api, '/library/notes', controller.signal);
+    const result = openFolder(api, '/project/notes', controller.signal);
 
     controller.abort();
     resolveOpen?.(snapshot);

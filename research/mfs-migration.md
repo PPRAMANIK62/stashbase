@@ -125,7 +125,7 @@ explicit compatible chunker/source-map adapter or accept a measured ranking and
 locator change; do not promise unchanged headings, page/line jumps, or recall.
 Sources: [upstream adapters](https://github.com/liliu-z/mfs/blob/9856ef95a713a6456a3832b106f0a3786037fdcc/src/mfs/adapters.py),
 [search result contract](../shared/search-results.ts),
-[semantic evidence](../server/retrieval/semantic.ts),
+[hybrid evidence](../server/retrieval/hybrid.ts),
 [product search contract](../design-docs/design/search.md).
 
 ### Filesystem mutations and crash recovery
@@ -145,7 +145,7 @@ compares their identities with MFS document status, and replays idempotent
 upsert/remove work. MFS compares the offered projection bytes with its current
 revision. A rename may re-embed because Internal documents do not use External
 rename observation; zero re-embedding is not a product guarantee.
-Sources: [mutation owner](../server/library-file-mutations.ts),
+Sources: [mutation owner](../server/project-file-mutations.ts),
 [file transaction contract](../code-review/file-transactions.md),
 [upstream integration contract](https://github.com/liliu-z/mfs/blob/9856ef95a713a6456a3832b106f0a3786037fdcc/docs/stashbase-integration.md).
 
@@ -175,7 +175,7 @@ filesystem transaction, credential, or viewer policies below.
 | Empty OCR is a successful, non-searchable preparation result | Empty processed text and a zero-chunk publication are representable | **Retain in Preparation.** Remove any old MFS projection and do not turn it into an indexing failure |
 | Source mutation authorization, path containment, version conflicts, atomic imports, link cascades, rollback, and remove-member-without-deleting-source | Internal upsert/remove manages only the search projection; MFS intentionally does not mutate external sources or authorize callers | **Retain in StashBase.** Reconcile projection state after the source transaction |
 | Unsaved encrypted draft journal | No corresponding MFS feature, by design | **Retain entirely outside MFS.** It must remain excluded from sync and retrieval |
-| Viewer handles, tab lifecycle, clipboard screenshot opt-in/import, and source previews | No corresponding product/UI feature, by design | **Retain entirely outside MFS.** Accepted screenshots become ordinary sources before MFS observes them |
+| Viewer handles, tab lifecycle, and source previews | No corresponding product/UI feature, by design | **Retain entirely outside MFS.** Source preparation and indexing observe ordinary files |
 | Folder-level readiness copy combining embedding state, preparation progress, failures, and provider health | MFS reports projection indexing state only; StashBase preparation remains an independent authority | **Retain the aggregation and current preparation status.** Remove only fields that duplicate MFS chunk/embed/publish state |
 
 ## Deferred TODO
@@ -324,7 +324,7 @@ invalidation before replacement, no-key reads/cleanup, nested folders, empty OCR
 CRLF/UTF-8 locators, cancel versus retry, config rotation, provider failure,
 daemon respawn, disk-operation crash recovery, and remove-folder without source
 deletion. Run `pnpm test:python`, `pnpm test:conversion-scheduler`,
-`pnpm test:retrieval`, `pnpm test:library-files`, and crossed Settings/MCP gates.
+`pnpm test:retrieval`, `pnpm test:project-files`, and crossed Settings/MCP gates.
 Run the credentialed semantic retrieval eval for chunking/ranking changes.
 Before committing implementation, run the repository's applicable gates.
 Electron launches must remove `ELECTRON_RUN_AS_NODE`; the frozen sidecar is
@@ -348,7 +348,7 @@ the pinned MFS revision:
   retrieval 23, MCP 16, configuration 51, and shared HTTP protocols 113;
 - the running desktop server reconciled the built-in Start Here Folder and
   returned 109 untruncated `StashBase` matches from visible sources through
-  `/api/library/keyword-search`, exercising the live Node-to-MFS exact path;
+  `/api/project/keyword-search`, exercising the live Node-to-MFS exact path;
 - all 1,621 renderer tests passed, followed by all 11 `check:web` gates;
 - package-input assertions passed 8 tests, documentation and test inventory
   checks passed, and the replacement Electron boundary smoke passed with

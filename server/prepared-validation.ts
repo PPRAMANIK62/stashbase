@@ -1,14 +1,12 @@
-import { Worker } from 'node:worker_threads';
+import { Worker, isMarkedAsUntransferable } from 'node:worker_threads';
+import { parseAudioTranscript } from './audio-transcript.ts';
 
 type Task = { kind: 'docx' | 'audio'; bytes: Uint8Array };
 export type AudioPreparedIdentity = { size: number; mtimeMs: number; statIdentity: string; contentHash: string };
 
 const WORKER_SOURCE = String.raw`
 const { parentPort, workerData } = require('node:worker_threads');
-const record = v => typeof v === 'object' && v !== null && !Array.isArray(v);
-const nonEmpty = v => typeof v === 'string' && v.trim().length > 0;
-const nonNegative = v => typeof v === 'number' && Number.isFinite(v) && v >= 0;
-const positive = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+const parseAudioTranscript = (${parseAudioTranscript.toString()});
 function docxHasText(html) {
   const text = html.replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, ' ')
     .replace(/<\s*br\s*\/?>/gi, '\n').replace(/<\/\s*(p|div|section|article|li|tr|h[1-6])\s*>/gi, '\n')
@@ -19,23 +17,7 @@ function docxHasText(html) {
   return text.trim().length > 0;
 }
 function audioIdentity(text) {
-  const value = JSON.parse(text), source = value && value.source, provider = value && value.provider;
-  const segments = value && value.segments;
-  if (!record(value) || value.schemaVersion !== 1 || !record(source) || !positive(source.durationMs)
-    || !nonNegative(source.size) || !nonNegative(source.mtimeMs) || !nonEmpty(source.statIdentity)
-    || typeof source.contentHash !== 'string' || !/^[a-f0-9]{64}$/i.test(source.contentHash)
-    || !record(provider) || !nonEmpty(provider.id) || !nonEmpty(provider.version) || !nonEmpty(provider.model)
-    || !nonEmpty(value.language) || !nonEmpty(value.createdAt) || !Number.isFinite(Date.parse(value.createdAt))
-    || !Array.isArray(segments)) throw new Error('invalid audio transcript');
-  let previousStartMs = -1;
-  for (let index = 0; index < segments.length; index++) {
-    const segment = segments[index];
-    if (!record(segment) || segment.id !== index + 1 || !Number.isInteger(segment.id)
-      || !nonNegative(segment.startMs) || !nonNegative(segment.endMs) || segment.endMs < segment.startMs
-      || segment.endMs > source.durationMs || segment.startMs < previousStartMs || !nonEmpty(segment.text))
-      throw new Error('invalid audio transcript');
-    previousStartMs = segment.startMs;
-  }
+  const { source } = parseAudioTranscript(JSON.parse(text));
   return { size: source.size, mtimeMs: source.mtimeMs, statIdentity: source.statIdentity, contentHash: source.contentHash };
 }
 try {
@@ -57,7 +39,9 @@ async function run<T>(task: Task): Promise<T> {
       const worker = new Worker(WORKER_SOURCE, {
         eval: true,
         workerData: task,
-        transferList: [task.bytes.buffer as ArrayBuffer],
+        // Small Node Buffers share an untransferable pool. Clone those;
+        // dedicated large file buffers can still transfer without copying.
+        transferList: isMarkedAsUntransferable(task.bytes.buffer) ? [] : [task.bytes.buffer as ArrayBuffer],
       });
       let settled = false;
       const fail = (error: Error) => { if (!settled) { settled = true; reject(error); } };

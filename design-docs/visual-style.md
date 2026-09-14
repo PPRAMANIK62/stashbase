@@ -1,9 +1,10 @@
 # Visual Style
 
-StashBase is a quiet, professional workspace for sustained work with the
-user's own files. It borrows the structure and density of a code workbench and
-the reading comfort of a focused writing application. The interface frames the
-work; it does not compete with it.
+StashBase is a quiet IDE for writing: a place to enter a project, discuss an
+idea, write, and refine. It combines workbench navigation with the reading
+comfort needed for conversation and prose. Brainstorming is a complete working
+state, including in an empty project; the interface should not imply that a
+wiki or finished document is required.
 
 This document owns visual intent. Semantic tokens, primitives, CSS mechanics,
 and visual validation live in
@@ -58,9 +59,9 @@ type is carried primarily by shape and label rather than a rainbow of colors.
   one paper, and hairline strokes plus shadow carry pane separation. Dark mode
   keeps a depth model where surface shifts do the separating. Each surface
   step pairs with one shadow step, so background and depth never disagree.
-- Documents read as the primary content surface. Chat uses a consistent
-  workbench canvas whether expanded or docked; layout changes do not recolor
-  its identity.
+- Chat leads before a document is open. Once the user opens writing or a
+  reference, document and conversation surfaces support the same work. Chat
+  keeps a consistent canvas whether expanded or docked.
 - Shadows are reserved for transient overlays and the rare standing surface
   that needs a clear anchor. Permanent hierarchy should not depend on heavy
   elevation.
@@ -74,30 +75,62 @@ type is carried primarily by shape and label rather than a rainbow of colors.
 
 ## Shape and Density
 
-- One geometry ships, and it is rounded. Boxes share one continuous container
-  shape; controls and rows use the smaller interaction shape appropriate to
-  their role. Size alone does not create a new corner language, and there is
-  no squared alternative to opt into.
-- Circles and capsules are reserved for semantics that need them, such as
-  status or a terminal action. A box never becomes a capsule by being short.
-  If the shape appears, it was chosen.
+- One geometry ships, and it is rounded. There is no squared alternative to
+  opt into.
+- A corner is two decisions, and the product makes both the same way
+  everywhere. How big it is comes from the size of the box it belongs to; how
+  full it is comes from one curve the whole application draws.
+- Radius belongs to the box, not to the rank. A card is the largest corner in
+  the product, a row or a control a middling one, a small chip the smallest,
+  and a surface does not earn a rounder corner by mattering more. The steps
+  are a short published ladder rather than a number chosen per surface, so two
+  boxes of the same size are never a few pixels apart, and enlarging one step
+  moves every surface on it.
+- Corners are continuous rather than circular. A plain arc leaves the edge
+  early and cuts across the corner, which reads thinner the larger the radius
+  gets; the curve this product draws eases into the edge and keeps the corner
+  full, so a generous radius reads generous instead of scooped.
+- A radius never reaches half of the box it is on. That is the line between a
+  rounded box and a capsule, and crossing it turns a short control into a
+  shape that means something else. Where the two collide the box wins and the
+  corner gives way.
+- Circles and capsules are reserved for semantics that need them: a status
+  dot, an avatar, a switch, a badge, or a terminal action such as the
+  composer's send. They stay true circles rather than taking the continuous
+  curve, so the one shape that means something is never approximated. A box
+  never becomes a capsule by being short. If the shape appears, it was
+  chosen.
 - Density is a small preset ladder rather than free-form scaling, and a region
   may be pinned to the compact step inside a roomier surface.
-- Which step a control sits on follows what it belongs to. The window's own
-  chrome, the titlebar and the sidebar's titlebar band, sits on the default
-  step. Everything inside a pane or a panel sits on the compact step: a pane's
-  header row and its actions, the sidebar's navigator, the Files and Chats
-  rows, the Markdown mode switch, and every popover. Switching what a panel
-  lists never changes the size of a row. Three things stand at the sidebar's
+- Which step a control sits on follows what it belongs to. The workspace
+  titlebar's own row sits on the default step. The whole sidebar, its
+  titlebar band included, and everything inside a pane or a panel, sits on
+  the compact step: the band's toggle and arrows are the compact square, the
+  size of every glyph beneath them, and the workspace titlebar's mirrored
+  trigger, arrows, and Chat toggle keep that same square so a corner never
+  changes size with the sidebar's state; a 28px row with a 13px label and a 14px
+  glyph, a row about twice its type, the density a chat client's sidebar
+  keeps. The sidebar is one list on that one row: New chat, the Files,
+  outline, and Chats rows, and the footer, with the folder header one step
+  taller at 32px, the way a chat client's sidebar keeps one row for its
+  every entry, so the primary action is told by its place and its plus and
+  never by its size. A pane's header row and its actions, the sidebar's mode
+  switch and navigator strip, the search field, the Markdown mode switch,
+  and every popover sit on the same step. Switching what a panel lists never
+  changes the size of a row. Three things stand at the sidebar's
   standard row instead: the folder row at the column's head, the footer's
   Gallery and account rows, and the document tab strip, which belongs to the
   titlebar.
 - A control that is only a glyph is a square of its step, with the step's
   glyph inside; a labelled control takes the step's height and its own
-  padding. Every glyph rests muted at the lighter stroke and turns to ink at
-  the heavier one when it is selected, hovered, or active, and a selected
-  label changes tint, never weight. Brand marks keep their own strokes and
-  colours.
+  padding. A control's glyph rests muted at the lighter stroke and turns to
+  ink at the heavier one when it is selected, hovered, or active, and a
+  selected label changes tint, never weight. A sidebar row is the exception
+  a chat client's sidebar taught: label and glyph both rest in ink, and
+  hover and selection add the row tint and nothing else, so a row never
+  changes colour, stroke, or weight under the pointer; grey stays the mark
+  of a section label, a caption, or a glyph that stands alone as a button. Brand marks keep
+  their own strokes and colours.
 - One hover tint and one interaction shape serve every pill, whether a
   button, a tab, a row, or a popover row. A fill is never squarer, rounder,
   or darker because of which primitive drew it.
@@ -145,6 +178,10 @@ compact layouts, and reduced motion are product states rather than degraded
 ones.
 
 ## Known Gaps
+
+These are maintenance and validation limitations of implemented surfaces, not
+additional unimplemented product features. Document-specific diff remains a
+separate unfinished experience; existing diff colors do not establish it.
 
 - Contrast is the one accessibility property no gate holds. Keyboard order,
   focus, semantics, and roles are checked automatically across the component

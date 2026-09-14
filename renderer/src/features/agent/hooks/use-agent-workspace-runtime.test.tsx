@@ -31,37 +31,37 @@ function mount(
 
 describe('useAgentWorkspaceRuntime', () => {
   it('keeps one runtime for the window and republishes the folder it moves to', () => {
-    const hook = mount('/library/Research');
+    const hook = mount('/project/Research');
     const runtime = hook.result.current;
 
-    hook.rerender({ folder: '/library/Plans' });
+    hook.rerender({ folder: '/project/Plans' });
 
     // A folder change rebinds the window's runtime rather than replacing it,
     // which is what lets a started conversation survive the move.
     expect(hook.result.current).toBe(runtime);
     expect(runtime.activeSession().store.getState().scope).toEqual({
       kind: 'folder',
-      path: '/library/Plans',
+      path: '/project/Plans',
     });
   });
 
   it('retires the sessions bound to a folder the host removed', () => {
     const removed: Array<(folderPath: string) => void> = [];
-    const hook = mount('/library/Research', (handler) => {
+    const hook = mount('/project/Research', (handler) => {
       removed.push(handler);
       return () => undefined;
     });
     const session = hook.result.current.activeSession();
     session.store.setState({ nativeSessionId: 'native-1' });
 
-    for (const handler of removed) handler('/library/Research');
+    for (const handler of removed) handler('/project/Research');
 
     expect(session.store.getState().connection.kind).toBe('retired');
   });
 
   it('disposes the runtime and drops its host subscription when the window goes', () => {
     const unsubscribe = vi.fn();
-    const hook = mount('/library/Research', () => unsubscribe);
+    const hook = mount('/project/Research', () => unsubscribe);
     const runtime = hook.result.current;
     const session = runtime.activeSession();
 

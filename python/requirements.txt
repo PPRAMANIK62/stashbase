@@ -17,7 +17,7 @@
 # packaged daemon so normal setup/release avoids their document-parser and
 # computer-vision payloads.
 #
-mfs @ git+https://github.com/liliu-z/mfs.git@9856ef95a713a6456a3832b106f0a3786037fdcc
+mfs @ git+https://github.com/liliu-z/mfs.git@357fe2525d663f8d6b510db16b28c209f42f11b9
 openai>=1.0
 numpy>=1.26
 blake3>=1.0

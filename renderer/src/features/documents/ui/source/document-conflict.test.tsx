@@ -34,7 +34,7 @@ function renderSource(api: DocumentSourcePort, source: { folderPath: string; pat
     api,
     createId: () => 'tab-1',
     createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
     restored: {
       activeTabId: 'tab-1',
@@ -82,7 +82,7 @@ describe('document save conflict', () => {
         )
         .mockResolvedValue(textSource({ content: 'merged', format: 'txt', version: 'v3' })),
     });
-    const { runtime } = renderSource(api, { folderPath: '/library/notes', path: 'plan.txt' });
+    const { runtime } = renderSource(api, { folderPath: '/project/notes', path: 'plan.txt' });
     await screen.findByLabelText('plan.txt source');
     const editor = codeEditor('plan.txt source');
     editor.dispatch({

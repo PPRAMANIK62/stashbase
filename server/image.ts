@@ -2,7 +2,7 @@
  * Image → OCR-text note conversion, driven by `python/ocr_extract.py`.
  *
  * The image analogue of `pdf.ts`: whenever a `.png` / `.jpg` / `.jpeg`
- * / `.webp` lands in a folder (drag-in, clipboard paste, in-app capture)
+ * / `.webp` lands in a folder (file import or an external copy)
  * we spawn RapidOCR in the background. It writes OCR Markdown under AppData;
  * on completion the note is pushed into the index directly when an API key is
  * available — so a screenshot's text becomes searchable. The image itself
@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import fs, { closeSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
 import { isImageFile } from './format.ts';
 import { derivedNoteFor, derivedDir } from './derived-store.ts';
-import { extractorSpawn } from './python-host.ts';
+import { extractorSpawn, prepareExtractorRuntime } from './python-host.ts';
 import { derivedIsFresh, discoverCandidateSources, discoverNewSources, indexFreshDerived, maybeConvert, TransientConversionError, type ConversionSpec } from './conversion.ts';
 import { lowerExtractorPriority, spawnOptionsForPdfOcr, terminateExtractorTree } from './extractor-process.ts';
 
@@ -81,11 +81,14 @@ function derivedImageIsComplete(_imageAbsPath: string, notePath: string): boolea
 /** Run the OCR extractor on a single image. Resolves with the note path
  *  on success; rejects with the extractor's stderr tail on failure.
  *  Does not throw synchronously — fire-and-forget at the call site. */
-function convertImage(
+async function convertImage(
   imageAbsPath: string,
   _onProgress?: unknown,
   signal?: AbortSignal,
+  yieldLane?: (until?: Promise<unknown>) => Promise<void>,
 ): Promise<{ notePath: string }> {
+  await prepareExtractorRuntime(signal, yieldLane);
+  signal?.throwIfAborted();
   const notePath = derivedNotePathForImage(imageAbsPath);
   mkdirSync(derivedDir(), { recursive: true });
   return new Promise((resolve, reject) => {

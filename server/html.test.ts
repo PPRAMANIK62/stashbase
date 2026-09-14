@@ -40,7 +40,7 @@ test('a document with no head still gets the rule ahead of its content', () => {
 
 test('injected chrome never reaches the indexed plaintext', () => {
   // `plaintext` feeds MFS chunking and keyword search. Viewer chrome in
-  // the index would be a search hit on every HTML file in the library.
+  // the index would be a search hit on every HTML file in the project.
   const { plaintext } = analyzeHtml('<html><head><title>t</title></head><body><h1>Hi</h1><p>x</p></body></html>');
   assert.doesNotMatch(plaintext, /scrollbar/);
   assert.equal(plaintext, 't\n\n# Hi\n\nx');

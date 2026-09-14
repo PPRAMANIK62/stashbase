@@ -12,7 +12,7 @@ import {
   LOCAL_TRANSCRIPTION_PROVIDER_ID,
   WhisperCppAdapter,
 } from './whisper-cpp-provider.ts';
-import { reconcileLibraryFolders } from './state.ts';
+import { reconcileProjectFolders } from './state.ts';
 
 let initialized = false;
 let recoveredAfterBind = false;
@@ -23,7 +23,7 @@ export function initializeTranscriptionRuntime(): void {
   initialized = true;
   registerTranscriptionProvider(localProvider);
   configureTranscriptionModelLifecycle({
-    onAvailable: (id) => reconcileLibraryFolders(`transcription model ${id} available`),
+    onAvailable: (id) => reconcileProjectFolders(`transcription model ${id} available`),
     release: async (id) => {
       await cancelAudioTranscriptionsUsingModel(LOCAL_TRANSCRIPTION_PROVIDER_ID, id);
     },

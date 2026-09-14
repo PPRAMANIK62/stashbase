@@ -55,9 +55,9 @@ afterEach(() => {
 const resource: DocumentAsset = { kind: 'source', url: 'blob:paper', version: 'v1' };
 
 function renderPdf(pdfPage = 1) {
-  const source = { folderPath: '/library/notes', path: 'paper.pdf' };
+  const source = { folderPath: '/project/notes', path: 'paper.pdf' };
   const runtime = createDocumentRuntime({
-    activeFolderPath: '/library/notes',
+    activeFolderPath: '/project/notes',
     generation: 1,
     id: 'tab-1',
     queries: documentQueryScope(),

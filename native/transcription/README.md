@@ -28,3 +28,13 @@ requirements newer than GLIBC 2.35 or GLIBCXX 3.4.30. FFmpeg GPL and nonfree
 components are disabled. Packaging independently checks executable format,
 platform baselines, every pinned manifest field, non-empty license notices,
 and FFmpeg configure flags before accepting the tools.
+
+The build also runs `scripts/check-transcription-media.mjs` against its staged
+binaries. The synthetic `fixtures/pcm.avi` contains 0.2 seconds of black MJPEG
+video and a 440 Hz mono PCM tone (16 kHz); it verifies AVI demuxing, inference
+normalization, and Opus fallback without downloading model weights. It contains
+no recorded user media. To rerun the check on an existing build:
+
+```bash
+node scripts/check-transcription-media.mjs native/transcription/sidecar.nosync/darwin-arm64
+```

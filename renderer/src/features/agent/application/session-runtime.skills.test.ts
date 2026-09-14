@@ -44,7 +44,7 @@ describe('AgentSessionRuntime skills', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({
       error: null,
@@ -84,7 +84,7 @@ describe('AgentSessionRuntime skills', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({
       error: null,

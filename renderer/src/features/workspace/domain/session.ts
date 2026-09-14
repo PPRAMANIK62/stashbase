@@ -4,14 +4,17 @@
  * bound here is a restore-time guard — a snapshot read back from disk is
  * untrusted input, so it is clamped and truncated rather than believed.
  */
+import { clamp } from '@/shared/utils/clamp';
+
 import type { WorkspaceState } from './workspace';
 
 const WORKSPACE_SESSION_VERSION = 1 as const;
-const DEFAULT_SIDEBAR_WIDTH = 240;
+const DEFAULT_SIDEBAR_WIDTH = 288;
 /** Mirrors the rail's drag floor (components/ui/sidebar-rail.tsx): the
- *  narrowest width that still shows the titlebar band's whole control trio.
- *  A restored snapshot below it would clip the band the rail refuses to. */
-const MIN_SIDEBAR_WIDTH = 192;
+ *  narrowest width that still shows the titlebar band's whole row, the
+ *  control trio and the mode switch at its far end. A restored snapshot
+ *  below it would clip the band the rail refuses to. */
+const MIN_SIDEBAR_WIDTH = 272;
 const MAX_SIDEBAR_WIDTH = 360;
 /** The Agent pane's remembered width and the bounds it is clamped to. One
  *  record, because a caller that reads one of these always reads the others. */
@@ -77,7 +80,7 @@ function unique(values: readonly string[]): string[] {
 /**
  * No folder is the welcome screen, and the welcome screen is arrived at with
  * the bare sidebar put away: its column holds nothing the screen does not
- * already offer, so a relaunch, a new window, and a folder leaving the library
+ * already offer, so a relaunch, a new window, and a folder leaving the project
  * mid-session all show the same collapsed rail. Every route there passes
  * through this one transition rather than each remembering the rule. Only
  * arriving collapses it — the corner toggle still brings the footer's rows
@@ -181,12 +184,12 @@ export function reconcileSessionMembership(
   snapshot: WorkspaceSessionSnapshot,
   memberPaths: readonly string[],
 ): WorkspaceSessionSnapshot {
-  const members = new Set(memberPaths);
-  const folders = snapshot.folders.filter((folder) => members.has(folder.folderPath));
-  const activeKept = snapshot.activeFolderPath === null || members.has(snapshot.activeFolderPath);
+  const projects = new Set(memberPaths);
+  const folders = snapshot.folders.filter((folder) => projects.has(folder.folderPath));
+  const activeKept = snapshot.activeFolderPath === null || projects.has(snapshot.activeFolderPath);
   if (activeKept && folders.length === snapshot.folders.length) return snapshot;
   const pruned = { ...snapshot, folders };
-  // The active folder leaving the library puts this window on the welcome
+  // The active folder leaving the project puts this window on the welcome
   // screen, so it arrives there the way every other route does.
   return activeKept ? pruned : arriveAtWelcome(pruned);
 }
@@ -232,7 +235,7 @@ export function setSessionSidebarOpen(
 }
 
 function clampAgentPaneWidth(width: number): number {
-  return Math.max(AGENT_PANE_WIDTH.min, Math.min(AGENT_PANE_WIDTH.max, Math.round(width)));
+  return clamp(Math.round(width), AGENT_PANE_WIDTH.min, AGENT_PANE_WIDTH.max);
 }
 
 export function setSessionAgentPaneWidth(

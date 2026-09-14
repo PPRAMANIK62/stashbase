@@ -18,7 +18,7 @@ test('window lifecycle protocol accepts only correlated save-barrier messages', 
   );
   assert.equal(
     windowContextReleaseRequestSchema.safeParse({
-      reason: 'navigation',
+      reason: 'window-reload',
       requestId: 'request-1',
     }).success,
     false,
@@ -27,7 +27,7 @@ test('window lifecycle protocol accepts only correlated save-barrier messages', 
     windowContextReleaseReadySchema.safeParse({
       future: true,
       ready: true,
-      reason: 'window-reload',
+      reason: 'window-close',
       requestId: 'request-1',
     }).success,
     false,

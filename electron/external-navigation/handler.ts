@@ -7,7 +7,7 @@ import {
   externalNavigationRequestSchema,
   externalNavigationResponseSchema,
 } from '../../shared/protocols/electron/external-navigation.ts';
-import { authorizeSender, type SenderAuthorization } from '../library/dialog.ts';
+import { authorizeSender, type SenderAuthorization } from '../project/dialog.ts';
 
 export { EXTERNAL_NAVIGATION_CAPABILITY };
 

@@ -14,13 +14,7 @@ import type { AgentId } from '@/shared/domain/agent-id';
 
 /** The four staged-preparation segments the track renders, in order, plus the
  *  terminal `ready` state that owns no segment of its own. */
-export const AGENT_RUNTIME_STAGES = [
-  'discover',
-  'install',
-  'authenticate',
-  'configure',
-  'ready',
-] as const;
+const AGENT_RUNTIME_STAGES = ['discover', 'install', 'authenticate', 'configure', 'ready'] as const;
 
 export type AgentRuntimeStage = (typeof AGENT_RUNTIME_STAGES)[number];
 

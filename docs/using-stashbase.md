@@ -1,14 +1,15 @@
 # Using StashBase
 
-Start with [Build Your First Wiki](../README.md#build-your-first-wiki) for the
-short path from a folder to Wiki Pages and Agent work.
+Start with [Start Writing](../README.md#start-writing): enter a project,
+brainstorm with an Agent, and begin drafting when ready.
 
 ## Choose a Folder and an Agent
 
-The first window opens with a blank Chat and a Gallery of ready-made Wikis.
-Choose **Make a copy** in an entry to download its folder and open it in a new
-window, or use **Open Folder…** for your own material. When an entry includes
-its build request, **Copy prompt** lets you reuse it on another folder.
+The first window opens at Welcome. Open an existing folder, create an empty
+project, import a public GitHub repository, or choose **Make a copy** in the
+Gallery. Chat becomes available inside the project, even if it contains no
+files. An entry's **Copy prompt** copies its build request for you to paste;
+it does not start a conversation automatically.
 
 **OpenQuill** is selected initially. Sign in to StashBase from the bottom of
 the sidebar, or from **Settings → Agents**, to use its free credits, which
@@ -17,16 +18,18 @@ required. You can instead select Claude Code or Codex.
 Those runtimes use their own provider login; a missing runtime waits for
 **Install and continue** before installation.
 
-Chat can work from Library scope or within a selected Folder. Search always
-targets one Folder; a Library Chat selects it from Library information. Use a
-Chat scoped to your Folder when asking an Agent to build or update its Wiki. The
-request creates or improves `wiki/index.md` and focused pages under `wiki/`
-while preserving Sources outside that directory. Ask again when you want
-updates; Wiki maintenance is not automatically scheduled.
+Start with an idea or question in the project's Chat. When ready, ask the
+Agent to create an outline or draft, or write directly in a new document.
+References and search are available when useful; neither a wiki nor a
+completed index is required to brainstorm.
+
+For a source-filled project, [Build Your First Wiki](../README.md#build-your-first-wiki)
+is an optional way to organize references. Search always targets one project,
+and wiki maintenance runs only when requested.
 
 A fresh default folder home also receives **Start Here**, a folder of local
-product and troubleshooting guides. Open it from the titlebar's **Library**
-menu, or ask a Library Chat **“How do I use StashBase?”**
+product and troubleshooting guides. Open it from Welcome / Recent and ask its
+Chat **“How do I use StashBase?”**
 
 ## Read and Work Alongside Chat
 
@@ -41,9 +44,15 @@ supported files directly.
 - **@ mentions in Chat:** find a file or folder and insert its relative path.
 
 Tool calls and file edits can be reviewed in Chat. Use **Agent Instructions**
-in the Chat toolbar to customize guidance for its scope. Changes apply from
-the next message and are stored by StashBase; this does not create or rewrite
+in the composer to customize guidance for its scope. Saved changes apply to
+newly mounted Chat sessions; an existing mounted session keeps its original
+instructions. StashBase stores the setting without creating or rewriting
 `AGENTS.md` or `CLAUDE.md` in your folders.
+
+Drafting, editing, Agent file-change reports, and save-conflict comparisons are
+available now. [Document diff — Coming soon](../README.md#document-diff--coming-soon)
+will add inline suggested revisions in the prose with individual and whole-set
+accept/reject; those controls are not currently available.
 
 Some files can be listed without being searchable or editable. Muted files
 are excluded from Search and automatic Chat context. Preview, editing,
@@ -58,7 +67,7 @@ add an OpenAI or OpenRouter key under **Settings → Search by Meaning**. The
 key is billed to you and is used only for search by meaning; signing in to
 StashBase does not turn it on.
 
-Once the key is saved, StashBase prepares Library folders and keeps their
+Once the key is saved, StashBase prepares registered projects and keeps their
 search index synchronized, and the search panel gains a **By meaning** mode
 beside **By keyword**. Removing the key turns it off again. This background
 work is separate from an Agent writing visible Wiki Pages. An OpenAI
@@ -92,7 +101,7 @@ and previews remain app-managed data. See
 
 ## Manage Access
 
-Apart from the bundled Start Here introduction, folders join the Library only
+Apart from the bundled Start Here introduction, folders join the project registry only
 when you explicitly add or open them, including making a Gallery copy.
 Removing a folder clears StashBase's state for it without deleting its files.
 

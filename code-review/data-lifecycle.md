@@ -9,7 +9,7 @@
 | State | Owner | Truth rule |
 |---|---|---|
 | Sources and Wiki Page Markdown | User filesystem | Durable source of truth |
-| Library membership, Agent Instructions, credentials, preferences | App config | Durable product configuration |
+| Project registration, Agent Instructions, credentials, preferences | App config | Durable product configuration |
 | Prepared text and assets | AppData | Rebuildable; valid only for the current source |
 | Preparation failures and explicit cancellation | AppData state database | Durable attention and user intent |
 | Queued, yielded, and running work | Process-wide scheduler | Disposable; reconcile must rediscover loss |
@@ -37,13 +37,24 @@
   timestamped Markdown with the terminal marker. StashBase owns playback and
   transcription; only the completed current transcript text is projected into
   MFS. Chunk checkpoints and the lazy compatible playback preview never
-  establish transcript completion.
+  establish transcript completion. Publication and synchronous/worker freshness
+  reads share one transcript schema validator; pooled small Buffers are cloned
+  into workers while transferable file buffers keep the zero-copy path.
 - Conversion completion is independent of semantic indexing. Current prepared
   text can serve exact retrieval while semantic indexing is disabled, pending,
   or failed.
-- A Chat's **Search by meaning** switch is consumption policy only. Off routes
-  its attributed retrieval through direct and current prepared text without
-  pausing Preparation, reconcile, or semantic indexing.
+  `currentPreparedTextPathAsync` is the shared dispatch boundary for retrieval,
+  Agent context, prepared-file reads, and native-read hints. It rejects missing
+  sources, incomplete or stale output, and unavailable conversion state before
+  exposing a format-owned prepared path.
+- Lookup strategy is grep or hybrid, independent of Preparation and index
+  lifecycle. An omitted mode follows current embedding-key configuration;
+  choosing grep explicitly does not pause reconcile or vector indexing.
+  There is no separate per-Chat retrieval switch. Configuration gating uses
+  key presence only. Index-status HTTP fields `semanticEnabled` and
+  `semanticAvailable` remain equal compatibility fields derived from that
+  fact; neither proves provider authentication, connectivity, or completed
+  indexing. Real operation failures retain their existing error/status paths.
 - **wiki/** pages are ordinary visible Markdown, not AppData-derived state.
   Agent write reconciliation admits them through the same exact/semantic paths
   as other Markdown. Activation/backfill for search by meaning and Build Wiki
@@ -54,31 +65,63 @@
 - One process-wide scheduler owns light, heavy, and auxiliary classification
   capacity. Format modules provide work and cost; they do not own private
   queues.
-- Ordering is explicit interaction, any open-folder work, then library
+- Ordering is explicit interaction, any open-folder work, then project registry
   background work. Background aging may rise only to open-folder urgency.
   Running tasks are not preempted except for the explicit same-source media
-  preview handoff.
+  preview handoff. That handoff snapshots the source-owned attempt's provider,
+  model, language, and urgency, then resumes its compatible checkpoints. A
+  preference change cannot relabel a live attempt; resume rechecks the original
+  model's availability and respects durable cancellation. Format resource
+  ownership is registered on every newly scheduled task, including automatic
+  rediscovery, rather than only on the original HTTP/discovery request.
 - Work identity retains the filesystem spelling used for I/O and display while
   a separate platform-aware comparison identity handles deduplication and
   subtree matching.
-- Cooperative yield is allowed only at a durable work-unit boundary. It keeps
+- Cooperative yield is allowed before native work or at a durable work-unit boundary. It keeps
   task identity and completion promise while releasing capacity; partial
   output remains incomplete.
 - User Cancel is durable and blocks rediscovery until Reprocess. Shutdown,
   source mutation, folder removal, or native failure are typed transient
   interruptions unless their owner explicitly records a failure.
 - Cancelling native work owns the descendant process tree and waits for
-  process/output-handle retirement before reporting the task released.
+  process/output-handle retirement before reporting the task released. POSIX
+  force-kill escalation checks the process group even after its leader exits,
+  so a stubborn descendant cannot keep inherited output pipes open indefinitely.
 - PDF/OCR preparation never owns a visible console window. POSIX extractors use
   a detached process group for tree signals; Windows PDF/OCR extractors stay
   attached, hide their console, and use `taskkill /T` for descendant
   cancellation.
 
+### PDF/OCR Component Installation
+
+`server/extractor-runtime.ts` owns one demand-driven installation flight shared
+by PDF and image preparation. `server/python-host.ts` bridges it to the format
+owners; cost probes never start a download. Waiting conversions yield their
+heavy lane until installation settles, retaining task identity and cancellation.
+Each server lifetime allows one automatic attempt, only after demand. A failed
+transfer stays failed with its sources yielded; there is no timer retry. A
+durable AppData demand latch enables one attempt on the next server bind,
+without requiring the original project to reopen. Success clears that latch.
+Settings reads never initiate installation; explicit Retry starts one shared
+attempt and wakes the existing waiters after success. Failure kinds exposed to
+Settings are bounded and contain no local paths or download URLs. The last
+cancelled source aborts a source-owned transfer; explicit Settings and startup
+downloads belong to the component rather than an individual source. Shutdown
+closes that owner after cancelling conversions, retaining unfinished demand.
+
+The application embeds the platform/version, release asset, exact byte length,
+and SHA-256 authority. Network metadata cannot replace it. The runtime checks
+the complete archive before confined extraction, bounds extracted entries and
+bytes, validates relative links, and atomically publishes a versioned AppData
+directory. Partial staging never supplies an executable. A completed version
+is reusable offline; source folders never contain component files. Release
+creation and signing belong to [Release Pipeline](release-pipeline.md).
+
 ## Reconcile
 
 Reconcile is folder-explicit and is the only operation that catches storage up
 with disk reality. It runs after server boot, folder entry, visible idle
-library maintenance, focus return, manual Sync, MCP reindex, Agent turn
+project registry maintenance, focus return, manual Sync, MCP reindex, Agent turn
 completion, and relevant configuration changes.
 
 For one folder it must:
@@ -150,8 +193,17 @@ large-index product policy is recorded as a TODO in
   credential for exact search, upsert, list, and cleanup; only vector indexing
   and search by meaning require BYOK. Store deletion failures propagate across the daemon boundary;
   they are never converted into a successful zero-row result.
-- Retrieval filters unavailable sources and always remaps evidence to a live
-  visible source before it crosses HTTP or MCP.
+  The longest registered Folder owns a source's namespace. Registering or
+  replaying nested bindings retires ancestor projections, serialized with
+  upsert admission.
+- Namespace configuration admission does not wait for embedding completion.
+  Keyword retrieval and status remain responsive during background rebuilds;
+  pending semantic configuration is reported as pending, not indexed. Removing
+  a key also supersedes an unfinished semantic configuration.
+- Both retrieval modes remap evidence to visible sources, then share a bounded
+  availability check before crossing HTTP or MCP: the source must still exist
+  within the Folder and pass retrieval eligibility; prepared formats require
+  current, complete format-owned output and no cancellation or failure.
 - Exact retrieval is MFS `grep` over the accepted text revision. MFS applies
   smart case, whole-word, path, extension, document, byte, and global-match
   bounds before StashBase formats source-visible snippets.
@@ -162,10 +214,23 @@ large-index product policy is recorded as a TODO in
   public API; the adapter does not query MFS implementation tables.
 - Closing or failing to open the store releases MFS and its process supervisor
   before cleanup returns.
+- The MFS Git revision in `python/requirements.txt` is the runtime authority;
+  its package version alone is insufficient. Python setup replaces a differing
+  installed revision and verifies provenance before accepting the environment.
 
 ## Cleanup and Recovery
 
-- Library removal cancels all work under the member root, removes index rows,
+Removing a parent project preserves separately registered descendants,
+including temporarily missing ones. Conversion cancellation, preparation
+records, and derived-file cleanup exclude those retained roots; namespace
+cleanup leaves those descendants bound and searchable. Overlapping parent/child removals are
+refused while one is in progress, and new registrations cannot enter that
+subtree until removal finishes.
+
+- Startup and registration never remove existing project membership or
+  favorites because a directory probe fails. Read-time availability filtering
+  is transient; durable removal requires the explicit cleanup operation below.
+- Project removal cancels work under the member root except retained projects, removes index rows,
   derived artifacts, preparation records, ordering, runtime bindings, and
   membership, but never deletes the user folder. A process-local removal intent
   rejects concurrent reopen/register attempts, and durable membership is
@@ -258,7 +323,7 @@ while it reports `CALIBRATION`; activation requires the baseline policy
 documented with the versioned dataset. `pnpm test:retrieval` validates the
 dataset manifest against its fixtures without credentials.
 
-Add `pnpm test:library-files` for mutation/reconcile changes and
+Add `pnpm test:project-files` for mutation/reconcile changes and
 `pnpm test:electron:smoke` when native process or store retirement changes.
 
 Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folder),

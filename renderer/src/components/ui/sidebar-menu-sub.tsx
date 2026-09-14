@@ -40,6 +40,10 @@ const SidebarMenuSub = forwardRef<HTMLUListElement, SidebarMenuSubProps>(
 
     return (
       <Collapse
+        // No fade: a branch folding is the space under its row closing, and a
+        // tree whose levels dissolve as they roll up reads as two things at
+        // once. The file tree's own groups fold the same way.
+        fade="none"
         height={content.size}
         hideWhenClosed
         open={open}

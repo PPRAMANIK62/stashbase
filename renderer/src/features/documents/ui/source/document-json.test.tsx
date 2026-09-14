@@ -35,7 +35,7 @@ function renderSource(api: DocumentSourcePort, source: { folderPath: string; pat
     api,
     createId: () => 'tab-1',
     createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
     restored: {
       activeTabId: 'tab-1',
@@ -73,7 +73,7 @@ describe('document JSON source', () => {
       ),
     });
     const { runtime } = renderSource(api, {
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'data.json',
     });
 
@@ -153,7 +153,7 @@ describe('document JSON source', () => {
     });
     await act(async () => vi.advanceTimersByTimeAsync(500));
     expect(api.save).toHaveBeenCalledWith(
-      { folderPath: '/library/notes', path: 'data.json' },
+      { folderPath: '/project/notes', path: 'data.json' },
       {
         baseVersion: 'v1',
         content: '\uFEFF{\n  "title" : "after",\n  "items": [1, 2]\n}\n',
@@ -167,7 +167,7 @@ describe('document JSON source', () => {
       load: vi.fn(async () => textSource({ content: '{"unfinished":', format: 'json' })),
     });
     const { runtime } = renderSource(api, {
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'unfinished.json',
     });
 
@@ -189,7 +189,7 @@ describe('document JSON source', () => {
       ),
     });
     const { runtime } = renderSource(api, {
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'person.json',
     });
 
@@ -233,7 +233,7 @@ describe('document JSON source', () => {
       load: vi.fn(async () => textSource({ content: '{"name":"Ada"}', format: 'json' })),
     });
     const { runtime } = renderSource(api, {
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'person.json',
     });
 

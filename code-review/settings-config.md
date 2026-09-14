@@ -7,9 +7,11 @@
 
 `server/app-config.ts` is the single persistent app-config Module and the Node
 server is its only writer. Domain routes expose narrow Interfaces for
-appearance, capture, workspace visibility, onboarding, updates, embedding,
+appearance, workspace visibility, onboarding, updates, embedding,
 transcription, Agent runtimes, and MCP transport settings. Renderer panels are
 Adapters over those routes; they do not own durable truth.
+Electron preference reads and writes also use those routes; main carries no
+independent app-config reader or writer.
 
 The renderer reaches every one of those routes through
 `renderer/src/features/settings/` and nothing else. `application/ports.ts` and
@@ -27,8 +29,6 @@ answers every read and write with the state it actually applied, so a window
 can never show rows one way and its menu the other. Renderer presentation of
 that toggle is contracted in [Renderer Workspace](renderer-workspace.md).
 
-Ambient capture is fail-closed: app config owns the opt-in, while Electron main
-only executes the current clipboard-monitoring state.
 Automatic desktop update checks are default-on: app config owns the preference,
 while Electron main reads it through the local route and owns the release
 runtime.
@@ -40,6 +40,14 @@ and Codex configuration files are rewritten only by Agent readiness
 per-session MCP environment instead of a durable client config. StashBase never
 writes any other client's configuration, so the MCP Settings page is a
 read-only access surface external clients copy from.
+
+General also observes PDF/OCR installation under Local components. Its Port
+reads the component owner's status and explicitly starts Retry; it writes no
+app-config preference and accepts no executable path or URL. The renderer polls
+status only while General is visible, shares it through the window query cache,
+and exposes bounded failure reasons and manual recovery. Installation lifetime,
+startup retry, and source waiting belong to
+[Data Lifecycle](data-lifecycle.md#pdfocr-component-installation).
 
 ## Credential Boundary
 
@@ -87,9 +95,26 @@ read-only access surface external clients copy from.
   is [Agent Runtime](agent-runtime.md).
 - A strict read or write reports malformed, inaccessible, or unwritable state.
   A fallback read may preserve app availability but must not pretend a failed
-  write persisted. Folder membership, recents, favorites, and seed-state
+  write persisted. Cancellable import registration checks its signal before
+  committing membership, without changing the calling window's binding.
+  Folder membership, recents, favorites, and seed-state
   mutations use the strict path so unreadable configuration is never replaced
   with fallback defaults.
+- Opening a folder prepares its registry response before writing configuration,
+  rechecks concurrent config changes, and commits registration and window
+  binding together. Failed validation or persistence cannot partially open a
+  project. [Window Lifecycle](window-lifecycle.md) owns stale-open cancellation.
+  Registration, open, and removal have one asynchronous mutation path each;
+  test setup uses those same paths rather than parallel synchronous mutations.
+- First-launch seeding requires a readable, actually empty default folder
+  home. It stages the complete introduction outside that home before renaming
+  it into place and registering it; failed copies never become completed seeds.
+  The durable latch preserves deliberate deletion and project removal. A
+  config reset may register an existing introduction without overwriting it.
+  Disk availability is not registration authority; see
+  [Data Lifecycle](data-lifecycle.md#cleanup-and-recovery).
+  Introduction seeding belongs to startup. Later picker and project-creation
+  requests may recreate the default home without rerunning onboarding seeding.
 - A durable write stays backward-readable, safely ignorable, or explicitly
   migratable, so a previous release can still read the file it finds. A domain
   read normalizes what it does not recognize instead of failing, an unknown key
@@ -119,12 +144,21 @@ read-only access surface external clients copy from.
   location without leaking atomic temporary paths.
 - Migration is idempotent and loss-averse. Invalid legacy state must not erase
   a valid current value or silently select a different provider.
-- BYOK credentials, the refreshable Supabase account session, and the active
-  embedding source persist independently. Only OpenAI and OpenRouter are valid
-  active embedding sources, and provider failure never falls back silently.
+- BYOK credentials and the refreshable Supabase account session persist
+  independently. Embedding state is provider, key presence, and model, with
+  no independent source selection or authorization flag. Key presence means
+  configured, not authenticated or reachable; provider validation may fail
+  transiently while a save succeeds with a warning. The HTTP Adapter alone
+  derives legacy `source` and `authorized` response aliases for older clients;
+  current domain types and renderer Adapters do not consume them. There is
+  no source-selection endpoint or request schema.
+  Only OpenAI and OpenRouter are valid providers, and provider failure never
+  falls back silently. Key changes rebind namespaces without waiting for their
+  background semantic builds; readiness is owned by Data Lifecycle.
   Retired `local` and `stashbase-account` selections migrate once before the
-  daemon starts: a stored BYOK credential is selected when present; otherwise
-  the explicit source is cleared so searching by meaning is not set up.
+  daemon starts by dropping that obsolete selection while preserving the
+  stored BYOK credential and account session. Key writes also remove the legacy
+  field; provider configuration alone remains authoritative.
 - Every OAuth flow establishes account identity for OpenQuill only. Account
   sign-in and sign-out never reset the indexer or begin semantic backfill.
 - Account access and refresh tokens are Node-only configuration. They never
@@ -163,31 +197,19 @@ read-only access surface external clients copy from.
   not proof that the app opened.
 - Concurrent MCP listener transitions serialize and roll active exposure back
   if persistence fails.
-- Clipboard-image monitoring defaults off for missing, legacy, malformed, or
-  unreadable capture settings. The renderer enables Electron monitoring only
-  after reading an explicit persisted opt-in, and it reports the case where the
-  write persisted but the desktop watch did not apply as a warning rather than
-  a failure. Turning it off stops polling and later offers; accepting a
-  resulting import remains a separate user action.
-- An offer needs three things at once, decided in
-  `electron/clipboard-watch-policy.cjs`. The opt-in is on, the window is
-  focused, and the Agent composer is not focused. The renderer forwards
-  composer focus to the desktop for exactly that reason, so an offer never
-  races a paste the reader aimed at the composer.
 - Automatic update checking defaults on for missing, legacy, or invalid update
   settings. Turning it off cancels future scheduled checks without cancelling
   a download already requested by the user. An automatic check never grants
   download or installation; an explicit grant is what authorizes the bounded
   download/install/relaunch operation.
 - Updating configuration invalidates or reconciles only the dependent runtime:
-  appearance updates the renderer, capture updates the Electron clipboard
-  monitor, update checks refresh the Electron update scheduler, embedding
+  appearance updates the renderer, update checks refresh the Electron update scheduler, embedding
   affects semantic readiness, transcription affects preparation, and MCP HTTP
   settings affect the listener. Ordinary browsing and keyword search remain
-  available on failure. Embedding diagnostics distinguish missing
-  authorization, exhausted hosted credits, and a configured runtime that is
-  still recovering; they never tell a signed-in user to select an account or
-  key merely because the broker is temporarily unavailable.
+  available on failure. Embedding diagnostics distinguish a missing provider
+  key from an actual provider or index-operation failure; key presence does
+  not establish service health. Account sign-in, OpenQuill credits, and broker
+  recovery do not control search or its diagnostics.
 
 ## Settings Surface
 
@@ -197,13 +219,40 @@ registered and the mistake fails to typecheck instead of rendering an empty
 pane. `renderer/src/features/settings/ui/managed-settings.tsx` is the whole
 list in nav order, and a section whose Port is absent is registered as
 unavailable rather than dropped, so the nav does not change shape between the
-desktop app and a host that lacks a capability.
+desktop app and a host that lacks a capability. General is always available;
+its update group requires an updater, and its Support row explains when the
+desktop bug-report capability is unavailable.
+
+Panel copy names the setting's purpose, scope, and next action in plain
+language. Missing host capabilities read **Unavailable**, never a future
+release promise. Agent setup distinguishes StashBase credits from provider
+sign-in; MCP copy includes supported writes and the Docker network port;
+transcription changes apply to future work, with **Reprocess** for existing
+files. Interface size includes code-editor text, while reading text size is
+specific to Markdown. Action labels retain consequential outcomes such as
+restart, uninstall, and token rotation.
 
 Settings is a modal a session may never open, so
 `renderer/src/features/settings/ui/settings.tsx` defers the panels until one is
-asked for. Below a compact window width the nav rail becomes a drawer, and the
+asked for. Opened with no section named, it lands on the first one, General;
+only a surface that means a particular section (the Agent panel's setup links)
+passes one. Below a compact window width the nav rail becomes a drawer, and the
 shell measures real window width for that rather than reading an ambient size
 variant that nothing drives.
+
+One row grammar draws every panel. `ui/rows.tsx` owns the pane, the titled
+group, the hairline list, the row of `lead · title and detail · trailing
+control`, the status chip, the bar, the quiet disclosure, and `SettingsMessage`
+for a read that is still in flight or failed; `ui/choice-rows.tsx` owns the
+radiogroup whose options are whole rows. A panel that cannot answer yet keeps
+its pane title and lede and puts that message in a list, so a section never
+collapses into a bare sentence. One voice runs through it: a row that cannot
+be used right now recedes to muted and says why in its own words, a state is a
+chip rather than a colored sentence, and the row's own action is the bordered
+`tertiary` button with the lesser one `ghost`, unadorned by an icon. The
+accent fill belongs to a transient offer elsewhere in the app, not to a
+standing settings row. Red is left to a refusal of what the reader just typed
+(`FailureNotice` in its input tone) and to a destructive confirmation.
 
 Every panel hook shares one command primitive
 (`renderer/src/features/settings/hooks/use-settings-command.ts`). It owns the
@@ -215,9 +264,9 @@ that polls while the server is still working declares the interval and its own
 idea of busy and stops the moment that is false.
 
 A panel that holds a value optimistically also names what to put back. The
-capture opt-in and the MCP Docker opt-in both cancel the read in flight first,
-hold the previous value, and restore it on refusal, and the MCP path refuses to
-restore an attempt that a newer write has already answered past.
+MCP Docker opt-in cancels the read in flight first, holds the previous value,
+and restores it on refusal. It refuses to restore an attempt that a newer
+write has already answered past.
 
 Every reader-facing sentence comes from a per-kind map, not from a transport.
 `renderer/src/features/settings/application/failure-messages.ts` covers the
@@ -225,6 +274,11 @@ whole ladder, so adding a failure kind fails the build there instead of
 shipping a blank.
 
 ## Appearance
+
+The HTTP Adapter validates partial writes with the shared strict appearance
+schema. Arrays and unknown fields fail before persistence. The app-config
+Module has one production write path, using a strict read and atomic write;
+route tests exercise that same path under an isolated home.
 
 Three preferences, one shape. Theme is `system`, `light`, or `dark`; interface
 size and reading text size are each `small`, `default`, or `large`. One table,
@@ -260,7 +314,11 @@ implemented; see Known Gaps.
 ## Software Updates
 
 General names the running build, says where the update has got to in one
-sentence, offers a manual check, and owns the automatic-check switch. The
+sentence, offers the current phase's action, and owns the automatic-check switch.
+Available and downloaded releases offer update/install and restart; other idle
+phases offer a manual check. Dismissing an announcement never removes this
+Settings action, and button wording names the installation and restart to
+which the click consents. The
 renderer never writes that preference over HTTP. It asks Electron main, which
 writes `/api/updates/preferences` and re-reads it into the update scheduler as
 one operation, so a window cannot show the switch one way while the scheduler
@@ -287,29 +345,35 @@ reads the account.
 - `AccountPort` reads `/api/account`, starts and polls the account-purpose
   OAuth flow, signs out, and fetches the provider's picture as bytes;
   `renderer/src/features/settings/infrastructure/account-api.ts` maps the
-  wire, leaves the search-credit fields the server still sends unread, and
+  wire and
   speaks to the server origin directly for the picture, because the page may
   only paint an image it holds as a blob. `hooks/use-account.ts` owns the
   browser round trip as one pending state and, when the account changes,
-  invalidates the Agent catalog, the credits, and the embedding source,
-  because the server still resolves the source from the session (see Known
-  Gaps); its `useAccountAvatar` turns the bytes into an object URL and
+  invalidates the Agent catalog and credits. Embedding configuration is
+  independent of account state; `useAccountAvatar` turns the bytes into an object URL and
   revokes it when replaced. A missing picture is an initial, never a failure.
 - Two views, one command. `ui/account/sidebar-account-row.tsx` is the row at
-  the foot of the sidebar: **Sign in** in one click while signed out, and the
-  person's name behind the same plain glyph once signed in, with a menu that
+  the foot of the sidebar: **Sign in for free OpenQuill credits** in one click while
+  signed out, and the person's name behind the same plain glyph once signed in, with a menu that
   opens on their picture, name, and email, then one **OpenQuill credits**
   line with its bar, then **Sign out**. The picture stays inside the menu on purpose, so
   the sidebar's foot remains one quiet column of glyphs. The Agents panel names the same
   person under **Account** and starts the same sign-in from a runtime row
   that reports `account-required`.
+- A browser wait is recoverable from both account entries. `useAccount`
+  clears the active flow on a terminal response or polling failure and retains
+  an actionable error until the next attempt. **Stop waiting** cancels its
+  in-flight status query and detaches that flow; a late response cannot finish
+  a newer wait. This is local polling cancellation, not OAuth revocation.
+  The server's existing ten-minute flow expiry still bounds abandoned browser
+  requests. The start request must finish before stopping its browser wait.
 
 ## Search by Meaning
 
 Search by meaning exists in a window only while the reader's own key answers
 embeddings. `hooks/use-embedder.ts` publishes that as `useSearchKeyConfigured`,
-true once `keyIsActive` holds for the source the server reports, false for
-any other source the server may resolve, and null until the source is read.
+true when the reported provider has a key, false without one, and null until
+configuration is read. It does not infer provider authentication or connectivity.
 The window projects every folder through it
 (`renderer/src/app/composition/folder/use-folder-readiness.ts`), so a folder
 reads as not set up whatever the daemon is doing in the background, and the
@@ -353,21 +417,20 @@ path. Renaming them is a separate change.
 |---|---|
 | Persistent Interface | strict/fallback read and write plus domain getters/setters in `server/app-config.ts`, over the preference shapes in `shared/preferences.ts` |
 | Domain owners | `server/agent-instructions.ts`, `server/mcp-http-settings.ts`, `server/hosted-account.ts`, `server/hosted-agent-broker.ts`, embedding and transcription configuration Modules |
-| HTTP Adapters | `server/routes/agent-instructions.ts`, `appearance.ts`, `capture.ts`, `updates.ts`, `workspace-preferences.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
+| HTTP Adapters | `server/routes/local-components.ts`, `server/routes/agent-instructions.ts`, `appearance.ts`, `updates.ts`, `workspace-preferences.ts`, `onboarding.ts`, `account.ts`, `embedder.ts`, `transcription.ts`, `mcp.ts` |
 | Wire schemas | `shared/protocols/http/onboarding.ts` and `shared/protocols/http/workspace-preferences.ts` for the two preferences a reader's own choice reaches, with the rest of the registered set under `shared/protocols/http/` |
 | Renderer Interface | `renderer/src/features/settings/public.ts`, bound once in `renderer/src/app/dependencies.ts` |
 | Software updates | `renderer/src/features/updates/`, whose phase table owns every sentence, with the Settings row shape in `renderer/src/shared/domain/software-update.ts` |
 | Renderer Ports | `renderer/src/features/settings/application/ports.ts` and `application/embedder-port.ts`, with the shared read keys in `application/queries.ts` and the sentence maps in `application/failure-messages.ts` |
-| Renderer Adapters | `renderer/src/features/settings/infrastructure/account-api.ts`, `agent-runtime-api.ts`, `appearance-api.ts`, `capture-api.ts`, `embedder-api.ts`, `mcp-access-api.ts`, `transcription-api.ts`, each built over the one Settings refusal ladder in `infrastructure/settings-request.ts` |
-| Panel controllers | `renderer/src/features/settings/hooks/use-settings-command.ts` plus one hook per capability in `hooks/use-account.ts`, `hooks/use-appearance.ts`, `hooks/use-capture.ts`, `use-embedder.ts` (which also publishes `useSearchKeyConfigured`), `use-mcp-access.ts`, `use-transcription.ts`, `use-agent-runtimes.ts` |
-| Settings views | `renderer/src/features/settings/ui/settings.tsx`, `ui/settings-types.ts`, `ui/managed-settings.tsx`, `ui/shell.tsx`, `ui/rows.tsx`, and the panels `ui/general/general-panel.tsx`, `ui/appearance/appearance-panel.tsx` over its `ui/appearance/preset-choice.tsx`, `ui/agents/agents-panel.tsx`, `ui/ai-index/ai-index-panel.tsx`, `ui/transcription/transcription-panel.tsx`, `ui/mcp/mcp-access-panel.tsx` |
+| Renderer Adapters | `renderer/src/features/settings/infrastructure/account-api.ts`, `agent-runtime-api.ts`, `appearance-api.ts`, `embedder-api.ts`, `mcp-access-api.ts`, `transcription-api.ts`, each built over the one Settings refusal ladder in `infrastructure/settings-request.ts` |
+| Panel controllers | `renderer/src/features/settings/hooks/use-settings-command.ts` plus one hook per capability in `hooks/use-account.ts`, `hooks/use-appearance.ts`, `use-embedder.ts` (which also publishes `useSearchKeyConfigured`), `use-mcp-access.ts`, `use-transcription.ts`, `use-agent-runtimes.ts` |
+| Settings views | `renderer/src/features/settings/ui/settings.tsx`, `ui/settings-types.ts`, `ui/managed-settings.tsx`, `ui/shell.tsx`, `ui/rows.tsx` with `ui/choice-rows.tsx`, and the panels `ui/general/general-panel.tsx`, `ui/appearance/appearance-panel.tsx` over its `ui/appearance/preset-choice.tsx`, `ui/agents/agents-panel.tsx`, `ui/ai-index/ai-index-panel.tsx`, `ui/transcription/transcription-panel.tsx`, `ui/mcp/mcp-access-panel.tsx` |
 | Account row | `renderer/src/features/settings/ui/account/sidebar-account-row.tsx` over `ui/account/account-avatar.tsx`, composed into the sidebar's footer by `renderer/src/app/composition/layout/workspace-sidebar.tsx` |
 | Search-by-meaning gate | `useSearchKeyConfigured` read once by `renderer/src/app/shell.tsx` and applied in `renderer/src/app/composition/folder/use-folder-readiness.ts` |
 | Appearance | the row table and surface mapping in `renderer/src/features/settings/domain/appearance.ts`, the surface type in `renderer/src/shared/domain/appearance.ts`, the document applier and broadcast in `renderer/src/shared/runtime/appearance-surface.ts`, applied for the window by `renderer/src/app/composition/use-appearance-surface.ts`, with the token scopes in `renderer/src/globals.css` |
 | Settings domain | `renderer/src/features/settings/domain/account.ts`, `domain/embedder.ts`, `domain/mcp-access.ts`, `domain/agent-catalog.ts`, `domain/agent-runtime-status.ts`, `domain/transcription.ts`, `domain/transcription-status.ts` |
-| Capture runtime Adapter | `renderer/src/platform/electron/capture.ts` and the clipboard boundary in `electron/main.cjs` over `electron/clipboard-watch-policy.cjs` |
 | Update runtime Adapter | `electron/update-manager.cjs`, `electron/update-install-strategy.cjs`, `electron/update-window-barrier.cjs`, and `electron/main.cjs` |
-| Focused evidence | `server/app-config.test.ts`, `server/agent-instructions.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/hosted-agent-broker.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `server/routes/onboarding.test.ts`, `server/routes/workspace-preferences.test.ts`, `server/routes/appearance.test.ts`, `shared/protocols/http/appearance.test.ts`, `electron/clipboard-watch-policy.test.cjs`, `electron/update-manager.test.cjs`, `renderer/src/features/settings/domain/appearance.test.ts`, `domain/embedder.test.ts`, `renderer/src/features/settings/hooks/use-account.test.ts`, `hooks/use-appearance.test.ts`, `hooks/use-embedder.test.ts`, `hooks/use-mcp-access.test.ts`, `hooks/use-capture.test.ts`, `hooks/use-transcription.test.ts`, `hooks/use-agent-runtimes.test.ts`, `hooks/use-settings-command.test.ts`, `renderer/src/features/settings/infrastructure/account-api.test.ts`, `infrastructure/embedder-api.test.ts`, `infrastructure/mcp-access-api.test.ts`, `infrastructure/agent-runtime-api.test.ts`, `infrastructure/capture-api.test.ts`, `infrastructure/transcription-api.test.ts`, `renderer/src/shared/runtime/appearance-surface.test.ts`, `renderer/src/app/composition/use-appearance-surface.test.ts`, `renderer/src/features/updates/domain/update-offer.test.ts`, `renderer/src/features/updates/infrastructure/updates-bridge.test.ts`, `renderer/src/features/updates/hooks/use-update-notice.test.ts`, `renderer/src/features/updates/hooks/use-software-update.test.ts`, and the panel suites `renderer/src/features/settings/ui/shell.test.tsx`, `ui/general/general-panel.test.tsx`, `ui/appearance/appearance-panel.test.tsx`, `ui/agents/agents-panel.test.tsx`, `ui/ai-index/ai-index-panel.test.tsx`, `ui/transcription/transcription-panel.test.tsx`, `ui/mcp/mcp-access-panel.test.tsx`, with the account row and the search gate proven through `renderer/src/app/composition/layout/workspace-sidebar.test.tsx`, `renderer/src/app/composition/folder/use-folder-readiness.test.tsx`, and `renderer/src/features/retrieval/ui/library-search.test.tsx` |
+| Focused evidence | `server/folder-startup.test.ts` and `server/project-open.test.ts` via `pnpm test:project-files`, `server/app-config.test.ts`, `server/agent-instructions.test.ts`, `server/hosted-account.test.ts`, `server/__tests__/hosted-agent-broker.test.ts`, `server/__tests__/mcp-http-settings.test.ts`, `server/routes/onboarding.test.ts`, `server/routes/workspace-preferences.test.ts`, `server/routes/appearance.test.ts`, `shared/protocols/http/appearance.test.ts`, `electron/update-manager.test.cjs`, `renderer/src/features/settings/domain/appearance.test.ts`, `domain/embedder.test.ts`, `renderer/src/features/settings/hooks/use-account.test.ts`, `hooks/use-appearance.test.ts`, `hooks/use-embedder.test.ts`, `hooks/use-mcp-access.test.ts`, `hooks/use-transcription.test.ts`, `hooks/use-agent-runtimes.test.ts`, `hooks/use-settings-command.test.ts`, `renderer/src/features/settings/infrastructure/account-api.test.ts`, `infrastructure/embedder-api.test.ts`, `infrastructure/mcp-access-api.test.ts`, `infrastructure/agent-runtime-api.test.ts`, `infrastructure/transcription-api.test.ts`, `renderer/src/shared/runtime/appearance-surface.test.ts`, `renderer/src/app/composition/use-appearance-surface.test.ts`, `renderer/src/features/updates/domain/update-offer.test.ts`, `renderer/src/features/updates/infrastructure/updates-bridge.test.ts`, `renderer/src/features/updates/hooks/use-update-notice.test.ts`, `renderer/src/features/updates/hooks/use-software-update.test.ts`, and the panel suites `renderer/src/features/settings/ui/shell.test.tsx`, `ui/general/general-panel.test.tsx`, `ui/appearance/appearance-panel.test.tsx`, `ui/agents/agents-panel.test.tsx`, `ui/ai-index/ai-index-panel.test.tsx`, `ui/transcription/transcription-panel.test.tsx`, `ui/mcp/mcp-access-panel.test.tsx`, with the account row and the search gate proven through `renderer/src/app/composition/layout/workspace-sidebar.test.tsx`, `renderer/src/app/composition/folder/use-folder-readiness.test.tsx`, and `renderer/src/features/retrieval/ui/project-search.test.tsx` |
 
 ## Validation
 
@@ -385,10 +448,21 @@ Run `pnpm test:protocols` when a preference wire schema changes, and
 `pnpm check:web` when a Settings panel changes layering or module shape.
 
 Journey automation retired with the Playwright suites. Prove Settings
-navigation, credential entry, and native capture opt-in with focused renderer
+navigation, credential entry, and update controls with focused renderer
 tests and a driven runtime pass. Run the affected conversion, Agent, or MCP
 suite when a setting changes its runtime behavior. Never use a real credential
 in a fixture or diagnostic.
+
+Driven runtime pass (2026-09-14): opened Settings → General in the built
+Electron renderer with local fixture services. At that revision the pane contained
+Software updates and Support, automatic update checking was the only toggle,
+and Report a bug was enabled.
+
+Driven runtime pass (2026-09-15): General's Local components row showed a
+failed PDF/OCR download and its bounded connection reason. Polling did not
+retry; Retry download issued one attempt, and restart recovery subsequently
+showed Installed. See [J04 evidence](journey-coverage.md#j04-preparation) for
+fixture boundaries and native conversion evidence.
 
 Related journeys: [J01](../design-docs/user-journeys.md#j01-complete-onboarding-and-reach-first-value),
 [J04](../design-docs/user-journeys.md#j04-prepare-a-hard-to-read-file),
@@ -403,3 +477,7 @@ builds.
 Related contracts: [MCP Access](mcp-access.md), [Agent Runtime](agent-runtime.md),
 [Renderer Workspace](renderer-workspace.md), and
 [Data Lifecycle](data-lifecycle.md).
+
+Existing unbound Chat instructions under the legacy `agentInstructions.library`
+key remain readable. The next instructions write compacts that field into
+`agentInstructions.unbound` while preserving per-project customizations.

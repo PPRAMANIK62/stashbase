@@ -9,7 +9,7 @@ const source: AgentContextItem = {
   boundVersion: null,
   format: 'md',
   kind: 'source',
-  source: { folderPath: '/library/Research', path: 'notes.md' },
+  source: { folderPath: '/project/Research', path: 'notes.md' },
 };
 
 function session(overrides: Partial<AgentSessionState> = {}): AgentSessionState {
@@ -17,7 +17,7 @@ function session(overrides: Partial<AgentSessionState> = {}): AgentSessionState 
     ...createAgentSessionState({
       agent: 'codex',
       id: 'chat-1',
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     }),
     ...overrides,
   };

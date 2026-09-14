@@ -4,8 +4,8 @@ import { z } from 'zod';
  *  at the same number so an oversized body is refused before it is decoded. */
 export const RECOVERY_DRAFT_MAX_CONTENT_BYTES = 2 * 1024 * 1024;
 
-const folderPathSchema = z.string().trim().min(1).max(4096);
-const relativePathSchema = z.string().trim().min(1).max(4096);
+const folderPathSchema = z.string().min(1).max(4096).refine((value) => value.trim().length > 0);
+const relativePathSchema = z.string().min(1).max(4096).refine((value) => value.trim().length > 0);
 const sourceVersionSchema = z.string().trim().min(1).max(256);
 const draftContentSchema = z.string().max(RECOVERY_DRAFT_MAX_CONTENT_BYTES);
 const savedAtSchema = z.string().datetime();

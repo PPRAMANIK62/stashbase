@@ -150,6 +150,10 @@ interface TabsStripIndicatorsProps {
   selectedIndex: number | null;
   /** Tint for the always-mounted selected pill. */
   selectedSurface: string;
+  /** The corner the pills draw. They land on the item they track, and a
+   *  segment on a track is the shortest box in the kit, so the caller names
+   *  the radius rather than the strip assuming the row's. */
+  radius?: string;
   /** Opacity the selected pill drops to while a different tab is hovered. */
   selectedHoverOpacity: number;
   /** Tint for the transient hover pill. */
@@ -166,6 +170,7 @@ export function TabsStripIndicators({
   strip,
   selectedIndex,
   selectedSurface,
+  radius,
   selectedHoverOpacity,
   hoverSurface,
 }: TabsStripIndicatorsProps) {
@@ -187,7 +192,7 @@ export function TabsStripIndicators({
       {/* Selected pill */}
       {selectedRect && (
         <motion.div
-          className={cn('pointer-events-none absolute', selectedSurface, shape.bg)}
+          className={cn('pointer-events-none absolute', selectedSurface, radius ?? shape.bg)}
           initial={false}
           animate={{ ...overlayBox(selectedRect), opacity: isHovering ? selectedHoverOpacity : 1 }}
           transition={glide}
@@ -198,7 +203,7 @@ export function TabsStripIndicators({
       <AnimatePresence>
         {hoverRect && !isHoveringSelected && selectedRect && (
           <motion.div
-            className={cn('pointer-events-none absolute', hoverSurface, shape.bg)}
+            className={cn('pointer-events-none absolute', hoverSurface, radius ?? shape.bg)}
             initial={{ ...overlayBox(selectedRect), opacity: 0 }}
             animate={{ ...overlayBox(hoverRect), opacity: 0.4 }}
             exit={

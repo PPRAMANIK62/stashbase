@@ -1,31 +1,31 @@
 import {
-  type LibraryFolderDialogFailure,
-  type LibraryFolderDialogRequest,
-  type LibraryFolderDialogResponse,
-} from '@/protocols/electron/library';
+  type ProjectFolderDialogFailure,
+  type ProjectFolderDialogRequest,
+  type ProjectFolderDialogResponse,
+} from '@/protocols/electron/project';
 
-export interface LibraryBridge {
-  chooseFolder(request?: Partial<LibraryFolderDialogRequest>): Promise<LibraryFolderDialogResponse>;
+export interface ProjectBridge {
+  chooseFolder(request?: Partial<ProjectFolderDialogRequest>): Promise<ProjectFolderDialogResponse>;
 }
 
-export type LibraryFolderPickerResult =
+export type ProjectFolderPickerResult =
   | { status: 'selected'; folderPath: string }
   | { status: 'cancelled' }
-  | { status: 'failed'; failure: LibraryFolderDialogFailure['failure'] };
+  | { status: 'failed'; failure: ProjectFolderDialogFailure['failure'] };
 
-export interface LibraryFolderPickerPort {
-  chooseFolder(request?: Partial<LibraryFolderDialogRequest>): Promise<LibraryFolderPickerResult>;
+export interface ProjectFolderPickerPort {
+  chooseFolder(request?: Partial<ProjectFolderDialogRequest>): Promise<ProjectFolderPickerResult>;
 }
 
 export function mapFolderSelection(
-  response: LibraryFolderDialogResponse,
-): LibraryFolderPickerResult {
+  response: ProjectFolderDialogResponse,
+): ProjectFolderPickerResult {
   if (!response.ok) return { status: 'failed', failure: response.failure };
   if (response.folderPath === null) return { status: 'cancelled' };
   return { status: 'selected', folderPath: response.folderPath };
 }
 
-export function createFolderPicker(bridge: LibraryBridge): LibraryFolderPickerPort {
+export function createFolderPicker(bridge: ProjectBridge): ProjectFolderPickerPort {
   return {
     async chooseFolder(request) {
       return mapFolderSelection(await bridge.chooseFolder(request));

@@ -9,7 +9,7 @@
 import { motion, useIsPresent } from 'framer-motion';
 import { useState, type ReactNode } from 'react';
 
-import { spring, tween } from '@/lib/springs';
+import { collapseTween, spring, tween } from '@/lib/springs';
 import { cn } from '@/lib/utils';
 
 export interface TreeGroupProps {
@@ -19,34 +19,38 @@ export interface TreeGroupProps {
 }
 
 /**
- * The children of an expanded folder. The group springs open from the folder
+ * The children of an expanded folder. The group eases open from the folder
  * row and closes back into it; while it is leaving, its rows are inert and
  * skipped by the proximity layer so nothing stale can be reached. Clipping
  * applies only while the height moves, so a row's focus ring is never shaved
  * once the group has settled.
+ *
+ * The height is the whole animation. A fade underneath it would say a second
+ * thing — that the rows themselves are going — on top of the one thing that is
+ * happening, which is the space closing; folding a branch and folding the
+ * navigator's region are then the same gesture at two scales.
  */
 export function TreeGroup({ children, onSettle, reduceMotion }: TreeGroupProps) {
   const present = useIsPresent();
   const [moving, setMoving] = useState(false);
   return (
     <motion.div
-      animate={{ height: 'auto', opacity: 1 }}
+      animate={{ height: 'auto' }}
       aria-hidden={present ? undefined : true}
       className={moving || !present ? 'overflow-hidden' : undefined}
       data-tree-exiting={present ? undefined : ''}
       exit={{
         height: 0,
-        opacity: 0,
-        transition: reduceMotion ? { duration: 0 } : spring.moderate.exit,
+        transition: reduceMotion ? { duration: 0 } : collapseTween.moderate.exit,
       }}
       inert={!present}
-      initial={{ height: 0, opacity: 0 }}
+      initial={{ height: 0 }}
       onAnimationComplete={() => {
         setMoving(false);
         onSettle();
       }}
       onAnimationStart={() => setMoving(true)}
-      transition={reduceMotion ? { duration: 0 } : { ...spring.moderate, opacity: tween.fast }}
+      transition={reduceMotion ? { duration: 0 } : collapseTween.moderate}
     >
       {children}
     </motion.div>

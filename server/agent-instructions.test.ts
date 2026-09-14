@@ -5,7 +5,7 @@ import {
   createAgentInstructionsStore,
   getAgentInstructions,
   readDefaultAgentInstructions,
-  readDefaultLibraryAgentInstructions,
+  readDefaultUnboundAgentInstructions,
   resolveAgentInstructions,
 } from './agent-instructions.ts';
 import type { AppConfigFile } from './app-config.ts';
@@ -18,7 +18,7 @@ function fixture(initial: AppConfigFile = {}) {
     write: (next) => { config = structuredClone(next); },
     equalPath: (left, right) => left.toLocaleLowerCase('en-US') === right.toLocaleLowerCase('en-US'),
     defaultText: 'Default Wiki guidance.',
-    defaultLibraryText: 'Default Library guidance.',
+    defaultUnboundText: 'Default chat guidance.',
   });
   return { store, config: () => config };
 }
@@ -51,44 +51,44 @@ test('the packaged default applies until a folder is customized and blank restor
   assert.equal(config().agentInstructions, undefined);
 });
 
-test('the Library scope has its own default and customization, independent of folders', () => {
+test('the unbound scope has its own default and customization, independent of folders', () => {
   const { store, config } = fixture();
-  assert.deepEqual(store.get({ kind: 'library' }), {
-    scope: { kind: 'library' },
-    text: 'Default Library guidance.',
+  assert.deepEqual(store.get({ kind: 'unbound' }), {
+    scope: { kind: 'unbound' },
+    text: 'Default chat guidance.',
     customized: false,
   });
 
   store.set({ kind: 'folder', path: '/Work/Alpha' }, 'Folder guidance');
-  store.set({ kind: 'library' }, 'Find things across my library.');
-  assert.equal(store.get({ kind: 'library' }).text, 'Find things across my library.');
+  store.set({ kind: 'unbound' }, 'Help me plan new work.');
+  assert.equal(store.get({ kind: 'unbound' }).text, 'Help me plan new work.');
   assert.equal(store.get({ kind: 'folder', path: '/Work/Alpha' }).text, 'Folder guidance');
   assert.deepEqual(config().agentInstructions, {
     folders: [{ path: '/Work/Alpha', text: 'Folder guidance' }],
-    library: 'Find things across my library.',
+    unbound: 'Help me plan new work.',
   });
 
   // Clearing one scope never disturbs the other, and clearing both
   // compacts the config key away entirely.
-  store.set({ kind: 'library' }, '   ');
-  assert.equal(store.get({ kind: 'library' }).customized, false);
+  store.set({ kind: 'unbound' }, '   ');
+  assert.equal(store.get({ kind: 'unbound' }).customized, false);
   assert.equal(store.get({ kind: 'folder', path: '/Work/Alpha' }).text, 'Folder guidance');
   store.set({ kind: 'folder', path: '/Work/Alpha' }, '');
   assert.equal(config().agentInstructions, undefined);
 });
 
-test('a Library Chat resolves the Library scope, and the packaged defaults are two distinct texts', () => {
-  // Runtime injection and the editor must agree on what a Library Chat reads.
-  assert.equal(resolveAgentInstructions(null), getAgentInstructions({ kind: 'library' }).text);
+test('a unbound Chat resolves the unbound scope, and the packaged defaults are two distinct texts', () => {
+  // Runtime injection and the editor must agree on what a unbound Chat reads.
+  assert.equal(resolveAgentInstructions(null), getAgentInstructions({ kind: 'unbound' }).text);
   const folderDefault = readDefaultAgentInstructions();
-  const libraryDefault = readDefaultLibraryAgentInstructions();
-  assert.ok(libraryDefault.length > 0);
-  assert.notEqual(libraryDefault, folderDefault);
+  const projectDefault = readDefaultUnboundAgentInstructions();
+  assert.ok(projectDefault.length > 0);
+  assert.notEqual(projectDefault, folderDefault);
 });
 
 test('user-visible Agent Instructions do not expose internal runtime routing policy', () => {
-  for (const instructions of [readDefaultAgentInstructions(), readDefaultLibraryAgentInstructions()]) {
-    assert.doesNotMatch(instructions, /StashBase MCP|mcp__stashbase__|`search_library`|`read_file`/i);
+  for (const instructions of [readDefaultAgentInstructions(), readDefaultUnboundAgentInstructions()]) {
+    assert.doesNotMatch(instructions, /StashBase MCP|mcp__stashbase__|`search_project`|`read_file`/i);
   }
 });
 
@@ -111,5 +111,17 @@ test('a malformed Agent Instructions object cannot block a later strict save', (
   store.set(scope, 'Recovered guidance');
   assert.deepEqual(config().agentInstructions, {
     folders: [{ path: '/Work/Alpha', text: 'Recovered guidance' }],
+  });
+});
+
+
+test('a saved pre-project Chat customization survives and compacts on write', () => {
+  const legacy = JSON.parse('{"agentInstructions":{"library":"Keep my wording."}}');
+  const { store, config } = fixture(legacy);
+  assert.equal(store.get({ kind: 'unbound' }).text, 'Keep my wording.');
+  store.set({ kind: 'folder', path: '/Work/Alpha' }, 'Project guidance.');
+  assert.deepEqual(config().agentInstructions, {
+    unbound: 'Keep my wording.',
+    folders: [{ path: '/Work/Alpha', text: 'Project guidance.' }],
   });
 });

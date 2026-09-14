@@ -45,11 +45,10 @@ export function prepareForIndex(filePath: string, content: string): string {
     // MFS's chunker splits on markdown headings — so we run a cheap,
     // in-memory "targeted optimization" that turns <h1-6> into `#`
     // headings + flattened body. Done here at feed time (not materialized
-    // to a hidden .md) because the transform is pure-regex / near-free and
-    // the .html already covers viewing. Unstructured sources
-    // (PDF/image/DOCX/audio),
-    // by contrast, are extracted to a hidden `.md` on disk because their
-    // conversion is expensive and worth caching.
+    // to a hidden .md) because the transform is cheap and the source HTML
+    // already covers viewing. PDF/image/media use durable prepared Markdown;
+    // DOCX uses prepared HTML. Their format owners cache these expensive
+    // conversions outside the visible project.
     const { plaintext } = analyzeHtml(content);
     return plaintext;
   }

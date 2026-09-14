@@ -1,6 +1,6 @@
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-/** Drag payload for a library source moved between features, such as a
+/** Drag payload for a project source moved between features, such as a
  *  file-tree row dropped on the Agent composer. Only the visible source
  *  identity travels; the receiver resolves what the Agent may read. */
 export const SOURCE_DRAG_MIME = 'application/x-stashbase-source';

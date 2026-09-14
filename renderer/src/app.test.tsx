@@ -11,23 +11,23 @@ import { documentAdapters, sourceApi } from '@/test/fakes/documents';
 import { preparationStatusApi } from '@/test/fakes/preparation';
 import {
   filesApi,
-  libraryApi,
-  librarySnapshot,
+  projectApi,
+  projectRegistrySnapshot,
   listing,
   listingFile,
-  pendingLibraryApi,
+  pendingProjectApi,
   sessionPersistence,
   workspaceAdapters,
 } from '@/test/fakes/workspace';
 
-/** The shell before any folder is authorized: the library never settles, so
+/** The shell before any folder is authorized: the project never settles, so
  *  nothing downstream of an active folder can render. */
 function restoringDependencies(): AppDependencies {
   const base = appDependencies();
   return {
     ...base,
     documents: { ...base.documents, adapters: documentAdapters({ source: sourceApi() }) },
-    library: { ...base.library, api: pendingLibraryApi() },
+    project: { ...base.project, api: pendingProjectApi() },
     preparation: {
       ...base.preparation,
       statusApi: preparationStatusApi({ load: vi.fn(() => new Promise<never>(() => undefined)) }),
@@ -98,7 +98,7 @@ describe('workspace shell', () => {
     await waitFor(() => {
       expect(dependencies.workspace.adapters.session.save).toHaveBeenCalledWith(
         expect.objectContaining({
-          shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 240 },
+          shell: { agentPaneWidth: 576, sidebarOpen: false, sidebarWidth: 288 },
         }),
       );
     });
@@ -151,9 +151,10 @@ describe('workspace shell', () => {
     expect(container.querySelector('[data-sidebar="peek"]')).toBeNull(); // dom-contract: sidebar primitive state
   });
 
-  it('opens an eligible file-tree source into the document workspace', async () => {
-    await act(async () => root.unmount());
-    await mount({
+  /** The window on an authorized folder holding `files`, which is what every
+   *  test below the welcome screen needs before it can touch a row. */
+  function folderDependencies(files: string[], createId: () => string): AppDependencies {
+    return {
       ...dependencies,
       documents: {
         ...dependencies.documents,
@@ -162,16 +163,16 @@ describe('workspace shell', () => {
             load: vi.fn(async () => ({ content: '# Plan', format: 'md' as const, version: 'v1' })),
           }),
         }),
-        createId: vi.fn(() => 'document-tab'),
+        createId: vi.fn(createId),
       },
-      library: {
-        ...dependencies.library,
-        api: libraryApi({
+      project: {
+        ...dependencies.project,
+        api: projectApi({
           load: vi.fn(async () =>
-            librarySnapshot({
-              activeFolder: { name: 'Notes', path: '/library/notes' },
-              members: [
-                { favorite: false, openedAt: '2026-09-02T00:00:00.000Z', path: '/library/notes' },
+            projectRegistrySnapshot({
+              activeFolder: { name: 'Notes', path: '/project/notes' },
+              projects: [
+                { favorite: false, openedAt: '2026-09-02T00:00:00.000Z', path: '/project/notes' },
               ],
             }),
           ),
@@ -183,12 +184,21 @@ describe('workspace shell', () => {
           ...dependencies.workspace.adapters,
           files: filesApi({
             load: vi.fn(async () =>
-              listing([listingFile({ heading: 'Plan', path: 'plan.md' })], [], 'Notes'),
+              listing(
+                files.map((path) => listingFile({ heading: 'Plan', path })),
+                [],
+                'Notes',
+              ),
             ),
           }),
         }),
       },
-    });
+    };
+  }
+
+  it('opens an eligible file-tree source into the document workspace', async () => {
+    await act(async () => root.unmount());
+    await mount(folderDependencies(['plan.md'], () => 'document-tab'));
 
     const view = within(container);
     await waitFor(() => {
@@ -273,5 +283,43 @@ describe('workspace shell', () => {
         .getElementById(outlineTab?.getAttribute('aria-controls') ?? '')
         ?.hasAttribute('hidden'),
     ).toBe(false);
+  });
+
+  it('keeps the tree on the document in front of the reader', async () => {
+    await act(async () => root.unmount());
+    let nextId = 0;
+    await mount(folderDependencies(['plan.md', 'notes.md'], () => `tab-${++nextId}`));
+
+    const view = within(container);
+    await waitFor(() => expect(view.getByRole('treeitem', { name: 'plan.md' })).not.toBeNull());
+    const row = (name: string) => view.getByRole('treeitem', { name });
+    const selectedRows = () =>
+      view
+        .getAllByRole('treeitem')
+        .filter((item) => item.getAttribute('aria-selected') === 'true')
+        .map((item) => item.getAttribute('data-path'));
+
+    await act(async () => row('plan.md').click());
+    // A double click on the preview asks for the tab to stay, so the next
+    // browse opens beside it instead of replacing it.
+    await act(async () => {
+      view
+        .getByRole('tab', { name: 'plan.md, preview' })
+        .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+    await act(async () => row('notes.md').click());
+    expect(selectedRows()).toEqual(['notes.md']);
+
+    // The strip is the only thing that moved: the tree has to follow it, or
+    // the highlight stays on a document that is no longer in front.
+    await act(async () => view.getByRole('tab', { name: 'plan.md' }).click());
+    await waitFor(() => expect(selectedRows()).toEqual(['plan.md']));
+
+    for (const name of ['plan.md', 'notes.md, preview']) {
+      const tab = view.getByRole('tab', { name });
+      await act(async () => tab.querySelector<HTMLElement>('[data-tab-trailing]')?.click());
+    }
+    await waitFor(() => expect(view.queryByRole('tab', { name: /\.md/ })).toBeNull());
+    expect(selectedRows()).toEqual([]);
   });
 });

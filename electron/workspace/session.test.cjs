@@ -137,3 +137,109 @@ test('only the first window claims durable restore while each reload keeps its o
     session: snapshot,
   });
 });
+
+function windowEvent() {
+  const frame = { url: 'app://renderer/' };
+  return { sender: { mainFrame: frame, window: {} }, senderFrame: frame };
+}
+
+function multiWindowSession(store) {
+  const first = windowEvent();
+  const second = windowEvent();
+  const setup = harness({
+    BrowserWindow: { fromWebContents: (sender) => sender.window },
+    claimRestore: (window) => window === first.sender.window,
+    store,
+  });
+  registerWorkspaceSession(setup.dependencies);
+  return {
+    first, second,
+    read: setup.handlers.get('workspace-session:read'),
+    write: setup.handlers.get('workspace-session:write'),
+  };
+}
+
+const emptySnapshot = { ...snapshot, activeFolderPath: null, folders: [] };
+const folderState = (folderPath, tab = 'note.md') => ({
+  ...snapshot.folders[0], folderPath,
+  tabs: [{ id: 'tab', path: tab }], activeTabId: 'tab',
+});
+
+test('real persistence merges window changes without blank or stale snapshots erasing peers', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'stashbase-session-windows-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, 'workspace-session.json');
+  const store = createWorkspaceSessionStore({ filePath });
+  const initial = { ...snapshot, folders: [folderState('/a'), folderState('/b')] };
+  await store.write(initial);
+  const setup = multiWindowSession(store);
+  assert.deepEqual((await setup.read(setup.first)).session, initial);
+  assert.equal((await setup.read(setup.second)).session, null);
+  const first = { ...initial, folders: [folderState('/a', 'edited.md'), folderState('/b')] };
+  await Promise.all([
+    setup.write(setup.first, first),
+    setup.write(setup.second, emptySnapshot),
+  ]);
+  assert.deepEqual((await store.read()).folders, [folderState('/b'), folderState('/a', 'edited.md')]);
+  const second = { ...snapshot, folders: [folderState('/b', 'newer.md')] };
+  await setup.write(setup.second, second);
+  await setup.write(setup.first, { ...first, shell: { ...first.shell, sidebarWidth: 300 } });
+  assert.equal((await store.read()).folders.find((folder) => folder.folderPath === '/b').tabs[0].path, 'newer.md');
+  // Membership pruning is an explicit deletion relative to this window's last
+  // snapshot. A peer's unchanged cached folder cannot resurrect it.
+  await setup.write(setup.second, emptySnapshot);
+  await setup.write(setup.first, first);
+  const restarted = createWorkspaceSessionStore({ filePath });
+  assert.deepEqual((await restarted.read()).folders, [folderState('/a', 'edited.md')]);
+  assert.deepEqual((await setup.read(setup.first)).session, first);
+  assert.deepEqual((await setup.read(setup.second)).session, emptySnapshot);
+});
+
+test('failed persistence keeps the previous delta baseline so retry writes the change', async () => {
+  let durable = snapshot;
+  let fail = true;
+  const setup = multiWindowSession({
+    read: async () => durable,
+    write: async (value) => {
+      if (fail) { fail = false; throw new Error('disk unavailable'); }
+      durable = value;
+    },
+  });
+  await setup.read(setup.first);
+  const changed = { ...snapshot, folders: [folderState('/workspace/notes', 'retry.md')] };
+  assert.equal((await setup.write(setup.first, changed)).ok, false);
+  assert.equal((await setup.write(setup.first, changed)).ok, true);
+  assert.deepEqual(durable.folders, changed.folders);
+});
+
+test('merged persistence evicts oldest folder records to retain count and byte bounds', async () => {
+  const largeFolder = (id) => ({
+    ...folderState(`/folder-${id}`),
+    expandedPaths: Array.from({ length: 10 }, (_, index) => `${index}${'x'.repeat(4000)}`),
+  });
+  let durable = { ...snapshot, folders: Array.from({ length: 20 }, (_, i) => largeFolder(i)) };
+  const setup = multiWindowSession({ read: async () => durable, write: async (value) => { durable = value; } });
+  await setup.read(setup.second);
+  const incoming = { ...snapshot, folders: Array.from({ length: 20 }, (_, i) => largeFolder(i + 20)) };
+  assert.equal((await setup.write(setup.second, incoming)).ok, true);
+  assert.ok(durable.folders.length > 20 && durable.folders.length <= 32);
+  assert.ok(Buffer.byteLength(JSON.stringify(durable)) <= 1_048_576);
+  assert.deepEqual(durable.folders.slice(-20), incoming.folders);
+});
+
+for (const code of ['EPERM', 'EEXIST']) {
+  test(`workspace replacement failure (${code}) retains the previous durable snapshot`, async (t) => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'stashbase-session-failure-'));
+    t.after(() => fs.rm(directory, { recursive: true, force: true }));
+    const filePath = path.join(directory, 'session.json');
+    const initial = createWorkspaceSessionStore({ filePath });
+    await initial.write(snapshot);
+    const failing = createWorkspaceSessionStore({ filePath, fileSystem: {
+      ...fs,
+      rename: async () => { throw Object.assign(new Error('replacement failed'), { code }); },
+    } });
+    await assert.rejects(failing.write({ ...snapshot, folders: [] }), { code });
+    assert.deepEqual(await initial.read(), snapshot);
+    assert.deepEqual(await fs.readdir(directory), ['session.json']);
+  });
+}

@@ -23,10 +23,10 @@ html:has(.workspace-shell) {
    which hides the lights and takes the room with them. */
 html[data-platform='darwin'] .workspace-shell {
   /* Lights end near x 66. The first control's box starts here, so with the
-     regular square (36px) around a 16px glyph the lights-to-glyph gap is
-     80 + 10 - 66 = 24px — a deliberate step and a half above the 16px the
-     trio keeps between its own glyphs (20px box gap minus the -ml-1
-     overlap), so the cluster reads apart from the native lights. */
+     band's 30px square around a 14px glyph the lights-to-glyph gap is
+     80 + 8 - 66 = 22px — above the 16px the trio keeps between its own
+     glyphs (the 2px box gap the mode switch also keeps), so the cluster
+     reads apart from the native lights. */
   --traffic-light-room: 80px;
 }
 
@@ -35,13 +35,13 @@ html[data-platform='darwin'][data-fullscreen] .workspace-shell {
 }
 
 html[data-platform='darwin'] .workspace-shell [data-slot='sidebar'] .workspace-titlebar {
-  padding-left: max(0.375rem, var(--traffic-light-room));
+  padding-left: max(0.5rem, var(--traffic-light-room));
 }
 
 /* With the sidebar collapsed the island's padding starts where the sidebar
-   band's did, and falls back to the same 6px once fullscreen has taken the
-   traffic-light room away — 6px + the square's 10px glyph inset lands the
-   toggle glyph on the sidebar's shared 16px glyph column. It eases at the
+   band's did, and falls back to the same 8px once fullscreen has taken the
+   traffic-light room away — 8px + the 30px square's 8px glyph inset lands
+   the toggle glyph on the sidebar's shared 16px glyph column. It eases at the
    same pace as the inset's margin, so the toggle rides the sidebar's edge
    rather than jumping ahead of it. */
 html[data-platform='darwin']
@@ -49,7 +49,7 @@ html[data-platform='darwin']
   [data-slot='sidebar'][data-state='collapsed']
   ~ [data-slot='sidebar-inset']
   > .workspace-titlebar {
-  padding-left: max(0.375rem, var(--traffic-light-room));
+  padding-left: max(0.5rem, var(--traffic-light-room));
 }
 
 html[data-platform='darwin'] .workspace-shell [data-slot='sidebar-inset'] > .workspace-titlebar {

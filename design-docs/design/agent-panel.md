@@ -2,9 +2,10 @@
 
 ## User Outcome
 
-People collaborate with the included or a bring-your-own local Agent against an
-explicit library or folder scope, then bring durable results back into ordinary
-local files.
+People enter a project, brainstorm with an Agent, and use the same conversation
+to draft and revise documents. These capabilities are implemented. Discussion
+can be useful before any file exists; document-specific diff for fine revision
+is the remaining feature, owned by [Documents](documents.md).
 
 ## Scope and Non-goals
 
@@ -20,208 +21,107 @@ and uses a hosted service only as its metered model provider.
 
 ## Current Experience
 
-- Chat begins expanded in a folder window. With no document it is the primary
-  work surface; opening a source docks the same mounted session beside it, and
-  closing the last source expands an open Chat again.
-- The Chat pane names itself. A row at the top of the pane, in both layouts,
-  carries the Agent's mark and the conversation's title, left-aligned where
-  the reader looks first, so the name never depends on whether the titlebar
-  is busy with document tabs, and at the row's right end the conversation's
-  own actions: **Chat history**, a clock that drops a popover with a
-  **Search recent chats** field over the folder's conversations, newest
-  first with how long ago each last moved, where a row opens the chat, or
-  restores it from history, and the popover closes; then **New chat**, on
-  the same glyph column as the titlebar's panel toggle above it. Renaming
-  and deleting stay with the sidebar's Chats panel. Docked, the row shares one line with the
-  Markdown viewer's Writer/Reading control across the seam. The row draws no
-  rule of its own; the transcript fades out beneath it, the same way it fades
-  in above the composer. A Chat no turn has started yet shows its default
-  name as quiet plain text, since there is no conversation to name and the
-  greeting stays the empty state's one anchor. The name is set in the same
-  voice as a sidebar file row. Once the Chat has started, or was resumed
-  from history, the title renames in place from a click or F2, the same
-  rename the Chats panel
-  offers its rows, with a pencil surfacing beside the name on hover to say
-  so; a Chat the runtime has already identified keeps the new name on
-  record, so it outlives the tab. A refused rename hands the old name back
-  and says why beside it.
-- A blank Chat keeps the durable greeting **From wiki to words.**, which names
-  the direction this space works in, a wiki built from the folder and the
-  writing drawn from it, without claiming the words as anyone's or ordering
-  what comes first. Beneath it the composer's placeholder cycles through three
-  requests, one for each thing the space does and none ahead of the others:
-  **Build a wiki for docs**, **What's in docs?**, and **Write a blog post
-  about docs**, each naming the folder. The cycle holds still while the
-  composer is focused, never runs under reduced motion, and yields to an
-  armed skill's own hint; a conversation under way shows a plain **Ask or
-  write…** instead. **Tab** on the empty composer takes the request showing
-  as the draft, and never sends it. There are no starter chips: the greeting
-  and composer are the whole empty state, and the first sent turn replaces
-  them with the transcript. Starting a wiki over the user's own files is a
-  plain conversation. The user asks in the composer, and the durable Wiki
-  behavior lives in Agent Instructions, so the visible request is exactly
-  what the Agent receives; **Copy prompt** on a Gallery entry's detail page
-  likewise fills and never sends.
-- A runtime gate is a notice beneath the composer naming each runtime that
-  cannot carry a turn by its own stage, never a screen in place of the
-  request. A gated Chat keeps its composer, holds whatever is written into it,
-  and carries that request onto the runtime that arrives, with the gate's own
-  recovery beneath the composer. Nothing is sent for the user, so
-  the gate lifting leaves the request in the composer to read and send.
-- The Gallery is not part of Chat. It is the band on the welcome screen a
-  window with no folder open shows, and the overlay the sidebar's **Gallery**
-  row raises inside a folder window. See [Workspace](workspace.md) for the
-  shop's two forms and the no-folder contract.
-- Agent retrieval adds meaning-based evidence on top of text matching whenever
-  an embedding key for search by meaning is on, and uses text matching alone
-  when none is. The Agent chooses the strategy for each lookup rather than
-  being told once, and either strategy keeps direct and prepared document text
-  reachable.
-- **Instructions** sits in the composer beside the Agent's own settings. It
-  edits the active Chat's scope, the concrete working folder, named in its
-  title, and a quiet dot shows when that scope has replaced its packaged
-  default. The dialog explains that every Chat in the scope starts with the
-  text and that open Chats pick it up on their next conversation, and it
-  offers **Restore default** once the scope is customized.
-  The editor saves in StashBase rather than the source tree, and saving takes
-  effect from the next message in every open Chat already using that folder,
-  not only in Chats started afterwards. The editor opens from the composer, so
-  there is always an open Chat that a new-Chats-only rule would exclude. A
-  Chat mid-turn applies it once that turn settles. The plain-language packaged
-  default contains every StashBase-owned behavior: search the Wiki when an
-  answer may depend on the user's work, answer briefly and name source files,
-  offer to make specific changes surfaced in discussion, keep Wiki Pages under
-  `wiki/`, and maintain an existing Wiki's conventions and affected links.
-  Clearing and saving restores that default. Existing `AGENTS.md` and
-  `CLAUDE.md` files remain separate user-owned runtime inputs and are never
-  changed.
-- New users start with **OpenQuill** selected. The Agent is chosen in the
-  composer's left cluster, from a control that names the current provider,
-  with the permission mode and Instructions beside it; the model-and-thinking
-  control for the same Agent sits at the right edge beside Send, where the
-  reader looks last. Choosing a different provider starts a new Chat rather
-  than repointing the current one, and the provider and model-and-thinking
-  controls stop taking input while a turn streams. OpenQuill's pinned
-  OpenCode runtime is included with the app, requires no Agent installation or
-  model API key, and becomes ready after StashBase account sign-in, which
-  starts from the sidebar's account row or from the Agents section of
-  Settings. Settings shows the free credits as the remaining percent and
-  refill time of the current fixed seven-day window, with token detail
-  available on demand, and keeps Codex and Claude Code as explicit
-  alternatives. It never exposes the credits' dollar value.
-- **New chat** is the deliberate creation entry and reuses a completely blank
-  tab. It sits at the right end of the Chat pane's name row, where it waits,
-  disabled, while no runtime is ready, and at the top of the sidebar's Chats
-  panel, where it becomes **Set up an Agent** in that state; both start the
-  same chat. Neither the sidebar's titlebar band nor the workspace titlebar
-  carries a New chat: the Chats panel manages the history, the pane's own
-  row manages the current conversation, and a hidden pane takes its control
-  with it. While the Chats panel is showing, the band's back and forward
-  arrows step through the window's open Chats in tab order. In the Chats panel a rule sets the button off from the
-  **Recent** list beneath it, which groups the folder's conversations by
-  day, newest first, merging restored history with open tabs and omitting
-  allocations that hold no work. A row renames in place and its
-  menu offers deletion. Opening the app, a folder, a tab, or history never
-  grants runtime-installation consent; a missing bring-your-own runtime waits
-  for **Install and continue**.
-- An installed but signed-out Codex runtime stops at a dedicated sign-in gate.
-  **Sign in with ChatGPT** runs that same discovered executable's official
-  browser flow; completion resumes preparation without another installation.
-- Every conversation is scoped to Library or one member folder. Drafts,
-  attachments, content, and resumed history freeze that scope, while folder
-  switching preserves started work. The Chats panel lists the active folder's
-  conversations, so work started in another folder stays mounted without being
-  listed there. History remains attributable to its Agent and home scope.
-- Removing a conversation's folder is an expected scope retirement, not a
-  transport failure. A completely blank Chat silently returns to Library
-  scope. A Chat with a draft, attachment, queued follow-up, transcript, active
-  turn, or resumed identity keeps that work visible, says the folder was
-  removed and the transcript is preserved, and reports how many queued
-  messages were cancelled with it.
-- Runtime capabilities determine model, permission, and effort controls without
-  rewriting global CLI defaults. The four permission modes are StashBase's own
-  promises about what a turn may do unasked, worded the same for every Agent:
-  **Ask** asks before every change and command; **Plan** reads and explores
-  and changes nothing; **Edit** edits inside the folder and asks for anything
-  else; **Auto** lets the runtime's own reviewer pass routine actions and
-  pause for risky ones. Each runtime declares which of the four it can honor,
-  the control lists only those, and a Chat that finds itself in a mode its
-  runtime cannot honor moves to Auto, or to Ask when Auto is not offered,
-  before its next turn. New sessions start in Auto. Ask, Plan, and Edit are
-  explicit per-session picks.
-  Model and thinking level are one control. Its trigger reads the model the
-  next turn runs on and, after it, the level. Opening it shows the levels that
-  model accepts, and the model list waits one layer deeper behind a **Model**
-  row, because the level changes turn to turn while the model is chosen once.
-  Picking a level keeps the menu open; picking a model closes it. As the pane
-  narrows the model's name folds away first and the level stays, then both go
-  and the trigger's title still names them; while no level is known yet, the
-  name stays in its place. The catalog is a property of the runtime, which
-  StashBase reads and remembers on its own, so a fresh Chat names the model
-  and level before any session starts; only the very first Chat on a runtime
-  that has never been read shows **Default**.
-  A new Chat runs on the runtime's own default model, which Codex lists newest
-  first and flags, at that model's declared default level, so the control
-  names both before anything is chosen instead of reading Default twice. A
-  runtime that names no default of its own reads **Default** until it reports
-  the model it is running, and keeps a Default row in the list, so the
-  catalog's order is never presented as live session state.
-  An idle Codex conversation can change the model used by its next turn without
-  replacing its native thread; the control pauses while a turn is active.
-  Claude keeps its selected model fixed after the conversation has content,
-  while its level stays open.
-- Streaming, tool activity, permissions, runtime-supported attachments, skills, recovery, and
-  file artifacts remain inspectable. Collapsed tool summaries omit exact
-  counts while using grammatical singular or plural category labels. The
-  latest prompt can be taken back into the composer once its turn has
-  settled: its text, bound context, and armed skill return as the draft, the
-  sent prompt stays in the transcript, and sending starts a new turn.
-- A follow-up submitted during an active turn waits visibly. The user may
-  delete one waiting follow-up before it is sent without interrupting the
-  active turn or removing its queued siblings; runtimes that support steering
-  also offer **Steer** for that waiting item.
-- OpenQuill normalizes OpenCode streaming, tools, permission requests,
-  native session history, and file Diffs into the same panel contract. Each
-  live panel session has an independently attributed local runtime and MCP
-  connection. Each user-submitted prompt also establishes one turn identity;
-  every model call caused by that prompt, including tool-follow-up calls, is
-  attributed to that turn until it settles.
-- Successful automatic approval reviews stay quiet in Auto. A blocked,
-  interrupted, or failed automatic review remains inspectable alongside
-  skill-context and configuration warnings as a non-fatal notice. These
-  advisories do not close Chat, fail a turn, or masquerade as
-  recovery-requiring errors.
-- Bring-your-own Agents preserve user-visible Unicode attachment filenames
-  from selection or drop through the sent transcript and restored history.
-  OpenQuill does not advertise transient attachments until its isolated
-  OpenCode runtime has a scoped byte-reading path; Library mentions and MCP
-  context remain available.
-- Source and attachment access follows the
-  [Documents format matrix](documents.md#format-capability-matrix). OpenQuill
-  image attachment behavior does not imply that every external MCP client can
-  read image bytes, and previewability does not imply content-write access.
-- Document context is explicit. Agent-created files refresh the workspace but
-  open only when selected; project creation rebinds only an attributed eligible
-  library chat.
-- Responses support GFM and local math rendering while preserving original
-  Markdown for history and copy. Raw HTML, remote images, unsafe links, and
-  invalid formulas remain inert or visibly recoverable.
-- Hovering a message reveals a quiet row beneath it. Under a prompt: when it
-  was sent, copy, and edit on the latest prompt. Under a settled reply: copy,
-  when the turn finished, and how long it took. The row's controls are icons
-  that line up with the message's own edge, so nothing sits ragged against
-  the reply text or the tool groups between turns. Times appear only when
-  genuinely recorded (live sends and settles, or history whose source kept
-  them); nothing is invented for restored transcripts.
+### Project conversation
+
+- Chat leads in a project with no open document. Opening a document can dock
+  the same mounted conversation beside it; hiding and showing the pane keeps
+  transcript and draft. Empty projects can accept a typed idea or request.
+- New chat reuses a completely blank tab or starts a conversation attributed
+  to the selected runtime and project. History lists that project's work,
+  with reopen, rename, and delete. Project changes never silently rebind a
+  started conversation.
+- A user can brainstorm, ask a question, request an outline or draft, and ask
+  for revisions. No source lookup or Build Wiki request is required before a
+  turn. Explicit references and tools are available when the task needs them.
+- Current blank-chat copy says **From wiki to words.** For a non-empty folder,
+  placeholders offer wiki building, a folder question, and a blog-writing
+  request. An empty folder gets no rotating source prompts but keeps the
+  composer. Tab accepts a displayed suggestion as a draft and never sends it.
+- Gallery remains outside Chat. Copy prompt copies to the clipboard; the user
+  pastes it if desired. It neither fills nor submits a conversation.
+
+### Runtime readiness and controls
+
+- OpenQuill is selected initially and uses the included local OpenCode runtime
+  after account sign-in. Claude Code and Codex are supported alternatives with
+  their own installation, authentication, model, and capability handling.
+- A runtime that cannot send shows its failing stage below the retained
+  composer. Entering a project or opening history is not installation consent;
+  missing bring-your-own runtimes require Install and continue. Installed
+  Codex has its own provider-owned sign-in flow. Resolving a gate does not
+  automatically send the draft.
+- OpenQuill account controls show remaining free credits and refill timing,
+  not a search quota. Stopping a browser-login wait permits another attempt
+  without claiming to revoke browser authorization.
+- Choosing another provider starts a new Chat rather than retargeting started
+  work. Model and thinking controls follow runtime capabilities. Auto is the
+  initial permission mode; supported Ask, Plan, and Edit modes remain explicit
+  per-session choices. The renderer does not answer a surfaced approval itself.
+
+### Context, instructions, and file work
+
+- Project mentions, supported attachments, and source requests supply explicit
+  context. Merely opening a document does not attach it. Format access follows
+  the [Documents matrix](documents.md#format-capability-matrix); OpenQuill does
+  not expose transient attachment support without a scoped byte-reading path.
+- Retrieval stays in the bound project. It can use current prepared text and,
+  when configured, meaning-based evidence. An omitted mode follows current
+  key configuration on each lookup; explicit modes are honored. There is no
+  per-Chat retrieval toggle, and lookup selection never controls background indexing.
+- Instructions edits working-folder guidance in application settings. The
+  packaged default supports brainstorming, requested drafting and revision,
+  source-backed answers, and wiki work only when requested. An empty project
+  needs no reference lookup before discussion. A saved customization applies to
+  sessions mounted afterwards; an already mounted session keeps its initial
+  instructions. Native `AGENTS.md` and `CLAUDE.md` remain untouched.
+- Drafting and revision can create or change ordinary authorized files. The
+  workspace refreshes without automatically opening the result. Reported file
+  changes and existing file diffs can be inspected; they are not the unfinished
+  writing-specific refinement diff or a universal approval gate over writes.
+- Permission decisions follow the selected runtime and mode. Successful Auto
+  reviews stay quiet; warnings, blocked reviews, tool activity, and failures
+  remain distinct events.
+
+### Continue and recover
+
+- Streaming, tool activity, queued follow-ups, skills, and file artifacts stay
+  attributable to the conversation. A queued follow-up can be removed before
+  send; steering is available only for runtimes that support it.
+- A settled latest prompt can be edited back into the composer and resent as
+  a new turn. Live bound context can be restored; native-history attachment
+  bytes are not recreated when they are unavailable.
+- Removing a project's scope cancels unfinished scoped work while retaining
+  started conversation state. The internal unbound boundary and native-history
+  limitations are recorded below; no in-app unbound Chat entry is exposed.
+- Replies render GFM, in-document anchors, and HTTP(S) links. Relative file
+  links in reply prose, raw HTML, and remote images remain inert; bound context
+  and file artifacts have separate navigation authority. Formula rendering and
+  classified failure recovery have
+  existing limitations in [Agent Panel](../../code-review/agent-panel.md#known-gaps);
+  they are not claimed complete merely because the protocol carries the data.
+
+Exact control placement and event-to-view mechanics belong in the
+[Agent Panel engineering contract](../../code-review/agent-panel.md).
 
 ## Experience Contract
 
+- A project-bound discussion can start without source files, wiki generation,
+  or optional meaning-based indexing. Existing runtime readiness and permission
+  requirements still apply.
+- Brainstorming does not automatically write a document. A user request may
+  authorize drafting and revision; file changes remain ordinary project work.
+
 - Chat-primary and docked layouts are two presentations of the same mounted
   session. Transcript, streaming, draft, attachments, scroll, and remembered
-  width survive the transition.
-- The Chat pane names its own conversation. The titlebar carries only
-  window-level chrome, so opening a document never takes the name away and
-  hiding the pane takes the name with it.
+  width survive the transition, and the transition itself is one push: the
+  Chat slides across the card as a sheet, its contents moving with its edge,
+  as a document opens or closes beside it or as the sidebar mode takes the
+  documents away and brings them back, and the document passes under it
+  whole rather than fading.
+- The Chat pane names its own conversation under Documents mode. The
+  titlebar carries only window-level chrome there, so opening a document
+  never takes the name away and hiding the pane takes the name with it; in
+  Chats mode the titlebar names the chat, because the pane is the card.
 - Respect explicit visibility. Initialization opens Chat; later automatic
   layout changes do not override a user hide or reveal.
 - Opening, switching, or resuming an Agent tab is not installation consent.
@@ -231,24 +131,23 @@ and uses a hosted service only as its metered model provider.
   **Copy prompt** on an entry's detail page, and nothing the Gallery does
   places or sends composer text. Setup for search by meaning is independent
   of building a wiki and never blocks a sent request.
-- Agent searches default to the current Chat scope. Searching the whole
-  Library from a folder Chat is explicit; empty results do not broaden the
-  search automatically. Search scope mechanics live in
+- Agent searches stay in the Chat's bound project. An unbound Chat cannot
+  borrow a project through tool arguments, and empty results never broaden
+  scope. Search scope mechanics live in
   [MCP Access](../../code-review/mcp-access.md).
-- Whether a Chat may add meaning-based evidence to a lookup is live session
-  policy, not Agent permission mode. Leaving it off keeps prepared PDF and
-  document text searchable and never alters background indexing.
+- Lookup selection follows the [Search contract](search.md): explicit modes
+  are honored; an omitted mode follows current key configuration. Lookup
+  selection does not control background indexing or depend on Agent permission mode.
 - Agent Instructions are durable working-folder metadata, not a live turn
   control or a security boundary. Save failures remain visible, the folder
-  requires live library membership, and changes reach matching open folder
-  Chats from their next message. Exactly one scope applies to a Chat and
+  requires live project registration, and a saved change reaches every Chat
+  that starts under that scope after it. Exactly one scope applies to a Chat and
   scopes never combine. A Chat resolves that scope's saved text, or that
-  scope's own packaged default when it has none. Library scope has its own
-  packaged default, which
-  a Library-wide customization may replace. The editor and its API expose only
+  scope's own packaged default when it has none. An unbound scope has its own
+  default, which an unbound customization may replace. The editor and its API expose only
   that user-visible text. Runtime
   Adapters preserve it exactly while composing a separate, non-user-visible
-  product policy that prefers StashBase MCP for library orientation and
+  product policy that prefers StashBase MCP for project discovery and
   prepared document reads. Product routing is never registered as if the user
   authored it.
 - The user's visible request is exactly what the Agent receives. Wiki Page
@@ -279,7 +178,7 @@ and uses a hosted service only as its metered model provider.
   automatic approval is routine activity rather than a notice; other notices
   use a polite warning presentation and stay visible when no final answer
   follows. Only failures enter startup, turn, or session recovery.
-- OpenQuill uses a service-owned model profile. The first release hides
+- OpenQuill uses a service-owned model profile. Its current product profile hides
   model selection, while the stable profile alias keeps later model choice and
   provider changes compatible with existing desktop builds.
 - Folder-scope retirement never offers Retry or reconnects user work into a
@@ -290,20 +189,23 @@ and uses a hosted service only as its metered model provider.
   its own. Every approval it surfaces — permission, deletion, command, network,
   or broader filesystem — is an explicit user decision; the panel never answers
   one itself. Tool payloads render in a human-readable form.
-- Library-wide OpenQuill sessions reach files only through the authorized
+- unbound OpenQuill sessions reach files only through the authorized
   StashBase MCP operation layer. Folder-scoped sessions may use OpenCode's
   native local tools inside that folder; commands, edits, network, and any
   broader access retain their configured approval or denial.
 - Agent copy and tool affordances describe the actual source or prepared
   representation and never advertise a broader format capability than the
   selected surface provides.
+  Prepared context remains usable only while its source exists and the
+  preparation is current and complete; an old attachment cannot keep deleted
+  or superseded extracted text readable.
 - Streaming does not steal the reading position of someone inspecting earlier
   content.
 - Agent response Markdown treats raw HTML and remote images as inert; only
   validated workspace links and HTTP(S) links are active.
 - Discovering and invoking a runtime skill never installs, edits, or exposes
   the skill implementation through the composer.
-- Turning a Library conversation into a project follows an explicit user
+- Turning an unbound conversation into a project follows an explicit user
   decision. The same Chat may rebind to the newly registered ordinary folder;
   later tool and file work uses that project as its working folder while native
   session identity and transcript remain continuous. The transcript is never
@@ -319,17 +221,41 @@ and uses a hosted service only as its metered model provider.
 
 ## Known Gaps
 
-### No surface for a Library-scoped Chat
+These record implementation limits, product-language alignment, or evidence
+issues in existing capabilities. They do not add unfinished product features
+to the roadmap; document-specific diff is the remaining feature.
 
-Library scope is implemented end to end, with its own packaged Agent
-Instructions oriented toward locating work across folders and starting new
-projects. No window shows it. A window with no folder open shows the welcome
+### Product-language alignment
+
+Current greetings and source-oriented placeholder requests retain wiki-first
+language and can understate the empty-project brainstorm and writing path.
+The packaged project Instructions and newly seeded Start Here guide now lead
+with discussion and requested writing. Existing user-customized Instructions
+and already seeded guide copies remain user-owned and are not overwritten.
+The remaining UI wording does not describe a prerequisite in the runtime.
+
+### No surface for an unbound Chat
+
+The unbound scope is implemented end to end, with its own packaged Agent
+Instructions for discussion and explicitly starting a project; it has no
+project-file access before binding. No window shows it. This is a retained secondary runtime boundary, not a
+requirement to add another onboarding path. A window with no folder open shows the welcome
 screen instead of a Chat, and a folder window's Chats panel lists only that
-folder's conversations. So a Library-scoped conversation cannot be started or
+folder's conversations. So an unbound conversation cannot be started or
 returned to, which leaves
 [J11](../user-journeys.md#j11-turn-a-conversation-into-a-project)'s entry
 state unreachable from the product and hides a blank Chat that has returned to
-Library scope after its folder was removed.
+unbound scope after its folder was removed.
+
+### A saved instruction edit waits for the next Chat
+
+The editor opens from the composer, so a reader always edits from inside an
+open Chat and expects the Chat in front of them to work under the text they
+just saved. Adapters inject the resolved instructions once, when a native
+session mounts, and none of them grows a live setter, so nothing carries a
+save into a mounted conversation and nothing remounts one. No surface names
+that limit, so a reader meets the delay rather than expecting it. See
+[Agent Runtime](../../code-review/agent-runtime.md) for the Adapter side.
 
 ### No control for meaning-based Agent retrieval
 
@@ -338,30 +264,23 @@ session policy the user owns. Nothing offers that choice. Every Chat keeps
 meaning-based retrieval on whenever a source is configured, so the only way to
 constrain a lookup to text matching is for the Agent to ask for it.
 
-### OpenQuill sign-in from the composer gate
-
-The composer's setup gate offers **Set up OpenQuill** while no runtime is
-ready, but OpenQuill needs an account rather than a setup step, and the gate
-cannot start the sign-in. **Agent settings** beside it is the route: the
-Agents section signs in, and so does the account row at the foot of the
-sidebar.
-
 ### OpenQuill project rebind
 
-An attributed OpenQuill Library chat can create a project and move its
+An attributed OpenQuill unbound chat can create a project and move its
 live panel scope to that folder. OpenCode cannot yet move the same native
 session record to a different directory project, so the restored history row
-remains under Library and that continued chat stays on MCP-only file access.
+remains under unbound history and that continued chat stays on MCP-only file access.
 Codex and Claude Code retain the full native cwd and history migration contract.
 
 ## Contribution Direction
 
 ### Next
 
-- Improve transcript scanning, tool summaries, and file-change presentation.
-- Improve attachment, mention, and focused context handoff.
-- Clarify runtime, recovery, settings, and context diagnostics.
-- Continue refining the compact, low-chrome adaptive layout.
+Maintain the implemented brainstorm-to-writing workflow, runtime continuity,
+context handling, and recovery. Align existing product language with the
+project-first purpose. Coordinate with Documents on the unfinished
+[document-specific diff](../product-direction.md#document-specific-diff--remaining-feature)
+without treating existing drafting or revision as future work.
 
 ### Coordinate First
 
@@ -381,10 +300,10 @@ Journeys: [J01](../user-journeys.md#j01-complete-onboarding-and-reach-first-valu
 [J06](../user-journeys.md#j06-start-and-continue-an-agent-chat), and
 [J07](../user-journeys.md#j07-converge-chat-into-a-document), plus
 [J12](../user-journeys.md#j12-build-wiki-pages-from-a-local-folder) and
-[J13](../user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery). The complete
-source-to-Agent-to-source route is the
+[J13](../user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery). The primary
+project-to-discussion-to-writing route is the
 [J10](../user-journeys.md#j10-turn-a-local-project-into-durable-agent-assisted-work)
-core loop. A Library Chat becomes a new durable project through
+core loop. The retained secondary unbound creation boundary is
 [J11](../user-journeys.md#j11-turn-a-conversation-into-a-project).
 
 Contracts: [Agent Panel](../../code-review/agent-panel.md),

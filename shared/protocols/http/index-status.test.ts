@@ -14,7 +14,7 @@ const baseline = {
   },
   conversionRevision: 12,
   conversionVersions: { 'papers/report.pdf': 4 },
-  folder: '/library/research',
+  folder: '/project/research',
   indexed: 10,
   indexWarning: null,
   orphaned: [],

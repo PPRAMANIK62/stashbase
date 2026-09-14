@@ -1,180 +1,141 @@
 # Architecture
 
-This document records StashBase's high-level system contracts. It explains
-what must remain true when implementation changes; source code remains the
-source of truth for file, module, route, and function-level detail.
+StashBase is a local IDE for writing. This document owns the product-level
+flow, data ownership, and trust boundaries. Detailed process protocols,
+transactions, and validation belong to the focused engineering contracts.
 
 ## System Shape
 
 ```text
-Sources ────────────────→ Document Workbench
-   ├→ Build Wiki → Wiki Pages ───────────────────┐
-   └→ Prepare → Search by keyword/meaning → MCP ─┴→ Agents
+Project (an ordinary local folder, possibly empty)
+  ├─ Agent Chat: brainstorm, discuss, draft, revise
+  ├─ Document Workbench: read, write, inspect, save
+  └─ Reference context: prepare → index/search → Agent/MCP
 ```
 
-The Document Workbench is the user-facing surface over local files. Sources,
-visible Wiki Pages, Search, and Agent work form the Wiki. Preparation and
-Search and Retrieval own the local RAG part, while the Agent Panel builds Wiki
-Pages and consumes the same authorized context.
+The user enters a project and can start discussing an idea before opening a
+file or preparing references. Chat and document work share the project without
+making the current document implicit Agent context. Drafts and source-linked
+wiki pages are ordinary files. Wiki building is one optional Agent task.
 
-The desktop application owns file access, user interaction, format
-preparation, the MCP boundary, and Agent execution. A local indexing runtime
-owns chunking, embedding, storage, and semantic retrieval. The included Agent
-runs in pinned local OpenCode processes; a Node-owned loopback broker forwards
-only its model requests to the hosted model gateway. Together these components
-operate as one local library per installation.
+Project work, Agent collaboration, file processing, indexing, retrieval, and
+writing are implemented. Document-specific diff for fine revision remains
+incomplete; current Agent file diffs and save-conflict comparisons are separate
+implemented mechanisms. See [Product Direction](product-direction.md).
+
+The desktop application owns user interaction and native window authority. Its
+local service coordinates file access, preparation, Agent runtimes, and MCP.
+One local daemon owns indexing; each registered folder has an independent
+namespace. The included Agent executes locally, with its model requests sent
+through the account-backed gateway. Bring-your-own runtimes keep their own
+provider authentication and execution boundaries.
 
 ## Ownership
 
-| Data | Owner | Rule |
+| Data or capability | Owner | Rule |
 |---|---|---|
-| Local files and folders | User | They remain the source of truth. |
-| Wiki Pages under `wiki/` | User | They are ordinary visible files created or edited through an explicit Agent action. `wiki/index.md` is the entry page. |
-| Agent Instructions | StashBase product and settings | Each scope, a member folder or the Library, has its own packaged default plus an optional customization. Exactly one scope resolves to the user-visible guidance. It is never a source-folder write. |
-| Agent runtime policy | StashBase Agent Adapters | Non-user-visible product guidance routes library orientation and prepared document reads through StashBase MCP. It is composed only at native session startup and is never exposed as Agent Instructions. |
-| `AGENTS.md` and `CLAUDE.md` | User | They are ordinary visible files and are never created, migrated, or overwritten by StashBase. |
-| Extracted text, previews, indexes, preparation records | StashBase | They are rebuildable derived state. |
-| Included OpenCode runtime | StashBase | It is pinned, packaged, private application state and never resolved from the user's PATH. |
-| Bring-your-own Agent runtimes | User / provider | They are explicitly discovered or demand-installed and keep their provider-owned login and history. |
-| Bug-report drafts | StashBase desktop application | They are ephemeral application state, not workspace files. |
-| Credentials and user settings | StashBase settings | They are managed through Settings, not environment variables. |
-| Desktop release state | Electron main process | It reads packaged-build update metadata; the renderer receives bounded status and actions only. |
+| Projects and documents | User | Ordinary local folders and files remain authoritative. |
+| Drafts and wiki pages written to files | User | Same file and permission rules as other project content. |
+| Conversation history | Agent runtime, adapted by StashBase | History is attributable to its runtime and scope; it is not automatically copied to project files. |
+| Unsaved recovery drafts | Local application | Protected recovery state outside projects, not indexed reference material. |
+| Extracted text, previews, indexes, checkpoints | Local application and index daemon | Derived state never replaces visible file identity. |
+| Agent Instructions | Application settings | One scope's packaged default or customization applies at session mount. |
+| Runtime routing policy | Agent adapters | Internal policy is separate from editable user guidance. |
+| Runtime-native instruction files | User | StashBase does not create or rewrite `AGENTS.md` or `CLAUDE.md`. |
+| Credentials | Local settings and the relevant provider runtime | Provider credentials do not become renderer data or project content. |
+| Bug-report drafts | Desktop application | Ephemeral, reviewed application state with explicit handoff. |
+| Updates and installation | Desktop application | Native installation and save barriers are not renderer-owned decisions. |
 
-Credentials and optional hosted-account sessions are owned by the local Node
-service. Provider and account tokens do not cross into renderer responses or
-OpenCode configuration/history. When the user adds an embedding key for search
-by meaning, the MFS indexing daemon uses that key with the selected OpenAI or
-OpenRouter provider; account sign-in never selects an embedding source. When
-the user runs OpenQuill, the Node broker sends prompts and necessary model
-context through the hosted model Adapter; sessions, tool execution, permissions,
-Diffs, and files remain local. The hosted service owns model routing and usage
-accounting, not Agent execution or session storage. The service atomically
-reserves and settles
-each model request against its prompt turn, fixed seven-day account window,
-short-term limits, and UTC-day provider budget. Model and policy versions are
-pinned when a turn begins. The visible source and durable library remain local.
-Detailed persistence, refresh, and broker invariants live in
-[Settings and Config](../code-review/settings-config.md).
-
-Packaged desktop updates use the official GitHub Release channel generated by
-the release pipeline. A version becomes public only after all supported
-platform metadata and payloads have been uploaded to its draft and verified as
-one immutable set. Electron main owns version comparison, artifact-integrity
-verification, download, and installation; no renderer fetches or interprets
-release tags. Platform install Adapters preserve the native trust boundary:
-Windows uses the release-generated NSIS package and hash metadata, adding
-publisher verification when Authenticode is configured; macOS uses its signed
-update payload; a Linux package may request administrator approval; and
-AppImage relaunch waits until the old process releases its single-instance
-lock.
-
-Machine-derived artifacts must not appear as ordinary files in the workspace.
-When search finds derived evidence, the result still identifies and opens the
-user-visible Source. Wiki Page Markdown is not machine-derived AppData: it is
-visible, user-owned content and follows ordinary file transactions.
+The project registry remembers folders and authorization. It is not a global
+library or a shared search scope. Native runtime histories, local configuration,
+and derived storage may be shared infrastructure without merging project
+content or access.
 
 ## Scope And Access
 
-- The library is the set of local folders the user has added or opened.
-- Each window works primarily in one current folder. Multiple windows may
-  show different folders at the same time; those are independent UI scopes,
-  not separate libraries or indexing runtimes.
-- Search and Agent retrieval target one selected authorized Folder and return
-  visible Source identity. A Library Chat selects a Folder before searching.
-  Keyword search works before any setup for search by meaning.
-  Mode-specific scope rules live in [Search and Retrieval](design/search.md)
-  and [MCP Access](../code-review/mcp-access.md).
-- Agent Instructions resolve from the scope's own packaged plain-language
-  default plus an optional customization in application config. A Chat
-  resolves exactly one scope, its member folder or the Library, and scopes
-  never combine.
-  Each runtime Adapter preserves the resolved text while composing the separate
-  internal Agent runtime policy. Saving remounts matching folder Chats so the
-  new composition applies from their next message. The editor and HTTP surface
-  expose only Agent Instructions; opening a folder or starting a runtime never
-  writes either instruction layer into user content.
-- MCP file operations are bounded to authorized library folders and never form
-  a general filesystem Interface. Membership-changing operations remain inside
-  an app-owned or already authorized root.
-- One local runtime owns indexing state. Other processes communicate through
-  its supported boundary rather than maintaining competing copies of the index.
-- The included Agent runtime is already packaged and starts only for an active
-  OpenQuill session. Bring-your-own readiness is demand-driven: opening
-  the app or a folder does not install an Agent runtime; explicit Chat actions
-  own preparation and recovery.
-- A Build Wiki request written before its Agent is ready waits in the composer
-  of the Chat pinned to that folder, and a Chat no turn has left follows the
-  first runtime that becomes ready so setup never strands it. The waiting
-  request is renderer-local and independent of setup for search by meaning; it
-  is never sent on the user's behalf, is not durable application state, and
-  cannot widen to Library implicitly.
-- Closing a window releases only its UI and folder context. Shared application
-  resources remain alive until the application session quits, and a window is
-  retired only after its current edit is durable.
+- A project window keeps its folder; another project opens in another window.
+  Windows share services while keeping their document and conversation state
+  attributable. Project retirement never silently rebinds existing work.
+- Built-in Agent file operations use the Chat's bound project. External MCP
+  clients select an authorized project explicitly. An unbound internal Chat
+  must open or create a project before accessing project files; Welcome does
+  not expose that secondary conversation entry.
+- Source discovery, retrieval, and file mutations keep the same project
+  boundary. Empty results never broaden the namespace or expose derived paths.
+- Agent Instructions are working guidance, not access control. A saved change
+  applies when a new session mounts; existing sessions retain their resolved
+  instructions. Reading or saving this setting does not modify project files.
+- The selected runtime and permission mode govern actions and approvals.
+  Discussion is not blanket authorization to rewrite or reorganize documents.
+- Project entry does not install a runtime, start sign-in, or send a prompt.
+  A gated composer keeps the unsent request until the user resolves the stage
+  and sends it. The included runtime is packaged; optional extractor components
+  follow their separate background installation lifecycle.
+
+See [Window Lifecycle](../code-review/window-lifecycle.md),
+[Agent Runtime](../code-review/agent-runtime.md), and
+[MCP Access](../code-review/mcp-access.md).
 
 ## Preparation And Retrieval
 
-- Direct-text readable formats use source-owned text. Prepared-text readable
-  formats may gain rebuildable derived representations, while the original
-  remains the visible source. The product-facing classifications live in the
-  [Documents format matrix](design/documents.md#format-capability-matrix).
-- Preparation and semantic indexing are separate stages. Current prepared text
-  may support keyword search before the semantic index is ready.
-- Incomplete, stale, or partial derived output is never current truth.
-- Reconcile brings external changes back into derived state and the index
-  without blocking folder navigation or ordinary local work.
-- One daemon owns semantic state. Configuration changes rebind that owner
-  rather than creating competing indexes.
+- Direct-text formats use source text. Other admitted formats use current,
+  complete prepared representations; previewability alone does not imply
+  retrieval or editing capability. The [Documents matrix](design/documents.md#format-capability-matrix)
+  owns those distinctions.
+- Preparation and semantic indexing are separate. Current prepared text can
+  support keyword retrieval independently of the optional meaning-based index.
+- Background reconcile and component downloads do not gate project entry or
+  discussion unrelated to the pending sources. Stale or partial output is not
+  presented as current evidence.
+- One daemon owns index state. Configuration changes reconfigure that owner;
+  they do not introduce a second index or global retrieval namespace.
+- Optional embedding requests may send text to the user's configured provider.
+  Account sign-in enables OpenQuill, not search by meaning.
 
-Format completion, scheduler, freshness, provider, and cleanup rules live in
+See [Preparation](design/preparation.md), [Search](design/search.md), and
 [Data Lifecycle](../code-review/data-lifecycle.md).
 
 ## Liveness And Recovery
 
-- Entering a folder prioritizes a usable workspace; listing, conversion, and
-  indexing continue in the background.
-- Background work must not make ordinary file browsing depend on preparation.
-- Explicit user cancellation is respected; interrupted background work is
-  rediscovered when its durable output is incomplete.
-- Removing a folder clears StashBase-owned state for that folder without
-  deleting the user's source files. Every window showing that folder saves
-  first and returns to the library view; restart recovery cannot silently add
-  an intentionally removed folder back.
-- Application shutdown is an explicit owner-to-server handshake that drains
-  shared cleanup before Electron exits.
-- File mutations preserve source identity and retire stale derived ownership.
-  Exact transaction sequences live in
-  [File Transactions](../code-review/file-transactions.md).
+- Startup establishes ownership of its local service before opening a working
+  window. Shutdown drains the shared owners through an explicit handshake.
+- Closing a window releases its context after the edit-durability boundary;
+  other windows and shared services remain independent.
+- Explicit cancellation stays cancelled. Retry and interrupted-work recovery
+  follow the owning task's lifecycle, rather than an unbounded global retry.
+- Removing a project clears its application-owned state without deleting the
+  folder. File deletion is a separate operation with its own authority.
+- File mutations keep source identity, version checks, and derived ownership
+  consistent. Existing conflict and crash-recovery paths remain part of
+  writing even while document-specific diff is unfinished.
+
+See [File Transactions](../code-review/file-transactions.md) and
+[Settings and Config](../code-review/settings-config.md). Known limitations in
+recovery remain in those contracts and [Documents](design/documents.md).
 
 ## Trust Boundaries
 
-- Untrusted document content must be rendered without granting it application
-  privileges. The current executable-HTML compatibility viewer is a known
-  exception tracked in
+- Native registration supplies window authority to local API and Agent
+  requests. Renderer-controlled URL fields cannot select another window.
+- The renderer uses the local application's allowed endpoints. Gallery index
+  and image requests pass through a bounded proxy, not an arbitrary remote
+  fetch capability.
+- Document content must not acquire application privileges. The current
+  executable HTML compatibility exception remains documented in
   [Document Viewers](../code-review/document-viewers.md#trust-boundary).
-- External URLs and local-file navigation follow explicit, validated paths.
-- The renderer never reaches the open internet: its CSP pins network and
-  image loading to the local daemon. The Gallery's published index and
-  screenshots arrive only through the daemon's gallery proxy, which pins
-  its upstreams to the gallery's own CDN hosts and refuses any other
-  source, so it cannot be bent into a general-purpose proxy (engineering
-  contract in [Agent Panel](../code-review/agent-panel.md#gallery)).
-- Network, commands, deletion, rename, and broader filesystem access remain
-  explicit approval decisions in the Agent Panel.
-- Every OpenQuill panel session receives a private OpenCode server
-  credential and MCP attribution identity. A Library-wide session disables
-  native cwd file/command tools and uses the membership-checked MCP layer;
-  folder sessions deny paths outside their working folder. The private process
-  receives an allowlisted non-secret environment rather than the desktop
-  process environment.
-- Bug-report draft lifecycle and any future report artifacts are owned by the
-  desktop application. Renderer views can present safe draft metadata but do
-  not own artifacts, filesystem access, or privileged actions. The focused
-  engineering Interface lives in
+- External navigation and local-file links use validated paths. Runtime
+  commands, network, and file changes follow the selected permission policy.
+- Hosted model requests carry necessary model context, not ownership of local
+  files, sessions, or tools. Account tokens stay in the local broker boundary.
+- Reports freeze the user's reviewed artifacts before an explicit local
+  handoff; no automatic submission is implied. See
   [Bug Reporting](../code-review/bug-reporting.md).
+- Application updates use the release pipeline's verified artifacts and the
+  native save/install boundary. See [Release Pipeline](../code-review/release-pipeline.md).
 
 ## Documentation Boundary
 
-Update this document when these system contracts, ownership boundaries, or
-major flows change. Put user-experience and contribution guidance in the
-relevant [design area](README.md). Do not turn either into a source-tree map.
+Product decisions and observable behavior belong in the area designs.
+Engineering contracts own implementation interfaces and validation. A new
+product description does not change runtime prompts, permissions, or data
+formats; retain truthful current-state limitations until code changes them.

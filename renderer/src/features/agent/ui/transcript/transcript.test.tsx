@@ -12,7 +12,7 @@ const turn: AgentTranscriptBlock[] = [
   { id: 'a1', kind: 'assistant', text: 'I will read the orientation files first.' },
   { id: 'th1', kind: 'thinking', text: 'Listing top-level entries' },
   { id: 't1', input: { command: 'ls' }, kind: 'tool', name: 'Bash', status: 'done' },
-  { id: 'a2', kind: 'assistant', text: 'It is a small learning library.' },
+  { id: 'a2', kind: 'assistant', text: 'It is a small learning project.' },
 ];
 
 afterEach(cleanup);
@@ -73,7 +73,7 @@ describe('Agent transcript permission decisions', () => {
     const onPermission = vi.fn(() => true);
     const ask: AgentTranscriptBlock = {
       id: 'tool-2',
-      input: { content: '# Plan', file_path: '/library/Research/plan.md' },
+      input: { content: '# Plan', file_path: '/project/Research/plan.md' },
       kind: 'tool',
       name: 'Write',
       permissionId: 'permission-1',

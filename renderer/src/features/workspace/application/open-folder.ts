@@ -1,15 +1,15 @@
-import type { LibrarySnapshot } from '@/features/workspace/domain/library';
+import type { ProjectRegistrySnapshot } from '@/features/workspace/domain/project';
 
-import { libraryFailureMessage } from './failure-messages';
-import { type LibraryPort, LibraryError } from './ports';
+import { projectFailureMessage } from './failure-messages';
+import { type ProjectRegistryPort, ProjectError } from './ports';
 
 export type OpenFolderResult =
   | { status: 'cancelled' }
   | { status: 'failed'; message: string }
-  | { status: 'opened'; snapshot: LibrarySnapshot };
+  | { status: 'opened'; snapshot: ProjectRegistrySnapshot };
 
 export async function openFolder(
-  api: LibraryPort,
+  api: ProjectRegistryPort,
   path: string,
   signal: AbortSignal,
 ): Promise<OpenFolderResult> {
@@ -22,8 +22,8 @@ export async function openFolder(
     if (signal.aborted) return { status: 'cancelled' };
     return {
       status: 'failed',
-      message: libraryFailureMessage(
-        error instanceof LibraryError ? error.kind : undefined,
+      message: projectFailureMessage(
+        error instanceof ProjectError ? error.kind : undefined,
         'opened',
       ),
     };

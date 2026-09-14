@@ -12,8 +12,8 @@ import {
 } from '../recovery-journal.ts';
 import { mount, type RecoveryDraftRouteDeps } from './recovery-drafts.ts';
 
-const MEMBER = '/library/notes';
-const NON_MEMBER = '/library/elsewhere';
+const MEMBER = '/project/notes';
+const NON_MEMBER = '/project/elsewhere';
 const JSON_BODY_LIMIT = '10mb';
 
 interface Harness {
@@ -74,6 +74,29 @@ const draft = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+test('folder and filename whitespace preserve distinct draft identities through every route', async (t) => {
+  const { request, deps } = await harness(t);
+  deps.memberFolderRoot = async (raw) => [MEMBER, MEMBER + ' '].includes(raw) ? raw : null;
+  for (const folderPath of [MEMBER, MEMBER + ' ']) {
+    for (const sourcePath of ['note.md', ' note.md', 'note.md ']) {
+      const content = JSON.stringify([folderPath, sourcePath]);
+      assert.equal((await request('PUT', {}, draft({ folderPath, path: sourcePath, content }))).status, 200);
+    }
+  }
+  for (const folderPath of [MEMBER, MEMBER + ' ']) {
+    const listed = await request('GET', { folder: folderPath });
+    assert.equal(listed.body.drafts.length, 3);
+    for (const entry of listed.body.drafts) {
+      assert.equal(entry.folderPath, folderPath);
+      const read = await request('CONTENT', { folder: folderPath, path: entry.path });
+      assert.equal(read.body.content, JSON.stringify([folderPath, entry.path]));
+    }
+  }
+  assert.equal((await request('DELETE', { folder: MEMBER + ' ', path: ' note.md' })).status, 200);
+  assert.equal((await request('CONTENT', { folder: MEMBER + ' ', path: ' note.md' })).status, 404);
+  assert.equal((await request('CONTENT', { folder: MEMBER, path: ' note.md' })).status, 200);
+});
+
 test('write, list, read, and discard a draft through the folder-explicit routes', async (t) => {
   const { request, versions } = await harness(t);
   versions.set(`${MEMBER}/daily/today.md`, 'sha256:now');
@@ -126,7 +149,7 @@ test('a missing source and a failing version lookup both report currentVersion n
 
 test('non-member folders are refused on every route', async (t) => {
   const { request } = await harness(t);
-  const refused = { code: 'FOLDER_UNAVAILABLE', error: 'folder is not a registered library folder' };
+  const refused = { code: 'FOLDER_UNAVAILABLE', error: 'folder is not a registered project folder' };
   const queries: Record<string, string>[] = [{}, { folder: NON_MEMBER }, { folder: 'relative' }];
   for (const query of queries) {
     const listed = await request('GET', query);

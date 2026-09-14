@@ -1,4 +1,4 @@
-"""StashBase adapter for the public MFS library.
+"""StashBase adapter for the public MFS project.
 
 StashBase owns format preparation and the user-visible source lifecycle. MFS
 owns one Internal namespace per Folder, projection content identity, document
@@ -296,23 +296,24 @@ class StashbaseMFS:
             and pending_dense.get("embedding_space") == requested.embedding_space
             and pending_dense.get("dimension") == requested.dimension
         )
-        if requested and not requested_matches and not pending_matches:
-            report = self._mfs.configure_namespace(
+        matches = pending_matches if configuration.pending_revision else requested_matches
+        if requested and not matches:
+            self._mfs.configure_namespace(
                 namespace,
                 processors=[self._processor],
                 chunker=self._chunker,
                 embedder=requested,
                 indexing="hybrid",
             )
-            self._mfs.wait(report, 300)
-        elif requested is None and configuration.indexing != "off":
-            report = self._mfs.configure_namespace(
+        elif requested is None and (configuration.indexing != "off" or configuration.pending_revision):
+            self._mfs.configure_namespace(
                 namespace,
                 processors=[self._processor],
                 chunker=self._chunker,
                 indexing="off",
             )
-            self._mfs.wait(report, 300)
+        # Configuration is durably accepted above; MFS builds it in the
+        # background. Never wait for embedding while holding the routing lock.
 
     def bind_folder(self, args: dict[str, Any]) -> dict[str, Any]:
         _require(args, "folder")
@@ -335,7 +336,33 @@ class StashbaseMFS:
         with self._lock:
             self._open_or_create_namespace(namespace, requested)
             self._bindings[identity] = FolderBinding(root, identity, namespace)
+            removals = self._remove_shadowed_projections()
+        for report in removals:
+            self._mfs.wait(report, 300)
         return {"namespace": namespace}
+
+    def _remove_shadowed_projections(self) -> list[Any]:
+        """Retire ancestor rows, including namespaces reopened after a restart.
+
+        Called under the routing lock, shared with upsert admission. A writer
+        cannot publish a new ancestor row after the nested owner takes over.
+        """
+        reports = []
+        for binding in self._bindings.values():
+            prefixes = [
+                _relative(binding.root, child.root) + "/"
+                for child in self._bindings.values()
+                if child.identity != binding.identity
+                and _is_under_identity(binding.identity, child.identity)
+            ]
+            if not prefixes:
+                continue
+            for status in self._document_statuses(binding):
+                if status.content_hash is not None and any(
+                    status.id.doc_id.startswith(prefix) for prefix in prefixes
+                ):
+                    reports.append(self._mfs.remove(binding.namespace, status.id.doc_id))
+        return reports
 
     def unbind_folder(self, args: dict[str, Any]) -> dict[str, Any]:
         _require(args, "folder")
@@ -380,15 +407,16 @@ class StashbaseMFS:
 
     def upsert(self, args: dict[str, Any]) -> dict[str, Any]:
         _require(args, "path", "content")
-        binding, doc_id = self.projection_identity(args)
         content = str(args["content"])
         started = time.monotonic()
-        report = self._mfs.upsert(
-            binding.namespace,
-            doc_id,
-            content.encode("utf-8"),
-            media_type="text/markdown",
-        )
+        with self._lock:
+            binding, doc_id = self.projection_identity(args)
+            report = self._mfs.upsert(
+                binding.namespace,
+                doc_id,
+                content.encode("utf-8"),
+                media_type="text/markdown",
+            )
         self._mfs.wait(report, 300)
         elapsed = int((time.monotonic() - started) * 1000)
         return {
@@ -464,21 +492,26 @@ class StashbaseMFS:
         )
         documents: list[Any] = []
         for binding in bindings:
-            indexing = self._mfs.namespace_configuration(binding.namespace).indexing
+            configuration = self._mfs.namespace_configuration(binding.namespace)
+            building = configuration.pending_revision is not None
+            indexing = (
+                self._manifest_dense(configuration.pending_manifest) is not None
+                if building else configuration.indexing != "off"
+            )
             documents.extend(
-                (binding, status, indexing)
+                (binding, status, indexing, building)
                 for status in self._document_statuses(binding)
                 if status.content_hash is not None
             )
         ready = [
             (binding, status)
-            for binding, status, indexing in documents
-            if indexing != "off" and status.indexed_revision == status.revision
+            for binding, status, indexing, building in documents
+            if indexing and not building and status.indexed_revision == status.revision
         ]
         pending = sorted(
             _join(binding.root, status.id.doc_id)
-            for binding, status, indexing in documents
-            if indexing != "off" and status.indexed_revision != status.revision
+            for binding, status, indexing, building in documents
+            if indexing and (building or status.indexed_revision != status.revision)
         )
         return {
             "total": len(documents),

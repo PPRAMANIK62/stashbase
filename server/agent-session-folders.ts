@@ -1,12 +1,12 @@
 /**
  * Persisted native-session → member-folder overrides for Agent history.
  *
- * Both runtimes' native history stores key sessions by cwd. A library-scoped
- * chat runs with cwd = the folder home (the reserved library cwd), so when
+ * Both runtimes' native history stores key sessions by cwd. An unbound
+ * chat runs with cwd = the folder home (the historical unbound cwd), so when
  * `create_project` migrates such a chat to a newly created project, its
- * native history record still lives under the library cwd. This store is the
+ * native history record still lives under the project cwd. This store is the
  * documented mapping override: it records "this native session now belongs
- * to that member folder". The history routes consult it — the library
+ * to that member folder". The history routes consult it — the project
  * listing excludes overridden sessions, the project listing includes them —
  * and Claude resume validation accepts an overridden session for its
  * override folder.
@@ -58,20 +58,16 @@ function writeFileState(state: OverrideFile): void {
   fs.renameSync(tmp, target);
 }
 
-/** Record that `sessionId`'s history now belongs to `folderAbs`. */
+/** Persist history ownership before live scope changes. Write errors propagate. */
 export function setAgentSessionFolderOverride(
   agent: AttributedAgentId,
   sessionId: string,
   folderAbs: string,
 ): void {
   if (!sessionId || !folderAbs) return;
-  try {
-    const state = readFileState();
-    state[agent] = { ...(state[agent] ?? {}), [sessionId]: filesystemPath.absolute(folderAbs) };
-    writeFileState(state);
-  } catch (err: unknown) {
-    log.warn(`could not persist session-folder override for ${agent}/${sessionId}: ${errorMessage(err)}`);
-  }
+  const state = readFileState();
+  state[agent] = { ...(state[agent] ?? {}), [sessionId]: filesystemPath.absolute(folderAbs) };
+  writeFileState(state);
 }
 
 export function clearAgentSessionFolderOverride(agent: AttributedAgentId, sessionId: string): void {
@@ -108,7 +104,7 @@ function pathsEqual(a: string, b: string): boolean {
 
 /** History-listing membership for one row under `folder`: an override wins
  * over the row's native cwd — an overridden session belongs ONLY to its
- * override folder (so the library listing under the folder-home cwd
+ * override folder (so the project listing under the folder-home cwd
  * excludes it), while a row without an override keeps its cwd identity. */
 export function historyRowInFolder(
   overrideTarget: string | null | undefined,
@@ -133,7 +129,7 @@ export function historyRowsForFolder<T extends { id: string }>(
 }
 
 /** Overridden session ids that belong to `folder` but are missing from the
- * native cwd-scoped rows (they live under the reserved library cwd). */
+ * native cwd-scoped rows (they live under the historical unbound cwd). */
 export function missingOverriddenSessionIds(
   rows: readonly { id: string }[],
   overrides: Record<string, string>,

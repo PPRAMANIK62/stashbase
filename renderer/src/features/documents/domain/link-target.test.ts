@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { resolveDocumentLink } from './link-target';
 
-const owner = { folderPath: '/library/notes', path: 'guides/current.md' };
+const owner = { folderPath: '/project/notes', path: 'guides/current.md' };
 
 describe('document link navigation', () => {
   it('resolves relative files and anchors from the owning source identity', () => {
     expect(resolveDocumentLink('../Other%20note.md#part', owner)).toEqual({
       anchor: 'part',
       kind: 'source',
-      source: { folderPath: '/library/notes', path: 'Other note.md' },
+      source: { folderPath: '/project/notes', path: 'Other note.md' },
     });
     expect(resolveDocumentLink('#R%C3%A9sum%C3%A9', owner)).toEqual({
       id: 'Résumé',
@@ -20,12 +20,12 @@ describe('document link navigation', () => {
   it('retains an out-of-folder source folder instead of rebinding to the active folder', () => {
     expect(
       resolveDocumentLink('sibling.md', {
-        folderPath: '/library/archive',
+        folderPath: '/project/archive',
         path: 'guides/current.md',
       }),
     ).toEqual({
       kind: 'source',
-      source: { folderPath: '/library/archive', path: 'guides/sibling.md' },
+      source: { folderPath: '/project/archive', path: 'guides/sibling.md' },
     });
   });
 
@@ -49,7 +49,7 @@ describe('document link navigation', () => {
     });
     expect(resolveDocumentLink('../archive.zip', owner)).toEqual({
       kind: 'source',
-      source: { folderPath: '/library/notes', path: 'archive.zip' },
+      source: { folderPath: '/project/notes', path: 'archive.zip' },
     });
   });
 });

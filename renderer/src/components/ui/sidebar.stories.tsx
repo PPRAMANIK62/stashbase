@@ -21,13 +21,13 @@ import {
 } from './sidebar';
 
 const navigation = [
-  { icon: SquareLibrary, label: 'Library' },
+  { icon: SquareLibrary, label: 'Projects' },
   { icon: Folder, label: 'Projects' },
   { icon: FileText, label: 'Recent files' },
 ];
 
 function SidebarExample({ defaultOpen = true }: { defaultOpen?: boolean }) {
-  const [current, setCurrent] = useState('Library');
+  const [current, setCurrent] = useState('Projects');
   return (
     <div className="h-[34rem] w-[min(100vw-3rem,58rem)] overflow-hidden bg-background">
       <SidebarProvider className="h-full" defaultOpen={defaultOpen} persist={false}>

@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import express from "express";
 
-import { clearCurrentFolder, removeRecent, setCurrentFolder } from "../folder.ts";
+import { clearCurrentFolder, removeRecentAsync, openProjectFolder } from "../folder.ts";
 import { mount as mountFiles } from "./files.ts";
 import { mount as mountFolders } from "./folders.ts";
 
@@ -29,7 +29,7 @@ test("entry mutations honor an explicit folder that names the active folder and 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-entry-mutations-"));
   const other = fs.mkdtempSync(path.join(os.tmpdir(), "stashbase-entry-other-"));
   fs.writeFileSync(path.join(root, "keep.md"), "# Keep\n", "utf8");
-  setCurrentFolder(root);
+  await openProjectFolder(root);
 
   const app = express();
   app.use(express.json());
@@ -81,7 +81,7 @@ test("entry mutations honor an explicit folder that names the active folder and 
   } finally {
     await server.close();
     clearCurrentFolder();
-    removeRecent(root);
+    await removeRecentAsync(root);
     fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
     fs.rmSync(other, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   }

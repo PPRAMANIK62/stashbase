@@ -9,11 +9,11 @@
   identity, roots, containment, realpath checks, case behavior, and Unicode.
 - Folder-relative path policy owns normalized in-folder names and protected
   write rules.
-- Shared save and library mutation services own content versions and the
+- Shared save and project mutation services own content versions and the
   transaction sequence. HTTP and MCP routes are adapters, not alternate
   mutation implementations.
 - Content capability is format- and surface-specific: the Workbench edits
-  Markdown, JSON, and valid UTF-8 TXT, while library/Agent operations accept
+  Markdown, JSON, and valid UTF-8 TXT, while project/Agent operations accept
   Markdown, HTML, JSON, and valid UTF-8 TXT. Preview-only binary and generic
   formats reject content writes. Rename, move,
   and delete are file mutations and do not imply content editability. The
@@ -28,7 +28,11 @@
   and creatable targets use realpath-aware containment; lexical containment is
   never claimed as symlink safety.
 - Retained spelling is used for disk I/O and display. Platform-aware comparison
-  identity is used only for equality, maps, and subtree operations.
+  identity is used only for equality, maps, and subtree operations. Folder
+  picker, lifecycle IPC, and project registry HTTP paths preserve whitespace in real
+  directory names; nonblank validation never rewrites a path. Protocol and
+  native picker/registry tests cover spelling, while `server/routes/project.test.ts`
+  opens and removes a real POSIX directory distinct from its trimmed sibling.
 - Drive and UNC roots remain intact. Creatable targets preserve the requested
   leaf spelling so case-only rename works on case-insensitive filesystems.
 - A basename rename stays in the source parent; a folder-relative target is a
@@ -39,6 +43,18 @@
 - Folder entry, Agent startup, and `create_project` never create or edit
   runtime instruction files. StashBase-managed Agent Instructions are
   application config, not a filesystem transaction.
+- Project creation preserves the explicit location's spelling and uses the
+  asynchronous resolver for both production and validation tests. Registration
+  failure cleanup checks the directory's device/inode identity before attempting
+  non-recursive removal; replaced, non-empty, or unidentifiable paths are retained.
+  Target resolution selects its owning root from one membership snapshot;
+  realpath containment and the removal gate still run before directory creation.
+  Reading the default home path has no filesystem or seeding side effects.
+- Opening an existing folder never creates directories. It prepares directory
+  checks, retained member spelling, and the validated registry response before
+  committing membership and the window binding without an intervening yield.
+  Failed preparation or persistence keeps the previous binding and membership.
+  Filesystem roots have a nonempty display label.
 - Request-handling Adapters perform potentially slow realpath,
   canonicalization, existence, and type checks asynchronously. A sync path
   resolver is allowed only where its caller is already outside the shared Node
@@ -47,7 +63,7 @@
 ### Request-path path-resolution liveness
 
 `FilesystemPathModule.resolveUnderAsync` owns asynchronous canonicalization,
-mounted-volume identity, containment, and native realpath checks; async library
+mounted-volume identity, containment, and native realpath checks; async project registry
 membership lookup also reads configuration and probes member directories without
 sync filesystem calls. HTTP and MCP file reads, writes, uploads, listings,
 scoped search, folder mutations, and project creation use those async identity
@@ -61,15 +77,34 @@ focused synchronous tests.
 sync stat/directory primitive, preserves Windows component spelling, and keeps
 unrelated event-loop work live while native realpath is artificially delayed.
 
+**Known gap — trailing-space folder scope after entry:** picker, registration,
+and window binding preserve the selected path, but downstream file-listing,
+index-status and Agent-session Adapters still trim some explicit
+folder inputs. A 2026-09-14 driven pass opened a directory ending in a space
+and received its correct registry snapshot, while the scoped file tree and
+other background requests were refused. The project-open fixes do not cover
+those downstream scope parsers.
+
 ## Save and Version Contract
 
+Project `edit_file` replacements are literal strings in single-match and
+replace-all modes. Replacement syntax such as `$&` must never interpolate the
+matched text or neighboring content; the normal version check still applies.
+
 - Text versions are hashes of complete source bytes, not mtimes.
+- Text reads return content and version from one bounded snapshot. Saves and
+  link rewrites share a per-source transaction queue, pin their folder before
+  yielding, and recheck the expected version after staging, before publication.
+  Their response version describes the bytes written, not a later disk read.
+  The queue serializes in-process text writers; the final external-edit check
+  is not an operating-system compare-and-swap against arbitrary external writers.
 - Renderer saves and Agent/MCP writes use the same version authority.
 - Build Wiki does not define a new write API or bypass approval/version rules.
-  Its default Agent contract writes only under **wiki/**, uses
-  **wiki/index.md** as the entry page, preserves everything outside that
-  directory, and treats move, rename, delete, or broad rewrites as a separately
-  proposed action requiring explicit approval.
+  For a requested wiki task, the packaged guidance places pages under
+  **wiki/** and preserves existing conventions; **wiki/index.md** is an example,
+  not a required entry filename. That request does not authorize moving,
+  renaming, deleting, or broadly rewriting other files. This is task guidance,
+  not a directory sandbox or a restriction on separately requested drafting.
 - Every content-write Adapter enforces the same accepted text-format set. A
   public tool description must not advertise a narrower or broader set than
   the operation actually accepts.
@@ -128,7 +163,7 @@ text do not.
   entry through a temporary and a rename, and stores nothing readable without
   the key.
 - The store lives in the server's private local-data directory
-  (`recoveryJournalDir` in `server/local-data.ts`), never inside a library
+  (`recoveryJournalDir` in `server/local-data.ts`), never inside a project registry
   folder, so folder sync, backups, listing, and indexing never observe it.
 - The key is provisioned and protected by Electron and reaches the owned server
   only over its process-private environment. The server deletes the variable as
@@ -167,6 +202,11 @@ text do not.
 - Two windows editing one source share that single entry and the last snapshot
   to arrive wins. Each window journals only its own changed text, so a window
   does not re-assert stale bytes over a peer's newer entry.
+- The journal serializes publication, reads, listing/eviction, and discard in
+  request order. Cleanup cannot remove a temporary file belonging to an active
+  write, and a failed operation releases the queue. Folder and relative source
+  paths retain their exact whitespace through the recovery wire and routes;
+  trimming must never alias two distinct drafts.
 
 **Known gap — the design is not ratified.** The implementation is Shipping, but
 its design record was never accepted. Treat the storage shape above as current
@@ -209,8 +249,8 @@ For rename, move, and delete:
 Validation must happen before cancellation so an invalid request cannot disturb
 healthy work.
 
-`server/library-file-mutations.ts` is the shared source-mutation owner. The
-active-folder HTTP routes and library/MCP operations only normalize their
+`server/project-file-mutations.ts` is the shared source-mutation owner. The
+active-folder HTTP routes and project/MCP operations only normalize their
 transport-specific arguments and map results. A delete acknowledgement waits
 for old source and derived index identities; rename/move removes the old
 identity before reporting any optional new-identity indexing lag.
@@ -225,7 +265,7 @@ callers that predate explicit scope.
 The active-folder Adapter may opt regular generic files into rename/move/delete
 without granting content writes or retrieval. Generic rename/move preserves the
 actual suffix and retires any stale index identity defensively. The shared
-library/Agent Interface does not opt in and returns `415`, so a Workbench file
+project/Agent Interface does not opt in and returns `415`, so a Workbench file
 operation cannot accidentally widen MCP. Symlinks and special entries never
 enter the mutation transaction.
 
@@ -234,10 +274,11 @@ enter the mutation transaction.
 Rename and move can rewrite other files' Markdown/HTML relative links so they
 keep resolving after the identity change.
 
-- `server/links.ts` plans the affected link set against pre-rename disk state
-  (`planRenameLinks`), then rewrites and saves affected files after the
-  filesystem mutation (`applyRenamePlan`); a write failure rolls back both the
-  rewrites and the disk rename.
+- `server/links.ts` plans the affected link set and source versions against
+  pre-rename disk state (`planRenameLinksAsync`), then applies it after the
+  filesystem mutation (`applyRenamePlanAsync`). Changed sources refuse the
+  rewrite. Rollback restores only bytes still owned by the completed rewrite;
+  a newer user edit is preserved and the refused rollback is reported in logs.
 - Cascade defaults on for every rename/move except a JSON target. The UI
   (`POST /api/rename-preview` in `server/routes/file-mutations.ts`, and folder
   rename in `server/routes/folders.ts`) previews the affected file/link count
@@ -249,15 +290,13 @@ keep resolving after the identity change.
   definition) and non-anchor tags such as `img src` are not tracked and go
   stale silently on rename.
 - Cross-folder moves and folder-level rename/move through MCP are out of
-  scope: `moveLibraryFile` only supports moves within one member folder root,
+  scope: `moveProjectFile` only supports moves within one member folder root,
   and only file-level moves are exposed to MCP.
 
 ## Import Publication
 
-### Clipboard and File Import
-- A clipboard image reaches publication only after the default-off capture
-  setting is enabled and the user accepts that specific offer. Dismissal and
-  clipboard observation never create a source file.
+### File Import
+
 - Multipart import streams into disk-backed OS-temp staging; it does not hold a
   multi-gigabyte body in memory.
 - Publication copies into a hidden same-directory temporary, then uses an
@@ -280,28 +319,40 @@ keep resolving after the identity change.
   `.import-staging-${uuid}` root. Asynchronous pre-publication inspection rejects
   root submodule declarations and LFS declarations in any checked-out
   `.gitattributes` file.
-- The final directory is reserved with exclusive creation before validated
-  staged entries move into it. An existing file, directory, or symlink wins the
-  collision and remains untouched. Failures clean the operation-owned staging
-  root and any final reservation the operation created.
+- Publication creates directories and symlinks exclusively, and publishes files
+  through no-replace hard links or exclusive copies on volumes without links.
+  Existing entries win collisions even after the final directory is reserved.
+  A publication ledger records filesystem identity and file metadata; rollback
+  removes only unchanged owned entries and empty owned directories, preserving
+  replacements, edits, and unrelated additions. Staging cleanup remains separate.
 - Request cancellation and application shutdown abort the Git process tree and
-  await staging cleanup. Raw remote output is used only for bounded error
-  classification and is never returned or logged.
-- Acquisition returns the retained local path only. The renderer then calls the
-  existing active-workspace folder-open action, which remains the sole owner of
-  membership, navigation, and background preparation/indexing. If that later
-  transition fails, the modal reports the retained path and retries opening
-  without cloning again.
+  await staging cleanup. The Git availability probe shares that cancellation
+  path and has a five-second deadline. Publication checks cancellation after the
+  last filesystem operation before committing success. Raw stderr is used only
+  for bounded error classification and is never returned or logged; stdout is
+  ignored.
+- Acquisition commits project registration after publication and before returning
+  the retained local path. The publication ledger remains available until that
+  commit, so registration failure rolls back unchanged owned content. Cancellation
+  is checked before the durable registration write; a successful commit keeps the
+  copy even if a later window transition fails. Import never changes the calling
+  window's binding or starts indexing; the existing folder-open action owns
+  navigation and background preparation. The registered copy remains discoverable
+  if opening it fails.
 
 **Known gap — atomic directory visibility:** Node exposes no cross-platform
 atomic no-replace rename for directories. The exclusive final reservation
-prevents clobbering concurrent user state, but the reserved directory can be
-briefly visible while its already-validated top-level entries move into place.
-The focused tests prove no-clobber and cleanup, not single-syscall visibility.
+prevents replacing an existing destination, but the reserved directory is
+visible while its validated entries are published. Exclusive-copy fallback can
+also expose an incomplete file until copying finishes. Identity checks and
+rollback protect observed replacements and additions; Node does not provide
+atomic identity-conditional unlink or directory-relative publication, so they
+are not a guarantee against adversarial path substitution between syscalls.
+The focused tests prove the exercised races and cleanup, not atomic visibility.
 
 ## Folder Removal vs Filesystem Delete
 
-Removing a library member deletes StashBase-owned state only. Deleting a folder
+Removing a registered project deletes StashBase-owned state only. Deleting a folder
 inside the active tree is a confirmed filesystem delete followed by subtree
 cleanup. These operations must never share ambiguous copy or confirmation.
 
@@ -319,15 +370,17 @@ text reads and manifest-known derived-text reads also reject responses above
 | Role | Stable entry points |
 |---|---|
 | Path Interface | `FilesystemPathModule.resolveUnderAsync` in `server/filesystem-path.ts`, `resolveSafeAsync` in `server/file-paths.ts`, and in-folder policy in `server/folder-relative-path.ts` |
+| Project entry | `openProjectFolder` and `getProjectRegistrySnapshot` in `server/folder.ts`, adapted by `server/routes/project.ts`; focused evidence in `server/project-open.test.ts` |
 | Save Interface | `validateEditableFileWrite`, `upsertSavedFile`, and `saveFileContent` in `server/file-save.ts` |
+| Text transaction owner | `server/text-file-transaction.ts` owns coherent snapshots, per-source writer serialization, and version-checked publication for saves and link rewrites; `server/text-file-transaction.test.ts` exercises concurrent writes and preservation during rewrite/rollback |
 | Active-folder Adapter | `server/routes/files.ts`, `server/routes/file-mutations.ts`, and `server/routes/upload.ts` |
-| Source Mutation Module | `server/library-file-mutations.ts` |
-| Link Cascade Module | `server/links.ts` (`planRenameLinksAsync`, `applyRenamePlanAsync`, plus sync background/test compatibility entry points) |
-| Library/MCP Adapter | `LibraryOperations` and MCP/HTTP transport adapters |
+| Source Mutation Module | `server/project-file-mutations.ts` |
+| Link Cascade Module | `server/links.ts` (`planRenameLinksAsync` and `applyRenamePlanAsync`) |
+| Project/MCP Adapter | `ProjectOperations` and MCP/HTTP transport adapters |
 | Publication Modules | `server/import-publication.ts` for file imports and `GitHubImportModule` in `server/github-import.ts` for repository acquisition |
 | Draft journal Module | `server/recovery-journal.ts`, behind the routes in `server/routes/recovery-drafts.ts`; renderer Port and Adapter in `renderer/src/features/documents/application/ports.ts` and `renderer/src/features/documents/infrastructure/recovery-draft-api.ts` |
 | Lifecycle Adapter | conversion cancellation, cleanup, and reconcile Modules in [Data Lifecycle](data-lifecycle.md) |
-| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `routes/file-mutations.test.ts`, `upload.test.ts`, `library-file-mutations.test.ts`, `library-operations/index.test.ts`, `server/recovery-journal.test.ts`, `server/routes/recovery-drafts.test.ts`, and the colocated save, conflict, and recovery tests under `renderer/src/features/documents/` |
+| Focused evidence | `server/filesystem-path.test.ts`, `folder-relative-path.test.ts`, `files.test.ts`, `routes/file-mutations.test.ts`, `upload.test.ts`, `project-file-mutations.test.ts`, `project-operations/index.test.ts`, `server/recovery-journal.test.ts`, `server/routes/recovery-drafts.test.ts`, and the colocated save, conflict, and recovery tests under `renderer/src/features/documents/` |
 
 ## Validation
 
@@ -336,7 +389,7 @@ Run:
 ```bash
 pnpm typecheck
 pnpm test:conversion-scheduler
-pnpm test:library-files
+pnpm test:project-files
 pnpm test:renderer
 ```
 
@@ -346,7 +399,7 @@ at the lowest deterministic layer. User-visible CRUD, failed-save navigation,
 and conflict recovery are proven at that layer plus the evidence
 [Journey Coverage](journey-coverage.md) assigns to J03. GitHub import behavior
 and lifecycle run through `server/__tests__/github-import.test.ts` in
-`pnpm test:library-files`, which also owns the draft journal and its routes.
+`pnpm test:project-files`, which also owns the draft journal and its routes.
 
 Related journeys: [J02](../design-docs/user-journeys.md#j02-add-and-open-a-folder),
 [J03](../design-docs/user-journeys.md#j03-read-and-edit-source-documents),

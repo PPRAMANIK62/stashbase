@@ -61,7 +61,7 @@ describe('useUpdateNotice', () => {
     expect(updates.port.subscribe).toHaveBeenCalledTimes(1);
     expect(updates.port.read).toHaveBeenCalledTimes(1);
     expect(result.current.offer).toEqual({
-      actionLabel: 'Download',
+      actionLabel: 'Update and restart',
       message: 'StashBase 1.5.0 is available.',
       releasePageLabel: "What's new",
     });

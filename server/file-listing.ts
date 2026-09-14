@@ -26,7 +26,7 @@ import { folderRoot, resolveSafe, resolveSafeAsync } from './file-paths.ts';
 import type {
   WorkspaceEntryAvailability,
   WorkspaceFileKind,
-} from '../shared/library-files.ts';
+} from '../shared/project-files.ts';
 import { decodeDirectTextBytes, decodeDirectTextPreview } from './text-decoding.ts';
 
 const LEGACY_DERIVED_SOURCE_RE = new RegExp(`^(.+)\\.(${LEGACY_DERIVED_SOURCE_EXTENSION_ALTERNATION})$`, 'i');

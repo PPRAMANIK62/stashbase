@@ -7,7 +7,7 @@ import { retireDocuments } from './retire-documents';
 
 function createWorkspace() {
   return createWorkspaceRuntime({
-    folder: { name: 'Notes', path: '/library/notes' },
+    folder: { name: 'Notes', path: '/project/notes' },
     generation: 1,
     queries: { cancel: vi.fn(async () => undefined), remove: vi.fn() },
   });
@@ -25,14 +25,14 @@ function createDocuments(
       remove: vi.fn(),
       replaceSource: vi.fn(),
     }),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
     restored: {
       activeTabId: 'tab-a',
       tabs: [
-        { id: 'tab-a', source: { folderPath: '/library/notes', path: 'drafts/plan.md' } },
-        { id: 'tab-b', source: { folderPath: '/library/notes', path: 'drafts/2026/notes.md' } },
-        { id: 'tab-c', source: { folderPath: '/library/notes', path: 'drafts-old/keep.md' } },
+        { id: 'tab-a', source: { folderPath: '/project/notes', path: 'drafts/plan.md' } },
+        { id: 'tab-b', source: { folderPath: '/project/notes', path: 'drafts/2026/notes.md' } },
+        { id: 'tab-c', source: { folderPath: '/project/notes', path: 'drafts-old/keep.md' } },
       ],
     },
   });
@@ -49,8 +49,8 @@ describe('retire documents workflow', () => {
     });
 
     expect(retired).toEqual([
-      { folderPath: '/library/notes', path: 'drafts/plan.md' },
-      { folderPath: '/library/notes', path: 'drafts/2026/notes.md' },
+      { folderPath: '/project/notes', path: 'drafts/plan.md' },
+      { folderPath: '/project/notes', path: 'drafts/2026/notes.md' },
     ]);
     expect(documents.openSources().map((source) => source.path)).toEqual(['drafts-old/keep.md']);
   });
@@ -98,7 +98,7 @@ describe('retire documents workflow', () => {
     const documents = createDocuments();
     workspace.dispose();
     const later = createWorkspaceRuntime({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 2,
       queries: { cancel: vi.fn(async () => undefined), remove: vi.fn() },
     });

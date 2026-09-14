@@ -1,17 +1,19 @@
-import type { ActiveLibraryFolder } from './library';
+import type { ActiveProjectFolder } from './project';
 import type { FolderSessionState } from './session';
 import { renamedTreePath, treePathWithin, type ExpandedFolders } from './tree';
 
 export interface WorkspaceScope {
-  readonly folder: ActiveLibraryFolder;
+  readonly folder: ActiveProjectFolder;
   readonly generation: number;
 }
 
-/** A create the window asked the tree to make: a draft, an `Untitled.md`
- *  beside the selection. Folders keep their explicit place in the tree's own
- *  menu, so the request has one kind. */
+/** A create the window asked the tree to make beside the selection: a
+ *  draft, an `Untitled.md` opened at once and renamed in place, or a folder,
+ *  which starts the tree's own name-first create where the selection sits.
+ *  The tree's menu keeps both as explicit rows; the request is how the
+ *  folder header and the titlebar reach the same flows. */
 export interface TreeCreateRequest {
-  kind: 'draft';
+  kind: 'draft' | 'folder';
   /** Distinguishes one request from the next of the same kind, so asking
    *  twice starts the naming twice. */
   revision: number;
@@ -57,7 +59,8 @@ export function disposeWorkspaceState(state: WorkspaceState): WorkspaceState {
   return state.lifecycle === 'disposed' ? state : { ...state, lifecycle: 'disposed' };
 }
 
-export function selectTreePath(state: WorkspaceState, selectedPath: string): WorkspaceState {
+/** Points the tree at `selectedPath`, or at no row at all with `null`. */
+export function selectTreePath(state: WorkspaceState, selectedPath: string | null): WorkspaceState {
   return state.selectedPath === selectedPath ? state : { ...state, selectedPath };
 }
 
@@ -66,6 +69,12 @@ export function toggleTreeFolder(state: WorkspaceState, folderPath: string): Wor
   if (expanded[folderPath]) delete expanded[folderPath];
   else expanded[folderPath] = true;
   return { ...state, expanded };
+}
+
+/** Folds every expanded folder, so the tree shows the root's own entries
+ *  and nothing beneath them. */
+export function collapseAllTreeFolders(state: WorkspaceState): WorkspaceState {
+  return Object.keys(state.expanded).length === 0 ? state : { ...state, expanded: {} };
 }
 
 export function expandTreeFolder(state: WorkspaceState, folderPath: string): WorkspaceState {

@@ -6,7 +6,7 @@ import {
   type BugReportOpenResponse,
   bugReportOpenResponseSchema,
 } from '../../shared/protocols/electron/bug-report.ts';
-import { authorizeSender, type SenderAuthorization } from '../library/dialog.ts';
+import { authorizeSender, type SenderAuthorization } from '../project/dialog.ts';
 
 export { BUG_REPORT_CAPABILITY };
 

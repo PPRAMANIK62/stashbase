@@ -11,7 +11,7 @@ afterEach(cleanup);
 
 /** The row reads only whether any document is open, so the test opens and
  *  closes one real document rather than reaching into the runtime's store. */
-const PLAN = { folderPath: '/library/notes', path: 'plan.md' } as const;
+const PLAN = { folderPath: '/project/notes', path: 'plan.md' } as const;
 
 describe('Agent document workspace row', () => {
   it('keeps one Agent workspace mounted while documents open and close', async () => {
@@ -75,6 +75,35 @@ describe('Agent document workspace row', () => {
     runtime.dispose();
   });
 
+  it('gives the Agent the whole row while documents are off screen, whatever the toggle says', async () => {
+    const runtime = createDocumentTabsRuntime(documentTabsRuntimeOptions());
+    render(
+      <AgentDocumentWorkspace
+        agent={<div data-testid="agent" />}
+        chatPaneOpen={false}
+        document={<div data-testid="document">Plan</div>}
+        documentsShown={false}
+        onPaneWidthChange={vi.fn()}
+        paneWidth={576}
+        runtime={runtime}
+      />,
+    );
+    await act(async () => void (await runtime.open(PLAN)));
+
+    // Chats mode: the open document stays mounted but leaves the row, and
+    // the Agent takes it even though the Chat toggle last said hide.
+    const slot = screen.getByTestId('document-slot');
+    expect(slot.getAttribute('aria-hidden')).toBe('true');
+    expect(slot.hasAttribute('inert')).toBe(true);
+    expect(screen.getByTestId('document')).not.toBeNull();
+    const shelf = screen.getByTestId('agent-pane').parentElement;
+    expect(shelf?.getAttribute('aria-hidden')).toBe('false');
+    expect(shelf?.hasAttribute('inert')).toBe(false);
+    expect(screen.getByTestId('agent-pane').style.width).toBe('100%');
+    expect(screen.queryByRole('separator', { name: 'Resize Agent pane' })).toBeNull();
+    runtime.dispose();
+  });
+
   it('gives the Agent the whole row without a documents runtime', () => {
     render(
       <AgentDocumentWorkspace
@@ -86,6 +115,7 @@ describe('Agent document workspace row', () => {
       />,
     );
     expect(screen.getByTestId('agent')).not.toBeNull();
-    expect(screen.getByTestId('agent-pane').getAttribute('style')).toBeNull();
+    // The box is the row: no pixel width of its own.
+    expect(screen.getByTestId('agent-pane').style.width).toBe('100%');
   });
 });

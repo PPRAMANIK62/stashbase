@@ -33,24 +33,24 @@ describe('semantic search domain', () => {
 
   it('keeps rank order inside the requested folder and drops invalid cross-folder hits', () => {
     const hits = [
-      hit('/library/b', 'one.md', 0.9),
-      hit('/library/a', 'two.md', 0.8),
-      hit('/library/b', 'three.md', 0.7),
+      hit('/project/b', 'one.md', 0.9),
+      hit('/project/a', 'two.md', 0.8),
+      hit('/project/b', 'three.md', 0.7),
     ];
-    expect(groupSemanticHits(hits, '/library/b').map((group) => group.folderPath)).toEqual([
-      '/library/b',
+    expect(groupSemanticHits(hits, '/project/b').map((group) => group.folderPath)).toEqual([
+      '/project/b',
     ]);
     expect(
-      groupSemanticHits(hits, '/library/b')[0]?.hits.map((entry) => entry.source.path),
+      groupSemanticHits(hits, '/project/b')[0]?.hits.map((entry) => entry.source.path),
     ).toEqual(['one.md', 'three.md']);
-    expect(groupSemanticHits(hits, '/library/a')[0]?.hits).toHaveLength(1);
-    expect(groupSemanticHits([], '/library/a')).toEqual([]);
+    expect(groupSemanticHits(hits, '/project/a')[0]?.hits).toHaveLength(1);
+    expect(groupSemanticHits([], '/project/a')).toEqual([]);
   });
 
   it('anchors navigation on the first non-heading line of the chunk', () => {
-    const intent = semanticNavigationIntent({ ...hit('/library/a', 'two.md', 1), pdfPage: 4 });
+    const intent = semanticNavigationIntent({ ...hit('/project/a', 'two.md', 1), pdfPage: 4 });
     expect(intent).toEqual({
-      source: { folderPath: '/library/a', path: 'two.md' },
+      source: { folderPath: '/project/a', path: 'two.md' },
       target: {
         caseSensitive: false,
         line: 3,

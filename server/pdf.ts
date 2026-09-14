@@ -17,7 +17,7 @@ import fs, { closeSync, existsSync, mkdirSync, openSync, readSync, rmSync, statS
 import path from 'node:path';
 import { isDerivedNoteName, matchDerivedNote, NOTE_EXTS } from './format.ts';
 import { derivedNoteFor, derivedBundleFor, derivedBatchesFor, derivedDir } from './derived-store.ts';
-import { extractorSpawn } from './python-host.ts';
+import { extractorSpawn, prepareExtractorRuntime } from './python-host.ts';
 import {
   discoverCandidateSources,
   discoverNewSources,
@@ -196,7 +196,7 @@ function probePdfTextLayer(pdfAbsPath: string, signal: AbortSignal): Promise<boo
  *  existence check (no extension probing). Used by the search routes to
  *  rewrite hits so users see the PDF / image row rather than the hidden
  *  derived note. `baseAbs` is the folder root for relative GUI hits; absolute
- *  library hits already carry their full source identity. */
+ *  project hits already carry their full source identity. */
 function originalForDerivedNote(noteRel: string, baseAbs: string): string | null {
   // The derived name encodes the full source filename, so the source is
   // read straight off it — no extension probing.
@@ -241,8 +241,8 @@ function originalForLegacyDerivedNote(noteRel: string, baseAbs: string): string 
  *    • any normal file → unchanged.
  *
  *  `rel` is relative to `baseAbs` for GUI routes, and may already be absolute
- *  for library/MCP routes. Centralised here so `/api/search`,
- *  `/api/keyword-search`, and `/api/library/search` can't drift apart. */
+ *  for project/MCP routes. Centralised here so `/api/search`,
+ *  `/api/keyword-search`, and `/api/project/search` can't drift apart. */
 export function displayPathForHit(rel: string, baseAbs: string): string | null {
   const source = originalForDerivedNote(rel, baseAbs);
   if (source) return source;
@@ -256,11 +256,14 @@ export function displayPathForHit(rel: string, baseAbs: string): string | null {
  *  rejects with the extractor's stderr tail on failure. Fire-and-
  *  forget at the call site if you don't want to block — `convertPdf`
  *  itself does not throw synchronously. */
-function convertPdf(
+async function convertPdf(
   pdfAbsPath: string,
   onProgress?: (progress: ConversionProgress) => void,
   signal?: AbortSignal,
+  yieldLane?: (until?: Promise<unknown>) => Promise<void>,
 ): Promise<ConvertResult> {
+  await prepareExtractorRuntime(signal, yieldLane);
+  signal?.throwIfAborted();
   const { notePath, bundleDir } = derivedPathsForPdf(pdfAbsPath);
   mkdirSync(derivedDir(), { recursive: true });
 

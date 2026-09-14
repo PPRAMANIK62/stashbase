@@ -10,7 +10,6 @@
 
 import { forwardRef, type HTMLAttributes } from 'react';
 
-import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
 type SidebarSectionProps = HTMLAttributes<HTMLDivElement>;
@@ -42,7 +41,6 @@ SidebarFooter.displayName = 'SidebarFooter';
 type SidebarInsetProps = HTMLAttributes<HTMLElement>;
 
 const SidebarInset = forwardRef<HTMLElement, SidebarInsetProps>(({ className, ...props }, ref) => {
-  const shape = useShape();
   return (
     <main
       ref={ref}
@@ -54,11 +52,14 @@ const SidebarInset = forwardRef<HTMLElement, SidebarInsetProps>(({ className, ..
         // the card keeps symmetric insets.
         'peer-data-[variant=inset]:peer-data-[state=collapsed]:peer-data-[side=left]:ml-2 peer-data-[variant=inset]:peer-data-[state=collapsed]:peer-data-[side=right]:mr-2',
         'transition-[margin] duration-fast',
-        // Container radius follows the shape system (literal classes so
-        // Tailwind's scanner emits both).
-        shape.bgRadius >= 20
-          ? 'peer-data-[variant=inset]:rounded-3xl'
-          : 'peer-data-[variant=inset]:rounded-xl',
+        // The container radius, written out in full: Tailwind scans source
+        // for whole class names, so one assembled from `shape.card`
+        // would never be generated. `lib/shape-context.ts` owns the value and
+        // this literal tracks its `card`, which `lib/tokens.test.ts`
+        // asserts. The branch this replaced thresholded on `bgRadius`, the
+        // interaction radius, and so could not follow the container scale.
+        // shape-literal: a variant prefix cannot carry a class variable.
+        'peer-data-[variant=inset]:rounded-3xl',
         'peer-data-[variant=inset]:bg-surface-2 peer-data-[variant=inset]:shadow-surface-2',
         className,
       )}

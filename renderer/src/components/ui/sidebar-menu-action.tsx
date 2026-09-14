@@ -64,13 +64,17 @@ const SidebarMenuAction = forwardRef<HTMLButtonElement, SidebarMenuActionProps>(
             ? 'group-has-[>[data-sidebar=menu-badge]]/menu-sub-item:right-8.5'
             : 'group-has-[>[data-sidebar=menu-badge]]/menu-item:right-8.5',
           item?.isSubRow || sizeClasses.variant === 'compact' ? 'top-0.5' : 'top-1',
-          'transition-[color,background-color,opacity] duration-fast hover:bg-hover hover:text-foreground',
+          // No fill of its own: the row it sits on already wears the hover
+          // tint, and a second fill inside it read as a separate control. The
+          // glyph darkens under its own pointer, the sidebar's rule for a
+          // glyph that stands alone, and never thickens.
+          'transition-[color,opacity] duration-fast hover:text-foreground',
           FOCUS_RING,
           // One icon size across the sidebar: row actions match the leading
           // icons and the section header's actions, all on the size ladder.
-          // Normalize bare icons to the site's 1.5 stroke (library defaults
-          // vary), thickening to 2 on hover — Button's icon-only treatment.
-          '[&_svg]:size-[var(--icon-size)] [&_svg]:shrink-0 [&_svg]:stroke-[1.5] [&_svg]:transition-[stroke-width] [&_svg]:duration-fast hover:[&_svg]:stroke-[2]',
+          // Normalize bare icons to the site's 1.5 stroke (project defaults
+          // vary).
+          '[&_svg]:size-[var(--icon-size)] [&_svg]:shrink-0 [&_svg]:stroke-[1.5]',
           shape.item,
           // Reveal on the OWN row only. A sub action must not use the
           // menu-item group — its nearest one is the parent li, which would

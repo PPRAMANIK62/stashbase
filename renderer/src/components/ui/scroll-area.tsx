@@ -51,6 +51,7 @@ const ScrollArea = forwardRef<ComponentRef<typeof ScrollAreaPrimitive.Root>, Scr
             <div
               data-slot="scroll-area-viewport"
               className={cn(
+                // shape-literal: inherits the host's corner, so it names no step.
                 'size-full rounded-[inherit]',
                 orientation === 'vertical' && 'overflow-y-auto',
                 orientation === 'horizontal' && 'overflow-x-auto',
@@ -70,6 +71,7 @@ const ScrollArea = forwardRef<ComponentRef<typeof ScrollAreaPrimitive.Root>, Scr
           >
             <ScrollAreaPrimitive.Viewport
               data-slot="scroll-area-viewport"
+              // shape-literal: inherits the host's corner, so it names no step.
               className={cn('size-full rounded-[inherit]', viewportClassName)}
             >
               {/* Content gives Base UI an intrinsic size to measure

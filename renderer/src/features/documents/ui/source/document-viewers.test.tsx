@@ -34,7 +34,7 @@ function pending(): () => Promise<never> {
 
 function renderSource(
   api: DocumentSourcePort,
-  source = { folderPath: '/library/notes', path: 'plan.md' },
+  source = { folderPath: '/project/notes', path: 'plan.md' },
   options: {
     assetApi?: Parameters<typeof DocumentWorkspace>[0]['assetApi'];
     genericPreviewApi?: GenericFilePreviewPort;
@@ -48,7 +48,7 @@ function renderSource(
     api,
     createId: () => 'tab-1',
     createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
     restored: {
       activeTabId: 'tab-1',
@@ -98,7 +98,7 @@ describe('document viewer routing', () => {
     });
     const { runtime } = renderSource(
       api,
-      { folderPath: '/library/notes', path: 'src/answer.ts' },
+      { folderPath: '/project/notes', path: 'src/answer.ts' },
       { genericPreviewApi },
     );
 
@@ -108,7 +108,7 @@ describe('document viewer routing', () => {
     expect(editor.state.doc.toString()).toBe('export const answer = 42;\n');
     expect(api.load).not.toHaveBeenCalled();
     expect(genericPreviewApi.load).toHaveBeenCalledWith(
-      { folderPath: '/library/notes', path: 'src/answer.ts' },
+      { folderPath: '/project/notes', path: 'src/answer.ts' },
       expect.any(AbortSignal),
     );
 
@@ -123,7 +123,7 @@ describe('document viewer routing', () => {
     const onReveal = vi.fn(async () => undefined);
     renderSource(
       sourceApi(),
-      { folderPath: '/library/archive', path: 'assets/payload.bin' },
+      { folderPath: '/project/archive', path: 'assets/payload.bin' },
       {
         genericPreviewApi: genericPreviewApiFake({
           load: vi.fn<GenericFilePreviewPort['load']>(async () => ({
@@ -140,7 +140,7 @@ describe('document viewer routing', () => {
     expect(screen.getByText('assets/payload.bin · 1.3 kB')).not.toBeNull();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Show in file manager' }));
     expect(onReveal).toHaveBeenCalledWith(
-      { folderPath: '/library/archive', path: 'assets/payload.bin' },
+      { folderPath: '/project/archive', path: 'assets/payload.bin' },
       expect.any(AbortSignal),
     );
   });
@@ -150,7 +150,7 @@ describe('document viewer routing', () => {
     const genericPreviewApi = genericPreviewApiFake({ load: vi.fn(pending()) });
     renderSource(
       sourceApi(),
-      { folderPath: '/library/notes', path: 'report.pdf' },
+      { folderPath: '/project/notes', path: 'report.pdf' },
       {
         assetApi,
         genericPreviewApi,
@@ -169,7 +169,7 @@ describe('document viewer routing', () => {
       const assetApi = assetApiFake({ load: vi.fn(pending()) });
       const genericPreviewApi = genericPreviewApiFake({ load: vi.fn(pending()) });
       const api = sourceApi();
-      renderSource(api, { folderPath: '/library/notes', path }, { assetApi, genericPreviewApi });
+      renderSource(api, { folderPath: '/project/notes', path }, { assetApi, genericPreviewApi });
 
       expect(await screen.findByText(`Loading ${path}`)).not.toBeNull();
       await waitFor(() => expect(assetApi.load).toHaveBeenCalled());
@@ -188,12 +188,12 @@ describe('document viewer routing', () => {
       const onOpenPrepared = vi.fn();
       renderSource(
         sourceApi(),
-        { folderPath: '/library/notes', path },
+        { folderPath: '/project/notes', path },
         { assetApi, onOpenPrepared },
       );
       await waitFor(() => expect(assetApi.load).toHaveBeenCalled());
       expect(onOpenPrepared.mock.calls, path).toEqual(
-        queued ? [[{ folderPath: '/library/notes', path }, queued]] : [],
+        queued ? [[{ folderPath: '/project/notes', path }, queued]] : [],
       );
       cleanup();
     }
@@ -206,13 +206,13 @@ describe('document viewer routing', () => {
     const renderPreparation = vi.fn(() => <p data-testid="preparation">Reading page 2…</p>);
     renderSource(
       sourceApi(),
-      { folderPath: '/library/notes', path: 'paper.pdf' },
+      { folderPath: '/project/notes', path: 'paper.pdf' },
       { assetApi, renderPreparation },
     );
 
     expect(await screen.findByTestId('preparation')).not.toBeNull();
     expect(renderPreparation).toHaveBeenCalledWith(
-      { folderPath: '/library/notes', path: 'paper.pdf' },
+      { folderPath: '/project/notes', path: 'paper.pdf' },
       'pdf',
     );
   });

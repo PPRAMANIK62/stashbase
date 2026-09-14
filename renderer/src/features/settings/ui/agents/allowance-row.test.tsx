@@ -12,7 +12,7 @@ describe('AllowanceRow', () => {
   it('says the window has not started when the server reports no end date', () => {
     render(<AllowanceRow allowance={IDLE_ALLOWANCE} onRefresh={vi.fn()} />);
 
-    expect(screen.getByText('100% left · The 7-day window starts on first use')).not.toBeNull();
+    expect(screen.getByText('100% remaining · Resets every 7 days from first use')).not.toBeNull();
   });
 
   it('clamps a nonsensical percentage into the bar it can actually draw', () => {
@@ -23,7 +23,7 @@ describe('AllowanceRow', () => {
       />,
     );
 
-    expect(screen.getByText(/^100% left/u)).not.toBeNull();
+    expect(screen.getByText(/^100% remaining/u)).not.toBeNull();
   });
 
   it('names the refill moment once the window has one', () => {
@@ -50,9 +50,11 @@ describe('AllowanceRow', () => {
     await user.click(screen.getByRole('button', { name: 'Refresh' }));
     expect(onRefresh).toHaveBeenCalled();
 
-    const disclosure = screen.getByRole('button', { name: 'Token detail' });
-    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
-    await user.click(disclosure);
+    const summary = screen.getByText('Token usage');
+    const disclosure = summary.closest('details') as HTMLDetailsElement;
+    expect(disclosure.open).toBe(false);
+    await user.click(summary);
+    expect(disclosure.open).toBe(true);
     expect(screen.getByText('1,200 input · 34 output · 0 cached')).not.toBeNull();
   });
 });

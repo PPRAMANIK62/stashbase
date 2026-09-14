@@ -10,8 +10,8 @@ import {
   type DocumentTabsState,
 } from './tabs';
 
-const notes = { folderPath: '/library/notes', path: 'plan.md' };
-const other = { folderPath: '/library/notes', path: 'other.md' };
+const notes = { folderPath: '/project/notes', path: 'plan.md' };
+const other = { folderPath: '/project/notes', path: 'other.md' };
 
 /** The invariant every transition below has to leave standing. */
 const isConsistent = (state: DocumentTabsState) =>
@@ -29,7 +29,7 @@ describe('document tabs', () => {
         { id: 'duplicate', source: { ...notes } },
         {
           id: 'archive',
-          source: { folderPath: '/library/archive', path: 'plan.md' },
+          source: { folderPath: '/project/archive', path: 'plan.md' },
         },
       ],
     });
@@ -50,7 +50,7 @@ describe('document tabs', () => {
   });
 
   it('gives the one preview tab to each new browse and keeps it on request', () => {
-    const third = { folderPath: '/library/notes', path: 'third.md' };
+    const third = { folderPath: '/project/notes', path: 'third.md' };
     let state = createDocumentTabsState();
     state = openDocumentTab(state, { id: 'kept', source: notes }, false);
     state = openDocumentTab(state, { id: 'look', source: other }, true);
@@ -88,11 +88,11 @@ describe('document tabs', () => {
         { id: 'one', source: notes },
         {
           id: 'two',
-          source: { folderPath: '/library/notes', path: 'two.md' },
+          source: { folderPath: '/project/notes', path: 'two.md' },
         },
         {
           id: 'three',
-          source: { folderPath: '/library/notes', path: 'three.md' },
+          source: { folderPath: '/project/notes', path: 'three.md' },
         },
       ],
     });
@@ -105,7 +105,7 @@ describe('document tabs', () => {
   });
 
   it('keeps the active tab a member of the tab set through every transition', () => {
-    const two = { folderPath: '/library/notes', path: 'two.md' };
+    const two = { folderPath: '/project/notes', path: 'two.md' };
     // A restored active id that names no surviving tab is dropped, not kept.
     let state = createDocumentTabsState({
       activeTabId: 'missing',

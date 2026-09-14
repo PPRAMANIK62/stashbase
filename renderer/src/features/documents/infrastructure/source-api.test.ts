@@ -21,10 +21,10 @@ describe('document source API', () => {
     const api = createDocumentSourceAdapter(client);
 
     await expect(
-      api.load({ folderPath: '/library/research notes', path: 'drafts/plan #1.markdown' }, signal),
+      api.load({ folderPath: '/project/research notes', path: 'drafts/plan #1.markdown' }, signal),
     ).resolves.toEqual({ content: '# Plan\n', format: 'md', version: 'sha256:abc' });
     expect(client.request).toHaveBeenCalledWith({
-      path: '/api/files/drafts/plan%20%231.markdown?folder=%2Flibrary%2Fresearch+notes',
+      path: '/api/files/drafts/plan%20%231.markdown?folder=%2Fproject%2Fresearch+notes',
       signal,
     });
   });
@@ -44,7 +44,7 @@ describe('document source API', () => {
     });
 
     await expect(
-      api.load({ folderPath: '/library/notes', path: 'legacy.txt' }, new AbortController().signal),
+      api.load({ folderPath: '/project/notes', path: 'legacy.txt' }, new AbortController().signal),
     ).rejects.toMatchObject({
       kind: 'unsupported-encoding',
       message: 'This text file is not valid UTF-8. It remains unchanged and read-only.',
@@ -60,7 +60,7 @@ describe('document source API', () => {
     });
     await expect(
       mismatched.load(
-        { folderPath: '/library/notes', path: 'notes.txt' },
+        { folderPath: '/project/notes', path: 'notes.txt' },
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ kind: 'invalid-response' });
@@ -72,7 +72,7 @@ describe('document source API', () => {
       })),
     });
     await expect(
-      lost.load({ folderPath: '/library/notes', path: 'notes.txt' }, new AbortController().signal),
+      lost.load({ folderPath: '/project/notes', path: 'notes.txt' }, new AbortController().signal),
     ).rejects.toMatchObject({
       kind: 'scope-lost',
       message: 'The document folder is no longer available in this window.',
@@ -109,7 +109,7 @@ describe('document source API', () => {
 
     await expect(
       api.save(
-        { folderPath: '/library/research notes', path: 'drafts/plan #1.markdown' },
+        { folderPath: '/project/research notes', path: 'drafts/plan #1.markdown' },
         { baseVersion: 'sha256:before', content: '# Changed\n' },
         signal,
       ),
@@ -117,7 +117,7 @@ describe('document source API', () => {
     expect(client.request).toHaveBeenCalledWith({
       body: { baseVersion: 'sha256:before', content: '# Changed\n' },
       method: 'PUT',
-      path: '/api/files/drafts/plan%20%231.markdown?folder=%2Flibrary%2Fresearch+notes',
+      path: '/api/files/drafts/plan%20%231.markdown?folder=%2Fproject%2Fresearch+notes',
       signal,
     });
   });
@@ -146,7 +146,7 @@ describe('document source API', () => {
         }),
     };
     const api = createDocumentSourceAdapter(client);
-    const source = { folderPath: '/library/notes', path: 'data.json' };
+    const source = { folderPath: '/project/notes', path: 'data.json' };
     const signal = new AbortController().signal;
 
     await expect(api.load(source, signal)).resolves.toEqual({
@@ -180,7 +180,7 @@ describe('document source API', () => {
 
     await expect(
       api.overwrite(
-        { folderPath: '/library/notes', path: 'plan.md' },
+        { folderPath: '/project/notes', path: 'plan.md' },
         { content: '# Editor draft\n' },
         signal,
       ),
@@ -192,7 +192,7 @@ describe('document source API', () => {
     expect(client.request).toHaveBeenCalledWith({
       body: { content: '# Editor draft\n', overwrite: true },
       method: 'PUT',
-      path: '/api/files/plan.md?folder=%2Flibrary%2Fnotes',
+      path: '/api/files/plan.md?folder=%2Fproject%2Fnotes',
       signal,
     });
   });
@@ -203,7 +203,7 @@ describe('document source API', () => {
         body: {
           code: 'FILE_CHANGED',
           currentVersion: 'sha256:external',
-          error: '/private/library/notes/plan.md changed',
+          error: '/private/project/notes/plan.md changed',
         },
         status: 409,
       })),
@@ -211,7 +211,7 @@ describe('document source API', () => {
 
     await expect(
       api.save(
-        { folderPath: '/library/notes', path: 'plan.md' },
+        { folderPath: '/project/notes', path: 'plan.md' },
         { baseVersion: 'sha256:before', content: 'draft' },
         new AbortController().signal,
       ),
@@ -232,7 +232,7 @@ describe('document source API', () => {
 
     await expect(
       api.save(
-        { folderPath: '/library/notes', path: 'plan.md' },
+        { folderPath: '/project/notes', path: 'plan.md' },
         { baseVersion: 'v1', content: 'saved' },
         new AbortController().signal,
       ),

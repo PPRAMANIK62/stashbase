@@ -10,7 +10,7 @@ const wire = {
   conversionProgress: { 'a.pdf': { lane: 'heavy', phase: 'queued', tasksAhead: 1 } },
   conversionRevision: 3,
   conversionVersions: {},
-  folder: '/library/research',
+  folder: '/project/research',
   indexReady: true,
   indexWarning: { at: '2026-09-09T00:00:00.000Z', message: 'daemon restarted' },
   indexed: 2,
@@ -33,11 +33,11 @@ describe('preparation status API', () => {
   it('requests the explicit folder and maps the semantic block', async () => {
     const request = vi.fn(async () => ({ body: wire, status: 200 }));
     const status = await createPreparationStatusAdapter({ request }).load(
-      '/library/research',
+      '/project/research',
       new AbortController().signal,
     );
     expect(request).toHaveBeenCalledWith(
-      expect.objectContaining({ path: '/api/index-status?folder=%2Flibrary%2Fresearch' }),
+      expect.objectContaining({ path: '/api/index-status?folder=%2Fproject%2Fresearch' }),
     );
     expect(status.conversionProgress['a.pdf']?.phase).toBe('queued');
     expect(status.semantic).toEqual({ partial: false, remaining: 1, state: 'indexing' });
@@ -57,7 +57,7 @@ describe('preparation status API', () => {
     const request = vi.fn(async () => ({ body: partial, status: 200 }));
 
     const status = await createPreparationStatusAdapter({ request }).load(
-      '/library/research',
+      '/project/research',
       new AbortController().signal,
     );
 
@@ -73,13 +73,13 @@ describe('preparation status API', () => {
       })),
     };
     await expect(
-      createPreparationStatusAdapter(lost).load('/library/x', new AbortController().signal),
+      createPreparationStatusAdapter(lost).load('/project/x', new AbortController().signal),
     ).rejects.toMatchObject({ kind: 'scope-lost' });
     const invalid: HttpClient = {
       request: vi.fn(async () => ({ body: { nope: true }, status: 200 })),
     };
     await expect(
-      createPreparationStatusAdapter(invalid).load('/library/x', new AbortController().signal),
+      createPreparationStatusAdapter(invalid).load('/project/x', new AbortController().signal),
     ).rejects.toBeInstanceOf(PreparationError);
   });
 });

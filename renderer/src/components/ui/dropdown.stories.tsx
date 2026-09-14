@@ -14,7 +14,7 @@ import {
 import { MenuItem } from './menu-item';
 
 const views = [
-  { icon: SquareLibrary, label: 'Library' },
+  { icon: SquareLibrary, label: 'Projects' },
   { icon: Clock, label: 'Recents' },
   { icon: Star, label: 'Favorites' },
 ];
@@ -55,7 +55,7 @@ export const TriggeredMenu: Story = {
 export const OpenMenu: Story = {
   render: () => (
     <DropdownMenu defaultOpen>
-      <DropdownTrigger render={<Button variant="secondary">Library view</Button>} />
+      <DropdownTrigger render={<Button variant="secondary">Project view</Button>} />
       <DropdownContent>
         {views.map((item) => (
           <MenuItem key={item.label} {...item} />
@@ -71,8 +71,8 @@ function GroupedMenu() {
   const [selected, setSelected] = useState(0);
   return (
     <DropdownMenu defaultOpen>
-      <DropdownTrigger render={<Button variant="secondary">Library view</Button>} />
-      <DropdownContent aria-label="Library view">
+      <DropdownTrigger render={<Button variant="secondary">Project view</Button>} />
+      <DropdownContent aria-label="Project view">
         <DropdownLabel>View</DropdownLabel>
         {views.map((item, index) => (
           <MenuItem

@@ -182,3 +182,43 @@ test('development update simulation previews states without touching the real up
 
   assert.throws(() => manager.setUpdateSimulation('bogus'), /Invalid update simulation/);
 });
+
+
+test('an updater error during pending saves cancels installation without hiding the error', async () => {
+  let release;
+  let rollbacks = 0;
+  const { updater, manager } = harness({
+    beforeInstall: () => new Promise((resolve) => { release = resolve; }),
+    afterInstallFailure: () => { rollbacks += 1; },
+  });
+  await manager.start();
+  updater.emit('update-downloaded', { version: '2.1.0' });
+  const pending = manager.primaryAction();
+  updater.emit('error', new Error('native preparation failed'));
+  release(true);
+  await pending;
+  assert.equal(updater.installs, 0);
+  assert.equal(rollbacks, 1);
+  assert.equal(manager.getState().phase, 'error');
+});
+
+
+test('a late save completion cannot install or overwrite a retry after an updater error', async () => {
+  const replies = [];
+  const { updater, manager } = harness({
+    beforeInstall: () => new Promise((resolve) => { replies.push(resolve); }),
+  });
+  await manager.start();
+  updater.emit('update-downloaded', { version: '2.1.0' });
+  const first = manager.primaryAction();
+  updater.emit('error', new Error('native preparation failed'));
+  updater.emit('update-downloaded', { version: '2.1.0' });
+  const retry = manager.primaryAction();
+  replies[0](false);
+  await first;
+  assert.equal(manager.getState().phase, 'installing');
+  assert.equal(updater.installs, 0);
+  replies[1](true);
+  await retry;
+  assert.equal(updater.installs, 1);
+});

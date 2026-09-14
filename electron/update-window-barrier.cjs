@@ -11,11 +11,15 @@ function createUpdateWindowBarrier(options) {
     isLiveWindow,
     shouldRequestFlush,
     requestFlush,
+    isWindowEnabled,
+    setWindowEnabled,
     approveClose,
     revokeCloseApproval,
     onBlocked = async () => {},
   } = options;
   const updateApprovedWindows = new Set();
+  const enabledWindows = new Map();
+  let active = null;
 
   async function flushWindow(win) {
     if (!shouldRequestFlush(win)) return true;
@@ -27,9 +31,20 @@ function createUpdateWindowBarrier(options) {
   }
 
   async function prepare() {
+    if (active) return false;
+    const attempt = {};
+    active = attempt;
     const liveWindows = [...getWindows()].filter((win) => isLiveWindow(win));
+    // Lock before asking for saves: native installers can prepare asynchronously
+    // after approval, and no new user edit may invalidate those replies.
+    for (const win of liveWindows) {
+      enabledWindows.set(win, isWindowEnabled(win));
+      setWindowEnabled(win, false);
+    }
     const results = await Promise.all(liveWindows.map((win) => flushWindow(win)));
+    if (active !== attempt) return false;
     if (!results.every(Boolean)) {
+      revoke();
       try {
         await onBlocked();
       } catch {
@@ -40,6 +55,7 @@ function createUpdateWindowBarrier(options) {
     }
 
     for (const win of liveWindows) {
+      if (!isLiveWindow(win)) continue;
       approveClose(win);
       updateApprovedWindows.add(win);
     }
@@ -49,9 +65,14 @@ function createUpdateWindowBarrier(options) {
   function revoke() {
     for (const win of updateApprovedWindows) revokeCloseApproval(win);
     updateApprovedWindows.clear();
+    for (const [win, enabled] of enabledWindows) {
+      if (isLiveWindow(win)) setWindowEnabled(win, enabled);
+    }
+    enabledWindows.clear();
+    active = null;
   }
 
-  return { prepare, revoke };
+  return { prepare, revoke, isActive: () => active !== null };
 }
 
 /**
@@ -64,6 +85,8 @@ function createWindowLifecycleUpdateBarrier({ lifecycle, getWindows, isLiveWindo
     isLiveWindow,
     shouldRequestFlush: (win) => lifecycle()?.hasLoadedRenderer(win) === true,
     requestFlush: (win) => lifecycle().requestContextRelease(win, 'update-install'),
+    isWindowEnabled: (win) => win.isEnabled(),
+    setWindowEnabled: (win, enabled) => win.setEnabled(enabled),
     approveClose: (win) => lifecycle()?.approveClose(win),
     revokeCloseApproval: (win) => lifecycle()?.revokeCloseApproval(win),
     onBlocked,

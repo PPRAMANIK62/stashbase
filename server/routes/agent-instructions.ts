@@ -1,7 +1,7 @@
 import type express from 'express';
 import type { AgentInstructionsScope } from '../../shared/agent-instructions.ts';
 import { getAgentInstructions, setAgentInstructions } from '../agent-instructions.ts';
-import { exactMemberFolderRootAsync } from '../folder.ts';
+import { exactRegisteredFolderRootAsync } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { sendError } from '../http.ts';
 
@@ -13,15 +13,15 @@ function requestError(message: string, status = 400): Error {
 
 async function resolveScope(value: unknown): Promise<AgentInstructionsScope> {
   if (typeof value !== 'string' || !value.trim()) {
-    throw requestError("scope must be 'library' or an absolute library-folder path");
+    throw requestError("scope must be 'unbound' or an absolute project-folder path");
   }
-  // The literal Library scope, mirroring the session routes' `scope=library`.
-  if (value === 'library') return { kind: 'library' };
+  // The literal unbound scope, mirroring the session routes' `scope=unbound`.
+  if (value === 'unbound') return { kind: 'unbound' };
   if (!filesystemPath.isAbsolute(value)) {
     throw requestError('folder scope must be an absolute path');
   }
-  const member = await exactMemberFolderRootAsync(value);
-  if (!member) throw requestError('folder is not in your library', 404);
+  const member = await exactRegisteredFolderRootAsync(value);
+  if (!member) throw requestError('folder is not in your registered projects', 404);
   return { kind: 'folder', path: member };
 }
 

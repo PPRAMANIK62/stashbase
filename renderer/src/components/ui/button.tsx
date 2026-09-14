@@ -24,7 +24,6 @@ import {
 
 import { FOCUS_RING } from '@/lib/focus-ring';
 import type { IconComponent } from '@/lib/icon-context';
-import { useShape } from '@/lib/shape-context';
 import { useSize, useSizeVariant } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 
@@ -182,7 +181,6 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           : contextSize;
     const sizeClasses = useSize(step);
     const iconSize = sizeClasses.icon;
-    const shape = useShape();
     const bgClass = active
       ? activeBgVariants[variant ?? 'primary']
       : bgVariants[variant ?? 'primary'];
@@ -196,11 +194,17 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             // shadow settles on the base step and its colour on the fast one, so
             // a reduced-motion viewer gets both from the same @media block that
             // zeroes every other transition in the app.
+            // shape-literal: the fill layer takes the button's own corner.
             'absolute inset-px rounded-[inherit] transition-[box-shadow,background-color] [transition-duration:var(--motion-base),var(--motion-fast)] [transition-timing-function:cubic-bezier(0.23,1,0.32,1),ease] group-active:[transition-duration:var(--motion-fast),var(--motion-fast)]',
             bgClass,
           )}
         />
-        <span className="relative inline-flex items-center justify-center gap-[inherit]">
+        {/* `min-w-0` on both content wrappers: without it their automatic
+            minimum size is the label's full nowrap width, so a caller that
+            bounds the button (`max-w-*`, or a row that squeezes it) clipped
+            nothing and the label spilled out past the button's own box over
+            whatever sat beside it. */}
+        <span className="relative inline-flex min-w-0 items-center justify-center gap-[inherit]">
           {loading ? (
             <>
               <span className="flex items-center justify-center gap-[inherit] opacity-0">
@@ -242,7 +246,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
                   on the label span (a blockified flex item), not the flex root.
                   The button's height is fixed (h-*), so this doesn't change
                   layout — it just centers the cap-to-baseline box optically. */}
-              <span className="[text-box:trim-both_cap_alphabetic]">{label}</span>
+              <span className="min-w-0 [text-box:trim-both_cap_alphabetic]">{label}</span>
               {TrailingIcon && (
                 <TrailingIcon
                   size={iconSize}
@@ -268,7 +272,9 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       isIconOnly
         ? cn(sizeClasses.square, sizeClasses.squareGlyph)
         : cn(sizeClasses.buttonPx, sizeClasses.buttonGap),
-      shape.button,
+      // The corner steps with the control (see size-context `radius`): 16 on
+      // the 36px button, 12 on the 28px one, so neither reads as a capsule.
+      sizeClasses.radius,
       className,
     );
 

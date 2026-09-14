@@ -296,7 +296,7 @@ export function hostedOAuthStatus(flowId: string): HostedOAuthStatus {
 
 export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}): Promise<string> {
   const session = getHostedAccountSession();
-  if (!session) throw new Error('Sign in to StashBase to use the hosted allowance.');
+  if (!session) throw new Error('Sign in to StashBase to use OpenQuill and its free credits.');
   if (!options.forceRefresh && session.expiresAt > Math.floor(Date.now() / 1000) + 60) return session.accessToken;
   const sessionKey = `${session.userId}\0${session.refreshToken}\0${session.accessToken}`;
   if (tokenRefresh?.sessionKey === sessionKey) return tokenRefresh.promise;

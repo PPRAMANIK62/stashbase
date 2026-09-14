@@ -38,7 +38,7 @@ afterEach(() => {
 
 describe('Quick Open command', () => {
   it('uses Cmd/Ctrl+P while leaving Cmd/Ctrl+O and Cmd/Ctrl+Shift+P unassigned', () => {
-    const notes = scope('/library/notes', 1);
+    const notes = scope('/project/notes', 1);
     const command = renderHook(() => useQuickOpenCommand(notes.workspace, notes.documents));
 
     const openFile = dispatchShortcut('o', { ctrlKey: true });
@@ -67,8 +67,8 @@ describe('Quick Open command', () => {
     const initiator = globalThis.document.createElement('button');
     globalThis.document.body.append(initiator);
     initiator.focus();
-    const notes = scope('/library/notes', 1);
-    const writing = scope('/library/writing', 2);
+    const notes = scope('/project/notes', 1);
+    const writing = scope('/project/writing', 2);
     const command = renderHook(
       ({ open }: { open: ReturnType<typeof scope> }) =>
         useQuickOpenCommand(open.workspace, open.documents),

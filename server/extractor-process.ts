@@ -57,7 +57,10 @@ export function terminateExtractorTree(proc: ChildProcess): void {
   }
   sendSignal(proc, 'SIGTERM');
   setTimeout(() => {
-    if (proc.exitCode == null && proc.signalCode == null) sendSignal(proc, 'SIGKILL');
+    // The group can outlive its leader while descendants still own pipes.
+    if (extractorGroupExists(proc) || (proc.exitCode == null && proc.signalCode == null)) {
+      sendSignal(proc, 'SIGKILL');
+    }
   }, KILL_GRACE_MS).unref();
 }
 
@@ -85,11 +88,23 @@ function terminateWindowsTree(proc: ChildProcess): void {
   }
 }
 
+function extractorGroupExists(proc: ChildProcess): boolean {
+  if (!proc.pid) return false;
+  try {
+    process.kill(-proc.pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
 function sendSignal(proc: ChildProcess, signal: NodeJS.Signals): void {
   if (!proc.pid) return;
   try {
     process.kill(-proc.pid, signal);
   } catch {
-    try { proc.kill(signal); } catch { /* already gone */ }
+    if (proc.exitCode == null && proc.signalCode == null) {
+      try { proc.kill(signal); } catch { /* already gone */ }
+    }
   }
 }

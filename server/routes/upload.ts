@@ -28,7 +28,7 @@ import { normalizeFolderRelativePath } from '../folder-relative-path.ts';
 import { errorMessage, logger } from '../log.ts';
 import {
   getCurrentFolder,
-  exactMemberFolderRootAsync,
+  exactRegisteredFolderRootAsync,
   resolveFolderRootAsync,
   runWithWindowId,
   WINDOW_ID_HEADER,
@@ -39,7 +39,7 @@ import { queueConvertibleSource } from '../conversion-dispatch.ts';
 import { isRetrievalEligiblePath } from '../indexable.ts';
 import { indexer } from '../state.ts';
 import { noteTreeChanged } from '../watcher.ts';
-import type { UploadResult } from '../../shared/library-files.ts';
+import type { UploadResult } from '../../shared/project-files.ts';
 
 const log = logger('routes/upload');
 
@@ -69,7 +69,7 @@ const uploadParser = multer({
 async function resolveUploadFolder(explicitFolder: string): Promise<string> {
   if (explicitFolder) {
     const root = await resolveFolderRootAsync(explicitFolder);
-    const memberRoot = await exactMemberFolderRootAsync(root);
+    const memberRoot = await exactRegisteredFolderRootAsync(root);
     if (!memberRoot) {
       const err = new Error('folder is not in your folders');
       (err as any).code = 'FOLDER_NOT_FOUND';

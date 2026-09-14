@@ -13,6 +13,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { shapeTokens } from '@/lib/shape-context';
 
 /** One thing the reader can do about a surface that failed to render. The
  *  boundary clears its own failure before `perform` runs, so an action whose
@@ -60,7 +61,7 @@ const PLACEMENTS: Record<SurfacePlacement, { container: string; card: string }> 
   },
   overlay: {
     container: 'fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4 text-center',
-    card: 'max-w-md rounded-xl bg-surface-3 p-6 shadow-surface-3',
+    card: `max-w-md ${shapeTokens.panel} bg-surface-3 p-6 shadow-surface-3`,
   },
   window: {
     container: 'flex h-svh items-center justify-center bg-surface-1 p-6 text-center',

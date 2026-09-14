@@ -6,31 +6,14 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  createCapturePreferencesStore,
   createUpdatePreferencesStore,
-  normalizeCapturePreferences,
   normalizeUpdatePreferences,
   normalizeWorkspacePreferences,
+  shouldBackfillAfterKeyChange,
   type AppConfigFile,
 } from './app-config.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-
-test('clipboard image capture is default-off and persists only an explicit opt-in', () => {
-  let config: AppConfigFile = { appearance: { theme: 'dark' } };
-  const store = createCapturePreferencesStore({
-    read: () => structuredClone(config),
-    write: (next) => { config = structuredClone(next); },
-  });
-
-  assert.deepEqual(store.get(), { clipboardImageImport: false });
-  assert.deepEqual(store.set({ clipboardImageImport: true }), { clipboardImageImport: true });
-  assert.equal(config.appearance?.theme, 'dark');
-  assert.deepEqual(store.get(), { clipboardImageImport: true });
-  assert.deepEqual(normalizeCapturePreferences({ clipboardImageImport: 'yes' }), {
-    clipboardImageImport: false,
-  });
-});
 
 test('hidden-files visibility is default-off and invalid stored state recovers to the safe view', () => {
   assert.deepEqual(normalizeWorkspacePreferences(undefined), { showHiddenFiles: false });
@@ -138,7 +121,7 @@ function runConfigMutation(home: string, statement: string) {
   );
 }
 
-test('removing library membership clears only its StashBase-owned Agent Instructions', () => {
+test('removing project membership clears only its StashBase-owned Agent Instructions', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-agent-instructions-remove-'));
   const configDir = path.join(home, '.stashbase');
   const configPath = path.join(configDir, 'config.json');
@@ -173,7 +156,7 @@ test('removing library membership clears only its StashBase-owned Agent Instruct
   }
 });
 
-test('retired folder metadata does not escape library APIs or survive a membership write', () => {
+test('retired folder metadata does not escape project APIs or survive a membership write', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-folder-metadata-test-'));
   const configDir = path.join(home, '.stashbase');
   const configPath = path.join(configDir, 'config.json');
@@ -196,7 +179,7 @@ test('retired folder metadata does not escape library APIs or survive a membersh
       const assert = (await import('node:assert/strict')).default;
       const fs = (await import('node:fs')).default;
       const folder = await import('./server/folder.ts');
-      const library = await import('./server/library-info.ts');
+      const project = await import('./server/project-info.ts');
       assert.deepEqual(folder.getRecentFolders(), [{
         path: ${JSON.stringify(member)},
         openedAt: ${JSON.stringify(openedAt)},
@@ -205,7 +188,7 @@ test('retired folder metadata does not escape library APIs or survive a membersh
         path: ${JSON.stringify(member)},
         openedAt: ${JSON.stringify(openedAt)},
       }]);
-      assert.deepEqual(Object.keys(library.getLibraryInfo().folders[0]).sort(), ['name', 'path', 'provider']);
+      assert.deepEqual(Object.keys(project.getProjectInfo().folders[0]).sort(), ['name', 'path', 'provider']);
       assert.equal(folder.setRecentFavorite(${JSON.stringify(member)}, true), true);
       assert.deepEqual(JSON.parse(fs.readFileSync(${JSON.stringify(configPath)}, 'utf8')).recentFolders, [{
         path: ${JSON.stringify(member)},
@@ -219,11 +202,10 @@ test('retired folder metadata does not escape library APIs or survive a membersh
   }
 });
 
-test('credential and source mutations never overwrite malformed config through a fallback read', () => {
+test('credential and preference mutations never overwrite malformed config through a fallback read', () => {
   const statements = [
     `config.setHostedAccountSession({ accessToken: 'access', refreshToken: 'refresh', expiresAt: 4102444800, userId: 'user', email: 'person@example.com' });`,
     `config.setEmbedderConfig({ provider: 'openai', apiKey: 'sk-test' });`,
-    `config.setEmbeddingSource('openai');`,
     `config.setWorkspacePreferences({ showHiddenFiles: true });`,
   ];
   for (const statement of statements) {
@@ -243,13 +225,42 @@ test('credential and source mutations never overwrite malformed config through a
   }
 });
 
-test('retired embedding sources cannot be selected again', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-local-embedding-config-test-'));
+test('embedding source follows the key provider and has no separate selection endpoint', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-embedding-key-route-'));
   try {
     const result = runConfigMutation(home, `
       const assert = (await import('node:assert/strict')).default;
-      assert.throws(() => config.setEmbeddingSource('local'), /Add an OpenAI key/);
-      assert.throws(() => config.setEmbeddingSource('stashbase-account'), /Add an OpenAI key/);
+      const express = (await import('express')).default;
+      const { mount } = await import('./server/routes/embedder.ts');
+      config.setEmbedderConfig({ provider: 'openrouter', apiKey: 'test-key' });
+      const app = express();
+      app.use(express.json());
+      mount(app);
+      const server = app.listen(0, '127.0.0.1');
+      await new Promise(resolve => server.once('listening', resolve));
+      const origin = 'http://127.0.0.1:' + server.address().port;
+      try {
+        const response = await fetch(origin + '/api/embedder');
+        const state = await response.json();
+        assert.equal(state.source, 'openrouter');
+        assert.equal(state.provider, 'openrouter');
+        assert.equal(state.hasKey, true);
+        assert.equal(state.authorized, true);
+        assert.equal('apiKey' in state, false);
+        const removed = await fetch(origin + '/api/embedder/source', {
+          method: 'PUT', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ source: 'openai' }),
+        });
+        assert.equal(removed.status, 404);
+        assert.equal(config.getEmbedderProvider(), 'openrouter');
+        assert.equal(config.isEmbeddingConfigured(), true);
+        const deleted = await fetch(origin + '/api/embedder/key', { method: 'DELETE' });
+        assert.equal(deleted.status, 200);
+        assert.equal((await deleted.json()).authorized, false);
+        assert.equal(config.isEmbeddingConfigured(), false);
+      } finally {
+        await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      }
     `);
     assert.equal(result.status, 0, result.stderr);
   } finally {
@@ -274,7 +285,7 @@ test('retired local and hosted embedding sources migrate to BYOK or unconfigured
         account: { session },
         appearance: { theme: 'dark' },
       },
-      expectedSource: 'openrouter',
+      expectedSource: undefined,
       expectedResolved: 'openrouter',
       expectedConfigured: true,
     },
@@ -285,7 +296,7 @@ test('retired local and hosted embedding sources migrate to BYOK or unconfigured
         embedder: { provider: 'openrouter', apiKey: 'sk-or-test' },
         appearance: { theme: 'dark' },
       },
-      expectedSource: 'openrouter',
+      expectedSource: undefined,
       expectedResolved: 'openrouter',
       expectedConfigured: true,
     },
@@ -319,7 +330,7 @@ test('retired local and hosted embedding sources migrate to BYOK or unconfigured
         const assert = (await import('node:assert/strict')).default;
         config.migrateRetiredEmbeddingSources();
         config.migrateRetiredEmbeddingSources();
-        assert.equal(config.getEmbeddingSource(), ${JSON.stringify(scenario.expectedResolved)});
+        assert.equal(config.getEmbedderProvider(), ${JSON.stringify(scenario.expectedResolved)});
         assert.equal(config.isEmbeddingConfigured(), ${scenario.expectedConfigured});
       `);
       assert.equal(result.status, 0, `${scenario.name}: ${result.stderr}`);
@@ -352,62 +363,7 @@ test('retired source migration leaves current BYOK sources unchanged', () => {
   }
 });
 
-test('embedding source activation persists only after reset and bind succeed', async () => {
-  const { activateEmbeddingSource } = await import('./routes/embedder.ts');
-  const runtime = {
-    provider: 'openai' as const,
-    apiKey: 'sk-test',
-    model: 'text-embedding-3-small',
-    dimension: 1536,
-  };
-  const events: string[] = [];
-
-  await activateEmbeddingSource('openrouter', 'openai', runtime, {
-    resetRuntime: async () => { events.push('reset'); },
-    bindFolders: async (nextRuntime) => { events.push(`bind:${nextRuntime?.provider ?? 'previous'}`); },
-    persistSource: (source) => { events.push(`persist:${source}`); },
-  });
-  assert.deepEqual(events, ['reset', 'bind:openai', 'persist:openai']);
-
-  events.length = 0;
-  await assert.rejects(
-    activateEmbeddingSource('openrouter', 'openai', runtime, {
-      resetRuntime: async () => {
-        events.push('reset');
-        throw new Error('reset failed');
-      },
-      bindFolders: async () => { events.push('bind'); },
-      persistSource: (source) => { events.push(`persist:${source}`); },
-    }),
-    /reset failed/,
-  );
-  assert.deepEqual(events, ['reset']);
-
-  events.length = 0;
-  let firstBind = true;
-  await assert.rejects(
-    activateEmbeddingSource('openrouter', 'openai', runtime, {
-      resetRuntime: async () => { events.push('reset'); },
-      bindFolders: async (nextRuntime) => {
-        events.push(`bind:${nextRuntime?.provider ?? 'previous'}`);
-        if (firstBind) {
-          firstBind = false;
-          throw new Error('bind failed');
-        }
-      },
-      persistSource: (source) => { events.push(`persist:${source}`); },
-    }),
-    /bind failed/,
-  );
-  assert.deepEqual(events, [
-    'reset',
-    'bind:openai',
-    'reset',
-    'bind:previous',
-  ]);
-});
-
-test('library membership mutations never overwrite malformed config through a fallback read', () => {
+test('project membership mutations never overwrite malformed config through a fallback read', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-folder-config-corrupt-test-'));
   const configDir = path.join(home, '.stashbase');
   const configPath = path.join(configDir, 'config.json');
@@ -418,7 +374,7 @@ test('library membership mutations never overwrite malformed config through a fa
   try {
     const result = runConfigMutation(home, `
       const folder = await import('./server/folder.ts');
-      folder.setCurrentFolder(${JSON.stringify(member)});
+      await folder.openProjectFolder(${JSON.stringify(member)});
     `);
     assert.equal(result.status, 17);
     assert.match(result.stderr, /Could not read .*config\.json: invalid JSON/);
@@ -428,7 +384,7 @@ test('library membership mutations never overwrite malformed config through a fa
   }
 });
 
-test('an in-progress library removal blocks reopen and descendant registration', () => {
+test('an in-progress project removal blocks reopen and descendant registration', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-folder-removal-gate-'));
   const member = path.join(home, 'member');
   fs.mkdirSync(member);
@@ -437,19 +393,18 @@ test('an in-progress library removal blocks reopen and descendant registration',
       const assert = (await import('node:assert/strict')).default;
       const path = await import('node:path');
       const folder = await import('./server/folder.ts');
-      await folder.registerLibraryFolderAsync(${JSON.stringify(member)});
-      const finish = await folder.beginLibraryFolderRemovalAsync(${JSON.stringify(member)});
+      await folder.registerProjectFolderAsync(${JSON.stringify(member)});
+      const finish = await folder.beginProjectFolderRemovalAsync(${JSON.stringify(member)});
       try {
-        assert.throws(() => folder.setCurrentFolder(${JSON.stringify(member)}), (error) => error.code === 'FOLDER_REMOVING');
-        assert.throws(() => folder.registerLibraryFolder(path.join(${JSON.stringify(member)}, 'child')), (error) => error.code === 'FOLDER_REMOVING');
+        await assert.rejects(() => folder.openProjectFolder(${JSON.stringify(member)}), (error) => error.code === 'FOLDER_REMOVING');
         await assert.rejects(
-          folder.registerLibraryFolderAsync(path.join(${JSON.stringify(member)}, 'async-child')),
+          folder.registerProjectFolderAsync(path.join(${JSON.stringify(member)}, 'async-child')),
           (error) => error.code === 'FOLDER_REMOVING',
         );
       } finally {
         finish();
       }
-      folder.setCurrentFolder(${JSON.stringify(member)});
+      await folder.openProjectFolder(${JSON.stringify(member)});
     `);
     assert.equal(result.status, 0, result.stderr);
   } finally {
@@ -469,13 +424,13 @@ test('concurrent async registrations preserve membership and unrelated settings'
       const folder = await import('./server/folder.ts');
       const { filesystemPath } = await import('./server/filesystem-path.ts');
       const registrations = Promise.all([
-        folder.registerLibraryFolderAsync(${JSON.stringify(first)}),
-        folder.registerLibraryFolderAsync(${JSON.stringify(second)}),
+        folder.registerProjectFolderAsync(${JSON.stringify(first)}),
+        folder.registerProjectFolderAsync(${JSON.stringify(second)}),
       ]);
-      queueMicrotask(() => config.setCapturePreferences({ clipboardImageImport: true }));
+      queueMicrotask(() => config.setAppearancePreferences({ theme: 'dark' }));
       await registrations;
       const saved = config.readAppConfigStrict();
-      assert.equal(saved.capture?.clipboardImageImport, true);
+      assert.equal(saved.appearance?.theme, 'dark');
       assert.deepEqual(
         new Set(saved.recentFolders?.map((entry) => entry.path)),
         new Set([
@@ -544,6 +499,51 @@ test('macOS config writes replace raw EPERM temp-file errors with an actionable 
     assert.doesNotMatch(failure.message, /config\.json\..*\.tmp/);
   } finally {
     execFileSync('/usr/bin/chflags', ['nouchg', configDir]);
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('changing or adding a BYOK key reconciles pending files', () => {
+  assert.equal(
+    shouldBackfillAfterKeyChange('openrouter', 'openai', true),
+    true,
+  );
+  assert.equal(
+    shouldBackfillAfterKeyChange('openai', 'openai', false),
+    true,
+  );
+  assert.equal(
+    shouldBackfillAfterKeyChange('openai', 'openai', true),
+    false,
+  );
+});
+
+test('index-status compatibility flags follow key configuration without probing the provider', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-key-status-'));
+  const folder = path.join(home, 'project');
+  fs.mkdirSync(folder);
+  try {
+    const result = runConfigMutation(home, `
+      const assert = (await import('node:assert/strict')).default;
+      const { indexer, resolveEmbedderRuntime } = await import('./server/state.ts');
+      const { buildIndexStatus } = await import('./server/index-status.ts');
+      const { indexStatusResponseSchema } = await import('./shared/protocols/http/index-status.ts');
+      globalThis.fetch = async () => { throw new Error('configuration must not probe the provider'); };
+      indexer.status = async () => ({
+        total: 0, indexed: 0, pendingCount: 0, pending: [], orphanedCount: 0,
+        orphaned: [], upToDate: true, indexReady: true,
+      });
+      for (const apiKey of [undefined, 'unvalidated-test-key', undefined]) {
+        config.setEmbedderConfig({ provider: 'openai', apiKey });
+        const status = indexStatusResponseSchema.parse(await buildIndexStatus(${JSON.stringify(folder)}));
+        assert.equal(status.semanticEnabled, !!apiKey);
+        assert.equal(status.semanticAvailable, !!apiKey);
+        assert.equal(status.semanticDisabledReason, apiKey ? undefined : 'Embedding provider key required');
+        assert.equal(resolveEmbedderRuntime()?.apiKey, apiKey);
+      }
+    `);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });

@@ -57,14 +57,27 @@ one.
   `components` may reach `shared/utils` and nothing else under `shared`, which
   is what keeps the kit installable without the application.
 - **`shared`** is a leaf. It holds `shared/domain` and `shared/utils`, both
-  pure; `shared/runtime`, the application plumbing (request-signal lifetimes,
-  lazily mounted surfaces, command-surface registration, runtime scoping and
-  retention, scroll anchoring, text-entry focus, and the provider stack the
-  application mounts); `shared/ui` and `shared/styling` for browser-facing
-  shared code such as the clipboard helper, the failure notice every surface
-  says a `FailureView` through, and code highlighting; and
-  `shared/brand`, which is artwork. Nothing in `shared` may reach `app`,
+  pure — the utilities carry what more than one feature would otherwise each
+  write for itself: numeric clamping, reading and encoding a path as text,
+  sizing a file for a reader, the delay a single click waits out before it
+  trusts it was not a double click, and the keyboard cursor every list in the
+  app moves by; `shared/runtime`, the application
+  plumbing (request-signal lifetimes, lazily mounted surfaces, command-surface
+  registration, runtime scoping and retention, scroll anchoring, text-entry
+  focus, and the provider stack the application mounts); `shared/ui` and
+  `shared/styling` for browser-facing shared code such as the clipboard
+  helper, the failure notice every surface says a `FailureView` through, the
+  chrome a multi-line text field wears, the path a confirmation shows as
+  evidence, and code highlighting; and
+  `shared/brand`, which is artwork, including the mark that stands for each
+  Agent wherever one is named. Nothing in `shared` may reach `app`,
   `features`, or `platform`.
+
+  Because a feature may not import a sibling, `shared` is the only place a
+  concern two features hold in common can live. A helper that stays inside one
+  feature is a helper the next feature has to rewrite, and the two copies then
+  drift: that is how the same Agent came to wear a vendor mark in the Chat
+  panel and a generic glyph in Settings.
 - **`platform`** owns mechanism at the host boundary, the typed preload bridge
   and the API client, with no product policy.
 - **`components/ui`** is the installed Fluid primitive layer. Product code
@@ -360,7 +373,7 @@ reason removes the entry.
   keeps the rest of the renderer honest.
 - **Color literals.** `renderer/src/globals.css` defines the tokens,
   `renderer/src/lib/focus-ring.ts` carries the focus fallback for engines
-  without the token, and `renderer/src/shared/brand/logo.tsx` is artwork.
+  without the token, and `renderer/src/shared/brand/` is artwork.
 - **`extends Error`.** Only `renderer/src/shared/domain/feature-error.ts`,
   which is the base everything else extends.
 - **Class assertions.** `components/ui` tests only, where the class is the

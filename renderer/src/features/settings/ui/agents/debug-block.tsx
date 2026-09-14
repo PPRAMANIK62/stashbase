@@ -95,11 +95,11 @@ export function DebugBlock({ runtimes }: { runtimes: AgentRuntimesViewModel }) {
           Development only
         </Badge>
       }
-      summary="Agent bootstrap testing"
+      summary="Agent setup testing"
     >
       <p className="text-caption text-muted-foreground">
-        These controls change discovery inside StashBase only — they never uninstall a global Agent
-        or clear provider credentials.
+        Simulate Agent discovery, setup, and turn results in StashBase. System installations and
+        provider sign-ins are kept.
       </p>
       <DebugSelectRow
         disabled={busy}
@@ -137,7 +137,7 @@ export function DebugBlock({ runtimes }: { runtimes: AgentRuntimesViewModel }) {
           size="compact"
           variant="tertiary"
         >
-          Reset Claude first run
+          Reset Claude Code first run
         </Button>
       </div>
       {runtimes.debugFailure && (

@@ -30,7 +30,7 @@ function HistoryButton({
     <Tooltip content={label} side="bottom">
       <Button
         aria-label={label}
-        className="-ml-1"
+        className="ml-1"
         disabled={target === null}
         onClick={onStep}
         size={size}

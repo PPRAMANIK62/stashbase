@@ -416,3 +416,46 @@ test('Download copies only prepared files into Downloads outside temporary clean
   assert.deepEqual((await fs.readdir(saved)).sort(), ['application-log.txt', 'diagnostics.txt']);
   assert.deepEqual(await fs.readdir(base), ['session-next']);
 });
+
+test('concurrent destinations share one Downloads copy and a failed copy retries in that folder', async (t) => {
+  const root = await temporaryRoot(t);
+  const downloads = path.join(root, 'downloads');
+  await fs.mkdir(downloads);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let failCopy = true;
+  let copies = 0;
+  let opened = 0;
+  const handoff = createBugReportHandoff({
+    baseTemporaryDirectory: path.join(root, 'reports'),
+    downloadsDirectory: () => downloads,
+    openExternal: async () => { opened += 1; },
+    fsModule: {
+      ...fs,
+      async copyFile(...args) {
+        copies += 1;
+        await gate;
+        if (failCopy) throw new Error('controlled copy failure');
+        return fs.copyFile(...args);
+      },
+    },
+  });
+  const approved = snapshot();
+  await handoff.prepare(approved);
+  const first = handoff.saveToDownloads(approved);
+  const second = handoff.openGitHub(approved);
+  release();
+  assert.ok((await Promise.all([first, second])).every((result) => !result.ok));
+  assert.equal(opened, 0);
+  assert.equal(copies, 1);
+  assert.deepEqual(await fs.readdir(downloads), ['StashBase bug report']);
+  failCopy = false;
+  const retried = await Promise.all([
+    handoff.saveToDownloads(approved), handoff.openGitHub(approved),
+  ]);
+  assert.ok(retried.every((result) => result.ok));
+  assert.equal(opened, 1);
+  assert.equal(copies, 4);
+  assert.deepEqual(await fs.readdir(downloads), ['StashBase bug report']);
+  assert.equal(await fs.readFile(path.join(downloads, 'StashBase bug report', 'application-log.txt'), 'utf8'), approved.artifacts[1].resource.text);
+});

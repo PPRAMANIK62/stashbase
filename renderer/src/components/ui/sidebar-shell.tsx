@@ -27,7 +27,7 @@ import { SidebarPeek } from '@/components/ui/sidebar-peek';
 import { SidebarRail } from '@/components/ui/sidebar-rail';
 import { mergeRefs } from '@/lib/merge-refs';
 import { useShape } from '@/lib/shape-context';
-import { spring, exitFallbackMs } from '@/lib/springs';
+import { collapseTween, spring, exitFallbackMs } from '@/lib/springs';
 import { surfaceClasses } from '@/lib/surface-classes';
 import { useSurface, SurfaceProvider } from '@/lib/surface-context';
 import { instant, useMotionTier } from '@/lib/use-motion-tier';
@@ -93,17 +93,19 @@ const SidebarShell = forwardRef<HTMLDivElement, SidebarShellProps>(
     // rail holding the pointer capture and kill the drag.
     const peekEnabled = peek !== 'none' && !open && !isResizing;
 
-    // Drag-resize needs the panel glued to the pointer; the spring resumes
-    // for open/close. Reduced motion snaps instead of sliding — the state
-    // change stays legible without the 256px of travel. The open/close ride
-    // the SLOW tier: a whole column moving is the largest thing this
-    // component animates (the sheet and peek stay on moderate — drawers
-    // settle precisely, per the tier notes).
+    // Drag-resize needs the panel glued to the pointer; motion resumes for
+    // open/close. Reduced motion snaps instead of sliding — the state change
+    // stays legible without the 256px of travel. The open/close are an expand
+    // and a collapse, so they take `collapseTween`'s slow tier rather than a
+    // spring: what travels is the space the column occupies, and a spring's
+    // bounce carries a whole column past the window edge it lands against and
+    // back. The sheet and peek stay on the spring — a drawer and a floated
+    // card are objects arriving, not space opening.
     const landmarkLabel = props['aria-label'] ?? sidebarLandmarkLabel(side);
     const dragSettle = useMotionTier(spring.moderate);
     const dragRetract = useMotionTier(spring.moderate.exit);
-    const toggleSettle = useMotionTier(spring.slow);
-    const toggleRetract = useMotionTier(spring.slow.exit);
+    const toggleSettle = useMotionTier(collapseTween.slow);
+    const toggleRetract = useMotionTier(collapseTween.slow.exit);
     // Mid-drag open flips — the collapse preview and its drag-back rescue —
     // ride the moderate tier instead of the drag's glued zero-duration tracking.
     // The flip is detected synchronously (transition must be right on the
@@ -123,7 +125,7 @@ const SidebarShell = forwardRef<HTMLDivElement, SidebarShellProps>(
     useEffect(() => {
       if (!(open && isPeeking)) return;
       setPinFromPeekHold(true);
-      const id = setTimeout(() => setPinFromPeekHold(false), exitFallbackMs(spring.slow));
+      const id = setTimeout(() => setPinFromPeekHold(false), exitFallbackMs(collapseTween.slow));
       return () => clearTimeout(id);
     }, [open, isPeeking]);
     useEffect(() => {
@@ -139,8 +141,9 @@ const SidebarShell = forwardRef<HTMLDivElement, SidebarShellProps>(
       return () => clearTimeout(id);
     }, [open, isResizing]);
     // Four landings, one rule: a drag that has flipped past its threshold
-    // settles on the moderate tier, a drag still tracking the pointer snaps,
-    // and a plain toggle takes the slow tier.
+    // settles on the moderate SPRING, because it is continuing a movement the
+    // pointer started and momentum is what a spring is for; a drag still
+    // tracking the pointer snaps; and a plain toggle eases.
     const widthTransition = isResizing
       ? openFlipped || dragFlip
         ? open

@@ -1,5 +1,7 @@
 import { Bot, Mic, Plug, Search, Settings as SettingsIcon, SunMoon } from 'lucide-react';
 
+import { useLocalComponent } from '@/features/settings/hooks/use-local-component';
+
 import { AgentRuntimesPanel } from './agents/agents-panel';
 import { AiIndexPanel } from './ai-index/ai-index-panel';
 import { AppearancePanel } from './appearance/appearance-panel';
@@ -11,20 +13,17 @@ import { TranscriptionPanel } from './transcription/transcription-panel';
 
 /** The section registry, in nav order: what everyone touches first, then the
  *  Agents section that owns the account, then the capabilities a reader turns
- *  on by bringing something of their own. Each panel owns its own data, so a
- *  section is the one place a capability's absence is decided: no port, no
- *  section. */
-const alwaysApplied = async () => true;
+ *  on by bringing something of their own. Capability-specific panels require
+ *  their ports; General always exposes the available update and support controls. */
 const ignoreExternal = () => undefined;
 
 export default function ManagedSettings({
   accountApi,
   agentRuntimeApi,
-  applyCaptureWatch = alwaysApplied,
   appearanceApi,
-  captureApi,
   embedderApi,
   mcpAccessApi,
+  localComponentApi,
   onClose,
   onOpenExternal = ignoreExternal,
   onReportBug = null,
@@ -34,23 +33,21 @@ export default function ManagedSettings({
   softwareUpdate = null,
   transcriptionApi,
 }: SettingsProps) {
+  const localComponent = useLocalComponent(localComponentApi, open && section === 'general');
   const sections: SettingsSectionDef[] = [
-    captureApi
-      ? {
-          available: true,
-          icon: SettingsIcon,
-          id: 'general',
-          label: 'General',
-          render: () => (
-            <GeneralPanel
-              applyCaptureWatch={applyCaptureWatch}
-              captureApi={captureApi}
-              onReportBug={onReportBug}
-              softwareUpdate={softwareUpdate}
-            />
-          ),
-        }
-      : { available: false, icon: SettingsIcon, id: 'general', label: 'General' },
+    {
+      available: true,
+      icon: SettingsIcon,
+      id: 'general',
+      label: 'General',
+      render: () => (
+        <GeneralPanel
+          localComponent={localComponent}
+          onReportBug={onReportBug}
+          softwareUpdate={softwareUpdate}
+        />
+      ),
+    },
     appearanceApi
       ? {
           available: true,

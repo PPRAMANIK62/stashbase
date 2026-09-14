@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vite-plus/test';
 import {
   initialReviewSession,
   reduceReviewSession as reduce,
-  sessionGeneration,
   type ApprovedReport,
   type ReviewDraft,
   type ReviewEvent,
@@ -74,8 +73,7 @@ describe('review session reducer', () => {
     expect(reduce({ failure, kind: 'unavailable' }, { draft, type: 'loaded' }).kind).toBe(
       'unavailable',
     );
-    expect(sessionGeneration(initialReviewSession)).toBeNull();
-    expect(sessionGeneration(loaded())).toBe(1);
+    expect(loaded()).toMatchObject({ generation: 1 });
   });
 
   it('tracks an edit as dirty until main confirms it', () => {
@@ -311,7 +309,7 @@ describe('review session reducer', () => {
       ],
       loaded(),
     );
-    expect(sessionGeneration(reopened)).toBe(2);
+    expect(reopened).toMatchObject({ generation: 2 });
     expect(reduce(reopened, { generation: 1, type: 'prepare-started' })).toBe(reopened);
     expect(reduce(reopened, { artifactId: 'log', generation: 1, type: 'preview-toggled' })).toBe(
       reopened,

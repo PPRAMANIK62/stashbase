@@ -22,9 +22,7 @@ describe('search by meaning settings panel', () => {
     const user = userEvent.setup();
 
     expect(
-      await screen.findByText(
-        'Searching by meaning isn’t set up. Add a key to turn it on. Keyword search keeps working.',
-      ),
+      await screen.findByText('Search by meaning is off. Add a key to turn it on.'),
     ).not.toBeNull();
     expect(screen.queryByRole('button', { name: /Sign in/u })).toBeNull();
     expect(screen.queryByText(/StashBase account/u)).toBeNull();
@@ -32,7 +30,7 @@ describe('search by meaning settings panel', () => {
     // and has no Cancel.
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
 
-    await user.type(screen.getByPlaceholderText('Paste the key'), 'sk-secret');
+    await user.type(screen.getByPlaceholderText('Paste your API key'), 'sk-secret');
     await user.click(screen.getByRole('button', { name: 'Save key' }));
     await waitFor(() =>
       expect(port.saveKey).toHaveBeenCalledWith('openai', 'sk-secret', expect.any(AbortSignal)),
@@ -40,16 +38,16 @@ describe('search by meaning settings panel', () => {
   });
 
   it('marks a stored key active and offers to replace or remove it', async () => {
-    renderPanel(embedderPort(keyedEmbedderState({ provider: 'openrouter', source: 'openrouter' })));
+    renderPanel(embedderPort(keyedEmbedderState({ provider: 'openrouter' })));
 
-    expect(await screen.findByText('OpenRouter key stored')).not.toBeNull();
+    expect(await screen.findByText('OpenRouter API key saved')).not.toBeNull();
     expect(screen.getByText('Active')).not.toBeNull();
     expect(
-      screen.getByText('Meaning-based search and indexing use your OpenRouter key.'),
+      screen.getByText('Search by meaning is on. Indexing and searches use your OpenRouter key.'),
     ).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Replace key' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Remove key' })).not.toBeNull();
-    expect(screen.queryByPlaceholderText('Paste the key')).toBeNull();
+    expect(screen.queryByPlaceholderText('Paste your API key')).toBeNull();
   });
 
   it('reports a rejected key as the reader’s to fix', async () => {
@@ -61,7 +59,7 @@ describe('search by meaning settings panel', () => {
     renderPanel(port);
     const user = userEvent.setup();
 
-    await user.type(await screen.findByPlaceholderText('Paste the key'), 'bad');
+    await user.type(await screen.findByPlaceholderText('Paste your API key'), 'bad');
     await user.click(screen.getByRole('button', { name: 'Save key' }));
     expect((await screen.findByRole('alert')).textContent).toBe(failureMessage('rejected'));
   });
@@ -79,15 +77,5 @@ describe('search by meaning settings panel', () => {
     const notice = await screen.findByText(failureMessage('unavailable'));
     expect(notice.getAttribute('role')).toBe('status');
     expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('does not call a stored key active while another BYOK provider is selected', async () => {
-    renderPanel(
-      embedderPort(embedderState({ authorized: true, hasKey: true, source: 'openrouter' })),
-    );
-
-    expect(await screen.findByText('OpenAI key stored')).not.toBeNull();
-    expect(screen.queryByText('Active')).toBeNull();
-    expect(screen.getByText(/isn’t set up/u)).not.toBeNull();
   });
 });

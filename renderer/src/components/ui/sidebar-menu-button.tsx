@@ -124,7 +124,7 @@ const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
     const inner = (
       <>
         {leading}
-        {!leading && Icon && <RowIcon icon={Icon} lit={lit} size={iconSize} />}
+        {!leading && Icon && <RowIcon icon={Icon} size={iconSize} />}
         {!leading && !Icon && resolvedDot && (
           <span
             className="flex shrink-0 items-center justify-center"
@@ -144,7 +144,7 @@ const SidebarMenuButton = forwardRef<HTMLButtonElement, SidebarMenuButtonProps>(
             />
           </span>
         )}
-        <MenuRowLabel extras={content} label={label} lit={lit} textClass={textClass} />
+        <MenuRowLabel extras={content} label={label} textClass={textClass} />
         {status === 'unread' && <span className="sr-only">, unread</span>}
       </>
     );

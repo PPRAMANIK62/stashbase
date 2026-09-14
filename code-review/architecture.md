@@ -4,6 +4,12 @@
 > [design-docs/architecture.md](../design-docs/architecture.md); focused
 > invariants live in the contracts linked below.
 
+The implemented capabilities support a project-first writing workflow:
+brainstorm, write, and refine, using file preparation and retrieval when
+useful. An empty project does not require an index or wiki before discussion.
+Document-specific diff remains a separate unfinished experience; it does not
+change the current source-of-truth or process ownership model.
+
 ## Runtime Shape
 
 ```text
@@ -13,7 +19,7 @@ Electron renderer windows
 Node application server
   ├─ local file operations and preparation orchestration
   ├─ Agent Panel bridge
-  ├─ MCP transports and library operations
+  ├─ MCP transports and project operations
   └─ Supabase session and OpenQuill model bridge
         │
         ▼
@@ -24,7 +30,7 @@ OpenAI or OpenRouter
 ```
 
 One application session may own several renderer windows. They share the Node
-server, Python daemon, library membership, settings, derived state, and MCP
+server, Python daemon, project registration, settings, derived state, and MCP
 service. Each renderer retains its own active folder, documents, search
 presentation, and Agent tabs.
 
@@ -45,7 +51,7 @@ presentation, and Agent tabs.
   Python daemon.
 - Renderer state is presentation and request coordination, not durable data
   truth. It cannot define preparation completion, index currency, file
-  versions, or library membership.
+  versions, or project registration.
 - Settings is the only product surface for BYOK credentials. Account OAuth may
   start from explicit setup, Settings, or account-menu Sign in actions; its
   refreshable session remains Node-owned. Environment variables may select
@@ -72,11 +78,11 @@ that crosses a product boundary retains or resolves to an authorized visible
 source file.
 
 The desktop popup's semantic path uses the same folder-explicit
-`POST /api/library/search` that powers MCP `search_library`; its exact path
-uses the folder-explicit `POST /api/library/keyword-search`. A Folder root is
+`POST /api/project/search` that powers MCP `search_project`; its exact path
+uses the folder-explicit `POST /api/project/keyword-search`. A Folder root is
 required unless an attributed folder Chat supplies it, and an optional
 escape-safe subfolder prefix may narrow either call.
-`normalizeLibrarySearchScope` rejects a prefix outside the requested Folder
+`normalizeProjectSearchScope` rejects a prefix outside the requested Folder
 instead of silently widening. File-type category chips are
 agent-facing only (`shared/search-types.ts` defines and validates the
 `notes` / `pdf` / `image` / `docx` / `audio` vocabulary; `server/format.ts`
@@ -89,13 +95,16 @@ surface.
 
 ## Cross-process Contracts
 
-- Every renderer request carries a stable window identity, and Electron main
-  is the one that stamps it. `installRequestAuthorization` in
-  `electron/renderer/requests.cjs` cancels any renderer request outside `/api/`
-  and `/ws/agent`, requires the sender's `webContents` and main frame to match a
-  live window registration on an allowed renderer origin, and then overwrites
-  the window-identity header. A renderer cannot choose or forge its own
-  identity. Folder context is a server-side binding, never a global
+- Electron main observes every renderer request to the local HTTP and WebSocket
+  origins. `installRequestAuthorization` in `electron/renderer/requests.cjs`
+  admits canonical `/api/` requests and the exact `/ws/agent` endpoint only
+  from a registered live window's main frame on the expected origin, and
+  overwrites any claimed window-identity header. Alternate path spellings and
+  retired socket aliases cannot bypass this check. Read-only asset and PDF
+  resources carry no window authority; their server-owned path and membership
+  checks also serve document frames and workers. Explicit Vite development
+  additionally permits static reads and the registered main frame's root HMR
+  socket. Folder context remains a server-side binding, never a global
   current-folder variable.
 - Shared services outlive an individual window. Window retirement cannot close
   the server, daemon, settings, or MCP resources while peers remain.
@@ -107,16 +116,19 @@ surface.
   current generation's process or request state.
 - Application quit is an authenticated owner-to-server shutdown handshake.
   Signals are timeout fallbacks, not the normal cleanup path.
+- Startup readiness belongs to the spawned server instance, not merely a
+  compatible listener on its port. The launch identity and bounded orphan
+  recovery are owned by [Window Lifecycle](window-lifecycle.md).
 - The shutdown ladder closes MCP, Agent-install, GitHub-import, conversion,
   database, and indexer resources independently so one cleanup failure cannot
   skip the others.
 - Static renderer serving must bypass every API and asset route before serving
   the web bundle.
-- `shared/file-formats.ts` and `shared/library-files.ts` carry the exact
+- `shared/file-formats.ts` and `shared/project-files.ts` carry the exact
   renderer/server tree contract. `generic` widens Workbench visibility only;
   the server's known-format detector remains the narrower retrieval and Agent
   admission boundary. Generic preview uses its own read-only route rather than
-  widening `/api/files`, library operations, or MCP.
+  widening `/api/files`, project operations, or MCP.
 
 ## Renderer Trust Boundary
 
@@ -131,12 +143,21 @@ WebSocket origin. `electron/app-protocol.cjs` owns the origin, the policy, and
 path containment under the renderer root.
 `electron/window-security.cjs` owns the shared web preferences and denies
 navigation away from that origin, popups, `webview` attachment, and every
-permission request.
+ambient permission check. One permission request is granted, and only when the
+requesting frame is the application origin itself: the sanitized clipboard
+write, which is how a value the reader asked a panel to copy leaves the window.
+Reading the clipboard stays denied, because a paste arrives as an event and
+needs no permission. The grant reaches the bundled renderer and nothing else,
+since document content renders at an opaque origin with no permission
+capability at all. The permission name is Chromium's, not a readable synonym:
+a handler that answers the wrong one denies silently, and the renderer can only
+report that the clipboard could not be reached, so a change to it is proven by
+driving a real window rather than by reading the code.
 
 Native capability crosses only through a bundled typed preload that exposes one
 narrow method group per capability and never the raw `ipcRenderer`. Main
 authorizes each call before acting on it. `authorizeSender` in
-`electron/library/dialog.ts` requires a live sender window, the sender's own
+`electron/project/dialog.ts` requires a live sender window, the sender's own
 main frame, an expected frame origin, and an explicit capability grant recorded
 for that window at creation; the handler then parses the payload against the
 shared wire schema under `shared/protocols/electron/`. Authorization identity
@@ -160,7 +181,7 @@ the Node server and its sidecars.
 
 A window paints a minimum safe shell first and lets its noncritical
 capabilities settle independently; `renderer/src/app/bootstrap/use-boot-progress.ts`
-publishes the settled state once the library has answered and no folder restore
+publishes the settled state once the project registry has answered and no folder restore
 is still running. Loading never replaces safe content or blocks local
 interaction. Optimistic update is confined to reversible low-risk metadata;
 nothing that decides durability may be presented before its owner confirms it.
@@ -190,7 +211,7 @@ The main ownership seams are intentionally narrower than this map:
   trust boundaries.
 - [Settings and Config](settings-config.md) — durable configuration and
   runtime reconfiguration.
-- [MCP Access](mcp-access.md) — external and built-in library access.
+- [MCP Access](mcp-access.md) — external and built-in project registry access.
 - [Agent Runtime](agent-runtime.md) — CLI discovery, preparation, native
   sessions, and history.
 - [Release Pipeline](release-pipeline.md) — CI and packaged native ownership.
@@ -203,12 +224,17 @@ The main ownership seams are intentionally narrower than this map:
 | Window/context owners | `electron/main.cjs`, `electron/multi-window.cjs`, `server/folder.ts`, `server/routes/window-context.ts` |
 | Application server composition | `server/index.ts`, with focused behavior behind route and service Modules |
 | Data lifecycle Interfaces | `server/conversion-dispatch.ts`, `server/conversion-scheduler.ts`, `server/indexer.ts`, `server/mfs-daemon.ts` |
-| Library/MCP Interface | `LibraryOperations` in `server/library-operations/index.ts` |
+| Project/MCP Interface | `ProjectOperations` in `server/project-operations/index.ts` |
 | Agent Interface | `AgentAdapter` and normalized events in `server/agent-contract.ts` |
 | Process Adapters | Electron preload/HTTP, MCP stdio/HTTP, Agent native protocols, and the Python daemon protocol |
 
 This map names ownership Seams, not every runtime file. Follow the focused
 contract before reading an owner Module's internals.
+
+The Node server owns lazy PDF/OCR component installation and its waiting
+conversion tasks; Electron startup requires only the bundled index daemon.
+See [component installation](data-lifecycle.md#pdfocr-component-installation)
+and [release packaging](release-pipeline.md) for the trust and publication contracts.
 
 ## Architectural Review Questions
 
@@ -219,7 +245,7 @@ contract before reading an owner Module's internals.
 - Can a folder-explicit operation accidentally depend on whichever folder a
   window currently shows?
 - Does a failure release every resource while preserving a recoverable source?
-- Does a new surface bypass the library membership, path, credential, or
+- Does a new surface bypass the project registration, path, credential, or
   permission boundary?
 
 ## Validation

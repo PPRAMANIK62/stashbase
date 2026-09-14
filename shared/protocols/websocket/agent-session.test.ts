@@ -12,7 +12,7 @@ test("agent socket schemas accept lifecycle, transcript, and scope-retirement ev
     { t: "ready" },
     { t: "session-id", id: "native-1" },
     { t: "text", delta: "hello" },
-    { t: "exit", reason: "scope-removed", folder: "/library/project" },
+    { t: "exit", reason: "scope-removed", folder: "/project/project" },
   ]) {
     assert.equal(agentServerEventSchema.safeParse(event).success, true);
   }
@@ -24,8 +24,8 @@ test("agent socket schemas reject contradictory scope and unrecognized wire even
     agentSessionConnectSchema.safeParse({
       agent: "codex",
       access: "auto",
-      folder: "/library/project",
-      scope: "library",
+      folder: "/project/project",
+      scope: "unbound",
     }).success,
     false,
   );

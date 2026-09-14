@@ -18,6 +18,26 @@ function tick(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
+test('parent removal leaves tasks and auxiliary scopes in retained nested projects running', async () => {
+  const scheduler = new ConversionScheduler({ laneCapacity: { heavy: 30 } });
+  const done = deferred();
+  const run = (signal: AbortSignal) => new Promise<void>((resolve) => {
+    signal.addEventListener('abort', () => resolve(), { once: true });
+    void done.promise.then(resolve);
+  });
+  const parent = scheduler.schedule(job('/project/a.pdf', 'heavy', 'background', run));
+  const child = scheduler.schedule(job('/project/child/b.pdf', 'heavy', 'background', run));
+  const preview = scheduler.schedule({ ...job('/cache/preview', 'heavy', 'background', run), scope: '/project/child/clip.mp4' });
+  await tick();
+  const cancelled = scheduler.cancelUnder('/project', 'folder-removed', ['/project/child']);
+  assert.deepEqual(cancelled.map((task) => task.key), ['/project/a.pdf']);
+  await Promise.all(cancelled.map((task) => task.completion));
+  assert.equal(scheduler.has('/project/child/b.pdf'), true);
+  assert.equal(scheduler.has('/cache/preview'), true);
+  done.resolve();
+  await Promise.allSettled([parent.completion, child.completion, preview.completion]);
+});
+
 function job(
   key: string,
   lane: ConversionLane,
@@ -471,4 +491,43 @@ test('hidden auxiliary work shares lane capacity and cancels by source scope', a
   await Promise.all(cancelled.map((item) => item.completion));
   await Promise.all([auxiliary.completion, visible.completion]);
   assert.deepEqual(cancelled.map((item) => item.key), ['/derived/voice.preview.webm']);
+});
+
+test('component installation releases the heavy lane until ready, then resumes the same task', async () => {
+  const scheduler = new ConversionScheduler();
+  const component = deferred();
+  const events: string[] = [];
+  const waiting = scheduler.schedule({
+    key: '/pdf.pdf', lane: 'heavy', urgency: 'interactive', cost: 1,
+    run: async ({ yieldLane }) => { events.push('download'); await yieldLane(component.promise); events.push('extract'); },
+  });
+  await tick();
+  const audio = scheduler.schedule({
+    key: '/audio.wav', lane: 'heavy', urgency: 'background', cost: 2,
+    run: async () => { events.push('transcribe'); },
+  });
+  await audio.completion;
+  assert.deepEqual(events, ['download', 'transcribe']);
+  assert.equal(scheduler.get('/pdf.pdf')?.state, 'yielded');
+  assert.equal(scheduler.snapshot().tasks.find((task) => task.key === '/pdf.pdf')?.state, 'yielded');
+  component.resolve();
+  await waiting.completion;
+  assert.deepEqual(events, ['download', 'transcribe', 'extract']);
+});
+
+test('removing a source waiting for its component retires it without waiting for network', async () => {
+  const scheduler = new ConversionScheduler();
+  const component = deferred();
+  const waiting = scheduler.schedule({
+    key: '/folder/pdf.pdf', lane: 'heavy', urgency: 'background', cost: 1,
+    run: async ({ yieldLane }) => { await yieldLane(component.promise); assert.fail('cancelled task must not extract'); },
+  });
+  const settled = waiting.completion.catch(() => {});
+  await tick();
+  await scheduler.cancel('/folder/pdf.pdf', 'file-operation');
+  await settled;
+  assert.equal(scheduler.has('/folder/pdf.pdf'), false);
+  component.resolve();
+  await tick();
+  assert.equal(scheduler.has('/folder/pdf.pdf'), false);
 });

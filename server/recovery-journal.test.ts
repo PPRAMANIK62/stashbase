@@ -14,8 +14,8 @@ import {
   type RecoveryDraftSnapshot,
 } from './recovery-journal.ts';
 
-const FOLDER = path.resolve('/library/notes');
-const OTHER_FOLDER = path.resolve('/library/other');
+const FOLDER = path.resolve('/project/notes');
+const OTHER_FOLDER = path.resolve('/project/other');
 const KEY = crypto.randomBytes(RECOVERY_JOURNAL_KEY_BYTES);
 const START = Date.parse('2026-01-01T00:00:00.000Z');
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -100,6 +100,50 @@ test('remove is idempotent and read reports absence', async (t) => {
   await journal.remove(snapshot());
   assert.deepEqual(files(), []);
   assert.equal(await journal.read(snapshot()), null);
+});
+
+test('listing waits for an active publication instead of deleting its temporary file', async (t) => {
+  const { journal, dir } = harness(t);
+  let release!: () => void;
+  let staged!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const ready = new Promise<void>((resolve) => { staged = resolve; });
+  const rename = fs.promises.rename;
+  t.mock.method(fs.promises, 'rename', async (from: fs.PathLike, to: fs.PathLike) => {
+    if (String(from).startsWith(dir + path.sep)) { staged(); await gate; }
+    return rename(from, to);
+  });
+  const writing = journal.write(snapshot());
+  await ready;
+  let listed = false;
+  const listing = journal.list(FOLDER).then((value) => { listed = true; return value; });
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.equal(listed, false);
+    assert.equal(fs.readdirSync(dir).filter((name) => name.endsWith('.tmp')).length, 1);
+  } finally { release(); }
+  assert.equal((await writing).status, 'stored');
+  const result = await listing;
+  assert.ok(result.available && result.entries.length === 1);
+  assert.equal((await journal.read(snapshot()))?.content, '# draft');
+});
+
+test('concurrent snapshots and discard retain request order, and a failed write releases the queue', async (t) => {
+  const { journal, dir } = harness(t);
+  const writes = Array.from({ length: 12 }, (_, index) => journal.write(snapshot({ content: String(index) })));
+  await Promise.all(writes);
+  assert.equal((await journal.read(snapshot()))?.content, '11');
+  await Promise.all([journal.write(snapshot({ content: 'pending' })), journal.remove(snapshot())]);
+  assert.equal(await journal.read(snapshot()), null);
+  const rename = fs.promises.rename;
+  const mock = t.mock.method(fs.promises, 'rename', async (from: fs.PathLike, to: fs.PathLike) => {
+    if (String(from).startsWith(dir + path.sep)) throw new Error('publication failed');
+    return rename(from, to);
+  });
+  await assert.rejects(journal.write(snapshot()), /publication failed/);
+  mock.mock.restore();
+  assert.equal((await journal.write(snapshot({ content: 'retry' }))).status, 'stored');
+  assert.equal((await journal.read(snapshot()))?.content, 'retry');
 });
 
 test('a disabled journal never touches disk, still removes, and lists unavailable', async (t) => {

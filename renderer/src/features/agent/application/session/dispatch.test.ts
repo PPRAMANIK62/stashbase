@@ -16,7 +16,7 @@ import {
 } from './dispatch';
 import { createPromptLedger } from './prompts';
 
-const RESEARCH = { kind: 'folder', path: '/library/Research' } as const;
+const RESEARCH = { kind: 'folder', path: '/project/Research' } as const;
 const report: AgentContextItem = {
   boundVersion: 4,
   format: 'md',
@@ -119,7 +119,7 @@ describe('prompt dispatcher', () => {
     const test = harness({
       contextPort: agentContextPort({
         resolve: vi.fn(async (source) => {
-          test.setState({ scope: { kind: 'folder', path: '/library/Archive' } });
+          test.setState({ scope: { kind: 'folder', path: '/project/Archive' } });
           return {
             available: true,
             folder: 'Research',
@@ -203,7 +203,7 @@ describe('unavailableContextPort', () => {
     const port = unavailableContextPort();
 
     await expect(
-      port.resolve({ folderPath: '/library', path: 'a.md' }, new AbortController().signal),
+      port.resolve({ folderPath: '/project', path: 'a.md' }, new AbortController().signal),
     ).rejects.toMatchObject({ kind: 'unavailable' });
     await expect(port.upload([], new AbortController().signal)).rejects.toMatchObject({
       kind: 'unavailable',

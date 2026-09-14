@@ -9,7 +9,7 @@
  * bundled, typed preload bridge.
  */
 
-const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, safeStorage, session, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -17,15 +17,12 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { pathToFileURL } = require('node:url');
 const {
   createServerArguments,
   createServerChildEnvironment,
   isCompatibleServerHealth,
-  serverStartupTimeoutMs,
-  waitForStableServerProbe,
+  startServer,
 } = require('./main-probe.cjs');
-const { shouldOfferClipboardImage } = require('./clipboard-watch-policy.cjs');
 const { createRecoveryKeyProvider } = require('./recovery-key.cjs');
 const { createBugReportService } = require('./bug-report-service.cjs');
 const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
@@ -121,8 +118,7 @@ function appendServerLogHint(message) {
     : message;
 }
 
-function stopSpawnedServer() {
-  const proc = serverProc;
+function stopSpawnedServer(proc) {
   if (!proc || proc.exitCode != null || proc.signalCode != null) return;
   try { proc.kill('SIGTERM'); } catch { /* already gone */ }
   setTimeout(() => {
@@ -155,34 +151,33 @@ const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 let serverProc = null;
 let serverStartPromise = null;
 const mainWindows = new Set();
+let quitRequested = false;
 const bugReportReviewWindows = new Set();
 const bugReportReviewDraftBySender = new Map();
 const windowRegistry = createWindowRegistry({ platform: process.platform });
 const replacementWindowCapabilities = new WeakMap();
-let libraryFolderDialogCapability = null;
-let libraryLifecycleCapability = null;
+let projectFolderDialogCapability = null;
+let projectLifecycleCapability = null;
 let workspaceSessionCapability = null;
 let windowLifecycleCapability = null;
 let externalNavigationCapability = null;
-let captureCapability = null;
 let bugReportCapability = null;
 let updatesCapability = null;
-let captureMonitor = null;
 let replacementWindowLifecycle = null;
 let replacementUpdates = null;
 let workspaceSessionRestoreWindow = null;
 let replacementBoundaryInstalled = false;
 
-const BUG_REPORT_REVIEW_FILE_URL = pathToFileURL(
-  path.join(__dirname, 'bug-report-review.html'),
-).toString();
+// The review page is the renderer's own `bug-report.html`. It loads from the
+// same origin the workspace does: the Vite dev origin while the development
+// server owns the renderer, `app://renderer` in every other launch.
+const BUG_REPORT_REVIEW_URL = USE_DEV_VITE
+  ? `${SERVER_URL}/bug-report.html`
+  : `${APP_URL}bug-report.html`;
 
 function isBugReportReviewFrameUrl(url) {
   if (typeof url !== 'string') return false;
-  if (url === BUG_REPORT_REVIEW_FILE_URL || url.startsWith(`${BUG_REPORT_REVIEW_FILE_URL}#`)) {
-    return true;
-  }
-  return !USE_DEV_VITE && isAllowedApplicationUrl(url, APP_ORIGIN);
+  return isAllowedApplicationUrl(url, RENDERER_ORIGIN);
 }
 
 function installReplacementBoundary() {
@@ -197,7 +192,7 @@ function installReplacementBoundary() {
     PROJECT_ROOT,
     'dist',
     'electron',
-    'library',
+    'project',
     'dialog.cjs',
   ));
   const externalNavigation = require(path.join(
@@ -211,7 +206,7 @@ function installReplacementBoundary() {
     PROJECT_ROOT,
     'dist',
     'electron',
-    'library',
+    'project',
     'lifecycle.cjs',
   ));
   const workspaceSession = require(path.join(
@@ -227,13 +222,6 @@ function installReplacementBoundary() {
     'electron',
     'window',
     'lifecycle.cjs',
-  ));
-  const capture = require(path.join(
-    PROJECT_ROOT,
-    'dist',
-    'electron',
-    'capture',
-    'monitor.cjs',
   ));
   const bugReportOpen = require(path.join(
     PROJECT_ROOT,
@@ -256,12 +244,11 @@ function installReplacementBoundary() {
     'updates',
     'ipc.cjs',
   ));
-  libraryFolderDialogCapability = boundary.LIBRARY_FOLDER_DIALOG_CAPABILITY;
-  libraryLifecycleCapability = lifecycle.LIBRARY_LIFECYCLE_CAPABILITY;
+  projectFolderDialogCapability = boundary.PROJECT_FOLDER_DIALOG_CAPABILITY;
+  projectLifecycleCapability = lifecycle.PROJECT_LIFECYCLE_CAPABILITY;
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
   windowLifecycleCapability = windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY;
   externalNavigationCapability = externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY;
-  captureCapability = capture.CAPTURE_CAPABILITY;
   bugReportCapability = bugReportOpen.BUG_REPORT_CAPABILITY;
   updatesCapability = updates.UPDATES_CAPABILITY;
   bugReportOpen.registerBugReportOpen({
@@ -284,26 +271,6 @@ function installReplacementBoundary() {
     openPreparedReport: (snapshot) => bugReportHandoff.openGitHub(snapshot),
     savePreparedReport: (snapshot) => bugReportHandoff.saveToDownloads(snapshot),
     isReviewFrameUrl: (url) => isBugReportReviewFrameUrl(url),
-  });
-  // Clipboard-image offers fail closed: main re-reads the durable Settings
-  // opt-in from the server on every refresh and never enables from memory.
-  captureMonitor = capture.registerCaptureMonitor({
-    BrowserWindow,
-    clipboard,
-    ipcMain,
-    expectedOrigins: new Set([RENDERER_ORIGIN]),
-    focusedWindow: () => BrowserWindow.getFocusedWindow(),
-    isLiveWindow: (win) => isLiveMainWindow(win),
-    hasCapability: (win, capability) => (
-      replacementWindowCapabilities.get(win)?.has(capability) === true
-    ),
-    readPreference: async () => {
-      const response = await fetch(`${SERVER_URL}/api/capture`);
-      if (!response.ok) return false;
-      const preferences = await response.json();
-      return preferences?.clipboardImageImport === true;
-    },
-    shouldOffer: shouldOfferClipboardImage,
   });
   externalNavigation.registerExternalNavigation({
     BrowserWindow,
@@ -353,8 +320,7 @@ function installReplacementBoundary() {
       const windowId = windowRegistry.idForWindow(win);
       return windowId ? windowRegistry.setFolder(windowId, folder) : false;
     },
-    windowsForFolder: (folder) => windowRegistry
-      .windowsByFolder(folder)
+    windowsForFolder: async (folder) => (await windowRegistry.windowsByFolder(folder))
       .filter((win) => isLiveMainWindow(win)),
   });
   workspaceSession.registerWorkspaceSession({
@@ -371,6 +337,7 @@ function installReplacementBoundary() {
     }),
   });
   replacementWindowLifecycle = windowLifecycle.registerWindowLifecycle({
+    onCloseBlocked: () => { quitRequested = false; },
     BrowserWindow,
     ipcMain,
     expectedOrigins: new Set([RENDERER_ORIGIN]),
@@ -435,7 +402,6 @@ const desktopUpdateWindows = createWindowLifecycleUpdateBarrier({
 const desktopUpdates = createUpdateManager({
   updater: autoUpdater,
   currentVersion: app.getVersion(),
-  platform: process.platform,
   isPackaged: app.isPackaged,
   readAutoCheck: readAutoUpdatePreference,
   // Every live window releases its unsaved work before an update closes it;
@@ -466,8 +432,6 @@ const bugReportHandoff = createBugReportHandoff({
   openExternal: (url) => shell.openExternal(url),
 });
 
-const APP_CONFIG_FILE = path.join(os.homedir(), '.stashbase', 'config.json');
-
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
@@ -495,27 +459,6 @@ function mcpWrapperPath() {
     'bin',
     process.platform === 'win32' ? 'stashbase-mcp.cmd' : 'stashbase-mcp',
   );
-}
-
-function readJsonObject(file) {
-  if (!fs.existsSync(file)) return {};
-  try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
-    console.warn(`[electron] ${file} is not a JSON object; leaving untouched`);
-  } catch (err) {
-    console.warn(`[electron] couldn't parse ${file}: ${err.message}; leaving untouched`);
-  }
-  return null;
-}
-
-function readAppConfig() {
-  const cfg = readJsonObject(APP_CONFIG_FILE);
-  return cfg && typeof cfg === 'object' ? cfg : {};
-}
-
-function writeAppConfig(cfg) {
-  writeFileAtomic(APP_CONFIG_FILE, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
 }
 
 function writeMcpWrapper() {
@@ -572,38 +515,8 @@ function writeFileAtomic(file, content, options = {}) {
   }
 }
 
-/** Spawn the Express server as a child. If something else is already on
- *  the port (e.g. you've got `pnpm dev` running in a terminal), we
- *  skip the spawn and just point the window at it — handy for editing
- *  the server in your editor with tsx-watch hot reload. */
-async function startOrReuseServer() {
-  const existing = await waitForStableServerProbe(
-    () => probeServer(SERVER_PORT, 300),
-    { timeoutMs: 5_000, retryMs: 150 },
-  );
-  if (existing.compatible) {
-    if (!app.isPackaged) {
-      console.log(`[electron] reusing existing server at ${SERVER_URL}`);
-      return;
-    }
-    // Packaged builds never adopt. The single-instance lock means a live
-    // sibling Electron cannot exist, so a compatible listener is an orphan
-    // from a dead owner (or a manually launched server). Adopting it strands
-    // shutdown — its shutdown token belongs to the dead parent and
-    // `will-quit` only kills a child we spawned — so the server would
-    // outlive every future session. Spawn our own child instead: on
-    // EADDRINUSE it reclaims a verified orphaned sibling and rebinds, or
-    // exits with the port guidance when the holder has a live parent.
-    console.warn(`[electron] found an unowned StashBase server on ${SERVER_URL} — spawning an owned replacement`);
-  } else if (existing.occupied) {
-    const what = existing.legacyStashBase
-      ? 'an older StashBase server'
-      : 'another local service';
-    throw new Error(
-      `Port ${SERVER_PORT} is already in use by ${what}, so this StashBase build cannot start its server.\n` +
-      `Quit the other StashBase/app using ${SERVER_URL}, then reopen StashBase.`,
-    );
-  }
+/** Construct the owned server child; readiness and port arbitration live in main-probe. */
+function spawnServer(instanceId) {
   const serverBin = app.isPackaged
     ? process.execPath
     : localBin('tsx');
@@ -646,23 +559,7 @@ async function startOrReuseServer() {
     return statIsFile(candidate);
   });
   const hasPackagedDaemon = Boolean(packagedDaemon);
-  // The PDF / OCR extractors ship as a second PyInstaller --onedir bundle
-  // (`sidecar/stashbase-extract/stashbase-extract`) so the packaged app can
-  // run them without a Python interpreter — there's no bundled venv. The
-  // server (pdf.ts / image.ts) spawns this binary with a `pdf` / `ocr`
-  // subcommand when STASHBASE_EXTRACT_BIN is set; in dev it spawns the
-  // scripts via the local venv instead.
-  const packagedExtractCandidates = [
-    sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-extract'),
-    sidecarExecutable(path.join(RESOURCES_ROOT, 'python', 'sidecar'), 'stashbase-extract', { direct: true }),
-  ];
-  const packagedExtract = packagedExtractCandidates.find((candidate) => {
-    return statIsFile(candidate);
-  });
-  const hasPackagedExtract = Boolean(packagedExtract);
   const packagedDaemonScript = path.join(RESOURCES_ROOT, 'python', 'stashbase_daemon.py');
-  const packagedPdfScript = path.join(RESOURCES_ROOT, 'python', 'pdf_extract.py');
-  const packagedOcrScript = path.join(RESOURCES_ROOT, 'python', 'ocr_extract.py');
   if (app.isPackaged) {
     if (!statIsFile(SERVER_ENTRY)) {
       throw new Error(`Packaged server entry is missing: ${SERVER_ENTRY}`);
@@ -681,7 +578,6 @@ async function startOrReuseServer() {
       STASHBASE_APP_ROOT: PROJECT_ROOT,
       STASHBASE_RESOURCES_PATH: RESOURCES_ROOT,
       ...(hasPackagedDaemon ? { STASHBASE_DAEMON_BIN: packagedDaemon } : {}),
-      ...(hasPackagedExtract ? { STASHBASE_EXTRACT_BIN: packagedExtract } : {}),
       ...(packagedPython ? { STASHBASE_PYTHON: packagedPython } : {}),
     }
     : { STASHBASE_APP_ROOT: PROJECT_ROOT };
@@ -709,14 +605,8 @@ async function startOrReuseServer() {
       if (app.isPackaged) {
         fs.writeSync(logFd, `resources: ${RESOURCES_ROOT}\n`);
         fs.writeSync(logFd, `daemon: ${packagedDaemon || '(missing; using Python script fallback if available)'}\n`);
-        fs.writeSync(logFd, `extractor: ${packagedExtract || '(missing; using Python script fallback if available)'}\n`);
+        fs.writeSync(logFd, 'PDF/OCR component: installed on demand by the server\n');
         fs.writeSync(logFd, `python: ${packagedPython || '(missing)'}\n`);
-        if (!hasPackagedExtract && !(packagedPython && statIsFile(packagedPdfScript) && statIsFile(packagedOcrScript))) {
-          fs.writeSync(
-            logFd,
-            'warning: packaged extractor resources are missing; PDF/image text extraction will fail until the package is rebuilt\n',
-          );
-        }
       }
     } catch (err) {
       console.warn(`[electron] application log unavailable: ${err?.message ?? err}`);
@@ -744,6 +634,7 @@ async function startOrReuseServer() {
       shutdownToken: SERVER_SHUTDOWN_TOKEN,
       oauthReturnToken: OAUTH_RETURN_TOKEN,
       recoveryJournalKey,
+      instanceId,
     }),
     // stdin = 'ignore' is intentional: the server never reads from
     // stdin, and inheriting the parent's TTY made Node attach a real
@@ -766,43 +657,37 @@ async function startOrReuseServer() {
   // permission errors, etc.). Without an explicit listener Node treats
   // the 'error' event as fatal and the whole Electron process crashes
   // with an unhelpful stack — surface a useful message instead.
-  let serverSpawnError = null;
   serverProc.on('error', (err) => {
-    serverSpawnError = err;
     console.warn(`[electron] server spawn failed: ${err.message}`);
     if (err.code === 'ENOENT') {
       console.warn(`[electron]   couldn't find ${serverBin}. ` +
         `Run \`pnpm install\` to populate node_modules/.bin.`);
     }
   });
-  serverProc.on('exit', (code) => {
-    serverStartPromise = null;
+  const child = serverProc;
+  child.on('exit', (code) => {
+    if (serverProc === child) serverStartPromise = null;
     if (code != null && code !== 0) {
       console.warn(`[electron] server exited with code ${code}`);
     }
   });
-  // Poll until the server is up. Packaged code is already bundled; source
-  // launches compile TypeScript on demand and need a wider cold-start bound
-  // on contended developer and CI machines. Both paths still fail closed.
-  const startupTimeoutMs = serverStartupTimeoutMs({ packaged: app.isPackaged });
-  const deadline = Date.now() + startupTimeoutMs;
-  while (Date.now() < deadline) {
-    if (serverSpawnError) {
-      throw new Error(appendServerLogHint(`server spawn failed: ${serverSpawnError.message}`));
-    }
-    if ((await probeServer(SERVER_PORT, 200)).compatible) return;
-    if (serverProc.exitCode != null || serverProc.signalCode != null) {
-      const detail = serverProc.exitCode != null
-        ? `server exited with code ${serverProc.exitCode}`
-        : `server exited with signal ${serverProc.signalCode}`;
-      throw new Error(appendServerLogHint(`${detail} before reporting healthy on :${SERVER_PORT}`));
-    }
-    await sleep(150);
+  return serverProc;
+}
+
+async function startOrReuseServer() {
+  let spawnedChild = null;
+  try {
+    const child = await startServer({
+      packaged: app.isPackaged,
+      port: SERVER_PORT,
+      probe: (instanceId) => probeServer(SERVER_PORT, 300, instanceId),
+      spawn: (instanceId) => { spawnedChild = spawnServer(instanceId); return spawnedChild; },
+    });
+    if (!child) console.log(`[electron] reusing existing server at ${SERVER_URL}`);
+  } catch (err) {
+    stopSpawnedServer(spawnedChild);
+    throw new Error(appendServerLogHint(err?.message ?? String(err)), { cause: err });
   }
-  stopSpawnedServer();
-  throw new Error(appendServerLogHint(
-    `server did not come up on :${SERVER_PORT} within ${startupTimeoutMs / 1000}s`,
-  ));
 }
 
 /** Coalesce every window onto one server readiness promise. The spawned
@@ -821,7 +706,7 @@ async function ensureServer() {
   }
 }
 
-async function probeServer(port, timeoutMs) {
+async function probeServer(port, timeoutMs, instanceId) {
   const health = await requestJson(port, '/api/health', timeoutMs);
   if (!health.reachable) {
     return {
@@ -837,6 +722,7 @@ async function probeServer(port, timeoutMs) {
       protocolVersion: SERVER_PROTOCOL_VERSION,
       appRoot: PROJECT_ROOT,
       resourcesPath: RESOURCES_ROOT,
+      instanceId,
     })
   ) {
     return { compatible: true, occupied: true, legacyStashBase: false, transient: false };
@@ -897,8 +783,6 @@ function requestJson(port, requestPath, timeoutMs, options = {}) {
     req.end();
   });
 }
-
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function isHttpUrl(rawUrl) {
   try {
@@ -978,21 +862,15 @@ async function openBugReportReview(win) {
     review = createBugReportReviewWindow({
       BrowserWindow,
       sourceWindow: isLiveMainWindow(win) ? win : null,
-      ...(USE_DEV_VITE
-        ? {
-          preloadPath: path.join(__dirname, 'bug-report-review-preload.cjs'),
-          htmlPath: path.join(__dirname, 'bug-report-review.html'),
-        }
-        : {
-          preloadPath: path.join(
-            PROJECT_ROOT,
-            'dist',
-            'electron',
-            'bug-report',
-            'review-window-preload.cjs',
-          ),
-          appUrl: `${APP_URL}bug-report.html`,
-        }),
+      preloadPath: path.join(
+        PROJECT_ROOT,
+        'dist',
+        'electron',
+        'bug-report',
+        'review-window-preload.cjs',
+      ),
+      appUrl: BUG_REPORT_REVIEW_URL,
+      appOrigin: RENDERER_ORIGIN,
     });
   } catch {
     bugReports.discardDraft(created.draft.id, source.webContentsId);
@@ -1008,7 +886,7 @@ async function openBugReportReview(win) {
     bugReportReviewDraftBySender.delete(reviewWebContentsId);
     bugReportReviewWindows.delete(reviewWindow);
     bugReports.discardDraftsForReviewWindow(reviewWebContentsId);
-    if (mainWindows.size === 0 && bugReportReviewWindows.size === 0 && shouldQuitAfterLastWindow(process.platform)) {
+    if (mainWindows.size === 0 && bugReportReviewWindows.size === 0 && shouldQuitAfterLastWindow(process.platform, quitRequested)) {
       app.quit();
     }
   });
@@ -1030,6 +908,7 @@ async function openBugReportReview(win) {
 }
 
 async function createWindow(initialFolder) {
+  if (desktopUpdateWindows.isActive()) return;
   try {
     await ensureServer();
   } catch (err) {
@@ -1045,6 +924,8 @@ async function createWindow(initialFolder) {
     if (mainWindows.size === 0) app.quit();
     return;
   }
+  // A window request may have started before the update save barrier.
+  if (desktopUpdateWindows.isActive()) return;
   const windowId = crypto.randomUUID();
   const win = new BrowserWindow({
     width: 1280,
@@ -1068,24 +949,22 @@ async function createWindow(initialFolder) {
   mainWindows.add(win);
   windowRegistry.add(windowId, win, initialFolder);
   if (
-    libraryFolderDialogCapability &&
-    libraryLifecycleCapability &&
+    projectFolderDialogCapability &&
+    projectLifecycleCapability &&
     workspaceSessionCapability &&
     windowLifecycleCapability &&
     externalNavigationCapability &&
-    captureCapability &&
     bugReportCapability &&
     updatesCapability
   ) {
     replacementWindowCapabilities.set(
       win,
       new Set([
-        libraryFolderDialogCapability,
-        libraryLifecycleCapability,
+        projectFolderDialogCapability,
+        projectLifecycleCapability,
         workspaceSessionCapability,
         windowLifecycleCapability,
         externalNavigationCapability,
-        captureCapability,
         bugReportCapability,
         updatesCapability,
       ]),
@@ -1095,7 +974,6 @@ async function createWindow(initialFolder) {
   replacementWindowLifecycle?.attach(win);
   win.on('focus', () => {
     lastMainWindow = win;
-    captureMonitor?.offerTo(win);
   });
   win.on('closed', () => {
     bugReports.discardUnreviewedDraftsForSource(webContentsId);
@@ -1106,14 +984,14 @@ async function createWindow(initialFolder) {
       lastMainWindow = [...mainWindows].find((candidate) => isLiveMainWindow(candidate)) ?? null;
     }
     if (mainWindows.size === 0 && bugReportReviewWindows.size === 0) {
-      if (shouldQuitAfterLastWindow(process.platform)) app.quit();
+      if (shouldQuitAfterLastWindow(process.platform, quitRequested)) app.quit();
     }
   });
 
   secureApplicationWindow(win, RENDERER_ORIGIN);
 
-  // Reload is a destructive renderer-context transition. Keep native reload
-  // chords blocked until the document slice owns a typed save/recovery path.
+  // Native reload destroys live edits; recovery currently remounts React.
+  // Keep the native reload chords blocked.
   win.webContents.on('before-input-event', (event, input) => {
     // Own window-level input before it reaches the renderer. The native menu
     // still advertises the platform accelerator, while this boundary prevents
@@ -1133,7 +1011,7 @@ async function createWindow(initialFolder) {
   });
 
   // The initial folder is not in this URL. A window learns which folder it was
-  // created for by claiming it over the library bridge, so dev and packaged
+  // created for by claiming it over the project bridge, so dev and packaged
   // windows load the same document and there is one answer to "how does a
   // window learn its folder" rather than two.
   win.loadURL(USE_DEV_VITE ? SERVER_URL : APP_URL);
@@ -1291,12 +1169,12 @@ if (!hasSingleInstanceLock) {
 
   app.on('activate', () => {
     if (mainWindows.size === 0) {
-      void createWindow();
+      void initialWindowFlight.run();
     }
   });
 
   app.on('window-all-closed', () => {
-    if (shouldQuitAfterLastWindow(process.platform)) app.quit();
+    if (shouldQuitAfterLastWindow(process.platform, quitRequested)) app.quit();
   });
 }
 
@@ -1309,6 +1187,10 @@ if (!hasSingleInstanceLock) {
 // lease, and the next launch fails to open the store.
 // Hard 8 s ceiling so the server's 6.5 s cleanup ladder can finish without a
 // stuck child pinning Electron forever.
+// An async save cancels Electron's initial quit. Keep that intent until the
+// last window closes, but revoke it when any save refuses. Ordinary macOS
+// Close Window still leaves the application running.
+app.on('before-quit', () => { quitRequested = true; });
 let quitting = false;
 app.on('will-quit', (event) => {
   if (quitting) return;

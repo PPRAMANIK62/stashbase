@@ -16,6 +16,7 @@ import {
 import { useEffect, useId, useRef, useState, type ComponentType } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Disclosure } from '@/components/ui/disclosure';
 import {
   ThinkingSteps,
   ThinkingStepsContent,
@@ -28,6 +29,7 @@ import {
 } from '@/features/agent/domain/file-change';
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
 import { focusRing } from '@/lib/focus-ring';
+import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
@@ -42,7 +44,11 @@ import {
   type AgentToolBlock,
 } from './tool-presentation';
 
-type ToolIcon = ComponentType<{ 'aria-hidden'?: boolean; className?: string }>;
+type ToolIcon = ComponentType<{
+  'aria-hidden'?: boolean;
+  className?: string;
+  strokeWidth?: number;
+}>;
 
 const STATUS_LABELS: Record<AgentToolBlock['status'], string> = {
   awaiting: 'Waiting for approval',
@@ -114,7 +120,11 @@ function AgentToolPayload({ indent = true, tool }: { indent?: boolean; tool: Age
 }
 
 function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
+  const shape = useShape();
   const [open, setOpen] = useState(false);
+  // The payload stays unmounted until the row is opened and leaves again once
+  // the close lands, which is the Disclosure's default: a long transcript is
+  // hundreds of these rows, and the diffs behind them are the expensive part.
   const panelId = useId();
   const Icon = iconFor(tool);
   const presentation = agentToolRow(tool);
@@ -122,7 +132,7 @@ function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
   return (
     <div
       className={cn(
-        'rounded-md',
+        shape.item,
         tool.status === 'error' && 'bg-destructive-light',
         tool.status === 'cancelled' && 'opacity-65',
       )}
@@ -131,7 +141,8 @@ function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
         aria-controls={hasDetails ? panelId : undefined}
         aria-expanded={hasDetails ? open : undefined}
         className={cn(
-          'group flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[12px] outline-none',
+          'group flex min-h-8 w-full items-center gap-2 px-2 text-left text-[12px] outline-none',
+          shape.item,
           focusRing('hover:bg-hover'),
           !hasDetails && 'cursor-default',
         )}
@@ -139,7 +150,7 @@ function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
         onClick={() => hasDetails && setOpen((value) => !value)}
         type="button"
       >
-        <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.5} />
         <span className="shrink-0 font-medium text-foreground">{presentation.verb}</span>
         {presentation.target && (
           <span
@@ -164,16 +175,17 @@ function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
           <ChevronRight
             aria-hidden
             className={cn(
-              'size-3 shrink-0 transition-transform motion-reduce:transition-none',
+              'size-3 shrink-0 transition-transform duration-fast motion-reduce:transition-none',
               open && 'rotate-90',
             )}
+            strokeWidth={1.5}
           />
         )}
       </button>
-      {hasDetails && open && (
-        <div id={panelId}>
+      {hasDetails && (
+        <Disclosure id={panelId} open={open}>
           <AgentToolPayload tool={tool} />
-        </div>
+        </Disclosure>
       )}
     </div>
   );
@@ -226,6 +238,7 @@ export function AgentPermissionCard({
   tool: AgentToolBlock;
   onReply(toolUseId: string, permissionId: string, allow: boolean): boolean;
 }) {
+  const shape = useShape();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const permissionId = tool.permissionId;
   const reply = (allow: boolean) => {
@@ -233,10 +246,19 @@ export function AgentPermissionCard({
     requestAnimationFrame(() => headingRef.current?.focus());
   };
   return (
-    <div className="relative flex min-h-[60px] min-w-0 flex-col overflow-hidden rounded-xl border border-decision/30 bg-decision-soft/45 pb-4 shadow-sm">
+    <div
+      className={cn(
+        'relative flex min-h-[60px] min-w-0 flex-col overflow-hidden border border-decision/30 bg-decision-soft/45 pb-4 shadow-sm',
+        shape.panel,
+      )}
+    >
       <div className="p-3">
         <div className="flex items-start gap-2">
-          <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-decision" />
+          <CircleAlert
+            aria-hidden
+            className="mt-0.5 size-4 shrink-0 text-decision"
+            strokeWidth={1.5}
+          />
           <h3
             className="text-[13px] font-medium text-foreground outline-none"
             ref={headingRef}

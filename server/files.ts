@@ -4,7 +4,7 @@
  * Public functions accept a folder-relative POSIX path like `topic/note.md`.
  * The implementation is split by responsibility so path containment, on-disk
  * mutations, and sidebar listing stay independently navigable while existing
- * route and library imports continue to use this module.
+ * route and project imports continue to use this module.
  */
 
 export { detectFormat, type FileFormat } from './format.ts';

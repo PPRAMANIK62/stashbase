@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { DocumentSourcePort } from '@/features/documents/application/ports';
@@ -33,18 +34,18 @@ function createRuntime(api: DocumentSourcePort = loadedSourceApi) {
     api,
     createId: () => `tab-${++next}`,
     createQueries: () => documentQueryScope(),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
     restored: {
       activeTabId: 'tab-2',
       tabs: [
         {
           id: 'tab-1',
-          source: { folderPath: '/library/notes', path: 'plan.md' },
+          source: { folderPath: '/project/notes', path: 'plan.md' },
         },
         {
           id: 'tab-2',
-          source: { folderPath: '/library/notes', path: 'drafts/other.md' },
+          source: { folderPath: '/project/notes', path: 'drafts/other.md' },
         },
       ],
     },
@@ -206,7 +207,7 @@ describe('document tabs', () => {
 
     await act(async () => {
       await runtime.open({
-        folderPath: '/library/notes',
+        folderPath: '/project/notes',
         path: 'newly-opened.md',
       });
     });
@@ -287,7 +288,7 @@ describe('document tabs', () => {
     expect(screen.getByRole('document', { name: 'other.md Markdown content' })).toBe(retained);
     await waitFor(() => expect(load).toHaveBeenCalledTimes(3));
     expect(load.mock.calls.at(-1)?.[0]).toEqual({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/other.md',
     });
   });
@@ -359,7 +360,7 @@ describe('document tabs', () => {
     });
 
     expect(JSON.parse(data.get(SOURCE_DRAG_MIME) ?? 'null')).toEqual({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'plan.md',
     });
     expect(runtime.store.getState().activeTabId).toBe('tab-2');
@@ -387,7 +388,7 @@ describe('preview tabs', () => {
 
     await act(async () => {
       await runtime.open(
-        { folderPath: '/library/notes', path: 'notes/look.md' },
+        { folderPath: '/project/notes', path: 'notes/look.md' },
         { preview: true },
       );
     });
@@ -402,7 +403,7 @@ describe('preview tabs', () => {
 
     await act(async () => {
       await runtime.open(
-        { folderPath: '/library/notes', path: 'notes/glance.md' },
+        { folderPath: '/project/notes', path: 'notes/glance.md' },
         { preview: true },
       );
     });
@@ -410,5 +411,73 @@ describe('preview tabs', () => {
     glance.focus();
     await user.keyboard('{Enter}');
     expect(screen.getByRole('tab', { name: 'glance.md' })).not.toBeNull();
+  });
+});
+
+/** The strip with a New tab of its own, held the way the window holds it. */
+function StripWithNewTab({ runtime }: { runtime: ReturnType<typeof createRuntime> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <DocumentTabs
+      newTab={{ add: () => setOpen(true), close: () => setOpen(false), open }}
+      runtime={runtime}
+    />
+  );
+}
+
+describe('new tab', () => {
+  it('ends the strip in a plus that seats the New tab last and selected, closed by Delete or a chosen document', async () => {
+    const runtime = createRuntime();
+    runtimes.push(runtime);
+    const user = userEvent.setup();
+    withQueryClient(<StripWithNewTab runtime={runtime} />);
+
+    const tabList = screen.getByRole('tablist', { name: 'Open documents' });
+    expect(screen.queryByRole('tab', { name: 'New tab' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'New tab' }));
+
+    const newTab = screen.getByRole('tab', { name: 'New tab' });
+    const tabs = within(tabList).getAllByRole('tab');
+    expect(tabs).toHaveLength(3);
+    expect(tabs.at(-1)).toBe(newTab);
+    expect(newTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'other.md' }).getAttribute('aria-selected')).toBe(
+      'false',
+    );
+    // The open set is untouched: the New tab is the strip's, not the runtime's.
+    expect(runtime.store.getState().tabs.map((tab) => tab.id)).toEqual(['tab-1', 'tab-2']);
+
+    newTab.focus();
+    await user.keyboard('{Delete}');
+    expect(screen.queryByRole('tab', { name: 'New tab' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'other.md' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'New tab' }));
+    await user.click(screen.getByRole('tab', { name: 'plan.md' }));
+    expect(screen.queryByRole('tab', { name: 'New tab' })).toBeNull();
+    expect(runtime.store.getState().activeTabId).toBe('tab-1');
+  });
+
+  it('stands as the plus alone while nothing is open, and seats the New tab on its own', async () => {
+    const runtime = createDocumentTabsRuntime({
+      api: loadedSourceApi,
+      createId: () => 'tab-1',
+      createQueries: () => documentQueryScope(),
+      folderPath: '/project/notes',
+      generation: 1,
+      restored: null,
+    });
+    runtimes.push(runtime);
+    const user = userEvent.setup();
+    withQueryClient(<StripWithNewTab runtime={runtime} />);
+
+    expect(screen.queryByRole('tablist')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'New tab' }));
+    expect(
+      within(screen.getByRole('tablist', { name: 'Open documents' })).getAllByRole('tab'),
+    ).toHaveLength(1);
+    expect(screen.getByRole('tab', { name: 'New tab' }).getAttribute('aria-selected')).toBe('true');
   });
 });

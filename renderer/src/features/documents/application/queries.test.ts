@@ -15,14 +15,14 @@ import {
 const scope = {
   generation: 3,
   id: 'tab-plan',
-  source: { folderPath: '/library/notes', path: 'drafts/plan.md' },
+  source: { folderPath: '/project/notes', path: 'drafts/plan.md' },
 };
 
 describe('document source queries', () => {
   it('keys source bytes by their complete disposable document scope', () => {
     expect(documentQueryKeys.source(scope)).toEqual([
       'documents',
-      '/library/notes',
+      '/project/notes',
       'drafts/plan.md',
       'tab-plan',
       3,
@@ -48,7 +48,7 @@ describe('document source queries', () => {
     expect(api.load).toHaveBeenCalledWith(scope.source, controller.signal);
     expect(query.queryKey).toEqual([
       'documents',
-      '/library/notes',
+      '/project/notes',
       'drafts/plan.md',
       'tab-plan',
       3,
@@ -87,7 +87,7 @@ describe('document source queries', () => {
     expect(api.load).toHaveBeenCalledWith(resource, controller.signal);
     expect(query.queryKey).toEqual([
       'documents',
-      '/library/notes',
+      '/project/notes',
       'drafts/plan.md',
       'tab-plan',
       3,
@@ -119,17 +119,17 @@ describe('document source queries', () => {
     const other = { ...scope, id: 'tab-other', source: { ...scope.source, path: 'other.md' } };
     queryClient.setQueryData(documentQueryKeys.source(scope), { content: 'a', version: 'v1' });
     queryClient.setQueryData(documentQueryKeys.source(other), { content: 'b', version: 'v1' });
-    queryClient.setQueryData(['workspace', 'folder', '/library/notes', 'files'], { files: [] });
+    queryClient.setQueryData(['workspace', 'folder', '/project/notes', 'files'], { files: [] });
 
     refreshDocumentSources(queryClient, [
-      { folderPath: '/library/notes', path: 'drafts/plan.md' },
-      { folderPath: '/library/elsewhere', path: 'other.md' },
+      { folderPath: '/project/notes', path: 'drafts/plan.md' },
+      { folderPath: '/project/elsewhere', path: 'other.md' },
     ]);
 
     expect(queryClient.getQueryState(documentQueryKeys.source(scope))?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(documentQueryKeys.source(other))?.isInvalidated).toBe(false);
     expect(
-      queryClient.getQueryState(['workspace', 'folder', '/library/notes', 'files'])?.isInvalidated,
+      queryClient.getQueryState(['workspace', 'folder', '/project/notes', 'files'])?.isInvalidated,
     ).toBe(false);
   });
 });

@@ -3,17 +3,16 @@ import type {
   AccountPort,
   AgentRuntimePort,
   AppearancePort,
-  CapturePort,
   McpAccessPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
 
 export const settingsQueryKeys = {
+  localComponent: ['settings', 'local-component'] as const,
   account: ['settings', 'account'] as const,
   agentAllowance: ['settings', 'agent-allowance'] as const,
   agentCatalog: ['settings', 'agent-catalog'] as const,
   appearance: ['settings', 'appearance'] as const,
-  capture: ['settings', 'capture'] as const,
   embedder: ['settings', 'embedder'] as const,
   mcpAccess: ['settings', 'mcp-access'] as const,
   transcription: ['settings', 'transcription'] as const,
@@ -63,14 +62,6 @@ export function mcpAccessQuery(port: McpAccessPort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.status(signal),
     queryKey: settingsQueryKeys.mcpAccess,
-    retry: false,
-  } as const;
-}
-
-export function captureQuery(port: CapturePort) {
-  return {
-    queryFn: ({ signal }: { signal: AbortSignal }) => port.load(signal),
-    queryKey: settingsQueryKeys.capture,
     retry: false,
   } as const;
 }

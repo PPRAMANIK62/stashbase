@@ -48,13 +48,13 @@ const UPDATE_OFFERS: { readonly [Phase in UpdatePhaseName]: UpdateOfferFor<Phase
     action: null,
     announce: false,
     releasePageLabel: null,
-    sentence: () => 'StashBase has not looked for a new version yet.',
+    sentence: () => 'No update check yet.',
   },
   checking: {
     action: null,
     announce: false,
     releasePageLabel: null,
-    sentence: () => 'Looking for a new version…',
+    sentence: () => 'Checking for updates…',
   },
   current: {
     action: null,
@@ -63,7 +63,7 @@ const UPDATE_OFFERS: { readonly [Phase in UpdatePhaseName]: UpdateOfferFor<Phase
     sentence: () => 'StashBase is up to date.',
   },
   available: {
-    action: { kind: 'primary', label: 'Download' },
+    action: { kind: 'primary', label: 'Update and restart' },
     announce: true,
     releasePageLabel: "What's new",
     sentence: (status) => `StashBase ${status.version} is available.`,

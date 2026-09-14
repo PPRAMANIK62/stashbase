@@ -181,7 +181,7 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
                     !shell &&
                     width === 'wide' &&
                     (compact ? 'max-w-[480px]' : 'max-w-[540px]'),
-                  shape.container,
+                  shape.card,
                   className,
                 )}
                 style={{ ...motionStyle(baseStyle), ...motionStyle(props.style) }}

@@ -5,24 +5,8 @@
  * place. Also handles re-relativising links inside the moved file
  * itself when its parent depth changed.
  *
- * Two entry points, used independently:
- *   - `planRenameLinks(renames)` — dry-run preview. Reads the folder in
- *     its PRE-rename state and returns the prospective new content
- *     for every file that would have at least one link rewritten.
- *     Powers the VSCode-style "Update N references in M files?"
- *     confirmation dialog (`/api/rename-preview`). The returned plan
- *     is never written by this module — the route applies it directly
- *     so it can reuse the bodies without re-walking disk.
- *   - `cascadeRenameLinks(renames)` — post-rename execution. Reads the
- *     folder in its POST-rename state, recovers each file's pre-rename
- *     location via the reverse mapping, rewrites + saves in place.
- *     Run AFTER the on-disk rename so a rolled-back rename leaves no
- *     stale link rewrites behind. Caller re-indexes the returned files.
- *
- * The two share `rewriteLinks` (pure-string rewrite, also exported for
- * tests) but otherwise walk disk independently — keeping them separate
- * lets the preview path be side-effect-free while the cascade path
- * stays simple (no "apply this prebuilt plan" branch to maintain).
+ * The async planner captures source versions before rename; apply and rollback
+ * share the normal save transaction and refuse newer source content.
  *
  * Scope:
  *   - Markdown `[text](url)` and `![alt](url)`.
@@ -31,9 +15,9 @@
  * Out of scope (left untouched):
  *   - `<img src>`, `<script src>`, `<link href>` (CSS/font/image refs
  *     resolve against the file's own `<stem>_files/` bundle, which
- *     moves with the note via `renameOnDisk`).
+ *     moves with the note via `renameOnDiskAsync`).
  *   - Reference-style markdown links (`[text][id]` + `[id]: url`).
- *     Possible follow-up; library-style docs rarely use this form.
+ *     Possible follow-up; project-style docs rarely use this form.
  *   - External URLs, `mailto:`, fragment-only `#anchor`.
  *
  * Path semantics:
@@ -45,14 +29,10 @@
 import path from 'node:path';
 import {
   detectFormat,
-  listFiles,
   listFilesAsync,
-  readText,
-  readTextAsync,
-  saveText,
-  saveTextAsync,
 } from './files.ts';
 import { logger, errorMessage } from './log.ts';
+import { fileChanged, readTextSnapshotAsync, replaceTextSnapshotAsync, textVersion, withTextFileTransaction } from './text-file-transaction.ts';
 
 const log = logger('links');
 
@@ -76,13 +56,6 @@ export interface CascadeResult {
   failed: Array<{ name: string; error: string }>;
 }
 
-export interface AppliedRenamePlan extends CascadeResult {
-  /** Restore every file that was rewritten by this application pass.
-   *  Used when a later index step fails and the disk rename is about to
-   *  roll back, so link rewrites don't point at a reverted path. */
-  rollback: () => void;
-}
-
 export interface AppliedRenamePlanAsync extends CascadeResult {
   rollback: () => Promise<void>;
 }
@@ -94,6 +67,8 @@ export interface PlanEntry {
   toName: string;
   /** Rewritten body. */
   newContent: string;
+  /** Exact bytes used to prepare this rewrite. */
+  baseVersion: string;
   /** Number of `<a>` hrefs that changed. */
   changes: number;
 }
@@ -187,19 +162,6 @@ function applyRenameForward(name: string, renames: RenameEntry[]): string {
   return name;
 }
 
-/** Reverse-map a path through the rename mapping (current → pre-rename). */
-function applyRenameReverse(name: string, renames: RenameEntry[]): string {
-  for (const r of renames) {
-    if (r.kind === 'file') {
-      if (name === r.new) return r.old;
-    } else {
-      if (name === r.new) return r.old;
-      if (name.startsWith(r.new + '/')) return r.old + name.slice(r.new.length);
-    }
-  }
-  return name;
-}
-
 /** Decide what the link href should become after the rename. Returns
  *  `null` when the link is untouchable (external, broken, etc.) or
  *  doesn't need rewriting. */
@@ -254,41 +216,15 @@ function dirOf(name: string): string {
   return d === '.' ? '' : d;
 }
 
-/** Dry-run: walks the folder in its PRE-rename state and returns the
- *  prospective new content for every file that would have at least
- *  one link rewritten. Used by `/api/rename-preview` to power the
- *  confirmation dialog AND by the apply step to avoid re-walking. */
-export function planRenameLinks(renames: RenameEntry[]): PlanEntry[] {
-  if (renames.length === 0) return [];
-  const out: PlanEntry[] = [];
-  for (const f of listFiles()) {
-    const format = detectFormat(f.name);
-    if (format !== 'md' && format !== 'html') continue;
-    const content = readText(f.name);
-    if (content == null) continue;
-    const fromName = f.name;
-    const toName = applyRenameForward(fromName, renames);
-    const { content: next, changes } = rewriteLinks({
-      content,
-      format,
-      fromDir: dirOf(fromName),
-      toDir: dirOf(toName),
-      renames,
-    });
-    if (changes === 0) continue;
-    out.push({ fromName, toName, newContent: next, changes });
-  }
-  return out;
-}
-
 export async function planRenameLinksAsync(renames: RenameEntry[]): Promise<PlanEntry[]> {
   if (renames.length === 0) return [];
   const out: PlanEntry[] = [];
   for (const file of await listFilesAsync()) {
     const format = detectFormat(file.name);
     if (format !== 'md' && format !== 'html') continue;
-    const content = await readTextAsync(file.name);
-    if (content == null) continue;
+    const snapshot = await readTextSnapshotAsync(file.name);
+    if (!snapshot) continue;
+    const { content } = snapshot;
     const fromName = file.name;
     const toName = applyRenameForward(fromName, renames);
     const rewritten = rewriteLinks({
@@ -299,64 +235,24 @@ export async function planRenameLinksAsync(renames: RenameEntry[]): Promise<Plan
       renames,
     });
     if (rewritten.changes === 0) continue;
-    out.push({ fromName, toName, newContent: rewritten.content, changes: rewritten.changes });
+    out.push({ fromName, toName, newContent: rewritten.content, changes: rewritten.changes, baseVersion: snapshot.version });
   }
   return out;
 }
 
-/** Apply a side-effect-free preview plan to the current POST-rename disk
- *  state. The returned rollback only undoes files this call successfully
- *  rewrote; failed writes are reported and left for the caller to decide. */
-export function applyRenamePlan(plan: PlanEntry[]): AppliedRenamePlan {
-  const updated: Array<{ name: string; changes: number }> = [];
-  const failed: Array<{ name: string; error: string }> = [];
-  const originals: Array<{ name: string; content: string }> = [];
-
-  for (const p of plan) {
-    const original = readText(p.toName);
-    if (original == null) {
-      failed.push({ name: p.toName, error: 'read returned null' });
-      continue;
-    }
-    try {
-      saveText(p.toName, p.newContent);
-      originals.push({ name: p.toName, content: original });
-      updated.push({ name: p.toName, changes: p.changes });
-    } catch (err: unknown) {
-      failed.push({ name: p.toName, error: errorMessage(err) });
-    }
-  }
-
-  return {
-    updated,
-    failed,
-    rollback: () => {
-      for (let i = originals.length - 1; i >= 0; i--) {
-        const original = originals[i];
-        try {
-          saveText(original.name, original.content);
-        } catch (err: unknown) {
-          log.warn(`failed to roll back link rewrite in ${original.name}: ${errorMessage(err)}`);
-        }
-      }
-    },
-  };
-}
-
 export async function applyRenamePlanAsync(plan: PlanEntry[]): Promise<AppliedRenamePlanAsync> {
-  const updated: Array<{ name: string; changes: number }> = [];
-  const failed: Array<{ name: string; error: string }> = [];
-  const originals: Array<{ name: string; content: string }> = [];
+  const updated: CascadeResult['updated'] = [];
+  const failed: CascadeResult['failed'] = [];
+  const originals: Array<{ name: string; content: string; writtenVersion: string }> = [];
   for (const entry of plan) {
-    const original = await readTextAsync(entry.toName);
-    if (original == null) {
-      failed.push({ name: entry.toName, error: 'read returned null' });
-      continue;
-    }
     try {
-      await saveTextAsync(entry.toName, entry.newContent);
-      originals.push({ name: entry.toName, content: original });
-      updated.push({ name: entry.toName, changes: entry.changes });
+      await withTextFileTransaction(entry.toName, async () => {
+        const original = await readTextSnapshotAsync(entry.toName);
+        if (!original || original.version !== entry.baseVersion) throw fileChanged(original?.version ?? null);
+        await replaceTextSnapshotAsync(entry.toName, entry.newContent, original.version);
+        originals.push({ name: entry.toName, content: original.content, writtenVersion: textVersion(entry.newContent) });
+        updated.push({ name: entry.toName, changes: entry.changes });
+      });
     } catch (err: unknown) {
       failed.push({ name: entry.toName, error: errorMessage(err) });
     }
@@ -365,62 +261,14 @@ export async function applyRenamePlanAsync(plan: PlanEntry[]): Promise<AppliedRe
     updated,
     failed,
     rollback: async () => {
-      for (let i = originals.length - 1; i >= 0; i--) {
-        const original = originals[i];
+      for (const original of [...originals].reverse()) {
         try {
-          await saveTextAsync(original.name, original.content);
+          await withTextFileTransaction(original.name, () =>
+            replaceTextSnapshotAsync(original.name, original.content, original.writtenVersion));
         } catch (err: unknown) {
           log.warn(`failed to roll back link rewrite in ${original.name}: ${errorMessage(err)}`);
         }
       }
     },
   };
-}
-
-/** Walk in POST-rename disk state and rewrite. Used after the disk
- *  rename has succeeded — re-reads each file from its current
- *  location and recovers its pre-rename location via the reverse
- *  mapping. */
-export function cascadeRenameLinks(renames: RenameEntry[]): CascadeResult {
-  if (renames.length === 0) return { updated: [], failed: [] };
-
-  const updated: Array<{ name: string; changes: number }> = [];
-  const failed: Array<{ name: string; error: string }> = [];
-
-  for (const f of listFiles()) {
-    const format = detectFormat(f.name);
-    if (format !== 'md' && format !== 'html') continue;
-    const content = readText(f.name);
-    if (content == null) {
-      failed.push({ name: f.name, error: 'read returned null' });
-      continue;
-    }
-    const toName = f.name;
-    const fromName = applyRenameReverse(toName, renames);
-    const { content: next, changes } = rewriteLinks({
-      content,
-      format,
-      fromDir: dirOf(fromName),
-      toDir: dirOf(toName),
-      renames,
-    });
-    if (changes === 0) continue;
-    try {
-      saveText(toName, next);
-      updated.push({ name: toName, changes });
-    } catch (err: unknown) {
-      failed.push({ name: toName, error: errorMessage(err) });
-    }
-  }
-
-  if (updated.length) {
-    log.info(
-      `rewrote ${updated.length} file(s), ${updated.reduce((a, b) => a + b.changes, 0)} link(s) total ` +
-        `(rename map size ${renames.length})`,
-    );
-  }
-  if (failed.length) {
-    log.warn(`${failed.length} file(s) failed during link cascade`);
-  }
-  return { updated, failed };
 }

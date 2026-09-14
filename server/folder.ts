@@ -2,7 +2,7 @@
  * Folder registry, window context, and folder-home management.
  *
  * Persistence reuses `app-config.ts`'s `~/.stashbase/config.json`
- * primitives for library membership; credentials and user preferences
+ * primitives for project membership; credentials and user preferences
  * (API keys, terminal CLI) live in app-config.ts entirely.
  *
  * The currently-open folder is in-memory only — server restart goes
@@ -16,8 +16,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
 import { logger, errorMessage } from './log.ts';
 import { copyDirectoryDereferenced } from './fs-move.ts';
-import { isIndexExcludedDirName } from './indexable.ts';
 import { filesystemPath } from './filesystem-path.ts';
+import { projectRegistrySnapshotSchema, type ProjectRegistrySnapshotWire } from '../shared/protocols/http/project.ts';
 import { validateFolderName as validatePortableFolderName } from '../shared/folder-name.ts';
 import {
   readAppConfig as readConfig,
@@ -34,13 +34,11 @@ export type { EmbedderProvider, RecentFolder } from './app-config.ts';
 
 const log = logger('folder');
 
-const MAX_RECENT = 50;
-
 export const WINDOW_ID_HEADER = 'x-stashbase-window-id';
 
 /** Folder name of the bundled product introduction, seeded into a brand-new
- *  default folder home and added to library membership without selecting it.
- *  Doubles as the disk directory name and the library label. */
+ *  default folder home and added to project membership without selecting it.
+ *  Doubles as the disk directory name and the project label. */
 const BUILTIN_FOLDER_NAME = '👋 Start Here';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -57,6 +55,9 @@ const DEFAULT_WINDOW_ID = 'default';
 const MAX_RETIRED_WINDOW_IDS = 2048;
 const requestWindow = new AsyncLocalStorage<string>();
 const currentFolders = new Map<string, string>();
+// Binding revisions protect reads; open intents separately order pending writes.
+const windowFolderVersions = new Map<string, object>();
+const windowOpenIntents = new Map<string, object>();
 const retiredWindowIds = new Map<string, number>();
 const removingFolders = new Map<string, string>();
 const switchListeners: Array<(newRoot: string, windowId: string) => void> = [];
@@ -121,11 +122,11 @@ export function currentWindowId(): string {
 
 /** Absolute POSIX roots of every member folder ("Your Folders"). The MCP
  *  layer scopes file/search ops to these — a path must live under one. */
-export function memberFolderRoots(): string[] {
+export function registeredFolderRoots(): string[] {
   return getRecentFolders().map((r) => filesystemPath.absolute(r.path));
 }
 
-export async function memberFolderRootsAsync(): Promise<string[]> {
+export async function registeredFolderRootsAsync(): Promise<string[]> {
   return (await getRecentFoldersAsync()).map((r) => filesystemPath.absolute(r.path));
 }
 
@@ -142,18 +143,10 @@ async function storedFolderPathEqualsAsync(value: unknown, target: string): Prom
   try { return await filesystemPath.equalAsync(value, target); } catch { return false; }
 }
 
-/** Return the stored spelling of an exact library-member root. Windows callers
- * may supply drive, separator, or component case variants; downstream path-
- * keyed stores must continue from the one spelling kept in membership. */
-export function exactMemberFolderRoot(abs: string): string | null {
+/** Return the retained spelling of an available exact project member. */
+export async function exactRegisteredFolderRootAsync(abs: string): Promise<string | null> {
   const target = filesystemPath.absolute(abs);
-  return memberFolderRoots().find((root) => filesystemPath.equal(root, target)) ?? null;
-}
-
-/** Async request-path equivalent of `exactMemberFolderRoot()`. */
-export async function exactMemberFolderRootAsync(abs: string): Promise<string | null> {
-  const target = filesystemPath.absolute(abs);
-  for (const root of await memberFolderRootsAsync()) {
+  for (const root of await registeredFolderRootsAsync()) {
     if (await filesystemPath.equalAsync(root, target)) return root;
   }
   return null;
@@ -163,7 +156,7 @@ export async function exactMemberFolderRootAsync(abs: string): Promise<string | 
  * source directory is currently missing. Removal uses this durable view so a
  * moved or deleted folder can still be deliberately forgotten without first
  * recreating it on disk. */
-export async function exactConfiguredMemberFolderRootAsync(abs: string): Promise<string | null> {
+export async function exactConfiguredProjectRootAsync(abs: string): Promise<string | null> {
   const target = filesystemPath.absolute(abs);
   const configured = (readConfigStrict().recentFolders ?? []).map(currentRecentFolder);
   for (const member of configured) {
@@ -174,13 +167,22 @@ export async function exactConfiguredMemberFolderRootAsync(abs: string): Promise
   return null;
 }
 
+/** Retained nested members keep their own preparation when a parent leaves.
+ * Use configured membership, including temporarily missing source folders. */
+export async function configuredDescendantProjectRootsAsync(parent: string): Promise<string[]> {
+  const roots = (readConfigStrict().recentFolders ?? []).map((member) => filesystemPath.absolute(member.path));
+  const nested = await Promise.all(roots.map(async (root) =>
+    !await filesystemPath.equalAsync(parent, root) && await filesystemPath.containsAsync(parent, root)));
+  return roots.filter((_, index) => nested[index]);
+}
+
 /** The member folder (longest-prefix) that contains `abs`, or null when
  *  the path isn't inside any member folder. The longest-prefix rule keeps
  *  nested members (`<root>/foo` and `<root>/foo/bar` both opened) correct. */
-export function memberRootForAbs(abs: string): string | null {
+export function registeredRootForAbs(abs: string): string | null {
   const target = filesystemPath.absolute(abs);
   let best: string | null = null;
-  for (const root of memberFolderRoots()) {
+  for (const root of registeredFolderRoots()) {
     if (filesystemPath.contains(root, target)) {
       if (!best || filesystemPath.identity(root).length > filesystemPath.identity(best).length) best = root;
     }
@@ -188,11 +190,11 @@ export function memberRootForAbs(abs: string): string | null {
   return best;
 }
 
-/** Async request-path equivalent of `memberRootForAbs()`. */
-export async function memberRootForAbsAsync(abs: string): Promise<string | null> {
+/** Async request-path equivalent of `registeredRootForAbs()`. */
+export async function registeredRootForAbsAsync(abs: string): Promise<string | null> {
   const target = filesystemPath.absolute(abs);
   let best: string | null = null;
-  for (const root of await memberFolderRootsAsync()) {
+  for (const root of await registeredFolderRootsAsync()) {
     if (await filesystemPath.containsAsync(root, target)) {
       if (!best || (await filesystemPath.identityAsync(root)).length > (await filesystemPath.identityAsync(best)).length) {
         best = root;
@@ -202,28 +204,8 @@ export async function memberRootForAbsAsync(abs: string): Promise<string | null>
   return best;
 }
 
-/** Resolve a folder reference to its absolute POSIX root, validating it is a
- *  real directory. Absolute paths are the normal API. A non-absolute ref is
- *  accepted only as a compatibility path under the default folder home.
- *  Throws with `code = FOLDER_NOT_FOUND` otherwise. */
-export function resolveFolderRoot(ref: string): string {
-  if (typeof ref !== 'string' || !ref.trim()) {
-    const err = new Error('folder reference required');
-    (err as any).code = 'FOLDER_NOT_FOUND';
-    throw err;
-  }
-  const root = filesystemPath.absolute(ref, getFolderHome());
-  try {
-    if (fs.statSync(root).isDirectory()) return root;
-  } catch {
-    /* fall through to the not-found error */
-  }
-  const err = new Error('folder not found');
-  (err as any).code = 'FOLDER_NOT_FOUND';
-  throw err;
-}
-
-/** Async request-path equivalent of `resolveFolderRoot()`. */
+/** Resolve a folder reference asynchronously and require an existing directory.
+ * Relative references are interpreted beneath the default folder home. */
 export async function resolveFolderRootAsync(ref: string): Promise<string> {
   if (typeof ref !== 'string' || !ref.trim()) {
     const err = new Error('folder reference required');
@@ -271,27 +253,6 @@ export function validateFolderName(name: string): string | null {
   return validatePortableFolderName(name);
 }
 
-/** Direct-child directory names under the default folder home. This is
- *  used only to decide whether first-launch seeding should run; it is
- *  not the library membership list. */
-function listFolderNamesUnder(root: string): string[] {
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(root, { withFileTypes: true }); }
-  catch { return []; }
-  return entries
-    .filter((e) =>
-      e.isDirectory() &&
-      !e.name.startsWith('.') &&
-      !isIndexExcludedDirName(e.name) &&
-      validateFolderName(e.name) == null)
-    .map((e) => e.name)
-    .sort();
-}
-
-function listDefaultHomeFolderNames(): string[] {
-  return listFolderNamesUnder(getFolderHome());
-}
-
 /** Human-facing label for the open folder: relative display text when under
  *  the default home, else the folder basename. null if no folder is open. */
 export function getCurrentFolderLabel(): string | null {
@@ -300,7 +261,7 @@ export function getCurrentFolderLabel(): string | null {
   const root = getFolderHome();
   const rel = filesystemPath.relative(root, cs);
   if (rel != null && rel !== '') return rel;
-  return path.basename(cs);
+  return path.basename(cs) || cs;
 }
 
 /** Convert a folder-relative path (`topic/note.md`) to the **absolute
@@ -322,42 +283,22 @@ export function fromSourcePath(sourcePath: string): string | null {
   return cs ? filesystemPath.relative(cs, sourcePath) : null;
 }
 
-/** Idempotent startup hook:
- *   1. Ensure the default folder home exists (mkdir -p) + seed the manual.
- *   2. Prune `recentFolders` entries whose folder no longer exists on disk
- *      (members can live anywhere; the only requirement is existence). */
+/** Establish the default folder home and seed the manual on first launch.
+ *  Disk availability never changes durable project membership. */
 export function ensureFolderHome(): void {
   const root = getFolderHome();
   try {
     fs.mkdirSync(root, { recursive: true });
-  } catch (err: any) {
+  } catch (err) {
     log.warn(`failed to create folder home ${root}: ${errorMessage(err)}`);
   }
-  try {
-    const cfg = readConfigStrict();
-    const before = cfg.recentFolders ?? [];
-    // Recents can live anywhere on disk (a Folder is openable from any
-    // location); only drop entries whose folder no longer exists.
-    const after = before.filter((r) => {
-      try { return fs.statSync(r.path).isDirectory(); } catch { return false; }
-    });
-    if (after.length !== before.length) {
-      cfg.recentFolders = after;
-      writeConfigStrict(cfg);
-      log.info(`pruned ${before.length - after.length} stale recent(s)`);
-    }
-  } catch (err) {
-    log.warn(`skipped recent-folder maintenance: ${errorMessage(err)}`);
-  }
-  // Seed the built-in manual here — `ensureFolderHome` is THE idempotent
-  // "folder home is established" hook, hit on every boot.
   seedBuiltinFolder();
 }
 
 /** Absolute path of the bundled built-in folder's source content, or null
  *  if it isn't shipped with this build. */
 function builtinFolderSource(): string | null {
-  const src = path.join(RESOURCES_ROOT, 'assets', 'builtin-library');
+  const src = path.join(RESOURCES_ROOT, 'assets', 'builtin-project');
   try {
     return fs.statSync(src).isDirectory() ? src : null;
   } catch {
@@ -365,82 +306,58 @@ function builtinFolderSource(): string | null {
   }
 }
 
-/** First-launch onboarding: copy the bundled product-introduction folder into
- *  the default folder home and surface it in library membership. Window entry
- *  remains unselected; the user chooses when to open the folder.
- *
- *  Two distinct jobs, in order:
- *
- *   1. **Surface** — if the introduction is already on disk (`<root>/<name>`)
- *      and the seed latch is absent, make sure it is reachable from library
- *      membership. This covers a full config reset while preserving an
- *      explicit later removal from the library: that removal keeps the latch,
- *      so restart must not silently add the folder back.
- *
- *   2. **Seed** — otherwise, copy the bundled content in, but only into a
- *      brand-new empty library. The `builtinSeeded` latch means "we did
- *      the initial copy already": once set, a user who *deletes the
- *      folder* won't get it resurrected (delete the folder to be rid of
- *      it). An existing folder home is latched and left untouched.
- *
- *  Idempotent and failure-tolerant: any error is logged and swallowed —
- *  onboarding content must never block boot. Call before binding folders
- *  so the seeded folder is picked up by `bootBindAllFolders`. */
+/** Seed the introduction only into an empty home, without selecting a folder.
+ *  The latch preserves explicit removal/deletion. After a config reset, an
+ *  existing introduction is registered without overwriting it. Copy failures
+ *  leave no partial final folder and remain retryable on the next launch. */
 export function seedBuiltinFolder(): void {
   const root = getFolderHome();
   const dest = path.join(root, BUILTIN_FOLDER_NAME);
-
+  let staging: string | undefined;
   const latch = () => {
-    const c = readConfigStrict();
-    if (!c.builtinSeeded) { c.builtinSeeded = true; writeConfigStrict(c); }
+    const cfg = readConfigStrict();
+    cfg.builtinSeeded = true;
+    writeConfigStrict(cfg);
   };
 
-  // (1) Already on disk after a full config reset → surface it once.
-  if (fs.existsSync(dest)) {
-    try {
-      const config = readConfigStrict();
-      if (config.builtinSeeded) return;
-      const inRecents = (config.recentFolders ?? []).some((r) =>
-        storedFolderPathEquals(r.path, dest),
-      );
-      if (!inRecents) pushRecent(dest);
+  try {
+    const config = readConfigStrict();
+    if (config.builtinSeeded) return;
+    const entries = fs.readdirSync(root);
+    if (entries.length > 0) {
+      // A config reset may forget an existing introduction. Never overwrite it
+      // or register a plain file that happens to have the same name.
+      if (entries.includes(BUILTIN_FOLDER_NAME) && fs.statSync(dest).isDirectory()) {
+        const registered = (config.recentFolders ?? []).some((r) =>
+          storedFolderPathEquals(r.path, dest),
+        );
+        if (!registered) pushRecent(dest);
+      }
       latch();
-    } catch (err) {
-      log.warn(`failed to surface built-in folder: ${errorMessage(err)}`);
+      return;
     }
-    return;
-  }
 
-  // (2) Not on disk. If we already seeded once, the user deleted the
-  // folder — don't resurrect it.
-  let seeded: boolean;
-  try {
-    seeded = !!readConfigStrict().builtinSeeded;
-  } catch (err) {
-    log.warn(`failed to read built-in folder state: ${errorMessage(err)}`);
-    return;
-  }
-  if (seeded) return;
+    const src = builtinFolderSource();
+    if (!src) return; // Retry when a build supplies the bundle.
 
-  // Only seed a brand-new, empty folder home — never inject into an existing
-  // user directory. Latch either way so this runs only once.
-  if (listDefaultHomeFolderNames().length > 0) {
-    try { latch(); }
-    catch (err) { log.warn(`failed to latch built-in folder state: ${errorMessage(err)}`); }
-    return;
-  }
-
-  const src = builtinFolderSource();
-  if (!src) return; // not bundled in this build — try again next boot
-
-  try {
-    fs.mkdirSync(root, { recursive: true });
-    copyDirectoryDereferenced(src, dest);
-    pushRecent(dest);          // add it to library membership
+    // Stage beside the home so a killed process cannot leave a partial final
+    // folder or make the home nonempty. Publish only by a completed rename.
+    staging = fs.mkdtempSync(`${root}.seed-`);
+    const stagedFolder = path.join(staging, BUILTIN_FOLDER_NAME);
+    copyDirectoryDereferenced(src, stagedFolder);
+    // Content added while copying belongs to the user; leave it untouched.
+    if (fs.readdirSync(root).length > 0) { latch(); return; }
+    fs.renameSync(stagedFolder, dest);
+    pushRecent(dest);
     latch();
     log.info(`seeded built-in folder at ${dest}`);
   } catch (err) {
     log.warn(`failed to seed built-in folder: ${errorMessage(err)}`);
+  } finally {
+    if (staging) {
+      try { fs.rmSync(staging, { recursive: true, force: true }); }
+      catch (err) { log.warn(`failed to clean up built-in staging: ${errorMessage(err)}`); }
+    }
   }
 }
 
@@ -462,62 +379,109 @@ export function requireCurrentFolder(): string {
   return currentFolder;
 }
 
-/** Open a folder at the given absolute path. Creates the directory if
- *  needed. Pushes to the recents list. Returns true when the active
- *  folder changed. Callers decide when to notify switch listeners so an
- *  HTTP route can respond before background index / Agent cleanup starts. */
-export function setCurrentFolder(absPath: string, opts?: { create?: boolean; exclusiveCreate?: boolean }): boolean {
-  if (typeof absPath !== 'string' || !absPath) throw new Error('path required');
-  const windowId = currentWindowId();
-  if (retiredWindowIds.has(windowId)) {
-    const err = new Error('window is closed');
-    (err as any).code = 'WINDOW_CLOSED';
-    throw err;
-  }
-  // Expand a leading `~` so the welcome screen can accept `~/Notes`
-  // without forcing the user to spell out their home directory.
+function normalizeOpenFolderPath(absPath: string): string {
+  if (typeof absPath !== 'string' || !absPath.trim()) throw new Error('path required');
   let expanded = absPath;
   if (expanded === '~') expanded = filesystemPath.absolute(os.homedir());
   else if (expanded.startsWith('~/')) {
     expanded = filesystemPath.join(filesystemPath.absolute(os.homedir()), expanded.slice(2));
   }
   if (!filesystemPath.isAbsolute(expanded)) throw new Error('path must be absolute');
-  const normalized = filesystemPath.absolute(expanded);
-  assertLibraryFolderAvailable(normalized);
-  // A Folder can be opened from anywhere on disk — there is no unified root
-  // constraint. The folder home is only the default location for the built-in
-  // folder and new-folder-by-name; opening an arbitrary folder is the
-  // norm (the daemon derives an independent MFS namespace from each Folder's
-  // comparison identity, so a folder outside the root indexes just fine).
-  // Creating a folder only happens on the explicit New-folder flow
-  // (`opts.create`). Open / recent flows must NOT mkdir: a missing
-  // folder there means the folder was deleted/moved out from under us,
-  // and silently re-creating it would resurrect an empty ghost folder
-  // (and turn a typo'd `~/Notess` into a stray dir). Error instead.
-  const existed = fs.existsSync(normalized);
-  if (existed && opts?.create && opts.exclusiveCreate) {
-    const err = new Error(`folder "${path.basename(normalized)}" already exists`);
-    (err as any).code = 'FOLDER_EXISTS';
-    throw err;
-  }
-  if (!existed) {
-    if (!opts?.create) throw new Error('folder does not exist (it may have been moved or deleted)');
-    fs.mkdirSync(normalized, { recursive: true });
-    log.warn(`created new folder directory: ${normalized}`);
-  }
-  const st = fs.statSync(normalized);
-  if (!st.isDirectory()) throw new Error('path is not a directory');
+  return filesystemPath.absolute(expanded);
+}
 
-  pushRecent(normalized);
-  const prev = currentFolders.get(windowId) ?? null;
-  const changed = prev == null || !filesystemPath.equal(prev, normalized);
-  currentFolders.set(windowId, normalized);
-  return changed;
+function assertWindowOpen(windowId: string): void {
+  if (retiredWindowIds.has(windowId)) {
+    throw Object.assign(new Error('window is closed'), { code: 'WINDOW_CLOSED', status: 410 });
+  }
+}
+
+function folderChangedError(): Error {
+  return Object.assign(new Error('window folder changed; try again'), { code: 'FOLDER_CHANGED', status: 409 });
+}
+
+async function activeProjectFolder(root: string) {
+  const relative = await filesystemPath.relativeAsync(getFolderHome(), root);
+  return { path: root, name: relative || path.basename(root) || root };
+}
+
+/** Read a coherent window snapshot. An old disk result never retires a newer
+ * binding, including close-and-reopen of the same path. */
+export async function getProjectRegistrySnapshot(): Promise<ProjectRegistrySnapshotWire> {
+  const windowId = currentWindowId();
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const version = windowFolderVersions.get(windowId);
+    const current = getCurrentFolder();
+    let available = false;
+    if (current) {
+      try { available = (await fs.promises.stat(current)).isDirectory(); }
+      catch { /* The snapshot exposes unavailable folders as unselected. */ }
+    }
+    const snapshot = projectRegistrySnapshotSchema.parse({
+      current: current && available ? await activeProjectFolder(current) : null,
+      homeDir: os.homedir(),
+      recent: await getRecentFoldersAsync(),
+    });
+    if (windowFolderVersions.get(windowId) !== version) continue;
+    if (current && !available) clearFolderBinding(windowId);
+    return snapshot;
+  }
+  throw folderChangedError();
+}
+
+/** Prepare every fallible read and response check before the atomic config
+ * write and window binding. No asynchronous work follows that commit. */
+export async function openProjectFolder(absPath: string): Promise<{
+  changed: boolean;
+  snapshot: ProjectRegistrySnapshotWire;
+}> {
+  const windowId = currentWindowId();
+  assertWindowOpen(windowId);
+  const normalized = normalizeOpenFolderPath(absPath);
+  const version = {};
+  windowOpenIntents.set(windowId, version);
+  try {
+    if (!(await fs.promises.stat(normalized)).isDirectory()) throw new Error('path is not a directory');
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const registration = await prepareProjectRegistration(normalized);
+      const current = await activeProjectFolder(registration.root);
+      const recent = await availableRecentFolders(registration.config.recentFolders!);
+      if (!recent.some((member) => member.path === current.path)) {
+        throw new Error('folder is no longer available');
+      }
+      const snapshot = projectRegistrySnapshotSchema.parse({
+        current,
+        homeDir: os.homedir(),
+        recent,
+      });
+      const previousVersion = windowFolderVersions.get(windowId);
+      const previous = getCurrentFolder();
+      const changed = !previous || !await filesystemPath.equalAsync(previous, current.path);
+      await assertProjectFolderAvailableAsync(normalized);
+      assertWindowOpen(windowId);
+      if (windowOpenIntents.get(windowId) !== version) throw folderChangedError();
+      if (windowFolderVersions.get(windowId) !== previousVersion) continue;
+      if (JSON.stringify(readConfigStrict()) !== registration.revision) continue;
+      writeConfigStrict(registration.config);
+      windowFolderVersions.set(windowId, {});
+      currentFolders.set(windowId, current.path);
+      return { changed, snapshot };
+    }
+    throw Object.assign(new Error('project membership changed repeatedly; try again'), { code: 'CONFIG_BUSY', status: 409 });
+  } finally {
+    if (windowOpenIntents.get(windowId) === version) windowOpenIntents.delete(windowId);
+  }
 }
 
 export function clearCurrentFolder(windowId = currentWindowId()): void {
   const id = normalizeWindowId(windowId);
+  windowOpenIntents.delete(id);
+  clearFolderBinding(id);
+}
+
+function clearFolderBinding(id: string): void {
   const oldRoot = currentFolders.get(id);
+  windowFolderVersions.delete(id);
   currentFolders.delete(id);
   if (oldRoot) {
     for (const fn of closeListeners) {
@@ -543,13 +507,7 @@ export function retireWindow(windowId = currentWindowId()): void {
   }
 }
 
-export function clearFolderPath(absPath: string): void {
-  for (const [windowId, value] of [...currentFolders.entries()]) {
-    if (filesystemPath.equal(value, absPath)) clearCurrentFolder(windowId);
-  }
-}
-
-/** Async request-path equivalent of `clearFolderPath()`. */
+/** Release window bindings for a removed project. */
 export async function clearFolderPathAsync(absPath: string): Promise<void> {
   for (const [windowId, value] of [...currentFolders.entries()]) {
     if (await filesystemPath.equalAsync(value, absPath)) clearCurrentFolder(windowId);
@@ -592,6 +550,10 @@ export function getRecentFolders(): RecentFolder[] {
 
 export async function getRecentFoldersAsync(): Promise<RecentFolder[]> {
   const all = ((await readConfigAsync()).recentFolders ?? []).map(currentRecentFolder);
+  return availableRecentFolders(all);
+}
+
+async function availableRecentFolders(all: RecentFolder[]): Promise<RecentFolder[]> {
   const checks = await Promise.all(all.map(async (value) => {
     try { return (await fs.promises.stat(value.path)).isDirectory(); }
     catch { return false; }
@@ -602,15 +564,9 @@ export async function getRecentFoldersAsync(): Promise<RecentFolder[]> {
 function pushRecent(absPath: string): void {
   const cfg = readConfigStrict();
   const list = (cfg.recentFolders ?? []).map(currentRecentFolder);
-  // Filter out the entry we're about to re-add (avoid dupes) AND
-  // entries whose target folder no longer exists — keeps the persisted
-  // recents from accumulating dead tmp dirs / deleted folders over
-  // time. Opportunistic cleanup on every write.
+  // Deduplicate the reopened folder, retaining even currently unavailable members.
   const existing = list.find((v) => storedFolderPathEquals(v.path, absPath));
-  const filtered = list.filter((v) => {
-    if (storedFolderPathEquals(v.path, absPath)) return false;
-    try { return fs.statSync(v.path).isDirectory(); } catch { return false; }
-  });
+  const filtered = list.filter((v) => !storedFolderPathEquals(v.path, absPath));
   // Reopening the same folder through an equivalent filesystem spelling must
   // not rewrite the durable source spelling: index rows, derived keys, and
   // daemon replay all continue from the first established root.
@@ -622,10 +578,10 @@ function pushRecent(absPath: string): void {
     openedAt: new Date().toISOString(),
     ...(existing?.favorite === true ? { favorite: true } : {}),
   });
-  // No cap: this list IS the knowledge-base membership ("Your Folders"),
-  // not a transient recency log. Opening a folder joins it; the only way
-  // out is an explicit remove (`removeRecent`). A hard cap would silently
-  // evict the oldest member's searchability — see the library-membership
+  // No cap: this is the durable project registry, not a transient recency
+  // log. Each folder keeps its own search namespace. The only way
+  // out is an explicit remove (`removeRecentAsync`). A hard cap would silently
+  // evict the oldest member's searchability — see the project-membership
   // ownership contract in code-review/data-lifecycle.md.
   cfg.recentFolders = filtered;
   // Drop the legacy field once we've migrated its content forward.
@@ -633,79 +589,41 @@ function pushRecent(absPath: string): void {
   writeConfigStrict(cfg);
 }
 
-/** Register a folder into library membership ("Your Folders") WITHOUT
- *  changing any window's current folder. This is the same registration
- *  path opening a folder uses (`pushRecent`), minus the window binding —
- *  used by `create_project`, which must make the new folder appear in
- *  every window's sidebar list while only the owning window navigates. */
-export function registerLibraryFolder(absPath: string): void {
-  const normalized = filesystemPath.absolute(absPath);
-  assertLibraryFolderAvailable(normalized);
-  pushRecent(normalized);
+async function prepareProjectRegistration(normalized: string) {
+  const config = readConfigStrict();
+  const revision = JSON.stringify(config);
+  const list = (config.recentFolders ?? []).map(currentRecentFolder);
+  const matches = await Promise.all(list.map((value) => storedFolderPathEqualsAsync(value.path, normalized)));
+  const existing = list[matches.findIndex(Boolean)];
+  const root = existing ? filesystemPath.absolute(existing.path) : normalized;
+  config.recentFolders = [
+    { path: root, openedAt: new Date().toISOString(), ...(existing?.favorite === true ? { favorite: true } : {}) },
+    ...list.filter((_, index) => !matches[index]),
+  ];
+  delete config.recentVaults;
+  return { config, revision, root };
 }
 
-/** Async project-creation registration path. Identity and directory probes
- * yield before the final synchronous config commit. */
-export async function registerLibraryFolderAsync(absPath: string): Promise<void> {
+/** Async project-creation registration, preserving concurrent config writes. */
+export async function registerProjectFolderAsync(absPath: string, options: { signal?: AbortSignal } = {}): Promise<void> {
   const normalized = filesystemPath.absolute(absPath);
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const snapshot = readConfigStrict();
-    const revision = JSON.stringify(snapshot);
-    const list = (snapshot.recentFolders ?? []).map(currentRecentFolder);
-    const matches = await Promise.all(list.map((value) => storedFolderPathEqualsAsync(value.path, normalized)));
-    const directoryChecks = await Promise.all(list.map(async (value) => {
-      try { return (await fs.promises.stat(value.path)).isDirectory(); }
-      catch { return false; }
-    }));
-    const existingIndex = matches.findIndex(Boolean);
-    const retainedPath = existingIndex >= 0
-      ? filesystemPath.absolute(list[existingIndex].path)
-      : normalized;
-    const filtered = list.filter((_, index) => !matches[index] && directoryChecks[index]);
-    filtered.unshift({
-      path: retainedPath,
-      openedAt: new Date().toISOString(),
-      ...(existingIndex >= 0 && list[existingIndex].favorite === true ? { favorite: true } : {}),
-    });
-    // Re-check removal and config truth after every awaited probe. The final
-    // read/compare/write sequence has no yield, so concurrent settings or
-    // membership mutations make this operation retry instead of losing data.
-    await assertLibraryFolderAvailableAsync(normalized);
-    const current = readConfigStrict();
-    if (JSON.stringify(current) !== revision) continue;
-    current.recentFolders = filtered;
-    delete current.recentVaults;
-    writeConfigStrict(current);
+    options.signal?.throwIfAborted();
+    const registration = await prepareProjectRegistration(normalized);
+    await assertProjectFolderAvailableAsync(normalized);
+    if (JSON.stringify(readConfigStrict()) !== registration.revision) continue;
+    options.signal?.throwIfAborted();
+    writeConfigStrict(registration.config);
     return;
   }
-  const err = new Error('library membership changed repeatedly; try again');
-  (err as any).code = 'CONFIG_BUSY';
-  (err as any).status = 409;
-  throw err;
+  throw Object.assign(new Error('project membership changed repeatedly; try again'), { code: 'CONFIG_BUSY', status: 409 });
 }
 
-/** Hold a process-local removal intent while a member's conversions, derived
- * artifacts, index rows, and runtime state are retired. Open/register calls
- * fail during the interval so a concurrent request cannot resurrect
- * membership halfway through cleanup. The caller commits membership last. */
-export function beginLibraryFolderRemoval(absPath: string): () => void {
-  const source = filesystemPath.absolute(absPath);
-  const key = filesystemPath.identity(source);
-  if (removingFolders.has(key)) {
-    const err = new Error('folder removal is already in progress');
-    (err as any).code = 'FOLDER_REMOVING';
-    (err as any).status = 409;
-    throw err;
-  }
-  removingFolders.set(key, source);
-  return () => { removingFolders.delete(key); };
-}
-
-/** Async request-path equivalent of `beginLibraryFolderRemoval()`. */
-export async function beginLibraryFolderRemovalAsync(absPath: string): Promise<() => void> {
+/** Hold a removal intent until cleanup and membership removal finish. */
+export async function beginProjectFolderRemovalAsync(absPath: string): Promise<() => void> {
   const source = filesystemPath.absolute(absPath);
   const key = await filesystemPath.identityAsync(source);
-  if (removingFolders.has(key)) {
+  if ([...removingFolders.keys()].some((root) => filesystemPath.contains(root, key) || filesystemPath.contains(key, root))) {
     const err = new Error('folder removal is already in progress');
     (err as any).code = 'FOLDER_REMOVING';
     (err as any).status = 409;
@@ -716,25 +634,13 @@ export async function beginLibraryFolderRemovalAsync(absPath: string): Promise<(
 }
 
 /** Read-only removal gate for background owners. A reconcile scheduled from a
- * stale library snapshot must not restart work after removal has begun. */
-export function isLibraryFolderRemovalInProgress(absPath: string): boolean {
+ * stale project snapshot must not restart work after removal has begun. */
+export function isProjectFolderRemovalInProgress(absPath: string): boolean {
   return removingFolders.has(filesystemPath.identity(filesystemPath.absolute(absPath)));
 }
 
-export function assertLibraryFolderAvailable(absPath: string): void {
-  const requested = filesystemPath.absolute(absPath);
-  const blocked = [...removingFolders.values()].some((root) => (
-    filesystemPath.equal(root, requested) || filesystemPath.contains(root, requested)
-  ));
-  if (!blocked) return;
-  const err = new Error('folder removal is in progress');
-  (err as any).code = 'FOLDER_REMOVING';
-  (err as any).status = 409;
-  throw err;
-}
-
-/** Async request-path equivalent of `assertLibraryFolderAvailable()`. */
-export async function assertLibraryFolderAvailableAsync(absPath: string): Promise<void> {
+/** Refuse entry into a project while its removal is in progress. */
+export async function assertProjectFolderAvailableAsync(absPath: string): Promise<void> {
   const requested = filesystemPath.absolute(absPath);
   for (const root of removingFolders.values()) {
     if (await filesystemPath.containsAsync(root, requested)) {
@@ -746,22 +652,7 @@ export async function assertLibraryFolderAvailableAsync(absPath: string): Promis
   }
 }
 
-/** Remove a folder from the membership list ("Your Folders"). Does NOT
- *  touch the folder on disk — removal only forgets it from the knowledge
- *  base; the caller clears its index rows separately. StashBase-owned Agent
- *  Instructions for that membership leave with it; user files do not. */
-export function removeRecent(absPath: string): void {
-  const target = filesystemPath.absolute(absPath);
-  const cfg = readConfigStrict();
-  const list = (cfg.recentFolders ?? []).map(currentRecentFolder);
-  const filtered = list.filter((v) => !storedFolderPathEquals(v.path, target));
-  const instructionsChanged = removeFolderInstructions(cfg, target);
-  if (filtered.length === list.length && !instructionsChanged) return;
-  cfg.recentFolders = filtered;
-  writeConfigStrict(cfg);
-}
-
-/** Async request-path equivalent of `removeRecent()`. */
+/** Forget membership and its app-owned instructions without deleting source files. */
 export async function removeRecentAsync(absPath: string): Promise<void> {
   const target = filesystemPath.absolute(absPath);
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -790,22 +681,10 @@ export async function removeRecentAsync(absPath: string): Promise<void> {
     writeConfigStrict(current);
     return;
   }
-  const err = new Error('library membership changed repeatedly; try again');
+  const err = new Error('project membership changed repeatedly; try again');
   (err as any).code = 'CONFIG_BUSY';
   (err as any).status = 409;
   throw err;
-}
-
-function removeFolderInstructions(config: AppConfigFile, target: string): boolean {
-  const folders = Array.isArray(config.agentInstructions?.folders)
-    ? config.agentInstructions.folders
-    : [];
-  const retained = folders.filter((entry) => !storedFolderPathEquals(entry?.path, target));
-  if (retained.length === folders.length) return false;
-  if (retained.length) config.agentInstructions!.folders = retained;
-  else delete config.agentInstructions!.folders;
-  compactAgentInstructions(config);
-  return true;
 }
 
 function compactAgentInstructions(config: AppConfigFile): void {
@@ -814,7 +693,7 @@ function compactAgentInstructions(config: AppConfigFile): void {
   }
 }
 
-/** Star / unstar a member folder in the library list. Returns false when
+/** Star / unstar a member folder in the project list. Returns false when
  *  the path is not a member (nothing persisted). Clearing removes the
  *  field so config.json stays free of `favorite: false` noise. */
 export function setRecentFavorite(absPath: string, favorite: boolean): boolean {

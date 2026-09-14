@@ -32,14 +32,14 @@ describe('Document tabs runtime', () => {
       api: createApi(),
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 3,
       restored: {
         activeTabId: 'tab-plan',
         tabs: [
           {
             id: 'tab-plan',
-            source: { folderPath: '/library/notes', path: 'plan.md' },
+            source: { folderPath: '/project/notes', path: 'plan.md' },
           },
         ],
       },
@@ -49,7 +49,7 @@ describe('Document tabs runtime', () => {
     expect(runtime.getDocument('tab-plan')?.scope).toEqual({
       generation: 1,
       id: 'tab-plan',
-      source: { folderPath: '/library/notes', path: 'plan.md' },
+      source: { folderPath: '/project/notes', path: 'plan.md' },
     });
   });
 
@@ -59,10 +59,10 @@ describe('Document tabs runtime', () => {
       api: createApi(),
       createId,
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
-    const source = { folderPath: '/library/notes', path: 'plan.md' };
+    const source = { folderPath: '/project/notes', path: 'plan.md' };
 
     const first = await runtime.open(source);
     const repeated = await runtime.open({ ...source });
@@ -77,10 +77,10 @@ describe('Document tabs runtime', () => {
       api: createApi(),
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
-    const source = { folderPath: '/library/notes', path: 'plan.md' };
+    const source = { folderPath: '/project/notes', path: 'plan.md' };
 
     await runtime.open(source, { anchor: 'details' });
     await runtime.open({ ...source }, { anchor: 'summary' });
@@ -97,7 +97,7 @@ describe('Document tabs runtime', () => {
       api: createApi(),
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
     const controller = {
@@ -108,7 +108,7 @@ describe('Document tabs runtime', () => {
     };
 
     await runtime.open(
-      { folderPath: '/library/notes', path: 'plan.md' },
+      { folderPath: '/project/notes', path: 'plan.md' },
       {
         search: {
           caseSensitive: false,
@@ -132,15 +132,15 @@ describe('Document tabs runtime', () => {
       api: createApi(),
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
     const first = await runtime.open({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'one.md',
     });
     const second = await runtime.open({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'two.md',
     });
     const capturedScope = first?.capture();
@@ -159,11 +159,11 @@ describe('Document tabs runtime', () => {
       api: createApi(),
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 2,
     });
     const document = await runtime.open({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'one.md',
     });
     const completion = vi.fn();
@@ -172,7 +172,7 @@ describe('Document tabs runtime', () => {
       runtime.accept(
         {
           generation: 0,
-          scope: { folderPath: '/library/notes', generation: 1 },
+          scope: { folderPath: '/project/notes', generation: 1 },
         },
         completion,
       ),
@@ -192,11 +192,11 @@ describe('Document tabs runtime', () => {
       api: createApi(),
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
-    await runtime.open({ folderPath: '/library/notes', path: 'inside.md' });
-    await runtime.open({ folderPath: '/library/archive', path: 'outside.md' });
+    await runtime.open({ folderPath: '/project/notes', path: 'inside.md' });
+    await runtime.open({ folderPath: '/project/archive', path: 'outside.md' });
 
     const persisted = runtime.toSession();
     expect(persisted.tabs).toEqual([{ id: 'tab-1', path: 'inside.md' }]);
@@ -213,18 +213,18 @@ describe('Document tabs runtime', () => {
       api,
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
       restored: {
         activeTabId: 'one',
         tabs: [
           {
             id: 'one',
-            source: { folderPath: '/library/notes', path: 'one.md' },
+            source: { folderPath: '/project/notes', path: 'one.md' },
           },
           {
             id: 'two',
-            source: { folderPath: '/library/notes', path: 'two.md' },
+            source: { folderPath: '/project/notes', path: 'two.md' },
           },
         ],
       },
@@ -253,11 +253,11 @@ describe('Document tabs runtime', () => {
       api,
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
     const document = await runtime.open({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'one.md',
     });
     makeDirty(runtime, 'tab-1');
@@ -274,7 +274,7 @@ describe('Document tabs runtime', () => {
     await expect(closing).resolves.toBe(true);
     expect(document?.signal.aborted).toBe(true);
     expect(api.save).toHaveBeenLastCalledWith(
-      { folderPath: '/library/notes', path: 'one.md' },
+      { folderPath: '/project/notes', path: 'one.md' },
       { baseVersion: 'v2', content: 'newer draft' },
       expect.any(AbortSignal),
     );
@@ -285,13 +285,13 @@ describe('Document tabs runtime', () => {
       api: createApi(),
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
     const captured = runtime.capture();
     const completion = vi.fn();
 
-    await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
+    await runtime.open({ folderPath: '/project/notes', path: 'one.md' });
 
     expect(runtime.accept(captured, completion)).toBe(false);
     expect(runtime.accept(runtime.capture(), completion)).toBe(true);
@@ -313,14 +313,14 @@ describe('Document tabs runtime', () => {
       api,
       createId,
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
     });
-    await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
+    await runtime.open({ folderPath: '/project/notes', path: 'one.md' });
     makeDirty(runtime, 'tab-1');
 
     const opening = runtime.open({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'two.md',
     });
     await vi.waitFor(() => expect(api.save).toHaveBeenCalledOnce());
@@ -333,7 +333,7 @@ describe('Document tabs runtime', () => {
   });
 });
 
-const notes = (path: string) => ({ folderPath: '/library/notes', path });
+const notes = (path: string) => ({ folderPath: '/project/notes', path });
 /** The open set as one string per tab, a star marking the preview. */
 const shape = (runtime: ReturnType<typeof createDocumentTabsRuntime>) =>
   runtime.store.getState().tabs.map((tab) => `${tab.source.path}${tab.preview ? '*' : ''}`);
@@ -344,7 +344,7 @@ describe('Document tabs runtime previews and history', () => {
       api: createApi(),
       createId: idFactory(),
       createQueries: () => documentQueryScope(),
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       generation: 1,
       restored,
     });

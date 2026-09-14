@@ -4,10 +4,9 @@ import {
 } from '@/protocols/electron/runtime';
 
 import { isBugReportBridge, type BugReportBridge } from './bug-report';
-import { isCaptureBridge, type CaptureBridge } from './capture';
 import type { ExternalNavigationBridge } from './external-navigation';
-import type { LibraryBridge } from './folder-picker';
-import type { LibraryLifecycleBridge } from './library-lifecycle';
+import type { ProjectBridge } from './folder-picker';
+import type { ProjectLifecycleBridge } from './project-lifecycle';
 import { isUpdatesBridge, type UpdatesBridge } from './updates';
 import type { WindowLifecycleBridge } from './window-lifecycle';
 
@@ -16,15 +15,13 @@ interface DesktopWorkspaceSessionBridge {
   write(snapshot: unknown): Promise<unknown>;
 }
 
-interface DesktopLibraryBridge extends LibraryBridge, LibraryLifecycleBridge {}
+interface DesktopProjectBridge extends ProjectBridge, ProjectLifecycleBridge {}
 
 interface DesktopBridge {
   /** Optional: opening the bug-report review exists only in the desktop shell. */
   bugReport?: BugReportBridge;
-  /** Optional: clipboard-image offers exist only in the desktop shell. */
-  capture?: CaptureBridge;
   externalNavigation: ExternalNavigationBridge;
-  library: DesktopLibraryBridge;
+  project: DesktopProjectBridge;
   runtime: RendererRuntimeConfig;
   /** Optional: keeping this build current exists only in the desktop shell. */
   updates?: UpdatesBridge;
@@ -37,9 +34,8 @@ declare global {
     stashbase?: {
       bugReport?: unknown;
       bugReportReview?: unknown;
-      capture?: unknown;
       externalNavigation?: ExternalNavigationBridge;
-      library?: DesktopLibraryBridge;
+      project?: DesktopProjectBridge;
       runtime?: unknown;
       updates?: unknown;
       workspaceSession?: DesktopWorkspaceSessionBridge;
@@ -51,23 +47,23 @@ declare global {
 export function readBridge(globalWindow: Window = window): DesktopBridge {
   const runtime = rendererRuntimeConfigSchema.parse(globalWindow.stashbase?.runtime);
   const externalNavigation = globalWindow.stashbase?.externalNavigation;
-  const library = globalWindow.stashbase?.library;
+  const project = globalWindow.stashbase?.project;
   const workspaceSession = globalWindow.stashbase?.workspaceSession;
   const windowLifecycle = globalWindow.stashbase?.windowLifecycle;
   if (!externalNavigation || typeof externalNavigation.open !== 'function') {
     throw new Error('External navigation is unavailable.');
   }
   if (
-    !library ||
-    typeof library.chooseFolder !== 'function' ||
-    typeof library.notifyFolderRemoved !== 'function' ||
-    typeof library.onFolderRemoved !== 'function' ||
-    typeof library.onPrepareFolderRemoval !== 'function' ||
-    typeof library.prepareFolderRemoval !== 'function' ||
-    typeof library.claimInitialFolder !== 'function' ||
-    typeof library.setActiveFolder !== 'function'
+    !project ||
+    typeof project.chooseFolder !== 'function' ||
+    typeof project.notifyFolderRemoved !== 'function' ||
+    typeof project.onFolderRemoved !== 'function' ||
+    typeof project.onPrepareFolderRemoval !== 'function' ||
+    typeof project.prepareFolderRemoval !== 'function' ||
+    typeof project.claimInitialFolder !== 'function' ||
+    typeof project.setActiveFolder !== 'function'
   ) {
-    throw new Error('The library folder picker is unavailable.');
+    throw new Error('The project folder picker is unavailable.');
   }
   if (
     !workspaceSession ||
@@ -76,22 +72,16 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   ) {
     throw new Error('Workspace session persistence is unavailable.');
   }
-  if (
-    !windowLifecycle ||
-    typeof windowLifecycle.onPrepareContextRelease !== 'function' ||
-    typeof windowLifecycle.reload !== 'function'
-  ) {
+  if (!windowLifecycle || typeof windowLifecycle.onPrepareContextRelease !== 'function') {
     throw new Error('The window lifecycle is unavailable.');
   }
   const bugReport = globalWindow.stashbase?.bugReport;
-  const capture = globalWindow.stashbase?.capture;
   const updates = globalWindow.stashbase?.updates;
   return {
     ...(isBugReportBridge(bugReport) ? { bugReport } : {}),
-    ...(isCaptureBridge(capture) ? { capture } : {}),
     ...(isUpdatesBridge(updates) ? { updates } : {}),
     externalNavigation,
-    library,
+    project,
     runtime,
     windowLifecycle,
     workspaceSession,

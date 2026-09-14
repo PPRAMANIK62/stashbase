@@ -2,9 +2,9 @@
  * Search result shapes returned to the renderer. The filter vocabulary a
  * request carries lives in `search-types.ts`; this file is what comes back.
  *
- * Semantic and keyword search return different shapes on purpose. A
- * semantic hit is a chunk with a similarity score and no notion of a line;
- * a keyword hit is a set of character ranges within specific lines, which
+ * Search by meaning returns ranked chunks with a hybrid fusion score and
+ * optional source locators. Keyword search returns character ranges within
+ * specific lines, which
  * is what lets the renderer highlight in place. Nothing useful is gained by
  * forcing them into one type.
  */
@@ -15,7 +15,7 @@ export interface SearchHit {
    *  renderer never sees the absolute spelling. */
   fileName: string;
   /** Owning member folder root (absolute) and folder-relative visible path.
-   *  Present on library-wide semantic responses so a renderer opens a hit in
+   *  Present on project semantic responses so a renderer opens a hit in
    *  its own folder identity without splitting `fileName` against roots. */
   folder?: string;
   path?: string;
@@ -71,6 +71,6 @@ export interface KeywordSearchResult {
 
 /** One keyword-hit file from an explicit Folder query. `folder` retains the
  *  selected member identity so a caller can open the result directly. */
-export interface LibraryKeywordFile extends KeywordHitFile {
+export interface ProjectKeywordFile extends KeywordHitFile {
   folder: string;
 }

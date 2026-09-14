@@ -3,7 +3,7 @@
  * `console.error` to stderr.
  *
  * Stdout is reserved for the MCP JSON-RPC framing. A stray `console.log`
- * — anywhere in our code OR in a transitively-imported library — would
+ * — anywhere in our code OR in a transitively-imported project — would
  * corrupt the protocol stream and surface to the client as
  * "Unexpected token X in JSON". Our own logger in `server/log.ts` already
  * targets stderr; this is the belt for the suspenders, and catches

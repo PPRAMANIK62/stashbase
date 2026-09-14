@@ -1,3 +1,4 @@
+import './isolated-home.ts';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
@@ -33,27 +34,24 @@ test('OpenCode history distinguishes allocated blanks from started conversations
   assert.equal(openCodeSessionHasContent({ title: 'Summarize the research folder' }, 0), true);
 });
 
-test('OpenCode applies the search-by-meaning policy before native client readiness', () => {
+test('OpenQuill publishes scope retirement once before closing its transport', () => {
   const ws = new FakeWebSocket();
-  const runtime: OpenCodeSessionRuntime = {
-    client: async () => new Promise<never>(() => {}),
-    beginTurn: () => {},
-    endTurn: () => {},
-    onExit: () => () => {},
-    close: async () => {},
-  };
+  let closed = 0;
   const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
-    windowId: 'similarity-policy-window',
-    folder: '/workspace',
-  }, runtime);
-
-  assert.equal(session.similaritySearchEnabled(), true);
-  ws.emit('message', Buffer.from(JSON.stringify({ t: 'set-similarity-search', enabled: false })));
-  assert.equal(session.similaritySearchEnabled(), false);
-  ws.emit('message', Buffer.from(JSON.stringify({ t: 'set-similarity-search', enabled: true })));
-  assert.equal(session.similaritySearchEnabled(), true);
-
-  session.dispose();
+    windowId: 'retire-window', folder: '/workspace',
+  }, {
+    client: async () => new Promise<never>(() => {}),
+    beginTurn: () => {}, endTurn: () => {}, onExit: () => () => {},
+    close: async () => { closed += 1; },
+  });
+  const termination = { kind: 'scope-removed' as const, folder: '/workspace' };
+  session.dispose(termination);
+  session.dispose(termination);
+  assert.deepEqual(ws.sent.map((value) => JSON.parse(value)), [
+    { t: 'exit', reason: 'scope-removed', folder: '/workspace' },
+  ]);
+  assert.equal(ws.readyState, 3);
+  assert.equal(closed, 1);
 });
 
 test('bundled OpenCode inherits launch plumbing but no ambient credentials or injection flags', () => {
@@ -88,13 +86,13 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
   assert.equal(config.permission?.edit, 'ask');
   assert.equal(config.permission?.bash, 'ask');
   assert.equal(config.permission?.external_directory, 'deny');
-  const libraryTools = config.agent?.['stashbase-library']?.tools ?? {};
+  const unboundTools = config.agent?.['stashbase-unbound']?.tools ?? {};
   for (const tool of ['read', 'write', 'edit', 'patch', 'apply_patch', 'glob', 'grep', 'bash', 'task']) {
-    assert.equal(libraryTools[tool], false, `Library profile must deny ${tool}`);
+    assert.equal(unboundTools[tool], false, `Unbound profile must deny ${tool}`);
   }
   assert.equal(config.agent?.['stashbase-folder']?.tools, undefined);
-  assert.equal(config.agent?.['stashbase-library']?.permission?.edit, 'deny');
-  assert.equal(config.agent?.['stashbase-library']?.permission?.bash, 'deny');
+  assert.equal(config.agent?.['stashbase-unbound']?.permission?.edit, 'deny');
+  assert.equal(config.agent?.['stashbase-unbound']?.permission?.bash, 'deny');
   assert.equal(config.agent?.['stashbase-folder']?.mode, 'primary');
   assert.equal((config.permission as Record<string, unknown>).stashbase_write_file, 'ask');
   assert.equal((config.permission as Record<string, unknown>).stashbase_delete_file, 'ask');
@@ -115,10 +113,10 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
     enabled: true,
     timeout: 10_000,
   });
-  for (const profile of ['stashbase-folder', 'stashbase-library'] as const) {
+  for (const profile of ['stashbase-folder', 'stashbase-unbound'] as const) {
     const prompt = attributed.agent?.[profile]?.prompt ?? '';
     assert.match(prompt, /StashBase MCP/i);
-    assert.match(prompt, /search_library/);
+    assert.match(prompt, /search_project/);
     assert.match(prompt, /read_file/);
     assert.match(prompt, /Use StashBase tools\./);
     assert.notEqual(prompt, 'Use StashBase tools.');
@@ -289,11 +287,11 @@ test('OpenCode translator isolates sessions and classifies hosted allowance fail
     type: 'session.error',
     properties: {
       sessionID: 'ours',
-      error: { name: 'APIError', data: { message: 'StashBase weekly Agent allowance exhausted', isRetryable: false } },
+      error: { name: 'APIError', data: { message: 'OpenQuill free credits are exhausted', isRetryable: false } },
     },
   });
   assert.deepEqual(events, [
-    { t: 'error', message: 'StashBase weekly Agent allowance exhausted', failure: { kind: 'allowance-exhausted' } },
+    { t: 'error', message: 'OpenQuill free credits are exhausted', failure: { kind: 'allowance-exhausted' } },
     { t: 'turn-end', isError: true },
   ]);
 });

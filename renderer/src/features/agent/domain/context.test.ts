@@ -188,12 +188,12 @@ describe('context validation', () => {
     expect(staleContext(validations).map((v) => v.item)).toEqual([source('gone.md')]);
   });
 
-  it('treats a library scope or another folder as stale and an unknown listing as ready', () => {
+  it('treats a project scope or another folder as stale and an unknown listing as ready', () => {
     expect(
       validateContext([source('docs/agent.md')], {
         listing: null,
         readiness: {},
-        scope: { kind: 'library' },
+        scope: { kind: 'unbound' },
       })[0],
     ).toMatchObject({ reason: 'This file belongs to a different folder.', status: 'stale' });
     expect(

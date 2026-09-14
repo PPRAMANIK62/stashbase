@@ -9,7 +9,7 @@
  * held here directly: a hook whose whole body was a call to another hook made
  * the shell four levels deep to answer "which panel is showing".
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { useBootProgress } from '@/app/bootstrap/use-boot-progress';
 import {
@@ -19,7 +19,7 @@ import {
 import type { DocumentTabsRuntime } from '@/features/documents/public';
 import type { SettingsSectionId } from '@/features/settings/public';
 import type {
-  LibrarySnapshot,
+  ProjectRegistrySnapshot,
   WorkspaceRuntime,
   WorkspaceSessionController,
 } from '@/features/workspace/public';
@@ -34,13 +34,30 @@ import { useSidebarSearchCommand } from './use-sidebar-search-command';
  *  cannot silently repoint a comparison somewhere else. */
 export type SidebarPanelId = 'files' | 'outline' | 'search' | 'chats';
 
+/** The sidebar's two modes, switched from its titlebar band. Documents holds
+ *  Files, Document outline, and Search under one tab strip; Chats is the
+ *  folder's conversations and needs no strip of its own. */
+export type SidebarMode = 'documents' | 'chats';
+
+/** Which mode a panel belongs to. Chats is its own mode; every other panel
+ *  is a way of looking at the folder's documents. */
+export function sidebarModeOf(panel: SidebarPanelId): SidebarMode {
+  return panel === 'chats' ? 'chats' : 'documents';
+}
+
 export interface SidebarNavigatorState {
   /** Bumped every time Search is summoned, so the field refocuses even when the
    *  panel was already showing. */
   focusRevision: number;
+  /** The mode the selected panel belongs to. */
+  mode: SidebarMode;
   /** Opens the sidebar on Search and puts the caret in its field. */
   openSearch(): void;
   select(panel: SidebarPanelId): void;
+  /** Switches mode. Chats lands on the Chats panel; Documents comes back to
+   *  whichever documents panel was showing last, so a trip to Chats and back
+   *  does not lose a search in progress. */
+  selectMode(mode: SidebarMode): void;
   selected: SidebarPanelId;
 }
 
@@ -62,24 +79,27 @@ export interface WorkspaceCommands {
   started: boolean;
 }
 
-const DEFAULT_SECTION: SettingsSectionId = 'agents';
+/** Settings opens where a reader looking for a setting expects to land: the
+ *  first section in the nav. A surface that means a specific section (the
+ *  Agent panel's own setup links) names it. */
+const DEFAULT_SECTION: SettingsSectionId = 'general';
 
 export function useWorkspaceCommands({
   documents,
   hostFailure,
-  library,
+  project,
   preparation,
   session,
   workspace,
 }: {
   documents: DocumentTabsRuntime | null;
   hostFailure: string | null;
-  library: LibrarySnapshot | null;
+  project: ProjectRegistrySnapshot | null;
   preparation: Pick<PreparationCommands, 'dismissFailure' | 'failure'>;
   session: WorkspaceSessionController;
   workspace: WorkspaceRuntime | null;
 }): WorkspaceCommands {
-  const memberCount = library?.members.length ?? 0;
+  const memberCount = project?.projects.length ?? 0;
   const sidebarRuntime = session.runtime;
 
   const settingsSurface = useCommandSurface();
@@ -94,23 +114,40 @@ export function useWorkspaceCommands({
   );
 
   const [selected, setSelected] = useState<SidebarPanelId>('files');
+  // The documents panel to come back to from Chats. A ref rather than state:
+  // nothing renders from it, and it only changes inside the select calls.
+  const documentsPanel = useRef<SidebarPanelId>('files');
+  const select = useCallback((panel: SidebarPanelId) => {
+    if (sidebarModeOf(panel) === 'documents') documentsPanel.current = panel;
+    setSelected(panel);
+  }, []);
+  const selectMode = useCallback((mode: SidebarMode) => {
+    setSelected(mode === 'chats' ? 'chats' : documentsPanel.current);
+  }, []);
   const [focusRevision, setFocusRevision] = useState(0);
   const openSearch = useCallback(() => {
     sidebarRuntime.setSidebarOpen(true);
-    setSelected('search');
+    select('search');
     setFocusRevision((revision) => revision + 1);
-  }, [sidebarRuntime]);
+  }, [select, sidebarRuntime]);
 
   useSidebarSearchCommand(memberCount > 0, openSearch);
   const quickOpen = useQuickOpenCommand(workspace, documents);
   const started = useBootProgress({
     memberCount,
-    settled: session.status.kind === 'ready' && library !== null,
+    settled: session.status.kind === 'ready' && project !== null,
   });
   const notices = useWorkspaceNotices(preparation.failure, preparation.dismissFailure, hostFailure);
 
   return {
-    navigator: { focusRevision, openSearch, select: setSelected, selected },
+    navigator: {
+      focusRevision,
+      mode: sidebarModeOf(selected),
+      openSearch,
+      select,
+      selectMode,
+      selected,
+    },
     notices,
     quickOpen,
     settings: {
@@ -120,6 +157,6 @@ export function useWorkspaceCommands({
       openSettings,
       section,
     },
-    started: started && library !== null,
+    started: started && project !== null,
   };
 }

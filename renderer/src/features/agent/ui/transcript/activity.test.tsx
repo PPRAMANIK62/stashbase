@@ -61,7 +61,7 @@ describe('Agent activity', () => {
         tool={{
           id: 'edit-1',
           input: {
-            file_path: '/library/Research/notes.md',
+            file_path: '/project/Research/notes.md',
             new_string: 'Accepted: use Screely.',
             old_string: 'Undecided.',
           },
@@ -91,14 +91,14 @@ describe('Agent activity', () => {
       <AgentActivityGroup
         onOpenSource={onOpenSource}
         sourceFor={(path) =>
-          path.startsWith('/library/Research/')
-            ? { folderPath: '/library/Research', path: path.slice('/library/Research/'.length) }
+          path.startsWith('/project/Research/')
+            ? { folderPath: '/project/Research', path: path.slice('/project/Research/'.length) }
             : null
         }
         tools={[
           {
             id: 'write-1',
-            input: { content: '# Plan', file_path: '/library/Research/plan.md' },
+            input: { content: '# Plan', file_path: '/project/Research/plan.md' },
             kind: 'tool',
             name: 'Write',
             status: 'done',
@@ -112,7 +112,7 @@ describe('Agent activity', () => {
           },
           {
             id: 'write-2',
-            input: { content: 'nope', file_path: '/library/Research/denied.md' },
+            input: { content: 'nope', file_path: '/project/Research/denied.md' },
             kind: 'tool',
             name: 'Write',
             status: 'denied',
@@ -127,7 +127,7 @@ describe('Agent activity', () => {
     expect(list.textContent).not.toContain('denied.md');
     expect(screen.queryByRole('button', { name: 'Open notes.md' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Open plan.md' }));
-    expect(onOpenSource).toHaveBeenCalledWith({ folderPath: '/library/Research', path: 'plan.md' });
+    expect(onOpenSource).toHaveBeenCalledWith({ folderPath: '/project/Research', path: 'plan.md' });
     await userEvent.click(screen.getByRole('button', { expanded: false }));
     expect(screen.getByRole('button', { name: /Changed.*notes\.md.*Done/u })).not.toBeNull();
   });

@@ -13,7 +13,7 @@ describe('workspace session persistence adapter', () => {
         {
           activeTabId: null,
           expandedPaths: ['drafts'],
-          folderPath: '/library/notes',
+          folderPath: '/project/notes',
           selectedPath: null,
           tabs: [],
         },

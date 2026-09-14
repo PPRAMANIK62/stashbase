@@ -1,9 +1,101 @@
+import './__tests__/isolated-home.ts';
 import assert from 'node:assert/strict';
+import childProcess from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+import { PassThrough } from 'node:stream';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { codexThreadHasContent, codexThreadToBlocks } from './codex-history.ts';
 import { nativeTimesByUuid, transcriptToBlocks } from './routes/sessions.ts';
+import { codexHistoryActions } from './routes/codex-sessions.ts';
+import { clearAgentSessionFolderOverride, setAgentSessionFolderOverride } from './agent-session-folders.ts';
+
+test('Codex history validates native or overridden project ownership before renaming and deleting', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-history-'));
+  const project = path.join(root, 'project');
+  const other = path.join(root, 'other');
+  fs.mkdirSync(project); fs.mkdirSync(other);
+  const binary = path.join(root, process.platform === 'win32' ? 'codex.exe' : 'codex');
+  fs.writeFileSync(binary, 'fixture binary');
+  fs.chmodSync(binary, 0o700);
+  const previousBin = process.env.STASHBASE_CODEX_BIN;
+  process.env.STASHBASE_CODEX_BIN = binary;
+  const originalSpawn = childProcess.spawn;
+  const processes: EventEmitter[] = [];
+  const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
+  const thread = { id: 'thread', cwd: project, name: 'Original', updatedAt: 123, preview: 'Started', turns: [] };
+  let missing = false;
+  let invalidAfterRename = false;
+  let renamed = false;
+  childProcess.spawn = ((command: string) => {
+    assert.equal(command, binary, 'Never launch a real native runtime in this test');
+    const proc = Object.assign(new EventEmitter(), {
+      stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
+      kill: () => { proc.emit('close', 0, null); return true; },
+    });
+    processes.push(proc);
+    proc.stdin.on('data', (data: Buffer) => {
+      for (const line of data.toString().trim().split('\n')) {
+        const request = JSON.parse(line) as { id?: number; method: string; params: Record<string, unknown> };
+        if (request.id == null) continue;
+        requests.push(request);
+        if (request.method === 'thread/name/set') { thread.name = String(request.params.name); renamed = true; }
+        const result = request.method === 'thread/read'
+          ? { thread: invalidAfterRename && renamed ? {} : { ...thread } }
+          : {};
+        queueMicrotask(() => proc.stdout.write(JSON.stringify(missing && request.method === 'thread/read'
+          ? { id: request.id, error: { code: -32602, message: 'thread not found' } }
+          : { id: request.id, result }) + '\n'));
+      }
+    });
+    return proc;
+  }) as unknown as typeof childProcess.spawn;
+  syncBuiltinESMExports();
+  t.after(() => {
+    for (const proc of processes) proc.emit('close', 0, null);
+    childProcess.spawn = originalSpawn;
+    syncBuiltinESMExports();
+    if (previousBin === undefined) delete process.env.STASHBASE_CODEX_BIN;
+    else process.env.STASHBASE_CODEX_BIN = previousBin;
+    clearAgentSessionFolderOverride('codex', thread.id);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  const history = codexHistoryActions();
+  for (const action of [
+    () => history.messages(thread.id, other),
+    () => history.rename(thread.id, 'Forbidden', other),
+    () => history.remove(thread.id, other),
+  ]) {
+    requests.length = 0;
+    await assert.rejects(async () => action(), /session not found/);
+    assert.equal(requests.some(({ method }) => method === 'thread/name/set' || method === 'thread/delete'), false);
+  }
+  requests.length = 0;
+  const result = await history.rename(thread.id, 'Renamed', project);
+  assert.deepEqual(requests.filter(({ method }) => method !== 'initialize').map(({ method }) => method), ['thread/read', 'thread/name/set', 'thread/read']);
+  assert.deepEqual(result, { id: thread.id, title: 'Renamed', lastModified: 123_000, hasContent: true, cwd: project });
+
+  setAgentSessionFolderOverride('codex', thread.id, other);
+  requests.length = 0;
+  await assert.rejects(async () => history.rename(thread.id, 'Old scope', project), /session not found/);
+  assert.equal(requests.length, 0);
+  assert.equal((await history.rename(thread.id, 'Rebound', other) as { title: string }).title, 'Rebound');
+  missing = true;
+  requests.length = 0;
+  await assert.rejects(history.rename(thread.id, 'Missing', other), /thread not found/);
+  assert.deepEqual(requests.map(({ method }) => method), ['thread/read']);
+  missing = false;
+  renamed = false;
+  invalidAfterRename = true;
+  await assert.rejects(history.rename(thread.id, 'Invalid metadata', other), /invalid session metadata/);
+  invalidAfterRename = false;
+  requests.length = 0;
+  await history.remove(thread.id, other);
+  assert.deepEqual(requests.map(({ method }) => method), ['thread/delete']);
+});
 
 test('Codex history distinguishes allocated blanks from started conversations', () => {
   assert.equal(codexThreadHasContent({ id: 'blank', preview: '' }), false);

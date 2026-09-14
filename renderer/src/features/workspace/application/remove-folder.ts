@@ -1,16 +1,16 @@
-import type { LibrarySnapshot } from '@/features/workspace/domain/library';
+import type { ProjectRegistrySnapshot } from '@/features/workspace/domain/project';
 
-import { libraryFailureMessage, REMOVAL_MESSAGES } from './failure-messages';
-import { type LibraryPort, LibraryError, type LibraryLifecyclePort } from './ports';
+import { projectFailureMessage, REMOVAL_MESSAGES } from './failure-messages';
+import { type ProjectRegistryPort, ProjectError, type ProjectLifecyclePort } from './ports';
 
 export type RemoveFolderResult =
   | { status: 'cancelled' }
   | { status: 'failed'; message: string }
-  | { status: 'removed'; snapshot: LibrarySnapshot; warning: string | null };
+  | { status: 'removed'; snapshot: ProjectRegistrySnapshot; warning: string | null };
 
 export async function removeFolder(
-  api: LibraryPort,
-  lifecycle: LibraryLifecyclePort,
+  api: ProjectRegistryPort,
+  lifecycle: ProjectLifecyclePort,
   folderPath: string,
   signal: AbortSignal,
 ): Promise<RemoveFolderResult> {
@@ -41,8 +41,8 @@ export async function removeFolder(
     if (signal.aborted) return { status: 'cancelled' };
     return {
       status: 'failed',
-      message: libraryFailureMessage(
-        error instanceof LibraryError ? error.kind : undefined,
+      message: projectFailureMessage(
+        error instanceof ProjectError ? error.kind : undefined,
         'removed',
       ),
     };

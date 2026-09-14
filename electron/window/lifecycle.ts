@@ -6,20 +6,18 @@ import {
   WINDOW_FULLSCREEN_CHANNEL,
   WINDOW_LIFECYCLE_CAPABILITY,
   WINDOW_PREPARE_CONTEXT_RELEASE_CHANNEL,
-  WINDOW_SAFE_RELOAD_CHANNEL,
   type WindowContextReleaseReason,
   windowContextReleaseReadySchema,
   windowFullScreenSchema,
-  windowLifecycleResponseSchema,
+  windowContextReleaseResponseSchema,
 } from '../../shared/protocols/electron/window-lifecycle.ts';
-import { authorizeSender, type SenderAuthorization } from '../library/dialog.ts';
+import { authorizeSender, type SenderAuthorization } from '../project/dialog.ts';
 
 export { WINDOW_LIFECYCLE_CAPABILITY };
 
 interface LifecycleWebContents {
   id: number;
   isDestroyed(): boolean;
-  reload(): void;
   send(channel: string, payload: unknown): void;
   on(event: 'did-finish-load', listener: () => void): void;
 }
@@ -29,6 +27,7 @@ type LifecycleWindow = BrowserWindow & { webContents: LifecycleWebContents };
 export interface WindowLifecycleDependencies extends SenderAuthorization {
   ipcMain: Pick<IpcMain, 'handle'>;
   isLiveWindow(window: BrowserWindow | null): boolean;
+  onCloseBlocked?(): void;
 }
 
 export function registerWindowLifecycle(
@@ -93,7 +92,7 @@ export function registerWindowLifecycle(
         dependencies,
         WINDOW_LIFECYCLE_CAPABILITY,
       ) as LifecycleWindow | null;
-      if (!senderWindow) return windowLifecycleResponseSchema.parse({ ok: true, reloaded: false });
+      if (!senderWindow) return windowContextReleaseResponseSchema.parse({ ok: true });
       const response = windowContextReleaseReadySchema.safeParse(rawResponse);
       const pending = pendingByWebContents.get(event.sender.id);
       if (
@@ -102,29 +101,12 @@ export function registerWindowLifecycle(
         pending.requestId !== response.data.requestId ||
         pending.reason !== response.data.reason
       ) {
-        return windowLifecycleResponseSchema.parse({ ok: true, reloaded: false });
+        return windowContextReleaseResponseSchema.parse({ ok: true });
       }
       settle(event.sender.id, response.data.ready);
-      return windowLifecycleResponseSchema.parse({ ok: true, reloaded: false });
+      return windowContextReleaseResponseSchema.parse({ ok: true });
     },
   );
-
-  dependencies.ipcMain.handle(WINDOW_SAFE_RELOAD_CHANNEL, async (event) => {
-    const senderWindow = authorizeSender(
-      event,
-      dependencies,
-      WINDOW_LIFECYCLE_CAPABILITY,
-    ) as LifecycleWindow | null;
-    if (!senderWindow || !(await request(senderWindow, 'window-reload'))) {
-      return windowLifecycleResponseSchema.parse({ ok: true, reloaded: false });
-    }
-    if (!dependencies.isLiveWindow(senderWindow) || senderWindow.webContents.isDestroyed()) {
-      return windowLifecycleResponseSchema.parse({ ok: true, reloaded: false });
-    }
-    loaded.delete(senderWindow);
-    senderWindow.webContents.reload();
-    return windowLifecycleResponseSchema.parse({ ok: true, reloaded: true });
-  });
 
   return {
     attach(window: LifecycleWindow) {
@@ -151,8 +133,10 @@ export function registerWindowLifecycle(
         if (closing.has(window)) return;
         closing.add(window);
         void request(window, 'window-close')
+          .catch(() => false)
           .then((ready) => {
-            if (!ready || !dependencies.isLiveWindow(window)) return;
+            if (!ready) { dependencies.onCloseBlocked?.(); return; }
+            if (!dependencies.isLiveWindow(window)) return;
             approvedClose.add(window);
             window.close();
           })

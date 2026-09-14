@@ -5,7 +5,7 @@ import { retireDocuments } from '@/app/workflows/retire-documents';
 import type { DocumentNavigationTarget, DocumentTabsRuntime } from '@/features/documents/public';
 import type { SearchNavigationIntent } from '@/features/retrieval/public';
 import {
-  useLibraryLifecycle,
+  useProjectLifecycle,
   type WorkspaceAdapters,
   type WorkspaceEntry,
   type WorkspaceRuntime,
@@ -26,7 +26,7 @@ export interface DocumentSources {
   /** Opens a source. Browsing is the default and opens a preview, the one
    *  tab the next browse reuses; `keep` asks for a tab that stays. */
   open(source: SourceReference, options?: { keep?: boolean }): void;
-  /** Reconciles a scope this window lost with the library the host reports. */
+  /** Reconciles a scope this window lost with the project the host reports. */
   recoverLostScope(scope: WorkspaceScope): void;
   /** Settles the open documents under an entry before it is renamed or
    *  deleted. */
@@ -42,7 +42,7 @@ export interface DocumentSources {
  *
  * Each workflow needs both runtimes and refuses to act without them, so the
  * binding is done once here instead of at every call site. The save barrier is
- * the reason this is not just a bag of callbacks: the library lifecycle has to
+ * the reason this is not just a bag of callbacks: the project lifecycle has to
  * be able to stop a folder change until the folder's own documents have been
  * flushed, and only the folder that owns a document may answer for it.
  *
@@ -60,8 +60,8 @@ export function useDocumentSources(
     [documents],
   );
 
-  const libraryLifecycle = useLibraryLifecycle(
-    adapters.library,
+  const projectLifecycle = useProjectLifecycle(
+    adapters.project,
     adapters.lifecycle,
     workspace,
     saveDocumentsForFolder,
@@ -112,11 +112,11 @@ export function useDocumentSources(
   );
 
   return {
-    hostFailure: libraryLifecycle.failure,
+    hostFailure: projectLifecycle.failure,
     navigate,
     navigateToMatch,
     open,
-    recoverLostScope: libraryLifecycle.recoverLostScope,
+    recoverLostScope: projectLifecycle.recoverLostScope,
     retire,
     saveOpenFolder,
   };

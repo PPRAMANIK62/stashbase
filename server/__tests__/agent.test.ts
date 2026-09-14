@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { CanUseTool, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { WebSocket } from 'ws';
 import {
   AgentSession,
@@ -19,7 +19,8 @@ import {
 } from '../agent.ts';
 import { resolveAgentInstructions, setAgentInstructions } from '../agent-instructions.ts';
 import { clearAgentRuntimeFailure } from '../agent-contract.ts';
-import { clearCurrentFolder, runWithWindowId, setCurrentFolder } from '../folder.ts';
+import { clearCurrentFolder, runWithWindowId, openProjectFolder, registerProjectFolderAsync } from '../folder.ts';
+import { derivedNoteFor, registerDerivedSource } from '../derived-store.ts';
 import { claudeTranscriptEffort } from '../routes/sessions.ts';
 
 class FakeAgentWebSocket extends EventEmitter {
@@ -39,19 +40,6 @@ test('Claude sends a structured scope-retirement exit before closing', () => {
     { t: 'exit', reason: 'scope-removed', folder: '/workspace' },
   ]);
   assert.equal(ws.readyState, 3);
-});
-
-test('Claude applies the search-by-meaning policy live', () => {
-  const ws = new FakeAgentWebSocket();
-  const session = new AgentSession(ws as unknown as WebSocket, 'similarity-policy-window');
-
-  assert.equal(session.similaritySearchEnabled(), true);
-  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: false }));
-  assert.equal(session.similaritySearchEnabled(), false);
-  ws.emit('message', JSON.stringify({ t: 'set-similarity-search', enabled: true }));
-  assert.equal(session.similaritySearchEnabled(), true);
-
-  session.dispose();
 });
 
 async function settle(): Promise<void> {
@@ -111,7 +99,7 @@ test('Claude keeps Agent Instructions user-visible while appending hidden StashB
   await settle();
   assert.equal(resolveAgentInstructions(folder), instructions);
   assert.match(appended, /StashBase MCP/i);
-  assert.match(appended, /search_library/);
+  assert.match(appended, /search_project/);
   assert.match(appended, /read_file/);
   assert.match(appended, /do not install or run a separate parser/i);
   assert.match(appended, /Prefer primary research notes\./);
@@ -183,6 +171,72 @@ function streamingClaudeQuery(prompt: AsyncIterable<unknown>, sessionId = 'test-
   }) as unknown as Query;
 }
 
+test('Claude permission callback asks for mutations and unknown tools, and settles replies or cancellation', async (t) => {
+  const ws = new FakeAgentWebSocket();
+  let canUseTool: CanUseTool | undefined;
+  const session = new AgentSession(
+    ws as unknown as WebSocket, 'permission-window', undefined, undefined, 'default', undefined, undefined,
+    ((request: { prompt: AsyncIterable<unknown>; options: { canUseTool: CanUseTool } }) => {
+      canUseTool = request.options.canUseTool;
+      return streamingClaudeQuery(request.prompt);
+    }) as never,
+    () => '/fake/claude', undefined, undefined, 'unbound',
+  );
+  t.after(() => session.dispose());
+  session.begin();
+  await settle();
+  assert.ok(canUseTool);
+  const permissionEvents = () => ws.sent.map((s) => JSON.parse(s)).filter((event) => event.t === 'permission');
+  for (const name of ['Read', 'Grep', 'mcp__stashbase__read_file', 'mcp__stashbase__search_project', 'mcp__stashbase__reindex']) {
+    const result = await canUseTool(name, {}, { signal: new AbortController().signal, toolUseID: name });
+    assert.equal(result.behavior, 'allow');
+  }
+  assert.equal(permissionEvents().length, 0);
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-read-redirect-'));
+  t.after(() => fs.rmSync(project, { recursive: true, force: true }));
+  await registerProjectFolderAsync(project);
+  const pdf = path.join(project, 'document.pdf');
+  fs.writeFileSync(pdf, 'updated source');
+  fs.utimesSync(pdf, 300, 300);
+  registerDerivedSource(pdf);
+  const prepared = derivedNoteFor(pdf);
+  fs.mkdirSync(path.dirname(prepared), { recursive: true });
+  fs.writeFileSync(prepared, 'old text\n<!-- stashbase-pdf-conversion: complete -->');
+  fs.utimesSync(prepared, 100, 100);
+  const nativeRead = () => canUseTool!('Read', { file_path: pdf }, { signal: new AbortController().signal, toolUseID: 'pdf' });
+  assert.equal((await nativeRead()).behavior, 'allow', 'stale preparation must not redirect a native read');
+  fs.utimesSync(prepared, 400, 400);
+  const redirect = await nativeRead();
+  assert.equal(redirect.behavior, 'deny');
+  if (redirect.behavior === 'deny') assert.match(redirect.message, /read_file/);
+  assert.equal((await nativeRead()).behavior, 'allow', 'the source redirect is only a one-time hint');
+  for (const name of ['mcp__stashbase__edit_file', 'mcp__stashbase__move_file', 'mcp__stashbase__write_file', 'mcp__stashbase__delete_file', 'Bash', 'new_tool', 'mcp__other__read_file']) {
+    let settled = false;
+    const input = { path: '/project/note.md' };
+    const result = canUseTool(name, input, { signal: new AbortController().signal, toolUseID: name });
+    void result.then(() => { settled = true; });
+    await settle();
+    assert.equal(settled, false, name);
+    const event = permissionEvents().at(-1);
+    assert.equal(event.name, name);
+    assert.equal(event.toolUseId, name);
+    ws.emit('message', JSON.stringify({ t: 'permission-reply', id: event.id, allow: name.endsWith('edit_file') }));
+    assert.equal((await result).behavior, name.endsWith('edit_file') ? 'allow' : 'deny');
+  }
+  const controller = new AbortController();
+  const pending = canUseTool('mcp__stashbase__move_file', {}, { signal: controller.signal, toolUseID: 'abort' });
+  await settle();
+  controller.abort();
+  assert.equal((await pending).behavior, 'deny');
+  const count = permissionEvents().length;
+  assert.equal((await canUseTool('Bash', {}, { signal: controller.signal, toolUseID: 'already-aborted' })).behavior, 'deny');
+  assert.equal(permissionEvents().length, count);
+  const closing = canUseTool('Bash', {}, { signal: new AbortController().signal, toolUseID: 'close' });
+  await settle();
+  session.dispose();
+  assert.equal((await closing).behavior, 'deny');
+});
+
 test('Claude project rebind resumes the same native session from the project cwd', async (t) => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-rebound-'));
   t.after(() => fs.rmSync(project, { recursive: true, force: true }));
@@ -203,7 +257,7 @@ test('Claude project rebind resumes the same native session from the project cwd
     () => '/fake/claude',
     undefined,
     undefined,
-    'library',
+    'unbound',
   );
   t.after(() => session.dispose());
 
@@ -249,7 +303,7 @@ async function startScriptedClaudeTurn(
   turnEvents(): TurnEvent[];
 }> {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), `stashbase-${windowId}-`));
-  runWithWindowId(windowId, () => setCurrentFolder(folder));
+  await runWithWindowId(windowId, () => openProjectFolder(folder));
 
   let releaseMessages!: () => void;
   const messageGate = new Promise<void>((resolve) => { releaseMessages = resolve; });
@@ -373,7 +427,7 @@ test('Claude native ownership is active before reconnect and serializes acquisit
 
 test('Claude resume validates folder scope before acquiring native ownership', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-resume-scope-'));
-  runWithWindowId('claude-resume-scope-window', () => setCurrentFolder(folder));
+  await runWithWindowId('claude-resume-scope-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('claude-resume-scope-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
@@ -455,7 +509,7 @@ test('Claude native ownership releases every id claimed by a disposed session', 
 
 test('Claude retirement waits for the SDK stream to exit after interrupt acknowledgement', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-retire-'));
-  runWithWindowId('claude-retire-window', () => setCurrentFolder(folder));
+  await runWithWindowId('claude-retire-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('claude-retire-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
@@ -512,7 +566,7 @@ test('Claude model selection recovers visibly when the SDK rejects a discovered 
 
 test('Claude applies a fresh idle model choice before the first prompt', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-model-'));
-  runWithWindowId('claude-model-window', () => setCurrentFolder(folder));
+  await runWithWindowId('claude-model-window', () => openProjectFolder(folder));
   let finish!: () => void;
   const finished = new Promise<void>((resolve) => {
     finish = resolve;
@@ -637,7 +691,7 @@ test('folder-trust pre-acceptance merges into ~/.claude.json without clobbering'
 
 test('Claude unexpected iterator EOF after ready emits one useful fatal exit', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-exit-'));
-  runWithWindowId('claude-eof-window', () => setCurrentFolder(folder));
+  await runWithWindowId('claude-eof-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('claude');
     runWithWindowId('claude-eof-window', () => clearCurrentFolder());
@@ -668,7 +722,7 @@ test('Claude unexpected iterator EOF after ready emits one useful fatal exit', a
 
 test('Claude iterator rejection after ready emits its cause once without a duplicate error', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-exit-'));
-  runWithWindowId('claude-failure-window', () => setCurrentFolder(folder));
+  await runWithWindowId('claude-failure-window', () => openProjectFolder(folder));
   t.after(() => {
     clearAgentRuntimeFailure('claude');
     runWithWindowId('claude-failure-window', () => clearCurrentFolder());
@@ -698,7 +752,7 @@ test('Claude iterator rejection after ready emits its cause once without a dupli
 
 test('Claude startup failure puts its cause on the terminal exit', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-exit-'));
-  runWithWindowId('claude-startup-window', () => setCurrentFolder(folder));
+  await runWithWindowId('claude-startup-window', () => openProjectFolder(folder));
   t.after(() => {
     runWithWindowId('claude-startup-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });

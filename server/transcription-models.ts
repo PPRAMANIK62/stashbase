@@ -99,7 +99,7 @@ interface ActiveVerification {
 }
 
 export interface TranscriptionModelLifecycle {
-  /** Reconcile newly available weights with incomplete library audio. */
+  /** Reconcile newly available weights with incomplete project audio. */
   onAvailable?: (id: TranscriptionModelId) => void | Promise<void>;
   /** Release every job using the weights before deletion. */
   release?: (id: TranscriptionModelId) => void | Promise<void>;

@@ -10,10 +10,10 @@ describe('index decision API', () => {
   it('dismisses a warning and resyncs the folder', async () => {
     const request = vi.fn(async () => ({ body: { ok: true, added: [] }, status: 200 }));
     const api = createIndexDecisionAdapter({ request });
-    await api.dismissWarning('/library/research', signal);
-    await api.resync('/library/research', signal);
+    await api.dismissWarning('/project/research', signal);
+    await api.resync('/project/research', signal);
     expect(request).toHaveBeenNthCalledWith(1, {
-      body: { folder: '/library/research' },
+      body: { folder: '/project/research' },
       method: 'POST',
       path: '/api/index-warning/dismiss',
       signal,
@@ -21,7 +21,7 @@ describe('index decision API', () => {
     expect(request).toHaveBeenNthCalledWith(2, {
       body: undefined,
       method: 'POST',
-      path: '/api/sync?folder=%2Flibrary%2Fresearch',
+      path: '/api/sync?folder=%2Fproject%2Fresearch',
       signal,
     });
   });
@@ -31,7 +31,7 @@ describe('index decision API', () => {
       request: vi.fn(async () => ({ body: { error: 'daemon busy' }, status: 500 })),
     };
     await expect(
-      createIndexDecisionAdapter(client).resync('/library/research', signal),
+      createIndexDecisionAdapter(client).resync('/project/research', signal),
     ).rejects.toMatchObject({ kind: 'unavailable', message: 'Sync could not start.' });
   });
 });

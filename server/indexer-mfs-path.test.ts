@@ -38,7 +38,7 @@ test('daemon readiness replays Folder bindings after every spawn', async (t) => 
     fs.rmSync(scratch, { recursive: true, force: true });
   });
 
-  await daemon.bindFolder('/library/research', { provider: 'openai', dimension: 1536 });
+  await daemon.bindFolder('/project/research', { provider: 'openai', dimension: 1536 });
   await daemon.close();
   const status = await daemon.call<{ operations: string[] }>('status', {});
   assert.deepEqual(status.operations, ['bind_folder', 'status']);

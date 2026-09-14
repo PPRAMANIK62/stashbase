@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import type { CapturePort } from '@/features/settings/application/ports';
-import { useCapture, type CaptureWatchApplier } from '@/features/settings/hooks/use-capture';
+import type { LocalComponentViewModel } from '@/features/settings/hooks/use-local-component';
 import {
   SettingsGroup,
   SettingsList,
@@ -11,9 +10,10 @@ import {
 import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 
+import { LocalComponentGroup } from './local-component-group';
+
 export interface GeneralPanelProps {
-  applyCaptureWatch: CaptureWatchApplier;
-  captureApi: CapturePort;
+  localComponent?: LocalComponentViewModel | null;
   /** Null outside the desktop app, where there is no review window to open;
    *  the row then stays, disabled, and says so. */
   onReportBug: (() => void) | null;
@@ -21,43 +21,9 @@ export interface GeneralPanelProps {
   softwareUpdate: SoftwareUpdateRow | null;
 }
 
-export function GeneralPanel({
-  applyCaptureWatch,
-  captureApi,
-  onReportBug,
-  softwareUpdate,
-}: GeneralPanelProps) {
-  const capture = useCapture(captureApi, applyCaptureWatch);
-  const enabled = capture.clipboardImageImport;
-
+export function GeneralPanel({ localComponent, onReportBug, softwareUpdate }: GeneralPanelProps) {
   return (
-    <SettingsPane lede="Choices that apply to every folder in your library." title="General">
-      <SettingsGroup
-        hint={
-          capture.failure ? (
-            <FailureNotice failure={capture.failure} />
-          ) : capture.warning ? (
-            <span role="status">{capture.warning}</span>
-          ) : undefined
-        }
-        title="Knowledge capture"
-      >
-        <SettingsList>
-          <SettingsRow
-            detail="When a StashBase window is focused and you copy an image, ask before adding it to the current folder for OCR and search."
-            title="Offer to add clipboard screenshots"
-            trail={
-              <Switch
-                checked={enabled}
-                disabled={capture.disabled}
-                label="Offer to add clipboard screenshots"
-                labelHidden
-                onToggle={() => capture.setClipboardImageImport(!enabled)}
-              />
-            }
-          />
-        </SettingsList>
-      </SettingsGroup>
+    <SettingsPane lede="App updates, local components, and support." title="General">
       {softwareUpdate && (
         <SettingsGroup
           hint={
@@ -72,16 +38,16 @@ export function GeneralPanel({
               trail={
                 <Button
                   disabled={softwareUpdate.busy}
-                  onClick={softwareUpdate.check}
+                  onClick={softwareUpdate.act}
                   size="compact"
-                  variant="secondary"
+                  variant="tertiary"
                 >
-                  Check for updates
+                  {softwareUpdate.actionLabel}
                 </Button>
               }
             />
             <SettingsRow
-              detail="Looks for a new version in the background and says so when one is waiting."
+              detail="Get notified when a new version is available."
               title="Check for updates automatically"
               trail={
                 <Switch
@@ -98,23 +64,26 @@ export function GeneralPanel({
           </SettingsList>
         </SettingsGroup>
       )}
+      {localComponent && <LocalComponentGroup model={localComponent} />}
       <SettingsGroup title="Support">
         <SettingsList>
           <SettingsRow
             detail={
               onReportBug
-                ? 'Review what StashBase collected, then hand the report off yourself. Nothing is sent without you.'
+                ? 'Review the report and attachments before sharing. Nothing is sent automatically.'
                 : 'Available in the desktop app.'
             }
             title="Report a bug"
             trail={
+              // The row already carries the name, so the control says only
+              // what pressing it does, the way every other row here reads.
               <Button
                 disabled={onReportBug === null}
                 onClick={onReportBug ?? undefined}
                 size="compact"
-                variant="secondary"
+                variant="tertiary"
               >
-                Report a bug
+                Start report…
               </Button>
             }
           />

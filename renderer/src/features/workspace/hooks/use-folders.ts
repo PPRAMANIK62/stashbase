@@ -5,8 +5,8 @@ import { FOLDER_CHANGE_BLOCKED } from '@/features/workspace/application/failure-
 import { openFolder } from '@/features/workspace/application/open-folder';
 import type {
   FolderPickerOptions,
-  LibraryPort,
-  LibraryFolderPickerPort,
+  ProjectRegistryPort,
+  ProjectFolderPickerPort,
 } from '@/features/workspace/application/ports';
 import { workspaceQueryKeys } from '@/features/workspace/application/queries';
 import { useRequestSignals } from '@/shared/runtime/use-request-signals';
@@ -25,8 +25,8 @@ interface FolderOperation {
  *  first, and the request that was abandoned is exactly the one whose signal
  *  is aborted, so a late answer can never overwrite the newer folder. */
 export function useFolders(
-  api: LibraryPort,
-  folderPicker: LibraryFolderPickerPort,
+  api: ProjectRegistryPort,
+  folderPicker: ProjectFolderPickerPort,
   beforeFolderChange: () => Promise<boolean> = async () => true,
 ) {
   const queryClient = useQueryClient();
@@ -50,7 +50,7 @@ export function useFolders(
     onSuccess: (result, variables) => {
       if (variables.signal.aborted) return;
       if (result.status === 'opened') {
-        queryClient.setQueryData(workspaceQueryKeys.library, result.snapshot);
+        queryClient.setQueryData(workspaceQueryKeys.project, result.snapshot);
       }
     },
   });

@@ -23,8 +23,8 @@ import {
 
 describe('document identity', () => {
   it('keeps the owning folder in source identity', () => {
-    const notes = { folderPath: '/library/notes', path: 'drafts/plan.md' };
-    const archive = { folderPath: '/library/archive', path: 'drafts/plan.md' };
+    const notes = { folderPath: '/project/notes', path: 'drafts/plan.md' };
+    const archive = { folderPath: '/project/archive', path: 'drafts/plan.md' };
 
     expect(sameSource(notes, { ...notes })).toBe(true);
     expect(sameSource(notes, archive)).toBe(false);
@@ -36,7 +36,7 @@ describe('document identity', () => {
     const scope = {
       generation: 2,
       id: 'tab-1',
-      source: { folderPath: '/library/notes', path: 'plan.md' },
+      source: { folderPath: '/project/notes', path: 'plan.md' },
     };
     const disposed = disposeDocumentState(createDocumentState(scope, 'editable'));
 
@@ -60,10 +60,10 @@ describe('document identity', () => {
 
   it('grants edit capability only to sources in the active folder scope', () => {
     expect(
-      documentAccess({ folderPath: '/library/notes', path: 'plan.md' }, '/library/notes'),
+      documentAccess({ folderPath: '/project/notes', path: 'plan.md' }, '/project/notes'),
     ).toBe('editable');
     expect(
-      documentAccess({ folderPath: '/library/archive', path: 'plan.md' }, '/library/notes'),
+      documentAccess({ folderPath: '/project/archive', path: 'plan.md' }, '/project/notes'),
     ).toBe('read-only');
   });
 
@@ -71,7 +71,7 @@ describe('document identity', () => {
     const scope = {
       generation: 1,
       id: 'tab-1',
-      source: { folderPath: '/library/notes', path: 'plan.md' },
+      source: { folderPath: '/project/notes', path: 'plan.md' },
     };
     const editable = createDocumentState(scope, 'editable');
     const reading = setDocumentMarkdownMode(editable, 'reading');
@@ -88,7 +88,7 @@ describe('document identity', () => {
     const scope = {
       generation: 1,
       id: 'tab-pdf',
-      source: { folderPath: '/library/notes', path: 'paper.pdf' },
+      source: { folderPath: '/project/notes', path: 'paper.pdf' },
     };
     const initial = createDocumentState(scope, 'read-only');
     const pageSeven = setDocumentPdfPage(initial, 7);
@@ -102,7 +102,7 @@ describe('document identity', () => {
     const scope = {
       generation: 1,
       id: 'tab-json',
-      source: { folderPath: '/library/notes', path: 'data.json' },
+      source: { folderPath: '/project/notes', path: 'data.json' },
     };
     const state = setDocumentJsonSession(createDocumentState(scope, 'editable'), {
       expandedPaths: ['$', '$.items'],
@@ -124,7 +124,7 @@ describe('document identity', () => {
     const scope = {
       generation: 1,
       id: 'tab-1',
-      source: { folderPath: '/library/notes', path: 'notes.txt' },
+      source: { folderPath: '/project/notes', path: 'notes.txt' },
     };
     const loaded = reconcileDocumentSource(
       createDocumentState(scope, 'editable'),
@@ -144,7 +144,7 @@ describe('document identity', () => {
     const scope = {
       generation: 1,
       id: 'tab-1',
-      source: { folderPath: '/library/notes', path: 'plan.md' },
+      source: { folderPath: '/project/notes', path: 'plan.md' },
     };
     let state = reconcileDocumentSource(
       createDocumentState(scope, 'editable'),
@@ -172,7 +172,7 @@ describe('document identity', () => {
     const scope = {
       generation: 1,
       id: 'tab-1',
-      source: { folderPath: '/library/notes', path: 'plan.md' },
+      source: { folderPath: '/project/notes', path: 'plan.md' },
     };
     let state = reconcileDocumentSource(
       createDocumentState(scope, 'editable'),

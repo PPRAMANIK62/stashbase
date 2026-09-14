@@ -13,7 +13,6 @@ import type {
   AccountPort,
   AgentRuntimePort,
   AppearancePort,
-  CapturePort,
   McpAccessPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
@@ -64,18 +63,16 @@ export function accountPort(
 
 export function embedderState(overrides: Partial<EmbedderState> = {}): EmbedderState {
   return {
-    authorized: false,
     hasKey: false,
     model: 'text-embedding-3-small',
     provider: 'openai',
-    source: 'openai',
     ...overrides,
   };
 }
 
 /** The reader's own key stored and answering embeddings. */
 export function keyedEmbedderState(overrides: Partial<EmbedderState> = {}): EmbedderState {
-  return embedderState({ authorized: true, hasKey: true, ...overrides });
+  return embedderState({ hasKey: true, ...overrides });
 }
 
 export function embedderPort(
@@ -221,14 +218,6 @@ export function appearancePort(overrides: Partial<AppearancePort> = {}): Appeara
   return {
     load: vi.fn(async () => saved),
     update: vi.fn(async (change) => ({ ...saved, ...change })),
-    ...overrides,
-  };
-}
-
-export function capturePort(overrides: Partial<CapturePort> = {}): CapturePort {
-  return {
-    load: vi.fn(async () => ({ clipboardImageImport: false })),
-    update: vi.fn(async (preferences) => preferences),
     ...overrides,
   };
 }

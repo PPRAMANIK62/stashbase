@@ -5,20 +5,12 @@ import test from 'node:test';
 import {
   cancelFolderSyncsAndWait,
   deleteFolderRuntimeState,
-  embeddingRuntimeUnavailableMessage,
   enqueueFolderSyncOperation,
   runFolderSyncOperation,
 } from './state.ts';
 import type { Indexer } from './indexer.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { MfsDaemonRetiringError } from './mfs-daemon.ts';
-
-test('embedding runtime warning explains the BYOK requirement', () => {
-  assert.match(embeddingRuntimeUnavailableMessage(
-    '/library/research',
-    { configured: false, available: false, reason: 'embedding-source-required' },
-  ), /OpenAI or OpenRouter key/);
-});
 
 test('Folder sync operations are serialized', async () => {
   const events: string[] = [];
@@ -74,7 +66,7 @@ test('a live Folder reconcile retries after shared daemon retirement', async () 
   const folder = path.join(os.tmpdir(), 'stashbase-live-sync-through-daemon-retirement');
   let bindCalls = 0;
   let syncCalls = 0;
-  const result = await runFolderSyncOperation(folder, { reason: 'library reconcile' }, {
+  const result = await runFolderSyncOperation(folder, { reason: 'project reconcile' }, {
     indexer: {} as Indexer,
     bind: async () => { bindCalls += 1; },
     sync: async () => {

@@ -7,8 +7,8 @@ import {
   type InitialFolderClaim,
 } from './landing';
 
-const NOTES = '/library/notes';
-const WRITING = '/library/writing';
+const NOTES = '/project/notes';
+const WRITING = '/project/writing';
 
 const pending: InitialFolderClaim = { kind: 'pending' };
 const settled = (folderPath: string | null): InitialFolderClaim => ({

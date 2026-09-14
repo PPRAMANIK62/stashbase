@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { DependencyProvider } from '@/app/composition/dependency-context';
 import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
-import { LibraryWelcome, type WorkspaceSessionController } from '@/features/workspace/public';
+import { ProjectWelcome, type WorkspaceSessionController } from '@/features/workspace/public';
 import { createWorkspaceSessionRuntime } from '@/features/workspace/test-support';
 import { appDependencies } from '@/test/fakes/app';
 import { sessionPersistence } from '@/test/fakes/workspace';
@@ -41,8 +41,8 @@ function mount(overrides: Partial<WorkspaceComposition> = {}) {
     // Bound the way the shell binds it, so the layout is exercised with the
     // welcome it is actually handed.
     welcome: (
-      <LibraryWelcome
-        {...dependencies.library}
+      <ProjectWelcome
+        {...dependencies.project}
         githubImport={dependencies.workspace.adapters.githubImport}
         isRestoringSession={active.status.kind === 'restoring'}
       />

@@ -14,7 +14,7 @@ import type {
 } from '@/shared/domain/feature-error';
 
 /** The `safeParse` surface every reviewed protocol schema exposes. Kept
- *  structural so the transport never depends on the validation library. */
+ *  structural so the transport never depends on the validation project. */
 export interface ResponseSchema<T> {
   safeParse(input: unknown): { success: true; data: T } | { success: false };
 }

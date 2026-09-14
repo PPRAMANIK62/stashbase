@@ -2,16 +2,16 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { workspaceQueryKeys } from '@/features/workspace/application/queries';
-import type { LibrarySnapshot } from '@/features/workspace/domain/library';
+import type { ProjectRegistrySnapshot } from '@/features/workspace/domain/project';
 import {
   createWorkspaceSessionSnapshot,
   type FolderSessionState,
   type WorkspaceSessionSnapshot,
 } from '@/features/workspace/domain/session';
 import {
-  libraryApi,
-  libraryLifecycle,
-  librarySnapshot,
+  projectApi,
+  projectLifecycle,
+  projectRegistrySnapshot,
   sessionPersistence,
 } from '@/test/fakes/workspace';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
@@ -20,11 +20,11 @@ import { useWorkspaceSession } from './use-workspace-session';
 
 afterEach(cleanup);
 
-const member = { favorite: false, openedAt: '2026-09-01T00:00:00.000Z', path: '/library/notes' };
-const settled = librarySnapshot({
+const member = { favorite: false, openedAt: '2026-09-01T00:00:00.000Z', path: '/project/notes' };
+const settled = projectRegistrySnapshot({
   activeFolder: null,
-  homeDirectory: '/library',
-  members: [member],
+  homeDirectory: '/project',
+  projects: [member],
 });
 
 /** A saved session naming `folderPath`, which is a current member, and
@@ -51,8 +51,8 @@ describe('workspace session restore', () => {
     // A plain relaunch: the desktop names no folder, and the session file
     // remembers the one that was open. The window lands empty all the same.
     const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.library, settled);
-    const api = libraryApi({
+    queryClient.setQueryData(workspaceQueryKeys.project, settled);
+    const api = projectApi({
       load: vi.fn(async () => settled),
       openFolder: vi.fn(async () => {
         throw new Error('not expected');
@@ -71,7 +71,7 @@ describe('workspace session restore', () => {
               shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 240 },
             }),
           }),
-          libraryLifecycle(),
+          projectLifecycle(),
         );
         sidebarFrames.push(controller.shell.sidebarOpen);
         return controller;
@@ -94,12 +94,12 @@ describe('workspace session restore', () => {
     // reader's click has landed, so what the session remembered about it comes
     // back with it.
     const queryClient = createTestQueryClient();
-    const opened = librarySnapshot({
+    const opened = projectRegistrySnapshot({
       ...settled,
       activeFolder: { name: 'notes', path: member.path },
     });
-    queryClient.setQueryData(workspaceQueryKeys.library, opened);
-    const api = libraryApi({
+    queryClient.setQueryData(workspaceQueryKeys.project, opened);
+    const api = projectApi({
       load: vi.fn(async () => opened),
       openFolder: vi.fn(async () => {
         throw new Error('not expected');
@@ -111,7 +111,7 @@ describe('workspace session restore', () => {
         useWorkspaceSession(
           api,
           sessionPersistence({ load: async () => savedSession(member.path, remembered) }),
-          libraryLifecycle(),
+          projectLifecycle(),
         ),
       { wrapper: queryWrapper(queryClient) },
     );
@@ -128,12 +128,12 @@ describe('workspace session restore', () => {
     expect(hook.result.current.shell.sidebarOpen).toBe(false);
   });
 
-  it('drops a persisted folder that is no longer a library member', async () => {
+  it('drops a persisted folder that is no longer a project member', async () => {
     const queryClient = createTestQueryClient();
-    const forgotten = librarySnapshot({ ...settled, members: [] });
-    queryClient.setQueryData(workspaceQueryKeys.library, forgotten);
+    const forgotten = projectRegistrySnapshot({ ...settled, projects: [] });
+    queryClient.setQueryData(workspaceQueryKeys.project, forgotten);
     const save = vi.fn(async (_snapshot: WorkspaceSessionSnapshot) => undefined);
-    const api = libraryApi({
+    const api = projectApi({
       load: vi.fn(async () => forgotten),
       openFolder: vi.fn(async () => {
         throw new Error('not expected');
@@ -154,7 +154,7 @@ describe('workspace session restore', () => {
             }),
             save,
           }),
-          libraryLifecycle(),
+          projectLifecycle(),
         ),
       { wrapper: queryWrapper(queryClient) },
     );
@@ -173,13 +173,13 @@ describe('workspace session restore', () => {
 
   it('does not let a late open replace a newer explicit folder selection', async () => {
     const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.library, settled);
-    let finish: ((value: LibrarySnapshot) => void) | undefined;
-    const api = libraryApi({
+    queryClient.setQueryData(workspaceQueryKeys.project, settled);
+    let finish: ((value: ProjectRegistrySnapshot) => void) | undefined;
+    const api = projectApi({
       load: vi.fn(async () => settled),
       openFolder: vi.fn(
         () =>
-          new Promise<LibrarySnapshot>((resolve) => {
+          new Promise<ProjectRegistrySnapshot>((resolve) => {
             finish = resolve;
           }),
       ),
@@ -192,37 +192,39 @@ describe('workspace session restore', () => {
         useWorkspaceSession(
           api,
           sessionPersistence(),
-          libraryLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
+          projectLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
         ),
       { wrapper: queryWrapper(queryClient) },
     );
     await waitFor(() => expect(api.openFolder).toHaveBeenCalledOnce());
-    const writing = librarySnapshot({
+    const writing = projectRegistrySnapshot({
       ...settled,
-      activeFolder: { name: 'writing', path: '/library/writing' },
-      members: [...settled.members, { ...member, path: '/library/writing' }],
+      activeFolder: { name: 'writing', path: '/project/writing' },
+      projects: [...settled.projects, { ...member, path: '/project/writing' }],
     });
-    act(() => queryClient.setQueryData(workspaceQueryKeys.library, writing));
-    finish?.(librarySnapshot({ ...settled, activeFolder: { name: 'notes', path: member.path } }));
+    act(() => queryClient.setQueryData(workspaceQueryKeys.project, writing));
+    finish?.(
+      projectRegistrySnapshot({ ...settled, activeFolder: { name: 'notes', path: member.path } }),
+    );
 
     await waitFor(() =>
-      expect(queryClient.getQueryData(workspaceQueryKeys.library)).toEqual(writing),
+      expect(queryClient.getQueryData(workspaceQueryKeys.project)).toEqual(writing),
     );
   });
 });
 
 describe('initial folder landing', () => {
-  const writing = { ...member, path: '/library/writing' };
-  const bothMembers = librarySnapshot({ ...settled, members: [member, writing] });
+  const writing = { ...member, path: '/project/writing' };
+  const bothMembers = projectRegistrySnapshot({ ...settled, projects: [member, writing] });
 
   it('opens the folder the window was created for', async () => {
     const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.library, settled);
-    const opened = librarySnapshot({
+    queryClient.setQueryData(workspaceQueryKeys.project, settled);
+    const opened = projectRegistrySnapshot({
       ...settled,
       activeFolder: { name: 'notes', path: member.path },
     });
-    const api = libraryApi({
+    const api = projectApi({
       load: vi.fn(async () => settled),
       openFolder: vi.fn(async () => opened),
     });
@@ -232,7 +234,7 @@ describe('initial folder landing', () => {
         useWorkspaceSession(
           api,
           sessionPersistence(),
-          libraryLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
+          projectLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
         ),
       { wrapper: queryWrapper(queryClient) },
     );
@@ -241,14 +243,14 @@ describe('initial folder landing', () => {
       expect(api.openFolder).toHaveBeenCalledWith(member.path, expect.any(AbortSignal)),
     );
     await waitFor(() =>
-      expect(queryClient.getQueryData(workspaceQueryKeys.library)).toEqual(opened),
+      expect(queryClient.getQueryData(workspaceQueryKeys.project)).toEqual(opened),
     );
   });
 
   it('leaves a window nobody named a folder for where it already was', async () => {
     const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.library, settled);
-    const api = libraryApi({
+    queryClient.setQueryData(workspaceQueryKeys.project, settled);
+    const api = projectApi({
       load: vi.fn(async () => settled),
       openFolder: vi.fn(async () => {
         throw new Error('not expected');
@@ -256,7 +258,7 @@ describe('initial folder landing', () => {
     });
 
     const hook = renderHook(
-      () => useWorkspaceSession(api, sessionPersistence(), libraryLifecycle()),
+      () => useWorkspaceSession(api, sessionPersistence(), projectLifecycle()),
       { wrapper: queryWrapper(queryClient) },
     );
 
@@ -268,12 +270,12 @@ describe('initial folder landing', () => {
 
   it('opens the folder the window was created for, not the saved session', async () => {
     const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.library, bothMembers);
-    const opened = librarySnapshot({
+    queryClient.setQueryData(workspaceQueryKeys.project, bothMembers);
+    const opened = projectRegistrySnapshot({
       ...bothMembers,
       activeFolder: { name: 'notes', path: member.path },
     });
-    const api = libraryApi({
+    const api = projectApi({
       load: vi.fn(async () => bothMembers),
       openFolder: vi.fn(async () => opened),
     });
@@ -283,7 +285,7 @@ describe('initial folder landing', () => {
         useWorkspaceSession(
           api,
           sessionPersistence({ load: async () => savedSession(writing.path) }),
-          libraryLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
+          projectLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
         ),
       { wrapper: queryWrapper(queryClient) },
     );
@@ -296,8 +298,8 @@ describe('initial folder landing', () => {
 
   it('shows nothing until the desktop has answered, then the welcome screen', async () => {
     const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.library, bothMembers);
-    const api = libraryApi({
+    queryClient.setQueryData(workspaceQueryKeys.project, bothMembers);
+    const api = projectApi({
       load: vi.fn(async () => bothMembers),
       openFolder: vi.fn(async () => {
         throw new Error('not expected');
@@ -316,7 +318,7 @@ describe('initial folder landing', () => {
         useWorkspaceSession(
           api,
           sessionPersistence({ load: async () => savedSession(writing.path) }),
-          libraryLifecycle({ claimInitialFolder }),
+          projectLifecycle({ claimInitialFolder }),
         ),
       { wrapper: queryWrapper(queryClient) },
     );

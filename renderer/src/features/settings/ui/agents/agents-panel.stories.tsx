@@ -63,13 +63,43 @@ const signedIn: AccountPort = {
   startSignIn: async () => ({ flowId: 'flow', url: 'https://accounts.example/sign-in' }),
 };
 
-function Harness() {
+/** Nobody signed in, so the bundled agent cannot run a turn yet: the row
+ *  recedes and says what would clear it, and the account row above offers the
+ *  same sign-in in the same shape. */
+const signedOut: AccountPort = {
+  ...signedIn,
+  load: async () => ({ avatarUrl: null, displayName: null, email: null, signedIn: false }),
+};
+
+function accountRequiredPort(): AgentRuntimePort {
+  const blocked: AgentRuntime = {
+    ...stashbase,
+    preparation: {
+      kind: 'failed',
+      failure: {
+        note: 'Sign in to StashBase to use the included weekly Agent allowance.',
+        refusal: 'account-required',
+        stage: 'authenticate',
+      },
+    },
+  };
+  const runtimes = [codex, { ...claude, installed: false, ownership: null }, blocked];
+  return {
+    ...fakePort(),
+    getAllowance: async () => {
+      throw new Error('unauthorized');
+    },
+    listAgents: async () => catalog(runtimes),
+  };
+}
+
+function Harness({ account, port }: { account: AccountPort; port: AgentRuntimePort }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={queryClient}>
       <AgentRuntimesPanel
-        accountApi={signedIn}
-        agentRuntimeApi={fakePort()}
+        accountApi={account}
+        agentRuntimeApi={port}
         onOpenExternal={() => undefined}
       />
     </QueryClientProvider>
@@ -83,6 +113,8 @@ const meta = {
 } satisfies Meta<typeof Harness>;
 
 export default meta;
-type Story = StoryObj;
+type Story = StoryObj<typeof Harness>;
 
-export const Ready: Story = {};
+export const Ready: Story = { args: { account: signedIn, port: fakePort() } };
+
+export const NeedsSignIn: Story = { args: { account: signedOut, port: accountRequiredPort() } };

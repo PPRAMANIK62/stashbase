@@ -1,3 +1,5 @@
+import { extractorManifestSchema, extractorDownloadUrl } from '../shared/extractor-runtime.ts';
+import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -263,39 +265,21 @@ function sidecarIssue(file, label) {
 
 function assertSidecarsForPlatform() {
   const daemon = sidecarCandidates('stashbase-daemon').find((candidate) => fs.existsSync(candidate));
-  const extract = sidecarCandidates('stashbase-extract').find((candidate) => fs.existsSync(candidate));
-  const requireExtract = process.env.STASHBASE_REQUIRE_EXTRACT === '1' || process.env.STASHBASE_BUILD_EXTRACT === '1';
-  const issues = [
-    daemon ? sidecarIssue(daemon, 'daemon') : null,
-    extract ? sidecarIssue(extract, 'extractor') : null,
-  ].filter(Boolean);
-
-  if (daemon && (extract || !requireExtract) && issues.length === 0) {
-    if (!extract) {
-      console.warn(
-        `[package] optional PDF/OCR extractor sidecar not found; packaged local PDF/OCR extraction will be disabled.\n` +
-          `          To include it, run with STASHBASE_BUILD_EXTRACT=1.`,
-      );
-    }
-    return;
+  if (!daemon || sidecarIssue(daemon, 'daemon')) {
+    throw new Error('A valid target-platform Python index daemon is required; run pnpm build:python-sidecar.');
   }
-
-  const expected = sidecarCandidates('stashbase-daemon')[0];
-  const extractExpected = sidecarCandidates('stashbase-extract')[0];
-  const hint = !hostMatchesTarget()
-    ? `Build the ${targetRuntime().label} Python sidecars on ${targetRuntime().label} before running \`pnpm dist:${platform}\` from another OS.`
-    : requireExtract
-      ? 'Run `STASHBASE_BUILD_EXTRACT=1 pnpm build:python-sidecar` before packaging.'
-      : 'Run `pnpm build:python-sidecar` before packaging.';
-  const missing = [
-    daemon ? null : path.relative(root, expected),
-    requireExtract && !extract ? path.relative(root, extractExpected) : null,
-  ].filter(Boolean);
-  throw new Error(
-    `${platform} packaging requires valid Python sidecar${missing.length + issues.length === 1 ? '' : 's'}:\n` +
-      [...missing.map((item) => `missing ${item}`), ...issues].map((item) => `  - ${item}`).join('\n') +
-      `\n${hint}`,
-  );
+  const manifestPath = path.join(root, 'python', 'sidecar.nosync', 'extractor-runtime.json');
+  const manifest = extractorManifestSchema.parse(JSON.parse(fs.readFileSync(manifestPath, 'utf8')));
+  const runtime = targetRuntime();
+  if (manifest.platform !== runtime.nodePlatform || manifest.arch !== runtime.arch || manifest.version !== pkg.version) {
+    throw new Error('Extractor component manifest does not match this app build');
+  }
+  extractorDownloadUrl(manifest);
+  const archive = path.join(root, 'release.nosync', manifest.asset);
+  const bytes = fs.readFileSync(archive);
+  if (bytes.length !== manifest.sizeBytes || crypto.createHash('sha256').update(bytes).digest('hex') !== manifest.sha256) {
+    throw new Error('Extractor component archive does not match its embedded manifest');
+  }
 }
 
 function transcriptionRoot() {
@@ -461,7 +445,10 @@ if (!hostMatchesTarget()) {
   runScript('build');
 } else {
   runScript('build');
-  if (!skipSidecarBuild) runScript('build:python-sidecar');
+  if (!skipSidecarBuild) {
+    runScript('build:python-extract-sidecar');
+    runScript('build:extractor-component');
+  }
   if (!skipTranscriptionBuild) runScript('build:transcription-sidecar');
   assertSidecarsForPlatform();
   assertTranscriptionToolsForPlatform();

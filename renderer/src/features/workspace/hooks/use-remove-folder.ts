@@ -1,7 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import type { LibraryPort, LibraryLifecyclePort } from '@/features/workspace/application/ports';
+import type {
+  ProjectRegistryPort,
+  ProjectLifecyclePort,
+} from '@/features/workspace/application/ports';
 import {
   workspaceQueryKeys,
   retireWorkspaceQueries,
@@ -9,7 +12,7 @@ import {
 import { removeFolder } from '@/features/workspace/application/remove-folder';
 import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
-export function useRemoveFolder(api: LibraryPort, lifecycle: LibraryLifecyclePort) {
+export function useRemoveFolder(api: ProjectRegistryPort, lifecycle: ProjectLifecyclePort) {
   const queryClient = useQueryClient();
   const [target, setTarget] = useState<string | null>(null);
   const signalFor = useRequestSignals<'remove'>();
@@ -19,7 +22,7 @@ export function useRemoveFolder(api: LibraryPort, lifecycle: LibraryLifecyclePor
     onSuccess(result, variables) {
       if (result.status !== 'removed') return;
       void retireWorkspaceQueries(queryClient, variables.folderPath);
-      queryClient.setQueryData(workspaceQueryKeys.library, result.snapshot);
+      queryClient.setQueryData(workspaceQueryKeys.project, result.snapshot);
       setTarget(null);
     },
   });

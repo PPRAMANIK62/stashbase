@@ -19,7 +19,7 @@ function harness(initial?: Partial<AgentSessionState>) {
     ...createAgentSessionState({
       agent: 'codex',
       id: 'chat-1',
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
     }),
     ...initial,
   };
@@ -130,21 +130,21 @@ describe('applyAgentSessionEvent', () => {
     const test = harness(live);
     test.apply({
       id: 'tool-1',
-      input: { file_path: '/library/Research/notes.md' },
+      input: { file_path: '/project/Research/notes.md' },
       kind: 'tool-started',
       name: 'Write',
     });
 
     test.apply({ content: 'ok', id: 'tool-1', isError: false, kind: 'tool-finished' });
 
-    expect(test.context.notifyFilesChanged).toHaveBeenCalledWith(['/library/Research/notes.md']);
+    expect(test.context.notifyFilesChanged).toHaveBeenCalledWith(['/project/Research/notes.md']);
   });
 
   it('reports nothing for a tool that failed', () => {
     const test = harness(live);
     test.apply({
       id: 'tool-1',
-      input: { file_path: '/library/Research/notes.md' },
+      input: { file_path: '/project/Research/notes.md' },
       kind: 'tool-started',
       name: 'Write',
     });
@@ -194,11 +194,11 @@ describe('applyAgentSessionEvent', () => {
     expect(exited.state().connection).toEqual({ kind: 'closed', message: 'Session closed.' });
 
     const retired = harness(live);
-    retired.apply({ folderPath: '/library/Archive', kind: 'scope-retired' });
+    retired.apply({ folderPath: '/project/Archive', kind: 'scope-retired' });
     expect(retired.transport.expectClose).toHaveBeenCalledOnce();
     expect(retired.state()).toMatchObject({
       connection: { kind: 'retired' },
-      scope: { kind: 'folder', path: '/library/Archive' },
+      scope: { kind: 'folder', path: '/project/Archive' },
     });
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Folder reconcile for one explicit Library Folder.
+ * Folder reconcile for one explicit project folder.
  *
  * StashBase enumerates admissible visible sources and prepares their complete
  * text projections. MFS owns projection hashing, unchanged detection,

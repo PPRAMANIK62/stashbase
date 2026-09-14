@@ -2,15 +2,8 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import {
-  ChoiceList,
-  ChoiceRow,
-  Disclosure,
-  SettingsGroup,
-  SettingsList,
-  SettingsPane,
-  SettingsRow,
-} from './rows';
+import { ChoiceList, ChoiceRow } from './choice-rows';
+import { Disclosure, SettingsGroup, SettingsList, SettingsPane, SettingsRow } from './rows';
 
 afterEach(cleanup);
 
@@ -18,7 +11,7 @@ describe('settings row grammar', () => {
   it('titles a group so the section is reachable by its own heading', () => {
     render(
       <SettingsPane lede="What this pane is for." title="General">
-        <SettingsGroup count="1 of 3 installed" title="Knowledge capture">
+        <SettingsGroup count="1 of 3 installed" title="Preferences">
           <SettingsList>
             <SettingsRow title="A row" />
           </SettingsList>
@@ -26,7 +19,7 @@ describe('settings row grammar', () => {
       </SettingsPane>,
     );
 
-    const group = screen.getByRole('region', { name: /Knowledge capture/u });
+    const group = screen.getByRole('region', { name: /Preferences/u });
     expect(within(group).getByText('1 of 3 installed')).not.toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'General' })).not.toBeNull();
     expect(screen.getByText('What this pane is for.')).not.toBeNull();

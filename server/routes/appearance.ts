@@ -4,18 +4,9 @@ import type express from 'express';
 import {
   getAppearancePreferences,
   setAppearancePreferences,
-  type AppearanceScale,
-  type AppearanceTheme,
 } from '../app-config.ts';
 import { sendError } from '../http.ts';
-
-function validTheme(value: unknown): value is AppearanceTheme {
-  return value === 'system' || value === 'light' || value === 'dark';
-}
-
-function validScale(value: unknown): value is AppearanceScale {
-  return value === 'small' || value === 'default' || value === 'large';
-}
+import { appearancePreferencesRequestSchema } from '../../shared/protocols/http/appearance.ts';
 
 export function mount(app: express.Express): void {
   app.get('/api/appearance', (_req, res) => {
@@ -23,18 +14,12 @@ export function mount(app: express.Express): void {
   });
 
   app.put('/api/appearance', (req, res) => {
-    const body = req.body ?? {};
-    if (body.theme !== undefined && !validTheme(body.theme)) {
-      return res.status(400).json({ error: 'theme must be system, light, or dark' });
-    }
-    if (body.uiScale !== undefined && !validScale(body.uiScale)) {
-      return res.status(400).json({ error: 'uiScale must be small, default, or large' });
-    }
-    if (body.readingTextSize !== undefined && !validScale(body.readingTextSize)) {
-      return res.status(400).json({ error: 'readingTextSize must be small, default, or large' });
+    const request = appearancePreferencesRequestSchema.safeParse(req.body);
+    if (!request.success) {
+      return res.status(400).json({ error: 'invalid appearance preferences' });
     }
     try {
-      res.json(setAppearancePreferences(body));
+      res.json(setAppearancePreferences(request.data));
     } catch (err: unknown) {
       sendError(res, err);
     }

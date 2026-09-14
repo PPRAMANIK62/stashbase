@@ -100,7 +100,7 @@ export type RecoveryDraftListing =
   | { available: false; reason: 'no-key' }
   | { available: true; drafts: RecoveryDraftSummary[] };
 
-/** The journal of unsaved text the server keeps outside every library folder.
+/** The journal of unsaved text the server keeps outside every project folder.
  *  Best-effort protection against an unclean exit: a write is never a save. */
 export interface RecoveryDraftPort {
   discard(source: SourceReference, signal: AbortSignal): Promise<void>;

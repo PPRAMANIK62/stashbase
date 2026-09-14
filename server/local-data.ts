@@ -50,7 +50,7 @@ export function fileOrderDir(): string {
   return path.join(appDataRoot(), 'file-order');
 }
 
-/** Encrypted crash-recovery drafts. Lives outside every library folder so
+/** Encrypted crash-recovery drafts. Lives outside every project folder so
  *  sync, backups, listing, and indexing never see it. */
 export function recoveryJournalDir(): string {
   return path.join(appDataRoot(), 'recovery-journal');

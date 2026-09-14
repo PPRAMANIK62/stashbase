@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -164,4 +164,37 @@ describe('bug report review form', () => {
     await waitFor(() => expect(closeWindow).toHaveBeenCalledOnce());
     expect(port.calls).not.toContain('discard');
   });
+});
+
+it('keeps edits made during blur-save and locks the final approval save', async () => {
+  const { port } = mount();
+  const updates = port.updateDescription;
+  const replies: (() => void)[] = [];
+  port.updateDescription = async (description) => {
+    const draft = await updates(description);
+    await new Promise<void>((resolve) => {
+      replies.push(resolve);
+    });
+    return draft;
+  };
+  const user = userEvent.setup();
+  const problem = await problemField();
+  await user.type(problem, 'Original');
+  await user.click(screen.getByRole('button', { name: 'Prepare Report' }));
+  await waitFor(() => expect(replies).toHaveLength(1));
+  // The blur save preceded Prepare on the command queue; further edits must
+  // survive that old response and join the final save before approval.
+  await user.type(problem, ' corrected');
+  const first = replies[0];
+  if (!first) throw new Error('blur save did not start');
+  await act(async () => first());
+  await waitFor(() => expect(replies).toHaveLength(2));
+  expect(problem).toHaveProperty('disabled', true);
+  expect(problem).toHaveProperty('value', 'Original corrected');
+  expect(port.calls).not.toContain('prepare');
+  const second = replies[1];
+  if (!second) throw new Error('approval save did not start');
+  await act(async () => second());
+  expect(await screen.findByRole('heading', { name: 'Report ready' })).not.toBeNull();
+  expect(port.draft.description.problem).toBe('Original corrected');
 });

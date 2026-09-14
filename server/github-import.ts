@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { getFolderHome } from './folder.ts';
+import { getFolderHome, registerProjectFolderAsync } from './folder.ts';
 import { terminateExtractorTree } from './extractor-process.ts';
 import { logger } from './log.ts';
 import { validateFolderName } from '../shared/folder-name.ts';
@@ -15,6 +15,7 @@ import {
 
 const log = logger('github-import');
 const GIT_OUTPUT_LIMIT_BYTES = 64 * 1024;
+const GIT_PROBE_TIMEOUT_MS = 5000;
 
 export type GitHubImportErrorCode =
   | 'INVALID_GITHUB_URL'
@@ -71,36 +72,30 @@ export function detectGitLfs(gitattributesContent: string): boolean {
 interface GitRunResult {
   exitCode: number;
   stderr: string;
-  stdout: string;
 }
 
 interface GitRunOptions {
-  cwd?: string;
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
 }
 
 export interface GitHubImportDeps {
   folderHome(): string;
-  isGitAvailable(): Promise<boolean>;
+  isGitAvailable(signal: AbortSignal): Promise<boolean>;
   runGit(args: string[], options: GitRunOptions): Promise<GitRunResult>;
-  publish(stagedRepository: string, target: string, signal: AbortSignal): Promise<void>;
+  register(target: string, signal: AbortSignal): Promise<void>;
+  publish(stagedRepository: string, target: string, signal: AbortSignal, commit: () => Promise<void>): Promise<void>;
 }
 
-async function defaultIsGitAvailable(): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    try {
-      const proc = spawn('git', ['--version'], {
-        stdio: 'ignore',
-        shell: false,
-        windowsHide: true,
-      });
-      proc.once('error', () => resolve(false));
-      proc.once('close', (code) => resolve(code === 0));
-    } catch {
-      resolve(false);
-    }
-  });
+async function defaultIsGitAvailable(signal: AbortSignal): Promise<boolean> {
+  try {
+    const result = await defaultRunGit(['--version'], {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(GIT_PROBE_TIMEOUT_MS)]),
+    });
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
 }
 
 function appendBounded(current: string, chunk: Buffer | string): string {
@@ -123,7 +118,6 @@ async function defaultRunGit(args: string[], options: GitRunOptions): Promise<Gi
         if (key.startsWith('GIT_')) delete env[key];
       }
       proc = spawn('git', args, {
-        cwd: options.cwd,
         env: {
           ...env,
           ...options.env,
@@ -131,7 +125,7 @@ async function defaultRunGit(args: string[], options: GitRunOptions): Promise<Gi
           GIT_ASKPASS: '',
         },
         detached: process.platform !== 'win32',
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'ignore', 'pipe'],
         shell: false,
         windowsHide: true,
       });
@@ -140,11 +134,7 @@ async function defaultRunGit(args: string[], options: GitRunOptions): Promise<Gi
       return;
     }
 
-    let stdout = '';
     let stderr = '';
-    proc.stdout?.on('data', (chunk: Buffer | string) => {
-      stdout = appendBounded(stdout, chunk);
-    });
     proc.stderr?.on('data', (chunk: Buffer | string) => {
       stderr = appendBounded(stderr, chunk);
     });
@@ -161,43 +151,118 @@ async function defaultRunGit(args: string[], options: GitRunOptions): Promise<Gi
     });
     proc.once('close', (code) => {
       retireAbortListener();
-      resolve({ exitCode: code ?? 1, stderr, stdout });
+      if (options.signal?.aborted) reject(abortError());
+      else resolve({ exitCode: code ?? 1, stderr });
     });
   });
 }
 
-/**
- * Reserve the final directory without clobbering a concurrent destination,
- * then move the already-validated repository into that owned reservation.
- */
+interface PublishedEntry {
+  path: string;
+  stat: fs.BigIntStats;
+  children: PublishedEntry[];
+}
+
+function sameIdentity(a: fs.BigIntStats, b: fs.BigIntStats): boolean {
+  return a.ino !== 0n && a.dev === b.dev && a.ino === b.ino
+    && a.birthtimeNs === b.birthtimeNs;
+}
+
+/** Publish without replacing entries, then roll back only unchanged owned items. */
 export async function publishStagedRepository(
   stagedRepository: string,
   target: string,
   signal: AbortSignal,
+  commit?: () => Promise<void>,
 ): Promise<void> {
-  throwIfCancelled(signal);
-  await fs.promises.mkdir(target, { recursive: false });
+  let root: PublishedEntry | undefined;
+  const ancestors: PublishedEntry[] = [];
+
+  async function publish(source: string, destination: string, parent?: PublishedEntry): Promise<void> {
+    throwIfCancelled(signal);
+    // Never continue into a directory that was replaced while we awaited I/O.
+    for (const ancestor of ancestors) {
+      const current = await fs.promises.lstat(ancestor.path, { bigint: true });
+      if (!current.isDirectory() || !sameIdentity(ancestor.stat, current)) {
+        throw destinationExists(path.basename(target));
+      }
+    }
+    const sourceStat = await fs.promises.lstat(source, { bigint: true });
+    let publishedStat: fs.BigIntStats;
+    if (sourceStat.isDirectory()) {
+      await fs.promises.mkdir(destination);
+      publishedStat = await fs.promises.lstat(destination, { bigint: true });
+    } else if (sourceStat.isSymbolicLink()) {
+      const link = await fs.promises.readlink(source);
+      const isDirectory = await fs.promises.stat(source).then((stat) => stat.isDirectory(), () => false);
+      await fs.promises.symlink(link, destination, isDirectory ? 'dir' : 'file');
+      publishedStat = await fs.promises.lstat(destination, { bigint: true });
+    } else {
+      try {
+        // Staging and destination share a volume. A hard link atomically exposes
+        // complete bytes and fails on collision; unlinking staging keeps Git's
+        // ordinary files and executable modes intact.
+        await fs.promises.link(source, destination);
+        publishedStat = sourceStat;
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (!['EXDEV', 'EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP', 'EOPNOTSUPP'].includes(code ?? '')) throw err;
+        // FAT/exFAT and some network volumes cannot hard-link. Exclusive copy
+        // retains the same no-replace contract on those filesystems.
+        await fs.promises.copyFile(source, destination, fs.constants.COPYFILE_EXCL);
+        publishedStat = await fs.promises.lstat(destination, { bigint: true });
+      }
+    }
+    const entry: PublishedEntry = { path: destination, stat: publishedStat, children: [] };
+    if (parent) parent.children.push(entry);
+    else root = entry;
+    throwIfCancelled(signal);
+    if (sourceStat.isDirectory()) {
+      ancestors.push(entry);
+      try {
+        for (const name of await fs.promises.readdir(source)) {
+          await publish(path.join(source, name), path.join(destination, name), entry);
+        }
+      } finally {
+        ancestors.pop();
+      }
+    }
+  }
+
   try {
-    const entries = await fs.promises.readdir(stagedRepository);
-    for (const entry of entries) {
-      throwIfCancelled(signal);
-      await fs.promises.rename(path.join(stagedRepository, entry), path.join(target, entry));
-    }
-  } catch (err: unknown) {
-    try {
-      await fs.promises.rm(target, { recursive: true, force: true });
-    } catch {
-      // The original failure remains authoritative; startup never assumes an
-      // ambiguously retained final directory is safe to remove.
-    }
+    await publish(stagedRepository, target);
+    // Persist membership only after publication and cancellation checks. A
+    // failed commit still owns this ledger and can safely roll publication back.
+    throwIfCancelled(signal);
+    await commit?.();
+  } catch (err) {
+    if (root) await rollbackPublication(root);
     throw err;
   }
+}
+
+async function rollbackPublication(entry: PublishedEntry): Promise<void> {
+  try {
+    const current = await fs.promises.lstat(entry.path, { bigint: true });
+    if (!sameIdentity(entry.stat, current)) return;
+    if (entry.stat.isDirectory()) {
+      for (let i = entry.children.length - 1; i >= 0; i--) {
+        await rollbackPublication(entry.children[i]);
+      }
+      // Non-recursive removal preserves any new or modified user content.
+      await fs.promises.rmdir(entry.path);
+    } else if (current.size === entry.stat.size && current.mtimeNs === entry.stat.mtimeNs
+      && current.mode === entry.stat.mode) {
+      await fs.promises.unlink(entry.path);
+    }
+  } catch { /* Keep ambiguous or changed paths; the import failure is authoritative. */ }
 }
 
 export const productionGitHubImportDeps: GitHubImportDeps = {
   folderHome: getFolderHome,
   isGitAvailable: defaultIsGitAvailable,
   runGit: defaultRunGit,
+  register: (target, signal) => registerProjectFolderAsync(target, { signal }),
   publish: publishStagedRepository,
 };
 
@@ -283,7 +348,9 @@ async function runImport(
   const target = path.join(folderHome, rawFolderName);
   if (await pathExists(target)) throw destinationExists(rawFolderName);
 
-  if (!(await deps.isGitAvailable())) {
+  const gitAvailable = await deps.isGitAvailable(signal);
+  throwIfCancelled(signal);
+  if (!gitAvailable) {
     throw new GitHubImportError(
       'Git is not available. Install Git or clone externally and use Open Folder….',
       'GIT_NOT_AVAILABLE',
@@ -366,7 +433,7 @@ async function runImport(
     throwIfCancelled(signal);
     if (await pathExists(target)) throw destinationExists(rawFolderName);
     try {
-      await deps.publish(stagedRepository, target, signal);
+      await deps.publish(stagedRepository, target, signal, () => deps.register(target, signal));
     } catch (err: unknown) {
       if (signal.aborted || isAbortError(err)) throw cancelled();
       if (isDestinationCollision(err)) throw destinationExists(rawFolderName);

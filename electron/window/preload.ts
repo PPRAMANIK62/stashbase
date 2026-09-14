@@ -1,12 +1,9 @@
 import {
   WINDOW_CONTEXT_RELEASE_READY_CHANNEL,
   WINDOW_PREPARE_CONTEXT_RELEASE_CHANNEL,
-  WINDOW_SAFE_RELOAD_CHANNEL,
   type WindowContextReleaseReason,
-  type WindowLifecycleResponse,
   windowContextReleaseReadySchema,
   windowContextReleaseRequestSchema,
-  windowLifecycleResponseSchema,
 } from '../../shared/protocols/electron/window-lifecycle.ts';
 
 export interface IpcRenderer {
@@ -18,7 +15,6 @@ export interface WindowLifecyclePreload {
   onPrepareContextRelease(
     handler: (reason: WindowContextReleaseReason) => boolean | Promise<boolean>,
   ): () => void;
-  reload(): Promise<WindowLifecycleResponse>;
 }
 
 export function createWindowLifecyclePreload(ipcRenderer: IpcRenderer): WindowLifecyclePreload {
@@ -51,16 +47,6 @@ export function createWindowLifecyclePreload(ipcRenderer: IpcRenderer): WindowLi
     onPrepareContextRelease(handler) {
       handlers.add(handler);
       return () => handlers.delete(handler);
-    },
-    async reload() {
-      try {
-        const response = windowLifecycleResponseSchema.safeParse(
-          await ipcRenderer.invoke(WINDOW_SAFE_RELOAD_CHANNEL),
-        );
-        return response.success ? response.data : { ok: true, reloaded: false };
-      } catch {
-        return { ok: true, reloaded: false };
-      }
     },
   };
   return Object.freeze(preload);

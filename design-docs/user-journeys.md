@@ -9,110 +9,93 @@ A journey records the primary flow and the results users must be able to
 observe. Shared ownership, trust, and lifecycle rules stay in area designs and
 engineering contracts rather than being copied into every journey.
 
-J01 Onboarding and J10 Core Loop are the two product-level critical journeys.
-J01 proves that a new user can understand the product and reach first value;
-J10 proves that the resulting environment supports durable repeated work. J12
-Build Wiki is the default folder activation path, while J11 Conversation
-to Project is the Chat-first branch between them. The
-other journeys own the capabilities and recovery paths they compose.
+The primary sequence is **enter a project → discuss ideas and brainstorm →
+write → refine**. Project entry, conversation, drafting, and ordinary editing
+and review are implemented. Document-specific diff for fine revision is the
+remaining feature; existing file diffs and save-conflict comparisons should
+not be described as that completed experience.
+
+J01 owns onboarding and first value; J10 owns the recurring project workflow.
+A project can be empty and a discussion can be useful without a file write.
+Search, preparation, Build Wiki (J12), and Gallery (J13) support the workflow
+when useful. They are not required before brainstorming. J11 retains the
+secondary conversation-to-project boundary and its unavailable in-app entry;
+it is not the primary activation route. Journey IDs are preserved for existing
+links, while evidence must be reassessed when a flow changes.
 
 ## J01: Complete onboarding and reach first value
 
 ### Outcome
 
-A first-time user understands StashBase's local-file model, authorizes useful
-context, and reaches a concrete first result without completing unnecessary
-setup or being introduced to an optional capability first. On the
-next launch, completed choices and authorized content remain recognizable
-without replaying onboarding.
+A first-time user understands that StashBase is an IDE for writing, enters an
+ordinary local project, and can begin a useful discussion with an Agent.
+Existing material is optional. Local work remains available while an Agent
+needs its own setup, and returning users retain their projects and settings.
 
 ### Entry State
 
-StashBase starts in a first-use window. The default folder home may be pristine,
-may already contain user content, or the user may want to add an existing
-folder. No account, configuration for search by meaning, active folder, or
-Agent runtime is assumed.
+The app opens a welcome window. The user may have an existing folder, want an
+empty project, or choose a GitHub/Gallery copy. No account, Agent readiness,
+reference file, wiki, or meaning-based index is assumed.
 
 ### Primary Flow
 
-1. **Orient.** Launch into the welcome screen and understand that StashBase
-   works with ordinary local folders, prepares them as Agent context, and keeps
-   source files user-owned.
-2. **Acquire useful context.** When the default folder home is genuinely new
-   and empty, open the seeded **👋 Start Here** folder and read its Welcome,
-   add an existing folder, or take a copy from the Gallery. Once a folder is
-   open its Chat can answer from the guides that folder contains. An existing
-   folder home is never seeded or modified by onboarding.
-3. **Enter the workspace.** Select a library folder and begin browsing before
-   preparation or indexing completes. A fresh window does not silently choose
-   a folder on the user's behalf.
-4. **Reach first value.** Open a real source and complete at least one useful
-   action: inspect the document, retrieve source evidence, or explicitly set up
-   a scoped Agent Chat. The next useful action stays visible without requiring
-   every optional capability first. No setup step stands in this path, and
-   nothing offers one: search by meaning is not introduced until a person
-   turns it on under Settings.
-5. **Return.** Close and relaunch StashBase. The library, durable settings, and
-   completed setup remain available; the handled onboarding choice is not
-   replayed. The window lands on the welcome screen again rather than in the
-   last folder, which is one click away in **Recent** and comes back with the
-   tabs and tree state it had. The sidebar is collapsed there, as it is in
-   any window arriving at the welcome screen. A
-   packaged build may quietly check the stable release channel when the saved
-   default-on preference permits it. One deliberate Update action may then
-   download, install, and relaunch after open edits are saved; Linux package
-   installs may request system administrator approval.
+1. Open an existing folder, create a project, or import one from GitHub or
+   Gallery. On a pristine default folder home the seeded Start Here project
+   is another optional entry, not a forced tour.
+2. Enter the project without waiting for background preparation or indexing.
+   Chat is available before any document is opened.
+3. Use the selected Agent. OpenQuill may need account sign-in; a bring-your-own
+   runtime may need its explicit installation or provider authentication.
+   The composer retains the idea while that stage is resolved.
+4. Send an idea, question, or request and continue the discussion. Consult
+   project material or start writing when useful. Neither a search nor a
+   document write is required to establish first value.
+5. On a later launch, choose the project from Recent and continue its work.
+   A fresh window starts at Welcome rather than silently reopening a folder.
 
 ### Required Observable Results
 
-- Before granting access, the user can distinguish Sources,
-  StashBase-derived data, and optional hosted processing well enough to make
-  the next decision deliberately.
-- The shortest path to first value is authorizing or selecting useful content,
-  not creating an account, installing an Agent, or waiting for all background
-  work.
-- Local browsing, editing, preview, and keyword search do not depend on
-  online authentication, readiness for search by meaning, transcription, or
-  an Agent runtime.
-- The seeded Start Here content appears only for a pristine default folder
-  home, gives people a concise Welcome, makes detailed grounded product context
-  available to Agents, remains an ordinary user-owned folder, is not
-  overwritten by app updates, and is never recreated after deletion.
-- A fresh window does not silently select another folder, send a prompt,
-  install an Agent runtime, or open account sign-in.
-- No surface offers search by meaning. The sidebar's search panel is keyword
-  search alone until an embedding key is added under Settings, and no notice,
-  tab, or explanation names the mode before then.
-- Leaving search by meaning off costs no local capability and does not
-  prevent Wiki Pages from being built.
-- Reaching first value leaves a clear route into Search, scoped Chat, or the
-  J10 durable core loop without forcing one universal workflow.
-- Returning users recognize their library and completed durable setup without
-  replaying first-use explanation or losing access when an optional online
-  capability is unavailable.
-- When a user signs in to the StashBase account for OpenQuill, every surface
-  that names the connected account, the sidebar's account row and the Agents
-  section of Settings, identifies the same person by optional provider
-  profile data plus the full email, without making profile loading a
-  prerequisite for local or hosted work.
+- Empty and source-filled projects are both valid. Onboarding never requires
+  wiki generation, opening a source, or an embedding key before discussion.
+- Entering a project does not silently send a prompt, install an Agent, or
+  start account sign-in. Runtime setup and actual send remain deliberate.
+- Local browsing, editing, preview, and keyword search remain available
+  independently of an online account or Agent readiness. This does not claim
+  that a selected Agent can answer without its required model service.
+- The user can distinguish their local files, application-derived data, and
+  any context sent to an Agent or configured embedding provider.
+- Start Here is seeded only for a pristine default folder home, never
+  overwrites an existing home or user copy, and is not recreated after removal.
+- Search by meaning is available only through its opt-in Settings path and is
+  not offered by onboarding while disabled.
+- Project registration, settings, and saved per-project workspace state remain
+  recognizable on return. An unavailable optional service does not remove
+  access to local work.
 
 ### Degradation and Recovery
 
-The user can back out of or retry each optional setup stage without losing an
-authorized folder or repeating earlier completed work. Provider,
-authentication, preparation, or runtime failure never blocks the workspace and
-exposes only recovery relevant to the failed stage. A failed first-value action
-keeps the source and an alternative local action available.
+A failed project open or import is retryable without corrupting existing files
+or changing another window. Agent installation, authentication, or connection
+failure retains the unsent request and identifies the failed stage. The user
+can continue local work or choose another supported Agent. Failed seeding does
+not publish partial guide content as a completed project.
+
+Current copy and packaged Instructions still emphasize wiki building. This is
+an alignment issue in the implemented entry, not a missing brainstorm feature;
+see [Agent Panel](design/agent-panel.md#product-language-alignment).
 
 ### Evidence
 
-See [J01 evidence](../code-review/journey-coverage.md#j01-onboarding).
+See [J01 evidence](../code-review/journey-coverage.md#j01-onboarding). Existing
+startup, folder, and setup evidence remains useful, but does not by itself
+prove first value from an empty-project brainstorm.
 
 ## J02: Add and open a folder
 
 ### Outcome
 
-An ordinary local folder joins the library and becomes usable without changing
+An ordinary local folder joins the project registry and becomes usable without changing
 its ownership, layout, or storage model.
 
 ### Entry State
@@ -122,11 +105,11 @@ one, or has a public GitHub repository URL to import into their folder home.
 
 ### Primary Flow
 
-1. Open or create a folder, or import a public GitHub repository, through the
-   Library switcher.
+1. Open or create a folder, or import a public GitHub repository, from Welcome or the native project actions.
 2. Enter the folder before recursive preparation or indexing finishes.
-3. Browse supported source files and switch among authorized member folders.
-4. When no longer needed, deliberately remove a folder from the library.
+3. Begin a project Chat, or browse and edit files when useful. An empty folder
+   is a valid project. Another project opens in another window.
+4. When no longer needed, deliberately remove the project registration.
 
 ### Required Observable Results
 
@@ -137,16 +120,21 @@ one, or has a public GitHub repository URL to import into their folder home.
   changing an existing destination in the folder home.
 - Folder entry prioritizes navigation; recursive background work does not hold
   the workspace closed.
-- Switching folders preserves library-level state while keeping folder-scoped
-  documents and started Chats attributable to their original scope.
+- Separate project windows preserve independent documents and Chats while
+  sharing the project registry and runtime services.
 - Removing membership clears only StashBase-owned state and leaves the source
   folder on disk.
 
 ### Degradation and Recovery
 
 A failed or slow open remains retryable and does not strand another window or
-folder context. Failed, cancelled, or rejected GitHub imports clean up staging
-directories completely without corrupting existing library members. Removal
+folder context. A failed open preserves the previous selection and registration;
+a late query or superseded open cannot undo a newer selection. Failed,
+cancelled, or rejected GitHub imports clean up staging
+directories without corrupting existing registered projects. Publication failures
+remove only unchanged import-owned content; concurrent additions, edits, and
+replacement directories remain intact. Git availability detection is cancellable
+and times out instead of holding import indefinitely. Removal
 either finishes its owned cleanup before membership is committed or remains
 recoverable without deleting user files. Opening or re-entering a folder never
 creates or edits an Agent instruction file.
@@ -165,13 +153,13 @@ explicit save behavior.
 
 ### Entry State
 
-An authorized folder contains an ordinary source or excluded infrastructure
-described by the
+An authorized folder is open. The user can create a new Markdown draft or
+open an existing entry with the capabilities in the
 [Documents format capability matrix](design/documents.md#format-capability-matrix).
 
 ### Primary Flow
 
-1. Open the source, as a preview tab by browsing or as a kept tab by asking,
+1. Create a new draft, or open an existing source as a preview or kept tab,
    and receive only the preview or editing capabilities declared for that
    format.
 2. For content-editable Markdown, JSON, or UTF-8 plain text, enter the appropriate editing state
@@ -188,13 +176,13 @@ described by the
 - The visible source file remains the identity behind every view and save.
 - Repeated or concurrent navigation to that source resolves to one tab, and
   browsing holds at most one preview tab; a same-named source in another
-  Library folder remains distinct.
+  project folder remains distinct.
 - Back and forward step through the documents visited, in order, reaching a
   preview that has since been replaced without adding a kept tab, whenever
   the sidebar shows anything but Chats.
-- **New draft** creates an Untitled Markdown file beside the selection, opens
-  it at once as a kept tab, and starts renaming it in the Files tree so the
-  name is the first thing typed.
+- **Create new draft**, on the strip's New tab, creates an Untitled Markdown
+  file beside the selection, opens it at once as a kept tab, and starts
+  renaming it in the Files tree so the name is the first thing typed.
 - Preview-only formats never expose a content-editing affordance. Workbench
   content editing, Agent/MCP content writes, and file-level rename/move/delete
   remain distinguishable capabilities.
@@ -232,7 +220,7 @@ described by the
   restores or discards each draft independently. A restore writes nothing. It
   returns an unsaved draft carrying the version its text was typed over, so
   the save barrier and conflict flow still decide what reaches disk. Drafts
-  never live inside a library folder, so folder sync, backups, and indexing
+  never live inside a project folder, so folder sync, backups, and indexing
   never see them, and signing out of an account does not remove them.
 - Parse, preview, decode, or availability failure keeps the source identifiable
   and recoverable.
@@ -255,21 +243,18 @@ See [J03 evidence](../code-review/journey-coverage.md#j03-documents).
 
 ### Outcome
 
-PDF, DOCX, image, audio, supported video, or an explicitly accepted clipboard
-screenshot becomes searchable and Agent-readable while the original remains
+A PDF, DOCX, image, audio, or supported video source becomes searchable and
+Agent-readable while the original remains
 visible and authoritative.
 
 ### Entry State
 
 An authorized folder contains a source whose useful text requires extraction,
-OCR, or transcription, or the user wants to accumulate a copied screenshot as
-new knowledge and has opted into clipboard-image offers in Settings.
+OCR, or transcription.
 
 ### Primary Flow
 
-1. Open or add an existing source; for a screenshot, first enable clipboard
-   image offers in Settings, copy it, and explicitly choose **Add** in the
-   import offer.
+1. Open or add an existing source.
 2. Continue browsing while OCR or other preparation runs.
 3. Observe preparation status only when it changes the next useful action.
 4. Search or let an Agent read the current prepared text after completion.
@@ -278,14 +263,14 @@ new knowledge and has opted into clipboard-image offers in Settings.
 ### Required Observable Results
 
 - Preparation never replaces the source or blocks its ordinary preview.
+- First PDF/OCR preparation downloads its local component in the background
+  without a confirmation. Waiting tasks resume automatically; later preparation
+  reuses the installed component offline. Failure leaves sources waiting until
+  one retry on the next launch or an explicit Retry in Settings → General →
+  Local components; status reads do not start an unused download.
 - Direct-text readable formats remain usable without Preparation. Formats that
   require prepared text expose only current format-appropriate OCR, extracted
   text, or transcripts to retrieval and Agents.
-- Clipboard-image monitoring is off by default. Enabling it only creates an
-  offer while StashBase is focused; importing still requires an explicit
-  **Add**, and disabling it stops further monitoring.
-- An accepted screenshot is a visible ordinary image source. Its OCR text is
-  derived state and never appears as a second workspace file.
 - Completion means format-specific output is both complete and fresh for the
   current source bytes.
 - Preparation readiness and readiness for search by meaning remain
@@ -296,8 +281,7 @@ new knowledge and has opted into clipboard-image offers in Settings.
 
 Stale, partial, cancelled, or incompatible output never counts as current
 truth. Missing optional native capability produces a blocked or retryable state
-without making the source itself a failed file. An unreadable clipboard or a
-dismissed offer creates no source file and does not interrupt ordinary work.
+without making the source itself a failed file.
 
 ### Evidence
 
@@ -312,7 +296,7 @@ returns to the visible source that supports it.
 
 ### Entry State
 
-The library contains direct-text readable or currently prepared sources as
+The project registry contains direct-text readable or currently prepared sources as
 classified by the
 [Documents format capability matrix](design/documents.md#format-capability-matrix).
 Searching by meaning may be ready, partially ready, not set up, or
@@ -353,13 +337,13 @@ See [J05 evidence](../code-review/journey-coverage.md#j05-search).
 
 ### Outcome
 
-The user collaborates with the included or a bring-your-own Agent against an
-explicit library or folder scope while retaining control of account use,
-installation, context, tools, and permissions.
+The user brainstorms, asks questions, drafts, and revises with an Agent in a
+project while retaining control of account use, installation, context, tools,
+and permissions. J11 separately records the unavailable unbound entry.
 
 ### Entry State
 
-A folder is open and its workspace has a reusable blank Chat. **OpenQuill**
+A project, possibly empty, is open and has a reusable blank Chat. **OpenQuill**
 is selected by default and may need account sign-in; a bring-your-own runtime
 may be ready, missing, disconnected, or recoverable.
 
@@ -374,7 +358,8 @@ may be ready, missing, disconnected, or recoverable.
 3. When a bring-your-own runtime is missing, explicitly choose **Install and
    continue**. When Codex is installed but signed out, choose **Sign in with ChatGPT** and
    finish the provider-owned browser flow started by that same runtime.
-4. Connect StashBase context and send a prompt.
+4. Send an idea or request. Attach or retrieve project material only when
+   useful; no source file or wiki is required to brainstorm.
 5. Optionally customize **Agent Instructions** for the Chat's working folder.
    The readable default already applies; StashBase stores a
    customization without writing to the source folder.
@@ -383,7 +368,8 @@ may be ready, missing, disconnected, or recoverable.
 7. Continue, edit and resend, or open a source beside the same mounted Chat.
    Use the top-right panel icon to hide Chat for more reading space and reopen
    it with the conversation and draft intact.
-8. Switch workspace folders without silently rebinding started work.
+8. Return to project history, or open another project in its own window
+   without silently rebinding this conversation.
 
 ### Required Observable Results
 
@@ -413,11 +399,11 @@ may be ready, missing, disconnected, or recoverable.
 - Agent Instructions resolve exactly one scope, and scopes never combine.
   That scope's packaged default applies until the scope is customized. A save
   persists in
-  StashBase application config and reaches matching folder Chats from their
-  next message without creating or changing `AGENTS.md`, `CLAUDE.md`, or
-  another source file.
+  StashBase application config and applies to Chats mounted after the save.
+  An already mounted session keeps its initial instructions. No save creates
+  or changes `AGENTS.md`, `CLAUDE.md`, or another source file.
 - Removing that scope silently returns only a completely blank Chat to
-  Library. Any Chat containing user work remains readable, cancels unfinished
+  an unbound internal scope; Welcome does not expose an unbound Chat. Any Chat containing user work remains readable, cancels unfinished
   work without presenting a transport failure, and says the folder was removed
   and the transcript is preserved instead of offering Retry.
 - Chat-primary and docked layouts preserve the same session and in-progress
@@ -429,14 +415,16 @@ may be ready, missing, disconnected, or recoverable.
   turn failure.
 - Tool and source use remain inspectable without turning generated artifacts
   or transcripts into hidden product state.
-- Agent search defaults to a folder Chat's live Folder. A Library Chat selects
-  one Folder from `library_info` for each query. Search results report that
-  Folder, and invalid scope does not fall back to a broader search.
-- Whether a Chat adds meaning-based evidence affects only that Chat's
-  retrieval strategy. Without it `search_library` stays available across the
-  authorized scope using direct and current prepared text; with it the same
-  lookup may additionally use meaning-based evidence. Neither state controls
-  background indexing or exposes derived paths.
+- Agent search defaults to its bound project. An unbound Chat must open or
+  create a project before reading or searching project files; an external MCP
+  client selects an authorized project explicitly. Invalid scope never falls
+  back to broader search.
+- With no explicit mode, `search_project` uses keyword search without an
+  embedding key and search by meaning with one, including after key changes.
+  Explicit keyword search remains available; explicit search by meaning reports
+  a missing key or provider failure rather than changing strategy silently.
+  Each lookup retains project scope and visible source identity without
+  controlling background indexing.
 - A source is presented as Agent-readable only when the selected Agent surface
   can consume that format's source or current prepared representation. OpenQuill
   attachment behavior must not be implied for an external MCP client.
@@ -453,7 +441,7 @@ same recheck accepts a Codex login completed elsewhere. Abandoned or
 interrupted output cannot arrive in a newer turn or session. A Stop racing a
 native turn that has already ended clears the stale working state without
 presenting a turn failure. Removing a folder is an expected scope retirement:
-it never widens a started conversation to Library or replaces its retained
+it never widens a started conversation to an unbound context or replaces its retained
 content with a connection error.
 
 ### Evidence
@@ -464,57 +452,72 @@ See [J06 evidence](../code-review/journey-coverage.md#j06-agent).
 
 ### Outcome
 
-Exploratory conversation produces reviewed, durable, user-owned project state.
+The user turns a discussion into an outline, draft, or revision in an ordinary
+project file, then inspects and edits the result. Writing is implemented; the
+unfinished document-specific diff concerns the later fine-revision experience.
 
 ### Entry State
 
-The user has an active scoped Chat and an existing or new Markdown source that
-can serve as the Canvas.
+A project-bound Chat contains an idea or request worth writing. The target may
+be an existing editable document or a new file; no Canvas or wiki is required.
 
 ### Primary Flow
 
-1. Explore alternatives in Chat using explicit project context.
-2. Open the Canvas beside the same conversation.
-3. Ask the Agent to write only accepted conclusions, reasoning, open questions,
-   and next steps into that source.
-4. Review, edit, and save the document as the lasting record.
+1. Brainstorm in Chat and decide what to write or change.
+2. Ask the Agent to create or revise an authorized project document, or create
+   a draft and begin editing directly.
+3. Open the result beside the conversation when useful. Inspect the text and
+   available Agent file-change information, then continue writing or revising.
+4. Save editor changes through the ordinary version/conflict path. Agent writes
+   are already file operations governed by their permissions and transaction
+   rules; displaying their diff is not a separate universal acceptance gate.
+5. Continue the discussion or return to the document in later work.
 
 ### Required Observable Results
 
-- The transcript remains exploration history, not the durable project model.
-- Writing targets an explicit authorized source file through the shared
-  transaction boundary.
+- Discussion alone does not automatically create a file or copy its transcript
+  into the project. A user request may authorize drafting as well as recording
+  settled conclusions.
+- Writes target an explicit authorized file and preserve the shared path,
+  version, and lifecycle rules.
 - Agent-created or changed files refresh the workspace without selecting
   themselves or replacing user focus.
-- The reviewed Markdown remains usable by other tools and future Agent work.
+- Existing editor and Agent comparisons describe the changes they actually
+  represent. They do not claim the incomplete document-specific diff or a
+  generic accept/reject workflow that the product does not provide.
+- Drafts and revised documents remain ordinary user-owned files, available to
+  other tools and later project context when their format is eligible.
 
 ### Degradation and Recovery
 
-A failed, interrupted, unauthorized, or version-conflicted write leaves the
-existing source recoverable and does not manufacture a successful document.
-StashBase does not automatically merge conversation branches into the Canvas.
+Failed, interrupted, unauthorized, or conflicting writes do not manufacture a
+successful document. The user can inspect the result and retained conversation
+before continuing. The editor's conflict flow keeps the dirty buffer and newer
+disk content distinct. Nothing automatically merges conversation branches into
+an accepted final document.
 
 ### Evidence
 
-See [J07 evidence](../code-review/journey-coverage.md#j07-converge).
+See [J07 evidence](../code-review/journey-coverage.md#j07-converge). File-write and
+editing evidence does not prove the unfinished refinement diff.
 
 ## J08: Connect an external Agent through MCP
 
 ### Outcome
 
-An MCP-capable client uses the same authorized library operations and visible
+An MCP-capable client uses the same authorized project operations and visible
 source identity as OpenQuill.
 
 ### Entry State
 
-The user has authorized at least one library folder and has an external
+The user has authorized at least one project folder and has an external
 MCP-capable client to configure.
 
 ### Primary Flow
 
 1. Copy the standard configuration or URL access details from Settings and
    register them in the client.
-2. Orient with library information, select one Folder for each search, then
+2. Orient with project information, select one Folder for each search, then
    search or read authorized files.
 3. Use bounded mutations when the client needs to write back.
 4. Reindex or reconcile external changes when required.
@@ -588,82 +591,98 @@ See [J09 evidence](../code-review/journey-coverage.md#j09-bug-report).
 
 ### Outcome
 
-An existing local project becomes reusable Agent context and produces a
-reviewed result that remains durable in ordinary source files.
+A person enters a project, develops an idea through discussion, and can write
+and refine ordinary documents in the same working context. Brainstorming and
+writing are implemented; document-specific diff for fine revision remains
+incomplete.
 
 ### Entry State
 
-The user has a folder containing project sources, including at least one
-readable or preparable document, and chooses a supported built-in or external
-Agent.
+An existing or newly created project is open. It may be empty. The person has
+an idea, question, existing draft, or reference material and chooses a
+supported Agent with its required readiness and authentication.
 
 ### Primary Flow
 
-1. Add or select the folder without migrating its contents.
-2. Inspect a Source and retrieve relevant evidence by keyword or by meaning.
-3. Start an explicitly scoped Agent task that uses the same source identity and
-   authorized context.
-4. Inspect the Agent's evidence, tool activity, and proposed file changes.
-5. Write accepted conclusions into an explicit Markdown Canvas, then review
-   and save it.
-6. Reopen or retrieve that source in later work without depending on the
-   original conversation.
+1. Enter the project without migrating its files or waiting for indexing.
+2. Start or continue a project-bound Chat to brainstorm, compare alternatives,
+   and develop the idea. Opening a source or searching is optional.
+3. When the discussion benefits from references, read or retrieve authorized
+   project material. Preparation supports eligible formats in the background.
+4. When ready to write, ask the Agent to draft or revise a file, or create and
+   edit a document directly. Opening it can dock the same Chat alongside it.
+5. Inspect the text and current change information, make ordinary edits, and
+   resolve any save conflicts. Dedicated document-diff refinement is not yet a
+   completed part of this step.
+6. Continue the conversation or reopen its history and documents for later
+   work. New writing can become reference material in the same project.
 
 ### Required Observable Results
 
-- Workspace, retrieval, built-in Chat, and external MCP agree on one-Folder
-  search scope and visible source identity.
-- Prepared evidence remains derived and invisible while still resolving to the
-  original source.
-- The user can distinguish exploration from the accepted durable result.
-- The written result re-enters ordinary browsing, search, and Agent context.
-- Direct-text project evidence, including valid UTF-8 plain text, remains the
-  same visible source across Workbench, retrieval, and Agent/MCP access.
-- Losing semantic or Agent availability does not make existing source work or
-  durable results inaccessible.
+- A project with no source files can carry a useful discussion. Building a
+  wiki, retrieving evidence, and writing a document are not entry requirements.
+- Project, conversation, document, and retrieval identities remain attributable
+  through the transitions; work never silently broadens to another folder.
+- Background preparation and optional meaning-based indexing do not block
+  discussion unrelated to those pending sources or ordinary document work.
+- A conversation can remain exploration. Writing follows a user request or
+  direct edit and the applicable permission rules; it is not inferred merely
+  from opening a Chat or receiving an answer.
+- Existing drafting, editing, Agent change reports, and conflict recovery stay
+  useful while document-specific diff is unfinished.
+- Written content remains in ordinary files, and any derived reference text
+  stays invisible while resolving to its visible source.
+- Loss of Agent or semantic availability does not remove access to existing
+  local documents or silently discard current work.
 
 ### Degradation and Recovery
 
-A failure in preparation, retrieval, Agent execution, permission, or writeback
-remains attributable to its stage and never corrupts the source project. The
-user can resume from the first incomplete stage without silently expanding
-scope or treating partial output as accepted state.
+Project entry, Agent setup/turns, reference preparation, and file writes report
+their own failures. A failed stage does not corrupt project files, erase the
+conversation, or treat partial output as accepted content. The user can retry
+that stage or continue other local work.
 
 ### Evidence
 
-See [J10 evidence](../code-review/journey-coverage.md#j10-core-loop). This
-journey composes J02, J04–J07, and J08 when an external Agent is used; it
-requires its own end-to-end evidence rather than inferring completion from
-those journeys independently.
+See [J10 evidence](../code-review/journey-coverage.md#j10-core-loop). This flow
+composes J02 and J06, with J03/J07 for writing and J04/J05/J08 when reference
+or external-Agent work is used. Prior source-first passes do not establish the
+empty-project discussion path; evidence for that path must be identified
+separately. Future document-diff evidence is outside current completion claims.
 
 ## J11: Turn a conversation into a project
 
+**Role:** retained secondary contract. The underlying creation and rebind
+boundary exists, but its unbound in-app entry is not exposed. It is not the
+project-first main flow, and retaining this record does not add an unbound Chat
+to the remaining feature roadmap.
+
 ### Outcome
 
-An exploratory Library Chat becomes a named ordinary local project only after
+An exploratory unbound Chat becomes a named ordinary local project only after
 the user decides the work deserves a durable scope. The same conversation
 continues inside the new project without losing its history or silently
 copying the transcript into source files.
 
 ### Entry State
 
-The user is in a live Library-scoped Chat that is not already bound to one
+The user is in a live unbound Chat that is not already bound to one
 member folder. The conversation has produced a direction worth continuing,
 but no project folder or durable project document is assumed.
 
 ### Primary Flow
 
-1. Explore a question, idea, or task in the reusable Library Chat.
+1. Explore a question, idea, or task in the reusable unbound Chat.
 2. Explicitly tell the Agent to turn the work into a project, optionally naming
    an authorized location.
 3. The Agent uses the StashBase `create_project` operation rather than a bare
    filesystem command.
 4. StashBase creates one new empty ordinary folder under the default folder
-   home or another authorized root and registers it in the Library. It does
+   home or another authorized root and registers it in the project registry. It does
    not seed instruction files.
-5. The live initiating Library Chat keeps its transcript, changes scope to the
+5. The live initiating unbound Chat keeps its transcript, changes scope to the
    new project, and causes its owning window to enter that folder. Other
-   windows observe Library membership without being redirected.
+   windows observe Project registration without being redirected.
 6. Continue the same conversation against the new project and explicitly write
    accepted goals, decisions, or plans into ordinary source files when they
    need to persist.
@@ -680,36 +699,39 @@ but no project folder or durable project document is assumed.
 - Existing `AGENTS.md`, `CLAUDE.md`, and other runtime-native instruction files
   are never created, migrated, or overwritten. Folder-scoped Agent
   Instructions can be added later from the Chat scope menu.
-- Only the live, attributable Library Chat that initiated creation may rebind.
+- Only the live, attributable unbound Chat that initiated creation may rebind.
   A folder-bound, stale, unattributed, or external caller may create and
   register an authorized project but cannot redirect an unrelated built-in
   Chat.
 - Rebinding preserves transcript, draft, session identity, and history
   attribution while changing future tool and file access to the new folder.
-- The new Library member and active scope remain visibly attributable. The
+- The new registered project and active scope remain visibly attributable. The
   conversation is not copied into project files automatically; durable content
   enters the project only through an explicit write.
 
 ### Degradation and Recovery
 
 Invalid names, unauthorized locations, symlink escapes, and existing targets
-fail before modifying disk. If Library registration cannot commit, StashBase
+fail before modifying disk. If Project registration cannot commit, StashBase
 removes only the newly created empty directory it still owns. If the initiating
 session closes or rebinding races with teardown, the project remains a normal
-registered folder while stale history overrides are rolled back. If the
+registered folder while stale history overrides are rolled back. If history
+ownership cannot be saved, creation still succeeds but the Chat keeps its
+previous scope; the result explains that the user can open the project and
+start a new Chat. If the
 originating window cannot enter a successfully rebound project, the Chat keeps
 the new scope visible and reports a retryable open failure rather than
-reverting to an ambiguous Library presentation.
+reverting to an ambiguous unbound Chat presentation.
 
-Known Gap: no window shows a Library-scoped Chat, so this journey's entry
+Known Gap: no window shows an unbound Chat, so this journey's entry
 state cannot be reached from the product. Project creation still works for an
 attributed MCP caller. The owning gap is
-[No surface for a Library-scoped Chat](design/agent-panel.md#no-surface-for-a-library-scoped-chat).
+[No surface for an unbound Chat](design/agent-panel.md#no-surface-for-an-unbound-chat).
 
 Known Gap: an OpenQuill chat updates its live scope and keeps using the
 attributed MCP connection, but OpenCode does not yet migrate the same native
 session record and cwd to the project. Its restored history remains under
-Library and native folder commands require a new folder-scoped chat.
+Projects and native folder commands require a new folder-scoped chat.
 
 ### Evidence
 
@@ -729,7 +751,7 @@ same Sources and Wiki Pages retrievable even when the wording differs.
 
 ### Entry State
 
-The user has opened a Library folder and is in a blank folder-scoped Chat. The
+The user has opened a project folder and is in a blank folder-scoped Chat. The
 folder may contain no Wiki Pages, or it may already have pages under `wiki/`.
 Search by meaning may or may not have been turned on; selected Agent
 readiness may be absent.
@@ -739,8 +761,8 @@ readiness may be absent.
 1. In the blank folder-scoped Chat, write the Build Wiki request — typed
    directly, taken with **Tab** from the composer's placeholder while it shows
    **Build a wiki for docs**, or reused from a Gallery entry's **Agent
-   Instructions** via its **Copy**. Neither Tab nor the Gallery sends what it
-   places.
+   Instructions** via its **Copy**. Tab inserts a draft; Gallery copies to the clipboard and requires a
+   user paste. Neither sends a request.
 2. Send it. The visible request is exactly what the Agent receives; the
    durable Wiki Pages contract (write scope, linking, maintenance) comes
    from Agent Instructions. Setup for search by meaning neither opens nor
@@ -749,9 +771,9 @@ readiness may be absent.
    stage first; the composer keeps the request while the gate stands, and a
    Chat no turn has left follows the first runtime that becomes ready. The
    request is never sent on the user's behalf when the gate lifts.
-4. The Agent inspects the folder and creates or improves `wiki/index.md`,
-   adding focused pages under `wiki/` only when a single map would be
-   unwieldy. Wiki Pages use relative links to visible Sources.
+4. The Agent inspects the folder and creates or improves linked pages under
+   `wiki/`, following the requested layout and existing conventions. A request
+   can name `wiki/index.md`; the packaged default does not mandate that filename.
 5. Review the resulting files and the Agent's summary of changed Wiki Pages
    and uncovered Sources.
 
@@ -759,16 +781,16 @@ readiness may be absent.
 
 - The visible transcript records the concise user intent while the Agent
   receives the stable safety and output contract.
-- The default write scope is only `wiki/`, with `wiki/index.md` as its entry.
-  The Agent does not modify anything outside that directory. A physical
-  reorganization is a separate proposal requiring explicit approval.
+- A wiki-building request follows its declared output scope and the existing
+  wiki's conventions. It does not by itself authorize source reorganization.
+  Page placement guidance is distinct from enforced project permissions.
 - Building Wiki Pages and activating search by meaning can succeed
   independently. Skipping or failing that activation does not discard the
   Build Wiki request.
 - Wiki Page Markdown is ordinary visible content and re-enters browsing,
   keyword search, semantic indexing, and future Agent work. Machine-derived
   text, chunks, and vectors remain invisible AppData.
-- The first release does not claim persistent built, ready, or stale Wiki
+- The implemented workflow has no persistent built, ready, or stale Wiki
   state. A folder that already has pages under `wiki/` cycles the same
   request in the same wording — it never becomes Update Wiki Pages — and
   nothing schedules background Wiki Page rewriting.
@@ -780,16 +802,16 @@ Agent setup failure keeps the composer draft visible beside the gate's
 stage-specific recovery. A partial Agent write remains an ordinary,
 inspectable file transaction and never authorizes source reorganization.
 
-Known Gap: the write scope is guidance rather than a boundary. The packaged
-Agent Instructions ask for Wiki Pages under `wiki/` and name no entry page,
-and nothing refuses a write elsewhere in the folder, so the scope above is a
-convention the Agent is asked to keep rather than one the product enforces.
+Implementation boundary: Wiki Instructions guide placement under `wiki/`;
+they are not a separate filesystem sandbox. The actual access boundary is the
+project and permission mode. Evaluating an Agent's adherence to the requested
+output scope requires Agent evidence, not just a successful file-write test.
 
 ### Evidence
 
 See [J12 evidence](../code-review/journey-coverage.md#j12-build-wiki-pages). This
-journey composes J02 folder scope, J05 activation of search by meaning, J06
-Agent lifecycle, and J07 ordinary file writeback.
+journey composes J02 folder scope, J06 Agent lifecycle, and J07 ordinary file
+writeback. J05 search by meaning is optional and independent.
 
 ## J13: Download a ready-made Wiki from the Gallery
 
@@ -797,7 +819,7 @@ Agent lifecycle, and J07 ordinary file writeback.
 
 A user browses curated, ready-made Wikis, understands what one contains and
 how it was built before taking it, and lands in a working copy — a real
-folder in the Library, open in its own window — without any setup, sign-in,
+folder in the project registry, open in its own window — without any setup, sign-in,
 or folder being open first.
 
 ### Entry State
@@ -820,7 +842,7 @@ unavailable.
 3. **Take a copy.** **Make a copy** downloads the entry's public repository
    into the folder home through the existing public-GitHub import and opens
    the copy in a new window. The shop window stays put for the next entry.
-4. **Continue.** The copy is an ordinary Library folder: browse its wiki,
+4. **Continue.** The copy is an ordinary project folder: browse its wiki,
    chat over it, or reuse the copied prompt on a folder of your own.
 
 ### Required Observable Results
@@ -832,7 +854,7 @@ unavailable.
   composer text; its one prompt affordance is explicit copy.
 - The renderer reaches the published index and screenshots only through the
   local daemon's gallery proxy; the image proxy refuses non-gallery hosts.
-- A copy is a plain folder registered in the Library, opened in a new
+- A copy is a plain folder registered in the project registry, opened in a new
   window; two clicks cannot race one download into two copies.
 - With no network, the bundled snapshot still renders the shop and the
   detail page's unpublished slots state themselves without reshaping the
@@ -842,12 +864,14 @@ unavailable.
 
 An unreachable index falls back whole to the bundled snapshot — never a
 half-parsed list. A failed download reports one visible error on the detail
-page and leaves the Library unchanged; the entry can be retried. A copy
-created but not opened remains an ordinary Library folder reachable through
-the switcher.
+page and leaves the project registry unchanged; the entry can be retried. A copy
+created but not opened remains an ordinary project folder reachable through
+Welcome / Recent: registration finishes before a new window is requested. A failed
+registration rolls back unchanged imported content and leaves the existing
+project list and current window unchanged.
 
 ### Evidence
 
 See [J13 evidence](../code-review/journey-coverage.md#j13-gallery-download).
 This journey composes J02 folder registration and window entry, and the
-GitHub import path it shares with the switcher menu's import flow.
+GitHub import path shared with the Welcome import flow.

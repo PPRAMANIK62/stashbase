@@ -36,6 +36,8 @@ import {
 import type { IconComponent } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
 import { SizeProvider, useSize, type SizeVariant } from '@/lib/size-context';
+import { surfaceBackground } from '@/lib/surface-classes';
+import { useSurface } from '@/lib/surface-context';
 import { useDomOrderRegistry, type DomOrderRegistry } from '@/lib/use-dom-order-registry';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +49,7 @@ interface TabsSubtleContextValue {
   idPrefix: string | undefined;
   activeLabel: boolean;
   iconOnly: boolean;
+  track: boolean;
 }
 
 const TabsSubtleContext = createContext<TabsSubtleContextValue | null>(null);
@@ -70,6 +73,12 @@ interface TabsSubtleProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onSelect
    *  28px — see /docs/sizes). Omitted, they follow the surrounding
    *  SizeProvider. */
   size?: SizeVariant;
+  /** Draws the strip as a segmented control: one muted track with the
+   *  selected tab as a lifted pill (the surface three steps up, no shadow,
+   *  the same lift the preset picker uses) that glides between the tabs.
+   *  Track and items add up to the ladder's control height, so the control
+   *  lines up with the buttons beside it. */
+  track?: boolean;
 }
 
 const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
@@ -82,11 +91,18 @@ const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
       activeLabel = false,
       iconOnly = false,
       size,
+      track = false,
       className,
       ...props
     },
     ref,
   ) => {
+    const shape = useShape();
+    // The pinned size, when there is one: the provider below wraps only the
+    // children, so the track drawn here would otherwise read the ambient
+    // step and sit two pixels wider than the items inside it.
+    const sizeClasses = useSize(size);
+    const lifted = surfaceBackground(Math.min(useSurface() + 3, 8));
     const strip = useTabsStrip('[data-proximity-index]', ref);
     const { hoveredIndex, registerItem, measureItems: measureTabs } = strip;
     const registry = useDomOrderRegistry();
@@ -127,8 +143,9 @@ const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
         idPrefix,
         activeLabel,
         iconOnly,
+        track,
       }),
-      [registry, registerTab, hoveredIndex, selectedIndex, idPrefix, activeLabel, iconOnly],
+      [registry, registerTab, hoveredIndex, selectedIndex, idPrefix, activeLabel, iconOnly, track],
     );
 
     const root = (
@@ -149,24 +166,35 @@ const TabsSubtle = forwardRef<HTMLDivElement, TabsSubtleProps>(
               ref={strip.listRef}
               {...strip.listHandlers}
               className={cn(
-                // -mx-1 px-1 / -my-1 py-1 give the 2px-outset focus ring room
-                // to draw without being clipped by overflow-x-auto. The
-                // max-width allows for the negative margins: fit-content
-                // parents size against the margin box (8px narrower than the
-                // border box), so a plain max-w-full would clamp the list 8px
-                // too small and clip the first/last tab's ring.
-                'scrollbar-hide relative -mx-1 -my-1 flex max-w-[calc(100%_+_8px)] items-center gap-0.5 overflow-x-auto px-1 py-1 select-none',
+                track
+                  ? // The track: segmentPad + segmentItem add up to the
+                    // ladder's control height, and the muted bar is what the
+                    // lifted pill reads against.
+                    cn(
+                      'relative inline-flex items-center gap-0.5 bg-muted select-none',
+                      shape.container,
+                      sizeClasses.segmentPad,
+                    )
+                  : // -mx-1 px-1 / -my-1 py-1 give the 2px-outset focus ring room
+                    // to draw without being clipped by overflow-x-auto. The
+                    // max-width allows for the negative margins: fit-content
+                    // parents size against the margin box (8px narrower than the
+                    // border box), so a plain max-w-full would clamp the list 8px
+                    // too small and clip the first/last tab's ring.
+                    'scrollbar-hide relative -mx-1 -my-1 flex max-w-[calc(100%_+_8px)] items-center gap-0.5 overflow-x-auto px-1 py-1 select-none',
                 className,
               )}
               {...props}
             >
               {/* Borderless pills: the selection and the hover preview wear
                   the one tint, and the selection holds still while another
-                  tab is hovered. */}
+                  tab is hovered. On a track the selection is the lifted
+                  pill instead, gliding between the tabs. */}
               <TabsStripIndicators
                 strip={strip}
                 selectedIndex={selectedIndex}
-                selectedSurface="bg-hover"
+                selectedSurface={track ? lifted : 'bg-hover'}
+                {...(track ? { radius: sizeClasses.segmentRadius } : {})}
                 selectedHoverOpacity={1}
                 hoverSurface="bg-hover"
               />
@@ -194,8 +222,16 @@ const TabsSubtleItem = forwardRef<HTMLButtonElement, TabsSubtleItemProps>(
   ({ icon: Icon, label, className, ...props }, ref) => {
     const shape = useShape();
     const sizeClasses = useSize();
-    const { registry, registerTab, hoveredIndex, selectedIndex, idPrefix, activeLabel, iconOnly } =
-      useTabsSubtle();
+    const {
+      registry,
+      registerTab,
+      hoveredIndex,
+      selectedIndex,
+      idPrefix,
+      activeLabel,
+      iconOnly,
+      track,
+    } = useTabsSubtle();
 
     // The tab's position is where it sits, not a number its caller counted
     // out; this strip resolves its selection by index, so no tab marks itself.
@@ -234,11 +270,16 @@ const TabsSubtleItem = forwardRef<HTMLButtonElement, TabsSubtleItemProps>(
           // A glyph-only item is the ladder's square, the same box every
           // icon button beside it wears, so its pill matches theirs; a
           // labelled item takes the control height and its own padding.
+          // On a track the items take the segment height instead, a
+          // glyph-only one a step wider than tall so the pill reads as a
+          // pill and not a square.
           iconOnly && Icon
-            ? cn(sizeClasses.square, 'justify-center')
-            : cn(sizeClasses.control, sizeClasses.px),
+            ? track
+              ? cn(sizeClasses.segmentItem, sizeClasses.segmentGlyphWidth, 'justify-center')
+              : cn(sizeClasses.square, 'justify-center')
+            : cn(track ? sizeClasses.segmentItem : sizeClasses.control, sizeClasses.px),
           !collapseLabel && sizeClasses.gap,
-          shape.bg,
+          track ? sizeClasses.segmentRadius : shape.bg,
           className,
         )}
         {...props}

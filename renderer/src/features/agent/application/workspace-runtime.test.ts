@@ -11,7 +11,7 @@ describe('AgentWorkspaceRuntime', () => {
     let nextId = 0;
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: idleAgentSessionPort(),
     });
 
@@ -20,7 +20,7 @@ describe('AgentWorkspaceRuntime', () => {
         agent: 'stashbase',
         blank: true,
         id: 'chat-1',
-        scope: { kind: 'folder', path: '/library/Research' },
+        scope: { kind: 'folder', path: '/project/Research' },
       },
     ]);
     expect(runtime.newChat('codex').id).toBe('chat-1');
@@ -32,29 +32,29 @@ describe('AgentWorkspaceRuntime', () => {
     let nextId = 0;
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: idleAgentSessionPort(),
     });
-    runtime.setWindowFolder('/library/Plans');
+    runtime.setWindowFolder('/project/Plans');
     expect(runtime.activeSession().store.getState().scope).toEqual({
       kind: 'folder',
-      path: '/library/Plans',
+      path: '/project/Plans',
     });
 
     runtime.activeSession().store.setState({ nativeSessionId: 'native-1' });
     const retainedId = runtime.activeSession().id;
-    runtime.setWindowFolder('/library/Archive');
+    runtime.setWindowFolder('/project/Archive');
     expect(runtime.activeSession().id).not.toBe(retainedId);
     expect(runtime.activeSession().store.getState().scope).toEqual({
       kind: 'folder',
-      path: '/library/Archive',
+      path: '/project/Archive',
     });
     expect(runtime.session(retainedId)?.store.getState().scope).toEqual({
       kind: 'folder',
-      path: '/library/Plans',
+      path: '/project/Plans',
     });
 
-    runtime.setWindowFolder('/library/Plans');
+    runtime.setWindowFolder('/project/Plans');
     expect(runtime.activeSession().id).toBe(retainedId);
   });
 
@@ -66,11 +66,11 @@ describe('AgentWorkspaceRuntime', () => {
     const runtime = createAgentWorkspaceRuntime({
       context: agentContextPort({ resolve }),
       createId: () => `chat-${++nextId}`,
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: idleAgentSessionPort(),
     });
     runtime.setScopeEnvironment({
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       listing: { files: [], folders: [] },
       readiness: {},
       versions: {},
@@ -79,7 +79,7 @@ describe('AgentWorkspaceRuntime', () => {
       boundVersion: null,
       format: 'md' as const,
       kind: 'source' as const,
-      source: { folderPath: '/library/Research', path: 'gone.md' },
+      source: { folderPath: '/project/Research', path: 'gone.md' },
     };
 
     const inFolder = runtime.activeSession();
@@ -87,8 +87,8 @@ describe('AgentWorkspaceRuntime', () => {
     await expect(inFolder.sendPrompt('Read it')).resolves.toEqual({ ok: false, reason: 'stale' });
     expect(resolve).not.toHaveBeenCalled();
 
-    const elsewhere = runtime.newChat('codex', { kind: 'folder', path: '/library/Plans' });
-    elsewhere.addContext({ ...missing, source: { folderPath: '/library/Plans', path: 'gone.md' } });
+    const elsewhere = runtime.newChat('codex', { kind: 'folder', path: '/project/Plans' });
+    elsewhere.addContext({ ...missing, source: { folderPath: '/project/Plans', path: 'gone.md' } });
     await expect(elsewhere.sendPrompt('Read it')).resolves.toEqual({ ok: true });
     expect(resolve).toHaveBeenCalledTimes(1);
   });
@@ -98,7 +98,7 @@ describe('AgentWorkspaceRuntime', () => {
     const runtime = createAgentWorkspaceRuntime({
       autostart: false,
       createId: () => 'chat-1',
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: sessionPort,
     });
 
@@ -121,7 +121,7 @@ describe('AgentWorkspaceRuntime', () => {
   it('advances local recency only when the user submits a prompt', () => {
     const runtime = createAgentWorkspaceRuntime({
       createId: () => 'chat-1',
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: idleAgentSessionPort(),
     });
     const session = runtime.activeSession();
@@ -152,7 +152,7 @@ describe('AgentWorkspaceRuntime', () => {
     });
     const runtime = createAgentWorkspaceRuntime({
       createId: () => 'chat-1',
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: sessionPort,
     });
 
@@ -161,7 +161,7 @@ describe('AgentWorkspaceRuntime', () => {
       hasContent: true,
       id: 'native-1',
       lastModified: 41,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
       title: 'Yesterday',
     });
     expect(runtime.store.getState().tabs[0]?.lastModified).toBe(41);
@@ -171,7 +171,7 @@ describe('AgentWorkspaceRuntime', () => {
     let nextId = 0;
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: idleAgentSessionPort(),
     });
     const retained = runtime.activeSession();
@@ -179,22 +179,22 @@ describe('AgentWorkspaceRuntime', () => {
       nativeSessionId: 'native-1',
       transcript: [{ kind: 'user', id: 'message-1', text: 'Keep this.' }],
     });
-    const blank = runtime.newChat('codex', { kind: 'folder', path: '/library/Research' });
+    const blank = runtime.newChat('codex', { kind: 'folder', path: '/project/Research' });
 
-    runtime.retireFolder('/library/Research');
+    runtime.retireFolder('/project/Research');
 
     expect(retained.store.getState().connection.kind).toBe('retired');
     expect(blank.store.getState().connection.kind).toBe('disposed');
-    expect(runtime.session(blank.id)?.store.getState().scope).toEqual({ kind: 'library' });
+    expect(runtime.session(blank.id)?.store.getState().scope).toEqual({ kind: 'unbound' });
 
-    runtime.setWindowFolder('/library/Plans');
+    runtime.setWindowFolder('/project/Plans');
     expect(runtime.session(blank.id)?.store.getState().scope).toEqual({
       kind: 'folder',
-      path: '/library/Plans',
+      path: '/project/Plans',
     });
     expect(retained.store.getState().scope).toEqual({
       kind: 'folder',
-      path: '/library/Research',
+      path: '/project/Research',
     });
   });
 
@@ -202,7 +202,7 @@ describe('AgentWorkspaceRuntime', () => {
     let nextId = 0;
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: idleAgentSessionPort(),
     });
     // Nothing is ready, so the first start leaves the chat on the default and
@@ -213,7 +213,7 @@ describe('AgentWorkspaceRuntime', () => {
       boundVersion: null,
       format: 'md',
       kind: 'source',
-      source: { folderPath: '/library/Research', path: 'MISSION.md' },
+      source: { folderPath: '/project/Research', path: 'MISSION.md' },
     });
 
     runtime.start(['codex']);
@@ -228,7 +228,7 @@ describe('AgentWorkspaceRuntime', () => {
   it('leaves a chat that has already spoken on the runtime it spoke to', () => {
     const runtime = createAgentWorkspaceRuntime({
       createId: () => 'chat-1',
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: idleAgentSessionPort(),
     });
     runtime.start([]);
@@ -248,17 +248,17 @@ describe('AgentWorkspaceRuntime', () => {
       hasContent: true,
       id: 'native-1',
       lastModified: 42,
-      scope: { kind: 'folder', path: '/library/Research' },
+      scope: { kind: 'folder', path: '/project/Research' },
       title: 'Renamed',
     });
     const runtime = createAgentWorkspaceRuntime({
       createId: () => 'chat-1',
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: sessionPort,
     });
     const session = runtime.activeSession();
     session.store.setState({ nativeSessionId: 'native-1', title: 'Before' });
-    const scope = { kind: 'folder' as const, path: '/library/Research' };
+    const scope = { kind: 'folder' as const, path: '/project/Research' };
     const entry = {
       agent: 'stashbase' as const,
       hasContent: true,
@@ -284,18 +284,18 @@ describe('AgentWorkspaceRuntime', () => {
     const sessionPort = idleAgentSessionPort();
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: sessionPort,
     });
     runtime.activeSession().store.setState({ nativeSessionId: 'research-chat' });
-    runtime.setWindowFolder('/library/Plans');
+    runtime.setWindowFolder('/project/Plans');
     runtime.activeSession().store.setState({ nativeSessionId: 'plans-chat' });
     const entry = {
       agent: 'stashbase' as const,
       hasContent: true,
       id: 'plans-chat',
       lastModified: 42,
-      scope: { kind: 'folder' as const, path: '/library/Plans' },
+      scope: { kind: 'folder' as const, path: '/project/Plans' },
       title: 'Plans',
     };
 
@@ -322,7 +322,7 @@ describe('AgentWorkspaceRuntime', () => {
     });
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       port: sessionPort,
     });
     const session = runtime.activeSession();
@@ -332,14 +332,14 @@ describe('AgentWorkspaceRuntime', () => {
       hasContent: true,
       id: 'native-1',
       lastModified: 41,
-      scope: { kind: 'folder' as const, path: '/library/Research' },
+      scope: { kind: 'folder' as const, path: '/project/Research' },
       title: 'Before',
     };
     const signal = new AbortController().signal;
 
     const renaming = runtime.renameHistory(entry, 'Renamed', signal);
     const removing = runtime.removeHistory(entry, signal);
-    runtime.setWindowFolder('/library/Plans');
+    runtime.setWindowFolder('/project/Plans');
     settle();
     await Promise.all([renaming, removing]);
 

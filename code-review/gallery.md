@@ -1,7 +1,8 @@
 # Gallery
 
-The shop of ready-made Wikis: how its index is published and read, how a copy
-becomes an ordinary Library folder, and where its reach outside the machine is
+An optional source of example projects and ready-made Wikis for the writing
+workspace: how its index is published and read, how a copy
+becomes an ordinary project folder, and where its reach outside the machine is
 bounded. Product intent is
 [Workspace](../design-docs/design/workspace.md) and
 [Agent Panel](../design-docs/design/agent-panel.md);
@@ -24,10 +25,11 @@ through the daemon. That is the design rather than a workaround: the proxy is
 where the reach is bounded, and the renderer's own network posture stays
 unchanged.
 
-The image route is not a general proxy. It serves a request only when the
-source URL starts with one of the gallery's own published prefixes, and answers
-400 otherwise, so it cannot be bent into an open relay by a caller that reaches
-the daemon.
+The image route parses and normalizes the URL before checking HTTPS, credentials,
+port, origin, and the secondary CDN's exact repository path. Encoded traversal
+and nested encoding are refused with 400. Both proxy routes refuse redirects,
+so an allowed upstream cannot redirect the daemon toward another host or a
+local service.
 
 Reading the shelf costs the user nothing and reveals nothing. No folder needs
 to be open, no account signed in, and no Agent runtime installed. The Gallery is
@@ -44,6 +46,10 @@ additive-only and one published by a newer gallery must still read here.
 An entry whose own required fields are missing is refused rather than dropped.
 One unusable entry means the publication is wrong, and quietly rendering the
 rest would hide that from everyone, the publisher included.
+Repository URLs must pass the same public GitHub URL parser as acquisition.
+The daemon validates the whole index before caching it, strips additive fields,
+and tries the secondary mirror after an invalid primary response. Failed parses
+never enter the ten-minute cache, so repaired publications can be retried at once.
 
 Failure has one outcome, not three. Unreachable, malformed, and an unreadable
 schema version all resolve to the bundled snapshot, so the Port answers `null`
@@ -76,30 +82,33 @@ that composition fills, and the screen renders correctly without one.
 
 ## Taking a copy
 
-A copy is not a Gallery mechanism. It is the Library's ordinary public
+A copy is not a Gallery mechanism. It is the project registry's ordinary public
 repository import into the folder home, followed by a window of its own, and
 composition wires both. The destination and the name rules belong to the
-Library; the window belongs to the desktop. The Port's `copy` answers the
-published path so a caller can name what it made.
+Projects; the window belongs to the desktop. The Port's `copy` answers the
+published path so a caller can name what it made. The acquisition service
+commits membership before returning that path, without changing the shop
+window's folder. Registration failure rolls back unchanged publication-owned
+content; a later new-window failure cannot undo successful registration.
 
-The entry's own name is used when the Library's naming rule accepts it, since
+The entry's own name is used when the project registry's naming rule accepts it, since
 that is what the reader just read on the card, then the repository's derived
 segment, then the entry name again as a last resort so the server owns the
 refusal rather than the shop inventing a name. That order is `copyFolderName`
 in the Gallery's domain rather than a condition at the composition root,
-because it shipped inverted there: the Library's validator answers null for a
+because it shipped inverted there: the project registry's validator answers null for a
 usable name, so a truthy answer was read as the name and every valid entry name
 was discarded.
 
 Two clicks cannot race one download into two copies: a copy in flight latches
 until it settles.
 
-A failed copy leaves the Library unchanged and reports one visible sentence on
+A failed copy leaves the project registry unchanged and reports one visible sentence on
 the detail page, and the entry can be retried. The Gallery does not map the
-Library's refusal ladder a second time; it names what did not happen and carries
+Projects's refusal ladder a second time; it names what did not happen and carries
 the sentence it was given.
 
-A copy the Library made but no window could show is still a folder in the
+A copy the project registry made but no window could show is still a folder in the
 switcher, and the failure says exactly that rather than implying nothing
 happened.
 
@@ -115,7 +124,7 @@ looking at the next entry.
 | Role | Stable entry points |
 |---|---|
 | Wire contract | `shared/protocols/http/gallery.ts`, the published index schema and its version gate |
-| Daemon proxy | `server/routes/gallery.ts`, the index route with its short cache and the prefix-restricted image route |
+| Daemon proxy | `server/routes/gallery.ts`, validated index caching and the URL-restricted image route |
 | Feature surface | `renderer/src/features/gallery/public.ts` |
 | Entry shape | `renderer/src/features/gallery/domain/entry.ts`, where an unpublished field is explicitly absent rather than missing |
 | Copy naming rule | `copyFolderName` in `renderer/src/features/gallery/domain/entry.ts` |
@@ -126,23 +135,25 @@ looking at the next entry.
 | Copy state | `renderer/src/features/gallery/hooks/use-gallery-copy.ts` |
 | Surfaces | `renderer/src/features/gallery/ui/shop.tsx` for the shelf, `renderer/src/features/gallery/ui/overlay.tsx` for the framed shop, `renderer/src/features/gallery/ui/detail.tsx` for one entry |
 | Composition | `renderer/src/app/composition/gallery/use-gallery-shop.tsx`, the one place both entrances are wired |
-| Copy wiring | the `gallery` block in `renderer/src/app/dependencies.ts`, over the Library's import and the folder-window channel |
-| New-window channel | `shared/protocols/electron/library.ts` |
+| Copy wiring | the `gallery` block in `renderer/src/app/dependencies.ts`, over the project registry's import and the folder-window channel |
+| New-window channel | `shared/protocols/electron/project.ts` |
 
 ## Validation
 
 ```bash
 pnpm test:protocols
-pnpm test:library-files
+pnpm test:project-files
 pnpm test:renderer
 ```
 
 `pnpm test:protocols` proves the index schema: the whole-parse-or-whole-fallback
 rule, additive stripping, and refusal of an entry missing a required field.
 
-`pnpm test:library-files` runs `server/routes/gallery.test.ts`, which proves
-upstream proxying with its cache, the offline unsupported-schema envelope, and
-the image route refusing a non-gallery host.
+`pnpm test:project-files` runs `server/routes/gallery.test.ts`, which proves
+validated caching, invalid-publication recovery and mirror fallback, the offline
+unsupported-schema envelope, normalized URL confinement, and redirect refusal.
+The shared GitHub import tests prove registration before return, unchanged
+window binding, and rollback on registration failure or cancellation.
 
 `pnpm test:renderer` runs the renderer half: the entry domain and its snapshot
 enrichment, the index adapter's fallback and screenshot rewriting, the two
@@ -154,9 +165,9 @@ A driven runtime pass is recorded in
 
 ## Known Gaps
 
-- The index host carries a transition fallback to an older mirror while the
-  primary asset host settles. Both prefixes are accepted by the image route, so
-  the trust surface is two hosts rather than one until the fallback is removed.
-- `Make a copy` has no driven runtime pass. It downloads a real public
-  repository and registers a real folder, so it is proved by the Library's
-  import evidence plus the copy latch rather than by driving it.
+- The secondary published mirror remains supported. The trust surface is two
+  explicit origins, with the secondary restricted to the Gallery repository;
+  retiring that compatibility is separate from URL confinement.
+- Copy success and new-window failure have a driven runtime pass using a
+  controlled index and a real public GitHub repository. The published catalog's
+  screenshots and packaged downloads still need release evidence.

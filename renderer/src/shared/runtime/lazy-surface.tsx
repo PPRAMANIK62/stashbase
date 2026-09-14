@@ -17,9 +17,19 @@ export interface LazySurfaceOptions<Props> {
  * Every deferred surface in this app repeats the same three decisions: when the
  * chunk is worth fetching at all, what stands in its place while it loads, and
  * what happens when the fetch fails. Written by hand they drifted — one wrapper
- * gained a retry the others never got. Here they are named once, and the lazy
- * component is held in state so `retry` can replace it with a fresh one; a
- * module-level `lazy` caches its own rejection forever and can never recover.
+ * gained a retry the others never got. Here they are named once.
+ *
+ * The lazy component is made ONCE per surface and replaced only by a retry. It
+ * cannot be made in the component's own state initialiser: a surface that
+ * unmounts and comes back — the sidebar's Chats panel is the pane that does —
+ * would get a fresh `lazy` on every mount, and a fresh one suspends for a tick
+ * even when the module is already in the browser's cache. The fallback would
+ * paint again on a panel with nothing left to load, and on a pane that mounts
+ * mid-animation it paints DURING the travel and swaps under the reader. Held
+ * beside the component instead, a remount reads a lazy that has already
+ * resolved and renders straight through. It cannot be a bare module constant
+ * either: that one caches its own rejection forever and could never recover,
+ * which is what `retry` replaces.
  *
  * What `retry` cannot do is heal a chunk whose fetch failed. A fresh `lazy`
  * calls `load` again, but the browser keeps a module URL that failed to fetch
@@ -32,9 +42,18 @@ export function lazySurface<Props extends object>(
   load: () => Promise<{ default: ComponentType<Props> }>,
   { boundary, fallback = null, when }: LazySurfaceOptions<Props> = {},
 ): (props: Props) => ReactNode {
+  // `lazy` does not call `load`: the import is still issued by the first
+  // render, so a surface behind a closed `when` gate still fetches nothing.
+  const held = { Surface: lazy(load) };
   return function LazySurface(props: Props) {
-    const [Surface, setSurface] = useState(() => lazy(load));
-    const retry = useCallback(() => setSurface(() => lazy(load)), []);
+    // Both sides go through the functional form: a `lazy` is callable as far
+    // as its type is concerned, so handing one to `useState` directly picks
+    // the updater overload and infers the state as whatever it would return.
+    const [Surface, setSurface] = useState(() => held.Surface);
+    const retry = useCallback(() => {
+      held.Surface = lazy(load);
+      setSurface(() => held.Surface);
+    }, []);
     if (when && !when(props)) return null;
     const content = (
       <Suspense fallback={fallback}>

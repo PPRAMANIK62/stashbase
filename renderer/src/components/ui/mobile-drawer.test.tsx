@@ -12,7 +12,7 @@ describe('MobileDrawer', () => {
     render(
       <MobileDrawer onClose={vi.fn()} open>
         <nav aria-label="Project navigation">
-          <a href="#library">Library</a>
+          <a href="#project">Library</a>
         </nav>
       </MobileDrawer>,
     );

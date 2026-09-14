@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import {
   clearTreeCreate,
   createWorkspaceState,
+  collapseAllTreeFolders,
   expandTreeFolder,
   forgetTreePath,
   renameTreePath,
@@ -14,7 +15,7 @@ import {
 describe('workspace tree state', () => {
   it('keeps expansion and selection serializable and folder-scoped', () => {
     const initial = createWorkspaceState({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 3,
     });
     const expanded = toggleTreeFolder(initial, 'drafts');
@@ -23,7 +24,7 @@ describe('workspace tree state', () => {
     expect(selected).toMatchObject({
       expanded: { drafts: true },
       selectedPath: 'drafts/plan.md',
-      scope: { folder: { path: '/library/notes' }, generation: 3 },
+      scope: { folder: { path: '/project/notes' }, generation: 3 },
     });
     expect(toggleTreeFolder(selected, 'drafts').expanded).toEqual({});
     expect(initial).toMatchObject({ expanded: {}, selectedPath: null });
@@ -32,13 +33,13 @@ describe('workspace tree state', () => {
   it('hydrates only approved tree state into a fresh runtime scope', () => {
     const restored = createWorkspaceState(
       {
-        folder: { name: 'Notes', path: '/library/notes' },
+        folder: { name: 'Notes', path: '/project/notes' },
         generation: 9,
       },
       {
         activeTabId: 'tab-1',
         expandedPaths: ['drafts'],
-        folderPath: '/library/notes',
+        folderPath: '/project/notes',
         selectedPath: 'drafts/plan.md',
         tabs: [{ id: 'tab-1', path: 'drafts/plan.md' }],
       },
@@ -49,7 +50,7 @@ describe('workspace tree state', () => {
       lifecycle: 'active',
       pendingCreate: null,
       scope: {
-        folder: { name: 'Notes', path: '/library/notes' },
+        folder: { name: 'Notes', path: '/project/notes' },
         generation: 9,
       },
       selectedPath: 'drafts/plan.md',
@@ -58,12 +59,17 @@ describe('workspace tree state', () => {
 
   it('moves expansion and selection with a renamed entry and drops them with a deleted one', () => {
     const scope = {
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 1,
     };
     let state = createWorkspaceState(scope);
     state = expandTreeFolder(expandTreeFolder(state, 'drafts'), 'drafts/2026');
     expect(expandTreeFolder(state, 'drafts')).toBe(state);
+    // Collapse all folds everything at once, and folding an already flat
+    // tree changes nothing.
+    const flat = collapseAllTreeFolders(state);
+    expect(flat.expanded).toEqual({});
+    expect(collapseAllTreeFolders(flat)).toBe(flat);
     state = selectTreePath(state, 'drafts/2026/plan.md');
 
     const renamed = renameTreePath(state, 'drafts', 'archive');
@@ -88,7 +94,7 @@ describe('workspace tree state', () => {
 describe('workspace create requests', () => {
   it('holds one create request at a time and clears it once the tree takes it up', () => {
     const state = createWorkspaceState({
-      folder: { name: 'Notes', path: '/library/notes' },
+      folder: { name: 'Notes', path: '/project/notes' },
       generation: 1,
     });
     expect(state.pendingCreate).toBeNull();

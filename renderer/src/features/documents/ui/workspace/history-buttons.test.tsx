@@ -20,7 +20,7 @@ function createRuntime() {
     api: sourceApi(),
     createId: () => `tab-${++next}`,
     createQueries: () => documentQueryScope(),
-    folderPath: '/library/notes',
+    folderPath: '/project/notes',
     generation: 1,
   });
   runtimes.push(runtime);
@@ -37,9 +37,9 @@ describe('DocumentHistoryButtons', () => {
     expect(button('Forward').disabled).toBe(true);
 
     await act(async () => {
-      await runtime.open({ folderPath: '/library/notes', path: 'one.md' });
+      await runtime.open({ folderPath: '/project/notes', path: 'one.md' });
       await runtime.open(
-        { folderPath: '/library/notes', path: 'drafts/two.md' },
+        { folderPath: '/project/notes', path: 'drafts/two.md' },
         { preview: true },
       );
     });

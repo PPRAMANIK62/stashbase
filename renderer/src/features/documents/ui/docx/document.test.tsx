@@ -19,11 +19,11 @@ const resource = {
 
 function renderDocument(api: DocxPreviewPort) {
   const runtime = createDocumentRuntime({
-    activeFolderPath: '/library',
+    activeFolderPath: '/project',
     generation: 1,
     id: 'tab-1',
     queries: documentQueryScope(),
-    source: { folderPath: '/library', path: 'documents/report.docx' },
+    source: { folderPath: '/project', path: 'documents/report.docx' },
   });
   const navigation = createDocumentNavigationRuntime('tab-1');
   const onNavigate = vi.fn();
@@ -67,7 +67,7 @@ describe('DOCX document', () => {
 
     await userEvent.setup().click(screen.getByRole('link', { name: 'Notes' }));
     expect(rendered.onNavigate).toHaveBeenCalledWith({
-      source: { folderPath: '/library', path: 'documents/notes.md' },
+      source: { folderPath: '/project', path: 'documents/notes.md' },
     });
     rendered.runtime.dispose();
     rendered.navigation.dispose();

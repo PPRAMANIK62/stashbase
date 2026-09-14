@@ -12,7 +12,7 @@ export interface AgentEnvironment {
   environment: AgentScopeEnvironment | null;
   /** The folder's top level, which seeds an empty chat's starter prompts. */
   outline: AgentScopeOutline | null;
-  /** What a new chat is scoped to: the selected folder, or the library when
+  /** What a new chat is scoped to: the selected folder, or the project when
    *  none is selected. */
   scope: AgentScope;
 }
@@ -43,7 +43,7 @@ export function useAgentEnvironment(
   // The selected folder, not the mounted workspace: a chat is scoped the
   // moment the reader picks a folder, before its workspace has settled.
   const scope = useMemo<AgentScope>(
-    () => (selectedFolderPath ? { kind: 'folder', path: selectedFolderPath } : { kind: 'library' }),
+    () => (selectedFolderPath ? { kind: 'folder', path: selectedFolderPath } : { kind: 'unbound' }),
     [selectedFolderPath],
   );
 

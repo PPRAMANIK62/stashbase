@@ -66,7 +66,7 @@ test('the supported renderer build is the only packaged renderer input', () => {
 });
 
 test('bundled Start Here filenames preserve the intended reading order', () => {
-  const files = fs.readdirSync(path.join(root, 'assets', 'builtin-library'))
+  const files = fs.readdirSync(path.join(root, 'assets', 'builtin-project'))
     .filter((name) => !name.startsWith('.'))
     .sort();
 
@@ -99,15 +99,13 @@ test('packaged Agent Instructions include the canonical default prompt', () => {
   );
 });
 
-test('packaged Agent Instructions include the Library default prompt', () => {
-  // Rides the same extraResources directory copy as default.md; this pins
-  // the file's presence and its orientation-first shape.
-  const prompt = fs.readFileSync(path.join(root, 'assets', 'agent-instructions', 'library.md'), 'utf8').trim();
-  assert.match(prompt, /Wiki assistant for my whole library/);
-  assert.match(prompt, /🔎 \*\*Find and orient\*\*/);
-  assert.match(prompt, /name the folder and the file/);
-  assert.match(prompt, /🌱 \*\*Start new work\*\*/);
-  assert.match(prompt, /needs a new project, ask me/);
+test('packaged unbound Chat instructions require a project before file access', () => {
+  const prompt = fs.readFileSync(path.join(root, 'assets', 'agent-instructions', 'unbound.md'), 'utf8').trim();
+  assert.match(prompt, /not yet bound to a project/);
+  assert.match(prompt, /Before reading, searching, or changing project files/);
+  assert.match(prompt, /ask me to open a project/);
+  assert.match(prompt, /explicitly ask to create a project/);
+  assert.match(prompt, /Never combine projects into a global knowledge scope/);
 });
 
 test('electron-builder includes local CommonJS dependencies outside electron/', () => {
@@ -142,7 +140,7 @@ test('Windows extractor build wires PyInstaller hide-console without switching o
   assert.doesNotMatch(source, /'--(?:no)?console'/);
 });
 
-test('the packaged daemon pins the public MFS library and excludes retired ONNX wiring', () => {
+test('the packaged daemon pins the public MFS project and excludes retired ONNX wiring', () => {
   const requirements = fs.readFileSync(path.join(root, 'python', 'requirements.txt'), 'utf8');
   const build = fs.readFileSync(path.join(root, 'scripts', 'build-python-sidecar.mjs'), 'utf8');
   const daemonExcludes = build.match(/const daemonExcludedModules = \[([\s\S]*?)\n\];/)?.[1] ?? '';

@@ -16,19 +16,28 @@
 ```text
 created → renderer loaded → save handler ready → context release requested
         → save acknowledged → close: identity retired → native window closed
-                            → reload: identity retained → renderer replaced
                             → update install: every window acknowledged
                               → installer runs → application relaunched
 ```
 
-A close or reload asks one window and the answer binds that window alone. An
+A close asks one window and the answer binds that window alone. An
 update install asks every live window at once and proceeds only on unanimous
 acknowledgement.
 
 A window created for a folder claims that folder once its renderer loads, then
 opens it the way a reader's own click would, so the server learns the window's
-folder through one path. A reload retains the window identity and the claim is
-already spent, so the renderer reads its folder back from the server instead.
+folder through one path. Renderer remounts retain the window identity and the
+claim is already spent, so the renderer reads its folder back from the server.
+
+Workspace snapshot replacement retains the last valid file if the rename
+fails, including Windows sharing/permission failures. The store only removes
+its temporary write; it never deletes the durable snapshot to retry replacement.
+`electron/workspace/session.test.cjs` covers these failure paths.
+
+The current server exposes project snapshots through `GET /api/projects` and
+startup identity through `GET /api/health`. Electron may probe an older server's
+`GET /api/folder` for a diagnostic, but the current server no longer serves it.
+`DELETE /api/folder` remains the active-window close operation.
 
 `did-finish-load` is not save readiness. Navigation invalidates the previous
 registration. Before readiness there cannot yet be a renderer-owned edit;
@@ -36,17 +45,19 @@ after readiness, a save failure or timeout keeps the window open.
 
 ## Invariants
 
-- Each window has one stable identity used by HTTP, asset URLs, Agent sockets,
+- Each window has one stable identity used by API requests, Agent sockets,
   and server-side folder context. Main stamps that identity onto outbound
   renderer requests after checking the sender, its main frame, and its origin,
   so the identity is never renderer-supplied. The system-level statement lives
   in [Architecture](architecture.md#renderer-trust-boundary).
 - Every window is created with the shared sandboxed web preferences and loads
-  the built bundle from the `app://renderer` application origin. Explicit Vite
+  the built bundle from the `app://renderer` application origin. The shared
+  preferences expose no sandbox-disable override. Explicit Vite
   development is the only launch that uses the loopback development origin
   instead. `secureApplicationWindow` enforces whichever origin the launch chose
-  and denies navigation off it, popups, `webview` attachment, and permission
-  requests. The application origin's own handler attaches the Content Security
+  and denies navigation off it, popups, `webview` attachment, and every
+  permission but one: the sanitized clipboard write, granted only to a frame at
+  that same origin, which is how a copied value leaves the window. The application origin's own handler attaches the Content Security
   Policy and refuses any request path that escapes the renderer root.
 - Capability reaches a window only through the bundled typed preload composed
   from the per-capability modules under `electron/`. A window's capability set
@@ -66,17 +77,27 @@ after readiness, a save failure or timeout keeps the window open.
 - Native close awaits the current renderer save barrier before retiring the
   identity. Retirement installs a bounded tombstone so an in-flight open
   request cannot recreate a ghost binding.
-- Product-owned reload is error recovery, not ordinary navigation. Native
-  Reload and Force Reload menu and keyboard bypasses are absent. Recovery crosses
-  main's awaited save barrier; if the failed renderer can no longer answer,
-  reload requires a second explicit risk confirmation.
+- Async folder opens are ordered by window intent: close, retirement, or a
+  newer open invalidates an older pending request before it commits. Registry
+  snapshots check the committed binding revision after disk reads; stale
+  results cannot clear a newer folder or mix its name with an older path.
+- Native folder-window lookup uses the shared filesystem comparison rules,
+  including macOS volume case behavior and Unicode normalization, while
+  retaining source spelling for initial-folder claims. Identity probes are
+  asynchronous; lookup rechecks the live registration after they complete.
+- Native Reload and Force Reload menu and keyboard bypasses are absent, and
+  the preload exposes no native reload operation. Current error recovery
+  remounts the React subtree. Any future native reload must cross main's save
+  barrier or require explicit risk confirmation when the renderer cannot answer.
 - Closing one window releases only that window's folder and Agent state. Shared
   server, daemon, settings, MCP, and other windows remain live.
-- Removing a library folder flushes every window showing it, commits membership
+- Removing a project folder flushes every window showing it, commits membership
   removal, and broadcasts the transition. Recovery may rebind only if durable
   membership still contains the folder.
 - A single-flight initial-window operation plus the single-instance lock
-  prevents startup races from creating duplicate windows.
+  prevents startup races from creating duplicate windows. Initial launch,
+  second-instance delivery, and macOS activation share this operation;
+  explicit New Window actions remain independent.
 - An Electron-owned source server is always launched with the general
   development-runtime marker, which keeps live Python sources and development
   controls available. The narrower Vite marker is present only when a Vite
@@ -89,7 +110,14 @@ after readiness, a save failure or timeout keeps the window open.
   connection but temporarily missed the health-response deadline receives a
   bounded re-probe before Electron decides whether to reuse or start a server;
   one short timeout can never race a competing child onto the same port.
-  Packaged launches explicitly remove both development markers.
+  After that interval, a persistently unresponsive listener reaches the child
+  server's verified orphan-reclaim path. Responsive incompatible listeners fail
+  before spawning. Packaged launches explicitly remove both development markers
+  and never reuse another server. Every spawned launch carries a fresh,
+  non-secret instance ID in its health response; readiness must match that ID
+  as well as the application paths and protocol. PID equality is insufficient
+  because development and Windows launch wrappers may own a different PID.
+  A child that has exited cannot satisfy readiness even if a probe succeeds.
 - Browser-owned OAuth returns focus only through the packaged `stashbase://`
   handler, which accepts the exact data-free `oauth-complete` authority.
   Renderer polling updates account state without racing that browser-owned
@@ -108,6 +136,11 @@ after readiness, a save failure or timeout keeps the window open.
   built by hand rather than from the stock `windowMenu` role, whose Close item
   would bind Cmd/Ctrl+W, and Close Window stays on Cmd+Shift+W or Alt+F4 so
   the renderer keeps Cmd/Ctrl+W for closing the active document tab.
+- Explicit application quit retains its intent while asynchronous window saves
+  settle, including on macOS. The final window resumes that quit; any refused,
+  failed, or timed-out save revokes the intent, so a later ordinary close does
+  not unexpectedly quit the app. Review windows participate in final-window
+  counting and keep the app alive until they also close.
 - Native Help remains main-process-owned and usable when the renderer cannot
   paint. Website, Community Discord, and Report an Issue open fixed shared URLs
   in the system browser; Report a Bug enters the J09 review flow. These are
@@ -122,7 +155,7 @@ after readiness, a save failure or timeout keeps the window open.
   AppImage Adapter applies without force-running a competing instance and asks
   Electron to relaunch the final filename after the old process exits. Install
   crosses that barrier with the `update-install` release reason, which is
-  distinct from `window-close` and `window-reload` so a release requested for
+  distinct from `window-close` so a release requested for
   an install is never satisfied by an answer the person gave about closing one
   window. Approval is all-or-nothing: every live window whose renderer has
   loaded must acknowledge before any window is pre-approved to close, and a
@@ -130,7 +163,13 @@ after readiness, a save failure or timeout keeps the window open.
   approval at all, and explains in a native notice why the download is still
   waiting. An install that fails after approval revokes exactly the approvals
   that install granted, so the person's next close is asked again rather than
-  passing silently.
+  passing silently. Before requesting saves, main disables native interaction
+  with every live application window and blocks new-window creation, including
+  requests already waiting for server startup. These locks last through the
+  native installer's asynchronous preparation; save replies cannot be invalidated
+  by later user edits. Save refusal restores each window's previous enabled
+  state before showing recovery. Synchronous or asynchronous installer failure
+  restores that state and revokes close approval.
 - Every application window carries the `updates.desktop` capability in the set
   recorded at its creation, and main publishes each transition of the update
   state machine to every live window that holds it. What a window receives is a
@@ -147,9 +186,11 @@ after readiness, a save failure or timeout keeps the window open.
   lowercases on Windows, answers the renderer with the raw spelling once, and
   forgets it as it answers, so a folder reopened through an equivalent spelling
   never comes back under a rewritten name. The claim is authorized exactly as
-  every other library-lifecycle call is, and a window nobody named a folder for
+  every other project-lifecycle call is, and a window nobody named a folder for
   is answered with no folder rather than a failure. No part of the folder
-  travels in the window's URL, so development and packaged windows load the
+  travels in the window's URL. Folder paths retain their exact whitespace
+  through the picker, lifecycle messages, registry, and HTTP boundary; blank
+  inputs are rejected without trimming valid names. Development and packaged windows load the
   same document.
 - Frameless chrome remains draggable on every desktop platform; macOS
   traffic-light layout is selected only by the exact Darwin platform marker,
@@ -162,8 +203,9 @@ after readiness, a save failure or timeout keeps the window open.
 
 **Known gap — no driven runtime pass proves an install.** A window can now
 request Install, so the all-window save barrier has a caller, but the evidence
-for it is still focused over the real lifecycle service, barrier, update state
-machine, and renderer boundary. An unpackaged build reports `unsupported`, so a
+includes focused tests plus a two-window built-renderer smoke over the real
+lifecycle service, native interaction locks, delayed MacUpdater handoff, and
+failure rollback. The native installer in that smoke is controlled. An unpackaged build reports `unsupported`, so a
 real download, install, and relaunch remain packaged-release evidence.
 
 ## Shutdown
@@ -186,6 +228,14 @@ health probes. An Electron-owned server also watches for POSIX reparenting and
 shuts itself down when its owner disappears; both reclaim paths are POSIX-only,
 like the daemon reapers.
 
+## Known Gaps in Renderer Recovery
+
+The active window lifecycle service tracks document load, not a separate
+save-handler readiness registration. A loaded renderer that cannot answer the
+save barrier stays open. The shell recovery action remounts React; a native
+reload with explicit risk confirmation after a root failure is not implemented.
+Focused tests prove refusal and timeout behavior through the active service.
+
 ## Bug-report review windows
 
 The review is an independent dialog-sized window, never a child or modal of its
@@ -204,8 +254,6 @@ creation, presentation, survival, and retirement.
 ## Failure and Recovery
 
 - Save error or timeout: leave the native window open and surface the failure.
-- Reload save error or timeout: keep the current renderer and buffer; never
-  turn the error-recovery button into a force reload.
 - Update install refused by any window: cancel the install, keep the phase at
   ready, grant no close approval, and name the reason in a native notice.
 - Update install failure after every window approved: revoke exactly those
@@ -217,8 +265,9 @@ creation, presentation, survival, and retirement.
 - Server startup failure: record the cause before opening the native error
   dialog so unattended launches retain actionable process output.
 - Temporarily unresponsive listener during startup: re-probe for a bounded
-  interval. Reuse it if compatibility becomes visible, start only after the
-  port becomes free, and retain port-in-use guidance if it stays occupied.
+  interval. Source launches may reuse it if compatibility becomes visible;
+  otherwise an owned child verifies whether a persistent holder is reclaimable.
+  Live-parented siblings and foreign listeners retain port-in-use guidance.
 - Second launch during startup: route to the existing application instance.
 - Orphaned sibling server on the port: reclaim and rebind once; a
   live-parented or foreign holder keeps the port-in-use guidance.
@@ -229,19 +278,20 @@ creation, presentation, survival, and retirement.
 
 | Role | Stable entry points |
 |---|---|
-| Native window Module | `electron/multi-window.cjs` |
+| Native window Module | `electron/multi-window.cjs`, sharing `server/filesystem-path.ts` through the bundled `project/filesystem-path` entry |
 | Renderer durability Interface | `registerWindowLifecycle` in `electron/window/lifecycle.ts`, which owns the loaded, pre-approved-close, and pending-request state and exposes `hasLoadedRenderer`, `requestContextRelease`, `approveClose`, and `revokeCloseApproval` as the only access to it |
-| Process owner Adapter | `electron/main.cjs`; child-environment construction and bounded stable-port probing in `electron/main-probe.cjs` |
-| Window origin and policy | `electron/app-protocol.cjs` for the application origin, Content Security Policy, and renderer-root containment; shared web preferences and navigation/permission denial in `electron/window-security.cjs` |
-| Renderer bridge Adapter | the per-capability preload modules under `electron/library/`, `electron/window/`, `electron/workspace/`, `electron/capture/`, `electron/external-navigation/`, `electron/bug-report/`, and `electron/renderer/`, composed into one bundled preload and read on the renderer side by `renderer/src/platform/electron/bridge.ts` |
-| IPC authorization Interface | `authorizeSender` in `electron/library/dialog.ts`, over the wire schemas in `shared/protocols/electron/`; outbound request authorization in `electron/renderer/requests.cjs` |
+| Process owner Adapter | `electron/main.cjs`; startup arbitration, launch-bound readiness, and child-environment construction in `electron/main-probe.cjs`, covered by `electron/main-probe.test.cjs` |
+| Window origin and policy | `electron/app-protocol.cjs` for the application origin, Content Security Policy, and renderer-root containment; shared web preferences, navigation denial, and the permission policy in `electron/window-security.cjs`, whose one grant is the sanitized clipboard write to the application's own origin |
+| Renderer bridge Adapter | the per-capability preload modules under `electron/project/`, `electron/window/`, `electron/workspace/`, `electron/external-navigation/`, `electron/bug-report/`, and `electron/renderer/`, composed into one bundled preload and read on the renderer side by `renderer/src/platform/electron/bridge.ts` |
+| IPC authorization Interface | `authorizeSender` in `electron/project/dialog.ts`, over the wire schemas in `shared/protocols/electron/`; outbound request authorization in `electron/renderer/requests.cjs` |
 | Recovery key provider | `createRecoveryKeyProvider` in `electron/recovery-key.cjs`, delivered to the child server by `electron/main-probe.cjs` |
+| Workspace persistence Module | `electron/workspace/session.ts` owns serialized per-window deltas over the durable folder-history aggregate; the wire shape lives in `shared/protocols/electron/workspace-session.ts`, with state and restore rules in [Renderer Workspace](renderer-workspace.md#workspace-invariants) |
 | Server context Interface | window-scoped registry and retirement in `server/folder.ts` |
 | HTTP Adapters | `server/routes/window-context.ts`, `server/routes/internal-shutdown.ts` |
 | Cleanup Interface | `server/shutdown-cleanup.ts`; orphan reclaim in `server/stale-lock.ts`; parent watchdog in `server/parent-watchdog.ts` |
 | Bug-report window Adapter | `electron/bug-report-review-window.cjs`; draft authority lives in [Bug Reporting](bug-reporting.md) |
 | Desktop update Module | `electron/update-manager.cjs`; platform install strategy in `electron/update-install-strategy.cjs`; all-window save barrier in `electron/update-window-barrier.cjs`, composed over the window lifecycle service by `createWindowLifecycleUpdateBarrier`, which resolves that service per call because main installs the replacement boundary after the update manager exists; renderer boundary in `electron/updates/ipc.ts` and `electron/updates/preload.ts` over the wire contract in `shared/protocols/electron/updates.ts`; native wiring in `electron/main.cjs` |
-| Focused evidence | `electron/multi-window.test.cjs`, `electron/app-protocol.test.cjs`, `electron/window-security.test.cjs`, `electron/recovery-key.test.cjs`, `electron/update-manager.test.cjs`, `electron/update-install-strategy.test.cjs`, `electron/update-window-barrier.test.cjs`, `electron/updates/ipc.test.cjs`, `electron/updates/preload.test.cjs`, `shared/protocols/electron/updates.test.ts`, `electron/window/lifecycle.test.cjs`, `electron/window/preload.test.cjs`, `electron/multi-window-smoke.cjs`, `server/folder-window.test.ts`, `server/window-context-route.test.ts`, `server/internal-shutdown-route.test.ts`, `server/stale-lock.test.ts`, `server/parent-watchdog.test.ts`, `server/__tests__/shutdown-cleanup.test.ts` |
+| Focused evidence | `electron/multi-window.test.cjs`, `electron/app-protocol.test.cjs`, `electron/window-security.test.cjs`, `electron/renderer/requests.test.cjs`, `electron/renderer/request-authorization-smoke.cjs`, `electron/recovery-key.test.cjs`, `electron/update-manager.test.cjs`, `electron/update-install-strategy.test.cjs`, `electron/update-window-barrier.test.cjs`, `electron/updates/ipc.test.cjs`, `electron/updates/preload.test.cjs`, `shared/protocols/electron/updates.test.ts`, `electron/window/lifecycle.test.cjs`, `electron/window/preload.test.cjs`, `electron/multi-window-smoke.cjs`, `server/folder-window.test.ts`, `server/window-context-route.test.ts`, `server/internal-shutdown-route.test.ts`, `server/stale-lock.test.ts`, `server/parent-watchdog.test.ts`, `server/__tests__/shutdown-cleanup.test.ts` |
 
 ## Validation
 

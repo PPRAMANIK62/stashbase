@@ -6,8 +6,8 @@ import { createWorkspaceRuntime } from '@/features/workspace/test-support';
 import { pendingSourceApi, recoveryApi } from '@/test/fakes/documents';
 import {
   folderSession,
-  libraryApi,
-  libraryLifecycle,
+  projectApi,
+  projectLifecycle,
   RESEARCH_FOLDER,
   sessionPersistence,
   workspaceRuntimeOptions,
@@ -39,13 +39,13 @@ describe('document workspace composition', () => {
     const createId = () => `new-tab-${++nextId}`;
     const api = pendingSourceApi();
     const recovery = recoveryApi();
-    const library = libraryApi();
+    const project = projectApi();
 
     // The session is reached through the app's own wiring, so the tabs this
     // hook records land in the same snapshot the running window would save.
     const { result, rerender } = renderHook(
       ({ currentWorkspace }) => {
-        const session = useWorkspaceSession(library, persistence, libraryLifecycle());
+        const session = useWorkspaceSession(project, persistence, projectLifecycle());
         // The shell only mounts a workspace once the session has settled;
         // the tabs runtime is built from whatever it restored.
         const live = session.status.kind === 'ready' ? currentWorkspace : null;

@@ -21,14 +21,14 @@ describe('Agent file change evidence', () => {
       <AgentFileChangeView
         change={{
           action: 'edited',
-          path: '/library/Research/notes.md',
+          path: '/project/Research/notes.md',
           text: { after: 'alpha\nbeta\n', before: 'alpha\nbravo\n', extent: 'fragment' },
         }}
       />,
     );
 
     const section = screen.getByRole('region', { name: 'Edited notes.md' });
-    expect(section.textContent).toContain('/library/Research');
+    expect(section.textContent).toContain('/project/Research');
     expect(screen.getByLabelText('1 added, 1 removed').textContent).toBe('+1−1');
     await waitFor(() => {
       expect(container.querySelector('.cm-deletedChunk')?.textContent).toContain('bravo'); // dom-contract: CodeMirror internals
@@ -74,13 +74,13 @@ describe('Agent file change evidence', () => {
     render(
       <AgentChangedFiles
         changes={[
-          { action: 'wrote', path: '/library/Research/notes/plan.md' },
+          { action: 'wrote', path: '/project/Research/notes/plan.md' },
           { action: 'edited', path: '/elsewhere/config.json' },
         ]}
         onOpenSource={onOpenSource}
         sourceFor={(path) =>
-          path.startsWith('/library/Research/')
-            ? { folderPath: '/library/Research', path: path.slice('/library/Research/'.length) }
+          path.startsWith('/project/Research/')
+            ? { folderPath: '/project/Research', path: path.slice('/project/Research/'.length) }
             : null
         }
       />,
@@ -93,7 +93,7 @@ describe('Agent file change evidence', () => {
     expect(screen.queryByRole('button', { name: 'Open config.json' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Open plan.md' }));
     expect(onOpenSource).toHaveBeenCalledWith({
-      folderPath: '/library/Research',
+      folderPath: '/project/Research',
       path: 'notes/plan.md',
     });
   });

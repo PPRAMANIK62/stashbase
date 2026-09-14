@@ -1,6 +1,6 @@
 /**
  * J13 at the renderer composition boundary: both ways into the shop, the entry
- * page a card opens, and the copy that reaches the Library through the ordinary
+ * page a card opens, and the copy that registers a project through the ordinary
  * import and a window of its own.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -11,7 +11,7 @@ import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
 import type { GalleryEntry } from '@/features/gallery/public';
 import { appDependencies, galleryPort } from '@/test/fakes/app';
-import { libraryApi, librarySnapshot, workspaceAdapters } from '@/test/fakes/workspace';
+import { projectApi, projectRegistrySnapshot, workspaceAdapters } from '@/test/fakes/workspace';
 
 afterEach(cleanup);
 
@@ -31,13 +31,13 @@ const PUBLISHED: GalleryEntry = {
 };
 
 function harness({ folderOpen }: { folderOpen: boolean }) {
-  const copy = vi.fn(async () => '/library/Widget Handbook');
-  const snapshot = librarySnapshot();
+  const copy = vi.fn(async () => '/project/Widget Handbook');
+  const snapshot = projectRegistrySnapshot();
   const dependencies = appDependencies({
     gallery: galleryPort({ copy, loadIndex: vi.fn(async () => [PUBLISHED]) }),
     workspace: {
       adapters: workspaceAdapters({
-        library: libraryApi({
+        project: projectApi({
           load: vi.fn(async () => ({
             ...snapshot,
             activeFolder: folderOpen ? snapshot.activeFolder : null,
@@ -47,7 +47,7 @@ function harness({ folderOpen }: { folderOpen: boolean }) {
       revealLabel: 'Show in file manager',
     },
   });
-  dependencies.library.api = dependencies.workspace.adapters.library;
+  dependencies.project.api = dependencies.workspace.adapters.project;
   render(
     <Providers>
       <App dependencies={dependencies} />
@@ -63,7 +63,7 @@ describe('Gallery shop', () => {
     // Browsing needs no folder, no account, and no Agent runtime. The band is
     // derived rather than offered, so the entry is on the screen before any
     // click. The click is retried against a fresh node: the welcome screen
-    // re-renders as its library query settles, and a node found before that is
+    // re-renders as its project query settles, and a node found before that is
     // already detached.
     await screen.findByRole('button', { name: /Widget Handbook/u });
     expect(screen.queryByRole('dialog', { name: 'Gallery' })).toBeNull();

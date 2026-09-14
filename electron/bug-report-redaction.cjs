@@ -59,7 +59,13 @@ function replaceHomeVariant(text, variant, caseInsensitive, counts) {
     // `C:\\Users\\Jane Doe`. The exact home may follow log punctuation,
     // quotes, or a URI separator, but never a path/name prefix or drive colon.
     const hasStartBoundary = index === 0 || !/[A-Za-z0-9_.:-]/.test(previous);
-    const hasEndBoundary = end === text.length || next === '/' || next === '\\';
+    // Quoted longer directory names and an unquoted spaced path continuation
+    // are not this home. In prose, whitespace or punctuation can terminate it.
+    const quotedPath = previous === '"' || previous === "'";
+    const spacedPathContinuation = /^[ \t]+[^\s"']*[\\/]/.test(text.slice(end));
+    const proseBoundary = !quotedPath && !spacedPathContinuation && /[\s),;:!?\]{}]/.test(next ?? '');
+    const hasEndBoundary = end === text.length || next === '/' || next === '\\'
+      || next === '"' || next === "'" || next === '\r' || next === '\n' || proseBoundary;
     if (!hasStartBoundary || !hasEndBoundary) {
       searchFrom = index + 1;
       continue;
@@ -265,7 +271,12 @@ function scanNamedFields(text) {
     const field = match[3];
     if (!isSensitiveFieldName(field)) continue;
     const parsed = readFieldValue(text, expression.lastIndex);
-    if (!parsed) continue;
+    // A log may end mid-write. Recognizing a sensitive field without a
+    // complete value cannot establish safety, even if redaction skipped it.
+    if (!parsed) {
+      count += 1;
+      continue;
+    }
     expression.lastIndex = parsed.end;
     if (!isAlreadyRedacted(parsed.value)) count += 1;
   }

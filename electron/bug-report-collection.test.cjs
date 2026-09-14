@@ -170,3 +170,12 @@ test('unavailable screenshot capture returns no artifact', async () => {
   assert.equal(await captureWindowScreenshot(null), null);
   assert.equal(await captureWindowScreenshot({ capturePage: async () => null }), null);
 });
+
+
+test('a log ending inside a quoted credential is unavailable to review', () => {
+  const result = collectRedactedApplicationLog({
+    filePath: '/logs/server.log',
+    fsModule: fakeFs('INFO ready\nINFO {"accessToken":"sample-private-value'),
+  });
+  assert.equal(result, null);
+});

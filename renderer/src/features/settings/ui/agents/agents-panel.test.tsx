@@ -65,17 +65,14 @@ describe('AgentRuntimesPanel', () => {
     renderPanel(port);
     const user = userEvent.setup();
 
-    const disclosure = await screen.findByRole('button', { name: 'Token detail' });
-    const panelId = disclosure.getAttribute('aria-controls');
-    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
-    expect(panelId).not.toBeNull();
+    const summary = await screen.findByText('Token usage');
+    const disclosure = summary.closest('details') as HTMLDetailsElement;
+    expect(disclosure.open).toBe(false);
 
-    await user.click(disclosure);
+    await user.click(summary);
 
-    expect(disclosure.getAttribute('aria-expanded')).toBe('true');
-    const detail = screen.getByText('0 input · 0 output · 0 cached');
-    expect(detail.id).toBe(panelId);
-    expect(detail.hidden).toBe(false);
+    expect(disclosure.open).toBe(true);
+    expect(disclosure.contains(screen.getByText('0 input · 0 output · 0 cached'))).toBe(true);
     expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
   });
 
@@ -114,6 +111,10 @@ describe('AgentRuntimesPanel', () => {
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledOnce());
     expect(rendered.onOpenExternal).toHaveBeenCalledWith('https://accounts.example/sign-in');
     expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Stop waiting' }));
+    expect(screen.queryByRole('button', { name: 'Waiting for browser…' })).toBeNull();
+    await user.click(screen.getAllByRole('button', { name: 'Sign in' })[0] as HTMLElement);
+    await waitFor(() => expect(account.startSignIn).toHaveBeenCalledTimes(2));
   });
 
   it('names the signed-in person under Account and signs out from there', async () => {
@@ -145,7 +146,7 @@ describe('AgentRuntimesPanel', () => {
     await user.click(await screen.findByRole('button', { name: 'Install' }));
 
     expect(port.prepareAgent).toHaveBeenCalledWith('codex', 'bootstrap', expect.anything());
-    await waitFor(() => expect(screen.getByText(/Ready for Chat/)).not.toBeNull());
+    await waitFor(() => expect(screen.getByText(/Ready to chat/)).not.toBeNull());
   });
 
   it('offers Uninstall only for a managed runtime and confirms before removing it', async () => {
@@ -158,7 +159,7 @@ describe('AgentRuntimesPanel', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Uninstall' }));
 
-    const dialog = await screen.findByRole('dialog', { name: 'Uninstall Claude Code runtime?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Uninstall Claude Code?' });
     await user.click(within(dialog).getByRole('button', { name: 'Uninstall' }));
 
     expect(port.resetManagedAgent).toHaveBeenCalledWith('claude', expect.anything());
@@ -174,7 +175,7 @@ describe('AgentRuntimesPanel', () => {
     });
     renderPanel(port);
 
-    expect(await screen.findByText('Credits are temporarily unavailable.')).not.toBeNull();
+    expect(await screen.findByText('Could not load your credit balance.')).not.toBeNull();
     expect(screen.queryByText(/remaining/)).toBeNull();
   });
 
@@ -183,7 +184,7 @@ describe('AgentRuntimesPanel', () => {
     renderPanel(port);
 
     await screen.findByRole('button', { name: 'Install' });
-    expect(screen.queryByText('Agent bootstrap testing')).toBeNull();
+    expect(screen.queryByText('Agent setup testing')).toBeNull();
   });
 
   it('keeps a failed install visible on its row instead of silently clearing the busy state', async () => {
@@ -213,7 +214,7 @@ describe('AgentRuntimesPanel', () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Uninstall' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Uninstall Claude Code runtime?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Uninstall Claude Code?' });
     await user.click(within(dialog).getByRole('button', { name: 'Uninstall' }));
 
     expect(await within(dialog).findByText(failureMessage('unavailable'))).not.toBeNull();
@@ -226,7 +227,7 @@ describe('AgentRuntimesPanel', () => {
     });
     renderPanel(port);
 
-    expect(await screen.findByText('Agent bootstrap testing')).not.toBeNull();
+    expect(await screen.findByText('Agent setup testing')).not.toBeNull();
     expect(screen.getByText('Development only')).not.toBeNull();
   });
 });

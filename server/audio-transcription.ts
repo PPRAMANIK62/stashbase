@@ -41,6 +41,7 @@ import { filesystemPath } from './filesystem-path.ts';
 import { isCloudPlaceholderName, isIndexExcludedDirName } from './indexable.ts';
 import { blake3File } from './file-hash.ts';
 import { validatePreparedAudioTranscript } from './prepared-validation.ts';
+import { parseAudioTranscript } from './audio-transcript.ts';
 import {
   getTranscriptionProvider,
   type TranscriptionModelRef,
@@ -324,20 +325,26 @@ export class AudioPreviewPipeline {
 
 const productionMediaTools = new FfmpegAudioMediaTools();
 const previewPipeline = new AudioPreviewPipeline(productionMediaTools);
-const transcriptionJobs = new Map<string, Map<string, Map<string, { sourceAbs: string; completion: Promise<void> }>>>();
-const audioPreviewProgress = new Map<string, { completedMs: number; totalMs: number }>();
-
-function configuredTranscription(): {
+interface TranscriptionSelection {
   provider: TranscriptionProvider;
   model: TranscriptionModelRef;
   language: string;
-} | null {
+}
+interface TranscriptionJob extends TranscriptionSelection {
+  sourceAbs: string;
+  urgency?: 'interactive';
+  completion: Promise<void>;
+}
+const transcriptionJobs = new Map<string, TranscriptionJob>();
+const audioPreviewProgress = new Map<string, { completedMs: number; totalMs: number }>();
+
+function configuredTranscription(): TranscriptionSelection | null {
   const resolved = resolveConfiguredTranscription();
   return resolved.status === 'ready' ? resolved.selection : null;
 }
 
 function resolveConfiguredTranscription():
-  | { status: 'ready'; selection: { provider: TranscriptionProvider; model: TranscriptionModelRef; language: string } }
+  | { status: 'ready'; selection: TranscriptionSelection }
   | { status: 'blocked'; block: ConfiguredTranscriptionBlock } {
   const preferences = getTranscriptionPreferences();
   const provider = getTranscriptionProvider(preferences.providerId);
@@ -409,14 +416,30 @@ export function maybeConvertAudio(
   sourceAbs: string,
   options: { urgency?: 'interactive'; language?: string } = {},
 ): Promise<void> | null {
-  const configured = configuredTranscription();
-  if (!configured) return null;
-  const language = options.language?.trim().toLowerCase() || configured.language;
-  const completion = maybeConvert(sourceAbs, audioSpec(configured.provider, configured.model, language), {
-    urgency: options.urgency ?? 'background',
+  const current = transcriptionJobs.get(filesystemPath.identity(sourceAbs));
+  // Repeated discovery or preference changes must not relabel a live job.
+  if (current && getScheduledConversion(sourceAbs)) {
+    return queueAudioTranscription(sourceAbs, current, options.urgency ?? current.urgency);
+  }
+  const selection = configuredTranscription();
+  if (!selection) return null;
+  return queueAudioTranscription(sourceAbs, {
+    ...selection,
+    language: options.language?.trim().toLowerCase() || selection.language,
+  }, options.urgency);
+}
+
+function queueAudioTranscription(
+  sourceAbs: string,
+  selection: TranscriptionSelection,
+  urgency?: 'interactive',
+): Promise<void> | null {
+  const completion = maybeConvert(sourceAbs, audioSpec(selection.provider, selection.model, selection.language), {
+    urgency: urgency ?? 'background',
     cost: 20,
   });
-  if (completion) trackTranscriptionJob(configured.provider.id, configured.model.id, sourceAbs, completion);
+  const current = transcriptionJobs.get(filesystemPath.identity(sourceAbs));
+  if (current?.completion === completion) current.urgency = urgency ?? current.urgency;
   return completion;
 }
 
@@ -459,7 +482,7 @@ export async function blockedAudioSourcesForFolder(folderAbs: string, treeRevisi
 }
 
 /** Revision-keyed cache keeps the frequent status endpoint independent from
- * recursive library size. Its injected scan seam makes the liveness contract
+ * recursive project size. Its injected scan seam makes the liveness contract
  * deterministic to test without filesystem timing assertions. */
 export class AudioBlockedSourceCache {
   private readonly entries = new Map<string, {
@@ -531,7 +554,7 @@ export async function incompleteAudioSourcesForFolder(folderAbs: string): Promis
 }
 
 export function indexFreshAudio(sourceAbs: string) {
-  return indexFreshDerived(sourceAbs, audioFreshnessSpec());
+  return indexFreshDerived(sourceAbs, AUDIO_FRESHNESS_POLICY);
 }
 
 export async function prepareAudioPreview(sourceAbs: string, signal?: AbortSignal): Promise<string> {
@@ -542,6 +565,7 @@ export async function prepareAudioPreview(sourceAbs: string, signal?: AbortSigna
     currentIdentity
     && audioPreviewIsCurrent(preview, derivedAudioPreviewMetadataFor(sourceAbs), currentIdentity)
   ) return preview;
+  const interruptedJob = transcriptionJobs.get(filesystemPath.identity(sourceAbs));
   const interruptedTranscription = await interruptConversionForInteractivePreview(sourceAbs);
   try {
     await runAuxiliaryConversion({
@@ -564,10 +588,15 @@ export async function prepareAudioPreview(sourceAbs: string, signal?: AbortSigna
     });
     return preview;
   } finally {
-    // `maybeConvertAudio` respects durable failed/cancelled state, so a user
-    // who cancelled transcription while preview work was active is not
-    // silently overridden by this resume attempt.
-    if (interruptedTranscription && fs.existsSync(sourceAbs)) maybeConvertAudio(sourceAbs);
+    // Resume the interrupted attempt, including a per-attempt language override.
+    // Recheck model availability after the await; removal must not revive work.
+    // The conversion owner still enforces durable user cancellation.
+    if (interruptedTranscription && interruptedJob && fs.existsSync(sourceAbs)) {
+      const resolved = interruptedJob.provider.resolveSelection(interruptedJob.model.id);
+      if (resolved.status === 'ready') {
+        queueAudioTranscription(sourceAbs, { ...interruptedJob, model: resolved.model }, interruptedJob.urgency);
+      }
+    }
   }
 }
 
@@ -596,39 +625,10 @@ export function readAudioPreviewStatus(sourceAbs: string): AudioPreviewStatus {
 /** Stop queued/running local inference before deleting a model. In particular,
  * Windows cannot remove a model while whisper.cpp still has it open/mapped. */
 export async function cancelAudioTranscriptionsUsingModel(providerId: string, modelId: string): Promise<string[]> {
-  const providerJobs = transcriptionJobs.get(providerId);
-  const jobs = [...(providerJobs?.get(modelId)?.values() ?? [])];
+  const jobs = [...transcriptionJobs.values()].filter((job) => job.provider.id === providerId && job.model.id === modelId);
   for (const job of jobs) cancelConversionForModelRemoval(job.sourceAbs);
   await Promise.allSettled(jobs.map((job) => job.completion));
   return jobs.map((job) => job.sourceAbs);
-}
-
-function trackTranscriptionJob(
-  providerId: string,
-  modelId: string,
-  sourceAbs: string,
-  completion: Promise<void>,
-): void {
-  const key = filesystemPath.identity(sourceAbs);
-  let providerJobs = transcriptionJobs.get(providerId);
-  if (!providerJobs) {
-    providerJobs = new Map();
-    transcriptionJobs.set(providerId, providerJobs);
-  }
-  let jobs = providerJobs.get(modelId);
-  if (!jobs) {
-    jobs = new Map();
-    providerJobs.set(modelId, jobs);
-  }
-  jobs.set(key, { sourceAbs, completion });
-  void completion.finally(() => {
-    const currentProvider = transcriptionJobs.get(providerId);
-    const current = currentProvider?.get(modelId);
-    if (current?.get(key)?.completion !== completion) return;
-    current.delete(key);
-    if (current.size === 0) currentProvider?.delete(modelId);
-    if (currentProvider?.size === 0) transcriptionJobs.delete(providerId);
-  }).catch(() => undefined);
 }
 
 function audioSpec(
@@ -643,6 +643,16 @@ function audioSpec(
     cost: 20,
     matches: isAudioFile,
     ...AUDIO_FRESHNESS_POLICY,
+    onScheduled: (sourceAbs, completion, urgency) => {
+      const key = filesystemPath.identity(sourceAbs);
+      transcriptionJobs.set(key, {
+        sourceAbs, provider, model, language, completion,
+        urgency: urgency === 'interactive' ? urgency : undefined,
+      });
+      void completion.finally(() => {
+        if (transcriptionJobs.get(key)?.completion === completion) transcriptionJobs.delete(key);
+      }).catch(() => undefined);
+    },
     convert: (abs, onProgress, signal, yieldLane) => transcription.prepare(abs, {
       model,
       language,
@@ -656,12 +666,7 @@ function audioSpec(
   };
 }
 
-/** Freshness/indexing is provider-independent: an already-complete transcript
- * remains readable even if its provider is temporarily unavailable. */
-function audioFreshnessSpec(): DerivedFreshnessSpec {
-  return AUDIO_FRESHNESS_POLICY;
-}
-
+/** Completed transcripts remain readable when their provider is unavailable. */
 const AUDIO_FRESHNESS_POLICY = {
   derivedNote: derivedNoteFor,
   derivedReady: (sourceAbs: string, notePath: string) => readCurrentAudioTranscript(sourceAbs, notePath) !== null,
@@ -781,48 +786,6 @@ async function fileTailContains(file: string, marker: string): Promise<boolean> 
   }
 }
 
-function parseAudioTranscript(value: unknown): AudioTranscript {
-  if (!isRecord(value) || value.schemaVersion !== 1) throw new Error('invalid audio transcript');
-  const source = value.source;
-  const provider = value.provider;
-  const segments = value.segments;
-  if (
-    !isRecord(source)
-    || !positiveFinite(source.durationMs)
-    || !nonNegativeFinite(source.size)
-    || !nonNegativeFinite(source.mtimeMs)
-    || !nonEmptyString(source.statIdentity)
-    || typeof source.contentHash !== 'string'
-    || !/^[a-f0-9]{64}$/i.test(source.contentHash)
-    || !isRecord(provider)
-    || !nonEmptyString(provider.id)
-    || !nonEmptyString(provider.version)
-    || !nonEmptyString(provider.model)
-    || !nonEmptyString(value.language)
-    || !nonEmptyString(value.createdAt)
-    || !Number.isFinite(Date.parse(value.createdAt))
-    || !Array.isArray(segments)
-  ) throw new Error('invalid audio transcript');
-
-  let previousStartMs = -1;
-  for (let index = 0; index < segments.length; index++) {
-    const segment = segments[index];
-    if (
-      !isRecord(segment)
-      || segment.id !== index + 1
-      || !Number.isInteger(segment.id)
-      || !nonNegativeFinite(segment.startMs)
-      || !nonNegativeFinite(segment.endMs)
-      || segment.endMs < segment.startMs
-      || segment.endMs > source.durationMs
-      || segment.startMs < previousStartMs
-      || !nonEmptyString(segment.text)
-    ) throw new Error('invalid audio transcript');
-    previousStartMs = segment.startMs;
-  }
-  return value as unknown as AudioTranscript;
-}
-
 async function walkAudioSourcesAsync(
   dir: string,
   visit: (sourceAbs: string) => Promise<void>,
@@ -907,10 +870,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function positiveFinite(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
 function nonNegativeFinite(value: unknown): value is number {

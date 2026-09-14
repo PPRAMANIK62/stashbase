@@ -21,3 +21,8 @@ journey, and engineering contract.
 * Update affected documentation with the behavior or Interface it describes.
   Run `pnpm test:docs` when routes, contracts, journeys, links, or structure
   change.
+
+The product baseline is IDE for writing: enter a project, brainstorm, write,
+and refine. These capabilities are implemented; document-specific diff for
+fine revision is the remaining feature. Do not turn workflow order into a
+feature roadmap or interpret evidence gaps as unimplemented capabilities.

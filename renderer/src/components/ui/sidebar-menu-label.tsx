@@ -1,9 +1,11 @@
 /** What sits inside a menu row's button: its leading icon and its label.
  *
- *  Both are shared by the parent rows and the sub rows, and both carry the
- *  same "lit" treatment — the row's colour and glyph stroke step up together
- *  when it is hovered or current, so a row never half-lights. Weight never
- *  changes: a current row looks exactly like a hovered one.
+ *  Both are shared by the parent rows and the sub rows. A row rests in ink,
+ *  label and glyph alike, the way a chat client's sidebar does; hover and
+ *  selection add the row tint and nothing else, so neither colour nor
+ *  stroke nor weight changes, and a current row looks exactly like a
+ *  hovered one. Grey is for glyphs that stand alone as buttons, which
+ *  darken under their own pointer.
  *
  *  The label is named, not guessed. This module used to read the row's
  *  children and peel the leading string off the front as "the label", which
@@ -19,25 +21,14 @@ import { WeightedLabel } from '@/components/ui/weighted-label';
 import type { IconComponent } from '@/lib/icon-context';
 import { cn } from '@/lib/utils';
 
-/** The row's leading glyph. Normalized to the size ladder's icon size, and
- *  thickened with the rest of the row when it is lit. */
-export function RowIcon({
-  icon: Icon,
-  lit,
-  size,
-}: {
-  icon: IconComponent;
-  lit: boolean;
-  size: number;
-}) {
+/** The row's leading glyph. Normalized to the size ladder's icon size, in
+ *  the same ink as the label beside it, so a row is one colour. */
+export function RowIcon({ icon: Icon, size }: { icon: IconComponent; size: number }) {
   return (
     <Icon
       size={size}
-      strokeWidth={lit ? 2 : 1.5}
-      className={cn(
-        'shrink-0 transition-[color,stroke-width] duration-fast',
-        lit ? 'text-foreground' : 'text-muted-foreground',
-      )}
+      strokeWidth={1.5}
+      className={cn('shrink-0 transition-colors duration-fast', 'text-foreground')}
     />
   );
 }
@@ -52,12 +43,10 @@ export function RowIcon({
 export function MenuRowLabel({
   label,
   extras,
-  lit,
   textClass,
 }: {
   label: React.ReactNode;
   extras: React.ReactNode;
-  lit: boolean;
   textClass: string;
 }) {
   if (label === undefined || label === null || label === '') {
@@ -65,7 +54,7 @@ export function MenuRowLabel({
       <span
         className={cn(
           'flex min-w-0 flex-1 items-center gap-2 transition-colors duration-fast',
-          lit ? 'text-foreground' : 'text-muted-foreground',
+          'text-foreground',
           textClass,
         )}
       >
@@ -76,10 +65,12 @@ export function MenuRowLabel({
 
   return (
     <>
+      {/* The label pins ink rather than handing WeightedLabel a lit state: a
+       *  lit label would otherwise rest muted, and a row's colour never
+       *  changes under the pointer. */}
       <WeightedLabel
-        className={cn('min-w-0 text-left', textClass)}
+        className={cn('min-w-0 text-left text-foreground', textClass)}
         emphasized={false}
-        lit={lit}
         overflow="truncate"
       >
         {label}

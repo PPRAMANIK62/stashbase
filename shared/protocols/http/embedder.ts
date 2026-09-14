@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 export const embedderProviderSchema = z.enum(['openai', 'openrouter']);
-export const embeddingSourceSchema = embedderProviderSchema;
 
 /** `GET /api/account`. Account identity is independent from embeddings. */
 export const hostedAccountStateSchema = z
@@ -16,12 +15,10 @@ export const hostedAccountStateSchema = z
 /** `GET /api/embedder`, and the body every embedder mutation answers with. */
 export const embedderStateSchema = z
   .object({
-    authorized: z.boolean(),
     backfillStarted: z.boolean().optional(),
     hasKey: z.boolean(),
     model: z.string().max(240),
     provider: embedderProviderSchema,
-    source: embeddingSourceSchema,
   })
   .passthrough();
 
@@ -35,17 +32,13 @@ export const embedderKeyRequestSchema = z
 /** `PUT /api/embedder/key`. */
 export const embedderKeySaveResponseSchema = z
   .object({
-    authorized: z.literal(true),
     backfillStarted: z.boolean().optional(),
     hasKey: z.literal(true),
     model: z.string().max(240),
     provider: embedderProviderSchema,
-    source: embeddingSourceSchema,
     warning: z.string().max(1000).optional(),
   })
   .passthrough();
-
-export const embedderSourceRequestSchema = z.object({ source: embedderProviderSchema }).strict();
 
 export const hostedOAuthStartRequestSchema = z
   .object({

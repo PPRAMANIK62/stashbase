@@ -10,8 +10,8 @@
 export { useWorkspace } from './hooks/use-workspace';
 export { useFiles } from './hooks/use-files';
 export { useHiddenFiles } from './hooks/use-hidden-files';
-export { useLibrary } from './hooks/use-library';
-export { useLibraryLifecycle } from './hooks/use-library-lifecycle';
+export { useProject } from './hooks/use-project';
+export { useProjectLifecycle } from './hooks/use-project-lifecycle';
 export {
   useWorkspaceSession,
   type WorkspaceSessionController,
@@ -26,11 +26,9 @@ export {
   type WorkspaceEntry,
   type WorkspaceListing,
 } from './domain/tree';
-export type { ActiveLibraryFolder, LibrarySnapshot } from './domain/library';
+export type { ActiveProjectFolder, ProjectRegistrySnapshot } from './domain/project';
 export type { WorkspaceScope } from './domain/workspace';
 export { createWorkspaceAdapters, type WorkspaceAdapters } from './infrastructure/adapters';
-export { ClipboardOffer } from './ui/clipboard-offer';
 export { FileTree, type FileTreeRowMarker } from './ui/file-tree';
-export { NewDraftButton } from './ui/new-draft-button';
-export { LibrarySidebar } from './ui/sidebar';
-export { LibraryWelcome } from './ui/welcome';
+export { ProjectSidebar } from './ui/sidebar';
+export { ProjectWelcome } from './ui/welcome';

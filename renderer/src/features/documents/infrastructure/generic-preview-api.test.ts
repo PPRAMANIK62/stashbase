@@ -22,7 +22,7 @@ describe('generic file preview API', () => {
     const api = createGenericFilePreviewAdapter(client);
 
     await expect(
-      api.load({ folderPath: '/library/source code', path: 'src/answer #1.ts' }, signal),
+      api.load({ folderPath: '/project/source code', path: 'src/answer #1.ts' }, signal),
     ).resolves.toEqual({
       content: 'export const answer = 42;\n',
       kind: 'text',
@@ -31,7 +31,7 @@ describe('generic file preview API', () => {
       version: 'sha256:source',
     });
     expect(client.request).toHaveBeenCalledWith({
-      path: '/api/file-preview/src/answer%20%231.ts?folder=%2Flibrary%2Fsource+code',
+      path: '/api/file-preview/src/answer%20%231.ts?folder=%2Fproject%2Fsource+code',
       signal,
     });
   });
@@ -45,7 +45,7 @@ describe('generic file preview API', () => {
     });
     await expect(
       mismatched.load(
-        { folderPath: '/library/notes', path: 'source.ts' },
+        { folderPath: '/project/notes', path: 'source.ts' },
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ kind: 'invalid-response' });
@@ -58,7 +58,7 @@ describe('generic file preview API', () => {
     });
     await expect(
       formatSpecific.load(
-        { folderPath: '/library/notes', path: 'report.pdf' },
+        { folderPath: '/project/notes', path: 'report.pdf' },
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ kind: 'not-generic' });
@@ -73,7 +73,7 @@ describe('generic file preview API', () => {
     });
 
     await expect(
-      api.load({ folderPath: '/library/notes', path: 'source.ts' }, new AbortController().signal),
+      api.load({ folderPath: '/project/notes', path: 'source.ts' }, new AbortController().signal),
     ).rejects.toMatchObject({
       kind: 'scope-lost',
       message: 'The file folder is no longer available in this window.',

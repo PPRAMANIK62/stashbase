@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { focusRing } from '@/lib/focus-ring';
+import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
 /** The hero is a 16:9 frame, full stop. It never trades its ratio for the
@@ -16,12 +17,13 @@ import { cn } from '@/lib/utils';
  *  to a strip. */
 const HERO_FRAME = { aspectRatio: '16 / 9' } as const;
 
-/** A thumbnail is a picture to recognize, not a dot to count: wide enough
- *  that a page's layout reads at a glance, three to a row under the hero at
- *  the column's full width, the rest one nudge away. `THUMB_STEP` is that
- *  width plus the strip's gap, so one arrow press moves exactly one. */
-const THUMB_WIDTH = 'w-40';
-const THUMB_STEP = 168;
+/** A thumbnail is a picture to recognize, not a dot to count: three fill the
+ *  column exactly, whatever width the window gives it, and the rest are one
+ *  nudge away. Fluid rather than a fixed width, because a fixed one left a
+ *  ragged gutter at the strip's right on every column it did not divide, and
+ *  read as a row that had run out rather than one that continued. */
+const THUMB_GAP = 8;
+const THUMB_WIDTH = 'w-[calc((100%-1rem)/3)]';
 
 /**
  * The curated screenshots: one hero across the page's full width, and a strip
@@ -40,6 +42,7 @@ export function GalleryScreenshots({
   name: string;
   screenshots: readonly string[];
 }) {
+  const shape = useShape();
   const [shot, setShot] = useState(0);
   const stripRef = useRef<HTMLDivElement>(null);
   // Which sides still have content, read from real scroll geometry rather than
@@ -60,10 +63,15 @@ export function GalleryScreenshots({
     updateArrows();
   }, [name, screenshots.length, updateArrows]);
 
-  /** One thumbnail plus its gap. The native scroller supplies the easing; the
-   *  arrow only picks the destination. */
+  /** One thumbnail plus its gap, measured off the strip rather than assumed,
+   *  since the thumbnails size to the column. The native scroller supplies
+   *  the easing; the arrow only picks the destination. */
   const nudge = (direction: 1 | -1) => {
-    stripRef.current?.scrollBy({ behavior: 'smooth', left: direction * THUMB_STEP });
+    const strip = stripRef.current;
+    if (!strip) return;
+    const first = strip.firstElementChild;
+    const step = first ? first.getBoundingClientRect().width + THUMB_GAP : strip.clientWidth / 3;
+    strip.scrollBy({ behavior: 'smooth', left: direction * step });
   };
 
   const hero = screenshots[shot];
@@ -72,7 +80,10 @@ export function GalleryScreenshots({
     <div className="min-w-0">
       {hero ? (
         <div
-          className="relative w-full overflow-hidden rounded-xl border border-border bg-surface-3"
+          className={cn(
+            'relative w-full overflow-hidden border border-border bg-surface-3',
+            shape.panel,
+          )}
           style={HERO_FRAME}
         >
           <img
@@ -83,7 +94,10 @@ export function GalleryScreenshots({
         </div>
       ) : (
         <div
-          className="flex w-full items-center justify-center rounded-xl border border-dashed border-border bg-surface-3"
+          className={cn(
+            'flex w-full items-center justify-center border border-dashed border-border bg-surface-3',
+            shape.panel,
+          )}
           style={HERO_FRAME}
         >
           <p className="m-0 max-w-xs text-center text-caption text-muted-foreground">
@@ -105,7 +119,8 @@ export function GalleryScreenshots({
                 aria-label={`Screenshot ${index + 1}`}
                 className={focusRing(
                   cn(
-                    `block ${THUMB_WIDTH} shrink-0 cursor-pointer snap-start overflow-hidden rounded-md border bg-surface-3 p-0 transition-colors duration-fast outline-none`,
+                    `block ${THUMB_WIDTH} shrink-0 cursor-pointer snap-start overflow-hidden border bg-surface-3 p-0 transition-colors duration-fast outline-none`,
+                    shape.chip,
                     // Selected reads as ink, not accent: the accent is reserved
                     // for the page's one action, and these repeat.
                     index === shot

@@ -78,7 +78,7 @@ for (const [source, markdown] of contents) {
 
 const forbidden = [
   'design-docs/use-cases.md',
-  'design-docs/design/library.md',
+  'design-docs/design/project.md',
   'design-docs/design/markdown.md',
   'code-review/data-layer.md',
   'code-review/ui-regression-testing.md',

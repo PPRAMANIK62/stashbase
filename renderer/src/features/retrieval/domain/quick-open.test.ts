@@ -10,22 +10,22 @@ const sources: QuickOpenSource[] = [
   {
     action: 'open',
     retrievalAccess: 'included',
-    source: { folderPath: '/library/notes', path: 'projects/other.md' },
+    source: { folderPath: '/project/notes', path: 'projects/other.md' },
   },
   {
     action: 'open',
     retrievalAccess: 'included',
-    source: { folderPath: '/library/notes', path: 'archive/project-notes.md' },
+    source: { folderPath: '/project/notes', path: 'archive/project-notes.md' },
   },
   {
     action: 'open',
     retrievalAccess: 'excluded',
-    source: { folderPath: '/library/notes', path: 'one/report.bin' },
+    source: { folderPath: '/project/notes', path: 'one/report.bin' },
   },
   {
     action: 'reveal',
     retrievalAccess: 'excluded',
-    source: { folderPath: '/library/notes', path: 'two/report.bin' },
+    source: { folderPath: '/project/notes', path: 'two/report.bin' },
   },
 ];
 
@@ -64,11 +64,11 @@ describe('Quick Open ranking', () => {
 
     expect(quickOpenNavigationIntent(openable)).toEqual({
       type: 'open-source',
-      source: { folderPath: '/library/notes', path: 'one/report.bin' },
+      source: { folderPath: '/project/notes', path: 'one/report.bin' },
     });
     expect(quickOpenNavigationIntent(revealable)).toEqual({
       type: 'reveal-source',
-      source: { folderPath: '/library/notes', path: 'two/report.bin' },
+      source: { folderPath: '/project/notes', path: 'two/report.bin' },
     });
   });
 });

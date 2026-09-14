@@ -26,7 +26,7 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 
 const MESSAGES = {
   'invalid-response': 'The recovery journal returned an invalid response.',
-  'scope-lost': 'That folder is no longer part of the library.',
+  'scope-lost': 'That folder is no longer part of the project.',
   unauthorized: 'This window can no longer use the recovery journal.',
   unavailable: 'The recovery journal could not be reached.',
 };

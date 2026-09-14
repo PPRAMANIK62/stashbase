@@ -2,6 +2,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { settingsQueryKeys } from '@/features/settings/application/queries';
+import type { HostedSignInStatus } from '@/features/settings/domain/account';
 import { accountPort, SIGNED_IN_ACCOUNT, SIGNED_OUT_ACCOUNT } from '@/test/fakes/settings';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
 
@@ -81,5 +82,60 @@ describe('useAccount', () => {
     await waitFor(() => expect(hook.result.current.account).toEqual(SIGNED_OUT_ACCOUNT));
     expect(port.signOut).toHaveBeenCalledOnce();
     expect(port.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the browser wait when polling fails and allows another sign-in', async () => {
+    const port = accountPort(SIGNED_OUT_ACCOUNT, {
+      signInStatus: vi.fn(async () => {
+        throw new Error('Disconnected');
+      }),
+    });
+    const { hook } = mount(port);
+    await waitFor(() => expect(hook.result.current.account).not.toBeNull());
+    act(() => hook.result.current.signIn());
+    await waitFor(() => expect(port.signInStatus).toHaveBeenCalledOnce());
+    await waitFor(() => expect(hook.result.current.signInPending).toBe(false));
+    expect(hook.result.current.failure).not.toBeNull();
+    act(() => hook.result.current.signIn());
+    await waitFor(() => expect(port.startSignIn).toHaveBeenCalledTimes(2));
+  });
+
+  it('stops polling and ignores a late response after the reader stops waiting and retries', async () => {
+    let finish: ((status: HostedSignInStatus) => void) | undefined;
+    const pending = new Promise<HostedSignInStatus>((resolve) => {
+      finish = resolve;
+    });
+    let pollSignal: AbortSignal | undefined;
+    let attempts = 0;
+    const port = accountPort(SIGNED_OUT_ACCOUNT, {
+      startSignIn: vi.fn(async () => ({
+        flowId: `flow-${++attempts}`,
+        url: 'https://accounts.example/sign-in',
+      })),
+      signInStatus: vi.fn(async (id, signal) => {
+        if (id !== 'flow-1') return { state: 'pending' as const };
+        pollSignal = signal;
+        return pending;
+      }),
+    });
+    const { hook } = mount(port);
+    await waitFor(() => expect(hook.result.current.account).not.toBeNull());
+    act(() => hook.result.current.signIn());
+    await waitFor(() => expect(port.signInStatus).toHaveBeenCalledOnce());
+    act(() => hook.result.current.stopWaiting());
+    expect(hook.result.current.busy).toBe(false);
+    expect(hook.result.current.canStopWaiting).toBe(false);
+    expect(pollSignal?.aborted).toBe(true);
+
+    act(() => hook.result.current.signIn());
+    await waitFor(() =>
+      expect(port.signInStatus).toHaveBeenCalledWith('flow-2', expect.any(AbortSignal)),
+    );
+    await act(async () => {
+      finish?.({ state: 'complete' });
+      await pending;
+    });
+    expect(hook.result.current.signInPending).toBe(true);
+    expect(port.load).toHaveBeenCalledOnce();
   });
 });

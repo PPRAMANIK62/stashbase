@@ -11,10 +11,19 @@ import { SurfaceBoundary } from '@/shared/runtime/surface-boundary';
 
 export interface AgentWorkspaceProps {
   catalog: AgentCatalogPort;
+  /** Whether the pane draws its own name row with the conversation's actions
+   *  (default true). False while the Chat has the whole card: the titlebar
+   *  names the chat then, and the Chats panel beside it manages the history
+   *  and New chat. */
+  header?: boolean | undefined;
   /** The standing instructions this scope's Chats run under. */
   instructions: AgentInstructionsPort;
   onOpenExternal(href: string): void;
   onOpenAgentSettings(): void;
+  /** Starts the StashBase account sign-in. The bundled runtime installs
+   *  nothing and holds no key, so the account is the only thing that can
+   *  stand between it and a turn, and no catalog command can clear it. */
+  onSignIn(): void;
   /** Opens a file the Agent changed beside the chat; the user chose it. */
   onOpenSource?: ((source: SourceReference) => void) | undefined;
   /** Restarts preparation for a bound source whose prepared text failed. */

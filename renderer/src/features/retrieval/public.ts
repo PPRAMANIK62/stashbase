@@ -12,5 +12,5 @@ export {
 export { createExactSearchAdapter } from './infrastructure/exact-search-api';
 export { createIndexDecisionAdapter } from './infrastructure/index-decision-api';
 export { createSemanticSearchAdapter } from './infrastructure/semantic-search-api';
-export { LibrarySearch } from './ui/library-search';
+export { ProjectSearch } from './ui/project-search';
 export { QuickOpen } from './ui/quick-open';

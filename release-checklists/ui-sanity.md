@@ -66,7 +66,7 @@ reason when a platform cannot exercise it.
   name; do not call the update path verified until every supported platform has
   a real result.
 - [ ] **J02** — Use the real native folder picker: cancel once without changing the
-  library, then add a disposable folder and confirm it opens.
+  project registry, then add a disposable folder and confirm it opens.
 - [ ] **J02 / J06** — Drag a real OS file or folder onto each supported drop target and confirm
   the intended import/attachment behavior and rejection feedback.
 - [ ] **J01 / J03** — Exercise native menus and the platform shortcuts for Quick Open, Command
@@ -83,7 +83,7 @@ reason when a platform cannot exercise it.
   approve the write, review and edit the file, then close and reopen it. Confirm
   keyword search can find the new durable content. This is a packaged integration
   check, not the semantic-quality threshold owned by the J05 Eval.
-- [ ] **J11** — From a Library-scoped Chat, explicitly ask the real Agent to create a
+- [ ] **J11** — From an unbound Chat, explicitly ask the real Agent to create a
   disposable project. Decline the first `create_project` approval and confirm no
   folder or membership appears. Ask again and approve: confirm the ordinary
   folder is created under the configured owned root, the same Chat transcript
@@ -93,19 +93,20 @@ reason when a platform cannot exercise it.
   folder through the external test setup rather than treating membership
   removal as filesystem deletion.
 - [ ] **J06** — Paste one non-sensitive clipboard image into the Agent composer. Confirm
-  the attachment preview appears, accompanying text remains, and the competing
-  clipboard library-import offer does not appear.
-- [ ] **J04** — With clipboard screenshot capture disabled in General Settings,
-  copy one non-sensitive screenshot and confirm StashBase does not offer it.
-  Enable capture, copy a new screenshot, explicitly add it, and confirm the
-  visible image enters the chosen folder while its OCR becomes searchable.
-  Disable capture again and confirm a later image creates no offer.
+  the attachment preview appears and accompanying text remains.
 - [ ] **J09** — Open **Report a Bug…** from the native Help menu. Review the bounded
   screenshot/log previews, exclude one available artifact, prepare the report,
   and use Download. Confirm only the selected files appear in one new Downloads
   folder and nothing is submitted automatically. When browser access is safe,
   also confirm **Open GitHub** opens the prefilled issue without placing logs or
   local paths in the URL.
+- [ ] **J04** — With a fresh component cache, prepare a PDF and image from the
+  installed release. Confirm the live release component downloads without a
+  confirmation, waiting preparation resumes, and macOS accepts the independently
+  signed/notarized executable. Interrupt an initial download and confirm it
+  waits for Settings → General → Local components → Retry download or one
+  attempt on the next launch. Restart offline after installation and prepare
+  another fixture using the same cache. Local HTTP fixture transport is not evidence for this check.
 - [ ] **J03 / J04** — Open representative real PDF, DOCX, image, and audio fixtures in the
   packaged app on platforms where those formats ship. The automated journey
   uses synthetic/minimal fixtures; here confirm production rendering and, for

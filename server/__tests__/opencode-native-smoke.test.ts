@@ -165,17 +165,17 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
   assert.equal(actionFor('stashbase-folder', 'edit'), 'ask');
   assert.equal(actionFor('stashbase-folder', 'external_directory'), 'deny');
   for (const permission of ['bash', 'read', 'glob', 'grep', 'edit', 'task', 'apply_patch']) {
-    assert.equal(actionFor('stashbase-library', permission), 'deny', `Library permission ${permission} is not denied`);
+    assert.equal(actionFor('stashbase-unbound', permission), 'deny', `Unbound permission ${permission} is not denied`);
   }
   for (const permission of ['stashbase_write_file', 'stashbase_edit_file', 'stashbase_move_file', 'stashbase_delete_file', 'stashbase_create_project']) {
-    assert.equal(actionFor('stashbase-library', permission), 'ask', `MCP permission ${permission} does not ask`);
+    assert.equal(actionFor('stashbase-unbound', permission), 'ask', `MCP permission ${permission} does not ask`);
   }
   const subscription = await client.event.subscribe({ sseMaxRetryAttempts: 1 });
   const nativeToolIds = ['invalid', 'question', 'bash', 'read', 'glob', 'grep', 'edit', 'write', 'task', 'webfetch', 'todowrite', 'websearch', 'skill', 'apply_patch'];
   assert.deepEqual(
     [...(await client.tool.ids({ throwOnError: true })).data].sort(),
     nativeToolIds.sort(),
-    'the pinned OpenCode native tool surface changed; review the Library-profile deny list',
+    'the pinned OpenCode native tool surface changed; review the unbound-profile deny list',
   );
   const events: Event[] = [];
   const consumed = (async () => {
@@ -219,22 +219,22 @@ test('pinned bundled OpenCode completes one SDK session against a fake compatibl
     assert.ok(folderTools.includes(name), `folder profile omitted ${name}`);
   }
 
-  const librarySession = (await client.session.create({ throwOnError: true, body: { title: 'Library Smoke' } })).data;
+  const unboundSession = (await client.session.create({ throwOnError: true, body: { title: 'Unbound Smoke' } })).data;
   await client.session.prompt({
     throwOnError: true,
-    path: { id: librarySession.id },
+    path: { id: unboundSession.id },
     body: {
       model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' },
-      agent: 'stashbase-library',
+      agent: 'stashbase-unbound',
       parts: [{ type: 'text', text: 'Reply with probe ok.' }],
     },
   });
-  const libraryTools = toolNames(gatewayRequests[1]);
+  const unboundTools = toolNames(gatewayRequests[1]);
   for (const name of ['bash', 'read', 'glob', 'grep', 'edit', 'write', 'task', 'apply_patch']) {
-    assert.equal(libraryTools.includes(name), false, `Library profile exposed ${name}`);
+    assert.equal(unboundTools.includes(name), false, `Unbound profile exposed ${name}`);
   }
   for (const name of ['stashbase_read_file', 'stashbase_write_file']) {
-    assert.ok(libraryTools.includes(name), `Library profile omitted ${name}`);
+    assert.ok(unboundTools.includes(name), `Unbound profile omitted ${name}`);
   }
 
   // A hardened-runtime signing mismatch can let Bun finish the request and

@@ -144,7 +144,7 @@ test('OAuth PKCE session persists locally and authenticates Agent allowance requ
     account.noteHostedOAuthAppReturn();
     const agentAllowance = await account.fetchHostedAgentAllowance();
     const state = await account.hostedAccountState();
-    process.stdout.write(JSON.stringify({ started, status: account.hostedOAuthStatus(started.flowId), calls, agentAllowance, state, session: config.getHostedAccountSession(), source: config.getEmbeddingSource() }));
+    process.stdout.write(JSON.stringify({ started, status: account.hostedOAuthStatus(started.flowId), calls, agentAllowance, state, session: config.getHostedAccountSession(), source: config.getEmbedderProvider() }));
   `);
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);

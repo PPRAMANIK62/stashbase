@@ -10,7 +10,7 @@ import {
 test('reprocess carries an explicit folder and an optional media language', () => {
   assert.equal(
     preparationReprocessRequestSchema.safeParse({
-      folder: '/library/research',
+      folder: '/project/research',
       language: 'en',
       path: 'talks/keynote.mp3',
     }).success,

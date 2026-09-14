@@ -107,10 +107,6 @@ export class CodexSession implements AttributedAgentSession {
   private models: AgentModel[] = [];
   private skills = new Map<string, { name: string; path: string }>();
   private skillSequence = 0;
-  /** Renderer-owned product policy. Search remains available when false;
-   * the host operation swaps vector retrieval for lexical retrieval. */
-  private similaritySearch = true;
-
   readonly windowId: string;
   readonly agentId = 'codex' as const;
   /** Private per-session attribution id. Rides the app-server env
@@ -118,12 +114,12 @@ export class CodexSession implements AttributedAgentSession {
    * host-side MCP tools can find the live calling session. */
   readonly attributionId = randomUUID();
 
-  /** True for a library-wide session: cwd is the folder home and the
+  /** True for an unbound session: cwd is the folder home and the
    * session is NOT bound to any member folder — member-folder removal
    * never tears it down (window close / app quit still do). */
-  private libraryScoped = false;
+  private unbound = false;
 
-  /** Member folder this LIBRARY session was migrated to by `create_project`.
+  /** Member folder this unbound session was migrated to by `create_project`.
    * The native thread identity stays intact while future turns, workspace
    * approvals, skills, teardown scope, and history follow this folder. */
   private rebound: string | null = null;
@@ -134,12 +130,12 @@ export class CodexSession implements AttributedAgentSession {
 
   /** The member folder this session is (or will be) bound to. `cwd` is the
    * authoritative binding once the session started; before that, the explicit
-   * connect-time folder is the best answer. A library-scoped session is
+   * connect-time folder is the best answer. An unbound session is
    * bound to no member folder and reports null — unless `create_project`
    * rebound it to the new project. */
   boundFolder(): string | null {
     if (this.rebound) return this.rebound;
-    if (this.libraryScoped || this.scope === 'library') return null;
+    if (this.unbound || this.scope === 'unbound') return null;
     return this.cwd ?? this.folder ?? null;
   }
 
@@ -147,23 +143,20 @@ export class CodexSession implements AttributedAgentSession {
     return this.busy;
   }
 
-  isLibraryScoped(): boolean {
-    return !this.rebound && (this.libraryScoped || this.scope === 'library');
+  isUnbound(): boolean {
+    return !this.rebound && (this.unbound || this.scope === 'unbound');
   }
 
   nativeSessionId(): string | null {
     return this.threadId;
   }
 
-  similaritySearchEnabled(): boolean {
-    return this.similaritySearch;
-  }
 
-  /** Migrate this LIBRARY-scoped session to a member folder (create_project).
+  /** Migrate this unbound session to a member folder (create_project).
    * The native thread identity stays intact, but subsequent turns use the
    * project cwd. A folder-bound chat is never rebound. */
   rebindToFolder(folderAbs: string): boolean {
-    if (this.closed || !this.isLibraryScoped()) return false;
+    if (this.closed || !this.isUnbound()) return false;
     this.rebound = folderAbs;
     this.send({ t: 'scope-changed', scope: { kind: 'folder', path: folderAbs } });
     return true;
@@ -177,11 +170,11 @@ export class CodexSession implements AttributedAgentSession {
     private accessMode?: AgentAccessMode,
     private model?: string,
     /** Explicit, membership-validated session folder. Undefined with no
-     *  library scope follows the window's current folder at connect time
-     *  (legacy clients), else the library. */
+     *  unbound scope follows the window's current folder at connect time
+     *  (legacy clients), else an unbound conversation. */
     private folder?: string,
-    /** Explicit library-wide scope (`scope=library` on the connect URL). */
-    private scope?: 'library',
+    /** Explicit unbound scope (`scope=unbound` on the connect URL). */
+    private scope?: 'unbound',
     private onDispose?: (session: CodexSession) => void,
     private spawnProcess: typeof spawnCodexAppServerProcess = spawnCodexAppServerProcess,
     private requestTimeoutMs: number = CODEX_RPC_REQUEST_TIMEOUT_MS,
@@ -200,8 +193,8 @@ export class CodexSession implements AttributedAgentSession {
 
   private async start(): Promise<void> {
     if (this.closed) return;
-    // An explicit folder pins the session; an explicit library scope (or
-    // no folder anywhere) binds the folder home as the reserved library
+    // An explicit folder pins the session; an explicit unbound scope (or
+    // no folder anywhere) binds the folder home as the historical unbound
     // cwd. Ordinary window navigation never changes it; an attributed
     // create_project transition is the one deliberate exception.
     const binding = resolveSessionBinding({
@@ -211,7 +204,7 @@ export class CodexSession implements AttributedAgentSession {
       folderHome: getFolderHome(),
     });
     const cwd = binding.cwd;
-    this.libraryScoped = binding.libraryScoped;
+    this.unbound = binding.unbound;
     this.cwd = cwd;
     // Model choice belongs to the first turn, so publish the native catalog
     // before the renderer enables its composer. Otherwise a fresh Codex chat
@@ -351,9 +344,6 @@ export class CodexSession implements AttributedAgentSession {
         break;
       case 'set-mode':
         this.accessMode = isAgentAccessMode(msg.mode) ? msg.mode : this.accessMode;
-        break;
-      case 'set-similarity-search':
-        if (typeof msg.enabled === 'boolean') this.similaritySearch = msg.enabled;
         break;
     }
   }
@@ -588,10 +578,10 @@ export class CodexSession implements AttributedAgentSession {
       approvalsReviewer: access.approvalsReviewer,
       sandbox: access.sandbox,
       // Keep the editable Agent Instructions distinct from StashBase's
-      // internal library-routing policy even though Codex receives their
+      // internal project-routing policy even though Codex receives their
       // composition through one native developer-instructions field.
       developerInstructions: resolveAgentRuntimeInstructions(
-        this.rebound || !this.libraryScoped ? cwd : null,
+        this.rebound || !this.unbound ? cwd : null,
       ),
     };
     const result = await this.request(
@@ -1150,7 +1140,7 @@ function titleFromPrompt(prompt: string): string {
 
 const sessions = new Set<CodexSession>();
 
-export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string, folder?: string, scope?: 'library'): void {
+export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string, folder?: string, scope?: 'unbound'): void {
   const session = new CodexSession(ws, windowId, effort, resume, access, model, folder, scope, (s) => sessions.delete(s));
   sessions.add(session);
   session.begin();
@@ -1169,7 +1159,7 @@ export function killActiveCodex(windowId?: string): void {
 }
 
 /** Kill the live Codex sessions bound to one member folder, across all
- * windows. Library folder removal calls this so a removed folder cannot keep
+ * windows. Project removal calls this so a removed folder cannot keep
  * running sessions. */
 export function killCodexSessionsForFolder(folderAbs: string): void {
   disposeSessionsBoundToFolder(sessions, folderAbs);

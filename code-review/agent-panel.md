@@ -10,6 +10,13 @@ through the Ports in `renderer/src/features/agent/application/ports.ts`, and
 `renderer/src/app/` is the only place its barrel is read. No Agent module may
 import a sibling feature.
 
+The product's primary entry is a project-bound discussion, including an empty
+project, followed by requested drafting or revision. Wiki requests are optional
+uses of the same composer. The packaged Instructions support this flow;
+current greeting and placeholder copy retain wiki-first language, recorded in
+[product-language alignment](../design-docs/design/agent-panel.md#product-language-alignment).
+Existing file-change views are not the unfinished document-specific refinement diff.
+
 ## Session and Workspace State
 
 - One window owns one Agent workspace. It holds the tab list, which session
@@ -30,12 +37,12 @@ import a sibling feature.
   scope it had.
 - A conversation no turn has left follows the runtime that becomes ready. When
   the catalog reports a ready runtime the bound one is not among, an unstarted
-  session is remounted onto it and the draft plus its bound library sources
+  session is remounted onto it and the draft plus its bound project sources
   move across. Transient uploads do not, because they are bytes the replaced
   session held while a source is a path any runtime can read back.
-- A scope is `{ kind: 'library' }` or one absolute member folder path. One
+- A scope is `{ kind: 'unbound' }` or one absolute member folder path. One
   function spells that identity, so the instructions editor's read key and the
-  socket's `scope` parameter cannot disagree. Library is a literal, which is
+  socket's `scope` parameter cannot disagree. Unbound is a literal, which is
   unambiguous only because folder scopes are absolute; the route refuses a
   relative one for the same reason.
 - Work that spans an `await` captures its scope first and refuses its own
@@ -43,13 +50,20 @@ import a sibling feature.
   a history mutation all run under that guard, so a completion arriving after a
   folder switch is dropped rather than applied to the folder now on screen.
 - Folder removal retires only the sessions bound to that member. A blank one
-  remounts in place under Library scope. One holding any work keeps its
+  remounts in place under unbound scope. One holding any work keeps its
   transcript, cancels its running tools, states how many queued messages went
   with the folder, and settles into a retired state with no composer.
 - History is native-runtime truth, read per runtime for the active scope. A
   conversation row is one open tab, one history entry, or both matched by
   runtime and native session id. Rows group by local day and order by recency,
   and opening or replaying a chat never promotes it in that order.
+- The listing outlives the panel. Chats is the one sidebar pane that unmounts
+  when another is chosen, so its listing is retained for the window's life
+  rather than collected once the last observer goes: reopening the panel paints
+  the rows it last held and refreshes behind them, never a loading line in
+  front of them. The listing stays briefly stale by design, standing in for an
+  invalidation this surface does not have, so a chat written outside the app
+  still turns up.
 
 ## Layout and Visibility
 
@@ -60,10 +74,41 @@ import a sibling feature.
   declared range; the document keeps a floor of its own and the Agent yields,
   which is what makes a narrow window collapse the chat rather than crush the
   page being read. With no document open the slot is zero wide and inert.
-- Only the seam moves. Both panes sit at their final widths from the first
-  frame, the transition runs only when a document opens or the last one closes,
-  and reduced motion lands every change at once. The splitter exposes
-  keyboard-accessible value semantics.
+- The seam is one push. The document slot and the Agent's box ride one eased
+  sweep — the collapse ladder's slow step, since the travel can be the row's
+  whole width and a spring's bounce would carry the rule past the wall it
+  lands on — so the Agent's left rule sweeps across the row while the Agent's
+  contents follow their edge and re-centre as the pane widens or narrows, the
+  same reflow a seam drag already makes. One value serves both directions and
+  both panes: they are halves of one rule, and anything read per pane would
+  land them a frame apart. The flip is detected during render rather than in
+  an effect, because the transition must already be the sweep on the commit
+  whose targets change.
+- The pane's name row is drawn in both layouts. With the whole card the
+  titlebar names the chat and the Chats panel manages the history, so the row
+  carries nothing and stands empty, keeping its height and the fade the
+  transcript scrolls under. A row that came and went with the mode would move
+  everything beneath it, the composer included, on every crossing.
+- The titlebar's document strip is covered rather than dismissed. The Chat
+  taking the card is one surface expanding leftwards over the row, and the
+  titlebar is part of what it expands over, so an opaque cover crosses the
+  strip on the seam's own step and from the same edge instead of the two
+  dissolving through each other. The strip stays mounted underneath, inert
+  while covered, so returning uncovers the tabs that were there. It is
+  isolated so its internal layering — a selected ground under its labels, a
+  focus ring over them — cannot paint through the cover.
+- Two flips sweep the seam, and which one it is decides what the page under it
+  does. Documents arriving or leaving — a document opening, the last one
+  closing, or the documents leaving and returning with the sidebar mode
+  (`documentsShown`) — start or end at a zero-wide slot, which is not a width
+  the page can be read at, so the page holds the width it had (or is heading
+  for) and slides under the sheet whole; it dissolves only over the sweep's
+  last stretch, where the slot is too few pixels wide for the seam to cover
+  what stands in the card's corner radius. Hiding or showing the Chat moves
+  the seam between two readable widths, so the page reflows under it live. A
+  Chat brought back from hidden rides its shelf's edge in rather than sweeping
+  a seam of its own, and reduced motion lands every change at once. The
+  splitter exposes keyboard-accessible value semantics.
 - The Chat pane names its own conversation. `ChatHeader` at the top of the
   workspace reads the mounted session's title and Agent, renames it in place
   once the session has started (`agentSessionIsUnstarted` decides; an
@@ -75,7 +120,10 @@ import a sibling feature.
   `ChatHistoryPopover` and `NewChatButton` at its right end, on the
   titlebar's glyph column; the titlebar carries no chat control, so a hidden
   pane takes them with it, and the header and the Chats panel share one
-  preferred-Agent rule and one `newChat` call. The popover reads the same
+  preferred-Agent rule and one `newChat` call. The row is the docked pane's:
+  `AgentWorkspace` takes `header={false}` while the sidebar is in Chats mode
+  and the Chat has the whole card, and the titlebar names the chat through
+  `ChatTitle`, which reads the same session store and renames nothing. The popover reads the same
   history query and `buildConversationGroups` projection as the Chats panel,
   filters rows by title, and opens a row through the runtime's `activate`
   or `restore`, so it can never disagree with the panel about what a
@@ -99,6 +147,24 @@ import a sibling feature.
   runtime. `checking` holds the offer back until the catalog answers, because
   treating an unanswered catalog as nothing-ready shows setup to a reader who
   is already set up and then withdraws it.
+- What an unprepared runtime waits for is one derivation, `runtimeGate` in
+  `agent-catalog.ts`, and both the gate's buttons and the provider control's
+  rows read it, so the two surfaces cannot name different waits for the same
+  runtime. The bundled runtime answers `account` from the registry rather than
+  from `needsSignIn`, which the catalog can only report after a bootstrap has
+  come back `authentication-required`: before any attempt, a runtime with no
+  installation step must not be offered one. `account` is cleared by the
+  window's account sign-in, never by a catalog command.
+- The provider control lists the whole catalog, not the ready runtimes. A
+  runtime that cannot carry a turn is the one a reader most needs named, and
+  the gate below only appears when nothing at all is ready, so the control is
+  the only place an unprepared runtime is offered while another one runs. Its
+  unready rows carry no check, because nothing is being chosen.
+- One account per window. `useAccount` keeps the open browser flow in local
+  state, so `AccountProvider` runs it once above the shell and the sidebar's
+  footer row and the composer's picker read the same view model; two surfaces
+  each running the hook would hold sign-ins the other cannot see. Settings'
+  Agents section is the one consumer still outside the provider.
 - CodeMirror owns composer text, selection, undo, and the `@` and `/` handoff.
   A mention is one atomic widget. The chip lives where it was typed, moves with
   the text, and deletes as one character, while the serialized draft reads
@@ -154,8 +220,7 @@ import a sibling feature.
   read transient bytes, while a source dragged from the tree stays available
   either way because it is a path the Agent reads back through MCP.
 - A clipboard image pasted with the composer focused is taken as an attachment
-  and the competing library-import offer is suppressed, so one paste has one
-  meaning.
+  when the runtime supports uploads; accompanying text stays in the composer.
 - Every bound item is validated against the folder snapshot the shell publishes
   before a send. A stale item refuses the send and says why; preparing, failed,
   and blocked items are explained and sent. That snapshot is the only thing a
@@ -196,8 +261,9 @@ import a sibling feature.
   customization and reloads the packaged default, which is the only way back
   once a scope is customized.
 - The field is monospace and carries no caveats, because the runtime carries
-  these bytes verbatim and a line break there is content. Copy says a save
-  applies from the next conversation and never claims to edit `AGENTS.md` or
+  these bytes verbatim and a line break there is content. Copy describes
+  response and file-work guidance; it never guarantees compliance, equates an
+  open Chat with a started native session, or claims to edit `AGENTS.md` or
   `CLAUDE.md`.
 - The resolved prompt is never spoken in the renderer. The server composes
   what a turn actually carries, and that composition belongs to
@@ -208,9 +274,9 @@ Wiki Pages,
 are not a staged machine of their own. Building a wiki is an ordinary visible
 request against the active folder, sent through the same composer, answered
 through the same permission surface, and applied through the same server-side
-write path as any other request. Its one entry point is the composer's
-cycling **Build a wiki for docs** request, and its durable half is the
-folder's Agent Instructions.
+write path as any other request. A user can type a wiki task, and non-empty
+folders also offer a cycling **Build a wiki for docs** placeholder. The
+folder's Agent Instructions provide the default conventions for that task.
 
 ## Transcript and Turn Lifecycle
 
@@ -277,8 +343,9 @@ folder's Agent Instructions.
   Arrow keys, Enter, Tab, and Escape are one declared binding shared by the
   editor that raises them and the panel that answers them, and the active row
   is named through `aria-activedescendant`.
-- The chats list is a sidebar tree of recency groups under a **Recent**
-  label, set off from the panel's New chat by a rule. A row opens on a click,
+- The chats list is a sidebar tree of recency groups under a **Chats**
+  label that is itself a collapsible `SidebarGroup`, set off from the panel's
+  New chat by a rule. A row opens on a click,
   renames in place on a slow second click or F2 (the Chat pane's header
   renames the open conversation the same way), and deletion is a confirming
   dialog that stays open on a refusal so the reason stays in front of the
@@ -328,13 +395,10 @@ gap below is observed in Shipping.
   literal, so a reply carrying a formula shows its source.
 - **A saved instruction edit does not reach a mounted conversation.** The
   Adapters inject the resolved text when a native session mounts, so a save
-  reaches Chats started after it and the dialog says exactly that. A mounted
-  conversation keeps the text it started under until it reconnects; nothing
-  remounts it on a save.
-- **Retrieval policy is not per conversation.** The protocol carries the
-  policy event and every Adapter implements it, but no renderer surface sends
-  it, so every Chat runs on the Adapter default and searches by meaning.
-- **A migrated Library conversation does not move the window.** A validated
+  reaches Chats started after it. A mounted conversation keeps the text it
+  started under until it reconnects; nothing remounts it on a save, and no
+  surface says when a save lands.
+- **A migrated unbound conversation does not move the window.** A validated
   scope change rebinds the conversation's scope only. The window does not enter
   the new member folder and the conversation is not selected there, so a reader
   finishing
@@ -378,13 +442,13 @@ pnpm typecheck
 pnpm lint:web
 pnpm test:renderer
 pnpm test:protocols
-pnpm test:library-files
+pnpm test:project-files
 pnpm build:web
 ```
 
 `pnpm test:renderer` covers the feature's colocated tests and the composition
 tests beside them. `pnpm test:protocols` covers the Agent wire schemas.
-`pnpm test:library-files` covers the attach route and the daemon's gallery
+`pnpm test:project-files` covers the attach route and the daemon's gallery
 proxy guard. Journey automation and pixel baselines retired with the Playwright
 suites, so prove an affected Agent journey with focused renderer tests, story
 accessibility, and a driven runtime pass through the built application. Exact
@@ -399,7 +463,7 @@ core loop. Wiki Pages are
 [J12](../design-docs/user-journeys.md#j12-build-wiki-pages-from-a-local-folder),
 the Gallery seam carries
 [J13](../design-docs/user-journeys.md#j13-download-a-ready-made-wiki-from-the-gallery),
-and the Library-to-project session transition is
+and the project registry-to-project session transition is
 [J11](../design-docs/user-journeys.md#j11-turn-a-conversation-into-a-project).
 
 Related contracts: [Agent Runtime](agent-runtime.md),

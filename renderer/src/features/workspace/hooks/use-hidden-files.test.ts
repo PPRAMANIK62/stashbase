@@ -11,7 +11,7 @@ afterEach(cleanup);
 function mount(
   applied: boolean,
   port = workspacePreferences(),
-  folderPath: string | null = '/library',
+  folderPath: string | null = '/project',
 ) {
   return renderHook(() => useHiddenFiles(port, applied, folderPath), {
     wrapper: queryWrapper(createTestQueryClient()),

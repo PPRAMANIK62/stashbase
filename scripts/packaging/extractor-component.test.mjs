@@ -1,0 +1,72 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import { buildExtractorComponent } from './extractor-component.mjs';
+import { createExtractorRuntime } from '../../server/extractor-runtime.ts';
+
+const root = new URL('../../', import.meta.url);
+
+test('the release component manifest drives the runtime through verified installation', async (t) => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'extractor-publish-'));
+  t.after(() => fs.rm(tmp, { recursive: true, force: true }));
+  const source = path.join(tmp, 'stashbase-extract');
+  await fs.mkdir(source);
+  const exe = process.platform === 'win32' ? 'stashbase-extract.exe' : 'stashbase-extract';
+  await fs.writeFile(path.join(source, exe), 'executable fixture');
+  const manifestPath = path.join(tmp, 'resources', 'extractor-runtime.json');
+  const built = await buildExtractorComponent({ source, output: path.join(tmp, 'release'), manifestPath, version: '2.0.0' });
+  let requests = 0;
+  const runtime = createExtractorRuntime({
+    root: path.join(tmp, 'installed'), manifest: async () => JSON.parse(await fs.readFile(manifestPath, 'utf8')),
+    fetch: async () => { requests++; return new Response(await fs.readFile(built.archive)); },
+  });
+  const bin = await runtime.ensure();
+  assert.equal(await fs.readFile(bin, 'utf8'), 'executable fixture');
+  assert.equal(requests, 1);
+  assert.equal(await runtime.ensure(), bin);
+});
+
+test('base package excludes the extractor and development payload, retaining the pinned manifest', async () => {
+  const pkg = JSON.parse(await fs.readFile(new URL('package.json', root), 'utf8'));
+  const sidecar = pkg.build.extraResources.find((entry) => entry.to === 'python/sidecar');
+  assert.deepEqual(sidecar.filter, ['stashbase-daemon/**/*']);
+  assert.ok(pkg.build.extraResources.some((entry) => entry.to === 'python/extractor-runtime.json'));
+  for (const excluded of ['!**/*.map', '!node_modules/better-sqlite3/deps/**', '!node_modules/better-sqlite3/src/**']) {
+    assert.ok(pkg.build.files.includes(excluded));
+  }
+});
+
+test('every release platform publishes its immutable component before the coordinator publishes the app', async () => {
+  for (const platform of ['linux', 'windows']) {
+    const workflow = await fs.readFile(new URL(`.github/workflows/release-${platform}.yml`, root), 'utf8');
+    assert.match(workflow, /build:extractor-component/);
+    assert.match(workflow, /stashbase-extract-/);
+  }
+  const packaging = await fs.readFile(new URL('scripts/package-desktop.mjs', root), 'utf8');
+  assert.match(packaging, /runScript\('build:extractor-component'\)/);
+  assert.match(packaging, /manifest\.sha256/);
+  const coordinator = await fs.readFile(new URL('.github/workflows/release.yml', root), 'utf8');
+  assert.match(coordinator, /darwin-arm64 win32-x64 linux-x64/);
+  assert.ok(coordinator.indexOf('PDF/OCR component manifest') < coordinator.indexOf('gh release edit'));
+});
+
+test('macOS component signing rejects unaccepted notarization and requires Developer ID', async (t) => {
+  const { signExtractorComponent } = await import('./sign-extractor.mjs');
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'extractor-sign-test-'));
+  t.after(() => fs.rm(tmp, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmp, 'stashbase-extract'), Buffer.from('cffaedfe00000000', 'hex'));
+  const env = { APPLE_KEYCHAIN_PROFILE: 'fixture-profile' };
+  await assert.rejects(signExtractorComponent(tmp, { platform: 'darwin', env, run: () => '' }), /exactly one Developer ID/);
+  const commands = [];
+  const run = (cmd, args) => {
+    commands.push([cmd, args]);
+    if (cmd === 'security') return '1) '+ 'A'.repeat(40)+' "Developer ID Application: Fixture"';
+    if (cmd === 'xcrun') return JSON.stringify({ id: 'fixture-id', status: 'Invalid' });
+    return '';
+  };
+  await assert.rejects(signExtractorComponent(tmp, { platform: 'darwin', env, run }), /notarization failed/);
+  assert.ok(commands.some(([cmd, args]) => cmd === 'codesign' && args.includes('--timestamp')));
+  assert.ok(commands.some(([cmd, args]) => cmd === 'codesign' && args.includes('--verify')));
+});

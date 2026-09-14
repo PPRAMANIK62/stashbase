@@ -146,6 +146,7 @@ export interface ReviewingSession {
 }
 
 export interface PreparingSession {
+  readonly dirty: boolean;
   readonly kind: 'preparing';
   readonly generation: number;
   readonly draft: ReviewDraft;
@@ -266,7 +267,7 @@ function reduceReviewing(state: ReviewingSession, event: ReviewEvent): ReviewSes
     case 'selection-applied':
       return {
         ...state,
-        draft: event.draft,
+        draft: { ...event.draft, description: state.draft.description },
         notice: { artifact: event.artifact, included: event.included, kind: 'selection-updated' },
         pending: null,
       };
@@ -303,6 +304,7 @@ function reduceReviewing(state: ReviewingSession, event: ReviewEvent): ReviewSes
       };
     case 'prepare-started':
       return {
+        dirty: state.dirty,
         draft: state.draft,
         generation: state.generation,
         kind: 'preparing',
@@ -316,13 +318,17 @@ function reduceReviewing(state: ReviewingSession, event: ReviewEvent): ReviewSes
 
 function reducePreparing(state: PreparingSession, event: ReviewEvent): ReviewSession {
   switch (event.type) {
+    case 'description-committed':
+      return { ...state, dirty: false, draft: event.draft };
     case 'prepared':
       return ready(state.generation, event.report, { kind: 'prepared' });
     case 'approved-unprepared':
       return ready(state.generation, event.report, { failure: event.failure, kind: 'failed' });
+    case 'command-failed':
     case 'prepare-failed':
       return {
         ...reviewing(state.generation, state.draft),
+        dirty: state.dirty,
         notice: { failure: event.failure, kind: 'failed' },
         openPreviewId: state.openPreviewId,
         previews: state.previews,
@@ -375,10 +381,4 @@ export function reduceReviewSession(state: ReviewSession, event: ReviewEvent): R
     case 'ready':
       return reduceReady(state, event);
   }
-}
-
-/** The generation a command must stamp its events with, or null when the
- *  session accepts no stamped events at all. */
-export function sessionGeneration(state: ReviewSession): number | null {
-  return 'generation' in state ? state.generation : null;
 }

@@ -21,17 +21,17 @@ import {
 test('workspace reveal requires an explicit folder and relative entry identity', () => {
   assert.deepEqual(
     workspaceRevealRequestSchema.parse({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/plan.md',
     }),
-    { folderPath: '/library/notes', path: 'drafts/plan.md' },
+    { folderPath: '/project/notes', path: 'drafts/plan.md' },
   );
   assert.equal(
     workspaceRevealRequestSchema.safeParse({ folderPath: '', path: 'drafts/plan.md' }).success,
     false,
   );
   assert.equal(
-    workspaceRevealRequestSchema.safeParse({ folderPath: '/library/notes', path: '' }).success,
+    workspaceRevealRequestSchema.safeParse({ folderPath: '/project/notes', path: '' }).success,
     false,
   );
 });
@@ -39,26 +39,26 @@ test('workspace reveal requires an explicit folder and relative entry identity',
 test('workspace entry mutations carry an explicit folder and one leaf name', () => {
   assert.deepEqual(
     workspaceCreateEntryRequestSchema.parse({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       kind: 'file',
       name: ' Plan ',
       parentPath: 'drafts',
     }),
-    { folderPath: '/library/notes', kind: 'file', name: 'Plan', parentPath: 'drafts' },
+    { folderPath: '/project/notes', kind: 'file', name: 'Plan', parentPath: 'drafts' },
   );
   assert.deepEqual(
     workspaceRenameEntryRequestSchema.parse({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       kind: 'folder',
       name: 'archive',
       path: 'drafts',
     }),
-    { folderPath: '/library/notes', kind: 'folder', name: 'archive', path: 'drafts' },
+    { folderPath: '/project/notes', kind: 'folder', name: 'archive', path: 'drafts' },
   );
   for (const name of ['', '  ', 'a/b', 'a\\b', '.', '..']) {
     assert.equal(
       workspaceCreateEntryRequestSchema.safeParse({
-        folderPath: '/library/notes',
+        folderPath: '/project/notes',
         kind: 'file',
         name,
         parentPath: '',
@@ -196,10 +196,10 @@ test('workspace listing rejects unknown formats and unowned fields', () => {
 test('document text source contracts retain content, format, and source version', () => {
   assert.deepEqual(
     documentTextSourceRequestSchema.parse({
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/plan.markdown',
     }),
-    { folderPath: '/library/notes', path: 'drafts/plan.markdown' },
+    { folderPath: '/project/notes', path: 'drafts/plan.markdown' },
   );
   assert.deepEqual(
     documentTextSourceResponseSchema.parse({
@@ -248,13 +248,13 @@ test('document text save contracts require identity, expected version, and autho
     documentTextSaveRequestSchema.parse({
       baseVersion: 'sha256:before',
       content: '# Changed\n',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/plan.md',
     }),
     {
       baseVersion: 'sha256:before',
       content: '# Changed\n',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/plan.md',
     },
   );
@@ -301,7 +301,7 @@ test('document text save contracts require identity, expected version, and autho
   assert.equal(
     documentTextSaveRequestSchema.safeParse({
       content: '# Missing version',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'plan.md',
     }).success,
     false,
@@ -312,13 +312,13 @@ test('document text overwrite requires an explicit conflict decision', () => {
   assert.deepEqual(
     documentTextOverwriteRequestSchema.parse({
       content: '# Editor draft\n',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       overwrite: true,
       path: 'drafts/plan.md',
     }),
     {
       content: '# Editor draft\n',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       overwrite: true,
       path: 'drafts/plan.md',
     },
@@ -326,7 +326,7 @@ test('document text overwrite requires an explicit conflict decision', () => {
   assert.equal(
     documentTextOverwriteRequestSchema.safeParse({
       content: '# Editor draft\n',
-      folderPath: '/library/notes',
+      folderPath: '/project/notes',
       path: 'drafts/plan.md',
     }).success,
     false,

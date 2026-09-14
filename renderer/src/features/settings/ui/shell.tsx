@@ -1,6 +1,16 @@
+/**
+ * The Settings window: a nav of sections beside the one section on show.
+ *
+ * A section that cannot be offered on this platform or build stays in the nav,
+ * disabled and tagged, rather than disappearing — a reader who knows the
+ * setting exists should find out here that it is unavailable, not wonder
+ * where it went.
+ */
+
 import { Menu } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { MobileDrawer } from '@/components/ui/mobile-drawer';
@@ -65,9 +75,9 @@ function SectionsNav({
             tabIndex={section.available ? undefined : -1}
           >
             {!section.available && (
-              <span className="ml-auto shrink-0 text-[9.5px] font-semibold tracking-wide text-muted-foreground uppercase">
-                Soon
-              </span>
+              <Badge className="ml-auto shrink-0" size="compact">
+                Unavailable
+              </Badge>
             )}
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -108,16 +118,16 @@ export function SettingsShell({
           <div className="flex h-14 flex-none items-center gap-2 border-b border-border px-5">
             {compact && (
               <Button
-                aria-label="Open sections"
+                aria-label="Open settings sections"
                 onClick={() => setDrawerOpen(true)}
                 ref={menuButtonRef}
                 size="icon-compact"
                 variant="ghost"
               >
-                <Menu aria-hidden="true" className="size-4" />
+                <Menu aria-hidden="true" />
               </Button>
             )}
-            <DialogTitle className="text-[16px]">Settings</DialogTitle>
+            <DialogTitle className="text-title">Settings</DialogTitle>
           </div>
 
           <div

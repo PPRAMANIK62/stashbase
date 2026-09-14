@@ -23,7 +23,7 @@ const ENTRY: GalleryEntry = {
 
 describe('useGalleryCopy', () => {
   it('asks for the entry by name and repository and nothing else', async () => {
-    const copy = vi.fn(async () => '/library/How to Start a Startup');
+    const copy = vi.fn(async () => '/project/How to Start a Startup');
     const { result } = renderHook(() => useGalleryCopy({ copy }));
 
     act(() => result.current.copy(ENTRY));
@@ -54,7 +54,7 @@ describe('useGalleryCopy', () => {
     expect(result.current.copyingId).toBe('cs183b');
 
     await act(async () => {
-      release('/library/copy');
+      release('/project/copy');
     });
     expect(result.current.copyingId).toBeNull();
   });
@@ -63,7 +63,7 @@ describe('useGalleryCopy', () => {
     const copy = vi
       .fn<() => Promise<string>>()
       .mockRejectedValueOnce(new Error('That repository is private or does not exist.'))
-      .mockResolvedValueOnce('/library/copy');
+      .mockResolvedValueOnce('/project/copy');
     const { result } = renderHook(() => useGalleryCopy({ copy }));
 
     act(() => result.current.copy(ENTRY));

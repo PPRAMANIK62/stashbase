@@ -181,6 +181,7 @@ function createBugReportHandoff({
   let initialization = null;
   const preparedByApproval = new Map();
   const downloadsByApproval = new Map();
+  const pendingDownloads = new Map();
 
   async function allocateDownloadsFolder() {
     const root = await downloadsDirectory();
@@ -203,7 +204,7 @@ function createBugReportHandoff({
   // One approval keeps one Downloads folder: retries and repeated actions heal
   // that folder instead of accumulating copies; a fresh approval allocates a
   // new one.
-  async function copyPreparedToDownloads(snapshot, prepared) {
+  async function copyPreparedFiles(snapshot, prepared) {
     let destination = downloadsByApproval.get(snapshot.approvalId) ?? null;
     if (destination) await fsModule.mkdir(destination, { recursive: true });
     else {
@@ -215,6 +216,20 @@ function createBugReportHandoff({
         pathModule.join(prepared.directory, fileName),
         pathModule.join(destination, fileName),
       );
+    }
+  }
+
+  async function copyPreparedToDownloads(snapshot, prepared) {
+    const cached = pendingDownloads.get(snapshot.approvalId);
+    if (cached) return cached;
+    const pending = copyPreparedFiles(snapshot, prepared);
+    pendingDownloads.set(snapshot.approvalId, pending);
+    try {
+      return await pending;
+    } finally {
+      // Retry a failed or deleted copy in the same allocated folder. Only
+      // overlapping requests share work; a later request can repair files.
+      pendingDownloads.delete(snapshot.approvalId);
     }
   }
 

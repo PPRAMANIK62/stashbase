@@ -114,7 +114,7 @@ editor, an HTML preview, or an iframe document surface.
   beyond the folder root, undecodable, separator-bearing, or control-bearing,
   and it decodes each segment only after splitting. A surviving relative target
   resolves against the owning document's own folder, so a link inside a document
-  from another library folder opens in that same folder and, because access is
+  from another project folder opens in that same folder and, because access is
   folder-relative, opens read-only. Only an original HTTP(S) URL is handed to
   the system browser, and a host that refuses to open one says so rather than
   leaving the click looking successful.
@@ -125,7 +125,7 @@ editor, an HTML preview, or an iframe document surface.
   editor; the Agent panel is the application AI surface.
 - Agent-facing `write_file` and `edit_file` mutations validate the complete
   replacement source before persistence, in
-  `server/library-file-mutations.ts`. C0 controls other than tab, line feed, and
+  `server/project-file-mutations.ts`. C0 controls other than tab, line feed, and
   carriage return are refused without changing the existing file, because those
   bytes commonly signal that an interpreted JavaScript string consumed LaTeX
   escapes. The refusal names the code point and the fix. Valid literal
@@ -202,7 +202,7 @@ code surface that also carries it are recorded once, in
 | Save and conflict Adapter | `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/features/documents/hooks/use-document-source.ts`, `renderer/src/features/documents/infrastructure/source-api.ts` |
 | Workspace Adapter | `renderer/src/features/documents/ui/workspace/workspace.tsx`, `renderer/src/features/documents/ui/workspace/outline.tsx`, `renderer/src/features/documents/ui/workspace/find.tsx`, and the composition in `renderer/src/app/composition/folder/` |
 | Styling | `renderer/src/features/documents/ui/markdown/document.css`, the migration's one component-specific CSS exception, mapping Crepe anatomy onto semantic tokens |
-| Agent-facing mutation guard | `server/library-file-mutations.ts` |
+| Agent-facing mutation guard | `server/project-file-mutations.ts` |
 | Focused evidence | `renderer/src/features/documents/ui/markdown/document.test.tsx`, `renderer/src/features/documents/ui/markdown/find-controller.test.ts`, `renderer/src/features/documents/application/markdown-editor-lifecycle.test.ts`, `renderer/src/features/documents/domain/markdown.test.ts`, `renderer/src/features/documents/domain/outline.test.ts`, `renderer/src/features/documents/domain/link-target.test.ts`, `renderer/src/features/documents/ui/source/document-markdown.test.tsx`, `renderer/src/features/documents/ui/workspace/outline.test.tsx` |
 
 ## Validation
@@ -218,7 +218,7 @@ pnpm build:web
 
 Add focused tests at the changed parsing, serialization, trust, navigation, or
 document-lifecycle Seam. Run `pnpm test:electron:smoke` for retained-tab and
-native lifecycle changes, and `pnpm test:library-files` when the agent-facing
+native lifecycle changes, and `pnpm test:project-files` when the agent-facing
 mutation guard changes.
 
 Journey automation and pixel baselines retired with the Playwright suites, so

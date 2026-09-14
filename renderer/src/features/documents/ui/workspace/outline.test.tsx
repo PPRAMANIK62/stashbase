@@ -11,7 +11,7 @@ import { documentTabsRuntimeOptions } from '@/test/fakes/documents';
 
 import { DocumentOutline } from './outline';
 
-const FOLDER = '/library/notes';
+const FOLDER = '/project/notes';
 const PLAN: DocumentHeading = { id: 'plan', level: 1, position: 1, text: 'Plan' };
 const DETAILS: DocumentHeading = { id: 'details', level: 2, position: 8, text: 'Details' };
 const UNTITLED: DocumentHeading = { id: 'blank', level: 1, position: 20, text: '' };

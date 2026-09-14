@@ -13,7 +13,7 @@ handoff destinations. It does not own general diagnostics, telemetry, crash
 reporting, GitHub authentication, or automatic issue submission.
 
 Bug-report drafts and prepared temporary artifacts are application state, not
-workspace files. They never join the library, search, preparation, or
+workspace files. They never join the project registry, search, preparation, or
 indexing for search by meaning.
 
 ## Current Experience
@@ -29,10 +29,13 @@ indexing for search by meaning.
 - The review is one compact form: a primary problem description, optional
   reproduction steps, and an attachment checklist. Each available artifact
   can be previewed and included or excluded independently. Opening a preview
-  never changes its selection.
+  never changes its selection. Changing an attachment preserves descriptions
+  still being edited.
 - **Prepare Report** is the approval point. It freezes exactly the reviewed
   text and selected artifacts, creates only those files locally, and moves the
-  same window to a **Report ready** handoff. Nothing is uploaded or submitted.
+  same window to a **Report ready** handoff. The form locks before its final
+  save; a failed save restores the pending text for correction or retry.
+  Nothing is uploaded or submitted.
 - **Open GitHub** copies the prepared files into one uniquely named Downloads
   folder and opens a prefilled issue for the user to finish and attach files.
   **Download** creates the same durable copy without opening GitHub.
@@ -71,9 +74,9 @@ indexing for search by meaning.
 
 ### Next
 
-- Add a copy-details fallback without introducing report history or automatic
-  submission.
-- Improve review accessibility and recovery while keeping one compact form.
+Maintain the implemented collection, review, and handoff flow, including its
+accessibility and failure recovery. Reporting supports the writing workspace;
+no additional reporting feature is committed by the current product direction.
 
 ### Coordinate First
 

@@ -37,7 +37,7 @@ type Story = StoryObj<typeof meta>;
 export const Available: Story = {
   args: {
     notice: offered({
-      actionLabel: 'Download',
+      actionLabel: 'Update and restart',
       message: 'StashBase 1.5.0 is available.',
       releasePageLabel: "What's new",
     }),

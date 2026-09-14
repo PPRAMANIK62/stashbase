@@ -1,5 +1,5 @@
 /** The magnetic pointer-hover system every list, menu, tab strip and card
- *  grid in this library shares: a registry of item elements, one coalesced
+ *  grid in this project shares: a registry of item elements, one coalesced
  *  measurement pass over them, and a rAF-throttled pointer handler that
  *  publishes the nearest item as `activeIndex`.
  *

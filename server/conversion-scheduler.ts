@@ -32,9 +32,10 @@ export interface ConversionRunContext {
    * Cooperatively release this task's lane between durable work units.
    * The same task identity and completion promise are retained while another
    * queued task may run. Resolves after this task reacquires the lane, or
-   * rejects when cancellation retires it while yielded.
+   * rejects when cancellation retires it while yielded. An optional dependency
+   * keeps the task visible but ineligible to reacquire until that promise settles.
    */
-  yieldLane: () => Promise<void>;
+  yieldLane: (until?: Promise<unknown>) => Promise<void>;
 }
 
 export interface ConversionJob {
@@ -104,6 +105,7 @@ interface Task extends ConversionJob {
   runStarted: boolean;
   ownsLane: boolean;
   cancelling: boolean;
+  waitingForDependency?: boolean;
   resumeYield?: () => void;
   completion: Promise<void>;
   resolveCompletion: () => void;
@@ -279,13 +281,15 @@ export class ConversionScheduler {
     ]);
   }
 
-  cancelUnder(prefix: string, reason?: ConversionCancellationReason): Array<{ key: string; completion: Promise<void> }> {
+  cancelUnder(prefix: string, reason?: ConversionCancellationReason, excludedRoots: readonly string[] = []): Array<{ key: string; completion: Promise<void> }> {
+    const matches = (scope: string) => this.paths.contains(prefix, scope)
+      && !excludedRoots.some((root) => this.paths.contains(root, scope));
     const keys = new Set<string>();
     for (const task of this.tasks.values()) {
-      if (this.paths.contains(prefix, this.scopeOf(task))) keys.add(task.key);
+      if (matches(this.scopeOf(task))) keys.add(task.key);
     }
     for (const run of this.classifierRuns) {
-      if (this.paths.contains(prefix, run.scope)) keys.add(run.key);
+      if (matches(run.scope)) keys.add(run.key);
     }
     return [...keys].map((key) => ({
       key,
@@ -414,7 +418,7 @@ export class ConversionScheduler {
 
   private drainLane(lane: ConversionLane): void {
     while (this.running[lane] < this.capacity[lane]) {
-      const task = this.sortedQueued(lane)[0];
+      const task = this.sortedQueued(lane).find((candidate) => !candidate.waitingForDependency);
       if (!task) return;
       const resuming = task.state === 'yielded';
       task.state = 'running';
@@ -435,7 +439,7 @@ export class ConversionScheduler {
       void Promise.resolve()
         .then(() => task.run({
           signal: task.controller.signal,
-          yieldLane: () => this.yieldLane(task),
+          yieldLane: (until) => this.yieldLane(task, until),
         }))
         .then(
           () => this.finish(task),
@@ -462,7 +466,7 @@ export class ConversionScheduler {
     this.scheduleAgeingCheck();
   }
 
-  private async yieldLane(task: Task): Promise<void> {
+  private async yieldLane(task: Task, until?: Promise<unknown>): Promise<void> {
     if (task.controller.signal.aborted) throw cancelledYieldError(task);
     if (task.state !== 'running' || !task.ownsLane) {
       throw new Error(`conversion task ${task.key} can only yield while it owns the ${task.lane} lane`);
@@ -471,6 +475,15 @@ export class ConversionScheduler {
     let resume!: () => void;
     const reacquired = new Promise<void>((resolve) => { resume = resolve; });
     task.resumeYield = resume;
+    task.waitingForDependency = until != null;
+    let dependencyError: unknown;
+    let dependencyFailed = false;
+    if (until) {
+      void until.catch((error: unknown) => { dependencyFailed = true; dependencyError = error; }).finally(() => {
+        task.waitingForDependency = false;
+        this.scheduleDrain();
+      });
+    }
     task.state = 'yielded';
     task.ownsLane = false;
     this.running[task.lane] = Math.max(0, this.running[task.lane] - 1);
@@ -480,6 +493,7 @@ export class ConversionScheduler {
 
     await reacquired;
     if (task.controller.signal.aborted) throw cancelledYieldError(task);
+    if (dependencyFailed) throw dependencyError;
   }
 
   private scheduleClassifierDrain(): void {

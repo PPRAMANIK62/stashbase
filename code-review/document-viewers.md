@@ -120,6 +120,12 @@ regardless of language label.
 
 ## Resource Discipline
 
+Local binary assets use error-owned file transfer: disappearing files and
+client disconnects release the stream without an uncaught server error.
+Range requests and authorized hidden-directory assets remain supported.
+`server/routes/file-assets.test.ts` exercises transfer failures and DOCX fallback
+admission alongside the project-file suite.
+
 Heavy renderer resources use bounded, version-keyed caches with explicit
 disposal, and only measured or unbounded collections are virtualized. Suspense
 is reserved for lazy code. An ordinary data refresh preserves safe content
@@ -236,6 +242,8 @@ retention to a registry-declared capability would close it.
   publishes an outline, derived from the sanitized article's headings through
   the shared slug allocator, and it claims Find through the shared rendered-prose
   controller.
+  The prepared fallback uses the DOCX owner's freshness, completion-marker,
+  and nonempty-text checks; idle task status alone does not admit derived HTML.
 - Local HTML is served into the sandboxed frame with the bootstrap the document
   needs for heading ids, anchor scroll, the in-frame Find half, and
   external-link forwarding. Injected chrome is a default rather than an
@@ -255,7 +263,9 @@ retention to a registry-declared capability would close it.
   also what selects the tab icon. Direct playback is attempted first; an
   unplayable source promotes a compatible preview and polls its status, and a
   fallback that also fails becomes a stated error rather than a silent dead
-  player. The transcript follows preparation freshness and source time, polls
+  player. Compatible audio fallback includes AVI demuxing with supported audio
+  codecs; the staged native toolchain validates decoding and fallback output.
+  The transcript follows preparation freshness and source time, polls
   while pending or blocked, and is published as a real WebVTT captions track so
   the player carries captions itself rather than depending on the list beside
   it.
@@ -301,13 +311,13 @@ retention to a registry-declared capability would close it.
 
 ## Recovery Drafts
 
-Unsaved editable text is journaled outside every library folder so an unclean
+Unsaved editable text is journaled outside every project folder so an unclean
 exit does not lose it. A journal write is never a save.
 
 Every format that has an editor is journaled on equal terms, which is Markdown,
 the JSON source pane, and plain text, because the journalist gates on the
 presence of an editor rather than on a format name. A document opened from
-another library folder is read-only, never gets an editor, and is never
+another project folder is read-only, never gets an editor, and is never
 journaled. Snapshots are debounced behind `RECOVERY_JOURNAL_DELAY_MS` with a
 hard ceiling at `RECOVERY_JOURNAL_MAX_DELAY_MS`, so continuous typing is still
 captured at a bounded interval. An entry is keyed by folder and relative path
@@ -364,7 +374,7 @@ pnpm typecheck
 pnpm test:renderer
 pnpm lint:web
 pnpm build:web
-pnpm test:library-files
+pnpm test:project-files
 pnpm test:conversion-scheduler
 ```
 

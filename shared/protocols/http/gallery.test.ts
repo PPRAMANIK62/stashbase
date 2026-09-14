@@ -63,3 +63,11 @@ test('refuses an index longer than a shelf a reader browses', () => {
     true,
   );
 });
+
+test('repository URLs must be accepted by the public GitHub acquisition contract', () => {
+  for (const repo of ['plain text', 'https://gitlab.com/owner/repo', 'https://github.com/owner/repo/tree/main',
+    'http://github.com/owner/repo', 'https://user:secret@github.com/owner/repo']) {
+    assert.equal(galleryIndexSchema.safeParse({ schemaVersion: 1, wikis: [ENTRY, { ...ENTRY, id: 'bad', repo }] }).success, false);
+  }
+  assert.equal(galleryEntrySchema.safeParse({ ...ENTRY, repo: 'https://github.com/owner/repo.git/' }).success, true);
+});

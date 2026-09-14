@@ -47,6 +47,10 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
       - uses: voidzero-dev/setup-vp@1b32467adbe183473499fd9d5d372c3ed9641754 # v1.18.0
         with:
           version: '0.3.0'
@@ -71,20 +75,20 @@ jobs:
       - name: Build Linux Python sidecar
         run: pnpm build:python-extract-sidecar
 
+      - name: Build PDF/OCR download component
+        run: pnpm build:extractor-component
+
       - name: Build Linux transcription sidecar
         run: pnpm build:transcription-sidecar
 
       - name: Build Linux packages
         env:
           GH_TOKEN: ${{ github.token }}
-          STASHBASE_REQUIRE_EXTRACT: '1'
           STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1'
         run: STASHBASE_SKIP_SIDECAR_BUILD=1 pnpm dist:linux
 
       - name: Smoke packaged Linux server
-        env:
-          STASHBASE_REQUIRE_EXTRACT: '1'
-        run: node scripts/smoke-packaged-server.mjs --require-extract --require-transcription
+        run: node scripts/smoke-packaged-server.mjs --require-transcription
 
       - name: Upload Linux packages to release
         env:
@@ -94,7 +98,7 @@ jobs:
           grep -q 'blockMapSize:' release.nosync/latest-linux.yml || { echo "::error::latest-linux.yml is missing embedded AppImage blockmap metadata"; exit 1; }
           find release.nosync -maxdepth 1 -type f -name '*.deb' -size +0c -print -quit | grep -q . || { echo "::error::Missing Debian package"; exit 1; }
           find release.nosync -maxdepth 1 -type f -name '*.AppImage' -size +0c -print -quit | grep -q . || { echo "::error::Missing AppImage"; exit 1; }
-          mapfile -t artifacts < <(find release.nosync -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.blockmap' -o -name '*.zsync' -o -name 'latest*.yml' \) -size +0c)
+          mapfile -t artifacts < <(find release.nosync -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.blockmap' -o -name '*.zsync' -o -name 'stashbase-extract-*.tar.gz' -o -name 'stashbase-extract-*.json' -o -name 'latest*.yml' \) -size +0c)
           test "${#artifacts[@]}" -gt 0 || { echo "::error::No Linux release assets found"; exit 1; }
           test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "true" || { echo "::error::Release $RELEASE_TAG must exist and remain a draft while assets are uploaded"; exit 1; }
           gh release upload "$RELEASE_TAG" "${artifacts[@]}" --repo "$GITHUB_REPOSITORY"

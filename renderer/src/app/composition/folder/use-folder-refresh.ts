@@ -22,8 +22,6 @@ export interface FolderRefresh {
   /** Files an Agent wrote: show them, reload the documents they touched, then
    *  reconcile the folder's index and readiness. */
   onAgentFilesChanged(change: AgentFilesChanged): void;
-  /** Re-reads the open folder's listing and preparation status. */
-  refresh(): void;
   /** Restarts preparation for one source and re-reads the folder once the
    *  call has settled. Preparation changes what the tree and the status line
    *  say, so the two always travel together. */
@@ -85,5 +83,5 @@ export function useFolderRefresh({
     [refresh, reprocessSource],
   );
 
-  return { onAgentFilesChanged, refresh, reprocess };
+  return { onAgentFilesChanged, reprocess };
 }

@@ -60,36 +60,42 @@ export async function listCodexSessions(folder: string | null): Promise<CodexSes
 
 export async function getCodexSessionMessages(threadId: string, folder: string | null): Promise<CodexSessionBlock[]> {
   const cwd = folder ?? process.cwd();
-  const result = await withTemporaryCodexAppServer(cwd, (request) => request('thread/read', {
-    threadId,
-    includeTurns: true,
-  })) as JsonObject;
+  const thread = await withTemporaryCodexAppServer(cwd, (request) => readScopedThread(request, threadId, folder, true));
+  return codexThreadToBlocks(thread, codexRolloutToolsByTurn(stringValue(thread.path)));
+}
+
+async function readScopedThread(
+  request: (method: string, params: unknown) => Promise<unknown>,
+  threadId: string,
+  folder: string | null,
+  includeTurns = false,
+): Promise<JsonObject> {
+  const result = objectValue(await request('thread/read', { threadId, includeTurns }));
   const thread = objectValue(result.thread);
   const threadCwd = stringValue(thread.cwd);
   if (folder && (!threadCwd.trim() || !filesystemPath.equal(threadCwd, folder))) {
     throw httpError(404, 'session not found for current folder');
   }
-  return codexThreadToBlocks(thread, codexRolloutToolsByTurn(stringValue(thread.path)));
+  return thread;
 }
 
 export async function renameCodexSession(threadId: string, title: string, folder: string | null): Promise<CodexSessionRow> {
   const cwd = folder ?? process.cwd();
-  await withTemporaryCodexAppServer(cwd, (request) => request('thread/name/set', { threadId, name: title }));
-  const rows = await listCodexSessions(folder);
-  return rows.find((row) => row.id === threadId) ?? {
-    id: threadId,
-    title,
-    lastModified: Date.now(),
-    hasContent: true,
-  };
+  return withTemporaryCodexAppServer(cwd, async (request) => {
+    await readScopedThread(request, threadId, folder);
+    await request('thread/name/set', { threadId, name: title });
+    const row = codexThreadToRow(await readScopedThread(request, threadId, folder));
+    if (!row) throw httpError(502, 'Codex returned invalid session metadata');
+    return row;
+  });
 }
 
 export async function deleteCodexSession(threadId: string, folder: string | null): Promise<void> {
   const cwd = folder ?? process.cwd();
-  if (folder) {
-    await getCodexSessionMessages(threadId, folder);
-  }
-  await withTemporaryCodexAppServer(cwd, (request) => permanentlyDeleteCodexThread(request, threadId));
+  await withTemporaryCodexAppServer(cwd, async (request) => {
+    if (folder) await readScopedThread(request, threadId, folder);
+    await permanentlyDeleteCodexThread(request, threadId);
+  });
 }
 
 /** Delete is irreversible in the shared panel, so use Codex's native

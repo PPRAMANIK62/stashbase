@@ -147,6 +147,16 @@ export function createRecoveryJournal(options: RecoveryJournalOptions): Recovery
   }
   const now = options.now ?? Date.now;
 
+  // Scans delete abandoned temporary files and expired entries. Serialize them
+  // with publication and discard, so cleanup cannot race an active write and
+  // the last request received for a source remains authoritative.
+  let pending = Promise.resolve();
+  const serialize = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = pending.then(operation);
+    pending = result.then(() => undefined, () => undefined);
+    return result;
+  };
+
   const entryFile = (id: string): string => path.join(dir, `${id}${ENTRY_EXTENSION}`);
   const discard = (file: string): Promise<void> => fs.promises.rm(file, { force: true });
 
@@ -230,7 +240,7 @@ export function createRecoveryJournal(options: RecoveryJournalOptions): Recovery
   return {
     available: key !== null,
 
-    async list(folderPath) {
+    list: (folderPath) => serialize(async () => {
       if (!key) return { available: false, reason: 'no-key' };
       const entries = (await scan(key))
         .map(({ record }) => record)
@@ -238,20 +248,20 @@ export function createRecoveryJournal(options: RecoveryJournalOptions): Recovery
         .map(withoutContent)
         .sort(newestFirst);
       return { available: true, entries };
-    },
+    }),
 
-    async read(identity) {
+    read: (identity) => serialize(async () => {
       assertIdentity(identity);
       if (!key) return null;
       return load(key, recoveryDraftId(identity));
-    },
+    }),
 
-    async remove(identity) {
+    remove: (identity) => serialize(async () => {
       assertIdentity(identity);
       await discard(entryFile(recoveryDraftId(identity)));
-    },
+    }),
 
-    async write(snapshot) {
+    write: (snapshot) => serialize(async () => {
       assertIdentity(snapshot);
       if (!key) return { status: 'unavailable' };
       if (Buffer.byteLength(snapshot.content, 'utf8') > RECOVERY_JOURNAL_MAX_CONTENT_BYTES) {
@@ -268,6 +278,6 @@ export function createRecoveryJournal(options: RecoveryJournalOptions): Recovery
       await store(id, seal(key, id, record));
       await evict(key);
       return { status: 'stored', entry: withoutContent(record) };
-    },
+    }),
   };
 }

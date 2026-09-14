@@ -6,11 +6,11 @@ import { createDocumentRuntime, DOCUMENT_RESTORE_WAIT_MS } from './document-runt
 
 function createRuntime(access: 'editable' | 'read-only' = 'editable') {
   return createDocumentRuntime({
-    activeFolderPath: access === 'editable' ? '/library/notes' : '/library/other',
+    activeFolderPath: access === 'editable' ? '/project/notes' : '/project/other',
     generation: 1,
     id: 'tab-1',
     queries: documentQueryScope(),
-    source: { folderPath: '/library/notes', path: 'plan.md' },
+    source: { folderPath: '/project/notes', path: 'plan.md' },
   });
 }
 

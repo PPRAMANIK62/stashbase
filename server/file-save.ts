@@ -1,7 +1,7 @@
 import { normalizeFolderRelativePath } from './folder-relative-path.ts';
 import { toSourcePath } from './folder.ts';
 import { detectFormat, isDerivedNoteName } from './format.ts';
-import { fileVersionAsync, readTextAsync, saveTextAsync } from './files.ts';
+import { fileChanged, readTextSnapshotAsync, replaceTextSnapshotAsync, withTextFileTransaction } from './text-file-transaction.ts';
 import { contentSizeError, shouldIndexFilePath } from './indexable.ts';
 import { errorMessage, logger } from './log.ts';
 import { preserveTextSourceFormat } from './markdown-source-format.ts';
@@ -74,36 +74,20 @@ export async function saveFileContent(
   opts: { baseVersion?: string } = {},
 ): Promise<{ content: string; indexWarning?: string; version?: string }> {
   validateEditableFileWrite(name);
-  const format = detectFormat(name);
-  if (opts.baseVersion !== undefined) {
-    const currentVersion = await fileVersionAsync(name);
-    if (currentVersion !== opts.baseVersion) {
-      const currentContent = await readTextAsync(name);
-      const serializedContent = format === 'md' || format === 'json' || format === 'txt'
-        ? preserveTextSourceFormat(currentContent ?? '', content)
-        : content;
-      if (currentContent === serializedContent) {
-        return { content: serializedContent, version: currentVersion ?? undefined };
-      }
-      const err = new Error('file changed on disk; reload before saving');
-      (err as any).code = 'FILE_CHANGED';
-      (err as any).currentVersion = currentVersion;
-      throw err;
+  return withTextFileTransaction(name, async () => {
+    const previous = await readTextSnapshotAsync(name);
+    const format = detectFormat(name);
+    const savedContent = format === 'md' || format === 'json' || format === 'txt'
+      ? preserveTextSourceFormat(previous?.content ?? '', content)
+      : content;
+    // A byte-identical retry succeeds even if its original baseline is stale.
+    if (previous?.content === savedContent) return previous;
+    if (opts.baseVersion !== undefined && previous?.version !== opts.baseVersion) {
+      throw fileChanged(previous?.version ?? null);
     }
-  }
-  // CodeMirror stores its document with LF line separators. Editable raw text
-  // still owns its byte-level presentation: retain a leading UTF-8 BOM and
-  // serialize edits using the source's uniform (or dominant mixed) ending.
-  const preservesSourceFormat = format === 'md' || format === 'json' || format === 'txt';
-  const previousContent = preservesSourceFormat ? await readTextAsync(name) : null;
-  const savedContent = preservesSourceFormat
-    ? preserveTextSourceFormat(previousContent ?? '', content)
-    : content;
-  if (previousContent !== null && savedContent === previousContent) {
-    return { content: savedContent, version: (await fileVersionAsync(name)) ?? undefined };
-  }
-  await saveTextAsync(name, savedContent);
-  const indexWarning = await upsertSavedFile(name, savedContent);
-  noteTreeChanged();
-  return { content: savedContent, indexWarning, version: (await fileVersionAsync(name)) ?? undefined };
+    const saved = await replaceTextSnapshotAsync(name, savedContent, previous?.version ?? null);
+    const indexWarning = await upsertSavedFile(name, saved.content);
+    noteTreeChanged();
+    return { ...saved, indexWarning };
+  });
 }

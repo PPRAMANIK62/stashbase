@@ -63,7 +63,8 @@ export interface IndexStatus {
   /** False when semantic indexing/retrieval is unconfigured, e.g. no
    *  embedding key. */
   semanticEnabled: boolean;
-  /** False while the configured BYOK provider is unavailable. */
+  /** Legacy alias of `semanticEnabled`: key presence only, not provider
+   * authentication, connectivity, or index readiness. */
   semanticAvailable: boolean;
   /** Human-readable reason, sent only when `semanticAvailable` is false. */
   semanticDisabledReason?: string;

@@ -47,8 +47,21 @@ interface SizeClasses {
    *  `segmentPad` + `segmentItem` adds back up to the control height —
    *  the segmented control's outer box stays on the same ladder. */
   segmentItem: string;
+  /** A glyph-only segment's width on a track. Wider than `segmentItem` is
+   *  tall, so the lifted pill reads as a pill and not a square — and at the
+   *  compact step wide enough that the track's own `gap-0.5` carries it to
+   *  the 32px glyph pitch the sidebar's band and the Chat header's actions
+   *  both keep, so every toolbar in the window runs at one pitch. The
+   *  sidebar's mode switch used to spell that width out on each item. */
+  segmentGlyphWidth: string;
   /** Padding of the segmented list around its tabs. */
   segmentPad: string;
+  /** The segment's own corner. It is the shortest box a highlight lands on —
+   *  24px at the compact step — so it cannot borrow `shape.bg`, whose 12 is
+   *  exactly half that height and would clamp the segment into a capsule. A
+   *  slider's item is a pill only in being wider than tall; its corners stay
+   *  corners. */
+  segmentRadius: string;
   /** Body text inside controls. Mirrors `--fs-body` in globals.css, which
    *  `lib/tokens.test.ts` holds to this value. */
   text: string;
@@ -88,6 +101,11 @@ interface SizeClasses {
    *  `control` and `text`. */
   buttonPx: string;
   buttonGap: string;
+  /** The corner a bounded control draws. On the ladder rather than in the
+   *  shape map because a radius belongs to the size of the box: the same
+   *  number that reads generous on the 36px control is half the height of the
+   *  28px one, where it would turn an icon-only button into a circle. */
+  radius: string;
   /** A square control's box — an icon-only button, the loading spinner that
    *  has to fill the same box. Written out rather than derived from `control`
    *  so the class names stay literal and Tailwind can see them. */
@@ -117,7 +135,9 @@ const sizeMap: Record<SizeVariant, SizeClasses> = {
     control: 'h-9',
     controlHeight: 36,
     segmentItem: 'h-7',
+    segmentGlyphWidth: 'w-8',
     segmentPad: 'p-1',
+    segmentRadius: 'rounded-lg',
     text: 'text-[13px]',
     prompt: 'h-12',
     promptText: 'text-[15px]',
@@ -129,6 +149,7 @@ const sizeMap: Record<SizeVariant, SizeClasses> = {
     keycap: 'h-[18px] px-1 text-[11px]',
     buttonPx: 'px-4',
     buttonGap: 'gap-1.5',
+    radius: 'rounded-xl',
     square: 'h-9 w-9',
     squareGlyph: '[&_svg]:h-4 [&_svg]:w-4',
     nestedControl: '',
@@ -144,15 +165,19 @@ const sizeMap: Record<SizeVariant, SizeClasses> = {
     },
   },
   // 28px — the compact height for dense surfaces: filter bars, toolbars,
-  // table headers, sidebars. One step down in text (12px) and icon (14px)
-  // so the whole control shrinks together, not just its box.
+  // table headers, sidebars. One step down in icon (14px) and the label at
+  // the same 13px the default step reads: a row about twice its type is
+  // the density a chat client's sidebar keeps, and the label is what is
+  // read, so the box shrinks around it rather than with it.
   compact: {
     variant: 'compact',
     control: 'h-7',
     controlHeight: 28,
     segmentItem: 'h-6',
+    segmentGlyphWidth: 'w-[30px]',
     segmentPad: 'p-0.5',
-    text: 'text-[12px]',
+    segmentRadius: 'rounded-md',
+    text: 'text-[13px]',
     prompt: 'h-10',
     promptText: 'text-[14px]',
     caption: 'text-[11px]',
@@ -163,6 +188,7 @@ const sizeMap: Record<SizeVariant, SizeClasses> = {
     keycap: 'h-4 px-1 text-[10px]',
     buttonPx: 'px-3',
     buttonGap: 'gap-1',
+    radius: 'rounded-lg',
     square: 'h-7 w-7',
     squareGlyph: '[&_svg]:h-3.5 [&_svg]:w-3.5',
     nestedControl: '[&_button]:h-6 [&_button]:text-[11px] [&_button.w-7]:w-6',

@@ -105,10 +105,7 @@ describe('useSearchKeyConfigured', () => {
     await waitFor(() => expect(keyed.result.current).toBe(true));
 
     const differentProvider = renderHook(
-      () =>
-        useSearchKeyConfigured(
-          embedderPort(embedderState({ authorized: true, source: 'openrouter' })),
-        ),
+      () => useSearchKeyConfigured(embedderPort(embedderState({ provider: 'openrouter' }))),
       { wrapper: queryWrapper(createTestQueryClient()) },
     );
     await waitFor(() => expect(differentProvider.result.current).toBe(false));

@@ -1,5 +1,5 @@
 /**
- * Workspace fixtures: listings, library snapshots, and every port as a `vi.fn`.
+ * Workspace fixtures: listings, project snapshots, and every port as a `vi.fn`.
  *
  * Only shapes and stubs live here. Nothing outside `app/` or `features/` may
  * hold a feature value, so a test that needs a live runtime builds it from the
@@ -8,20 +8,20 @@
 import { vi } from 'vite-plus/test';
 
 import type {
-  ClipboardCapturePort,
-  ClipboardImageOffer,
   FilesPort,
   GitHubImportPort,
-  LibraryFolderPickerPort,
-  LibraryLifecyclePort,
-  LibraryPort,
-  UploadPort,
+  ProjectFolderPickerPort,
+  ProjectLifecyclePort,
+  ProjectRegistryPort,
   WorkspacePreferencesPort,
   WorkspaceQueryScope,
   WorkspaceSessionPort,
 } from '@/features/workspace/application/ports';
 import type { WorkspaceRuntimeOptions } from '@/features/workspace/application/runtime';
-import type { ActiveLibraryFolder, LibrarySnapshot } from '@/features/workspace/domain/library';
+import type {
+  ActiveProjectFolder,
+  ProjectRegistrySnapshot,
+} from '@/features/workspace/domain/project';
 import type {
   FolderSessionState,
   WorkspaceSessionSnapshot,
@@ -33,7 +33,7 @@ import type {
 } from '@/features/workspace/domain/tree';
 import type { WorkspaceAdapters } from '@/features/workspace/infrastructure/adapters';
 
-export const RESEARCH_FOLDER: ActiveLibraryFolder = { name: 'Research', path: '/Library/Research' };
+export const RESEARCH_FOLDER: ActiveProjectFolder = { name: 'Research', path: '/Library/Research' };
 
 /** One readable Markdown file in a listing. Tests name only what they assert
  *  on — usually the path and format. */
@@ -71,11 +71,13 @@ export function listing(
   };
 }
 
-export function librarySnapshot(overrides: Partial<LibrarySnapshot> = {}): LibrarySnapshot {
+export function projectRegistrySnapshot(
+  overrides: Partial<ProjectRegistrySnapshot> = {},
+): ProjectRegistrySnapshot {
   return {
     activeFolder: RESEARCH_FOLDER,
     homeDirectory: '/home/person',
-    members: [
+    projects: [
       { favorite: false, openedAt: '2026-09-02T00:00:00.000Z', path: RESEARCH_FOLDER.path },
     ],
     ...overrides,
@@ -93,24 +95,24 @@ export function filesApi(overrides: Partial<FilesPort> = {}): FilesPort {
   };
 }
 
-export function libraryApi(overrides: Partial<LibraryPort> = {}): LibraryPort {
+export function projectApi(overrides: Partial<ProjectRegistryPort> = {}): ProjectRegistryPort {
   return {
-    load: vi.fn(async () => librarySnapshot()),
-    openFolder: vi.fn(async () => librarySnapshot()),
-    removeFolder: vi.fn(async () => librarySnapshot({ activeFolder: null, members: [] })),
+    load: vi.fn(async () => projectRegistrySnapshot()),
+    openFolder: vi.fn(async () => projectRegistrySnapshot()),
+    removeFolder: vi.fn(async () => projectRegistrySnapshot({ activeFolder: null, projects: [] })),
     ...overrides,
   };
 }
 
-/** A library whose load never settles, so the shell stays in its restoring
+/** A project whose load never settles, so the shell stays in its restoring
  *  state and no folder ever becomes active. */
-export function pendingLibraryApi(): LibraryPort {
-  return libraryApi({ load: vi.fn(() => new Promise<never>(() => undefined)) });
+export function pendingProjectApi(): ProjectRegistryPort {
+  return projectApi({ load: vi.fn(() => new Promise<never>(() => undefined)) });
 }
 
-export function libraryLifecycle(
-  overrides: Partial<LibraryLifecyclePort> = {},
-): LibraryLifecyclePort {
+export function projectLifecycle(
+  overrides: Partial<ProjectLifecyclePort> = {},
+): ProjectLifecyclePort {
   return {
     // No folder named for this window, so every test that does not care about
     // the desktop's answer lands the way a plain relaunch does.
@@ -125,31 +127,9 @@ export function libraryLifecycle(
 }
 
 export function folderPicker(
-  overrides: Partial<LibraryFolderPickerPort> = {},
-): LibraryFolderPickerPort {
+  overrides: Partial<ProjectFolderPickerPort> = {},
+): ProjectFolderPickerPort {
   return { chooseFolder: vi.fn(async () => ({ status: 'cancelled' as const })), ...overrides };
-}
-
-export function uploadApi(overrides: Partial<UploadPort> = {}): UploadPort {
-  return { upload: vi.fn(async () => []), ...overrides };
-}
-
-/** The desktop clipboard watch, plus a hook so a test can offer an image the
- *  way the watch would. */
-export function clipboardCapture(
-  overrides: Partial<ClipboardCapturePort> = {},
-): ClipboardCapturePort & { emit(offer: ClipboardImageOffer): void } {
-  const handlers = new Set<(offer: ClipboardImageOffer) => void>();
-  return {
-    refresh: vi.fn(),
-    settle: vi.fn(),
-    subscribe: vi.fn((handler: (offer: ClipboardImageOffer) => void) => {
-      handlers.add(handler);
-      return () => handlers.delete(handler);
-    }),
-    ...overrides,
-    emit: (offer) => handlers.forEach((handler) => handler(offer)),
-  };
 }
 
 /** One folder's saved presentation state. Tests name it through this builder
@@ -230,14 +210,13 @@ export function workspacePreferences(
 /** Every Workspace port, as one record. Override one entry at a time. */
 export function workspaceAdapters(overrides: Partial<WorkspaceAdapters> = {}): WorkspaceAdapters {
   return {
-    clipboardCapture: null,
     files: filesApi(),
-    library: libraryApi(),
+    project: projectApi(),
     githubImport: githubImportApi(),
-    lifecycle: libraryLifecycle(),
+    lifecycle: projectLifecycle(),
     preferences: workspacePreferences(),
     session: sessionPersistence(),
-    upload: uploadApi(),
+    upload: { upload: vi.fn(async () => []) },
     ...overrides,
   };
 }

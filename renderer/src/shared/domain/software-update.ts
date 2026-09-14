@@ -13,6 +13,7 @@ export interface SoftwareUpdateRow {
   readonly status: string;
   /** The build that is running. */
   readonly version: string;
-  check(): void;
+  readonly actionLabel: string;
+  act(): void;
   setAutoCheck(enabled: boolean): void;
 }

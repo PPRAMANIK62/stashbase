@@ -73,7 +73,7 @@ function useIcon(name: IconName): IconComponent {
 }
 
 /**
- * Swap some or all icons for components from another library.
+ * Swap some or all icons for components from another project.
  * Names left out of `icons` keep their default (Lucide) component.
  */
 function IconProvider({

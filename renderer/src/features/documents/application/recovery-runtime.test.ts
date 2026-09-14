@@ -6,7 +6,7 @@ import type { DocumentRestoreOutcome } from './document-runtime';
 import { RecoveryDraftError, type RecoveryDraftPort } from './ports';
 import { createRecoveryRuntime } from './recovery-runtime';
 
-const folderPath = '/library/notes';
+const folderPath = '/project/notes';
 const plan = { folderPath, path: 'plan.md' };
 const notes = { folderPath, path: 'notes.md' };
 

@@ -220,3 +220,76 @@ describe('bug report review runtime', () => {
     expect(toReviewFailure(new Error('boom'))).toEqual({ kind: 'unavailable' });
   });
 });
+
+it('preserves unsaved text across an attachment response and includes it in approval', async () => {
+  const { port, runtime, state } = runtimeWith();
+  let finish: () => void = noop;
+  let started: () => void = noop;
+  const waiting = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const include = port.includeArtifact;
+  port.includeArtifact = async (id) => {
+    const draft = await include(id);
+    started();
+    await gate;
+    return draft;
+  };
+  await runtime.load();
+  const selection = runtime.setIncluded('artifact-log', true);
+  await waiting;
+  runtime.editDescription({ problem: 'New text while selecting', reproduction: '' });
+  finish();
+  await selection;
+  expect(state()).toMatchObject({
+    dirty: true,
+    draft: { description: { problem: 'New text while selecting' } },
+  });
+  await runtime.prepare();
+  expect(state()).toMatchObject({
+    kind: 'ready',
+    report: { description: { problem: 'New text while selecting' } },
+  });
+});
+
+it('locks before the approval save and restores dirty text after a save refusal', async () => {
+  const { port, runtime, state } = runtimeWith();
+  let finish: () => void = noop;
+  let started: () => void = noop;
+  const waiting = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const update = port.updateDescription;
+  port.updateDescription = async () => {
+    started();
+    await gate;
+    throw new BugReportError('unavailable', 'controlled save failure');
+  };
+  await runtime.load();
+  runtime.editDescription({ problem: 'Reviewed text', reproduction: '' });
+  const preparation = runtime.prepare();
+  await waiting;
+  expect(state()).toMatchObject({ kind: 'preparing' });
+  runtime.editDescription({ problem: 'Cannot edit during approval', reproduction: '' });
+  expect(state()).toMatchObject({ draft: { description: { problem: 'Reviewed text' } } });
+  finish();
+  await preparation;
+  expect(port.calls).not.toContain('prepare');
+  expect(state()).toMatchObject({
+    kind: 'reviewing',
+    dirty: true,
+    draft: { description: { problem: 'Reviewed text' } },
+  });
+  port.updateDescription = update;
+  await runtime.prepare();
+  expect(state()).toMatchObject({
+    kind: 'ready',
+    report: { description: { problem: 'Reviewed text' } },
+  });
+});
