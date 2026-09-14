@@ -417,7 +417,10 @@ class StashbaseMFS:
                 content.encode("utf-8"),
                 media_type="text/markdown",
             )
-        self._mfs.wait(report, 300)
+        # Source saves need acceptance (which retires the previous revision),
+        # not completion of optional provider-backed embedding work.
+        if args.get("wait_for_index", True):
+            self._mfs.wait(report, 300)
         elapsed = int((time.monotonic() - started) * 1000)
         return {
             "total_ms": elapsed,

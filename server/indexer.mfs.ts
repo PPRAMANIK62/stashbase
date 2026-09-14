@@ -172,7 +172,7 @@ export class MfsIndexer implements Indexer {
     this.loggedBindings.delete(key);
   }
 
-  async upsertFile(filePath: string, content: string): Promise<IndexUpsertResult> {
+  async upsertFile(filePath: string, content: string, options?: { waitForIndex?: boolean }): Promise<IndexUpsertResult> {
     if (!shouldIndexSourcePath(filePath)) {
       await getDaemon().call('delete', {
         path: normalizeDaemonPath(filePath),
@@ -210,6 +210,7 @@ export class MfsIndexer implements Indexer {
         path: normalizeDaemonPath(filePath),
         path_identity: filesystemPath.identity(filePath),
         content: text,
+        wait_for_index: options?.waitForIndex ?? true,
       },
     );
     log.info(

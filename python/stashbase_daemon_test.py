@@ -28,6 +28,17 @@ class TinyEmbedder:
 
 
 class StashbaseMfsTests(unittest.TestCase):
+    """MFS-backed daemon behaviour.
+
+    Paths come back in the daemon's own canonical form, which uses forward
+    slashes on every platform: it is the form the namespace keys and document
+    ids are built from, and the form the server canonicalizes to before it
+    compares anything. Expectations therefore read `Path.as_posix()` rather
+    than `str(Path)`, which differ only on Windows and hid this for as long as
+    the suite ran on POSIX alone. Arguments passed in stay native, because
+    that is what a caller on Windows actually holds.
+    """
+
     def test_internal_projection_uses_one_deterministic_namespace_per_folder(self) -> None:
         with tempfile.TemporaryDirectory() as data, tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -51,7 +62,7 @@ class StashbaseMfsTests(unittest.TestCase):
                     service.upsert({"path": str(source), "content": content})["outcome"],
                     "unchanged",
                 )
-                self.assertEqual(service.list_documents(folder), [str(source)])
+                self.assertEqual(service.list_documents(folder), [source.as_posix()])
                 chunks = service._mfs.grep(
                     first["namespace"],
                     [ByDocumentId(DocumentId(first["namespace"], "notes/hello.md"))],
@@ -62,6 +73,45 @@ class StashbaseMfsTests(unittest.TestCase):
                 self.assertEqual(service.delete({"path": str(source)}), {"removed": 1})
                 self.assertEqual(service.list_documents(folder), [])
             finally:
+                service.close()
+
+    def test_consecutive_save_acceptance_does_not_wait_for_embeddings(self) -> None:
+        entered, release = threading.Event(), threading.Event()
+
+        class SlowEmbedder(TinyEmbedder):
+            def embed_documents(self, texts):
+                entered.set()
+                if not release.wait(15):
+                    raise TimeoutError("test embedder was not released")
+                return super().embed_documents(texts)
+
+        with tempfile.TemporaryDirectory() as data, tempfile.TemporaryDirectory() as folder:
+            service = stashbase_daemon.StashbaseMFS(data)
+            try:
+                with mock.patch.object(stashbase_daemon, "make_embedder", return_value=SlowEmbedder()):
+                    service.bind_folder({"folder": folder, "api_key": "fixture-only"})
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    try:
+                        source = str(Path(folder) / "note.md")
+                        first = pool.submit(service.upsert, {
+                            "path": source, "content": "oldneedle", "wait_for_index": False,
+                        })
+                        self.assertEqual(first.result(timeout=5)["outcome"], "added")
+                        self.assertTrue(entered.wait(5))
+                        second = pool.submit(service.upsert, {
+                            "path": source, "content": "newneedle", "wait_for_index": False,
+                        })
+                        self.assertEqual(second.result(timeout=5)["outcome"], "updated")
+                        self.assertFalse(release.is_set())
+                        release.set()
+                        old = pool.submit(service.grep, {"folder": folder, "query": "oldneedle"})
+                        new = pool.submit(service.grep, {"folder": folder, "query": "newneedle"})
+                        self.assertEqual(old.result(timeout=5)["total_matches"], 0)
+                        self.assertEqual(new.result(timeout=5)["total_matches"], 1)
+                    finally:
+                        release.set()
+            finally:
+                release.set()
                 service.close()
 
     def test_internal_namespace_never_scans_the_user_folder(self) -> None:
@@ -93,7 +143,7 @@ class StashbaseMfsTests(unittest.TestCase):
                     service.delete_prefix({"prefix": str(removed.parent)}),
                     {"removed": 1},
                 )
-                self.assertEqual(service.list_documents(folder), [str(keep)])
+                self.assertEqual(service.list_documents(folder), [keep.as_posix()])
             finally:
                 service.close()
 
@@ -122,7 +172,7 @@ class StashbaseMfsTests(unittest.TestCase):
                 service.delete({"path": str(old)})
                 result = service.upsert({"path": str(new), "content": "changed"})
                 self.assertEqual(result["outcome"], "added")
-                self.assertEqual(service.list_documents(folder), [str(new)])
+                self.assertEqual(service.list_documents(folder), [new.as_posix()])
             finally:
                 service.close()
 
@@ -140,7 +190,7 @@ class StashbaseMfsTests(unittest.TestCase):
                 service.upsert({"path": str(source), "content": "nested"})
                 self.assertNotEqual(outer_bind["namespace"], nested_bind["namespace"])
                 self.assertEqual(service.list_documents(str(outer)), [])
-                self.assertEqual(service.list_documents(str(nested)), [str(source)])
+                self.assertEqual(service.list_documents(str(nested)), [source.as_posix()])
             finally:
                 service.close()
 
@@ -167,7 +217,7 @@ class StashbaseMfsTests(unittest.TestCase):
                     "query": "needle", "folder": folder, "path_prefix": str(notes),
                     "extensions": [".md"], "top_k": 1,
                 })
-                self.assertEqual([hit["path"] for hit in result["hits"]], [str(wanted)])
+                self.assertEqual([hit["path"] for hit in result["hits"]], [wanted.as_posix()])
                 with self.assertRaisesRegex(ValueError, "Folder is not bound"):
                     service.search({"query": "needle", "folder": str(root / "other")})
             finally:

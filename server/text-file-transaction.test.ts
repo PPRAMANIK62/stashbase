@@ -113,3 +113,49 @@ test('two folder aliases serialize writes to the same source directory entry', a
   const failure = results.find((result) => result.status === 'rejected');
   assert.equal(failure?.reason.code, 'FILE_CHANGED');
 });
+
+test('cleared sources cannot return stale evidence after a failed index removal; identical saves retry', async (t) => {
+  const { sourceAvailable } = await import('./retrieval/availability.ts');
+  const root = folder();
+  const source = path.join(root, 'note.md');
+  fs.writeFileSync(source, 'oldneedle');
+  let removals = 0;
+  t.mock.method(indexer, 'deleteFile', async () => {
+    if (++removals === 1) throw new Error('transport unavailable');
+  });
+  await runWithFolderRoot(root, async () => {
+    const cleared = await saveFileContent('note.md', '');
+    assert.equal(fs.readFileSync(source, 'utf8'), '');
+    assert.match(cleared.indexWarning ?? '', /transport unavailable/);
+    assert.equal(await sourceAvailable(source, root), false);
+    const retried = await saveFileContent('note.md', '', { baseVersion: textVersion('oldneedle') });
+    assert.equal(retried.version, cleared.version);
+    assert.equal(retried.indexWarning, undefined);
+    assert.equal(removals, 2);
+  });
+  // Eligibility is derived from disk, not an in-memory failure flag.
+  fs.writeFileSync(source, '\uFEFF \n\t');
+  assert.equal(await sourceAvailable(source, root), false);
+  fs.writeFileSync(source, 'a new draft');
+  assert.equal(await sourceAvailable(source, root), true);
+});
+
+test('save submits the current projection without waiting for embedding completion', async (t) => {
+  const root = folder();
+  const source = path.join(root, 'note.md');
+  fs.writeFileSync(source, 'original');
+  const accepted: string[] = [];
+  t.mock.method(indexer, 'upsertFile', async (target: string, content: string, options?: { waitForIndex?: boolean }) => {
+    assert.equal(target, source.replace(/\\/g, '/'));
+    assert.equal(fs.readFileSync(source, 'utf8'), content);
+    assert.equal(options?.waitForIndex, false);
+    accepted.push(content);
+    return { outcome: 'updated' };
+  });
+  await runWithFolderRoot(root, async () => {
+    const first = await saveFileContent('note.md', 'first');
+    const second = await saveFileContent('note.md', 'second', { baseVersion: first.version });
+    assert.equal(second.content, 'second');
+  });
+  assert.deepEqual(accepted, ['first', 'second']);
+});
