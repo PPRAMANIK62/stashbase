@@ -24,12 +24,6 @@ export function fileOrderDir(): string {
   return path.join(appDataRoot(), 'file-order');
 }
 
-/** Encrypted crash-recovery drafts. Lives outside every project folder so
- *  sync, backups, listing, and indexing never see it. */
-export function recoveryJournalDir(): string {
-  return path.join(appDataRoot(), 'recovery-journal');
-}
-
 /** The single global MFS store root for the whole app. The daemon maps every
  *  member Folder to one Internal namespace below it. `.nosync` keeps iCloud
  *  off the database files even though this

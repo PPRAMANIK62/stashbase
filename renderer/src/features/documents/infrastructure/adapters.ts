@@ -5,7 +5,6 @@ import type {
   DocxPreviewPort,
   GenericFilePreviewPort,
   MediaPort,
-  RecoveryDraftPort,
 } from '@/features/documents/application/ports';
 import type { WindowLifecycleBridge } from '@/platform/electron/window-lifecycle';
 import type { HttpClient } from '@/platform/http/client';
@@ -14,18 +13,16 @@ import { createDocumentAssetAdapter } from './asset-api';
 import { createDocxPreviewAdapter } from './docx-preview-api';
 import { createGenericFilePreviewAdapter } from './generic-preview-api';
 import { createMediaAdapter } from './media-api';
-import { createRecoveryDraftAdapter } from './recovery-draft-api';
 import { createDocumentSourceAdapter } from './source-api';
 import { createDocumentWindowLifecycleAdapter } from './window-lifecycle';
 
 /** Every port the Documents feature needs a real implementation of, in one
- *  record so the app wires the feature rather than its seven transports. */
+ *  record so the app wires the feature rather than individual transports. */
 export interface DocumentAdapters {
   asset: DocumentAssetPort;
   docxPreview: DocxPreviewPort;
   genericPreview: GenericFilePreviewPort;
   media: MediaPort;
-  recovery: RecoveryDraftPort;
   source: DocumentSourcePort;
   windowLifecycle: DocumentWindowLifecyclePort;
 }
@@ -54,7 +51,6 @@ export function createDocumentAdapters({
     docxPreview: createDocxPreviewAdapter(),
     genericPreview: createGenericFilePreviewAdapter(http),
     media: createMediaAdapter(http),
-    recovery: createRecoveryDraftAdapter(http),
     source: createDocumentSourceAdapter(http),
     windowLifecycle: createDocumentWindowLifecycleAdapter(windowLifecycle),
   };

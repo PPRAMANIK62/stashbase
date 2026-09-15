@@ -9,7 +9,6 @@ import { useEffect, useState } from 'react';
 
 import { useAgentWorkspaceRuntime } from '@/features/agent/public';
 import {
-  RecoveryDrafts,
   useDocumentCommands,
   useDocumentSaveBarrier,
   useNewTab,
@@ -38,7 +37,6 @@ import { useDocumentSources } from './composition/folder/use-document-sources';
 import { useDocumentWorkspace } from './composition/folder/use-document-workspace';
 import { useFolderReadiness } from './composition/folder/use-folder-readiness';
 import { useFolderRefresh } from './composition/folder/use-folder-refresh';
-import { useRecoveryDrafts } from './composition/folder/use-recovery-drafts';
 import { useTreeFollowsDocument } from './composition/folder/use-tree-follows-document';
 import { useGalleryShop } from './composition/gallery/use-gallery-shop';
 import { WorkspaceDialogs } from './composition/layout/workspace-dialogs';
@@ -82,18 +80,11 @@ function WorkspaceWindow() {
   );
   const project = useProject(workspaceDeps.adapters.project).data ?? null;
   const workspace = useWorkspace(workspaceDeps.adapters.project, session);
-  const documents = useDocumentWorkspace(
-    workspace,
-    session,
-    docs.adapters.source,
-    docs.createId,
-    docs.adapters.recovery,
-  );
+  const documents = useDocumentWorkspace(workspace, session, docs.adapters.source, docs.createId);
   useDocumentCommands(documents?.navigation ?? null, documents);
   useDocumentSaveBarrier(documents, docs.adapters.windowLifecycle);
   const newTab = useNewTab(documents);
   const sources = useDocumentSources(workspaceDeps.adapters, workspace, documents);
-  const recovery = useRecoveryDrafts(workspace, documents, docs.adapters.recovery);
   // The tree's selection is the document in front of the reader, not the
   // last row that was clicked, so a tab switch, a reused preview, or the last
   // tab closing all show in the sidebar.
@@ -179,7 +170,6 @@ function WorkspaceWindow() {
         }
         hasActiveFolder={activeFolder !== null}
         notices={chrome.notices}
-        recovery={recovery ? <RecoveryDrafts runtime={recovery} /> : null}
         panes={
           <WorkspacePanes
             chatPaneOpen={chatPaneOpen}

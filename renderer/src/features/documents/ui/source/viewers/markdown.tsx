@@ -25,7 +25,6 @@ export default function MarkdownViewer({
         <MarkdownDocument
           // Milkdown refuses outside text while the document is dirty, which is
           // right for a refetch and wrong for a restored draft; a restore remounts.
-          key={editor?.restores ?? 0}
           active={active}
           canChangeMode={access === 'editable' && editor !== null}
           dirty={editor !== null && editor.value !== editor.baseline}

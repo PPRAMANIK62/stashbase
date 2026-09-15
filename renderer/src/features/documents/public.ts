@@ -14,9 +14,6 @@ export {
   type DocumentTabsRuntime,
 } from './application/tabs-runtime';
 export type { DocumentRuntime } from './application/document-runtime';
-export { createRecoveryJournalist } from './application/recovery-journalist';
-export { createRecoveryRuntime, type RecoveryRuntime } from './application/recovery-runtime';
-export { RecoveryDrafts } from './ui/recovery/recovery-drafts';
 export { createDocumentAdapters, type DocumentAdapters } from './infrastructure/adapters';
 export { useDocumentCommands } from './hooks/use-document-commands';
 export { useDocumentSaveBarrier } from './hooks/use-document-save-barrier';

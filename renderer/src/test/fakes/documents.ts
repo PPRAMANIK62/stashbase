@@ -9,7 +9,6 @@ import type {
   DocxPreviewPort,
   GenericFilePreviewPort,
   MediaPort,
-  RecoveryDraftPort,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntimeOptions } from '@/features/documents/application/tabs-runtime';
 import type { DocumentTextSource } from '@/features/documents/domain/document';
@@ -70,19 +69,6 @@ export function mediaApi(overrides: Partial<MediaPort> = {}): MediaPort {
   };
 }
 
-/** A recovery journal that is available and empty; every call is overridable. */
-export function recoveryApi(overrides: Partial<RecoveryDraftPort> = {}): RecoveryDraftPort {
-  return {
-    discard: vi.fn(async () => undefined),
-    list: vi.fn(async () => ({ available: true as const, drafts: [] })),
-    read: vi.fn(async () => {
-      throw new Error('no draft');
-    }),
-    write: vi.fn(async () => ({ savedAt: '2026-09-10T08:00:00.000Z' })),
-    ...overrides,
-  };
-}
-
 export function documentWindowLifecycle(
   overrides: Partial<DocumentWindowLifecyclePort> = {},
 ): DocumentWindowLifecyclePort {
@@ -123,7 +109,6 @@ export function documentAdapters(overrides: Partial<DocumentAdapters> = {}): Doc
     docxPreview: docxPreviewApi(),
     genericPreview: genericPreviewApi(),
     media: mediaApi(),
-    recovery: recoveryApi(),
     source: sourceApi(),
     windowLifecycle: documentWindowLifecycle(),
     ...overrides,

@@ -32,7 +32,6 @@ function mount(overrides: Partial<WorkspaceComposition> = {}) {
     hasActiveFolder: true,
     notices: [],
     panes: <div data-testid="panes" />,
-    recovery: null,
     session: active,
     sidebar: <div data-testid="sidebar" />,
     started: true,

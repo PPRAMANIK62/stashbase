@@ -9,7 +9,7 @@
  * bundled, typed preload bridge.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, safeStorage, session, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
@@ -23,7 +23,6 @@ const {
   isCompatibleServerHealth,
   startServer,
 } = require('./main-probe.cjs');
-const { createRecoveryKeyProvider } = require('./recovery-key.cjs');
 const { createBugReportService } = require('./bug-report-service.cjs');
 const { collectBugReportDiagnostics } = require('./bug-report-diagnostics.cjs');
 const { collectRedactedApplicationLog, readApplicationLogTail } = require('./bug-report-log.cjs');
@@ -617,13 +616,6 @@ function spawnServer(instanceId) {
       logFd = null;
     }
   }
-  const recoveryJournalKey = createRecoveryKeyProvider({
-    safeStorage,
-    filePath: path.join(app.getPath('userData'), 'recovery-journal.key'),
-  }).load();
-  if (recoveryJournalKey === null) {
-    console.warn('[electron] recovery journal disabled: OS-protected storage is unavailable');
-  }
   serverProc = spawn(serverBin, serverArgs, {
     cwd: serverCwd,
     // Port flows via the CLI arg above, not the env — keeps the server
@@ -634,7 +626,6 @@ function spawnServer(instanceId) {
       packagedEnv,
       shutdownToken: SERVER_SHUTDOWN_TOKEN,
       oauthReturnToken: OAUTH_RETURN_TOKEN,
-      recoveryJournalKey,
       instanceId,
     }),
     // stdin = 'ignore' is intentional: the server never reads from

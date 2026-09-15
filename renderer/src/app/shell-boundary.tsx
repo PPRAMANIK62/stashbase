@@ -5,17 +5,8 @@
  * `./bootstrap/startup-failure.tsx` sets the same precedent for the other
  * failure a window can reach the reader with.
  *
- * The detail sentence is careful because the guarantee behind it is narrow.
- * Snapshots of unsaved text are journaled outside React, over HTTP to the
- * local server, which seals them to disk, so they do survive the subtree
- * remount this boundary performs. The dirty buffer itself does not survive,
- * because the tabs runtime lives in `useState` and is disposed with the
- * subtree along with everything it held. Snapshots are also deliberately
- * behind the typist, written 1.5s after the last keystroke and at worst every
- * 5s through continuous typing, so the newest text was never journaled. And on
- * an installation where Electron's `safeStorage` is unavailable the journal is
- * disabled outright, which is why the sentence says StashBase recovers what it
- * could store rather than promising recovery.
+ * Remounting disposes the document runtimes and their unsaved buffers.
+ * Only text already saved to source files survives; there is no draft journal.
  */
 import type { ReactNode } from 'react';
 
@@ -23,8 +14,7 @@ import { SurfaceBoundary } from '@/shared/runtime/surface-boundary';
 
 const SHELL_RECOVERY = {
   actions: [{ label: 'Reopen the workspace' }],
-  detail:
-    'Reopening reloads this folder from disk. Unsaved text comes back from draft recovery where StashBase could store it, and never includes the last few seconds of typing.',
+  detail: 'Reopening reloads this folder from disk. Text that has not been saved will be lost.',
   message: 'The workspace could not be drawn.',
 } as const;
 

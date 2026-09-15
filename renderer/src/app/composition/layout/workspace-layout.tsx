@@ -27,8 +27,6 @@ export interface WorkspaceComposition {
   notices: readonly WorkspaceNotice[];
   /** The Agent beside the open document. */
   panes: ReactNode;
-  /** The folder's unsaved drafts from a previous session, awaiting a decision. */
-  recovery: ReactNode;
   session: WorkspaceSessionController;
   sidebar: ReactNode;
   /** True once the window has a project and the Agent may be shown. */
@@ -48,7 +46,6 @@ export function WorkspaceLayout({
   hasActiveFolder,
   notices,
   panes,
-  recovery,
   session,
   sidebar,
   started,
@@ -75,7 +72,6 @@ export function WorkspaceLayout({
         {titlebar}
         <WorkspaceNotices notices={notices} />
         {updateNotice}
-        {hasActiveFolder && recovery}
 
         <section aria-label="Agent workspace" className="min-h-0 flex-1" {...agentSurfaceProps}>
           {started ? (

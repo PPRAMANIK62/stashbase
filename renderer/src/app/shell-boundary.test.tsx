@@ -37,7 +37,7 @@ describe('ShellBoundary', () => {
     expect(screen.getByText('The workspace could not be drawn.').isConnected).toBe(true);
     expect(
       screen.getByText(
-        'Reopening reloads this folder from disk. Unsaved text comes back from draft recovery where StashBase could store it, and never includes the last few seconds of typing.',
+        'Reopening reloads this folder from disk. Text that has not been saved will be lost.',
       ).isConnected,
     ).toBe(true);
   });

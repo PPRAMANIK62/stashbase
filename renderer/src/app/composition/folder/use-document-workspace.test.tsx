@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { useWorkspaceSession } from '@/features/workspace/public';
 import { createWorkspaceRuntime } from '@/features/workspace/test-support';
-import { pendingSourceApi, recoveryApi } from '@/test/fakes/documents';
+import { pendingSourceApi } from '@/test/fakes/documents';
 import {
   folderSession,
   projectApi,
@@ -38,7 +38,6 @@ describe('document workspace composition', () => {
     let nextId = 0;
     const createId = () => `new-tab-${++nextId}`;
     const api = pendingSourceApi();
-    const recovery = recoveryApi();
     const project = projectApi();
 
     // The session is reached through the app's own wiring, so the tabs this
@@ -49,7 +48,7 @@ describe('document workspace composition', () => {
         // The shell only mounts a workspace once the session has settled;
         // the tabs runtime is built from whatever it restored.
         const live = session.status.kind === 'ready' ? currentWorkspace : null;
-        return { documents: useDocumentWorkspace(live, session, api, createId, recovery), session };
+        return { documents: useDocumentWorkspace(live, session, api, createId), session };
       },
       {
         initialProps: { currentWorkspace: workspace as typeof workspace | null },
