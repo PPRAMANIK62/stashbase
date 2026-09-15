@@ -17,7 +17,7 @@ Electron windows → shared Node server → Python daemon → one MFS store
 | Owner | Authority |
 |---|---|
 | User filesystem | Source files, Wiki Pages, and native instruction files |
-| Electron main | Window/capability identity, server-child lifetime, native save barriers, updates, recovery-key protection |
+| Electron main | Window/capability identity, server-child lifetime, native save barriers, updates |
 | Node server | Registered projects, authorized file operations, preparation, Settings, MCP operations, Agent adapters |
 | Python/MFS | Completed text projections, revisions, chunking, embeddings, status, and retrieval through public APIs |
 | Native Agent runtime | Sessions, conversation history, native capabilities and tool execution |
@@ -99,20 +99,19 @@ path. A later window-open failure keeps the copy registered. Directory publicati
 and exclusive-copy fallback are not atomically visible; tests prove specific
 races, not protection against every adversarial syscall interleaving.
 
-### Recovery Journal
+### Draft Durability
 
-The server encrypts bounded draft snapshots outside projects; Electron protects
-the key with OS storage. The private child handoff cannot leak to daemon/Agent
-children. No key means unavailable, never a plaintext fallback. Sign-out does
-not delete local drafts or their key.
+Document text becomes durable through ordinary versioned saves. Close, project
+switch, and update barriers must finish those saves or retain the live window
+and its dirty buffers. Crash recovery snapshots and their OS-protected key store
+are removed: startup never imports or calls Electron safeStorage, and no recovery
+key is created or passed to the server. The app does not read or delete existing
+keychain entries or old encrypted snapshots.
 
-Snapshots retain source identity and base version, coalesce behind a bounded
-delay, and serialize with reads, eviction, and discard. Two windows share one
-entry per source; only changed text is journaled. Restore makes an unsaved draft
-with the recorded base version, never a direct disk write. Save/discard removes
-it. Retention, byte/count limits, and delayed or failed writes mean this is not
-a guarantee of the latest text. The unaccepted storage decision and recovery
-visibility/concurrency gaps remain recorded under J03.
+Unsaved text lives in the document runtime. A process crash or a shell remount can
+lose text that has not reached its source file. There is no plaintext snapshot or
+local-key replacement. Source transaction rollback and interrupted-operation
+recovery remain separate responsibilities.
 
 ## Preparation and Retrieval
 
@@ -260,6 +259,8 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
 - Node owns telemetry preferences and random installation identity in the strict
   app-config store. Missing preferences default on; malformed/unreadable state
   fails closed. No account, project, document, or machine identity is reused.
+  Settings General owns disclosure and opt-out; there is no startup notice or
+  persisted notice-dismissal state.
 - Only the fixed event schema may leave the process. Direct Capture API requests
   add no browser metadata; no SDK, replay, raw error capture, or AI tracing runs.
   The distributor's public ingestion token is build configuration, not a user
@@ -308,7 +309,7 @@ registered host boundaries; renderer shared types are a different layer.
   double-cast exemption is its Find controller's structural DOM corpus and guarded
   CSS Highlight probe; other exceptions need their code-owned rationale.
 - Surface recovery remounts the smallest boundary. Shell remount loses live buffers
-  and can recover only sealed journal snapshots. HTTP loss must not reload the app.
+  and reloads only saved source files. HTTP loss must not reload the app.
   Raw failures are mapped to feature-owned messages and recovery kinds.
 
 ### Document and Window Trust
@@ -336,8 +337,10 @@ and unused-code rules. Do not reproduce their inventories here. Primitive/story
 reachability complements unused-code analysis, which counts test-only callers.
 
 One token/geometry/motion system serves app and catalog through shared providers.
-Bundled kit code never loads registry/CDN assets at runtime. Overrideable CSS
-belongs in its layer; scoped themes resolve their own tokens. Reduced motion must
+Server-rendered pages opened outside the renderer restate those token values
+locally and track the token layer when it moves. Bundled kit code never loads
+registry/CDN assets at runtime. Overrideable CSS belongs in its layer; scoped
+themes resolve their own tokens. Reduced motion must
 settle both JS and CSS lifetimes, including transition-end waiters. Structural
 shape, DOM-test, swallowed-error, and third-party token exceptions remain locally
 justified and bounded. Stories/axe do not prove painted contrast or composition.
@@ -359,6 +362,12 @@ identity and a dead parent before killing. Foreign/live-parented listeners remai
   revokes exactly its approvals, and leaves the download retryable.
 - Renderer requests never choose feed, path, or phase. Automatic checks do not
   authorize downloads/install. Production exposes no development simulator.
+  Update offers render in the sidebar footer. The development Settings controls
+  ask app composition to close Settings, expand the sidebar, and render an
+  Updates-owned visual override in that same slot. Preview state belongs to the
+  window, survives closing Settings, and holds no updater port. Dismissal or
+  Stop preview drops only the override; the subscribed real state and its
+  actions remain intact. Window unmount discards the preview.
 - App quit authenticates to the owned server and awaits independent cleanup;
   timeout signals are fallback. Window close cannot terminate shared services.
   Native reload has no bypass around saving; current recovery remounts React.
@@ -387,7 +396,11 @@ artifact bytes, paths, logs, and internal identities never enter a GitHub URL.
 ### Gallery
 
 Node proxies a validated whole index and restricted screenshots; the renderer
-never contacts arbitrary catalog hosts. Normalize URLs before exact host/path
+never contacts arbitrary catalog hosts. Screenshot URLs resolve against the
+native-provided server origin, not the bundled `app://renderer` origin. The
+production image CSP permits only that server’s `/api/gallery/image` proxy in
+addition to bundled/data/blob images; native main-frame request authorization
+still applies. Normalize URLs before exact host/path
 checks, refuse redirects, validate before caching, and fall back to the bundled
 snapshot on unsupported/unreachable publications. Index reads carry no project
 or composer content. Both entrances share one copy latch. Acquisition uses the

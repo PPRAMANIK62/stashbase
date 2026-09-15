@@ -30,7 +30,7 @@ OCR images, and transcript media. One representation cannot prove another.
 |---|---|---|
 | [J01 Onboarding](#j01-onboarding) | [Writing Workspace](../design-docs/design/writing-workspace.md), [Project Context](../design-docs/design/project-context.md) | [Entry and identity](architecture.md#project-scope-and-paths), [Native lifecycle](architecture.md#native-lifecycle-and-updates) |
 | [J02 Folder](#j02-folder) | [Writing Workspace](../design-docs/design/writing-workspace.md) | [Projects](architecture.md#project-scope-and-paths), [Import](architecture.md#import-publication) |
-| [J03 Documents](#j03-documents) | [Writing Workspace](../design-docs/design/writing-workspace.md) | [Source transactions](architecture.md#source-transactions), [Renderer](architecture.md#renderer-boundaries), [Recovery](architecture.md#recovery-journal) |
+| [J03 Documents](#j03-documents) | [Writing Workspace](../design-docs/design/writing-workspace.md) | [Source transactions](architecture.md#source-transactions), [Renderer](architecture.md#renderer-boundaries), [Draft durability](architecture.md#draft-durability) |
 | [J04 Preparation](#j04-preparation) | [Project Context](../design-docs/design/project-context.md) | [Preparation](architecture.md#preparation-and-retrieval), [Local components](architecture.md#optional-local-components) |
 | [J05 Search](#j05-search) | [Project Context](../design-docs/design/project-context.md), [Writing Workspace](../design-docs/design/writing-workspace.md) | [Retrieval](architecture.md#preparation-and-retrieval), [Scope](architecture.md#project-scope-and-paths) |
 | [J06 Agent](#j06-agent) | [Writing Workspace](../design-docs/design/writing-workspace.md) | [Agent sessions](architecture.md#agent-sessions-and-permissions), [Credentials](architecture.md#credentials-and-external-access) |
@@ -45,20 +45,26 @@ OCR images, and transcript media. One representation cannot prove another.
 ## J01: Onboarding
 
 **Usage statistics:** `server/telemetry.ts` and `server/routes/telemetry.ts` own
-manual collection and Settings persistence; Settings General and the first-launch
-notice expose default-on disclosure and opt-out. `server/telemetry.test.ts` covers
+manual collection and Settings persistence; Settings General exposes default-on
+disclosure and opt-out. The workspace has no first-launch statistics banner. `server/telemetry.test.ts` covers
 field rejection, opt-out/restart/ID rotation, offline delivery, corrupt config,
 and daily editor-save suppression. Renderer usage tests cover terminal event
 coalescing and Settings choice/failure UI. A 2026-09-15 built-service pass with
 isolated config, real Python/MFS, and a local capture sink exercised project open,
 versioned editor save, opt-out, ID removal, and suppression of later events.
-Built Storybook controls and disclosure were driven and reviewed visually;
+Before removal of the startup banner, built Storybook privacy controls and the
+then-present disclosure were driven and reviewed visually;
 Electron boundary/authorization smoke passed. A separate real PostHog Capture
 API pass received HTTP 200 for `app_opened` and `telemetry_disabled`, both visible
 in project 384555 with version `2.7.0-telemetry-verification`. IP discard was
-confirmed enabled there. Signed packaged multi-window disclosure and real-provider
+confirmed enabled there. Signed packaged multi-window privacy settings and real-provider
 Agent telemetry remain unproven; desktop accessibility selected a pre-existing
 app instance rather than the isolated verification window.
+A later 2026-09-15 source-desktop startup pass used an empty temporary HOME and
+isolated profile, with any application access to Electron safeStorage made fatal.
+It reached the real welcome screen, showed no statistics banner, and exited
+cleanly. This proves the source startup path no longer needs OS key storage;
+it does not establish the next signed installer or third-party Agent login UI.
 
 
 **Intent:** [J01](../design-docs/user-journeys.md#j01-complete-onboarding-and-reach-first-value).
@@ -80,8 +86,20 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
   delayed-start activation, initial seeding, save-refused quit and later reopen,
   and theme writes. OS URL registration/key protection are substitutes.
   Account identity/menu is tested; a seeded session did not prove live sign-in.
+  A 2026-09-15 isolated Chromium pass renders the server-owned sign-in success
+  and failure pages in light and dark modes, with visible return buttons and
+  no horizontal overflow. Screenshots verify composition; this pass does not
+  exercise a real OAuth provider or native protocol handoff.
   A built-server delayed fake-Codex pass (2026-09-15) kept health requests
   responsive and issued one probe; it proves liveness, not a model turn.
+  Development Settings triggers a preview in the sidebar footer.
+  `sidebar-update-preview.test.tsx` covers Settings dismissal, footer placement,
+  inert preview installation, and restoration of real update actions.
+  `update-preview.test.tsx` covers selecting a state before starting the preview.
+  An isolated Electron/Vite pass (2026-09-15) opens the developer controls,
+  starts the default ready-to-install preview, and visually verifies the card
+  above Gallery in the expanded sidebar with Settings closed. Clicking Install
+  and restart leaves the window running; the close icon removes the preview.
   Controlled updater passes cover dismissed notices, Settings actions, native
   input locking, save barriers, and handoff failure rollback, not replacement.
 - **AI Eval:** first-discussion quality belongs to J10; retrieval quality to J05.
@@ -134,15 +152,15 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 **Intent:** [J03](../design-docs/user-journeys.md#j03-read-and-edit-source-documents).
 
 **Implementation:** Renderer: `renderer/src/features/documents/ui/source/registry.tsx`, `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/features/documents/ui/markdown/document.tsx`.
-Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`, `server/recovery-journal.ts`.
+Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`.
 
 **Status:** Release-dependent.
 
 - **Contract Test:** `pnpm test:renderer`, `pnpm test:project-files`,
   `pnpm test:electron`, and `pnpm test:electron:smoke` cover format capabilities, source identity,
   hidden-file policy, tab/history behavior, save barriers, shared version
-  authority, conflicts, encrypted recovery journals, and failure handling.
-  `pnpm test:config` covers strict durable preferences and recovery default-off.
+  authority, conflicts, and failure handling.
+  `pnpm test:config` covers strict durable preferences.
   Transaction/Python regressions cover concurrent saves, staging-time external
   edits, failed empty-source removal with same-content retry, and consecutive
   projection acceptance while a local embedder blocks. They do not establish
@@ -150,10 +168,9 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`, `server
   HTTP source-format contracts isolate index admission; they do not start or
   verify the Python daemon. Real daemon lifecycle belongs to Electron smoke
   and the built-service pass below.
-- **Driven Runtime Pass:** isolated built-app passes cover crash → journal offer
-  → restore dirty text → versioned autosave → journal clearing with a stand-in
-  keyring; distinct whitespace recovery identities; preview reuse/keep, history,
-  draft creation/rename, and kept-only tab restoration. A separate window-origin
+- **Driven Runtime Pass:** isolated built-app passes cover preview reuse/keep,
+  history, draft creation/rename, and kept-only tab restoration. Earlier journal
+  restoration passes apply to the removed snapshot feature, not current durability. A separate window-origin
   API pass proves one success/one conflict for same-version saves and missing
   asset refusal; it does not drive editor typing or conflict-dialog decisions.
   The 2026-09-15 v2.7.0 retry exercised the built service with a real Python/MFS
@@ -177,12 +194,10 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`, `server
   reading offsets; sidebar resizing is pointer-only. Native close tracks document
   load rather than separate save-handler readiness, with failure/timeout keeping
   the window open. Recovery is a React remount, not a native reload protocol.
-- **Known issues — journal:** storage/key ownership is not an accepted design
-  decision. Disabled protection lacks visible explanation; wire character and
-  stored byte limits disagree; two-window writers have no decisive test. Clean
-  exit can offer saved text, removed-project drafts wait out retention unoffered,
-  and key loss/limits/eviction can remove recovery without a clear user explanation.
-  Do not expand the trust contract until its decision is settled.
+- **Durability limit:** the keychain-backed draft journal is removed by product
+  decision. Automatic saves, versioned conflict handling, and native save barriers
+  remain. Process crashes and shell remounts can lose text not yet saved to source.
+  No existing keychain item or old snapshot is read, migrated, or deleted.
 - **Known issues — trust:** executable source HTML and remote subresources remain
   weaker than intended isolation. The current opaque frame is not approval to
   expand script/network authority.
@@ -429,18 +444,26 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `electron/
 - **Contract Test:** `pnpm test:protocols`, `pnpm test:renderer`, and
   `pnpm test:project-files` cover bounded whole-index
   parsing/fallback, image-host and redirect restrictions, cached browsing, copy
-  serialization, and shared GitHub acquisition/publication rollback. See
+  serialization, and shared GitHub acquisition/publication rollback. The Electron
+  smoke also loads the built Gallery UI through `app://renderer`, decodes cover,
+  hero, and thumbnail images, and selects another screenshot using controlled
+  proxy bytes with production CSP and native request authorization. See
   [Gallery boundary](architecture.md#gallery).
 - **Driven Runtime Pass:** clean-profile bundled browsing and detail/Instructions
   inspection without account/runtime. A separate isolated built-app pass
   (2026-09-14) copies real `octocat/Hello-World` via a controlled Gallery index,
   registers it, opens a second bound window, and preserves the shop's null binding.
   Injected window-open failure preserves the copy/registration. OS key/URL setup
-  is substituted; live screenshots and packaged delivery are not exercised.
+  is substituted; packaged delivery is not exercised. An isolated macOS source
+  Electron pass (2026-09-15) loads the built UI through the production app
+  protocol, browses the live published index, and visually verifies the ECCV
+  2026 Orals hero and all three thumbnails. The original failure was relative
+  image URLs resolving to bundled files, followed by CSP blocking the daemon
+  image URL. Both are covered by the built-renderer smoke above.
 - **AI Eval:** not required; acquisition does not generate content.
 - **Release Check:** published index, CDN screenshots, real copy, and new window
   in one packaged pass.
-- **Gap:** controlled upstreams do not establish published delivery. Wire fields
+- **Gap:** published delivery still needs verification in a signed installer. Wire fields
   `learnMore`, `starterPrompts`, `contents`, and `files` have no app surface.
 
 ## Maintenance Rule

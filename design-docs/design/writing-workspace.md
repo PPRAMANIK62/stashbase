@@ -35,7 +35,9 @@ Gallery example. The registry remembers projects; relaunch starts at Welcome,
 and explicit entry restores saved work. A window currently holds one project;
 other windows share services while keeping their work independent. Optional
 Start Here content seeds only a pristine default home without overwriting or
-recreating deliberately removed user content.
+recreating deliberately removed user content. Gallery covers, detail screenshots,
+and thumbnail selection work in the installed desktop app through its local
+image proxy. Browsing remains available without a project or account.
 
 ### Work with project files
 
@@ -46,9 +48,9 @@ visibility is a saved preference; protected/derived state stays hidden, and
 excluded infrastructure does not become recursive background work.
 
 Versioned saves protect source bytes. Conflicts retain dirty and disk text until
-a deliberate choice. Where OS key protection is available, recovery journals
-keep unsaved text outside projects; restoring returns a dirty buffer, not a disk
-write. Preview failures retain the original file's identity. Existing Agent
+a deliberate choice. Text becomes durable through ordinary saves; no separate
+crash-recovery snapshots or keychain access are used. A crash can lose text that
+has not reached its source file. Preview failures retain the original file's identity. Existing Agent
 file comparisons and save-conflict comparisons are not the coming-soon prose diff.
 
 ### Agent collaboration
@@ -74,11 +76,24 @@ explicit and crosses every window's save barrier. J09 owns the bug-report flow;
 review authorization, immutable approval, and local handoff. Reporting is not
 telemetry or automatic submission.
 
+Development builds expose Settings → General → Developer → Update notification
+preview. Choose a state and select Preview in sidebar to close Settings, open
+the left sidebar, and show the update card in its footer above Gallery. The
+default is ready to install; available, downloading, installing, and failed
+states are also selectable. Real update offers use this same sidebar card,
+with one primary action and a top-right close icon. No secondary release-page
+or Not now buttons appear. Preview actions do not invoke the updater.
+The close icon or Stop preview ends the
+window-local preview and reveals the current real update state.
+
 ### Basic usage statistics
 
 Official desktop builds share a small, public event allowlist with PostHog by
-default. A non-modal first-launch disclosure and Settings → General privacy
-switch explain the choice. Collection excludes all document/conversation content,
+default. Settings → General → Privacy explains the choice and provides the
+collection switch in a single compact row, with a short purpose statement and
+a View details link. Provider, event fields, and opt-out delivery mechanics live
+in the linked usage-statistics guide. The writing workspace has no first-launch
+statistics banner. Collection excludes all document/conversation content,
 paths, account identity, raw diagnostics, and automatic recordings. Turning it
 off persists the choice, discards pending usage, and attempts one disclosed final
 notification before stopping; re-enabling uses a new random installation ID.
@@ -129,9 +144,9 @@ filesystem entries are reveal-only. Generic bytes are never decoded lossily.
   retrieval or Agent access.
 - Conflicting writes never silently overwrite dirty or newer disk text. Saving
   does not await embeddings; failed search updates report lag, and cleared text
-  cannot remain usable evidence. Recovery restores the original version boundary.
-- Recovery remains protected local state outside projects and Agent access,
-  unaffected by account sign-out. No unprotected journal fallback is allowed.
+  cannot remain usable evidence. Save conflict handling preserves the original version boundary.
+- Startup does not request a keychain or OS key-store credential. There is no
+  background draft journal; auto-save and save-before-close barriers own durability.
 - Discussion or presentation changes do not authorize writes or attach context.
   Requests, editable Instructions, internal routing, and permissions stay distinct.
 - Surfaced approvals require deliberate user decisions. Runtime notices, automatic
@@ -173,12 +188,9 @@ the full native continuation contract.
 
 - Executable local HTML/remote subresources have a weaker boundary than required;
   [Document Viewers](../../code-review/architecture.md#document-and-window-trust) owns it.
-- Recovery ships, but journal key/storage ownership remains an unsettled trust
-  decision. Missing key protection, size limits, eviction, or unreadable old
-  journal keys can leave recovery unavailable without a user-visible explanation.
-- Clean exits can still offer already-saved recovery text; drafts for removed
-  projects wait out retention without being offered. See
-  [File Transactions](../../code-review/architecture.md#recovery-journal).
+- Unsaved text is retained while its document runtime lives. Crash or shell
+  remount recovery reloads saved source files and cannot recover newer buffer text.
+  See [Draft Durability](../../code-review/architecture.md#draft-durability).
 
 Navigation and recovery limits: [J03 evidence](../../code-review/journey-coverage.md#j03-documents).
 Quality and flow evidence: [Journey Coverage](../../code-review/journey-coverage.md).
