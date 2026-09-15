@@ -1,7 +1,7 @@
 # Usage statistics
 
 Official desktop builds share basic usage statistics with PostHog by default.
-A non-modal notice appears on first launch. Turn collection off at any time in
+The collection explanation and controls are in Settings. Turn collection off at any time in
 **Settings → General → Privacy → Share basic usage statistics**. Local editing,
 Agent access, and every other feature work regardless of this choice.
 Development builds and builds without a configured destination do not send.

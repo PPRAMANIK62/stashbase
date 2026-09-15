@@ -10,7 +10,6 @@ import packageInfo from '../package.json' with { type: 'json' };
 
 export interface TelemetryState {
   enabled: boolean;
-  noticeSeen: boolean;
   installationId?: string;
   /** Only bounded daily suppression markers, never document identities. */
   writeDay?: string;
@@ -19,11 +18,10 @@ export interface TelemetryState {
 
 function stateOf(config: AppConfigFile): TelemetryState {
   const raw = config.telemetry;
-  if (raw === undefined) return { enabled: true, noticeSeen: false };
+  if (raw === undefined) return { enabled: true };
   // Malformed preferences must never silently re-enable collection.
   return {
     enabled: raw?.enabled === true,
-    noticeSeen: raw?.noticeSeen === true,
     ...(typeof raw?.installationId === 'string' && /^[0-9a-f-]{36}$/.test(raw.installationId)
       ? { installationId: raw.installationId } : {}),
     ...(typeof raw?.writeDay === 'string' ? { writeDay: raw.writeDay } : {}),
@@ -53,7 +51,7 @@ export function createTelemetry(options: {
 
   const preferences = () => {
     const state = stateOf(options.read());
-    return { enabled: state.enabled, noticeSeen: state.noticeSeen, available: options.available };
+    return { enabled: state.enabled, available: options.available };
   };
   const cancel = () => {
     for (const controller of pending) controller.abort();
@@ -114,7 +112,7 @@ export function createTelemetry(options: {
   return {
     preferences,
     capture,
-    update(next: { enabled?: boolean; noticeSeen?: true }) {
+    update(next: { enabled: boolean }) {
       // Even a persistence failure stops this process; the UI reports that the
       // choice could not be saved and must not claim it survives relaunch.
       if (next.enabled === false) { collectionStopped = true; cancel(); }
@@ -132,7 +130,7 @@ export function createTelemetry(options: {
       if (previous.enabled && !state.enabled && previous.installationId && options.available && !stopped) {
         send(previous.installationId, 'telemetry_disabled', {});
       }
-      return { enabled: state.enabled, noticeSeen: state.noticeSeen, available: options.available };
+      return { enabled: state.enabled, available: options.available };
     },
     close() { stopped = true; cancel(); },
   };

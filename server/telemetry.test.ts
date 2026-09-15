@@ -53,7 +53,7 @@ test('opt-out persists first, discards pending events, sends one final signal, a
   await tick();
   const oldId = f.sent[0].body.distinct_id;
   f.service.capture({ event: 'agent_turn_started', runtime: 'codex' });
-  assert.equal(f.service.update({ enabled: false, noticeSeen: true }).enabled, false);
+  assert.equal(f.service.update({ enabled: false }).enabled, false);
   assert.equal(f.config().telemetry?.installationId, undefined);
   f.service.capture({ event: 'agent_turn_started', runtime: 'codex' });
   await tick();
@@ -129,7 +129,7 @@ test('HTTP boundary refuses arbitrary fields and never exposes the installation 
     assert.equal((await post('/events', { event: 'agent_turn_started', runtime: 'codex', prompt: 'private' })).status, 400);
     assert.equal((await post('', { enabled: false, installationId: 'injected' }, 'PUT')).status, 400);
     assert.equal((await post('/events', { event: 'app_opened' })).status, 204);
-    assert.deepEqual(await (await fetch(url)).json(), { enabled: true, noticeSeen: false, available: true });
+    assert.deepEqual(await (await fetch(url)).json(), { enabled: true, available: true });
     assert.equal((await post('', { enabled: false }, 'PUT')).status, 200);
     assert.equal(f.config().telemetry?.enabled, false);
   } finally { f.service.close(); server.closeAllConnections(); server.close(); }

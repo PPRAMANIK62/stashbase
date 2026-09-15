@@ -61,10 +61,8 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       agentRuntimeApi: agentRuntimePort(),
       appearanceApi: appearancePort(),
       telemetryApi: {
-        load: async () => ({ enabled: true, noticeSeen: false, available: false }),
+        load: async () => ({ enabled: true, available: false }),
         update: async (change) => ({
-          enabled: true,
-          noticeSeen: false,
           available: false,
           ...change,
         }),

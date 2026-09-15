@@ -15,7 +15,7 @@ export function useTelemetry(port: TelemetryPort) {
   });
   const command = useSettingsCommand(
     'telemetry',
-    (change: { enabled?: boolean; noticeSeen?: true }, signal) => port.update(change, signal),
+    (change: { enabled: boolean }, signal) => port.update(change, signal),
     {
       onStart: () => client.cancelQueries({ queryKey }),
       onDone: (saved) => {

@@ -23,4 +23,3 @@ export { createLocalComponentAdapter } from './infrastructure/local-component-ap
 
 export type { TelemetryPort } from './application/telemetry-port';
 export { createTelemetryAdapter } from './infrastructure/telemetry-api';
-export { TelemetryNotice } from './ui/telemetry-notice';
