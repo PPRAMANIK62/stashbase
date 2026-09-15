@@ -32,6 +32,7 @@ import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { holdsTextSelection } from '@/shared/utils/click-intent';
 
 import { AgentChangedFiles, AgentFileChangeView } from './file-change';
 import {
@@ -147,15 +148,28 @@ function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
           !hasDetails && 'cursor-default',
         )}
         disabled={!hasDetails}
-        onClick={() => hasDetails && setOpen((value) => !value)}
+        // The row's verb and target are selectable, so the drag that copies a
+        // path or a command ends as a click here. Folding the row shut on that
+        // gesture would take the text away as the reader lifts the pointer.
+        onClick={(event) => {
+          if (holdsTextSelection(event.currentTarget)) return;
+          if (hasDetails) setOpen((value) => !value);
+        }}
         type="button"
       >
         <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.5} />
-        <span className="shrink-0 font-medium text-foreground">{presentation.verb}</span>
+        {/* select-text on both text spans: a button's text is not selectable
+            by default, and what the agent touched — the command it ran, the
+            file it edited — is the line a reader most wants to copy out of a
+            transcript. Truncation is visual, so a selection carries the whole
+            path even where the row shows its head. */}
+        <span className="shrink-0 font-medium text-foreground select-text">
+          {presentation.verb}
+        </span>
         {presentation.target && (
           <span
             className={cn(
-              'min-w-0 flex-1 truncate text-muted-foreground',
+              'min-w-0 flex-1 truncate text-muted-foreground select-text',
               presentation.mono && 'font-mono',
             )}
             title={presentation.target}
@@ -191,19 +205,22 @@ function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
   );
 }
 
+export type AgentActivityStep = Extract<AgentTranscriptBlock, { kind: 'thinking' | 'tool' }>;
+
 export function AgentActivityGroup({
   focusToolId = null,
   onOpenSource,
   sourceFor,
-  tools,
+  steps,
 }: {
   /** A tool whose ask was just decided: the group that receives it takes
    *  focus once, at its summary, so the decision stays reachable. */
   focusToolId?: string | null;
   onOpenSource?: ((source: SourceReference) => void) | undefined;
   sourceFor?: ((path: string) => SourceReference | null) | undefined;
-  tools: AgentToolBlock[];
+  steps: AgentActivityStep[];
 }) {
+  const tools = steps.filter((step): step is AgentToolBlock => step.kind === 'tool');
   const active = tools.some((tool) => tool.status === 'running');
   const changes = settledFileChanges(tools);
   const headerRef = useRef<HTMLButtonElement>(null);
@@ -218,14 +235,27 @@ export function AgentActivityGroup({
     <div className="-ml-2 flex w-[calc(100%+0.5rem)] flex-col gap-1">
       <ThinkingSteps className="w-full" defaultOpen={false}>
         <ThinkingStepsHeader className="px-2 py-1.5 text-[13px]" ref={headerRef}>
-          {agentActivitySummary(tools, active)}
+          {tools.length ? agentActivitySummary(tools, active) : 'Thinking'}
         </ThinkingStepsHeader>
         <ThinkingStepsContent className="gap-0.5 pl-2">
-          {tools.map((tool) => (
-            <AgentToolRow key={tool.id} tool={tool} />
-          ))}
+          {steps
+            .filter((step) => step.kind !== 'tool' || !['error', 'denied'].includes(step.status))
+            .map((step) =>
+              step.kind === 'thinking' ? (
+                <p className="text-caption whitespace-pre-wrap text-muted-foreground" key={step.id}>
+                  {step.text}
+                </p>
+              ) : (
+                <AgentToolRow key={step.id} tool={step} />
+              ),
+            )}
         </ThinkingStepsContent>
       </ThinkingSteps>
+      {tools
+        .filter((tool) => tool.status === 'error' || tool.status === 'denied')
+        .map((tool) => (
+          <AgentToolRow key={tool.id} tool={tool} />
+        ))}
       <AgentChangedFiles changes={changes} onOpenSource={onOpenSource} sourceFor={sourceFor} />
     </div>
   );
@@ -290,8 +320,4 @@ export function AgentPermissionCard({
       </div>
     </div>
   );
-}
-
-export function isAgentToolBlock(block: AgentTranscriptBlock): block is AgentToolBlock {
-  return block.kind === 'tool';
 }

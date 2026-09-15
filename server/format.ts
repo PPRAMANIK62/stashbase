@@ -7,9 +7,9 @@
  *     the single source of truth and is indexed directly — markdown
  *     as-is; HTML via a cheap in-memory "→ heading markdown" optimization
  *     at MFS-feed time (`analyzeHtml`), NOT materialized to disk.
- *   - **Convertible** (`UNSTRUCTURED_SOURCE_EXTS`: pdf, images, docx, audio): a
+ *   - **Convertible** (`UNSTRUCTURED_SOURCE_EXTS`: pdf, images, docx): a
  *     converter extracts text into an AppData-derived representation. That
- *     text layer feeds search; PDFs/DOCX/audio also use it for Agent text
+ *     text layer feeds search; PDFs/DOCX also use it for Agent text
  *     reading, while images remain the read/view source.
  * MFS receives raw Markdown/JSON/TXT and markdown-shaped HTML plaintext; all format knowledge lives here / in
  * the converters, never in MFS.
@@ -23,7 +23,6 @@
  */
 
 import {
-  AUDIO_SOURCE_EXTENSIONS,
   AUDIO_SOURCE_EXTENSION_ALTERNATION,
   CONVERTIBLE_SOURCE_EXTENSION_ALTERNATION,
   DOCX_EXTENSIONS,
@@ -69,8 +68,7 @@ const DIRECT_TEXT_FORMATS: Array<{ exts: readonly string[]; format: FileFormat }
 export const NOTE_EXTS: readonly string[] = NOTE_FORMATS.flatMap((f) => f.exts);
 
 /** Only formats that actually emitted sibling derived notes participate in
- * compatibility hiding. Current converted output, including all audio
- * transcripts, lives in AppData. */
+ * compatibility hiding. Current converted output lives in AppData. */
 const LEGACY_DERIVED_SOURCE_EXTS = LEGACY_DERIVED_SOURCE_EXTENSIONS;
 
 const NOTE_EXT_ALT = NOTE_EXTS.join('|');
@@ -143,12 +141,6 @@ export function isDocxFile(name: string): boolean {
   return DOCX_PATTERN.test(base) && !base.startsWith('~$') && !base.startsWith('.~');
 }
 
-/** Audio and video-container sources accepted by the local transcription
- *  pipeline. Video containers are treated as transcribable media: FFmpeg
- *  extracts their audio track and discards video. */
-export function isAudioFile(name: string): boolean {
-  return AUDIO_PATTERN.test(pathBasename(name));
-}
 
 /** True for an unstructured **convertible source** — files
  *  whose searchable text comes from an app-data derived note and are
@@ -168,7 +160,6 @@ const SEARCH_TYPE_EXTENSIONS: Record<SearchTypeCategory, readonly string[]> = {
   pdf: PDF_EXTENSIONS,
   image: IMAGE_SOURCE_EXTENSIONS,
   docx: DOCX_EXTENSIONS,
-  audio: AUDIO_SOURCE_EXTENSIONS,
 };
 
 /** Lowercase dot-prefixed source extensions for a set of search

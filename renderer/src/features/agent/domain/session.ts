@@ -1,19 +1,38 @@
+/** Pure session transitions keep transport state separate from turn outcomes. */
+import {
+  agentActiveTurn,
+  agentTurnIsActive,
+  skillCatalogOf,
+  agentSkills,
+} from './session-selectors';
+export {
+  agentReconnectAttempt,
+  agentTurnIsActive,
+  agentCanSend,
+  agentSessionPhase,
+  agentSkills,
+  agentSessionIsUnstarted,
+  agentCanChangeAgent,
+  agentSessionIsBlank,
+  agentScopesEqual,
+  scopeForWindowFolder,
+  agentScopeKey,
+  scopeLabel,
+  agentWorkStatus,
+  agentSessionIsBusy,
+} from './session-selectors';
 /** The Agent session reducer and the selectors that read its state. Every
  *  action lands in one exhaustive switch: transcript work is delegated to
  *  `session-transcript`, the connection moves as one discriminated union, and
  *  the composer, catalog and scope fields are edited in place. Selectors are
  *  the only way anything outside the domain asks a question about a session,
  *  so the union's shape stays an implementation detail of this module. */
-import type { AgentSkill } from './runtime-catalog';
 import {
   MAX_QUEUED_PROMPTS,
   type AgentActiveTurn,
   type AgentConnection,
-  type AgentScope,
   type AgentSessionAction,
-  type AgentSessionPhase,
   type AgentSessionState,
-  type AgentSkillCatalog,
 } from './session-state';
 import {
   appendBlock,
@@ -31,6 +50,7 @@ import {
 
 export {
   createAgentSessionState,
+  UNTITLED_CHAT_TITLE,
   type AgentConnection,
   type AgentId,
   type AgentQueuedPrompt,
@@ -41,73 +61,10 @@ export {
   type AgentSessionState,
   type AgentSkillCatalog,
 } from './session-state';
-import { basePathName } from '@/shared/utils/file-path';
 
 import type { AgentTranscriptBlock } from './session-transcript';
 
 export { latestUserBlock, type AgentTranscriptBlock } from './session-transcript';
-
-// Connection
-
-/** How many reconnects this connection has already spent. A connection that
- *  is not being retried has spent none, which is what resets the ladder after
- *  a successful `ready` or a manual reconnect. */
-export function agentReconnectAttempt(connection: AgentConnection): number {
-  return connection.kind === 'connecting' || connection.kind === 'reconnecting'
-    ? connection.attempt
-    : 0;
-}
-
-/** The turn being streamed, or null when nothing is running. */
-function agentActiveTurn(connection: AgentConnection): AgentActiveTurn | null {
-  return connection.kind === 'live' ? connection.turn : null;
-}
-
-export function agentTurnIsActive(connection: AgentConnection): boolean {
-  return agentActiveTurn(connection) !== null;
-}
-
-/** Whether the connection can carry a prompt right now. A draft has no
- *  transport yet and opens one on the first send. */
-export function agentCanSend(connection: AgentConnection): boolean {
-  return connection.kind === 'draft' || (connection.kind === 'live' && connection.turn === null);
-}
-
-/** The coarse label tabs and status rows read. A retried connection is still
- *  connecting, and a failure is a connection that closed with a reason. */
-export function agentSessionPhase(connection: AgentConnection): AgentSessionPhase {
-  switch (connection.kind) {
-    case 'reconnecting':
-      return 'connecting';
-    case 'failed':
-      return 'closed';
-    default:
-      return connection.kind;
-  }
-}
-
-// Skill catalog
-
-/** The catalog the runtime just reported, as one value. The report is a flat
- *  triple on the wire, so this is where it becomes a state that cannot lie: a
- *  failed read keeps its reason and no skills, and a report carrying none is
- *  empty however the runtime spelled it. */
-function skillCatalogOf(
-  report: Extract<AgentSessionAction, { kind: 'skills' }>,
-): AgentSkillCatalog {
-  if (report.state === 'failed') {
-    return { kind: 'failed', message: report.error ?? 'The Agent could not read its skills.' };
-  }
-  return report.skills.length > 0
-    ? { kind: 'available', skills: report.skills }
-    : { kind: 'empty' };
-}
-
-/** The skills the composer can offer right now. Only a stocked catalog has
- *  any, so an empty or failed one answers with none. */
-export function agentSkills(catalog: AgentSkillCatalog): AgentSkill[] {
-  return catalog.kind === 'available' ? catalog.skills : [];
-}
 
 /** Moves the turn inside a live connection. Any other connection has no turn
  *  to move, so turn actions arriving late are ignored rather than forging a
@@ -124,15 +81,51 @@ export function transitionAgentSession(
 ): AgentSessionState {
   switch (action.kind) {
     case 'connect':
-      return { ...state, connection: { attempt: action.attempt, kind: 'connecting' } };
+      return {
+        ...state,
+        queuePaused: state.queuePaused || agentTurnIsActive(state.connection),
+        delivery: agentTurnIsActive(state.connection) ? 'unknown' : state.delivery,
+        connection: { attempt: action.attempt, kind: 'connecting' },
+      };
     case 'schedule-reconnect':
-      return { ...state, connection: { attempt: action.attempt, kind: 'reconnecting' } };
+      return {
+        ...state,
+        queuePaused: true,
+        delivery: agentTurnIsActive(state.connection)
+          ? 'unknown'
+          : state.delivery === 'preparing'
+            ? 'failed'
+            : state.delivery,
+        connection: { attempt: action.attempt, kind: 'reconnecting' },
+      };
     case 'ready':
       return { ...state, connection: { kind: 'live', turn: null } };
     case 'identified':
       return { ...state, nativeSessionId: action.id };
+    case 'rename':
+      return { ...state, title: action.title.trim() || state.title, titleEdited: true };
     case 'titled':
-      return { ...state, title: action.title.trim() || state.title };
+      return state.titleEdited || /^(new chat|untitled)$/i.test(action.title.trim())
+        ? state
+        : { ...state, title: action.title.trim() || state.title };
+    case 'delivery':
+      return { ...state, delivery: action.value };
+    case 'pause-queue':
+      return { ...state, queuePaused: action.paused };
+    case 'reset-draft-connection':
+      return { ...state, connection: { kind: 'draft' }, delivery: 'idle' };
+    case 'select-agent':
+      return {
+        ...state,
+        agent: action.agent,
+        nativeSessionId: null,
+        models: [],
+        model: null,
+        activeModel: null,
+        effort: null,
+        skill: null,
+        skillCatalog: { kind: 'empty' },
+      };
     case 'set-access-mode':
       return { ...state, accessMode: action.mode };
     case 'set-model':
@@ -177,10 +170,12 @@ export function transitionAgentSession(
       return {
         ...state,
         connection: withTurn(state.connection, { promptBlockId: action.id }),
-        context: [],
+        delivery: 'idle',
+        title: !state.titleEdited && action.titleHint ? action.titleHint : state.title,
+        context: action.clearDraft === false ? state.context : [],
         contextIssue: null,
-        draft: '',
-        skill: null,
+        draft: action.clearDraft === false ? state.draft : '',
+        skill: action.clearDraft === false ? state.skill : null,
         transcript: appendBlock(state.transcript, {
           at: action.at,
           ...(action.context.length > 0 ? { context: action.context } : {}),
@@ -232,8 +227,18 @@ export function transitionAgentSession(
       return {
         ...state,
         connection: withTurn(state.connection, null),
+        delivery:
+          state.delivery === 'stopping'
+            ? 'stopped'
+            : state.delivery === 'failed' || action.isError
+              ? 'failed'
+              : 'completed',
+        queuePaused: state.queuePaused || action.isError || state.delivery === 'stopping',
         transcript: stampClosingReply(
-          settlePendingTools(state.transcript, action.isError ? 'error' : 'done'),
+          settlePendingTools(
+            state.transcript,
+            state.delivery === 'stopping' ? 'cancelled' : action.isError ? 'error' : 'done',
+          ),
           action.at,
         ),
       };
@@ -249,6 +254,8 @@ export function transitionAgentSession(
     case 'turn-fail':
       return {
         ...state,
+        delivery: 'failed',
+        queuePaused: true,
         connection: withTurn(state.connection, null),
         transcript: appendBlock(settlePendingTools(state.transcript, 'error'), {
           failure: action.failure,
@@ -260,22 +267,38 @@ export function transitionAgentSession(
       };
     case 'settle-error':
       return { ...state, transcript: settleErrorBlock(state.transcript, action.id) };
-    case 'scope-changed':
-      return { ...state, scope: action.scope };
     case 'fail':
       return {
         ...state,
+        queuePaused: true,
+        delivery:
+          agentTurnIsActive(state.connection) || state.delivery === 'unknown'
+            ? 'unknown'
+            : 'failed',
         connection: { kind: 'failed', message: action.message },
         transcript: settlePendingTools(state.transcript, 'error'),
       };
     case 'close':
       return {
         ...state,
+        queuePaused: true,
+        delivery:
+          agentTurnIsActive(state.connection) || state.delivery === 'unknown'
+            ? 'unknown'
+            : action.message || state.delivery === 'preparing'
+              ? 'failed'
+              : state.delivery,
         connection: { kind: 'closed', message: action.message },
         transcript: settlePendingTools(state.transcript, 'error'),
       };
     case 'begin-restore':
-      return { ...state, connection: { kind: 'restoring' }, title: action.title };
+      return {
+        ...state,
+        connection: { kind: 'restoring' },
+        delivery: state.delivery === 'unknown' ? 'unknown' : 'idle',
+        title: action.title,
+        titleEdited: true,
+      };
     case 'restore':
       return {
         ...state,
@@ -288,6 +311,8 @@ export function transitionAgentSession(
       return {
         ...state,
         connection: { kind: 'retired' },
+        delivery: 'stopped',
+        queuePaused: true,
         contextIssue: null,
         queuedPrompts: [],
         transcript: retiredTranscript(state),
@@ -321,64 +346,4 @@ function retiredTranscript(state: AgentSessionState) {
     kind: 'notice',
     text: `${count} queued ${count === 1 ? 'message was' : 'messages were'} cancelled when this folder was removed.`,
   });
-}
-
-// Session selectors
-
-/** A conversation no turn has left yet: nothing was sent, nothing came back,
- *  and no native session backs it. Its bound runtime is still free to change,
- *  which is what lets a chat follow a runtime the reader sets up after the
- *  window opened. A waiting draft does not start a conversation. */
-export function agentSessionIsUnstarted(state: AgentSessionState): boolean {
-  return (
-    state.nativeSessionId === null &&
-    state.transcript.length === 0 &&
-    !agentTurnIsActive(state.connection)
-  );
-}
-
-/** Unstarted and holding nothing the reader typed, dropped, or armed, so a new
- *  chat would be indistinguishable from it. */
-export function agentSessionIsBlank(state: AgentSessionState): boolean {
-  return (
-    agentSessionIsUnstarted(state) &&
-    state.draft.length === 0 &&
-    state.skill === null &&
-    state.context.length === 0 &&
-    state.queuedPrompts.length === 0
-  );
-}
-
-// Scope
-
-export function agentScopesEqual(left: AgentScope, right: AgentScope): boolean {
-  return (
-    left.kind === right.kind &&
-    (left.kind === 'unbound' || (right.kind === 'folder' && left.path === right.path))
-  );
-}
-
-export function scopeForWindowFolder(folderPath: string | null): AgentScope {
-  return folderPath ? { kind: 'folder', path: folderPath } : { kind: 'unbound' };
-}
-
-/**
- * A scope's stable identity: the literal `unbound`, or the folder's path.
- *
- * One function because two readers need it to agree. The instructions editor
- * keys its read on it and the transport spells `?scope=` with it, and deriving
- * those separately is how an editor shows one scope's text and saves it into
- * another's.
- *
- * The unbound scope's spelling is a literal, so it is only unambiguous because
- * folder paths are absolute. The route refuses a relative folder scope for the
- * same reason.
- */
-export function agentScopeKey(scope: AgentScope): string {
-  return scope.kind === 'unbound' ? 'unbound' : scope.path;
-}
-
-export function scopeLabel(scope: AgentScope): string {
-  if (scope.kind === 'unbound') return 'Chat';
-  return basePathName(scope.path);
 }

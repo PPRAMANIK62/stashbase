@@ -54,8 +54,8 @@ export const galleryEntrySchema = z
      *  out. Carried so a published entry round-trips whole; the app renders
      *  no surface for it. */
     files: z.array(line(1_024)).max(2_000).optional(),
-    /** The Build Wiki request that produced this wiki; the entry page shows
-     *  it as the copy's Agent Instructions. */
+    /** The generating request shown as Prompt. This metadata is not installed
+     *  as the copied project's ongoing Agent instructions. */
     wikiPrompt: line(4_000).optional(),
     /** Absolute CDN URLs, gallery order, the first one the hero. */
     screenshots: z.array(line(2_048)).max(20).optional(),

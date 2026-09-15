@@ -6,50 +6,9 @@ import { createProjectOperations } from '../project-operations/index.ts';
 import { registerAttributedAgentSession, unregisterAttributedAgentSession } from '../agent-session-registry.ts';
 import { mount } from './project-files.ts';
 
-test('project creation preserves supplied attribution and never invents a default window', async (t) => {
-  const inputs: unknown[] = [];
-  const operations = createProjectOperations({
-    createProject: async (input) => {
-      inputs.push(input);
-      return { path: '/home/New', name: 'New', registered: true, rebound: false, note: 'Created' };
-    },
-  });
-  const app = express();
-  app.use(express.json());
-  mount(app, operations);
-  const server = app.listen(0, '127.0.0.1');
-  t.after(() => { server.closeAllConnections(); server.close(); });
-  await new Promise<void>((resolve) => server.once('listening', resolve));
-  const address = server.address();
-  assert.ok(address && typeof address === 'object');
-  const url = `http://127.0.0.1:${address.port}/api/project/create-project`;
-  const cases: Array<Record<string, string>> = [
-    {},
-    { 'x-stashbase-window-id': 'window' },
-    { 'x-stashbase-agent-session-id': '', 'x-stashbase-window-id': 'window' },
-    { 'x-stashbase-agent-session-id': 'retired', 'x-stashbase-window-id': 'window' },
-  ];
-  for (const headers of cases) {
-    const response = await fetch(url, {
-      method: 'POST', headers: { 'content-type': 'application/json', ...headers },
-      body: JSON.stringify({ name: 'New', location: '/home/Parent ', agentSessionId: 'model-claimed' }),
-    });
-    assert.equal(response.status, 200);
-    await response.json();
-  }
-  assert.deepEqual(inputs, [
-    { name: 'New', location: '/home/Parent ', agentSessionId: undefined, windowId: undefined },
-    { name: 'New', location: '/home/Parent ', agentSessionId: undefined, windowId: 'window' },
-    { name: 'New', location: '/home/Parent ', agentSessionId: '', windowId: 'window' },
-    { name: 'New', location: '/home/Parent ', agentSessionId: 'retired', windowId: 'window' },
-  ]);
-});
-
 test('project search validates and forwards file-type filters', async (t) => {
   registerAttributedAgentSession('panel-session', {
-    agentId: 'claude', windowId: 'route-window', boundFolder: () => '/project',
-    isUnbound: () => false, turnInFlight: () => true, nativeSessionId: () => null, rebindToFolder: () => false,
-  });
+    agentId: 'claude', windowId: 'route-window', boundFolder: () => '/project', turnInFlight: () => true,});
   t.after(() => unregisterAttributedAgentSession('panel-session'));
   let normalizedFolder: unknown;
   let searchInput: Record<string, unknown> | undefined;
@@ -273,11 +232,9 @@ test('read route forwards a line window and rejects a malformed one', async () =
 
 test('HTTP file access keeps attributed Chats in their bound project across awaits', async (t) => {
   const { assertProjectScope } = await import('../project-request-scope.ts');
-  for (const [id, folder] of [['one', '/project/one'], ['two', '/project/two'], ['unbound', null]] as const) {
+  for (const [id, folder] of [['one', '/project/one'], ['two', '/project/two'], ['starting', null]] as const) {
     registerAttributedAgentSession(id, {
-      agentId: 'claude', windowId: 'scope-window', boundFolder: () => folder,
-      isUnbound: () => folder === null, turnInFlight: () => true, nativeSessionId: () => null, rebindToFolder: () => false,
-    });
+      agentId: 'claude', windowId: 'scope-window', boundFolder: () => folder, turnInFlight: () => true,});
     t.after(() => unregisterAttributedAgentSession(id));
   }
   const operations = createProjectOperations({
@@ -298,7 +255,7 @@ test('HTTP file access keeps attributed Chats in their bound project across awai
     `http://127.0.0.1:${address.port}/api/project/file?path=/project/${project}/note.md`,
     { headers: { 'x-stashbase-agent-session-id': session } },
   );
-  const responses = await Promise.all([read('one', 'one'), read('two', 'two'), read('one', 'two'), read('unbound', 'one'), read('retired', 'one')]);
+  const responses = await Promise.all([read('one', 'one'), read('two', 'two'), read('one', 'two'), read('starting', 'one'), read('retired', 'one')]);
   assert.deepEqual(responses.map((response) => response.status), [200, 200, 403, 400, 409]);
 });
 
@@ -308,9 +265,7 @@ test('nested project registration does not invalidate paths inside the bound par
   const { registerAttributedAgentSession, unregisterAttributedAgentSession } = await import('../agent-session-registry.ts');
   const id = 'nested-project-parent';
   registerAttributedAgentSession(id, {
-    agentId: 'claude', windowId: 'nested-window', boundFolder: () => '/project/parent',
-    isUnbound: () => false, turnInFlight: () => true, nativeSessionId: () => null, rebindToFolder: () => false,
-  });
+    agentId: 'claude', windowId: 'nested-window', boundFolder: () => '/project/parent', turnInFlight: () => true,});
   t.after(() => unregisterAttributedAgentSession(id));
   await withAgentProjectScope(id, async () => {
     await new Promise<void>((resolve) => setImmediate(resolve));

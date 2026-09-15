@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
+import { mutateDocuments } from '@/app/workflows/mutate-documents';
 import { openDocument } from '@/app/workflows/open-document';
-import { retireDocuments } from '@/app/workflows/retire-documents';
 import type { DocumentNavigationTarget, DocumentTabsRuntime } from '@/features/documents/public';
 import type { SearchNavigationIntent } from '@/features/retrieval/public';
 import {
@@ -30,7 +30,7 @@ export interface DocumentSources {
   recoverLostScope(scope: WorkspaceScope): void;
   /** Settles the open documents under an entry before it is renamed or
    *  deleted. */
-  retire(entry: WorkspaceEntry): Promise<SourceReference[] | null>;
+  mutate(entry: WorkspaceEntry, operation: () => Promise<string | null>): Promise<boolean>;
   /** Flushes the open folder's unsaved documents; true when it is safe to
    *  leave the folder. */
   saveOpenFolder(): Promise<boolean>;
@@ -98,11 +98,11 @@ export function useDocumentSources(
     [documents, workspace],
   );
 
-  const retire = useCallback(
-    (entry: WorkspaceEntry) =>
+  const mutate = useCallback(
+    (entry: WorkspaceEntry, operation: () => Promise<string | null>) =>
       workspace && documents
-        ? retireDocuments(workspace, documents, entry)
-        : Promise.resolve<SourceReference[]>([]),
+        ? mutateDocuments(workspace, documents, entry, operation)
+        : Promise.resolve(false),
     [documents, workspace],
   );
 
@@ -117,7 +117,7 @@ export function useDocumentSources(
     navigateToMatch,
     open,
     recoverLostScope: projectLifecycle.recoverLostScope,
-    retire,
+    mutate,
     saveOpenFolder,
   };
 }

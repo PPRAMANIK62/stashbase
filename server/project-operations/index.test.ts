@@ -117,9 +117,7 @@ test('Project Operations surfaces a truncated result signal', async () => {
 test('external search never inherits an unrelated active chat project', async (t) => {
   const { registerAttributedAgentSession, unregisterAttributedAgentSession } = await import('../agent-session-registry.ts');
   registerAttributedAgentSession('unrelated-search-policy', {
-    agentId: 'claude', windowId: 'unrelated-window', boundFolder: () => '/other-project',
-    isUnbound: () => false, turnInFlight: () => true, nativeSessionId: () => null, rebindToFolder: () => false,
-  });
+    agentId: 'claude', windowId: 'unrelated-window', boundFolder: () => '/other-project', turnInFlight: () => true,});
   t.after(() => unregisterAttributedAgentSession('unrelated-search-policy'));
   const operations = createProjectOperations({
     normalizeSearchScope: normalizeFolder,
@@ -146,11 +144,7 @@ for (const mode of ['hybrid', 'grep'] as const) {
     let bound: string | null = '/project/one';
     const sessionId = `search-folder-${mode}`;
     registerAttributedAgentSession(sessionId, {
-      agentId: 'claude', windowId: 'scope-window', boundFolder: () => bound,
-      isUnbound: () => bound == null, turnInFlight: () => true,
-      nativeSessionId: () => null,
-      rebindToFolder: () => false,
-    });
+      agentId: 'claude', windowId: 'scope-window', boundFolder: () => bound, turnInFlight: () => true,});
     t.after(() => unregisterAttributedAgentSession(sessionId));
     const reached: string[] = [];
     const operations = createProjectOperations({
@@ -187,9 +181,7 @@ test('Project Operations rejects stale or ambiguous attribution when no Folder w
   await assert.rejects(operations.search({ query: 'answer', agentSessionId: 'retired-session' }), /session is no longer available/);
   for (const id of ['scope-first', 'scope-second']) {
     registerAttributedAgentSession(id, {
-      agentId: 'claude', windowId: 'shared-window', boundFolder: () => `/project/${id}`,
-      isUnbound: () => false, turnInFlight: () => true, nativeSessionId: () => null, rebindToFolder: () => false,
-    });
+      agentId: 'claude', windowId: 'shared-window', boundFolder: () => `/project/${id}`, turnInFlight: () => true,});
     t.after(() => unregisterAttributedAgentSession(id));
   }
   await assert.rejects(operations.search({ query: 'answer', windowId: 'shared-window' }), /ambiguous/);

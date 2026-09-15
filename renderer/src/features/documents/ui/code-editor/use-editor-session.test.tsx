@@ -50,6 +50,8 @@ function harness() {
         };
         sessions.push(session);
         const handle: CodeEditorSession = {
+          restore: () => undefined,
+          snapshot: () => ({ content, state: null, top: 0, left: 0 }),
           applyContent: (next) => {
             session.applied.push(next);
           },

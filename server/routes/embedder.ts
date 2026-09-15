@@ -30,13 +30,19 @@ function providerLabel(provider: EmbedderProvider): string {
   return provider === 'openrouter' ? 'OpenRouter' : 'OpenAI';
 }
 
-/** Compatibility aliases for older HTTP clients. Neither field is an
- * independent source selection or proof of successful provider authentication. */
-function withLegacyAliases<T extends EmbedderState>(state: T) {
-  return { ...state, source: state.provider, authorized: state.hasKey };
-}
-
 export function mount(app: express.Express): void {
+  let revision = 0;
+  let mutationTail = Promise.resolve();
+  const superseded = () => Object.assign(new Error('Embedding settings changed during this request. Try again.'), { status: 409 });
+  const apply = (version: number, work: () => Promise<void>) => {
+    const pending = mutationTail.then(async () => {
+      if (version !== revision) throw superseded();
+      await work();
+      if (version !== revision) throw superseded();
+    });
+    mutationTail = pending.catch(() => {});
+    return pending;
+  };
   // Embedder status: active provider + whether a key is configured.
   app.get('/api/embedder', async (_req, res) => {
     const cfg = getEmbedderConfig();
@@ -45,7 +51,7 @@ export function mount(app: express.Express): void {
       hasKey: !!cfg.apiKey,
       model: cfg.model,
     };
-    res.json(withLegacyAliases(state));
+    res.json(state);
   });
 
   // Set / rotate the active embedding key. A definite provider rejection
@@ -58,69 +64,69 @@ export function mount(app: express.Express): void {
     if (!provider) return res.status(400).json({ error: 'unknown embedder provider' });
     const rawKey = typeof req.body?.key === 'string'
       ? req.body.key
-      : typeof req.body?.openaiKey === 'string'
-        ? req.body.openaiKey
-        : '';
+      : '';
     const key = rawKey.trim();
     if (!key) return res.status(400).json({ error: 'key required' });
+    const version = ++revision;
     const check = await validateEmbedderKey(provider, key);
+    if (version !== revision) { sendError(res, superseded()); return; }
     const warning = check.ok ? undefined : check.error;
     if (!check.ok && check.status < 500) return res.status(check.status).json({ error: check.error });
-    const previous = getEmbedderConfig();
-    const shouldBackfill = shouldBackfillAfterKeyChange(
-      previous.provider,
-      provider,
-      !!previous.apiKey,
-    );
+    let backfillStarted = false;
+    let runtimeWarning: string | undefined;
     try {
-      setApiKey(key, provider);
+      await apply(version, async () => {
+        const previous = getEmbedderConfig();
+        const shouldBackfill = shouldBackfillAfterKeyChange(previous.provider, provider, !!previous.apiKey);
+        setApiKey(key, provider);
+        try {
+          await resetIndexerRuntime({ forgetBindings: true });
+          await bootBindAllFolders();
+          if (version !== revision) return;
+          if (shouldBackfill) {
+            const cur = getCurrentFolder();
+            log.info(`${providerLabel(provider)} key set: starting semantic backfill${cur ? ` (active folder: ${cur})` : ''}`);
+            backfillStarted = true;
+            void reconcileProjectFolders(`${providerLabel(provider)} embedder key set`)
+              .catch((err: unknown) => log.warn(`key set: semantic backfill failed: ${errorMessage(err)}`));
+          }
+        } catch (err: unknown) {
+          log.warn(`key set: runtime reset/rebind failed: ${errorMessage(err)}`);
+          runtimeWarning = 'Key saved, but search could not restart. Try again or restart StashBase.';
+        }
+      });
+      const saved = getEmbedderConfig();
+      const result: ApiKeySaveResult = {
+        hasKey: true,
+        provider: saved.provider,
+        model: saved.model,
+        backfillStarted,
+        ...((runtimeWarning || warning) ? { warning: runtimeWarning || warning } : {}),
+      };
+      res.json(result);
     } catch (err: unknown) {
       sendError(res, err);
-      return;
     }
-    try {
-      await resetIndexerRuntime({ forgetBindings: true });
-      await bootBindAllFolders();
-      if (shouldBackfill) {
-        const cur = getCurrentFolder();
-        log.info(`${providerLabel(provider)} key set: starting semantic backfill${cur ? ` (active folder: ${cur})` : ''}`);
-        void reconcileProjectFolders(`${providerLabel(provider)} embedder key set`)
-          .catch((err: unknown) => {
-            log.warn(`key set: semantic backfill failed: ${errorMessage(err)}`);
-          });
-      } else {
-        log.info(`${providerLabel(provider)} key updated; existing embedding index remains valid`);
-      }
-    } catch (err: unknown) {
-      log.warn(`key set: runtime reset/rebind failed: ${errorMessage(err)}`);
-    }
-    const saved = getEmbedderConfig();
-    const result: ApiKeySaveResult = {
-      hasKey: true,
-      provider: saved.provider,
-      model: saved.model,
-      backfillStarted: shouldBackfill,
-      ...(warning ? { warning } : {}),
-    };
-    res.json(withLegacyAliases(result));
   });
 
   // Remove the key: automatic searches use grep; explicit hybrid reports
   // missing configuration. Existing vectors remain stored.
   app.delete('/api/embedder/key', async (_req, res) => {
+    const version = ++revision;
     try {
-      setApiKey(undefined);
+      await apply(version, async () => {
+        setApiKey(undefined);
+        try {
+          await resetIndexerRuntime({ forgetBindings: true });
+          await bootBindAllFolders();
+        } catch (err: unknown) {
+          log.warn(`key delete: runtime reset failed: ${errorMessage(err)}`);
+        }
+      });
+      const cfg = getEmbedderConfig();
+      res.json({ hasKey: !!cfg.apiKey, provider: cfg.provider, model: cfg.model });
     } catch (err: unknown) {
       sendError(res, err);
-      return;
     }
-    try {
-      await resetIndexerRuntime({ forgetBindings: true });
-      await bootBindAllFolders();
-    } catch (err: unknown) {
-      log.warn(`key delete: runtime reset failed: ${errorMessage(err)}`);
-    }
-    const cfg = getEmbedderConfig();
-    res.json(withLegacyAliases({ hasKey: false, provider: cfg.provider, model: cfg.model }));
   });
 }

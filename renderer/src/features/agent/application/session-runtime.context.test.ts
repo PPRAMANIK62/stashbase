@@ -6,12 +6,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 import type { AgentContextItem } from '@/features/agent/domain/context';
 import { agentContextPort, agentSessionPort } from '@/test/fakes/agent';
 
-import {
-  AgentContextError,
-  type AgentContextPort,
-  type AgentReconnectScheduler,
-  type AgentSessionPort,
-} from './ports';
+import { AgentContextError, type AgentReconnectScheduler, type AgentSessionPort } from './ports';
 import { createAgentSessionRuntime } from './session-runtime';
 
 type AgentConnectRequest = Parameters<AgentSessionPort['connect']>[0];
@@ -91,7 +86,7 @@ describe('AgentSessionRuntime context', () => {
     await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
 
     expect(context.resolve).toHaveBeenCalledWith(reportSource.source, runtime.signal);
-    expect(test.sent.at(-1)).toEqual({
+    expect(test.sent.at(-1)).toMatchObject({
       kind: 'prompt',
       skill: null,
       text: [
@@ -113,7 +108,12 @@ describe('AgentSessionRuntime context', () => {
     test.listeners[0]?.onEvent({ kind: 'failed', message: 'Rate limited.' });
     const failure = runtime.store.getState().transcript.find((block) => block.kind === 'error');
     expect(runtime.retry(failure?.id ?? '')).toBe(true);
-    expect(test.sent.at(-1)).toEqual(test.sent.at(-2));
+    const initial = test.sent.at(-2);
+    expect(test.sent.at(-1)).toMatchObject({
+      kind: 'prompt',
+      skill: null,
+      text: initial?.kind === 'prompt' ? initial.text : '',
+    });
   });
 
   it('refuses a send whose source left the folder and keeps the draft', async () => {
@@ -190,7 +190,7 @@ describe('AgentSessionRuntime context', () => {
       ],
     });
 
-    runtime.setQueue([]);
+    // Delivery removes the queued item only after acceptance.
     test.listeners[0]?.onEvent({ isError: false, kind: 'turn-ended' });
     await expect(
       runtime.sendPrompt('Then read @papers/report.pdf', { queuedId: 'queued-1' }),
@@ -217,8 +217,7 @@ describe('AgentSessionRuntime context', () => {
     });
     runtime.addContext(reportSource);
     runtime.setQueue([{ id: 'queued-1', text: 'Later' }]);
-    runtime.setDraft('Later');
-    runtime.setQueue([]);
+    expect(runtime.editQueued('queued-1')).toBe(true);
 
     expect(runtime.store.getState()).toMatchObject({
       context: [reportSource],
@@ -244,7 +243,7 @@ describe('AgentSessionRuntime context', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
 
     const notes = new File(['a'], 'notes.txt', { type: 'text/plain' });
@@ -258,61 +257,5 @@ describe('AgentSessionRuntime context', () => {
     });
     runtime.removeContext('transient:/tmp/attach/notes.txt');
     expect(runtime.store.getState().context).toEqual([]);
-  });
-
-  it('drops a send whose context resolved after the conversation changed folder', async () => {
-    const test = harness();
-    /** Resolutions the test holds open, so a folder change can land first. */
-    const pending: Array<() => void> = [];
-    const context = agentContextPort({
-      resolve: vi.fn<AgentContextPort['resolve']>(
-        (source) =>
-          new Promise((resolve) => {
-            pending.push(() =>
-              resolve({
-                available: true,
-                folder: 'Research',
-                kind: 'direct',
-                path: `${source.folderPath}/${source.path}`,
-                readPath: source.path,
-                reason: '',
-                sourceFormat: 'md',
-                sourcePath: source.path,
-              }),
-            );
-          }),
-      ),
-    });
-    const runtime = createAgentSessionRuntime({
-      agent: 'codex',
-      context,
-      id: 'chat-1',
-      port: test.port,
-      scheduler: test.scheduler,
-      scope: { kind: 'folder', path: '/project/Research' },
-    });
-    test.listeners[0]?.onEvent({ kind: 'ready' });
-    runtime.addContext({
-      boundVersion: null,
-      format: 'md',
-      kind: 'source',
-      source: { folderPath: '/project/Research', path: 'notes.md' },
-    });
-
-    const send = runtime.sendPrompt('Summarize the notes');
-    // The runtime reports the folder move while the resolve is still open;
-    // the completion belongs to the conversation that has since left.
-    test.listeners[0]?.onEvent({
-      kind: 'scope-changed',
-      scope: { kind: 'folder', path: '/project/Plans' },
-    });
-    for (const resolveNow of pending.splice(0)) resolveNow();
-
-    await expect(send).resolves.toEqual({ ok: false, reason: 'stale' });
-    expect(test.sent).toEqual([]);
-    expect(runtime.store.getState().contextIssue).toBe(
-      'This conversation moved to another folder.',
-    );
-    expect(runtime.store.getState().transcript).toEqual([]);
   });
 });

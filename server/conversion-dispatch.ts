@@ -5,33 +5,21 @@
  * repeating format switches, cleanup rules, or interactive-promotion logic.
  */
 import fs from 'node:fs';
-import {
-  configuredTranscriptionBlock,
-  currentDerivedTextPathForAudioAsync,
-  derivedTranscriptPathForAudio,
-  discoverNewAudio,
-  indexFreshAudio,
-  maybeConvertAudio,
-  resetAudioTranscription,
-} from './audio-transcription.ts';
 import { collectSourceCandidates, isConversionTextUnavailable, promoteConversion } from './conversion.ts';
 import { clearRecord } from './conversion-status.ts';
 import { currentDerivedTextPathForDocxAsync, derivedHtmlPathForDocx, discoverNewDocx, indexFreshDocx, maybeConvertDocx } from './docx.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { isAudioFile, isDocxFile, isImageFile } from './format.ts';
+import { isDocxFile, isImageFile } from './format.ts';
 import { currentDerivedTextPathForImageAsync, derivedNotePathForImage, discoverNewImages, indexFreshImage, maybeConvertImage } from './image.ts';
 import { currentDerivedTextPathForPdfAsync, derivedPathsForPdf, discoverNewPdfs, indexFreshPdf, maybeConvertPdf } from './pdf.ts';
-import type { ConfiguredTranscriptionBlock } from '../shared/transcription.ts';
 import type { IndexUpsertResult } from './indexer.ts';
 
 export interface ConvertibleOptions {
   urgency?: 'interactive';
-  language?: string;
 }
 
 export type ConvertibleReprocessResult =
   | { status: 'unsupported' }
-  | { status: 'blocked'; block: ConfiguredTranscriptionBlock }
   | { status: 'queued' };
 
 interface ConvertibleFormatAdapter {
@@ -41,7 +29,6 @@ interface ConvertibleFormatAdapter {
   indexFresh(sourceAbs: string): Promise<IndexUpsertResult | null>;
   reset(sourceAbs: string): void;
   interactive: boolean;
-  reprocessBlock?(): ConfiguredTranscriptionBlock | null;
   currentTextPathAsync(sourceAbs: string, known: { sourceMtimeMs: number; derivedMtimeMs: number }): Promise<string | null>;
   textCandidatePath(sourceAbs: string): string;
 }
@@ -81,17 +68,6 @@ const FORMATS: readonly ConvertibleFormatAdapter[] = [
     currentTextPathAsync: currentDerivedTextPathForDocxAsync,
     textCandidatePath: derivedHtmlPathForDocx,
   },
-  {
-    matches: isAudioFile,
-    queue: (sourceAbs, options) => { maybeConvertAudio(sourceAbs, options); },
-    discover: discoverNewAudio,
-    indexFresh: indexFreshAudio,
-    reset: resetAudioTranscription,
-    interactive: true,
-    currentTextPathAsync: currentDerivedTextPathForAudioAsync,
-    textCandidatePath: derivedTranscriptPathForAudio,
-    reprocessBlock: configuredTranscriptionBlock,
-  },
 ];
 
 export function queueConvertibleSource(
@@ -112,8 +88,6 @@ export function reprocessConvertibleSource(
 ): ConvertibleReprocessResult {
   const format = findFormat(displayName);
   if (!format) return { status: 'unsupported' };
-  const block = format.reprocessBlock?.();
-  if (block) return { status: 'blocked', block };
   clearRecord(filesystemPath.absolute(sourceAbs));
   format.reset(sourceAbs);
   format.queue(sourceAbs, { ...options, urgency: 'interactive' });

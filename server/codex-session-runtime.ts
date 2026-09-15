@@ -1,3 +1,4 @@
+import { retireAgentProcess } from './agent-process.ts';
 /**
  * Live Codex WebSocket session runtime.
  *
@@ -18,7 +19,6 @@ import { agentTurnErrorEvent } from './agent-turn-failure.ts';
 import {
   disposeSessionsBoundToFolder,
   isAgentAccessMode,
-  reportAgentRuntimeFailure,
   resolveSessionBinding,
   type AgentAccessMode,
   type AgentModel,
@@ -59,7 +59,7 @@ import {
   unregisterAttributedAgentSession,
   type AttributedAgentSession,
 } from './agent-session-registry.ts';
-import { getCurrentFolder, getFolderHome, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { errorMessage, logger } from './log.ts';
 
 const log = logger('codex-agent');
@@ -80,6 +80,7 @@ export class CodexSession implements AttributedAgentSession {
   private closed = false;
   private ready = false;
   private appServerReady = false;
+  private retirement: Promise<void> = Promise.resolve();
   private proc: ChildProcessWithoutNullStreams | null = null;
   private stdout: readline.Interface | null = null;
   private stderr: readline.Interface | null = null;
@@ -114,52 +115,17 @@ export class CodexSession implements AttributedAgentSession {
    * host-side MCP tools can find the live calling session. */
   readonly attributionId = randomUUID();
 
-  /** True for an unbound session: cwd is the folder home and the
-   * session is NOT bound to any member folder — member-folder removal
-   * never tears it down (window close / app quit still do). */
-  private unbound = false;
-
-  /** Member folder this unbound session was migrated to by `create_project`.
-   * The native thread identity stays intact while future turns, workspace
-   * approvals, skills, teardown scope, and history follow this folder. */
-  private rebound: string | null = null;
-
   private activeCwd(): string | null {
-    return this.rebound ?? this.cwd;
+    return this.cwd;
   }
 
-  /** The member folder this session is (or will be) bound to. `cwd` is the
-   * authoritative binding once the session started; before that, the explicit
-   * connect-time folder is the best answer. An unbound session is
-   * bound to no member folder and reports null — unless `create_project`
-   * rebound it to the new project. */
+  /** The project pinned at startup, or its explicit connection-time folder. */
   boundFolder(): string | null {
-    if (this.rebound) return this.rebound;
-    if (this.unbound || this.scope === 'unbound') return null;
     return this.cwd ?? this.folder ?? null;
   }
 
   turnInFlight(): boolean {
     return this.busy;
-  }
-
-  isUnbound(): boolean {
-    return !this.rebound && (this.unbound || this.scope === 'unbound');
-  }
-
-  nativeSessionId(): string | null {
-    return this.threadId;
-  }
-
-
-  /** Migrate this unbound session to a member folder (create_project).
-   * The native thread identity stays intact, but subsequent turns use the
-   * project cwd. A folder-bound chat is never rebound. */
-  rebindToFolder(folderAbs: string): boolean {
-    if (this.closed || !this.isUnbound()) return false;
-    this.rebound = folderAbs;
-    this.send({ t: 'scope-changed', scope: { kind: 'folder', path: folderAbs } });
-    return true;
   }
 
   constructor(
@@ -170,11 +136,8 @@ export class CodexSession implements AttributedAgentSession {
     private accessMode?: AgentAccessMode,
     private model?: string,
     /** Explicit, membership-validated session folder. Undefined with no
-     *  unbound scope follows the window's current folder at connect time
-     *  (legacy clients), else an unbound conversation. */
+     *  follows the window folder before startup. */
     private folder?: string,
-    /** Explicit unbound scope (`scope=unbound` on the connect URL). */
-    private scope?: 'unbound',
     private onDispose?: (session: CodexSession) => void,
     private spawnProcess: typeof spawnCodexAppServerProcess = spawnCodexAppServerProcess,
     private requestTimeoutMs: number = CODEX_RPC_REQUEST_TIMEOUT_MS,
@@ -193,18 +156,9 @@ export class CodexSession implements AttributedAgentSession {
 
   private async start(): Promise<void> {
     if (this.closed) return;
-    // An explicit folder pins the session; an explicit unbound scope (or
-    // no folder anywhere) binds the folder home as the historical unbound
-    // cwd. Ordinary window navigation never changes it; an attributed
-    // create_project transition is the one deliberate exception.
-    const binding = resolveSessionBinding({
-      scope: this.scope,
-      folder: this.folder,
-      currentFolder: getCurrentFolder(),
-      folderHome: getFolderHome(),
-    });
-    const cwd = binding.cwd;
-    this.unbound = binding.unbound;
+    let cwd: string;
+    try { cwd = resolveSessionBinding({ folder: this.folder, currentFolder: getCurrentFolder() }).cwd; }
+    catch (error) { this.finish(errorMessage(error)); return; }
     this.cwd = cwd;
     // Model choice belongs to the first turn, so publish the native catalog
     // before the renderer enables its composer. Otherwise a fresh Codex chat
@@ -224,6 +178,8 @@ export class CodexSession implements AttributedAgentSession {
   }
 
   private async ensureAppServer(): Promise<void> {
+    await this.retirement;
+    if (this.closed) throw new Error('Codex session closed.');
     if (this.appServerReady) return;
     if (!this.cwd) throw new Error('No folder open.');
     this.spawnAppServer(this.cwd);
@@ -280,7 +236,6 @@ export class CodexSession implements AttributedAgentSession {
     proc.once('error', (err) => {
       rpc.close(err);
       if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
-      reportAgentRuntimeFailure('codex', err);
       if (!this.closed) this.handleAppServerExit(errorMessage(err));
     });
     proc.once('close', (code, signal) => {
@@ -288,7 +243,6 @@ export class CodexSession implements AttributedAgentSession {
       rpc.close(error);
       if (!this.releaseAppServerGeneration(proc, rpc, stdout, stderr)) return;
       if (!this.closed) {
-        reportAgentRuntimeFailure('codex', error);
         this.handleAppServerExit(error.message);
       }
     });
@@ -581,7 +535,7 @@ export class CodexSession implements AttributedAgentSession {
       // internal project-routing policy even though Codex receives their
       // composition through one native developer-instructions field.
       developerInstructions: resolveAgentRuntimeInstructions(
-        this.rebound || !this.unbound ? cwd : null,
+        cwd,
       ),
     };
     const result = await this.request(
@@ -1012,7 +966,7 @@ export class CodexSession implements AttributedAgentSession {
     rpc?.close(new Error('Codex session closed.'));
     stdout?.close();
     stderr?.close();
-    if (proc) try { proc.kill('SIGTERM'); } catch { /* already gone */ }
+    if (proc) this.retirement = retireAgentProcess(proc);
   }
 
   private handleAppServerExit(message: string): void {
@@ -1140,8 +1094,8 @@ function titleFromPrompt(prompt: string): string {
 
 const sessions = new Set<CodexSession>();
 
-export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string, folder?: string, scope?: 'unbound'): void {
-  const session = new CodexSession(ws, windowId, effort, resume, access, model, folder, scope, (s) => sessions.delete(s));
+export function attachCodexWebSocket(ws: WebSocket, windowId = 'default', effort?: string, resume?: string, access?: AgentAccessMode, model?: string, folder?: string): void {
+  const session = new CodexSession(ws, windowId, effort, resume, access, model, folder, (s) => sessions.delete(s));
   sessions.add(session);
   session.begin();
 }

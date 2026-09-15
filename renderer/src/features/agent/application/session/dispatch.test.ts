@@ -115,35 +115,6 @@ describe('prompt dispatcher', () => {
     expect(test.state().contextIssue).not.toBeNull();
   });
 
-  it('drops a send whose folder changed while its context was resolving', async () => {
-    const test = harness({
-      contextPort: agentContextPort({
-        resolve: vi.fn(async (source) => {
-          test.setState({ scope: { kind: 'folder', path: '/project/Archive' } });
-          return {
-            available: true,
-            folder: 'Research',
-            kind: 'direct' as const,
-            path: source.path,
-            readPath: source.path,
-            reason: '',
-            sourceFormat: 'md',
-            sourcePath: source.path,
-          };
-        }),
-      }),
-    });
-    test.goLive();
-    test.setState({ context: [report] });
-
-    await expect(test.dispatcher.send('Summarise it')).resolves.toEqual({
-      ok: false,
-      reason: 'stale',
-    });
-    expect(test.submit).not.toHaveBeenCalled();
-    expect(test.state().contextIssue).toBe('This conversation moved to another folder.');
-  });
-
   it('treats a source the server no longer has as a stale send', async () => {
     const test = harness({
       contextPort: agentContextPort({

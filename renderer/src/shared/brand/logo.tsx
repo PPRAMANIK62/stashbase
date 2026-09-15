@@ -17,7 +17,17 @@
 
 import type { SVGProps } from 'react';
 
-export function Logo(props: SVGProps<SVGSVGElement>) {
+export interface LogoProps extends SVGProps<SVGSVGElement> {
+  /** Multiplies both stroke weights for a size the lockup's were not drawn
+   *  for. The mark also stands for the bundled Agent, where it paints at
+   *  14px and the lockup's strokes would land under a pixel. The scale stays
+   *  below 1.5: past that a stroke's half-width passes the 24-unit fillet
+   *  radius, the joins stop rounding, and the frame pokes past the ink's
+   *  silhouette. */
+  strokeScale?: number;
+}
+
+export function Logo({ strokeScale = 1, ...props }: LogoProps) {
   return (
     <svg fill="none" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" {...props}>
       <path
@@ -25,7 +35,7 @@ export function Logo(props: SVGProps<SVGSVGElement>) {
         stroke="var(--brand-frame)"
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeWidth="24"
+        strokeWidth={24 * strokeScale}
       />
       {/* One ribbon threaded through a cube. Every turn is a circular fillet
        *  of one radius (24), the frame's corner included, so the mark rounds
@@ -37,7 +47,7 @@ export function Logo(props: SVGProps<SVGSVGElement>) {
         stroke="var(--brand-accent)"
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeWidth="32"
+        strokeWidth={32 * strokeScale}
       />
     </svg>
   );

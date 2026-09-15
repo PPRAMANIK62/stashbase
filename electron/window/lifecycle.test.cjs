@@ -59,6 +59,7 @@ function harness({ load = true, timeoutMs = 1_000 } = {}) {
     blocked: () => blocked,
     event,
     finishLoad,
+    crash: () => webContentsHandlers.get('render-process-gone')(),
     fullscreenSent,
     handlers,
     lifecycle,
@@ -192,4 +193,20 @@ test('an approved close skips the barrier until the approval is revoked', async 
   await ready(setup.event, { ...setup.sent.at(-1)[1], ready: false });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(setup.closeCalls(), 0);
+});
+
+
+test('a gone renderer releases an outstanding close and a reloaded renderer needs saving again', async () => {
+  const setup = harness();
+  const release = setup.lifecycle.requestContextRelease(setup.window, 'window-close');
+  setup.crash();
+  assert.equal(await release, true);
+  assert.equal(setup.lifecycle.hasLoadedRenderer(setup.window), false);
+  setup.close({ preventDefault: () => assert.fail('a crashed renderer cannot acknowledge') });
+  setup.finishLoad();
+  assert.equal(setup.lifecycle.hasLoadedRenderer(setup.window), true);
+  const next = setup.lifecycle.requestContextRelease(setup.window, 'window-close');
+  const request = setup.sent.at(-1)[1];
+  await setup.handlers.get('window:context-release-ready')(setup.event, { ...request, ready: false });
+  assert.equal(await next, false);
 });

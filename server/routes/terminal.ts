@@ -4,20 +4,18 @@
  * the CLIs themselves run via structured agent bridges, not a PTY.
  */
 import express from 'express';
-import { discoverAgentRuntimes, stopAgentRuntime } from '../agent-contract.ts';
+import { discoverAgentRuntimes } from '../agent-contract.ts';
 import { ensureAgentModelCatalog } from '../agent-model-catalog.ts';
 import { sendError } from '../http.ts';
 import {
   getAgentRuntimeDebugState,
-  removeManagedAgentRuntime,
   setAgentRuntimeDebugState,
-  type ManagedAgentId,
+  type NativeAgentId,
 } from '../agent-runtime-paths.ts';
 import {
   beginAgentBootstrap,
   loginAgentBootstrap,
   recheckAgentBootstrap,
-  resetAgentBootstrap,
 } from '../agent-runtime-installer.ts';
 import type { AgentId } from '../../shared/agent-protocol.ts';
 
@@ -25,7 +23,7 @@ function agentId(value: unknown): AgentId | null {
   return value === 'stashbase' || value === 'claude' || value === 'codex' ? value : null;
 }
 
-function managedAgentId(value: unknown): ManagedAgentId | null {
+function nativeAgentId(value: unknown): NativeAgentId | null {
   return value === 'claude' || value === 'codex' ? value : null;
 }
 
@@ -99,7 +97,7 @@ export function mount(app: express.Express): void {
   /** Launch the selected Codex executable's provider-owned browser login.
    * This never installs another CLI or handles provider credentials itself. */
   app.post('/api/terminal/clis/:id/login', (req, res) => {
-    const id = managedAgentId(req.params.id);
+    const id = nativeAgentId(req.params.id);
     if (!id) {
       res.status(404).json({ error: 'Unsupported Agent runtime.' });
       return;
@@ -119,27 +117,6 @@ export function mount(app: express.Express): void {
   app.put('/api/terminal/debug', (req, res) => {
     try {
       setAgentRuntimeDebugState(req.body ?? {});
-      res.json(agentCatalogResponse());
-    } catch (error) {
-      sendError(res, error);
-    }
-  });
-
-  /** Uninstall the StashBase-managed runtime (Settings, and the dev-only
-   * first-run reset). Removes only the private install under AppData —
-   * `removeManagedAgentRuntime` path-guards that — and never a system
-   * executable, provider login, or native history. The next explicit New
-   * Chat re-runs readiness. */
-  app.delete('/api/terminal/clis/:id/managed', async (req, res) => {
-    const id = managedAgentId(req.params.id);
-    if (!id) {
-      res.status(404).json({ error: 'Unsupported Agent runtime.' });
-      return;
-    }
-    try {
-      stopAgentRuntime(id);
-      await resetAgentBootstrap(id);
-      removeManagedAgentRuntime(id);
       res.json(agentCatalogResponse());
     } catch (error) {
       sendError(res, error);

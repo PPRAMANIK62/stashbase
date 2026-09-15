@@ -13,4 +13,6 @@ export type { AgentScope } from './domain/session';
 export type { AgentInstructionsPort } from './application/ports';
 export { createAgentInstructionsAdapter } from './infrastructure/agent-instructions-api';
 export type { AgentWorkspaceRuntime } from './application/workspace-runtime';
-export type { AgentScopeOutline } from './domain/starters';
+
+export { createAgentPreferencesAdapter } from './infrastructure/agent-preferences-api';
+export type { AgentPreferencesPort } from './application/ports';

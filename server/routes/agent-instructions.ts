@@ -13,10 +13,8 @@ function requestError(message: string, status = 400): Error {
 
 async function resolveScope(value: unknown): Promise<AgentInstructionsScope> {
   if (typeof value !== 'string' || !value.trim()) {
-    throw requestError("scope must be 'unbound' or an absolute project-folder path");
+    throw requestError("scope must be an absolute project-folder path");
   }
-  // The literal unbound scope, mirroring the session routes' `scope=unbound`.
-  if (value === 'unbound') return { kind: 'unbound' };
   if (!filesystemPath.isAbsolute(value)) {
     throw requestError('folder scope must be an absolute path');
   }

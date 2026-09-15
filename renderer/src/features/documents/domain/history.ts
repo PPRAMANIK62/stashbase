@@ -33,6 +33,7 @@ export function createDocumentHistoryState(): DocumentHistoryState {
 
 function sameLocation(a: DocumentLocation, b: DocumentLocation): boolean {
   return (
+    JSON.stringify(a.scroll ?? null) === JSON.stringify(b.scroll ?? null) &&
     (a.anchor ?? null) === (b.anchor ?? null) &&
     JSON.stringify(a.search ?? null) === JSON.stringify(b.search ?? null)
   );
@@ -52,6 +53,7 @@ export function recordDocumentVisit(
   const current = state.entries[state.index];
   const entry: DocumentVisit = {
     source: { ...visit.source },
+    ...(visit.scroll === undefined ? {} : { scroll: { ...visit.scroll } }),
     ...(visit.anchor === undefined ? {} : { anchor: visit.anchor }),
     ...(visit.search === undefined ? {} : { search: { ...visit.search } }),
   };

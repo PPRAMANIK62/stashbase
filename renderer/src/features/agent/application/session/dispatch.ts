@@ -22,7 +22,7 @@ import {
 } from '@/features/agent/domain/context';
 import {
   agentCanSend,
-  agentScopesEqual,
+  agentSessionIsBusy,
   agentSkills,
   agentTurnIsActive,
   type AgentSessionAction,
@@ -37,12 +37,11 @@ export type AgentSendResult =
  *  server: the live listing and preparation state of its own folder. */
 export interface AgentSessionEnvironment {
   listing: AgentScopeListing | null;
+  versions?: Readonly<Record<string, number>> | undefined;
   readiness: Readonly<Record<string, AgentContextReadiness>>;
 }
 
 const NO_ENVIRONMENT: AgentSessionEnvironment = { listing: null, readiness: {} };
-
-const MOVED = 'This conversation moved to another folder.';
 
 const refuseContext = () =>
   Promise.reject(
@@ -74,6 +73,7 @@ export interface AgentPromptDispatcherOptions {
 export interface AgentPromptDispatcher {
   send(text: string, options?: { queuedId?: string }): Promise<AgentSendResult>;
   attach(files: File[]): Promise<void>;
+  cancel(): void;
 }
 
 export function createPromptDispatcher({
@@ -89,6 +89,7 @@ export function createPromptDispatcher({
   transition,
 }: AgentPromptDispatcherOptions): AgentPromptDispatcher {
   let sending = false;
+  let generation = 0;
 
   const refuse = (message: string) => transition({ message, kind: 'set-context-issue' });
 
@@ -117,14 +118,22 @@ export function createPromptDispatcher({
   };
 
   return {
+    cancel() {
+      generation += 1;
+      sending = false;
+      ledger.takeHeld();
+    },
     async send(text, options = {}) {
-      const opening = state();
-      if (disposed() || agentTurnIsActive(opening.connection) || sending) {
+      let opening = state();
+      if (disposed() || agentSessionIsBusy(opening) || opening.delivery === 'unknown' || sending) {
         return { ok: false, reason: 'busy' };
       }
       const prompt = text.trim();
       const queued =
-        options.queuedId === undefined ? undefined : ledger.takeStashed(options.queuedId);
+        options.queuedId === undefined
+          ? undefined
+          : opening.queuedPrompts.find((item) => item.id === options.queuedId);
+      if (options.queuedId !== undefined && !queued) return { ok: false, reason: 'empty' };
       const context = queued?.context ?? opening.context;
       const skillId = queued ? queued.skill : opening.skill;
       const skill = agentSkills(opening.skillCatalog).find((entry) => entry.id === skillId) ?? null;
@@ -134,19 +143,43 @@ export function createPromptDispatcher({
       // the first await instead of read again once the work has finished.
       const startScope = opening.scope;
       const stale = staleContext(
-        validateContext(context, { ...(environment() ?? NO_ENVIRONMENT), scope: startScope }),
+        validateContext(context, {
+          ...(environment() ?? NO_ENVIRONMENT),
+          scope: startScope,
+          hasUpload: (path) => transientFiles.has(path),
+        }),
       );
       if (stale.length > 0) {
         refuse(stale[0]?.reason ?? 'This file is no longer available.');
         return { ok: false, reason: 'stale' };
       }
+      if (skillId && !skill) {
+        refuse('This skill is unavailable. Remove it or select another skill before sending.');
+        return { ok: false, reason: 'stale' };
+      }
+      if (!queued && !opening.draft && text.trim()) {
+        transition({ kind: 'set-draft', draft: text });
+        opening = state();
+      }
+      const captured = generation;
+      const draft = queued
+        ? undefined
+        : { text: opening.draft, context: opening.context, skill: opening.skill };
       sending = true;
+      transition({ kind: 'delivery', value: 'preparing' });
       try {
         const lines = await resolveLines(context);
-        if (disposed()) return { ok: false, reason: 'disconnected' };
+        if (disposed() || captured !== generation) return { ok: false, reason: 'disconnected' };
         const current = state();
-        if (!agentScopesEqual(startScope, current.scope)) {
-          refuse(MOVED);
+        const currentStale = staleContext(
+          validateContext(context, {
+            ...(environment() ?? NO_ENVIRONMENT),
+            scope: current.scope,
+            hasUpload: (path) => transientFiles.has(path),
+          }),
+        );
+        if (currentStale.length) {
+          refuse(currentStale[0]?.reason ?? 'Review the request context before sending.');
           return { ok: false, reason: 'stale' };
         }
         if (lines === 'stale') {
@@ -154,25 +187,35 @@ export function createPromptDispatcher({
           return { ok: false, reason: 'stale' };
         }
         if (agentTurnIsActive(current.connection)) return { ok: false, reason: 'busy' };
-        const wire = renderPromptContext(prompt, lines);
+        const pending: PendingPrompt = {
+          context,
+          display: prompt,
+          skill,
+          wire: renderPromptContext(prompt, lines),
+          ...(draft ? { draft } : {}),
+          ...(queued ? { queuedId: queued.id } : {}),
+        };
         if (current.connection.kind === 'draft') {
-          ledger.hold({ context, display: prompt, skill, wire });
-          transition({ draft: prompt, kind: 'set-draft' });
+          ledger.hold(pending);
           start();
           return { ok: true };
         }
         if (current.connection.kind !== 'live') return { ok: false, reason: 'disconnected' };
-        return submit({ context, display: prompt, skill, wire })
-          ? { ok: true }
-          : { ok: false, reason: 'disconnected' };
+        const sent = submit(pending);
+        if (!sent)
+          refuse('The request was not sent. Your input was kept; reconnect and try again.');
+        return sent ? { ok: true } : { ok: false, reason: 'disconnected' };
       } finally {
-        sending = false;
+        if (captured === generation) {
+          sending = false;
+          if (state().delivery === 'preparing' && state().connection.kind !== 'connecting')
+            transition({ kind: 'delivery', value: 'idle' });
+        }
       }
     },
 
     async attach(files) {
       if (disposed() || files.length === 0) return;
-      const startScope = state().scope;
       let outcomes;
       try {
         outcomes = await contextPort.upload(files, signal);
@@ -181,7 +224,7 @@ export function createPromptDispatcher({
         refuse(agentFailure(error).message);
         return;
       }
-      if (disposed() || !agentScopesEqual(startScope, state().scope)) return;
+      if (disposed()) return;
       let failed = 0;
       let context = state().context;
       outcomes.forEach((outcome, index) => {

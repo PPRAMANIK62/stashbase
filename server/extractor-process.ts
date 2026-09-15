@@ -50,6 +50,35 @@ export function lowerExtractorPriority(proc: ChildProcess): void {
   }
 }
 
+/** Install immediately after spawn. Completion includes pipe release and descendants,
+ * even if the leader exits first. Cancellation still uses terminateExtractorTree. */
+export function waitForExtractorTree(proc: ChildProcess): Promise<number | null> {
+  return new Promise((resolve, reject) => {
+    let closed = false;
+    let poll: ReturnType<typeof setInterval> | undefined;
+    const cleanup = () => {
+      clearInterval(poll);
+      proc.off('error', fail);
+      proc.off('exit', onExit);
+      proc.off('close', onClose);
+    };
+    const inspect = () => {
+      if (!closed || (process.platform !== 'win32' && extractorGroupExists(proc))) return;
+      cleanup();
+      resolve(proc.exitCode);
+    };
+    const fail = (error: Error) => { cleanup(); reject(error); };
+    const onExit = () => {
+      if (process.platform !== 'win32' && extractorGroupExists(proc)) terminateExtractorTree(proc);
+      poll = setInterval(inspect, 25);
+    };
+    const onClose = () => { closed = true; inspect(); };
+    proc.once('error', fail);
+    proc.once('exit', onExit);
+    proc.once('close', onClose);
+  });
+}
+
 export function terminateExtractorTree(proc: ChildProcess): void {
   if (process.platform === 'win32') {
     terminateWindowsTree(proc);

@@ -1,20 +1,11 @@
-/**
- * The Agents section: the StashBase account, OpenQuill's free credits, and
- * every runtime this window can hold a conversation with.
- *
- * Sign-in lives here because the account exists for OpenQuill. A runtime row
- * that reports it needs an account starts the same browser sign-in the account
- * row does, so the two can never disagree about what signing in means. One
- * command, one button: both wear the row idiom every action here wears.
- */
-import { useState } from 'react';
-
+/** Each Agent owns its connection controls; Default groups account and credits. */
 import { Button } from '@/components/ui/button';
-import type { AccountPort, AgentRuntimePort } from '@/features/settings/application/ports';
+import type { AgentRuntimePort } from '@/features/settings/application/ports';
 import { accountLabel } from '@/features/settings/domain/account';
 import type { AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import type { AgentRuntimeAction } from '@/features/settings/domain/agent-runtime-status';
-import { useAccount, type AccountViewModel } from '@/features/settings/hooks/use-account';
+import { useAccountView } from '@/features/settings/hooks/account-context';
+import type { AccountViewModel } from '@/features/settings/hooks/use-account';
 import { useAgentRuntimes } from '@/features/settings/hooks/use-agent-runtimes';
 import {
   SettingsGroup,
@@ -26,32 +17,40 @@ import {
 import { FailureNotice } from '@/shared/ui/failure-notice';
 
 import { AllowanceRow } from './allowance-row';
-import { DebugBlock } from './debug-block';
 import { RuntimeRow } from './runtime-row';
-import { UninstallAgentDialog } from './uninstall-dialog';
 
 export interface AgentRuntimesPanelProps {
-  accountApi: AccountPort;
   agentRuntimeApi: AgentRuntimePort;
-  onOpenExternal(href: string): void;
 }
 
 function AccountRow({ account }: { account: AccountViewModel }) {
   const signedIn = account.account?.signedIn ?? false;
   return (
     <SettingsRow
+      as="li"
       detail={
         account.account === null
-          ? 'Checking…'
+          ? account.loading
+            ? 'Checking…'
+            : 'Account unavailable.'
           : signedIn
             ? [account.account.displayName, account.account.email]
                 .filter((part): part is string => part !== null)
                 .join(' · ') || accountLabel(account.account)
-            : 'Sign in for free OpenQuill credits.'
+            : 'Sign in for free Agent credits.'
       }
-      title="StashBase account"
+      title="Account"
       trail={
-        signedIn ? (
+        account.loadFailed ? (
+          <Button
+            disabled={account.loading || account.busy}
+            onClick={account.retryAccount}
+            size="compact"
+            variant="tertiary"
+          >
+            Retry account
+          </Button>
+        ) : signedIn ? (
           <Button
             disabled={account.busy}
             onClick={() => account.signOut()}
@@ -85,14 +84,9 @@ function AccountRow({ account }: { account: AccountViewModel }) {
   );
 }
 
-export function AgentRuntimesPanel({
-  accountApi,
-  agentRuntimeApi,
-  onOpenExternal,
-}: AgentRuntimesPanelProps) {
-  const account = useAccount(accountApi, onOpenExternal);
+export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps) {
+  const account = useAccountView();
   const runtimes = useAgentRuntimes(agentRuntimeApi);
-  const [uninstallTarget, setUninstallTarget] = useState<AgentRuntime | null>(null);
 
   const onAction = (action: AgentRuntimeAction, runtime: AgentRuntime) => {
     if (action.kind === 'login') runtimes.login(runtime.id);
@@ -100,41 +94,42 @@ export function AgentRuntimesPanel({
     else account.signIn();
   };
 
-  const confirmUninstall = () => {
-    const id = uninstallTarget?.id;
-    if (!id || id === 'stashbase') return;
-    runtimes.uninstall(id, () => setUninstallTarget(null));
-  };
-
   const { allowance, catalog } = runtimes;
 
   return (
-    <SettingsPane
-      lede="Use OpenQuill with free StashBase credits, or connect Codex and Claude Code with their own sign-ins."
-      title="Agents"
-    >
-      <SettingsGroup title="Account">
-        <SettingsList>
+    <SettingsPane lede="Manage your Agent connections." title="Agents">
+      <SettingsGroup title="Default">
+        <SettingsList as="ul">
           <AccountRow account={account} />
+          {account.account?.signedIn && (allowance.allowance || allowance.failed) && (
+            <>
+              {allowance.allowance ? (
+                <AllowanceRow allowance={allowance.allowance} />
+              ) : (
+                <SettingsMessage
+                  as="li"
+                  message="Could not load your credit balance."
+                  onRetry={runtimes.refreshAllowance}
+                />
+              )}
+            </>
+          )}
+          {catalog.runtimes
+            .filter((runtime) => runtime.id === 'stashbase')
+            .map((runtime) => (
+              <RuntimeRow
+                key={runtime.id}
+                runtime={runtime}
+                busy={runtimes.busy(runtime.id) || account.busy}
+                failure={runtimes.failure(runtime.id)}
+                onAction={onAction}
+                hideAccountAction
+              />
+            ))}
         </SettingsList>
       </SettingsGroup>
 
-      {(allowance.allowance || allowance.failed) && (
-        <SettingsGroup title="Credits">
-          <SettingsList>
-            {allowance.allowance ? (
-              <AllowanceRow allowance={allowance.allowance} onRefresh={runtimes.refreshAllowance} />
-            ) : (
-              <SettingsMessage
-                message="Could not load your credit balance."
-                onRetry={runtimes.refreshAllowance}
-              />
-            )}
-          </SettingsList>
-        </SettingsGroup>
-      )}
-
-      <SettingsGroup title="Chat agents">
+      <SettingsGroup title="Your agents">
         <SettingsList as="ul">
           {catalog.loading && <SettingsMessage as="li" message="Checking agents…" />}
           {catalog.failed && (
@@ -144,28 +139,19 @@ export function AgentRuntimesPanel({
               onRetry={runtimes.refreshCatalog}
             />
           )}
-          {catalog.runtimes.map((runtime) => (
-            <RuntimeRow
-              busy={runtimes.busy(runtime.id) || (runtime.id === 'stashbase' && account.busy)}
-              failure={runtimes.failure(runtime.id)}
-              key={runtime.id}
-              onAction={onAction}
-              onUninstall={setUninstallTarget}
-              runtime={runtime}
-            />
-          ))}
+          {catalog.runtimes
+            .filter((runtime) => runtime.id !== 'stashbase')
+            .map((runtime) => (
+              <RuntimeRow
+                busy={runtimes.busy(runtime.id)}
+                failure={runtimes.failure(runtime.id)}
+                key={runtime.id}
+                onAction={onAction}
+                runtime={runtime}
+              />
+            ))}
         </SettingsList>
       </SettingsGroup>
-
-      <DebugBlock runtimes={runtimes} />
-
-      <UninstallAgentDialog
-        failure={runtimes.uninstallFailure(uninstallTarget?.id ?? null)?.message ?? null}
-        onCancel={() => setUninstallTarget(null)}
-        onConfirm={confirmUninstall}
-        pending={runtimes.uninstalling(uninstallTarget?.id ?? null)}
-        runtime={uninstallTarget}
-      />
     </SettingsPane>
   );
 }

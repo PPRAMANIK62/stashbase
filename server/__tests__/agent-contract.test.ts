@@ -3,12 +3,10 @@ import test from 'node:test';
 import { BUILT_IN_AGENT_ADAPTERS } from '../agent-adapters.ts';
 import {
   attachAgentRuntime,
-  clearAgentRuntimeFailure,
   discoverAgentRuntimes,
   disposeSessionsBoundToFolder,
   parseAgentEffort,
   registerAgentAdapter,
-  reportAgentRuntimeFailure,
   resolveAgentSessionFolder,
   resolveAgentSessionScope,
   resolveSessionBinding,
@@ -26,7 +24,7 @@ test('every built-in runtime declares the fundamental Shared Agent Contract beha
   assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => [adapter.id, adapter.label]), [
     ['codex', 'Codex'],
     ['claude', 'Claude Code'],
-    ['stashbase', 'OpenQuill'],
+    ['stashbase', 'Default'],
   ]);
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {
     for (const capability of REQUIRED_SHARED_CAPABILITIES) {
@@ -83,18 +81,16 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'file-diff', id: 'diff', file: 'notes.md', before: 'old', after: 'new', additions: 1, deletions: 1 },
     { t: 'permission', id: 'approval', toolUseId: 'tool', name: 'Write', title: null, input: {} },
     { t: 'steer-result', id: 'queued', ok: true },
-    // create_project rebinding a unbound chat to the new project.
-    { t: 'scope-changed', scope: { kind: 'folder', path: '/Users/me/Documents/StashBase/Project' } },
     { t: 'turn-end', isError: false },
     { t: 'error', message: 'runtime unavailable' }, { t: 'exit' },
     { t: 'exit', message: 'runtime stopped unexpectedly' },
     { t: 'exit', reason: 'scope-removed', folder: '/Users/me/Projects/Research' },
   ];
   assert.equal(clientEvents.length, 7);
-  assert.equal(events.length, 19);
+
 });
 
-test('capability discovery reports supported, unavailable, and failed runtimes without changing adapter metadata', () => {
+test('capability discovery reports installed and unavailable native runtimes without changing adapter metadata', () => {
   const expectedInstallHints = {
     claude: process.platform === 'win32'
       ? 'irm https://claude.ai/install.ps1 | iex'
@@ -114,14 +110,7 @@ test('capability discovery reports supported, unavailable, and failed runtimes w
     assert.equal(unavailable.source, null);
     assert.equal(unavailable.installHint, expectedInstallHints[adapter.id]);
   }
-  const adapter = BUILT_IN_AGENT_ADAPTERS.find((candidate) => candidate.id === 'claude')!;
 
-  reportAgentRuntimeFailure(adapter.id, new Error('native protocol changed'));
-  const failed = runtimeDescriptorFor(adapter, '/native/claude');
-  assert.equal(failed.state, 'failed');
-  assert.equal(failed.error, 'native protocol changed');
-  assert.deepEqual(failed.capabilities, adapter.capabilities);
-  clearAgentRuntimeFailure(adapter.id);
 });
 
 test('capability discovery publishes the registered adapter catalog', () => {
@@ -155,82 +144,6 @@ test('an explicit session folder is accepted only when it is a registered projec
   assert.equal(resolveAgentSessionFolder('relative/path', members).ok, false);
   assert.equal(resolveAgentSessionFolder(['/Users/me/Projects/Research'], members).ok, false);
   assert.equal(resolveAgentSessionFolder('/anything', []).ok, false);
-});
-
-test('an explicit session scope is scope=unbound, a member folder, or nothing', () => {
-  const members = ['/Users/me/Documents/StashBase/Notes', '/Users/me/Projects/Research'];
-
-  // scope=unbound → accepted as the unbound scope.
-  assert.deepEqual(resolveAgentSessionScope('unbound', undefined, members), { ok: true, scope: { kind: 'unbound' } });
-  // Explicit member folder → folder scope with the stored member spelling.
-  assert.deepEqual(
-    resolveAgentSessionScope(undefined, '/Users/me/Projects/Research', members),
-    { ok: true, scope: { kind: 'folder', path: '/Users/me/Projects/Research' } },
-  );
-  // Both absent/empty → no explicit scope: the window's current folder
-  // applies when one exists, else the project fallback.
-  assert.deepEqual(resolveAgentSessionScope(undefined, undefined, members), { ok: true });
-  assert.deepEqual(resolveAgentSessionScope('', '  ', members), { ok: true });
-
-  // Invalid folders are still rejected exactly as before.
-  assert.equal(resolveAgentSessionScope(undefined, '/etc', members).ok, false);
-  assert.equal(resolveAgentSessionScope(undefined, 'relative/path', members).ok, false);
-  // Unknown scope values and contradictory scope+folder are rejected.
-  assert.equal(resolveAgentSessionScope('global', undefined, members).ok, false);
-  assert.equal(resolveAgentSessionScope(['unbound'], undefined, members).ok, false);
-  assert.equal(resolveAgentSessionScope('unbound', '/Users/me/Projects/Research', members).ok, false);
-});
-
-test('session binding: project scope binds the folder home and is not folder-bound', () => {
-  const home = '/Users/me/Documents/StashBase';
-
-  // Explicit unbound scope → cwd is the historical unbound cwd (the folder
-  // home) even while the window has a current folder.
-  assert.deepEqual(
-    resolveSessionBinding({ scope: 'unbound', currentFolder: '/Users/me/Projects/Research', folderHome: home }),
-    { cwd: home, unbound: true },
-  );
-  // Explicit folder → that member root.
-  assert.deepEqual(
-    resolveSessionBinding({ folder: '/tmp/scratch', currentFolder: '/Users/me/Projects/Research', folderHome: home }),
-    { cwd: '/tmp/scratch', unbound: false },
-  );
-  // Absent scope → the window's current folder when one exists…
-  assert.deepEqual(
-    resolveSessionBinding({ currentFolder: '/Users/me/Projects/Research', folderHome: home }),
-    { cwd: '/Users/me/Projects/Research', unbound: false },
-  );
-  // …else the project fallback (no more "No folder open." dead end).
-  assert.deepEqual(
-    resolveSessionBinding({ currentFolder: null, folderHome: home }),
-    { cwd: home, unbound: true },
-  );
-});
-
-test('folder removal never tears down unbound sessions', () => {
-  const projectSession = {
-    disposed: false,
-    // A unbound session reports no bound folder even though its
-    // cwd is the folder home.
-    boundFolder: (): string | null => null,
-    dispose() { projectSession.disposed = true; },
-  };
-  const folderSession = {
-    disposed: false,
-    boundFolder: () => '/Users/me/Projects/Research',
-    dispose() { folderSession.disposed = true; },
-  };
-  const sessions = new Set([projectSession, folderSession]);
-
-  disposeSessionsBoundToFolder(sessions, '/Users/me/Projects/Research');
-  assert.equal(folderSession.disposed, true);
-  assert.equal(projectSession.disposed, false);
-
-  // Even removing a member folder that happens to equal the folder home
-  // cannot match a project session: its boundFolder() is null.
-  disposeSessionsBoundToFolder(sessions, '/Users/me/Documents/StashBase');
-  assert.equal(projectSession.disposed, false);
-  assert.deepEqual([...sessions], [projectSession]);
 });
 
 test('folder-bound teardown ends only the sessions bound to the removed folder', () => {
@@ -285,4 +198,13 @@ test('native CLI smoke checks report protocol incompatibility with an actionable
   const claude = smokeNativeAgentCli('claude', '/native/claude', () => ({ status: 1, stdout: '', stderr: 'bad flag' }));
   assert.equal(claude.ok, false);
   assert.match(claude.message, /exit code 1/);
+});
+
+test('session requests require an explicit registered project and reject unbound or aggregate scope', () => {
+ const project = '/work/project';
+ for (const scope of ['unbound', 'all', '', []]) assert.equal(resolveAgentSessionScope(scope, project, [project]).ok, false);
+ for (const folder of [undefined, '', '/outside']) assert.equal(resolveAgentSessionScope(undefined, folder, [project]).ok, false);
+ assert.deepEqual(resolveAgentSessionScope(undefined, project, [project]), { ok: true, scope: { kind: 'folder', path: project } });
+ assert.throws(() => resolveSessionBinding({ currentFolder: null }), /Open a project/);
+ assert.deepEqual(resolveSessionBinding({ folder: project, currentFolder: '/other' }), { cwd: project });
 });

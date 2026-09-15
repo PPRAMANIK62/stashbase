@@ -27,15 +27,15 @@ test('parent removal leaves tasks and auxiliary scopes in retained nested projec
   });
   const parent = scheduler.schedule(job('/project/a.pdf', 'heavy', 'background', run));
   const child = scheduler.schedule(job('/project/child/b.pdf', 'heavy', 'background', run));
-  const preview = scheduler.schedule({ ...job('/cache/preview', 'heavy', 'background', run), scope: '/project/child/clip.mp4' });
+  const nested = scheduler.schedule(job('/project/child/c.pdf', 'heavy', 'background', run));
   await tick();
   const cancelled = scheduler.cancelUnder('/project', 'folder-removed', ['/project/child']);
   assert.deepEqual(cancelled.map((task) => task.key), ['/project/a.pdf']);
   await Promise.all(cancelled.map((task) => task.completion));
   assert.equal(scheduler.has('/project/child/b.pdf'), true);
-  assert.equal(scheduler.has('/cache/preview'), true);
+  assert.equal(scheduler.has('/project/child/c.pdf'), true);
   done.resolve();
-  await Promise.allSettled([parent.completion, child.completion, preview.completion]);
+  await Promise.allSettled([parent.completion, child.completion, nested.completion]);
 });
 
 function job(
@@ -103,11 +103,11 @@ test('a cooperative yield lets higher-priority heavy work run before the task re
   const scheduler = new ConversionScheduler({ laneCapacity: { heavy: 1 } });
   const mayYield = deferred();
   const order: string[] = [];
-  const audio = scheduler.schedule(controlledJob('/recording.wav', 'heavy', 'background', async ({ yieldLane }) => {
-    order.push('audio-1');
+  const image = scheduler.schedule(controlledJob('/scan.png', 'heavy', 'background', async ({ yieldLane }) => {
+    order.push('image-1');
     await mayYield.promise;
     await yieldLane();
-    order.push('audio-2');
+    order.push('image-2');
   }));
   await tick();
 
@@ -115,16 +115,16 @@ test('a cooperative yield lets higher-priority heavy work run before the task re
     order.push('pdf');
   }));
   mayYield.resolve();
-  await Promise.all([audio.completion, pdf.completion]);
+  await Promise.all([image.completion, pdf.completion]);
 
-  assert.deepEqual(order, ['audio-1', 'pdf', 'audio-2']);
+  assert.deepEqual(order, ['image-1', 'pdf', 'image-2']);
 });
 
 test('snapshot exposes yielded work without treating it as a running conversion', async () => {
   const scheduler = new ConversionScheduler({ laneCapacity: { heavy: 1 } });
   const mayYield = deferred();
   const blocker = deferred();
-  const audio = scheduler.schedule(controlledJob('/recording.wav', 'heavy', 'background', async ({ yieldLane }) => {
+  const image = scheduler.schedule(controlledJob('/scan.png', 'heavy', 'background', async ({ yieldLane }) => {
     await mayYield.promise;
     await yieldLane();
   }));
@@ -133,14 +133,14 @@ test('snapshot exposes yielded work without treating it as a running conversion'
 
   mayYield.resolve();
   await tick();
-  const yielded = scheduler.get('/recording.wav');
+  const yielded = scheduler.get('/scan.png');
   assert.equal(yielded?.state, 'yielded');
   assert.equal(yielded?.tasksAhead, 1);
-  assert.equal(scheduler.hasRunningUnder('/recording.wav'), false);
+  assert.equal(scheduler.hasRunningUnder('/scan.png'), false);
   assert.equal(scheduler.hasRunningUnder('/opened.pdf'), true);
 
   blocker.resolve();
-  await Promise.all([audio.completion, pdf.completion]);
+  await Promise.all([image.completion, pdf.completion]);
 });
 
 test('cancelling yielded work wakes and retires the suspended run', async () => {
@@ -148,7 +148,7 @@ test('cancelling yielded work wakes and retires the suspended run', async () => 
   const mayYield = deferred();
   const blocker = deferred();
   let abortReason: unknown;
-  const audio = scheduler.schedule(controlledJob('/folder/recording.wav', 'heavy', 'background', async ({ signal, yieldLane }) => {
+  const image = scheduler.schedule(controlledJob('/folder/scan.png', 'heavy', 'background', async ({ signal, yieldLane }) => {
     await mayYield.promise;
     try {
       await yieldLane();
@@ -160,18 +160,18 @@ test('cancelling yielded work wakes and retires the suspended run', async () => 
   const pdf = scheduler.schedule(job('/opened.pdf', 'heavy', 'interactive', () => blocker.promise));
   mayYield.resolve();
   await tick();
-  assert.equal(scheduler.get('/folder/recording.wav')?.state, 'yielded');
+  assert.equal(scheduler.get('/folder/scan.png')?.state, 'yielded');
 
-  const cancelled = scheduler.cancel('/folder/recording.wav', 'folder-removed');
+  const cancelled = scheduler.cancel('/folder/scan.png', 'folder-removed');
   assert.ok(cancelled);
   await cancelled;
   assert.equal(abortReason, 'folder-removed');
-  assert.equal(scheduler.has('/folder/recording.wav'), false);
+  assert.equal(scheduler.has('/folder/scan.png'), false);
   assert.equal(scheduler.has('/opened.pdf'), true);
 
   blocker.resolve();
   await pdf.completion;
-  await assert.rejects(audio.completion);
+  await assert.rejects(image.completion);
 });
 
 test('duplicate scheduling coalesces and promotes the existing task', async () => {
@@ -466,32 +466,6 @@ test('Windows drive and UNC roots match descendants without matching sibling nam
   assert.deepEqual(remaining.map((item) => item.key), ['//Server/Shared/d.docx']);
 });
 
-test('hidden auxiliary work shares lane capacity and cancels by source scope', async () => {
-  const scheduler = new ConversionScheduler({ laneCapacity: { heavy: 1 } });
-  const auxiliary = scheduler.schedule({
-    key: '/derived/voice.preview.webm',
-    scope: '/folder/voice.aiff',
-    visible: false,
-    lane: 'heavy',
-    urgency: 'interactive',
-    cost: 1,
-    run: ({ signal }) => new Promise<void>((resolve) => {
-      signal.addEventListener('abort', () => resolve(), { once: true });
-    }),
-  });
-  const visible = scheduler.schedule(job('/folder/meeting.wav', 'heavy', 'interactive', async () => undefined));
-  await tick();
-
-  assert.equal(scheduler.get('/derived/voice.preview.webm')?.state, 'running');
-  assert.deepEqual(scheduler.snapshot().tasks.map((task) => ({ key: task.key, tasksAhead: task.tasksAhead })), [
-    { key: '/folder/meeting.wav', tasksAhead: 1 },
-  ]);
-  assert.equal(scheduler.hasRunningUnder('/folder'), true);
-  const cancelled = scheduler.cancelScope('/folder/voice.aiff', 'source-change');
-  await Promise.all(cancelled.map((item) => item.completion));
-  await Promise.all([auxiliary.completion, visible.completion]);
-  assert.deepEqual(cancelled.map((item) => item.key), ['/derived/voice.preview.webm']);
-});
 
 test('component installation releases the heavy lane until ready, then resumes the same task', async () => {
   const scheduler = new ConversionScheduler();
@@ -502,17 +476,17 @@ test('component installation releases the heavy lane until ready, then resumes t
     run: async ({ yieldLane }) => { events.push('download'); await yieldLane(component.promise); events.push('extract'); },
   });
   await tick();
-  const audio = scheduler.schedule({
-    key: '/audio.wav', lane: 'heavy', urgency: 'background', cost: 2,
-    run: async () => { events.push('transcribe'); },
+  const image = scheduler.schedule({
+    key: '/image.png', lane: 'heavy', urgency: 'background', cost: 2,
+    run: async () => { events.push('ocr'); },
   });
-  await audio.completion;
-  assert.deepEqual(events, ['download', 'transcribe']);
+  await image.completion;
+  assert.deepEqual(events, ['download', 'ocr']);
   assert.equal(scheduler.get('/pdf.pdf')?.state, 'yielded');
   assert.equal(scheduler.snapshot().tasks.find((task) => task.key === '/pdf.pdf')?.state, 'yielded');
   component.resolve();
   await waiting.completion;
-  assert.deepEqual(events, ['download', 'transcribe', 'extract']);
+  assert.deepEqual(events, ['download', 'ocr', 'extract']);
 });
 
 test('removing a source waiting for its component retires it without waiting for network', async () => {

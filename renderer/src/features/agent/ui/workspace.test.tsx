@@ -22,47 +22,6 @@ import { registerWorkspaceCleanup, renderWorkspace } from './workspace.harness';
 registerWorkspaceCleanup();
 
 describe('Agent workspace', () => {
-  it('keeps the composer and its draft while Agent setup stands', async () => {
-    const notReady = agentDefinition({ ready: false });
-    const { runtime } = renderWorkspace(idleAgentSessionPort(), [notReady]);
-    await agentGateLifted();
-
-    expect(await screen.findByText('No Agent is ready yet.')).not.toBeNull();
-    const composer = screen.getByRole('textbox', { name: 'Message' });
-    typeInto(composer, 'Build wiki pages for this folder');
-    expect(draftOf(runtime)).toBe('Build wiki pages for this folder');
-    // The request is written, and stays written: a gate that took the canvas
-    // away to ask for setup would take the request with it.
-    expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Sign in to OpenQuill' })).not.toBeNull();
-    // Nothing the runtime cannot do is advertised while it cannot carry a turn.
-    expect(screen.queryByRole('button', { name: 'Attach files' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Provider: / })).toBeNull();
-  });
-
-  it('names sign-in rather than installation for a runtime that only needs it', async () => {
-    renderWorkspace(idleAgentSessionPort(), [
-      agentDefinition({ id: 'codex', label: 'Codex', needsSignIn: true, ready: false }),
-    ]);
-    await agentGateLifted();
-
-    expect(await screen.findByRole('button', { name: 'Sign in to Codex' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Set up Codex' })).toBeNull();
-  });
-
-  it('offers the bundled runtime sign-in before any attempt has named the account', async () => {
-    // The catalog only reports `needsSignIn` once a bootstrap has come back
-    // authentication-required. The bundled runtime has no setup step to offer
-    // in the meantime, so the offer must not invent one.
-    renderWorkspace(idleAgentSessionPort(), [
-      agentDefinition({ needsSignIn: false, ready: false }),
-    ]);
-    await agentGateLifted();
-
-    expect(await screen.findByRole('button', { name: 'Sign in to OpenQuill' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Set up OpenQuill' })).toBeNull();
-  });
-
   it('holds the setup offer back until the catalog has answered', async () => {
     let answer!: (catalog: { agents: Agent[] }) => void;
     const answered = new Promise<{ agents: Agent[] }>((resolve) => {
@@ -82,47 +41,24 @@ describe('Agent workspace', () => {
     });
     await agentGateLifted();
     expect(screen.queryByText('No Agent is ready yet.')).toBeNull();
-    expect(await screen.findByRole('button', { name: 'Provider: OpenQuill' })).not.toBeNull();
-  });
-
-  it('carries a waiting request into the runtime the reader sets up', async () => {
-    const notReady = agentDefinition({ id: 'claude', label: 'Claude Code', ready: false });
-    const { runtime } = renderWorkspace(idleAgentSessionPort(), [notReady], undefined, undefined, {
-      prepareAgent: vi.fn(async () => ({ agents: [CODEX_AGENT] })),
-    });
-    await agentGateLifted();
-
-    typeInto(
-      await screen.findByRole('textbox', { name: 'Message' }),
-      'Build wiki pages for this folder',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Set up Claude Code' }));
-
-    // The runtime that arrived is not the one this chat opened on, so the chat
-    // follows it — and finds the same request waiting.
-    expect(await screen.findByRole('button', { name: 'Provider: Codex' })).not.toBeNull();
-    expect(runtime.activeSession().store.getState().agent).toBe('codex');
-    expect(draftOf(runtime)).toBe('Build wiki pages for this folder');
-    expect(screen.queryByText('No Agent is ready yet.')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+    expect(await screen.findByRole('button', { name: 'Provider: Default' })).not.toBeNull();
   });
 
   it('cycles the blank composer through the three requests, and Tab takes the one showing', async () => {
     const port = idleAgentSessionPort();
     const { runtime } = renderWorkspace(port);
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
 
-    // The placeholder is the only place a folder window says the folder can
-    // gain a wiki at all, so it is J12's entrance. It opens on the wiki.
-    expect(screen.getByText('Build a wiki for Research')).not.toBeNull();
+    // Taking a suggestion fills the draft without starting a turn.
+    expect(screen.getByText('Help me explore an idea')).not.toBeNull();
     expect(screen.queryByRole('button', { name: /Build/u })).toBeNull();
 
     const field = screen.getByRole('textbox', { name: 'Message' });
     await userEvent.click(field);
     await userEvent.keyboard('{Tab}');
 
-    expect(draftOf(runtime)).toBe('Build a wiki for Research');
+    expect(draftOf(runtime)).toBe('Help me explore an idea');
     // Filled, not sent: the visible request stays the reader's to edit, so
     // what the Agent receives is still exactly what the transcript records.
     expect(port.connect).not.toHaveBeenCalled();
@@ -134,7 +70,7 @@ describe('Agent workspace', () => {
     const { runtime } = renderWorkspace(port);
 
     expect(port.connect).not.toHaveBeenCalled();
-    expect(await screen.findByText('From wiki to words.')).not.toBeNull();
+    expect(await screen.findByText('What’s on your mind?')).not.toBeNull();
     await agentGateLifted();
     expect(screen.queryByText('Research workspace')).toBeNull();
     const composer = screen.getByRole('textbox', { name: 'Message' });
@@ -144,14 +80,14 @@ describe('Agent workspace', () => {
     expect(port.connect).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Chat scope: Research')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Close conversation' })).toBeNull();
-    expect(screen.getAllByRole('button', { name: 'Provider: OpenQuill' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Provider: Default' })).toHaveLength(1);
 
     const newChat = screen.getByRole('button', { name: 'Start new chat' });
     await userEvent.click(newChat);
     expect(port.connect).not.toHaveBeenCalled();
     expect(runtime.activeSession().store.getState().agent).toBe('stashbase');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: OpenQuill' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Default' }));
     const codexOption = await screen.findByRole('menuitemradio', { name: 'Codex' });
     const claudeOption = screen.getByRole('menuitemradio', { name: 'Claude Code' });
     // The provider marks are aria-hidden, injected third-party SVG markup (`@lobehub/icons-static-svg`);
@@ -173,7 +109,7 @@ describe('Agent workspace', () => {
     const requests = () => vi.mocked(port.connect).mock.calls.map(([request]) => request);
     renderWorkspace(port);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Provider: OpenQuill' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Provider: Default' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     await userEvent.click(screen.getByRole('button', { name: 'Model and thinking: Default' }));
     expect(requests()).toHaveLength(1);
@@ -230,9 +166,9 @@ describe('Agent workspace', () => {
   it('starts the first composer turn and presents an explicit permission decision', async () => {
     const { listeners, port, sent } = agentSessionPort();
     const { runtime } = renderWorkspace(port);
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: OpenQuill' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Default' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
 
     const composer = screen.getByRole('textbox', { name: 'Message' });
@@ -241,8 +177,15 @@ describe('Agent workspace', () => {
     expect(draftOf(runtime)).toBe('Inspect the workspace');
 
     act(() => listeners[0]?.onEvent({ kind: 'ready' }));
-    expect(await screen.findByText('Inspect the workspace')).not.toBeNull();
-    expect(sent).toEqual([{ kind: 'prompt', skill: null, text: 'Inspect the workspace' }]);
+    expect((await screen.findAllByText('Inspect the workspace'))[0]).not.toBeNull();
+    expect(sent).toEqual([
+      {
+        kind: 'prompt',
+        skill: null,
+        text: 'Inspect the workspace',
+        titleHint: 'Inspect the workspace',
+      },
+    ]);
 
     act(() => {
       listeners[0]?.onEvent({ kind: 'turn-started' });
@@ -264,6 +207,10 @@ describe('Agent workspace', () => {
       kind: 'reply-permission',
     });
 
+    expect(
+      screen.getByRole('button', { name: /Permission mode: Auto/u }).hasAttribute('disabled'),
+    ).toBe(true);
+    act(() => listeners[0]?.onEvent({ kind: 'turn-ended', isError: false }));
     await userEvent.click(screen.getByRole('button', { name: /Permission mode: Auto/u }));
     await userEvent.click(
       await screen.findByRole('menuitemradio', {
@@ -288,8 +235,11 @@ describe('Agent workspace', () => {
       ],
     });
     const { port } = agentSessionPort();
-    renderWorkspace(port, [codex]);
+    const { runtime } = renderWorkspace(port, [codex]);
     await agentGateLifted();
+    await act(async () => {
+      await runtime.chooseAgent('codex');
+    });
 
     expect(
       await screen.findByRole('button', { name: 'Model and thinking: GPT-6-Astra, Medium' }),
@@ -322,26 +272,26 @@ describe('Agent workspace', () => {
   it('takes the latest prompt back into the composer from its edit control', async () => {
     const { listeners, port } = agentSessionPort();
     const { runtime } = renderWorkspace(port);
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: OpenQuill' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Default' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
 
     typeInto(screen.getByRole('textbox', { name: 'Message' }), 'Inspect the workspace');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     act(() => listeners[0]?.onEvent({ kind: 'ready' }));
-    await screen.findByText('Inspect the workspace');
+    await screen.findAllByText('Inspect the workspace');
     act(() => {
       listeners[0]?.onEvent({ kind: 'turn-started' });
       listeners[0]?.onEvent({ delta: 'A small workspace.', kind: 'text' });
     });
     // Streaming: copy is there, edit is not.
     expect(screen.getByRole('button', { name: 'Copy message' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reuse message' })).toBeNull();
 
     act(() => listeners[0]?.onEvent({ isError: false, kind: 'turn-ended' }));
     expect(draftOf(runtime)).toBe('');
-    await userEvent.click(screen.getByRole('button', { name: 'Edit message' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Reuse message' }));
     expect(draftOf(runtime)).toBe('Inspect the workspace');
     await waitFor(() => expectFocused(screen.getByRole('textbox', { name: 'Message' })));
     // The sent prompt stays in the transcript; the edit is the next turn.

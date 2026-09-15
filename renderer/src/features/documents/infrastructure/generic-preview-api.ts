@@ -32,7 +32,9 @@ function previewFailure({
   return failure.success &&
     (failure.data.code === 'FOLDER_UNAVAILABLE' || failure.data.code === 'NO_FOLDER')
     ? new GenericFilePreviewError('scope-lost', SCOPE_LOST, cause)
-    : null;
+    : response.status === 404
+      ? new GenericFilePreviewError('missing', 'The source file is missing.', cause)
+      : null;
 }
 
 function mapPreview(body: PreviewResponse, expectedName: string): GenericFilePreview {

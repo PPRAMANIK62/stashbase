@@ -122,7 +122,7 @@ test('cancelling one waiter leaves its peer alive and a cancelled source never r
   await runtime.retry(); assert.ok(await second); assert.equal(calls, 2);
 });
 
-test('last waiter cancellation aborts an active transfer and clears staging', async (t) => {
+test('last waiter cancellation aborts transfer, clears staging and prevents next-launch download', async (t) => {
   const f = await fixture(t);
   let started!: () => void;
   const entered = new Promise<void>((resolve) => { started = resolve; });
@@ -132,9 +132,16 @@ test('last waiter cancellation aborts an active transfer and clears staging', as
   } });
   const cancel = new AbortController();
   const result = assert.rejects(runtime.ensure(cancel.signal), /removed/);
-  await entered; cancel.abort(new Error('removed')); await result;
+  await entered; cancel.abort(new Error('removed'));
+  const closing = runtime.close();
+  await result; await closing;
   assert.equal((await runtime.status()).error, 'interrupted');
   assert.deepEqual((await fs.readdir(f.options.root)).filter((name) => name.startsWith('.staging-')), []);
+  await runtime.close();
+  const next = f.make({ fetch: async () => assert.fail('cancelled demand must not download on restart') });
+  await next.resume();
+  assert.equal((await next.status()).status, 'not-installed');
+  assert.deepEqual(await fs.readdir(f.options.root), []);
 });
 
 test('tar extraction refuses files outside the component root', async (t) => {
@@ -163,4 +170,27 @@ test('archive symlinks preserve bundled framework links but cannot escape the co
   const unsafe = path.join(f.root, 'unsafe'); await fs.mkdir(unsafe);
   await assert.rejects(unpackExtractor(f.archive, unsafe), /link escapes component/);
   assert.equal(await fs.lstat(path.join(unsafe, 'stashbase-extract', 'escape')).then(() => true, () => false), false);
+});
+
+test('failed source demand is removed on cancellation but explicit and shutdown demand survive', async (t) => {
+  for (const mode of ['cancel', 'explicit', 'shutdown']) {
+    const explicit = mode === 'explicit';
+    const reason = mode === 'shutdown' ? 'shutdown' : new Error('removed');
+    const f = await fixture(t);
+    const runtime = f.make({ fetch: async () => { throw new Error('offline'); } });
+    const cancel = new AbortController();
+    const waiting = assert.rejects(runtime.ensure(cancel.signal), (error) => error === reason);
+    await until(async () => (await runtime.status()).status === 'failed');
+    if (explicit) {
+      await runtime.retry();
+      await until(async () => (await runtime.status()).status === 'failed');
+    }
+    cancel.abort(reason); await waiting; await runtime.close();
+    let calls = 0;
+    const next = f.make({ fetch: async () => { calls++; throw new Error('offline'); } });
+    await next.resume();
+    if (mode !== 'cancel') await until(async () => calls === 1);
+    else assert.equal((await next.status()).status, 'not-installed');
+    assert.equal(calls, mode !== 'cancel' ? 1 : 0);
+  }
 });

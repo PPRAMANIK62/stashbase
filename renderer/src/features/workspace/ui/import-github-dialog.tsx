@@ -8,13 +8,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { InputField, InputGroup } from '@/components/ui/input-group';
-import type { GitHubImportView } from '@/features/workspace/hooks/use-github-import';
+import type { GitHubImportView } from '@/features/workspace/hooks/use-project-entry';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 
 export interface ImportGitHubDialogProps {
-  /** Where the copy would land, so the destination is a fact on screen rather
-   *  than something the reader infers from the name field. */
-  folderHome: string;
   import: GitHubImportView;
   onClose(): void;
   open: boolean;
@@ -28,19 +25,13 @@ export interface ImportGitHubDialogProps {
  * the server. Closing while a request is open cancels it; the server cleans
  * its own staging, and no partial member is left behind.
  */
-export function ImportGitHubDialog({
-  folderHome,
-  import: request,
-  onClose,
-  open,
-}: ImportGitHubDialogProps) {
+export function ImportGitHubDialog({ import: request, onClose, open }: ImportGitHubDialogProps) {
   const close = () => {
     request.cancel();
     onClose();
   };
 
-  const destination =
-    request.folderName && !request.nameIssue ? `${folderHome}/${request.folderName}` : null;
+  const destination = request.destination;
 
   return (
     <Dialog onOpenChange={(next) => !next && close()} open={open}>
@@ -48,29 +39,31 @@ export function ImportGitHubDialog({
         <DialogHeader>
           <DialogTitle>Import from GitHub</DialogTitle>
           <DialogDescription>
-            Copy a public repository into your project. The original is never changed.
+            Create a new local project from a public repository. The original is never changed.
           </DialogDescription>
         </DialogHeader>
         {/* One group, not two: the group is a proximity row, and a lone field
          * in its own group loses the reveal and reads as static text. */}
         <InputGroup className="w-full" size="compact">
           <InputField
+            disabled={request.inputLocked}
             autoComplete="off"
             error={request.urlIssue ?? undefined}
-            filled
             label="Repository URL"
             onChange={request.setUrl}
             placeholder="https://github.com/owner/repo"
+            resting="filled"
             spellCheck={false}
             value={request.url}
           />
           <InputField
+            disabled={request.inputLocked}
             autoComplete="off"
             error={request.nameIssue ?? undefined}
-            filled
             label="Folder name"
             onChange={request.setFolderName}
             placeholder="repo"
+            resting="filled"
             spellCheck={false}
             value={request.folderName}
           />
@@ -80,13 +73,36 @@ export function ImportGitHubDialog({
         {destination && (
           <p className="m-0 pl-2 text-caption text-muted-foreground">{destination}</p>
         )}
+        {request.retainedPath && (
+          <p className="m-0 pl-2 text-caption text-muted-foreground">
+            Local project: {request.retainedPath}
+          </p>
+        )}
         {request.failure && <FailureNotice className="m-0 pl-2" failure={request.failure} />}
         <DialogFooter>
           <Button onClick={close} variant="ghost">
             Cancel
           </Button>
+          {(request.retainedPath || request.checkingOutcome) && (
+            <Button
+              disabled={request.pending}
+              onClick={request.startAnotherCopy}
+              variant="tertiary"
+            >
+              Start another copy
+            </Button>
+          )}
+          {request.existingPath && (
+            <Button disabled={request.pending} onClick={request.openExisting} variant="tertiary">
+              Open existing folder
+            </Button>
+          )}
           <Button disabled={!request.canSubmit} loading={request.pending} onClick={request.submit}>
-            Import
+            {request.retainedPath
+              ? 'Open project'
+              : request.checkingOutcome
+                ? 'Check result'
+                : 'Import'}
           </Button>
         </DialogFooter>
       </DialogContent>

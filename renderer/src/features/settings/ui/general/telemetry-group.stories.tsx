@@ -22,12 +22,7 @@ function Harness({ enabled = true }: { enabled?: boolean }) {
   });
   return (
     <QueryClientProvider client={client}>
-      <GeneralPanel
-        telemetryApi={port}
-        onOpenExternal={() => undefined}
-        onReportBug={() => undefined}
-        softwareUpdate={null}
-      />
+      <GeneralPanel telemetryApi={port} onOpenExternal={() => undefined} softwareUpdate={null} />
     </QueryClientProvider>
   );
 }

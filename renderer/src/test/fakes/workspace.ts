@@ -114,9 +114,8 @@ export function projectLifecycle(
   overrides: Partial<ProjectLifecyclePort> = {},
 ): ProjectLifecyclePort {
   return {
-    // No folder named for this window, so every test that does not care about
-    // the desktop's answer lands the way a plain relaunch does.
-    claimInitialFolder: vi.fn(async (): Promise<string | null> => null),
+    enterFolder: vi.fn(async () => {}),
+    onEnterFolder: vi.fn(() => () => {}),
     notifyFolderRemoved: vi.fn(async () => undefined),
     onFolderRemoved: vi.fn(() => () => undefined),
     onPrepareFolderRemoval: vi.fn(() => () => undefined),
@@ -180,6 +179,7 @@ export function workspaceRuntimeOptions(
  *  proof somewhere it does not belong. */
 export function githubImportApi(overrides: Partial<GitHubImportPort> = {}): GitHubImportPort {
   return {
+    home: vi.fn(async () => '/home/person/Documents/StashBase'),
     folderNameIssue: (name: string) => (name.includes('/') ? 'name cannot contain slashes' : null),
     readUrl: (raw: string) => {
       const match = /^https:\/\/github\.com\/[^/]+\/([^/]+)$/.exec(raw.trim());
@@ -216,7 +216,7 @@ export function workspaceAdapters(overrides: Partial<WorkspaceAdapters> = {}): W
     lifecycle: projectLifecycle(),
     preferences: workspacePreferences(),
     session: sessionPersistence(),
-    upload: { upload: vi.fn(async () => []) },
+    upload: { upload: vi.fn(async () => ({ paths: [], refused: [] })) },
     ...overrides,
   };
 }

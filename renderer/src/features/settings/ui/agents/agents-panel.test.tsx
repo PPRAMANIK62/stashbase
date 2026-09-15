@@ -1,10 +1,11 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { failureMessage } from '@/features/settings/application/failure-messages';
 import type { AccountPort, AgentRuntimePort } from '@/features/settings/application/ports';
 import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
+import { AccountProvider } from '@/features/settings/hooks/account-context';
 import {
   accountPort,
   agentRuntime,
@@ -20,9 +21,6 @@ function catalog(runtimes: AgentRuntime[], debug?: AgentCatalog['debug']): Agent
 }
 
 /** A reset runtime comes back not installed with nothing prepared for it. */
-function uninstalled(runtime: AgentRuntime): AgentRuntime {
-  return { ...runtime, installed: false, preparation: { kind: 'idle' } };
-}
 
 function renderPanel(
   port: AgentRuntimePort,
@@ -30,11 +28,9 @@ function renderPanel(
   onOpenExternal = vi.fn(),
 ) {
   const rendered = withQueryClient(
-    <AgentRuntimesPanel
-      accountApi={account}
-      agentRuntimeApi={port}
-      onOpenExternal={onOpenExternal}
-    />,
+    <AccountProvider port={account} openExternal={onOpenExternal}>
+      <AgentRuntimesPanel agentRuntimeApi={port} />
+    </AccountProvider>,
   );
   return { ...rendered, onOpenExternal };
 }
@@ -49,33 +45,7 @@ const codex = agentRuntime({
   preparation: { kind: 'idle' },
 });
 
-const managedClaude = agentRuntime({ id: 'claude', label: 'Claude Code', ownership: 'managed' });
-
-const enabledDebug: AgentCatalog['debug'] = {
-  discoverySource: 'auto',
-  nextSetupResult: 'none',
-  nextTurnResult: 'none',
-};
-
 describe('AgentRuntimesPanel', () => {
-  it('expands the token detail disclosure onto the panel it controls', async () => {
-    const port = agentRuntimePort({
-      listAgents: vi.fn(async () => catalog([managedClaude, agentRuntime()])),
-    });
-    renderPanel(port);
-    const user = userEvent.setup();
-
-    const summary = await screen.findByText('Token usage');
-    const disclosure = summary.closest('details') as HTMLDetailsElement;
-    expect(disclosure.open).toBe(false);
-
-    await user.click(summary);
-
-    expect(disclosure.open).toBe(true);
-    expect(disclosure.contains(screen.getByText('0 input · 0 output · 0 cached'))).toBe(true);
-    expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
-  });
-
   it('starts the browser sign-in from a runtime that needs an account', async () => {
     // The row's Sign in and the account row's Sign in are one command over one
     // port, so the runtime can never send the reader somewhere else to do it.
@@ -85,10 +55,10 @@ describe('AgentRuntimesPanel', () => {
           agentRuntime({
             id: 'stashbase',
             installed: true,
-            label: 'OpenQuill',
+            label: 'Default',
             preparation: {
               failure: {
-                note: 'An account is required to use OpenQuill.',
+                note: 'An account is required to use the Default Agent.',
                 refusal: 'account-required',
                 stage: 'install',
               },
@@ -102,12 +72,10 @@ describe('AgentRuntimesPanel', () => {
     const rendered = renderPanel(port, account);
     const user = userEvent.setup();
 
-    // Two Sign in buttons once the catalog has answered: the account row's
-    // and the runtime row's. The runtime's is the one under test.
-    await screen.findByText('An account is required to use OpenQuill.');
+    await screen.findByText('An account is required to use the Default Agent.');
     const buttons = screen.getAllByRole('button', { name: 'Sign in' });
-    expect(buttons).toHaveLength(2);
-    await user.click(buttons[1] as HTMLElement);
+    expect(buttons).toHaveLength(1);
+    await user.click(buttons[0] as HTMLElement);
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledOnce());
     expect(rendered.onOpenExternal).toHaveBeenCalledWith('https://accounts.example/sign-in');
     expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
@@ -149,23 +117,6 @@ describe('AgentRuntimesPanel', () => {
     await waitFor(() => expect(screen.getByText(/Ready to chat/)).not.toBeNull());
   });
 
-  it('offers Uninstall only for a managed runtime and confirms before removing it', async () => {
-    const port = agentRuntimePort({
-      listAgents: vi.fn(async () => catalog([managedClaude])),
-      resetManagedAgent: vi.fn(async () => catalog([uninstalled(managedClaude)])),
-    });
-    renderPanel(port);
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: 'Uninstall' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Uninstall Claude Code?' });
-    await user.click(within(dialog).getByRole('button', { name: 'Uninstall' }));
-
-    expect(port.resetManagedAgent).toHaveBeenCalledWith('claude', expect.anything());
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-  });
-
   it('shows a quiet retry row when the allowance fails to load, never a stale number', async () => {
     const port = agentRuntimePort({
       listAgents: vi.fn(async () => catalog([agentRuntime()])),
@@ -173,7 +124,7 @@ describe('AgentRuntimesPanel', () => {
         throw new Error('unavailable');
       }),
     });
-    renderPanel(port);
+    renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
 
     expect(await screen.findByText('Could not load your credit balance.')).not.toBeNull();
     expect(screen.queryByText(/remaining/)).toBeNull();
@@ -201,33 +152,5 @@ describe('AgentRuntimesPanel', () => {
 
     expect(await screen.findByText(failureMessage('unavailable'))).not.toBeNull();
     expect(await screen.findByRole('button', { name: 'Install' })).not.toBeNull();
-  });
-
-  it('keeps a failed uninstall visible inside the confirm dialog', async () => {
-    const port = agentRuntimePort({
-      listAgents: vi.fn(async () => catalog([managedClaude])),
-      resetManagedAgent: vi.fn(async () => {
-        throw new Error('Could not remove the managed install.');
-      }),
-    });
-    renderPanel(port);
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: 'Uninstall' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Uninstall Claude Code?' });
-    await user.click(within(dialog).getByRole('button', { name: 'Uninstall' }));
-
-    expect(await within(dialog).findByText(failureMessage('unavailable'))).not.toBeNull();
-    expect(screen.queryByRole('dialog')).not.toBeNull();
-  });
-
-  it('reveals the debug block once the catalog carries debug controls', async () => {
-    const port = agentRuntimePort({
-      listAgents: vi.fn(async () => catalog([codex], enabledDebug)),
-    });
-    renderPanel(port);
-
-    expect(await screen.findByText('Agent setup testing')).not.toBeNull();
-    expect(screen.getByText('Development only')).not.toBeNull();
   });
 });

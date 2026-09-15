@@ -46,14 +46,14 @@ describe('AgentSessionRuntime turns', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
 
     runtime.setDraft('  Inspect the project  ');
     await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
     expect(runtime.store.getState()).toMatchObject({
       connection: { attempt: 0, kind: 'connecting' },
-      draft: 'Inspect the project',
+      draft: '  Inspect the project  ',
     });
     expect(test.sent).toEqual([]);
 
@@ -67,7 +67,14 @@ describe('AgentSessionRuntime turns', () => {
     });
     test.listeners[0]?.onEvent({ delta: '/project', id: 'tool-1', kind: 'tool-output' });
 
-    expect(test.sent).toEqual([{ kind: 'prompt', skill: null, text: 'Inspect the project' }]);
+    expect(test.sent).toEqual([
+      {
+        kind: 'prompt',
+        skill: null,
+        text: 'Inspect the project',
+        titleHint: 'Inspect the project',
+      },
+    ]);
     expect(runtime.store.getState()).toMatchObject({
       connection: { kind: 'live', turn: { promptBlockId: expect.any(String) } },
       draft: '',
@@ -93,7 +100,7 @@ describe('AgentSessionRuntime turns', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     runtime.setDraft('Inspect the project');
     await expect(runtime.sendPrompt()).resolves.toEqual({ ok: true });
@@ -200,7 +207,7 @@ describe('AgentSessionRuntime turns', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({ kind: 'ready' });
     test.listeners[0]?.onEvent({
@@ -234,7 +241,7 @@ describe('AgentSessionRuntime turns', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     runtime.setAccessMode('default');
     test.listeners[0]?.onEvent({ kind: 'ready' });

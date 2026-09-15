@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect, type ReactNode } from 'react';
 
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
 import { sourceName } from '@/features/documents/domain/document';
@@ -20,17 +20,46 @@ export function DocumentSource({ active, runtime, viewers, ...services }: Docume
   const format = documentViewerFormat(runtime.scope.source.path);
   const entry = documentViewerEntry(format, viewers);
   const Viewer = entry.component;
+  const status: typeof entry.status = (value) => (
+    <OutlineStatus
+      failed={!!value.error}
+      active={active}
+      runtime={runtime}
+      navigation={services.navigation}
+    >
+      {entry.status(value)}
+    </OutlineStatus>
+  );
 
   return (
-    <Suspense fallback={entry.status({ name })}>
+    <Suspense fallback={status({ name })}>
       <Viewer
         {...services}
         active={active}
         format={format}
         name={name}
         runtime={runtime}
-        status={entry.status}
+        status={status}
       />
     </Suspense>
   );
+}
+
+function OutlineStatus({
+  failed,
+  active,
+  runtime,
+  navigation,
+  children,
+}: {
+  failed: boolean;
+  active: boolean;
+  runtime: DocumentRuntime;
+  navigation: DocumentViewerServices['navigation'];
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    if (active) navigation.setOutlineFailed(runtime.scope.id, failed);
+  }, [active, failed, navigation, runtime]);
+  return children;
 }

@@ -55,7 +55,6 @@ function ShopPreview({
       copying={false}
       entries={ENTRIES}
       entry={entry}
-      issue={null}
       onBack={() => setEntry(null)}
       onClose={() => undefined}
       onCopy={() => undefined}
@@ -78,7 +77,7 @@ type Story = StoryObj<typeof meta>;
 export const Shelf: Story = {};
 
 /** One entry's page, read top to bottom: the screenshot leads, then what it
- *  is, the introduction, then the one action, with the Agent Instructions
+ *  is, the introduction, then the one action, with the prompt
  *  folded beneath the introduction. */
 export const EntryPage: Story = { args: { opened: true } };
 

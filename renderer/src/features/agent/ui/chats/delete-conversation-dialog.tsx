@@ -29,7 +29,8 @@ export function DeleteConversationDialog({
       confirmLabel="Delete"
       description={
         <>
-          “{entry?.title}” will be removed from {workspaceName}. This cannot be undone.
+          “{entry?.title}” will be removed from {workspaceName}. Project files will stay where they
+          are. This cannot be undone.
         </>
       }
       destructive

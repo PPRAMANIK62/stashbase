@@ -1,3 +1,5 @@
+import './isolated-home.ts';
+import { writeAppConfigStrict } from '../app-config.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -6,8 +8,11 @@ import test from 'node:test';
 import express from 'express';
 import type { WebSocket } from 'ws';
 import { registerAgentAdapter, type AgentHistoryActions } from '../agent-contract.ts';
+import * as claudeHistory from '../claude-history.ts';
 import * as sharedRoutes from '../routes/agent-sessions.ts';
-import * as legacyRoutes from '../routes/sessions.ts';
+
+const member = fs.mkdtempSync(path.join(os.homedir(), 'history-project-'));
+writeAppConfigStrict({ recentFolders: [{ path: member, openedAt: new Date().toISOString() }] });
 
 async function invoke(app: express.Express, path: string, params: Record<string, string>): Promise<{ status: number; body: unknown }> {
   const layer = (app as any)._router.stack.find((entry: any) => entry.route?.path === path);
@@ -18,11 +23,11 @@ async function invoke(app: express.Express, path: string, params: Record<string,
       status(code: number) { status = code; return this; },
       json(body: unknown) { resolve({ status, body }); return this; },
     };
-    Promise.resolve(layer.route.stack[0].handle({ params, query: {}, body: {} }, res, reject)).catch(reject);
+    Promise.resolve(layer.route.stack[0].handle({ params, query: { folder: member }, body: {} }, res, reject)).catch(reject);
   });
 }
 
-test('shared replay adds metadata without changing shared or legacy messages responses', async () => {
+test('shared replay adds metadata without changing messages responses', async () => {
   const messages = [{ kind: 'assistant', id: 'h0', text: 'persisted' }];
   const history: AgentHistoryActions = {
     list: async () => [],
@@ -48,13 +53,10 @@ test('shared replay adds metadata without changing shared or legacy messages res
 
   const app = express();
   sharedRoutes.mount(app);
-  legacyRoutes.mount(app);
 
   assert.deepEqual(await invoke(app, '/api/agents/:agent/sessions/:id/replay', { agent: 'claude', id: 's1' }),
     { status: 200, body: { protocol: 2, messages, effort: 'max' } });
   assert.deepEqual(await invoke(app, '/api/agents/:agent/sessions/:id/messages', { agent: 'claude', id: 's1' }),
-    { status: 200, body: messages });
-  assert.deepEqual(await invoke(app, '/api/agent/sessions/:id/messages', { id: 's1' }),
     { status: 200, body: messages });
 });
 
@@ -123,7 +125,7 @@ test('production Claude replay joins SDK-selected active UUIDs to raw JSONL effo
     message: { role: 'assistant', content: [{ type: 'text', text: 'active answer' }] },
     parent_tool_use_id: null,
   }];
-  const history = legacyRoutes.claudeHistoryActions({
+  const history = claudeHistory.claudeHistoryActions({
     belongsToFolder: async () => true,
     getMessages: async () => sanitized,
   });
@@ -134,27 +136,16 @@ test('production Claude replay joins SDK-selected active UUIDs to raw JSONL effo
   });
 });
 
-test('scope=all merges the project bucket with every member folder, tagging member rows', async () => {
-  const { listAllSessions } = sharedRoutes;
-  const byCwd: Record<string, { id: string; lastModified: number }[]> = {
-    '/home/lib': [{ id: 'lib-1', lastModified: 300 }],
-    '/work/alpha': [{ id: 'a-1', lastModified: 500 }, { id: 'a-2', lastModified: 100 }],
-    '/work/beta': [{ id: 'b-1', lastModified: 400 }],
-  };
-  const history = {
-    list: async (cwd: string | null) => {
-      if (cwd === '/work/broken') throw new Error('unreadable bucket');
-      return byCwd[cwd ?? ''] ?? [];
-    },
-  };
-  const rows = await listAllSessions(history, '/home/lib', ['/work/alpha', '/work/beta', '/work/broken']) as
-    { id: string; folder?: string }[];
-  // Newest first across buckets; member rows tagged, project rows untagged;
-  // the broken bucket drops out without blanking the rest.
-  assert.deepEqual(rows.map((row) => [row.id, row.folder ?? null]), [
-    ['a-1', '/work/alpha'],
-    ['b-1', '/work/beta'],
-    ['lib-1', null],
-    ['a-2', '/work/alpha'],
-  ]);
+test('history rejects aggregate scope before calling a runtime', async () => {
+  const app = express();
+  sharedRoutes.mount(app);
+  const layer = (app as any)._router.stack.find((entry: any) => entry.route?.path === '/api/agents/:agent/sessions');
+  let status = 200;
+  let body: unknown;
+  await layer.route.stack[0].handle(
+    { params: { agent: 'claude' }, query: { scope: 'all' } },
+    { status(code: number) { status = code; return this; }, json(value: unknown) { body = value; } },
+  );
+  assert.equal(status, 400);
+  assert.match((body as { error: string }).error, /scope/);
 });

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import type { AgentScope, AgentScopeEnvironment, AgentScopeOutline } from '@/features/agent/public';
+import type { AgentScope, AgentScopeEnvironment } from '@/features/agent/public';
 import { useOpenDocumentSources, type DocumentTabsRuntime } from '@/features/documents/public';
 import { sourceReadiness } from '@/features/preparation/public';
 import type { FolderIndexStatus } from '@/features/preparation/public';
@@ -10,11 +10,8 @@ export interface AgentEnvironment {
   /** What the Agent may bind context against, or null while the folder's
    *  listing is unknown. */
   environment: AgentScopeEnvironment | null;
-  /** The folder's top level, which seeds an empty chat's starter prompts. */
-  outline: AgentScopeOutline | null;
-  /** What a new chat is scoped to: the selected folder, or the project when
-   *  none is selected. */
-  scope: AgentScope;
+  /** What a new chat is scoped to: the selected project, or null on Welcome. */
+  scope: AgentScope | null;
 }
 
 /**
@@ -42,19 +39,10 @@ export function useAgentEnvironment(
 
   // The selected folder, not the mounted workspace: a chat is scoped the
   // moment the reader picks a folder, before its workspace has settled.
-  const scope = useMemo<AgentScope>(
-    () => (selectedFolderPath ? { kind: 'folder', path: selectedFolderPath } : { kind: 'unbound' }),
+  const scope = useMemo<AgentScope | null>(
+    () => (selectedFolderPath ? { kind: 'folder', path: selectedFolderPath } : null),
     [selectedFolderPath],
   );
-
-  const outline = useMemo<AgentScopeOutline | null>(() => {
-    if (!listing) return null;
-    const topLevel = (path: string) => !path.includes('/');
-    return {
-      files: listing.files.map((file) => file.path).filter(topLevel),
-      folders: listing.folders.map((folder) => folder.path).filter(topLevel),
-    };
-  }, [listing]);
 
   const environment = useMemo<AgentScopeEnvironment | null>(() => {
     if (!listing || !folderPath) return null;
@@ -81,5 +69,5 @@ export function useAgentEnvironment(
     };
   }, [folderPath, listing, openSources, status]);
 
-  return useMemo(() => ({ environment, outline, scope }), [environment, outline, scope]);
+  return useMemo(() => ({ environment, scope }), [environment, scope]);
 }

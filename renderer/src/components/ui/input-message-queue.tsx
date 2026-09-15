@@ -1,18 +1,8 @@
-/** Messages staged while the assistant is responding. A submit made during a
- *  response does not send: it snapshots the draft into a queued message that
- *  waits, reorders, edits or dies, and auto-dispatches on the streaming →
- *  idle edge.
- *
- *  `useComposerQueue` owns the list and its transitions — enqueue, edit,
- *  remove, move, reorder, auto-dispatch, and the polite announcement that
- *  goes with it. `QueueRegion` renders the reorderable rows above the editor,
- *  and a consumer that renders the queue itself simply doesn't mount it. The
- *  hook never touches the draft: putting a queued message back in the
- *  composer is `onRestore`, which the composer shell owns. */
+/** Controlled queue presentation. The conversation owns delivery and advancement. */
 'use client';
 
 import { AnimatePresence, Reorder } from 'framer-motion';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
 import { Collapse, useClippedHeight } from '@/components/internal/collapse';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -37,18 +27,16 @@ export interface QueuedMessage {
 
 /** The slice of `InputMessage`'s public surface this concern owns. */
 export interface InputMessageQueueProps {
-  /** Assistant response state. When `"streaming"`, the send button becomes a
-   *  Stop control (empty draft) or a Queue action (non-empty draft); on the
-   *  `streaming → idle` edge the next queued message auto-dispatches via `onSend`.
-   *  Leave undefined to keep the legacy send-immediately behavior. */
+  /** Execution state controls Send / Queue / Stop presentation only. */
   status?: 'idle' | 'streaming';
+  onEditQueued?: (id: string) => boolean;
   /** Controlled queue of pending messages. Requires `status` to be controlled. */
   queue?: QueuedMessage[];
   /** Called when the queue changes (enqueue, edit, delete, reorder, dispatch). */
   onQueueChange?: (queue: QueuedMessage[]) => void;
   /** Render the built-in reorderable queue rows above the textarea. Set to
    *  `false` to suppress them and render the queue yourself (e.g. as full-width
-   *  rows above the composer) — enqueue + auto-dispatch still run. */
+   *  rows above the composer). */
   showQueue?: boolean;
 }
 
@@ -60,12 +48,9 @@ interface ComposerQueueOptions {
   /** Called with the next queue on every transition. Its presence, with a
    *  controlled `status`, is the opt-in. */
   onQueueChange: ((queue: QueuedMessage[]) => void) | undefined;
-  /** Fires the head of the queue on the streaming → idle edge, after it has
-   *  already been dropped from the list. */
-  onDispatch: (item: QueuedMessage) => void;
   /** Puts a queued message back into the composer for editing. Called before
    *  the item leaves the queue, so the draft is written first. */
-  onRestore: (item: QueuedMessage) => void;
+  onRestore: (item: QueuedMessage) => boolean;
 }
 
 /** Everything the composer needs to know about its queue. */
@@ -85,15 +70,12 @@ interface ComposerQueue {
   move: (item: QueuedMessage, direction: -1 | 1) => void;
   /** Adopts a dragged order wholesale. */
   reorder: (next: QueuedMessage[]) => void;
-  /** Politely announced text — auto-dispatch, and what is left behind. */
-  liveMessage: string;
 }
 
 export function useComposerQueue({
   status,
   queue,
   onQueueChange,
-  onDispatch,
   onRestore,
 }: ComposerQueueOptions): ComposerQueue {
   const items = useMemo(() => queue ?? [], [queue]);
@@ -104,7 +86,6 @@ export function useComposerQueue({
   itemsRef.current = items;
   const supported = status !== undefined && onQueueChange !== undefined;
   const streaming = status === 'streaming';
-  const [liveMessage, setLiveMessage] = useState('');
 
   const enqueue = useCallback(
     (text: string, files: File[]) => {
@@ -122,9 +103,8 @@ export function useComposerQueue({
   const edit = useCallback(
     (item: QueuedMessage) => {
       if (!supported) return;
-      // Silent replace: pull the item out of the queue into the composer,
-      // overwriting any current draft. Re-sending re-queues it to the end.
-      onRestore(item);
+      // Only remove a row after the owner accepts restoring its draft.
+      if (!onRestore(item)) return;
       onQueueChange?.(itemsRef.current.filter((queued) => queued.id !== item.id));
     },
     [supported, onRestore, onQueueChange],
@@ -148,24 +128,7 @@ export function useComposerQueue({
 
   const reorder = useCallback((next: QueuedMessage[]) => onQueueChange?.(next), [onQueueChange]);
 
-  // Auto-dispatch: on the streaming → idle edge (whether the response
-  // finished on its own or the user pressed Stop), fire the head of the
-  // queue and drop it. The consumer is expected to set status back to
-  // "streaming" inside onSend, which re-arms this for the next item.
-  const previousStatus = useRef(status);
-  useEffect(() => {
-    const previous = previousStatus.current;
-    previousStatus.current = status;
-    if (!supported) return;
-    const [next, ...rest] = items;
-    if (previous === 'streaming' && status === 'idle' && next) {
-      onQueueChange?.(rest);
-      onDispatch(next);
-      setLiveMessage(`Message sent.${rest.length ? ` ${rest.length} still queued.` : ''}`);
-    }
-  }, [status, supported, items, onQueueChange, onDispatch]);
-
-  return { edit, enqueue, items, liveMessage, move, remove, reorder, streaming, supported };
+  return { edit, enqueue, items, move, remove, reorder, streaming, supported };
 }
 
 interface QueuedRowProps {
@@ -273,7 +236,7 @@ interface QueueRegionProps {
   /** The composer's queue state. */
   queue: ComposerQueue;
   /** Whether to render the built-in rows. False when the consumer renders the
-   *  queue itself — enqueue and auto-dispatch still run either way. */
+   *  queue itself — enqueue and queue callbacks still run either way. */
   show: boolean;
 }
 

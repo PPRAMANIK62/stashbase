@@ -9,7 +9,7 @@ import { useAgentInstructions } from './use-agent-instructions';
 
 afterEach(cleanup);
 
-const LIBRARY: AgentScope = { kind: 'unbound' };
+const LIBRARY: AgentScope = { kind: 'folder', path: '/project/Research' };
 const FOLDER: AgentScope = { kind: 'folder', path: '/project/notes' };
 
 function mount(port = agentInstructionsApi(), scope: AgentScope | null = LIBRARY) {

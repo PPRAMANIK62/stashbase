@@ -21,7 +21,6 @@ import type {
   DocumentSourceFailureKind,
   DocxPreviewFailureKind,
   GenericFilePreviewFailureKind,
-  MediaFailureKind,
 } from './ports';
 
 /** A family's whole ladder, mapped to the one sentence each kind reads as. */
@@ -30,6 +29,7 @@ export type FailureMessages<Extra extends string = never> = Readonly<
 >;
 
 export const DOCUMENT_SOURCE_MESSAGES: Readonly<Record<DocumentSourceFailureKind, string>> = {
+  missing: 'The source file is missing. Open work is still available; restore the file and retry.',
   'invalid-response': 'The document could not be loaded. Your source file has not been changed.',
   'scope-lost': 'That folder is no longer available in this window.',
   unauthorized: 'This window can no longer open that document.',
@@ -39,6 +39,7 @@ export const DOCUMENT_SOURCE_MESSAGES: Readonly<Record<DocumentSourceFailureKind
 };
 
 export const DOCUMENT_SAVE_MESSAGES: Readonly<Record<DocumentSaveFailureKind, string>> = {
+  missing: 'The source file is missing. Open work is still available; restore the file and retry.',
   conflict:
     'The file changed on disk, but its newer version could not be loaded. Retry to compare both versions.',
   'invalid-response': 'The document could not be saved. Your changes are still available.',
@@ -49,6 +50,7 @@ export const DOCUMENT_SAVE_MESSAGES: Readonly<Record<DocumentSaveFailureKind, st
 
 /** Overwriting keeps both versions, so its wording differs from a plain save. */
 export const DOCUMENT_OVERWRITE_MESSAGES: Readonly<Record<DocumentSaveFailureKind, string>> = {
+  missing: 'The source file is missing. Open work is still available; restore the file and retry.',
   conflict: 'The document could not be overwritten. Both versions are still available.',
   'invalid-response': 'The document could not be overwritten. Both versions are still available.',
   'scope-lost': 'The document could not be overwritten. Both versions are still available.',
@@ -57,6 +59,7 @@ export const DOCUMENT_OVERWRITE_MESSAGES: Readonly<Record<DocumentSaveFailureKin
 };
 
 export const DOCUMENT_ASSET_MESSAGES: Readonly<Record<DocumentAssetFailureKind, string>> = {
+  missing: 'The source file is missing. Open work is still available; restore the file and retry.',
   'invalid-response': 'The file may have moved, changed, or become unavailable.',
   'scope-lost': 'That folder is no longer available in this window.',
   unauthorized: 'This window can no longer open that file.',
@@ -71,14 +74,8 @@ export const DOCX_PREVIEW_MESSAGES: Readonly<Record<DocxPreviewFailureKind, stri
   unavailable: 'Direct preview unavailable. Showing the prepared version when it is ready.',
 };
 
-export const MEDIA_MESSAGES: Readonly<Record<MediaFailureKind, string>> = {
-  'invalid-response': 'The transcript could not be loaded.',
-  'scope-lost': 'That folder is no longer available in this window.',
-  unauthorized: 'This window can no longer read that recording.',
-  unavailable: 'The transcript could not be loaded.',
-};
-
 export const GENERIC_PREVIEW_MESSAGES: Readonly<Record<GenericFilePreviewFailureKind, string>> = {
+  missing: 'The source file is missing. Open work is still available; restore the file and retry.',
   'invalid-response': 'The file could not be inspected. It has not been changed.',
   'not-generic': 'This document viewer is not available yet.',
   'scope-lost': 'That folder is no longer available in this window.',

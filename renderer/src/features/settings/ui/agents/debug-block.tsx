@@ -1,10 +1,8 @@
 import { useId } from 'react';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import type {
-  AgentDiscoverySource,
   AgentSetupSimulation,
   AgentTurnSimulation,
 } from '@/features/settings/domain/agent-catalog';
@@ -19,12 +17,6 @@ import { FailureNotice } from '@/shared/ui/failure-notice';
  * is on — the renderer has no environment-variable authority of its own to
  * decide this — so an absent block here means the server withheld it.
  */
-
-const DISCOVERY_SOURCES: ReadonlyArray<{ value: AgentDiscoverySource; label: string }> = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'managed-only', label: 'Managed only' },
-  { value: 'system-only', label: 'System only' },
-];
 
 const SETUP_FAILURES: ReadonlyArray<{ value: AgentSetupSimulation; label: string }> = [
   { value: 'none', label: 'Normal' },
@@ -98,16 +90,9 @@ export function DebugBlock({ runtimes }: { runtimes: AgentRuntimesViewModel }) {
       summary="Agent setup testing"
     >
       <p className="text-caption text-muted-foreground">
-        Simulate Agent discovery, setup, and turn results in StashBase. System installations and
-        provider sign-ins are kept.
+        Simulate Agent setup and turn results in StashBase. System installations and provider
+        sign-ins are kept.
       </p>
-      <DebugSelectRow
-        disabled={busy}
-        items={DISCOVERY_SOURCES}
-        label="Discovery source"
-        onChange={(discoverySource) => runtimes.updateDebug({ discoverySource })}
-        value={debug.discoverySource}
-      />
       <DebugSelectRow
         disabled={busy}
         items={SETUP_FAILURES}
@@ -122,24 +107,6 @@ export function DebugBlock({ runtimes }: { runtimes: AgentRuntimesViewModel }) {
         onChange={(nextTurnResult) => runtimes.updateDebug({ nextTurnResult })}
         value={debug.nextTurnResult}
       />
-      <div className="mt-2.5 flex flex-wrap gap-2">
-        <Button
-          disabled={busy}
-          onClick={() => runtimes.resetFirstRun('codex')}
-          size="compact"
-          variant="tertiary"
-        >
-          Reset Codex first run
-        </Button>
-        <Button
-          disabled={busy}
-          onClick={() => runtimes.resetFirstRun('claude')}
-          size="compact"
-          variant="tertiary"
-        >
-          Reset Claude Code first run
-        </Button>
-      </div>
       {runtimes.debugFailure && (
         <FailureNotice className="mt-2.5" failure={runtimes.debugFailure} />
       )}

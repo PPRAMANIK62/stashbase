@@ -2,12 +2,7 @@ import type { AppearancePort } from '@/features/settings/application/ports';
 import { APPEARANCE_ROWS } from '@/features/settings/domain/appearance';
 import { useAppearance } from '@/features/settings/hooks/use-appearance';
 import { PresetChoice } from '@/features/settings/ui/appearance/preset-choice';
-import {
-  SettingsGroup,
-  SettingsList,
-  SettingsPane,
-  SettingsRow,
-} from '@/features/settings/ui/rows';
+import { SettingsGroup, SettingsList, SettingsRow } from '@/features/settings/ui/rows';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 
 export interface AppearancePanelProps {
@@ -19,30 +14,28 @@ export function AppearancePanel({ appearanceApi }: AppearancePanelProps) {
   const preferences = appearance.preferences;
 
   return (
-    <SettingsPane lede="Customize the appearance of all StashBase windows." title="Appearance">
-      <SettingsGroup
-        hint={appearance.failure ? <FailureNotice failure={appearance.failure} /> : undefined}
-        title="Display"
-      >
-        <SettingsList>
-          {APPEARANCE_ROWS.map((row) => (
-            <SettingsRow
-              detail={row.detail}
-              key={row.field}
-              title={row.title}
-              trail={
-                <PresetChoice
-                  choices={row.choices}
-                  disabled={preferences === null}
-                  label={row.title}
-                  onChoose={(value) => appearance.choose(row.field, value)}
-                  value={preferences ? preferences[row.field] : null}
-                />
-              }
-            />
-          ))}
-        </SettingsList>
-      </SettingsGroup>
-    </SettingsPane>
+    <SettingsGroup
+      hint={appearance.failure ? <FailureNotice failure={appearance.failure} /> : undefined}
+      title="Appearance"
+    >
+      <SettingsList>
+        {APPEARANCE_ROWS.map((row) => (
+          <SettingsRow
+            detail={row.detail}
+            key={row.field}
+            title={row.title}
+            trail={
+              <PresetChoice
+                choices={row.choices}
+                disabled={preferences === null}
+                label={row.title}
+                onChoose={(value) => appearance.choose(row.field, value)}
+                value={preferences ? preferences[row.field] : null}
+              />
+            }
+          />
+        ))}
+      </SettingsList>
+    </SettingsGroup>
   );
 }

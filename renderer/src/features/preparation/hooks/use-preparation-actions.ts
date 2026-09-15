@@ -2,10 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
 import { preparationFailure } from '@/features/preparation/application/failure-messages';
-import type {
-  PreparationControlPort,
-  PreparationReprocessOptions,
-} from '@/features/preparation/application/ports';
+import type { PreparationControlPort } from '@/features/preparation/application/ports';
 import { refreshFolderStatus } from '@/features/preparation/application/queries';
 import type { PreparationAction } from '@/features/preparation/domain/readiness';
 import type { SourceReference } from '@/shared/domain/source-reference';
@@ -27,13 +24,13 @@ export function usePreparationActions(api: PreparationControlPort, source: Sourc
   );
 
   const run = useCallback(
-    async (action: PreparationAction, options: PreparationReprocessOptions = {}) => {
+    async (action: PreparationAction) => {
       const signal = signalFor('command');
       setPending(action);
       setError(null);
       try {
         if (action === 'cancel') await api.cancel(source, signal);
-        else await api.reprocess(source, options, signal);
+        else await api.reprocess(source, signal);
         if (!signal.aborted) await invalidate();
       } catch (caught) {
         if (signal.aborted) return;
@@ -61,6 +58,6 @@ export function usePreparationActions(api: PreparationControlPort, source: Sourc
     error,
     pending,
     prepare,
-    reprocess: (options?: PreparationReprocessOptions) => run('reprocess', options),
+    reprocess: () => run('reprocess'),
   };
 }

@@ -51,8 +51,10 @@ describe('document identity', () => {
         viewMode: null,
       },
       lifecycle: 'disposed',
+      mutationPending: false,
       markdownMode: 'writer',
       pdfPage: 1,
+      readingRequest: 0,
       scope,
     });
     expect(disposeDocumentState(disposed)).toBe(disposed);

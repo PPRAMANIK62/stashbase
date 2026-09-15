@@ -27,6 +27,9 @@ const upload = multer({
 });
 
 const ATTACHMENT_MAX_AGE_MS = 24 * 60 * 60_000;
+// Drafts, queues and retries can retain these files for the entire server
+// lifetime. Age is only a cleanup policy for batches from previous processes.
+const liveBatches = new Set<string>();
 
 /** Root for transient attachment files, outside any folder. */
 export function attachRoot(): string {
@@ -102,6 +105,7 @@ export function cleanupStaleAttachments(root = attachRoot(), maxAgeMs = ATTACHME
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const abs = path.join(root, entry.name);
+    if (liveBatches.has(abs)) continue;
     try {
       const st = fs.statSync(abs);
       if (now - st.mtimeMs > maxAgeMs) fs.rmSync(abs, { recursive: true, force: true });
@@ -141,6 +145,7 @@ export function mount(app: express.Express): void {
       const dir = path.join(root, randomUUID());
       try {
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+        liveBatches.add(dir);
       } catch (err: unknown) {
         res.status(500).json({ error: errorMessage(err) });
         return;
@@ -159,6 +164,7 @@ export function mount(app: express.Express): void {
         }
       }
       if (out.every((entry) => entry.error)) {
+        liveBatches.delete(dir);
         try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
       }
       res.json({ files: out });

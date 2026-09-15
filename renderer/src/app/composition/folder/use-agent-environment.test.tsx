@@ -45,29 +45,16 @@ describe('useAgentEnvironment', () => {
 
     expect(result.current).toEqual({
       environment: null,
-      outline: null,
       scope: { kind: 'folder', path: folderPath },
     });
   });
 
-  it("names the folder's top level for the starter prompts", () => {
-    const { result } = mount();
-
-    // The outline is the folder as the reader sees it in the tree, so a
-    // derived folder is still named; only bindable context filters it out.
-    expect(result.current.outline).toEqual({
-      files: ['notes.md'],
-      folders: ['papers', '.stashbase'],
-    });
-  });
-
-  it('keeps an outline but no environment while no folder is open', () => {
+  it('has no environment while no folder is open', () => {
     const { result } = renderHook(() => useAgentEnvironment(folderListing, null, null, null, null));
 
-    expect(result.current.outline).not.toBeNull();
     expect(result.current.environment).toBeNull();
-    // Nothing is selected, so a new chat is unbound.
-    expect(result.current.scope).toEqual({ kind: 'unbound' });
+    // Welcome has no conversation scope.
+    expect(result.current.scope).toBeNull();
   });
 
   it('hides derived folders from what the Agent can see', () => {

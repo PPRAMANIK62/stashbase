@@ -12,33 +12,20 @@ const MediaDocument = lazy(async () => {
 export default function AudioViewer({
   active,
   assetApi,
-  mediaApi,
   name,
-  navigation,
-  onOpenPrepared,
   runtime,
   status,
-}: DocumentViewerProps<'assetApi' | 'mediaApi' | 'navigation' | 'onOpenPrepared'>) {
+}: DocumentViewerProps<'assetApi'>) {
   return (
-    <AssetSurface
-      active={active}
-      api={assetApi}
-      name={name}
-      onOpenPrepared={onOpenPrepared}
-      prepareOnOpen="audio"
-      runtime={runtime}
-      status={status}
-    >
+    <AssetSurface active={active} api={assetApi} name={name} runtime={runtime} status={status}>
       {({ asset, retry }) =>
         asset.kind === 'media' ? (
           <MediaDocument
             active={active}
-            api={mediaApi}
             key={asset.version}
             name={name}
-            navigation={navigation}
             resource={asset}
-            runtime={runtime}
+            path={runtime.scope.source.path}
           />
         ) : (
           status({

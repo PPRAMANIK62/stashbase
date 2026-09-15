@@ -1,5 +1,6 @@
+import { onlineManager } from '@tanstack/react-query';
 /** What the shop shows before, during, and after the published index answers. */
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { GalleryEntry } from '@/features/gallery/domain/entry';
@@ -56,5 +57,22 @@ describe('useGallery', () => {
     await waitFor(() => expect(loadIndex).toHaveBeenCalled());
     expect(result.current.bundled).toBe(true);
     expect(result.current.entries).toEqual(GALLERY_SNAPSHOT);
+  });
+
+  it('recovers a failed publication on reconnect without restarting the window', async () => {
+    const loadIndex = vi.fn().mockResolvedValueOnce(null).mockResolvedValue([published()]);
+    const { result, unmount } = mount(loadIndex);
+    try {
+      await waitFor(() => expect(loadIndex).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      act(() => onlineManager.setOnline(false));
+      act(() => onlineManager.setOnline(true));
+      await waitFor(() => expect(result.current.bundled).toBe(false));
+    } finally {
+      unmount();
+      onlineManager.setOnline(true);
+    }
   });
 });

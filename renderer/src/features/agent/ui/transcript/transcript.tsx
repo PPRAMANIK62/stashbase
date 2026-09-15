@@ -26,12 +26,14 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 import { writeToClipboard } from '@/shared/ui/clipboard';
 import { basePathName } from '@/shared/utils/file-path';
 
-import { AgentActivityGroup, AgentPermissionCard, isAgentToolBlock } from './activity';
+import { AgentActivityGroup, AgentPermissionCard, type AgentActivityStep } from './activity';
 import { AgentMarkdown } from './markdown';
 
 const TRANSCRIPT_PAGE_SIZE = 200;
 
-type TranscriptGroup = AgentTranscriptBlock | Extract<AgentTranscriptBlock, { kind: 'tool' }>[];
+type TranscriptGroup =
+  | AgentTranscriptBlock
+  | { kind: 'activity'; id: string; steps: AgentActivityStep[] };
 
 /** Copies the untouched source text; the glyph confirms for a moment. */
 function CopyAction({ label, text }: { label: string; text: string }) {
@@ -97,22 +99,17 @@ function DayDivider({ at, now }: { at: number; now: number }) {
 
 function transcriptGroups(blocks: AgentTranscriptBlock[]): TranscriptGroup[] {
   const groups: TranscriptGroup[] = [];
-  let tools: Extract<AgentTranscriptBlock, { kind: 'tool' }>[] = [];
-  const flush = () => {
-    if (tools.length > 0) groups.push(tools);
-    tools = [];
-  };
+  let activity: Extract<TranscriptGroup, { kind: 'activity' }> | null = null;
   for (const block of blocks) {
-    // Only an ask still waiting stands alone; a decided one is ordinary
-    // settled work and folds into the group, where its row stays inspectable.
-    if (isAgentToolBlock(block) && block.status !== 'awaiting') {
-      tools.push(block);
-      continue;
-    }
-    flush();
-    groups.push(block);
+    if (block.kind === 'user') activity = null;
+    if (block.kind === 'thinking' || (block.kind === 'tool' && block.status !== 'awaiting')) {
+      if (!activity) {
+        activity = { kind: 'activity', id: `activity-${block.id}`, steps: [] };
+        groups.push(activity);
+      }
+      activity.steps.push(block);
+    } else groups.push(block);
   }
-  flush();
   return groups;
 }
 
@@ -136,6 +133,8 @@ const TranscriptBlock = memo(function TranscriptBlock({
   now,
   onEditPrompt,
   onOpenExternal,
+  onOpenSource,
+  sourceFor,
   onPermission,
   onRetry,
   promptAt,
@@ -150,6 +149,8 @@ const TranscriptBlock = memo(function TranscriptBlock({
   now: number;
   onEditPrompt?: ((blockId: string) => void) | undefined;
   onOpenExternal(href: string): void;
+  onOpenSource?: ((source: SourceReference) => void) | undefined;
+  sourceFor?: ((path: string) => SourceReference | null) | undefined;
   onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
   onRetry(errorBlockId: string): boolean;
   /** When the prompt a closing reply answers was sent, for the duration. */
@@ -181,7 +182,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
               {editable && onEditPrompt && (
                 <ChatMessageAction
                   icon={Pencil}
-                  label="Edit message"
+                  label="Reuse message"
                   onClick={() => onEditPrompt(block.id)}
                 />
               )}
@@ -229,7 +230,12 @@ const TranscriptBlock = memo(function TranscriptBlock({
         }
       >
         <span className="sr-only">Agent: </span>
-        <AgentMarkdown markdown={block.text} onOpenExternal={onOpenExternal} />
+        <AgentMarkdown
+          markdown={block.text}
+          onOpenExternal={onOpenExternal}
+          onOpenSource={onOpenSource}
+          sourceFor={sourceFor}
+        />
       </ChatMessage>
     );
   }
@@ -246,16 +252,20 @@ const TranscriptBlock = memo(function TranscriptBlock({
       <section className={cn('border border-destructive/30 bg-destructive-light p-3', shape.panel)}>
         <h3 className="text-caption font-medium text-foreground">The Agent could not finish</h3>
         <p className="mt-1 text-caption text-muted-foreground">{block.text}</p>
-        {block.retryablePrompt !== undefined && (
-          <Button
-            className="mt-2"
-            onClick={() => onRetry(block.id)}
-            size="compact"
-            variant="tertiary"
-          >
-            Try again
-          </Button>
-        )}
+        <p className="mt-1 text-caption text-muted-foreground">
+          Partial output and completed file changes are kept. Retrying may repeat work.
+        </p>
+        {block.retryablePrompt !== undefined &&
+          (!block.failure || block.failure === 'network' || block.failure === 'rate-limit') && (
+            <Button
+              className="mt-2"
+              onClick={() => onRetry(block.id)}
+              size="compact"
+              variant="tertiary"
+            >
+              Try again
+            </Button>
+          )}
       </section>
     );
   }
@@ -329,13 +339,13 @@ export const AgentTranscript = memo(function AgentTranscript({
         </Button>
       )}
       {groups.map((group) =>
-        Array.isArray(group) ? (
+        group.kind === 'activity' ? (
           <AgentActivityGroup
             focusToolId={decidedToolId}
-            key={`activity-${group[0]?.id}`}
+            key={group.id}
             onOpenSource={onOpenSource}
             sourceFor={sourceFor}
-            tools={group}
+            steps={group.steps}
           />
         ) : (
           <Fragment key={group.id}>
@@ -349,6 +359,8 @@ export const AgentTranscript = memo(function AgentTranscript({
               now={now}
               onEditPrompt={onEditPrompt}
               onOpenExternal={onOpenExternal}
+              onOpenSource={onOpenSource}
+              sourceFor={sourceFor}
               onPermission={decide}
               onRetry={onRetry}
               promptAt={closing.get(group.id)}

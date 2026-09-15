@@ -60,10 +60,29 @@ export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
   let ready: string | undefined;
   let status: LocalComponentStatusWire = { status: 'not-installed', error: null };
   let automaticAttempted = false;
+  let componentDemand = false;
+  let shutdownDemand = false;
+  let demandWrites = Promise.resolve();
   let closed = false;
   let initialized: Promise<void> | undefined;
   let active: { controller: AbortController; completion: Promise<void>; background: boolean } | undefined;
-  const waiters = new Set<{ resolve: (bin: string) => void; reject: (error: unknown) => void }>();
+  type Waiter = { resolve: (bin: string) => void; reject: (error: unknown) => void; cancelled?: boolean };
+  const waiters = new Set<Waiter>();
+
+  // Serialize demand publication with cancellation. A new waiter arriving during
+  // removal must restore its own next-launch demand after the old removal finishes.
+  function persistDemand(): Promise<void> {
+    const next = demandWrites.catch(() => {}).then(async () => {
+      if (!ready && ([...waiters].some((waiter) => !waiter.cancelled) || componentDemand || shutdownDemand)) {
+        await fs.mkdir(options.root, { recursive: true, mode: 0o700 });
+        await fs.writeFile(requested, '{}', { mode: 0o600 });
+      } else {
+        await fs.rm(requested, { force: true });
+      }
+    });
+    demandWrites = next;
+    return next;
+  }
 
   async function readManifest() {
     const manifest = extractorManifestSchema.parse(await options.manifest());
@@ -92,7 +111,12 @@ export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
   }
 
   function startAttempt(background: boolean): void {
-    if (closed || ready || active) return;
+    if (closed || ready) return;
+    if (background) {
+      componentDemand = true;
+      if (active) active.background = true;
+    }
+    if (active) return;
     automaticAttempted = true;
     status = { status: 'downloading', error: null };
     const flight = { controller: new AbortController(), completion: Promise.resolve(), background };
@@ -104,8 +128,7 @@ export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
       try {
         // A durable demand latch lets the next app launch try once even if
         // the project is not reopened. Merely reading Settings never sets it.
-        await fs.mkdir(options.root, { recursive: true, mode: 0o700 });
-        await fs.writeFile(requested, '{}', { mode: 0o600 });
+        await persistDemand();
         failure = 'manifest';
         const manifest = await readManifest();
         ready = await installed(manifest);
@@ -185,12 +208,17 @@ export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
       if (status.status === 'installed') status = { status: 'failed', error: 'installation' };
       if (active?.controller.signal.aborted) await active.completion;
       signal?.throwIfAborted();
-      let waiter!: { resolve: (bin: string) => void; reject: (error: unknown) => void };
+      let waiter!: Waiter;
       const completion = new Promise<string>((resolve, reject) => { waiter = { resolve, reject }; });
-      const abort = () => waiter.reject(signal?.reason ?? new Error('Extractor preparation cancelled'));
+      const abort = () => {
+        if (signal?.reason === 'shutdown') shutdownDemand = true;
+        else waiter.cancelled = true;
+        waiter.reject(signal?.reason ?? new Error('Extractor preparation cancelled'));
+      };
       waiters.add(waiter);
       signal?.addEventListener('abort', abort, { once: true });
       if (!automaticAttempted) startAttempt(false);
+      else void persistDemand().catch(waiter.reject);
       try { return await completion; }
       finally {
         signal?.removeEventListener('abort', abort);
@@ -199,13 +227,18 @@ export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
           active.controller.abort();
           await active.completion;
         }
+        if (signal?.aborted && signal.reason !== 'shutdown' && !componentDemand) {
+          await persistDemand();
+        }
       }
     },
     async close(): Promise<void> {
+      shutdownDemand ||= [...waiters].some((waiter) => !waiter.cancelled);
       closed = true;
       for (const waiter of waiters) waiter.reject(new Error('Extractor runtime closed'));
       active?.controller.abort();
       await active?.completion;
+      await demandWrites;
     },
   };
 }

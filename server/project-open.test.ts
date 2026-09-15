@@ -206,3 +206,18 @@ test('a directory disappearing during preparation does not commit an open', asyn
   assert.equal(folder.getCurrentFolder(), previous);
   assert.deepEqual(config.readAppConfigStrict(), before);
 });
+
+test('cancelling a pending entry leaves the previous binding and membership intact', async (t) => {
+  const previous = directory('Previous'), next = directory('Cancelled');
+  await folder.openProjectFolder(previous);
+  const before = config.readAppConfigStrict();
+  const gate = holdStat(t, next);
+  const controller = new AbortController();
+  const opening = folder.openProjectFolder(next, controller.signal);
+  await gate.started;
+  controller.abort();
+  gate.resume();
+  await assert.rejects(opening, { name: 'AbortError' });
+  assert.equal(folder.getCurrentFolder(), previous);
+  assert.deepEqual(config.readAppConfigStrict(), before);
+});

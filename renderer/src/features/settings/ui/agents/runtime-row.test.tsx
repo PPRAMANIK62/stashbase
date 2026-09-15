@@ -26,17 +26,15 @@ function renderRow(
   options: { busy?: boolean; failure?: FailureView | null } = {},
 ) {
   const onAction = vi.fn();
-  const onUninstall = vi.fn();
   render(
     <RuntimeRow
       busy={options.busy ?? false}
       failure={options.failure ?? null}
       onAction={onAction}
-      onUninstall={onUninstall}
       runtime={subject}
     />,
   );
-  return { onAction, onUninstall };
+  return { onAction };
 }
 
 describe('RuntimeRow', () => {
@@ -78,20 +76,5 @@ describe('RuntimeRow', () => {
     });
 
     expect(screen.getByRole('alert').textContent).toBe('Installer exited with status 1.');
-  });
-
-  it('offers Uninstall only for an idle, managed install', async () => {
-    const subject = codex({
-      installed: true,
-      ownership: 'managed',
-      preparation: { kind: 'ready' },
-    });
-    const { onUninstall } = renderRow(subject);
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Uninstall' }));
-    expect(onUninstall).toHaveBeenCalledWith(subject);
-
-    cleanup();
-    renderRow(codex({ installed: true, ownership: 'system', preparation: { kind: 'ready' } }));
-    expect(screen.queryByRole('button', { name: 'Uninstall' })).toBeNull();
   });
 });

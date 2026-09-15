@@ -10,7 +10,9 @@ const externalNavigation = {
 };
 const project = {
   chooseFolder: async () => ({ ok: true as const, folderPath: null }),
-  claimInitialFolder: async () => ({ folderPath: null, ok: true as const }),
+  cancelEntry: async () => ({ ok: true as const }),
+  onEntryCancelled: () => () => {},
+  onEnterFolder: () => () => {},
   notifyFolderRemoved: async () => ({ ok: true as const }),
   onFolderRemoved: () => () => undefined,
   openFolderWindow: async () => ({ action: 'opened' as const, ok: true as const }),
@@ -64,29 +66,6 @@ describe('Electron bridge', () => {
       windowLifecycle,
     };
     expect(() => readBridge()).toThrow(/Unrecognized key\(s\) in object: 'windowId'/u);
-  });
-
-  it('passes the bug-report capability through only when it is complete', () => {
-    const bugReport = { open: async () => ({ ok: true as const }) };
-    window.stashbase = {
-      bugReport,
-      externalNavigation,
-      project,
-      runtime,
-      workspaceSession,
-      windowLifecycle,
-    };
-    expect(readBridge().bugReport).toBe(bugReport);
-
-    window.stashbase = {
-      bugReport: {},
-      externalNavigation,
-      project,
-      runtime,
-      workspaceSession,
-      windowLifecycle,
-    };
-    expect(readBridge().bugReport).toBeUndefined();
   });
 
   it('passes the updates capability through only when it is complete', () => {

@@ -1,46 +1,21 @@
-/**
- * Where this window lands, and the saved presentation state it lands with.
- *
- * The rule for which folder wins is not here: it is
- * `domain/landing.ts`, one total function over the two sources that can name
- * one. This hook owns the mechanics of carrying that answer out — asking the
- * desktop once, holding one open request in flight, publishing the snapshot
- * the request answers with, and reporting whether the window has settled.
- */
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+/** Restore presentation state for the server-bound project. Project entry is
+ * owned by the entry receiver; saved state never chooses a project to open. */
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
 import { useStore } from 'zustand';
 
-import { openFolder } from '@/features/workspace/application/open-folder';
 import type {
-  ProjectLifecyclePort,
   ProjectRegistryPort,
   WorkspaceSessionPort,
 } from '@/features/workspace/application/ports';
-import { projectQuery, workspaceQueryKeys } from '@/features/workspace/application/queries';
+import { projectQuery } from '@/features/workspace/application/queries';
 import {
   createWorkspaceSessionRuntime,
   type WorkspaceSessionRuntime,
 } from '@/features/workspace/application/session-runtime';
-import {
-  chooseFolderLanding,
-  landingToOpen,
-  type InitialFolderClaim,
-} from '@/features/workspace/domain/landing';
 import { restoreFolderSession, type FolderSessionState } from '@/features/workspace/domain/session';
-import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 import { useRetainedRuntime } from '@/shared/runtime/use-retained-runtime';
 
-/**
- * Where landing stands, as one value.
- *
- * The three parallel flags this replaced could spell states restoration never
- * reaches — ready while still restoring, a restored folder before the stored
- * session had even been read. Only `ready` carries the folder to restore,
- * because only `ready` has one. `restoring` covers three waits: the stored
- * session being read, the desktop being asked which folder this window was
- * created for, and that folder, if it named one, being opened.
- */
 type WorkspaceSessionStatus =
   | { kind: 'restoring' }
   | { kind: 'ready'; restoredFolder: FolderSessionState | null };
@@ -58,135 +33,37 @@ export interface WorkspaceSessionController {
 export function useWorkspaceSession(
   api: ProjectRegistryPort,
   persistence: WorkspaceSessionPort,
-  lifecycle: Pick<ProjectLifecyclePort, 'claimInitialFolder'>,
 ): WorkspaceSessionController {
-  const queryClient = useQueryClient();
   const runtime = useRetainedRuntime(
     () => createWorkspaceSessionRuntime(persistence),
     (session) => session.dispose(),
   );
   const state = useStore(runtime.store);
   const project = useQuery(projectQuery(api)).data;
-  const attemptedRestore = useRef<string | null>(null);
-  // One lane: reopening a different folder replaces the attempt in flight.
-  const signalFor = useRequestSignals<'restore-folder'>();
-  const [pendingPath, setPendingPath] = useState<string | null>(null);
-  const [initialFolder, setInitialFolder] = useState<InitialFolderClaim>({ kind: 'pending' });
-
-  useEffect(() => {
-    void runtime.restore();
-  }, [runtime]);
-
-  // Asked while there is no answer, rather than once per port identity: a
-  // window claims its folder exactly once, so keying this to the port would
-  // both re-ask a caller that rebuilds it and say something untrue about when
-  // a second claim is wanted. The port is idempotent, so a re-run and
-  // StrictMode's second mount both read the first answer.
-  useEffect(() => {
-    if (initialFolder.kind === 'settled') return;
-    let live = true;
-    const settle = (folderPath: string | null) => {
-      if (live) setInitialFolder({ kind: 'settled', folderPath });
-    };
-    // The claim settles either way. A window that could not ask is a window
-    // with no folder named for it, and it lands by saved session instead;
-    // leaving the claim pending would strand the window in its restoring state
-    // with no render left to correct it.
-    void lifecycle.claimInitialFolder().then(settle, () => settle(null));
-    return () => {
-      live = false;
-    };
-  }, [initialFolder.kind, lifecycle]);
-
   const memberPaths = useMemo(
     () => project?.projects.map((member) => member.path) ?? [],
     [project?.projects],
   );
-
-  // The saved session is not consulted here. It carries each folder's tabs and
-  // tree state for when that folder is opened, and nothing about where to land.
-  const landing = useMemo(
-    () =>
-      chooseFolderLanding({
-        activeFolder: project?.activeFolder?.path ?? null,
-        initialFolder,
-      }),
-    [initialFolder, project?.activeFolder?.path],
-  );
-  // A landing that still owes an open request, for the status below.
-  const unopened = landingToOpen(landing);
-
+  useEffect(() => {
+    void runtime.restore();
+  }, [runtime]);
   useEffect(() => {
     if (!project || state.restoreStatus !== 'ready') return;
     runtime.reconcileMembership(memberPaths);
-
-    // Still asking the desktop which folder this window was made for. Opening
-    // anything now is how the saved session used to win that race.
-    if (landing.source === 'pending') return;
-
-    if (landing.source === 'server') {
-      attemptedRestore.current = landing.path;
-      runtime.setActiveFolder(landing.path);
-      return;
-    }
-
-    if (landing.source === 'none') {
-      runtime.setActiveFolder(null);
-      return;
-    }
-
-    // The folder the window was made for is opened exactly the way a reader's
-    // own click would open it, so the server learns this window's folder the
-    // one way.
-    const wanted = landing.path;
-    if (attemptedRestore.current === wanted) return;
-    attemptedRestore.current = wanted;
-    const capturedProject = project;
-    setPendingPath(wanted);
-    void openFolder(api, wanted, signalFor('restore-folder')).then((result) => {
-      if (
-        result.status === 'opened' &&
-        queryClient.getQueryData(workspaceQueryKeys.project) === capturedProject
-      ) {
-        queryClient.setQueryData(workspaceQueryKeys.project, result.snapshot);
-      } else if (result.status === 'failed') {
-        runtime.setActiveFolder(null);
-      }
-      setPendingPath((current) => (current === wanted ? null : current));
-    });
-    return () => setPendingPath((current) => (current === wanted ? null : current));
-  }, [api, landing, project, memberPaths, queryClient, runtime, signalFor, state.restoreStatus]);
-
-  // Read off the same landing the effect acts on, so the two can never
-  // disagree. A folder the project already has open is not being restored,
-  // whatever else still names one: the attempt marker is a ref, so a window
-  // that never has to open anything would otherwise stay "restoring" with no
-  // render left to correct it. A window created for a folder counts as
-  // restoring from the first render, which is what keeps the welcome screen
-  // from flashing before its folder arrives.
-  const restoring =
-    state.restoreStatus === 'loading' ||
-    landing.source === 'pending' ||
-    pendingPath !== null ||
-    (unopened !== null && attemptedRestore.current !== unopened);
-
-  // A restored snapshot may still name the folder it was written in while the
-  // landing says this window has none. The effect above collapses the sidebar
-  // as the window arrives at the welcome screen, but it runs after the render
-  // that first shows that screen, so the frame between reads as arrived
-  // rather than painting the column open and then closing it.
-  const arriving = landing.source === 'none' && state.snapshot.activeFolderPath !== null;
-
+    runtime.setActiveFolder(project.activeFolder?.path ?? null);
+  }, [project, memberPaths, runtime, state.restoreStatus]);
+  const arriving = !project?.activeFolder && state.snapshot.activeFolderPath !== null;
   return {
     runtime,
     shell: arriving ? { ...state.snapshot.shell, sidebarOpen: false } : state.snapshot.shell,
-    status: restoring
-      ? { kind: 'restoring' }
-      : {
-          kind: 'ready',
-          restoredFolder: project?.activeFolder
-            ? restoreFolderSession(state.snapshot, project.activeFolder.path)
-            : null,
-        },
+    status:
+      state.restoreStatus === 'loading'
+        ? { kind: 'restoring' }
+        : {
+            kind: 'ready',
+            restoredFolder: project?.activeFolder
+              ? restoreFolderSession(state.snapshot, project.activeFolder.path)
+              : null,
+          },
   };
 }

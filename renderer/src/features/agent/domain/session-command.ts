@@ -6,7 +6,7 @@ import type { AgentAccessMode } from '@/features/agent/domain/access';
 
 export type AgentSessionCommand =
   /** Sends one user turn, optionally under the skill armed for it. */
-  | { kind: 'prompt'; text: string; skill: string | null }
+  | { kind: 'prompt'; text: string; skill: string | null; titleHint?: string }
   | { kind: 'interrupt' }
   /** Answers one permission request; `always` remembers the decision. */
   | { kind: 'reply-permission'; id: string; allow: boolean; always: boolean | null }

@@ -127,12 +127,6 @@ export const agentServerEventSchema = z.union([
       message: boundedText(2_000).optional(),
     })
     .strict(),
-  z
-    .object({
-      t: z.literal("scope-changed"),
-      scope: z.object({ kind: z.literal("folder"), path: boundedText(16_384) }).strict(),
-    })
-    .strict(),
   z.object({ t: z.literal("turn-end"), isError: z.boolean() }).strict(),
   z.object({ t: z.literal("notice"), message: boundedText(2_000) }).strict(),
   z
@@ -160,20 +154,10 @@ const agentSessionConnectFields = {
   resume: boundedText(512).optional(),
 };
 
-export const agentSessionConnectSchema = z.union([
-  z
-    .object({
-      ...agentSessionConnectFields,
-      folder: boundedText(16_384).trim().min(1),
-    })
-    .strict(),
-  z
-    .object({
-      ...agentSessionConnectFields,
-      scope: z.literal("unbound"),
-    })
-    .strict(),
-]);
+export const agentSessionConnectSchema = z.object({
+  ...agentSessionConnectFields,
+  folder: boundedText(16_384).min(1),
+}).strict();
 
 export type AgentId = z.infer<typeof agentIdSchema>;
 export type AgentAccessMode = z.infer<typeof agentAccessModeSchema>;

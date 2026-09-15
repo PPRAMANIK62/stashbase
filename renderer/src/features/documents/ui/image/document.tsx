@@ -69,7 +69,7 @@ export function ImageDocument({ name, resource }: { name: string; resource: Docu
           <Expand aria-hidden="true" />
         </ViewerToolbarButton>
       </ViewerToolbar>
-      <div className="min-h-0 flex-1 overflow-auto" ref={viewportRef}>
+      <div className="min-h-0 flex-1 overflow-auto" data-document-scroller ref={viewportRef}>
         {loadFailed ? (
           <AssetStatus
             detail="The image may have moved, changed, or become unavailable."

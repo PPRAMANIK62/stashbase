@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
-import { expect, screen, waitFor } from 'storybook/test';
+import { expect, screen, userEvent, waitFor } from 'storybook/test';
 
 import type { AgentInstructionsPort } from '@/features/agent/application/ports';
 import { createAgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
@@ -26,7 +26,7 @@ const abilities: Agent['abilities'] = {
 const agents: Agent[] = [
   { abilities, id: 'codex', label: 'Codex', models: [], needsSignIn: false, ready: true },
   { abilities, id: 'claude', label: 'Claude Code', models: [], needsSignIn: false, ready: true },
-  { abilities, id: 'stashbase', label: 'OpenQuill', models: [], needsSignIn: false, ready: true },
+  { abilities, id: 'stashbase', label: 'Default', models: [], needsSignIn: false, ready: true },
 ];
 
 /** The same runtimes before any of them can carry a turn: one waiting on
@@ -123,7 +123,7 @@ function WorkspacePreview({
         },
       ],
       connection: empty ? { kind: 'draft' } : { kind: 'live', turn: null },
-      title: empty ? 'New chat' : 'Screenshot research',
+      title: empty ? 'Untitled' : 'Screenshot research',
       transcript: empty
         ? []
         : [
@@ -233,10 +233,6 @@ function WorkspacePreview({
             onOpenAgentSettings={() => undefined}
             onSignIn={() => undefined}
             runtime={runtime}
-            scopeOutline={{
-              files: ['MISSION.md', 'NOTES.md', 'screenshot-tools.md'],
-              folders: ['assets', 'lessons', 'reference'],
-            }}
           />
         </div>
       </div>
@@ -279,11 +275,14 @@ export const Docked: Story = {
   play: readyWorkspace,
 };
 
-/** Before any runtime is set up: the request can still be written, and the
- *  offer sits under the composer rather than in place of it. */
+/** Access is offered only after an explicit Send, while keeping the draft. It
+ *  asks about the Agent this chat is on, which here is Codex. */
 export const SetupOffer: Story = {
   args: { empty: true, ready: false },
   play: async () => {
-    await screen.findByText('No Agent is ready yet.');
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await userEvent.type(input, 'Help me write');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await screen.findByRole('dialog', { name: 'Connect Codex' });
   },
 };

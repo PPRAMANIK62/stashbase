@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vite-plus/test';
 
@@ -18,7 +18,7 @@ const read: UpdatesPort['read'] = async () => ({
   },
 });
 
-it('closes Settings and previews installation in the sidebar without invoking the updater', async () => {
+it('closes Developer tools and previews installation in the sidebar without invoking the updater', async () => {
   const primary = vi.fn(read);
   const release = vi.fn(read);
   const updates: UpdatesPort = {
@@ -36,9 +36,16 @@ it('closes Settings and previews installation in the sidebar without invoking th
     </Providers>,
   );
   await user.click(await screen.findByRole('button', { name: 'Settings' }));
-  await user.click(await screen.findByText('Update notification preview'));
+  fireEvent.keyDown(document, {
+    key: 'D',
+    code: 'KeyD',
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: true,
+  });
+  await screen.findByRole('dialog', { name: 'Developer tools' });
   await user.click(screen.getByRole('button', { name: 'Preview in sidebar' }));
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Developer tools' })).toBeNull());
   const label = await screen.findByText('Update preview');
   const footer = label.closest<HTMLElement>('[data-sidebar="footer"]');
   expect(footer).not.toBeNull();

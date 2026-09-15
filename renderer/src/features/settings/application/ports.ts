@@ -14,12 +14,6 @@ import type {
 } from '@/features/settings/domain/appearance';
 import type { LocalComponentStatus } from '@/features/settings/domain/local-component';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
-import type {
-  TranscriptionModelOperation,
-  TranscriptionPreferences,
-  TranscriptionPreferencesPatch,
-  TranscriptionSettings,
-} from '@/features/settings/domain/transcription';
 import type { AgentId } from '@/shared/domain/agent-id';
 import {
   featureErrorClass,
@@ -36,7 +30,6 @@ export interface AgentRuntimePort {
     signal: AbortSignal,
   ): Promise<AgentCatalog>;
   updateDebug(patch: AgentDebugPatch, signal: AbortSignal): Promise<AgentCatalog>;
-  resetManagedAgent(id: AgentId, signal: AbortSignal): Promise<AgentCatalog>;
   getAllowance(signal: AbortSignal): Promise<AgentAllowance>;
 }
 
@@ -45,16 +38,6 @@ export type AgentRuntimeFailureKind = TransportFailureKind;
 export type AgentRuntimeError = FeatureError;
 export const AgentRuntimeError = featureErrorClass('AgentRuntimeError');
 
-export interface TranscriptionPort {
-  load(signal: AbortSignal): Promise<TranscriptionSettings>;
-  updatePreferences(
-    patch: TranscriptionPreferencesPatch,
-    signal: AbortSignal,
-  ): Promise<TranscriptionPreferences>;
-  downloadModel(id: string, signal: AbortSignal): Promise<TranscriptionModelOperation>;
-  removeModel(id: string, signal: AbortSignal): Promise<void>;
-}
-
 /** Both calls resolve the full triple, because the server's answer is what the
  *  window applies. */
 export interface AppearancePort {
@@ -62,7 +45,7 @@ export interface AppearancePort {
   update(change: AppearanceChange, signal: AbortSignal): Promise<AppearancePreferences>;
 }
 
-/** The StashBase account, which exists for OpenQuill's free credits. A
+/** The StashBase account, which exists for the bundled Agent's free credits. A
  *  sign-in is a browser round trip the server owns: the renderer starts it,
  *  hands the URL to the browser, and polls until the server says the flow
  *  finished. Sign-out answers with the signed-out account. */

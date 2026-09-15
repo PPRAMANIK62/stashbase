@@ -268,10 +268,8 @@ test('both retrieval modes reject deleted, cancelled, failed, and stale prepared
         }
         source = path.join(root, 'clip.wav');
         fs.writeFileSync(source, 'audio fixture');
-        const transcript = preparedTextCandidatePath(source);
-        fs.mkdirSync(path.dirname(transcript), { recursive: true });
-        fs.writeFileSync(transcript, '{"schemaVersion":1}');
-        await expectCount(0, 'invalid audio transcript');
+        assert.equal(preparedTextCandidatePath(source), null);
+        await expectCount(0, 'media is excluded from retrieval');
         source = path.join(root, '.private', 'hidden.md');
         fs.mkdirSync(path.dirname(source));
         fs.writeFileSync(source, 'needle');

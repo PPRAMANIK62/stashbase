@@ -1,10 +1,9 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import {
   GalleryOverlay,
   GalleryShop,
   useGallery,
-  useGalleryCopy,
   type GalleryEntry,
   type GalleryPort,
 } from '@/features/gallery/public';
@@ -28,42 +27,56 @@ export interface GalleryShopCommand {
  * band card opens that entry's page directly, where the sidebar row opens the
  * shelf.
  *
- * A copy opens in a window of its own and the shop stays put, which is why
- * neither the overlay nor the entry page closes when a copy succeeds: the
- * reader is still in the shop, looking at the next entry.
  */
-export function useGalleryShop(port: GalleryPort): GalleryShopCommand {
+export function useGalleryShop(
+  port: GalleryPort,
+  copy: (entry: GalleryEntry) => void,
+  pending: boolean,
+  activePath: string | null,
+): GalleryShopCommand {
   const [open, setOpen] = useState(false);
-  const [entry, setEntry] = useState<GalleryEntry | null>(null);
+  const [entryId, setEntryId] = useState<string | null>(null);
   const gallery = useGallery(port);
-  const copying = useGalleryCopy(port);
+  const entry = gallery.entries.find((candidate) => candidate.id === entryId) ?? null;
+  useEffect(() => {
+    if (activePath) {
+      setOpen(false);
+      setEntryId(null);
+    }
+  }, [activePath]);
 
   return {
     band: (
       <GalleryShop
         entries={gallery.entries}
+        recovery={gallery.recovery}
         onOpen={(next) => {
-          setEntry(next);
+          setEntryId(next.id);
           setOpen(true);
+          gallery.recovery?.retry();
         }}
       />
     ),
-    browse: useCallback(() => setOpen(true), []),
+    browse: useCallback(() => {
+      setOpen(true);
+      gallery.recovery?.retry();
+    }, [gallery.recovery]),
     surfaces: (
       <GalleryOverlay
-        copying={copying.copyingId === entry?.id}
+        copying={pending}
         entries={gallery.entries}
         entry={entry}
-        issue={copying.issue}
-        onBack={() => setEntry(null)}
+        recovery={gallery.recovery}
+        unavailable={entryId !== null && entry === null}
+        onBack={() => setEntryId(null)}
         onClose={() => {
           setOpen(false);
           // Closing the shop ends the visit: reopening starts at the shelf
           // rather than on whichever entry was last read.
-          setEntry(null);
+          setEntryId(null);
         }}
-        onCopy={copying.copy}
-        onOpen={setEntry}
+        onCopy={copy}
+        onOpen={(next) => setEntryId(next.id)}
         open={open}
       />
     ),

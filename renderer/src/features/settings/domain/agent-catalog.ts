@@ -24,8 +24,8 @@ export type AgentRuntimeStage = (typeof AGENT_RUNTIME_STAGES)[number];
 export type AgentPreparationStage = Exclude<AgentRuntimeStage, 'discover' | 'ready'>;
 
 /** Who owns a runtime's installation. `bundled` ships with StashBase,
- *  `managed` is a private install under AppData, `system` is the user's own. */
-type AgentRuntimeOwnership = 'bundled' | 'system' | 'managed';
+ *  `system` is installed and owned by the user/provider. */
+type AgentRuntimeOwnership = 'bundled' | 'system';
 
 /** Why a staged preparation stopped. The panel offers a different recovery for
  *  an account that has to exist first than for a step that can simply be run
@@ -79,9 +79,6 @@ export interface AgentRuntime {
   readonly preparation: AgentPreparation;
 }
 
-/** Where StashBase looks for runtimes. Development-only. */
-export type AgentDiscoverySource = 'auto' | 'managed-only' | 'system-only';
-
 /** A one-shot simulated outcome for the next staged preparation. */
 export type AgentSetupSimulation = 'none' | 'installation' | 'authentication' | 'mcp';
 
@@ -98,7 +95,6 @@ export type AgentTurnSimulation =
  *  The service's own `enabled` flag never reaches here: a catalog either
  *  carries these controls or it does not. */
 export interface AgentDebugControls {
-  readonly discoverySource: AgentDiscoverySource;
   readonly nextSetupResult: AgentSetupSimulation;
   readonly nextTurnResult: AgentTurnSimulation;
 }

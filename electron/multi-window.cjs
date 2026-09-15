@@ -194,24 +194,7 @@ function createWindowRegistry({ platform = process.platform } = {}) {
 
   return {
     add(windowId, win, folder = null) {
-      const raw = typeof folder === 'string' && folder.trim() ? folder : '';
-      records.set(windowId, {
-        win,
-        folder: folderPath(folder),
-        // A comparison identity never replaces the source spelling handed to
-        // the renderer when it claims the initial folder.
-        initialFolder: raw || null,
-      });
-    },
-    /** The folder this window was created for, answered at most once. The
-     *  registry forgets it as it answers: a window that reloads keeps its
-     *  identity and the server still holds its current folder, so a value that
-     *  lingered here would fight a folder the reader has since moved to. */
-    claimInitialFolder(windowId) {
-      const record = records.get(windowId);
-      const folder = record?.initialFolder ?? null;
-      if (record) record.initialFolder = null;
-      return folder;
+      records.set(windowId, { win, folder: folderPath(folder) });
     },
     remove(windowId) {
       records.delete(windowId);
@@ -232,6 +215,9 @@ function createWindowRegistry({ platform = process.platform } = {}) {
     },
     windowForId(windowId) {
       return records.get(windowId)?.win ?? null;
+    },
+    folderForWindow(win) {
+      return records.get(this.idForWindow(win))?.folder ?? null;
     },
     setFolder(windowId, folder) {
       const record = records.get(windowId);
@@ -285,17 +271,35 @@ function classifyProtocolLaunch(argv) {
   return 'ordinary';
 }
 
-async function openOrFocusFolder({
-  registry,
-  folder,
-  senderWindow,
-  createWindow,
-}) {
-  const senderId = registry.idForWindow(senderWindow);
-  const existing = await registry.findByFolder(folder, { excludeWindowId: senderId });
-  if (focusWindow(existing)) return { ok: true, action: 'focused', win: existing };
-  const created = await createWindow(folder);
-  return { ok: Boolean(created), action: created ? 'opened' : 'failed', win: created ?? null };
+// Allocation and readiness share one lane. A second request observes the first
+// settled workspace, including filesystem aliases, before allocating a window.
+const entryLanes = new WeakMap();
+function openOrFocusFolder({ registry, folder, senderWindow, createWindow, enterFolder, signal }) {
+  const previous = entryLanes.get(registry) ?? Promise.resolve();
+  const operation = previous.catch(() => {}).then(async () => {
+    signal?.throwIfAborted();
+    if (senderWindow.isDestroyed?.()) throw new Error('The initiating window closed.');
+    const existing = await registry.findByFolder(folder);
+    signal?.throwIfAborted();
+    if (focusWindow(existing)) return { ok: true, action: 'focused', win: existing };
+    const target = registry.folderForWindow(senderWindow)
+      ? await createWindow()
+      : senderWindow;
+    if (!target) throw new Error('A project window could not be created.');
+    try { await enterFolder(target, folder); }
+    catch (error) {
+      if (target !== senderWindow && !registry.folderForWindow(target)) target.close?.();
+      throw error;
+    }
+    registry.setFolder(registry.idForWindow(target), folder);
+    focusWindow(target);
+    return { ok: true, action: 'opened', win: target };
+  });
+  entryLanes.set(registry, operation);
+  void operation.finally(() => {
+    if (entryLanes.get(registry) === operation) entryLanes.delete(registry);
+  }).catch(() => {});
+  return operation;
 }
 
 async function releaseWindowContextWithRetry(

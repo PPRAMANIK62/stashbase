@@ -1,8 +1,5 @@
 import { ProjectError, type ProjectLifecyclePort } from '@/features/workspace/application/ports';
-import {
-  claimedInitialFolder,
-  type ProjectLifecycleBridge,
-} from '@/platform/electron/project-lifecycle';
+import type { ProjectLifecycleBridge } from '@/platform/electron/project-lifecycle';
 import type { ProjectLifecycleResponse } from '@/protocols/electron/project';
 
 function lifecycleFailure(
@@ -22,15 +19,38 @@ function accept(response: ProjectLifecycleResponse): void {
 export function createProjectLifecycleAdapter(
   bridge: ProjectLifecycleBridge,
 ): ProjectLifecyclePort {
-  // The desktop answers the initial folder once and then forgets it, so the
-  // answer is held here. Without this, a re-run effect or StrictMode's second
-  // mount would ask again and read the null that means "already claimed" as
-  // "this window was created for no folder".
-  let claimed: Promise<string | null> | null = null;
   return {
-    claimInitialFolder() {
-      claimed ??= claimedInitialFolder(bridge);
-      return claimed;
+    async enterFolder(path, signal) {
+      signal.throwIfAborted();
+      const id = crypto.randomUUID();
+      const cancel = () => {
+        void bridge.cancelEntry(id).catch(() => {});
+      };
+      signal.addEventListener('abort', cancel, { once: true });
+      try {
+        const response = await bridge.openFolderWindow(path, id);
+        if (!response.ok) throw lifecycleFailure(response);
+      } finally {
+        signal.removeEventListener('abort', cancel);
+      }
+    },
+    onEnterFolder(handler) {
+      const pending = new Map<string, AbortController>();
+      const unsubscribeCancellation = bridge.onEntryCancelled((id) => pending.get(id)?.abort());
+      const unsubscribeEntry = bridge.onEnterFolder(async (request) => {
+        const controller = new AbortController();
+        pending.set(request.requestId, controller);
+        try {
+          return await handler(request.folderPath, controller.signal);
+        } finally {
+          pending.delete(request.requestId);
+        }
+      });
+      return () => {
+        unsubscribeCancellation();
+        unsubscribeEntry();
+        for (const controller of pending.values()) controller.abort();
+      };
     },
     async notifyFolderRemoved(folderPath) {
       accept(await bridge.notifyFolderRemoved(folderPath));

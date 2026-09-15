@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import {
-  agentScopeKey,
   agentScopesEqual,
   agentSessionIsBlank,
   createAgentSessionState,
@@ -15,7 +14,7 @@ describe('Agent session domain', () => {
     const session = createAgentSessionState({
       agent: 'stashbase',
       id: 'chat-1',
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     expect(session.connection).toEqual({ kind: 'draft' });
     expect(agentSessionIsBlank(session)).toBe(true);
@@ -32,7 +31,7 @@ describe('Agent session domain', () => {
     const draft = createAgentSessionState({
       agent: 'codex',
       id: 'chat-1',
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     const connecting = transitionAgentSession(draft, { attempt: 0, kind: 'connect' });
     const restored = transitionAgentSession(connecting, {
@@ -54,13 +53,13 @@ describe('Agent session domain', () => {
     });
   });
 
-  it('resolves and labels explicit unbound and folder scopes', () => {
-    expect(scopeForWindowFolder(null)).toEqual({ kind: 'unbound' });
+  it('requires and labels project scopes', () => {
+    expect(() => scopeForWindowFolder(null)).toThrow('Open a project');
     expect(scopeForWindowFolder('/project/Research')).toEqual({
       kind: 'folder',
       path: '/project/Research',
     });
-    expect(scopeLabel({ kind: 'unbound' })).toBe('Chat');
+
     expect(scopeLabel({ kind: 'folder', path: '/project/Research/' })).toBe('Research');
     expect(
       agentScopesEqual(
@@ -74,7 +73,7 @@ describe('Agent session domain', () => {
     const initial = createAgentSessionState({
       agent: 'codex',
       id: 'chat-1',
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     const awaiting = transitionAgentSession(initial, {
       id: 'permission-1',
@@ -151,7 +150,7 @@ describe('Agent session domain', () => {
     const initial = createAgentSessionState({
       agent: 'stashbase',
       id: 'chat-1',
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     const queued = transitionAgentSession(initial, {
       queue: Array.from({ length: 25 }, (_, index) => ({
@@ -169,7 +168,11 @@ describe('Agent session domain', () => {
 
   it('records a native file diff once as settled work', () => {
     const live = transitionAgentSession(
-      createAgentSessionState({ agent: 'stashbase', id: 'chat-1', scope: { kind: 'unbound' } }),
+      createAgentSessionState({
+        agent: 'stashbase',
+        id: 'chat-1',
+        scope: { kind: 'folder', path: '/project/Research' },
+      }),
       { kind: 'ready' },
     );
     const change = {
@@ -301,24 +304,5 @@ describe('Agent session domain', () => {
       message: 'Skill directory is unreadable.',
     });
     expect(failed.skill).toBe(null);
-  });
-});
-
-describe('agent scope identity', () => {
-  it('names each kind of scope once, so two readers cannot disagree', () => {
-    expect(agentScopeKey({ kind: 'unbound' })).toBe('unbound');
-    expect(agentScopeKey({ kind: 'folder', path: '/project/notes' })).toBe('/project/notes');
-  });
-
-  it('separates folders from each other and from an unbound conversation', () => {
-    expect(agentScopeKey({ kind: 'folder', path: '/a' })).not.toBe(
-      agentScopeKey({ kind: 'folder', path: '/b' }),
-    );
-    // Folder paths are absolute, which is what keeps them clear of the
-    // unbound scope's literal spelling; a bare `unbound` would collide, and the
-    // route refuses one for the same reason.
-    expect(agentScopeKey({ kind: 'folder', path: '/unbound' })).not.toBe(
-      agentScopeKey({ kind: 'unbound' }),
-    );
   });
 });

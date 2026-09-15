@@ -166,9 +166,9 @@ test('host failures do not skip later checks or turn the source job green', () =
 test('Windows packaging verification stays in the release workflow', () => {
   const source = readWorkflow('.github/workflows/ci.yml').jobs['source-build'].steps;
   assert.ok(source.every((step) => !step.uses?.startsWith('msys2/')));
-  assert.doesNotMatch(source.map((step) => step.run ?? '').join('\n'), /dist:win|build:python-extract-sidecar|build:transcription/);
+  assert.doesNotMatch(source.map((step) => step.run ?? '').join('\n'), /dist:win|build:python-extract-sidecar/);
   const release = readWorkflow('.github/workflows/release-windows.yml').jobs['windows-installer'].steps;
   const runs = release.map((step) => step.run ?? '').join('\n');
   assert.match(runs, /pnpm dist:win/);
-  assert.match(runs, /smoke-packaged-server\.mjs --require-transcription/);
+  assert.match(runs, /smoke-packaged-server\.mjs/);
 });

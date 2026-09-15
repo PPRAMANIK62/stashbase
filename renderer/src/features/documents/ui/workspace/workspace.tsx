@@ -1,11 +1,13 @@
+/** Compose retained document sessions, navigation feedback, and the active viewer. */
 import { useEffect, useState, type ReactNode } from 'react';
+import { useStore } from 'zustand';
 
+import { Button } from '@/components/ui/button';
 import type {
   DocumentAssetPort,
   DocumentSourcePort,
   DocxPreviewPort,
   GenericFilePreviewPort,
-  MediaPort,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { sourceName } from '@/features/documents/domain/document';
@@ -26,6 +28,7 @@ import type {
 import type { SourceReference } from '@/shared/domain/source-reference';
 
 import { DocumentFind } from './find';
+import { DocumentReadingSurface } from './reading-surface';
 
 const ignoreNavigation = () => undefined;
 const rejectExternalNavigation = async () => false;
@@ -34,7 +37,6 @@ export interface DocumentWorkspaceProps {
   assetApi: DocumentAssetPort;
   docxPreviewApi: DocxPreviewPort;
   genericPreviewApi: GenericFilePreviewPort;
-  mediaApi: MediaPort;
   onNavigate?: ((target: DocumentNavigationTarget) => void) | undefined;
   onOpenExternal?: ((href: string) => Promise<boolean>) | undefined;
   /** Fired once when a DOCX or media document mounts so preparation can be
@@ -56,7 +58,6 @@ export function DocumentWorkspace({
   assetApi,
   docxPreviewApi,
   genericPreviewApi,
-  mediaApi,
   onNavigate = ignoreNavigation,
   onOpenExternal = rejectExternalNavigation,
   onOpenPrepared,
@@ -67,6 +68,8 @@ export function DocumentWorkspace({
   sourceApi,
   viewers,
 }: DocumentWorkspaceProps) {
+  const searchNotice = useStore(runtime.navigation.store, (state) => state.searchNotice);
+  const openFailure = useStore(runtime.store, (state) => state.openFailure);
   const { activeTab, activeTabId, tabs } = useDocumentTabs(runtime);
   const [retention, setRetention] = useState<{ ids: string[]; runtime: DocumentTabsRuntime }>(
     () => ({
@@ -96,7 +99,7 @@ export function DocumentWorkspace({
       return { ids, runtime };
     });
   }, [activeTabId, runtime, tabs]);
-  if (tabs.length === 0) return null;
+  if (tabs.length === 0 && !openFailure) return null;
   const activeIsRetainedMarkdown = activeTab ? retainedMarkdownIds.includes(activeTab.id) : false;
   // A format that never claims a find controller shows no find bar at all.
   const activeFindable = activeTab
@@ -115,29 +118,57 @@ export function DocumentWorkspace({
         key={tab.id}
         role="region"
       >
-        <DocumentSource
-          active={!hidden}
-          assetApi={assetApi}
-          docxPreviewApi={docxPreviewApi}
-          genericPreviewApi={genericPreviewApi}
-          mediaApi={mediaApi}
-          navigation={runtime.navigation}
-          onNavigate={onNavigate}
-          onOpenExternal={onOpenExternal}
-          onOpenPrepared={onOpenPrepared}
-          onReveal={onReveal}
-          renderPreparation={renderPreparation}
-          revealLabel={revealLabel}
-          runtime={document}
-          sourceApi={sourceApi}
-          viewers={viewers}
-        />
+        <DocumentReadingSurface runtime={document} history={runtime.history} active={!hidden}>
+          <DocumentSource
+            active={!hidden}
+            assetApi={assetApi}
+            docxPreviewApi={docxPreviewApi}
+            genericPreviewApi={genericPreviewApi}
+            navigation={runtime.navigation}
+            onNavigate={onNavigate}
+            onOpenExternal={onOpenExternal}
+            onOpenPrepared={onOpenPrepared}
+            onReveal={onReveal}
+            renderPreparation={renderPreparation}
+            revealLabel={revealLabel}
+            runtime={document}
+            sourceApi={sourceApi}
+            viewers={viewers}
+          />
+        </DocumentReadingSurface>
       </div>
     );
   };
 
   return (
     <section aria-label="Document workspace" className="relative flex h-full min-h-0 flex-col">
+      {openFailure && (
+        <div className="flex items-center gap-3 border-b border-border px-4 py-2 text-caption">
+          <span role="alert">
+            Could not open {openFailure.source.path}. {openFailure.message}
+          </span>
+          <Button size="compact" onClick={() => void runtime.retryOpen()}>
+            Retry
+          </Button>
+          <Button size="compact" variant="tertiary" onClick={runtime.dismissOpenFailure}>
+            Dismiss
+          </Button>
+        </div>
+      )}
+      {searchNotice && (
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
+          <span role="status">
+            {activeFindable ? searchNotice : 'This preview cannot locate search matches.'}
+          </span>
+          <Button
+            size="compact"
+            variant="tertiary"
+            onClick={runtime.navigation.dismissSearchNotice}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
       {retainedMarkdownIds.map((tabId) => renderDocument(tabId, tabId !== activeTabId))}
       {activeTab &&
         documentTextFormat(activeTab.source.path) !== 'md' &&

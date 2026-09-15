@@ -9,6 +9,9 @@ import { telemetry } from '../telemetry.ts';
  */
 import express from 'express';
 import fs from 'node:fs';
+import path from 'node:path';
+import { githubImportRequestSchema } from '../../shared/protocols/http/github-import.ts';
+import { createProjectImportOperations } from '../project-import-operations.ts';
 import {
   clearFolderPathAsync,
   beginProjectFolderRemovalAsync,
@@ -30,7 +33,6 @@ import { clearRecordsUnder } from '../conversion-status.ts';
 import { cancelConversionsUnderAndWait } from '../conversion.ts';
 import { noteTreeChanged } from '../watcher.ts';
 import { deleteDerivedForSource, deleteDerivedUnderFolder, type DerivedCleanupStats } from '../derived-store.ts';
-import { deleteFileOrderForRoot } from '../file-order.ts';
 import { stopAgentRuntimesForFolder } from '../agent-contract.ts';
 import {
   projectOpenFolderRequestSchema,
@@ -72,8 +74,6 @@ async function cleanupRemovedProjectFolder(abs: string): Promise<void> {
   }
   try { clearRecordsUnder(abs, retainedRoots); }
   catch (err: unknown) { log.warn(`conversion-state cleanup failed for ${abs}: ${errorMessage(err)}`); }
-  try { deleteFileOrderForRoot(abs); }
-  catch (err: unknown) { log.warn(`file-order cleanup failed for ${abs}: ${errorMessage(err)}`); }
   await cleanupDerivedForFolder(abs, retainedRoots);
   // Clear its index rows + unbind from the daemon. deletePathPrefix is
   // keyed by the absolute folder root.
@@ -124,8 +124,11 @@ export function mount(app: express.Express): void {
       res.status(400).json({ error: 'path required', code: 'INVALID_FOLDER' });
       return;
     }
+    const controller = new AbortController();
+    const closed = () => { if (!res.writableEnded) controller.abort(); };
+    res.once('close', closed);
     try {
-      const { changed, snapshot } = await openProjectFolder(request.data.path);
+      const { changed, snapshot } = await openProjectFolder(request.data.path, controller.signal);
       const folderRoot = snapshot.current!.path;
       const windowId = currentWindowId();
       if (changed) {
@@ -134,13 +137,14 @@ export function mount(app: express.Express): void {
       telemetry.capture({ event: 'project_entry_result', outcome: 'success' });
       res.json(snapshot);
     } catch (err: unknown) {
+      if (controller.signal.aborted || res.destroyed) return;
       telemetry.capture({ event: 'project_entry_result', outcome: 'failed' });
       if ((err as { code?: string })?.code === 'WINDOW_CLOSED') {
         res.status(410).json({ error: 'window is closed', code: 'WINDOW_CLOSED' });
         return;
       }
       sendFolderOperationError(res, err);
-    }
+    } finally { res.removeListener('close', closed); }
   });
 
   app.post('/api/projects/remove', async (req, res) => {
@@ -171,40 +175,62 @@ export function mount(app: express.Express): void {
     }
   });
 
-  // Default folder home: where New Folder starts its native picker and
-  // where the built-in manual is seeded. Read-only — there is no
-  // configurable folder home.
+  // Default folder home: where New Folder starts its native picker.
+  // Read-only — there is no configurable folder home.
   app.get('/api/folder-home', async (_req, res) => {
     const root = getFolderHome();
     await fs.promises.mkdir(root, { recursive: true });
     res.json({ path: root });
   });
 
-  // Import a public GitHub repository into the StashBase folder home.
-  // Works before any folder is open.
-  app.post('/api/github/import', async (req, res) => {
-    const ac = new AbortController();
-    const abort = () => ac.abort(new Error('GitHub import request closed'));
-    const abortOnPrematureClose = () => { if (!res.writableEnded) abort(); };
-    req.once('aborted', abort);
-    res.once('close', abortOnPrematureClose);
+  // Receipts survive HTTP disconnection. Explicit cancellation, not losing a
+  // response, owns cancellation for receipt-bearing clients.
+  const imports = createProjectImportOperations<{ status: number; body: unknown }>();
+  async function acquire(input: { url: string; folderName: string }, signal: AbortSignal) {
     try {
-      const result = await importPublicGitHubRepository({
-        url: req.body?.url,
-        folderName: req.body?.folderName,
-        signal: ac.signal,
-      });
-      res.json(result);
-    } catch (err: unknown) {
-      if (ac.signal.aborted || res.destroyed) return;
-      if (err instanceof GitHubImportError) {
-        return res.status(err.status).json({ error: err.message, code: err.code });
+      return { status: 200, body: await importPublicGitHubRepository({ ...input, signal }) };
+    } catch (err) {
+      if (!(err instanceof GitHubImportError)) {
+        return { status: 500, body: { code: 'LOCAL_IMPORT_FAILED', error: 'The local import failed.' } };
       }
-      sendFolderOperationError(res, err);
-    } finally {
-      req.removeListener('aborted', abort);
-      res.removeListener('close', abortOnPrematureClose);
+      let destination;
+      if (err.code === 'DESTINATION_EXISTS') {
+        const target = path.join(getFolderHome(), input.folderName);
+        const stat = await fs.promises.stat(target).catch(() => null);
+        destination = stat ? { path: target, directory: stat.isDirectory() } : undefined;
+      }
+      return { status: err.status, body: {
+        code: err.code, error: err.message,
+        ...(destination ? { destination } : {}),
+        ...(err.retainedPath ? { retainedPath: err.retainedPath } : {}),
+      } };
     }
+  }
+  app.post('/api/github/import', async (req, res) => {
+    const parsed = githubImportRequestSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ code: 'INVALID_GITHUB_URL', error: 'Invalid import request.' }); return; }
+    const { operationId, ...input } = parsed.data;
+    const controller = new AbortController();
+    const abort = () => { if (!res.writableEnded) controller.abort(); };
+    if (!operationId) res.once('close', abort);
+    try {
+      const result = await (operationId
+        ? imports.start(currentWindowId(), operationId, JSON.stringify(input), (signal) => acquire(input, signal))
+        : acquire(input, controller.signal));
+      if (!res.destroyed) res.status(result.status).json(result.body);
+    } catch {
+      if (!res.destroyed) res.status(409).json({ error: 'That receipt belongs to another import request.' });
+    } finally { res.removeListener('close', abort); }
+  });
+  app.get('/api/github/import/:operationId', async (req, res) => {
+    const receipt = imports.result(currentWindowId(), req.params.operationId);
+    if (!receipt) { res.status(404).json({ code: 'OUTCOME_UNKNOWN', error: 'The import outcome is unknown.' }); return; }
+    const result = await receipt;
+    res.status(result.status).json(result.body);
+  });
+  app.delete('/api/github/import/:operationId', (req, res) => {
+    imports.cancel(currentWindowId(), req.params.operationId, { status: 499, body: { code: 'IMPORT_CANCELLED', error: 'The import was cancelled.' } });
+    res.json({ ok: true });
   });
 
   // Star / unstar a member folder. Pure project metadata — never touches

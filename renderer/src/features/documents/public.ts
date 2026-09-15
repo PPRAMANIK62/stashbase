@@ -25,3 +25,5 @@ export { DocumentHistoryButtons } from './ui/workspace/history-buttons';
 export { DocumentOutline, DocumentOutlineEmpty } from './ui/workspace/outline';
 export { DocumentWorkspace } from './ui/workspace/workspace';
 export type { DocumentNavigationTarget } from './ui/source/viewer';
+
+export { prepareDocument } from './application/prepare-document';

@@ -1,5 +1,4 @@
 import { cleanup, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { AgentDebugControls } from '@/features/settings/domain/agent-catalog';
@@ -10,7 +9,6 @@ import { DebugBlock } from './debug-block';
 afterEach(cleanup);
 
 const enabledDebug: AgentDebugControls = {
-  discoverySource: 'auto',
   nextSetupResult: 'none',
   nextTurnResult: 'none',
 };
@@ -27,10 +25,6 @@ function viewModel(overrides: Partial<AgentRuntimesViewModel> = {}): AgentRuntim
     login: vi.fn(),
     refreshAllowance: vi.fn(),
     refreshCatalog: vi.fn(),
-    resetFirstRun: vi.fn(),
-    uninstall: vi.fn(),
-    uninstallFailure: () => null,
-    uninstalling: () => false,
     updateDebug: vi.fn(),
     ...overrides,
   };
@@ -57,19 +51,10 @@ describe('DebugBlock', () => {
     expect(screen.getByText(/System installations and/u)).not.toBeNull();
   });
 
-  it('resets a runtime first run through the view model', async () => {
-    const runtimes = viewModel();
-    render(<DebugBlock runtimes={runtimes} />);
-
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Reset Codex first run' }));
-
-    expect(runtimes.resetFirstRun).toHaveBeenCalledWith('codex');
-  });
-
   it('holds every control while a debug write is open', () => {
     render(<DebugBlock runtimes={viewModel({ debugBusy: true })} />);
 
-    expect(screen.getByRole('button', { name: 'Reset Claude Code first run' })).toHaveProperty(
+    expect(screen.getByRole('combobox', { name: 'Next setup result' })).toHaveProperty(
       'disabled',
       true,
     );

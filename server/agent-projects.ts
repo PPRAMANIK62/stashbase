@@ -1,20 +1,5 @@
-/**
- * `create_project` — host-side project creation for Agent callers.
- *
- * During an unbound chat an attributed Agent Panel session can call the
- * `create_project` MCP tool to get a fresh working context. This module owns
- * the semantics: validate the name, create the directory (under the default
- * folder home unless an explicit valid location is given), register it into
- * project membership so every window's sidebar lists it, and — ONLY when the
- * calling live session is unbound — migrate that session's binding to
- * the new project and persist the history override that moves its native
- * session record from unbound history to the project history.
- *
- * A chat already bound to a folder is NEVER rebound: the tool still creates
- * and registers the project, and the result tells the agent the chat stays
- * bound. Calls without session attribution (external MCP clients) create and
- * register only.
- */
+/** Explicit MCP project creation. Create and register an authorized directory;
+ * opening it and starting a conversation use the ordinary project entry flow. */
 import fs from 'node:fs';
 import {
   assertProjectFolderAvailableAsync,
@@ -27,37 +12,18 @@ import { filesystemPath } from './filesystem-path.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { syncFolderNow } from './state.ts';
 import { logger, errorMessage } from './log.ts';
-import {
-  attributedRequestSession,
-  createProjectRebindPlan,
-  type AttributedAgentSession,
-} from './agent-session-registry.ts';
-import {
-  setAgentSessionFolderOverride,
-  clearAgentSessionFolderOverride,
-} from './agent-session-folders.ts';
-import path from 'node:path';
 
 const log = logger('agent-projects');
 
 export interface CreateProjectInput {
   name: unknown;
   location?: unknown;
-  /** Request attribution from the `x-stashbase-agent-session-id` header —
-   * never a tool argument, so a model cannot claim another session. */
-  agentSessionId?: string;
-  /** Owning-window fallback when the MCP host didn't forward the session
-   * header — resolved to the window's one turn-active session. */
-  windowId?: string;
 }
 
 export interface CreateProjectResult {
   path: string;
   name: string;
   registered: true;
-  /** True when the CALLING chat session migrated its binding to the new
-   * project (unbound callers only). */
-  rebound: boolean;
   note: string;
 }
 
@@ -119,10 +85,6 @@ export interface CreateProjectDeps {
   noteTreeChanged(): void;
   /** Bind + reconcile the new folder in the background. */
   syncFolder(abs: string): Promise<unknown>;
-  /** Resolve trusted request identity; stale identities never fall through. */
-  session(attributionId: string | undefined, windowId: string | undefined): AttributedAgentSession | null;
-  setOverride(agent: AttributedAgentSession['agentId'], nativeSessionId: string, folderAbs: string): void;
-  clearOverride(agent: AttributedAgentSession['agentId'], nativeSessionId: string): void;
   assertAvailable(abs: string): void | Promise<void>;
 }
 
@@ -132,9 +94,6 @@ const productionDeps: CreateProjectDeps = {
   register: registerProjectFolderAsync,
   noteTreeChanged,
   syncFolder: (abs) => syncFolderNow(abs, { reason: 'create_project' }),
-  session: attributedRequestSession,
-  setOverride: setAgentSessionFolderOverride,
-  clearOverride: clearAgentSessionFolderOverride,
   assertAvailable: assertProjectFolderAvailableAsync,
 };
 
@@ -199,57 +158,10 @@ export async function createProjectFolder(
     .then(() => deps.syncFolder(target))
     .catch((err: unknown) => log.warn(`create_project: background bind/sync failed for ${target}: ${errorMessage(err)}`));
 
-  const { rebound, note } = applyRebind(input, target, deps);
-  return { path: target, name: resolved.name, registered: true, rebound, note };
-}
-
-function applyRebind(
-  input: Pick<CreateProjectInput, 'agentSessionId' | 'windowId'>,
-  target: string,
-  deps: CreateProjectDeps,
-): { rebound: boolean; note: string } {
-  const session = deps.session(input.agentSessionId, input.windowId);
-  const plan = createProjectRebindPlan(session);
-  if (plan.kind === 'none') {
-    if (plan.reason === 'folder-bound') {
-      return {
-        rebound: false,
-        note: `The project was created and registered. This chat stays bound to its folder "${path.basename(plan.folder)}" — open a new chat in the project to work inside it.`,
-      };
-    }
-    return {
-      rebound: false,
-      note: 'The project was created and registered. No calling chat session was rebound.',
-    };
-  }
-  // Persist the history override BEFORE flipping the live binding: the
-  // renderer reacts to `scope-changed` by opening the project and reading
-  // its History, which must already include this session.
-  const nativeId = session!.nativeSessionId();
-  try {
-    if (nativeId) deps.setOverride(session!.agentId, nativeId, target);
-  } catch (err) {
-    log.warn(`create_project: history ownership could not be saved: ${errorMessage(err)}`);
-    return {
-      rebound: false,
-      note: 'The project was created and registered, but history ownership could not be saved. This chat has not moved; open the project to start a new chat.',
-    };
-  }
-  const flipped = session!.rebindToFolder(target);
-  if (!flipped) {
-    // Raced with session close/teardown — undo the override; the record
-    // stays a project session.
-    if (nativeId) deps.clearOverride(session!.agentId, nativeId);
-    return {
-      rebound: false,
-      note: 'The project was created and registered, but the calling chat session had ended and was not rebound.',
-    };
-  }
-  if (!nativeId) {
-    log.warn(`create_project: session rebound to ${target} before a native session id existed — history stays under the project listing`);
-  }
   return {
-    rebound: true,
-    note: 'The project was created, registered, and this chat is now bound to it. Work with files inside the project from here on.',
+    path: target,
+    name: resolved.name,
+    registered: true,
+    note: 'Project created and registered. Open it to start a chat there.',
   };
 }

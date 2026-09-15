@@ -1,12 +1,13 @@
 /**
  * The sidebar's account row, at the foot of the window's left column.
  *
- * Signed out it is one button that starts the browser sign-in for free
- * OpenQuill credits. Signed in the row and its menu wear the same initials disc — the
- * theme's ink around the name's first letters, never a provider picture —
- * and the menu holds the credits, Settings, and sign-out. The same sign-in the Agents
- * section runs, through the same port, so the two entries can never
- * disagree.
+ * Signed out it is one button that starts the browser sign-in; what the
+ * account is worth (the bundled Agent's free credits) is stated in
+ * Settings → Agents rather than inside this row. Signed in the row and its
+ * menu wear the same initials disc — the theme's ink around the name's first
+ * letters, never a provider picture — and the menu holds the credits,
+ * Settings, and sign-out. The same sign-in the Agents section runs, through
+ * the same port, so the two entries can never disagree.
  */
 import { useQuery } from '@tanstack/react-query';
 import { Gauge, LogOut, Settings as SettingsIcon, UserRound, X } from 'lucide-react';
@@ -70,24 +71,28 @@ export function SidebarAccountRow({ agentRuntimeApi, onOpenSettings }: SidebarAc
         </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
-            disabled={account.busy || person === null}
+            disabled={account.busy || account.loading || (!person && !account.loadFailed)}
             icon={UserRound}
+            // The row is the action and nothing else, the length of Gallery
+            // and Settings above it. It used to carry the reason inline in a
+            // second tone, which made the one row in the column that reads as
+            // a sentence; the offer belongs where it is acted on, so Settings
+            // → Agents states it and the pointer gets it here.
             label={
-              account.signInPending ? (
-                'Waiting for browser…'
-              ) : (
-                // Two tones in one label: the action rests in the row's ink
-                // and the reason steps back behind it, so the row scans as
-                // "Sign in" at a glance and still answers "for what?" without
-                // a second line. The row's own rule is untouched — hover and
-                // selection recolour nothing.
-                <>
-                  {'Sign in '}
-                  <span className="text-muted-foreground">for free OpenQuill credits</span>
-                </>
-              )
+              account.loadFailed
+                ? 'Retry account'
+                : account.signInPending
+                  ? 'Waiting for browser…'
+                  : 'Sign in'
             }
-            onClick={() => account.signIn()}
+            onClick={account.loadFailed ? account.retryAccount : account.signIn}
+            title={
+              account.loadFailed
+                ? 'Retry loading your account'
+                : account.signInPending
+                  ? undefined
+                  : 'Sign in for free Agent credits'
+            }
           />
           {account.canStopWaiting && (
             <SidebarMenuAction
@@ -147,7 +152,7 @@ export function SidebarAccountRow({ agentRuntimeApi, onOpenSettings }: SidebarAc
                   size={sizeClasses.icon}
                   strokeWidth={1.5}
                 />
-                OpenQuill credits
+                Agent credits
               </span>
               <span className="text-muted-foreground">
                 {percent !== null ? `${percent}%` : credits.isError ? 'Unavailable' : '…'}

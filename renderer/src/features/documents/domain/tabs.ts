@@ -21,6 +21,8 @@ export interface DocumentTab {
 
 export interface DocumentTabsState {
   activeTabId: string | null;
+  openRequest: SourceReference | null;
+  openFailure: { source: SourceReference; message: string } | null;
   lifecycle: 'active' | 'disposed';
   tabs: DocumentTab[];
 }
@@ -70,10 +72,14 @@ export function createDocumentTabsState(
   }
 
   const requestedActiveId = restored?.activeTabId ?? null;
-  return withTabs({ activeTabId: null, lifecycle: 'active', tabs: [] }, sources, [
-    requestedActiveId,
-    requestedActiveId === null ? null : (remappedIds.get(requestedActiveId) ?? null),
-  ]);
+  return withTabs(
+    { activeTabId: null, openRequest: null, openFailure: null, lifecycle: 'active', tabs: [] },
+    sources,
+    [
+      requestedActiveId,
+      requestedActiveId === null ? null : (remappedIds.get(requestedActiveId) ?? null),
+    ],
+  );
 }
 
 /** The tab the reader is only looking at, if there is one. */
@@ -143,4 +149,15 @@ export function closeDocumentTab(state: DocumentTabsState, tabId: string): Docum
 
 export function disposeDocumentTabsState(state: DocumentTabsState): DocumentTabsState {
   return state.lifecycle === 'disposed' ? state : { ...state, lifecycle: 'disposed' };
+}
+
+/** Only kept tabs in this project are restored from saved files. */
+export function documentTabsSession(state: DocumentTabsState, folderPath: string) {
+  const tabs = state.tabs
+    .filter((tab) => !tab.preview && tab.source.folderPath === folderPath)
+    .map((tab) => ({ id: tab.id, path: tab.source.path }));
+  return {
+    activeTabId: tabs.some((tab) => tab.id === state.activeTabId) ? state.activeTabId : null,
+    tabs,
+  };
 }

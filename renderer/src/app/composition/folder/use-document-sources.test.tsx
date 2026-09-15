@@ -111,10 +111,14 @@ describe('useDocumentSources', () => {
     ).resolves.toBe(false);
   });
 
-  it('answers an empty retirement while no runtime is bound', async () => {
+  it('refuses a mutation while no runtime is bound', async () => {
     const { result } = mount(null, null);
 
-    await expect(result.current.retire({ kind: 'file', path: 'notes.md' })).resolves.toEqual([]);
+    const operation = vi.fn();
+    await expect(
+      result.current.mutate({ kind: 'file', path: 'notes.md' }, operation),
+    ).resolves.toBe(false);
+    expect(operation).not.toHaveBeenCalled();
   });
 
   it('lets a folder change through when nothing is open', async () => {

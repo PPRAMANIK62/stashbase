@@ -5,17 +5,11 @@ import { afterEach, expect, it, vi } from 'vite-plus/test';
 import type { LocalComponentPort } from '@/features/settings/application/ports';
 import { settingsQueryKeys } from '@/features/settings/application/queries';
 import type { LocalComponentStatus } from '@/features/settings/domain/local-component';
-import { useLocalComponent } from '@/features/settings/hooks/use-local-component';
 import { withQueryClient } from '@/test/query';
 
-import { LocalComponentGroup } from './local-component-group';
+import { LocalComponentRecovery } from './local-component-recovery';
 
 afterEach(cleanup);
-
-function Harness({ port }: { port: LocalComponentPort }) {
-  const model = useLocalComponent(port, true);
-  return model ? <LocalComponentGroup model={model} /> : null;
-}
 
 it('shows a failed download, retries only on click, and follows shared installation state', async () => {
   let status: LocalComponentStatus = { status: 'failed', error: 'network' };
@@ -26,7 +20,7 @@ it('shows a failed download, retries only on click, and follows shared installat
       return status;
     }),
   };
-  const view = withQueryClient(<Harness port={port} />);
+  const view = withQueryClient(<LocalComponentRecovery port={port} />);
   expect(await screen.findByText(/Check your connection and retry/)).not.toBeNull();
   expect(port.retry).not.toHaveBeenCalled();
   await userEvent.setup().click(screen.getByRole('button', { name: 'Retry download' }));
@@ -34,7 +28,7 @@ it('shows a failed download, retries only on click, and follows shared installat
   expect(screen.queryByRole('button', { name: 'Retry download' })).toBeNull();
   status = { status: 'installed', error: null };
   await view.client.invalidateQueries({ queryKey: settingsQueryKeys.localComponent });
-  expect(await screen.findByText(/Ready for offline use/)).not.toBeNull();
+  await waitFor(() => expect(screen.queryByText('Text extraction')).toBeNull());
   expect(port.retry).toHaveBeenCalledTimes(1);
 });
 
@@ -43,8 +37,9 @@ it('leaves an unused component alone and offers recovery for an unreadable statu
     load: vi.fn(async () => ({ status: 'not-installed' as const, error: null })),
     retry: vi.fn(),
   };
-  const view = withQueryClient(<Harness port={port} />);
-  expect(await screen.findByText(/Downloads automatically when first needed/)).not.toBeNull();
+  const view = withQueryClient(<LocalComponentRecovery port={port} />);
+  await waitFor(() => expect(port.load).toHaveBeenCalled());
+  expect(screen.queryByText('Text extraction')).toBeNull();
   expect(port.retry).not.toHaveBeenCalled();
   view.unmount();
   const unavailable: LocalComponentPort = {
@@ -53,7 +48,7 @@ it('leaves an unused component alone and offers recovery for an unreadable statu
       throw new Error('offline');
     }),
   };
-  withQueryClient(<Harness port={unavailable} />);
+  withQueryClient(<LocalComponentRecovery port={unavailable} />);
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Refresh status' })).not.toBeNull(),
   );

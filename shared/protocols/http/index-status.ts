@@ -10,10 +10,8 @@ export const conversionProgressSchema = z.discriminatedUnion('phase', [
   z.object({ lane: laneSchema, phase: z.literal('yielded'), tasksAhead: countSchema }).strict(),
   z
     .object({
-      completedUnits: countSchema.optional(),
       currentPage: z.number().int().positive().optional(),
       phase: z.literal('extracting'),
-      totalUnits: countSchema.optional(),
     })
     .strict(),
   z.object({ phase: z.literal('indexing') }).strict(),
@@ -51,7 +49,6 @@ export const indexWarningSchema = z
  *  display-only counters does not invalidate an older renderer. */
 export const indexStatusResponseSchema = z
   .object({
-    blockedConversions: z.array(relativePathSchema).max(100_000),
     conversionProgress: z.record(relativePathSchema, conversionProgressSchema),
     conversionRevision: countSchema,
     conversionVersions: z.record(relativePathSchema, countSchema),

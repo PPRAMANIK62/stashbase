@@ -1,12 +1,9 @@
 import { Worker, isMarkedAsUntransferable } from 'node:worker_threads';
-import { parseAudioTranscript } from './audio-transcript.ts';
 
-type Task = { kind: 'docx' | 'audio'; bytes: Uint8Array };
-export type AudioPreparedIdentity = { size: number; mtimeMs: number; statIdentity: string; contentHash: string };
+type Task = { kind: 'docx'; bytes: Uint8Array };
 
 const WORKER_SOURCE = String.raw`
 const { parentPort, workerData } = require('node:worker_threads');
-const parseAudioTranscript = (${parseAudioTranscript.toString()});
 function docxHasText(html) {
   const text = html.replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, ' ')
     .replace(/<\s*br\s*\/?>/gi, '\n').replace(/<\/\s*(p|div|section|article|li|tr|h[1-6])\s*>/gi, '\n')
@@ -16,13 +13,9 @@ function docxHasText(html) {
     .replace(/&#x([0-9a-f]+);/gi, (_, n) => { try { return String.fromCodePoint(Number.parseInt(n, 16)); } catch { return ''; } });
   return text.trim().length > 0;
 }
-function audioIdentity(text) {
-  const { source } = parseAudioTranscript(JSON.parse(text));
-  return { size: source.size, mtimeMs: source.mtimeMs, statIdentity: source.statIdentity, contentHash: source.contentHash };
-}
 try {
   const text = Buffer.from(workerData.bytes).toString('utf8');
-  parentPort.postMessage({ ok: true, value: workerData.kind === 'docx' ? docxHasText(text) : audioIdentity(text) });
+  parentPort.postMessage({ ok: true, value: docxHasText(text) });
 }
 catch (error) { parentPort.postMessage({ ok: false, error: error && error.message ? error.message : String(error) }); }
 `;
@@ -61,4 +54,3 @@ async function run<T>(task: Task): Promise<T> {
 }
 
 export const validatePreparedDocxText = (bytes: Buffer): Promise<boolean> => run({ kind: 'docx', bytes });
-export const validatePreparedAudioTranscript = (bytes: Buffer): Promise<AudioPreparedIdentity> => run({ kind: 'audio', bytes });

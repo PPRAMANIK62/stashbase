@@ -59,3 +59,9 @@ export const SURFACE_FAILED = 'The Agent view could not load.';
 export function agentFailure(error: unknown): FailureView {
   return readFailure<AgentContextExtra>(error, MESSAGES, { inputKinds: INPUT_KINDS });
 }
+
+/** Access setup failures keep the retained request available for another try. */
+export function agentAccessFailure(error: unknown): string {
+  if (isFeatureError(error)) return agentFailure(error).message;
+  return 'Could not connect. Your message was kept. Try again or check Agent settings.';
+}

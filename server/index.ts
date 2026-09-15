@@ -1,3 +1,6 @@
+import { ensureMcpLauncher } from './agent-mcp.ts';
+import { closeAgentProcesses } from './agent-process.ts';
+import { mountFileOperationReceipts } from './routes/file-operations.ts';
 /**
  * Express server entry point.
  *
@@ -39,11 +42,6 @@ import { reapOrphanDaemons, reclaimStaleServerPort } from './stale-lock.ts';
 import { startParentWatchdog } from './parent-watchdog.ts';
 import { logger } from './log.ts';
 import { cancelAllConversions, setDerivedNoteIndexer } from './conversion.ts';
-import { cancelAllTranscriptionModelDownloads } from './transcription-models.ts';
-import {
-  initializeTranscriptionRuntime,
-  recoverTranscriptionRuntimeAfterServerBind,
-} from './transcription-runtime.ts';
 import { noteTreeChanged } from './watcher.ts';
 import { indexer } from './state.ts';
 import { closeStateDb } from './state-db.ts';
@@ -60,7 +58,6 @@ import { mount as mountWorkspacePreferenceRoutes } from './routes/workspace-pref
 import { mount as mountUpdateRoutes } from './routes/updates.ts';
 import { mount as mountLocalComponentRoutes } from './routes/local-components.ts';
 import { resumeExtractorDownload, closeExtractorRuntime } from './python-host.ts';
-import { mount as mountTranscriptionRoutes } from './routes/transcription.ts';
 import { mount as mountFilesRoutes } from './routes/files.ts';
 import { mount as mountFoldersRoutes } from './routes/folders.ts';
 import { mount as mountUploadRoutes } from './routes/upload.ts';
@@ -71,9 +68,8 @@ import { mount as mountTerminalRoutes } from './routes/terminal.ts';
 import { mount as mountMcpRoutes } from './routes/mcp.ts';
 import { createMcpHttpService } from './mcp-http-service.ts';
 import { runShutdownCleanup } from './shutdown-cleanup.ts';
-import { mount as mountSessionsRoutes } from './routes/sessions.ts';
-import { mount as mountCodexSessionsRoutes } from './routes/codex-sessions.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
+import { mount as mountAgentPreferencesRoutes } from './routes/agent-preferences.ts';
 import { mount as mountAgentInstructionsRoutes } from './routes/agent-instructions.ts';
 import { createRendererOriginPolicy } from './middleware/renderer-origin.ts';
 import { mount as mountAccountRoutes } from './routes/account.ts';
@@ -88,7 +84,6 @@ import { cancelAllGitHubImports } from './github-import.ts';
 
 const log = logger('server');
 
-initializeTranscriptionRuntime();
 
 // Compatibility adapters preserve the established Claude SDK and Codex
 // app-server behaviour behind one panel contract.  Their native protocols
@@ -100,7 +95,7 @@ for (const adapter of BUILT_IN_AGENT_ADAPTERS) registerAgentAdapter(adapter);
 // (not inside conversion.ts) to avoid a conversion ↔ state module cycle.
 setDerivedNoteIndexer(async (sourceAbs, derivedAbs) => {
   // Derived text lives in app data; index it UNDER the source
-  // PDF/image/DOCX/audio path so folder-scoped search finds it. MFS owns the
+  // PDF/image/DOCX path so folder-scoped search finds it. MFS owns the
   // accepted projection's content identity and unchanged decision.
   const derivedContent = fs.readFileSync(derivedAbs, 'utf8');
   const result = await indexer.upsertConvertedFile(
@@ -137,7 +132,7 @@ const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
 const WEB_BUILD_DIR = path.resolve(APP_ROOT, 'dist', 'renderer');
 const PDFJS_DIST_DIR = path.resolve(APP_ROOT, 'node_modules', 'pdfjs-dist');
 
-// Establish the default folder home and seed the built-in manual on first use.
+// Establish the default folder home without adding projects or source files.
 // Unavailable folders retain their durable project registration.
 ensureFolderHome();
 // NB: the daemon is NOT spawned here — `bootBindAllFolders` runs from the
@@ -252,8 +247,7 @@ mountInternalShutdownRoute(app, {
 // Static layer is mounted before the API routes for renderer bundle
 // requests, but data routes must bypass it entirely. In packaged asar
 // builds, serve-static can still issue directory-normalisation redirects
-// before "falling through"; `/api/*`, `/asset/*`, and the dedicated audio
-// preview asset prefix must always reach the route handlers below as-is.
+// before "falling through"; API and asset paths must reach their route handlers as-is.
 if (!DEV_VITE) {
   if (fs.existsSync(path.join(WEB_BUILD_DIR, 'index.html'))) {
     const webStatic = express.static(WEB_BUILD_DIR, { redirect: false });
@@ -263,8 +257,6 @@ if (!DEV_VITE) {
         req.path.startsWith('/api/') ||
         req.path === '/asset' ||
         req.path.startsWith('/asset/') ||
-        req.path === '/asset-audio-preview' ||
-        req.path.startsWith('/asset-audio-preview/') ||
         req.path === '/asset-derived' ||
         req.path.startsWith('/asset-derived/') ||
         req.path === '/mcp'
@@ -294,16 +286,14 @@ mountGalleryRoutes(app);
 // previously-bound folder.
 app.use([
   '/api/files',
+  '/api/file-operations',
   '/api/file-preview',
   '/api/folders',
   '/api/search',
   '/api/rename-preview',
-  '/api/file-order',
   '/api/reveal',
   '/asset',
-  '/asset-audio-preview',
   '/asset-derived',
-  '/api/audio',
 ], requireFolder);
 
 // ----- mount routes -------------------------------------------------------
@@ -315,11 +305,11 @@ mountAccountRoutes(app, {
   appReturnToken: process.env.STASHBASE_OAUTH_RETURN_TOKEN ?? '',
 });
 mountEmbedderRoutes(app);
-mountTranscriptionRoutes(app);
 mountLocalComponentRoutes(app);
 // Register exact `/api/files/prepare` and `/api/files/reprocess` endpoints
 // before the generic file-content wildcard routes.
 mountIndexingRoutes(app);
+mountFileOperationReceipts(app);
 mountFilesRoutes(app);
 mountFoldersRoutes(app);
 mountUploadRoutes(app);
@@ -328,10 +318,9 @@ mountProjectFileRoutes(app);
 mountTerminalRoutes(app);
 mountMcpRoutes(app, mcpHttpService);
 mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in and MCP-only
-mountSessionsRoutes(app); // global (no requireFolder) — lists all local sessions
-mountCodexSessionsRoutes(app); // global (no requireFolder) — filters to current folder when open
 mountAgentSessionsRoutes(app); // shared contract history surface for the built-in panel
-mountAgentInstructionsRoutes(app); // global + explicit member-folder Chat guidance
+mountAgentInstructionsRoutes(app);
+mountAgentPreferencesRoutes(app); // global + explicit member-folder Chat guidance
 
 // Renderer error sink. The root `ErrorBoundary` POSTs render-time
 // exceptions here so they appear in the same server log developers
@@ -356,19 +345,10 @@ const viteProxy = DEV_VITE
 if (viteProxy) app.use(viteProxy);
 
 const server = app.listen(PORT, '127.0.0.1', () => {
+  try { ensureMcpLauncher(); }
+  catch (err: unknown) { log.warn(`MCP launcher refresh failed: ${err instanceof Error ? err.message : String(err)}`); }
   log.info(`listening on http://127.0.0.1:${PORT}`);
   void resumeExtractorDownload().catch((error) => log.warn(`component recovery failed: ${String(error)}`));
-  try {
-    const recovered = recoverTranscriptionRuntimeAfterServerBind();
-    if (recovered.modelDownloads.length || recovered.audioPreviews.length) {
-      log.info(
-        `reclaimed transcription crash residue: ${recovered.modelDownloads.length} model download(s), `
-        + `${recovered.audioPreviews.length} audio preview(s)`,
-      );
-    }
-  } catch (err: unknown) {
-    log.warn(`transcription crash recovery failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
   void mcpHttpService.start().catch((err: unknown) => {
     log.warn(`MCP HTTP startup failed: ${err instanceof Error ? err.message : String(err)}`);
   });
@@ -385,11 +365,8 @@ const server = app.listen(PORT, '127.0.0.1', () => {
   try { reapOrphanDaemons(); } catch (err: unknown) {
     log.warn(`reap orphan daemons failed: ${err instanceof Error ? err.message : String(err)}`);
   }
-  // NB: the built-in manual is seeded inside `ensureFolderHome` (called at
-  // module load above), so by the time we bind here the seeded folder is
-  // already on disk and gets picked up. Configure the daemon + bind every
-  // known Folder so its namespace reconciles without waiting for the user to
-  // open it. Background.
+  // Configure the daemon and bind registered folders in the background so
+  // their namespaces reconcile without waiting for the user to open them.
   Promise.resolve()
     .then(() => bootBindAllFolders())
     .then(() => reconcileProjectFolders('app boot'))
@@ -444,9 +421,7 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 // because we share the existing http.Server with Vite's HMR proxy.
 const agentWss = new WebSocketServer({ noServer: true });
 agentWss.on('connection', (ws, req) => {
-  // An explicit session scope must be `scope=unbound` or a registered
-  // project folder; reject anything else before a runtime process can be
-  // bound to it.
+  // Reject missing or unregistered projects before starting a runtime.
   const resolved = resolveAgentSessionScope(rawScopeOf(req), rawFolderOf(req), registeredFolderRoots());
   if (!resolved.ok) {
     ws.send(JSON.stringify({ t: 'error', message: 'That folder is not a registered project.' }));
@@ -456,8 +431,7 @@ agentWss.on('connection', (ws, req) => {
   const scope = resolved.scope;
   attachAgentRuntime(agentIdOf(req), ws, {
     ...connectionOptionsOf(req),
-    ...(scope?.kind === 'folder' ? { folder: scope.path } : {}),
-    ...(scope?.kind === 'unbound' ? { scope: 'unbound' as const } : {}),
+    folder: scope.path,
   });
 });
 
@@ -494,7 +468,7 @@ function rawFolderOf(req: import('node:http').IncomingMessage): string | undefin
   }
 }
 
-/** Raw explicit-scope request off the WS URL (`scope=unbound`). */
+/** Reject retired or unsupported scope selectors at the connection boundary. */
 function rawScopeOf(req: import('node:http').IncomingMessage): string | undefined {
   try {
     const u = new URL(req.url ?? '', `http://${req.headers.host ?? '127.0.0.1'}`);
@@ -549,15 +523,8 @@ function resumeOf(req: import('node:http').IncomingMessage): string | undefined 
   }
 }
 
-// Agent sessions are pinned to an explicit scope (a member folder, or
-// the unbound conversation), so a window switching folders does NOT tear them
-// down — the chat tabs and their running sessions survive the switch. An
-// attributed unbound Chat's explicit create_project action is the one scope
-// migration and is owned inside the runtime/session registry.
-// Teardown remains on window close/retire (below), project folder
-// removal (routes/project.ts via stopAgentRuntimesForFolder — which only
-// matches folder-bound sessions, never unbound ones), and app
-// shutdown.
+// Sessions stay with their project across navigation. Close, project removal,
+// and shutdown retire them through their owning runtime.
 onClose((_oldRoot, windowId) => {
   stopAgentRuntime('claude', windowId);
   stopAgentRuntime('codex', windowId);
@@ -602,9 +569,8 @@ async function shutdown(reason: string): Promise<void> {
     await runShutdownCleanup({
       closeMcp: () => mcpHttpService.close(),
       cancelAgentInstalls: cancelAgentRuntimeInstalls,
-      closeBundledAgent: stopOpenCodeRuntime,
+      closeBundledAgent: async () => { await Promise.all([stopOpenCodeRuntime(), closeAgentProcesses()]); },
       cancelGitHubImports: cancelAllGitHubImports,
-      cancelModelDownloads: cancelAllTranscriptionModelDownloads,
       cancelConversions: async () => {
         const cancelled = await cancelAllConversions();
         await closeExtractorRuntime();
@@ -614,9 +580,6 @@ async function shutdown(reason: string): Promise<void> {
       closeIndexer: () => indexer.close(),
       onCancelled: (cancelled) => {
         if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} conversion(s)`);
-      },
-      onModelDownloadsCancelled: (cancelled) => {
-        if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} model download(s)`);
       },
       onAgentInstallsCancelled: (cancelled) => {
         if (cancelled.length) log.info(`shutdown: cancelled ${cancelled.length} Agent install(s)`);

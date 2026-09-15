@@ -20,7 +20,6 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   detectFormat,
-  pathExists,
   sanitizeFilename,
 } from '../files.ts';
 import { isConvertibleSource, isNoteName } from '../format.ts';
@@ -349,91 +348,6 @@ function rawUploadPathFor(files: Express.Multer.File[], paths: string[], idx: nu
   return paths[idx] && paths[idx].length ? paths[idx] : f.originalname;
 }
 
-export function computeFinalNames(
-  files: Express.Multer.File[],
-  paths: string[],
-  prefix: string,
-  exists: (relPath: string) => boolean = pathExists,
-): string[] {
-  // Step 1: reserve a non-colliding name for every TOP-LEVEL file (any
-  // type). "Top-level" = no folder separator (so it lives directly at
-  // the drop target, alongside its `<stem>_files/` bundle if it's a
-  // note). Bundle members (rel contains `/`) are handled in step 3.
-  const reserved = new Set<string>();             // finalName (stem+ext) / dir name taken this batch
-  const finalByIndex = new Map<number, string>(); // idx → final top-level name
-  const noteStemRenames = new Map<string, string>(); // note origStem → finalStem (for bundles)
-  const topLevelNoteStems = new Set<string>();    // stems of top-level notes (to spot their bundles)
-  for (let i = 0; i < files.length; i++) {
-    const rel = rawUploadPathFor(files, paths, i);
-    if (rel.includes('/')) continue;
-    const isNote = isNoteName(rel);
-    const dot = rel.lastIndexOf('.');
-    const origStem = dot > 0 ? rel.slice(0, dot) : rel;
-    const ext = dot > 0 ? rel.slice(dot) : ''; // includes leading dot, '' if none
-    if (isNote) topLevelNoteStems.add(origStem);
-    let finalStem = origStem;
-    let n = 2;
-    while (
-      exists(prefix + finalStem + ext)
-      || reserved.has(finalStem + ext)
-      || (isNote && exists(prefix + finalStem + '_files'))
-    ) {
-      finalStem = `${origStem}-${n}`;
-      n++;
-    }
-    reserved.add(finalStem + ext);
-    finalByIndex.set(i, finalStem + ext);
-    if (isNote && finalStem !== origStem) noteStemRenames.set(origStem, finalStem);
-  }
-  // Step 2: renumber each distinct TOP-LEVEL folder that collides, as a
-  // unit. A note's `<stem>_files/` bundle is NOT a folder here — it
-  // tracks its note via `noteStemRenames` (step 3) — so skip those.
-  const dirRenames = new Map<string, string>(); // origTopDir → finalTopDir
-  const seenDirs = new Set<string>();
-  for (let i = 0; i < files.length; i++) {
-    const rel = rawUploadPathFor(files, paths, i);
-    const dirEnd = rel.indexOf('/');
-    if (dirEnd < 0) continue; // top-level file, handled above
-    const top = rel.slice(0, dirEnd);
-    if (seenDirs.has(top)) continue;
-    seenDirs.add(top);
-    const bm = top.match(/^(.+)_files$/);
-    if (bm && topLevelNoteStems.has(bm[1])) continue; // a note bundle, not a folder
-    let finalDir = top;
-    let n = 2;
-    while (exists(prefix + finalDir) || reserved.has(finalDir)) {
-      finalDir = `${top}-${n}`;
-      n++;
-    }
-    reserved.add(finalDir);
-    if (finalDir !== top) dirRenames.set(top, finalDir);
-  }
-  // Step 3: rewrite every file's path. Top-level files use their
-  // reserved final name; a renamed note's `<stem>_files/...` bundle
-  // tracks the renumbered stem; everything under a renumbered folder
-  // gets its first segment swapped; the rest stay verbatim.
-  const finalNames = files.map((_, i) => {
-    const rel = rawUploadPathFor(files, paths, i);
-    const segments = rel.split('/');
-    if (segments.length === 1) {
-      return sanitizeFilename(prefix + (finalByIndex.get(i) ?? rel));
-    }
-    const top = segments[0];
-    const bm = top.match(/^(.+)_files$/);
-    if (bm && noteStemRenames.has(bm[1])) {
-      segments[0] = noteStemRenames.get(bm[1])! + '_files';
-      return sanitizeFilename(prefix + segments.join('/'));
-    }
-    if (dirRenames.has(top)) {
-      segments[0] = dirRenames.get(top)!;
-      return sanitizeFilename(prefix + segments.join('/'));
-    }
-    return sanitizeFilename(prefix + rel);
-  });
-  const used = new Set<string>();
-  return finalNames.map((name) => reserveFinalPath(name, used, exists));
-}
-
 export async function computeFinalNamesAsync(
   files: Express.Multer.File[],
   paths: string[],
@@ -512,26 +426,6 @@ export async function computeFinalNamesAsync(
     reservedNames.push(await reserveFinalPathAsync(name, used, exists));
   }
   return reservedNames;
-}
-
-function reserveFinalPath(candidate: string, used: Set<string>, exists: (relPath: string) => boolean): string {
-  if (!used.has(candidate) && !exists(candidate)) {
-    used.add(candidate);
-    return candidate;
-  }
-  const slash = candidate.lastIndexOf('/');
-  const dir = slash >= 0 ? candidate.slice(0, slash + 1) : '';
-  const base = slash >= 0 ? candidate.slice(slash + 1) : candidate;
-  const dot = base.lastIndexOf('.');
-  const stem = dot > 0 ? base.slice(0, dot) : base;
-  const ext = dot > 0 ? base.slice(dot) : '';
-  for (let n = 2; ; n++) {
-    const next = `${dir}${stem}-${n}${ext}`;
-    if (!used.has(next) && !exists(next)) {
-      used.add(next);
-      return next;
-    }
-  }
 }
 
 async function reserveFinalPathAsync(

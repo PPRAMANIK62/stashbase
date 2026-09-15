@@ -6,7 +6,6 @@ import type { HttpClient } from '@/platform/http/client';
 import { createPreparationStatusAdapter } from './status-api';
 
 const wire = {
-  blockedConversions: [],
   conversionProgress: { 'a.pdf': { lane: 'heavy', phase: 'queued', tasksAhead: 1 } },
   conversionRevision: 3,
   conversionVersions: {},

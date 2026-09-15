@@ -29,7 +29,7 @@ export type AgentHistoryMutation =
   | { kind: 'refused'; reason: AgentContextErrorKind };
 
 function scopeKey(scope: AgentScope): string {
-  return scope.kind === 'unbound' ? 'unbound' : `folder:${scope.path}`;
+  return `folder:${scope.path}`;
 }
 
 function historyQueryKey(agent: AgentId, scope: AgentScope) {
@@ -60,6 +60,7 @@ function useRenameHistoryMutation(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
+    scope: { id: 'agent-history-rename' },
     mutationFn: ({ entry, title }: { entry: AgentHistoryEntry; title: string }) =>
       runtime.renameHistory(entry, title, signal()),
     onMutate: () => onFailure(null),
@@ -74,9 +75,7 @@ function useRenameHistoryMutation(
 }
 
 /** Renames the Chat behind a mounted session from wherever it is shown. The
- *  session takes the name at once; one the runtime has already identified is
- *  renamed on record as well, so the name outlives the tab, and a refusal
- *  hands the old name back. */
+ *  native title changes only after persistence succeeds. Draft titles stay local. */
 export function useRenameConversation(runtime: AgentWorkspaceRuntime) {
   const signalFor = useRequestSignals<'rename'>();
   const [failure, setFailure] = useState<string | null>(null);
@@ -86,13 +85,14 @@ export function useRenameConversation(runtime: AgentWorkspaceRuntime) {
     rename: async (session: AgentSessionRuntime, title: string): Promise<AgentHistoryMutation> => {
       const state = session.store.getState();
       const entry = historyEntryOf(state);
-      session.rename(title);
-      if (entry === null) return { kind: 'done' };
+      if (entry === null) {
+        session.rename(title);
+        return { kind: 'done' };
+      }
       try {
         await mutation.mutateAsync({ entry, title });
         return { kind: 'done' };
       } catch (error) {
-        session.rename(state.title);
         return { kind: 'refused', reason: failureKind(error) };
       }
     },

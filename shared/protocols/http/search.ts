@@ -18,7 +18,6 @@ const exactSearchRangeSchema = z
 
 export const exactSearchMatchSchema = z
   .object({
-    audioTimestampMs: z.number().finite().nonnegative().optional(),
     line: z.number().int().positive(),
     pdfPage: z.number().int().positive().optional(),
     ranges: z.array(exactSearchRangeSchema).max(256),

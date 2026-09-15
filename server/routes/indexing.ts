@@ -11,16 +11,12 @@ import {
   resolveFolderRootAsync,
 } from '../folder.ts';
 import {
-  cancelAudioPreparation,
-  isAudioTranscriptTextUnavailable,
-} from '../audio-transcription.ts';
-import {
   cancelConversionAndWait,
   isConversionPending,
   isConversionTextUnavailable,
   promoteConversion,
 } from '../conversion.ts';
-import { isAudioFile, isConvertibleSource } from '../format.ts';
+import { detectFormat, isConvertibleSource } from '../format.ts';
 import { clearRecord, markCancelled, readAll as readConversionStatus } from '../conversion-status.ts';
 import {
   prepareConvertibleSource,
@@ -40,10 +36,6 @@ import {
 } from '../../shared/search-types.ts';
 import { buildIndexStatus } from '../index-status.ts';
 import { createRetrieval, keywordFilesFromEvidence, searchHitsFromEvidence } from '../retrieval/index.ts';
-import {
-  normalizeTranscriptionLanguage,
-  type ConfiguredTranscriptionBlock,
-} from '../../shared/transcription.ts';
 
 const log = logger('routes/indexing');
 const retrieval = createRetrieval();
@@ -124,7 +116,6 @@ async function requireExistingFileInFolderAsync(folderRoot: string, rel: string)
 export async function reprocessFileInFolder(
   relPath: string,
   folderName?: string,
-  options: { language?: string } = {},
 ): Promise<'conversion' | 'index'> {
   const rel = typeof relPath === 'string' ? relPath : '';
   if (!rel) {
@@ -142,6 +133,11 @@ export async function reprocessFileInFolder(
   const { folderRoot } = await requireRequestFolder(folderName || undefined);
 
   const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
+  if (!isConvertibleSource(rel) && !detectFormat(rel)) {
+    const err = new Error('this file format cannot be prepared');
+    (err as any).status = 415;
+    throw err;
+  }
   const sourcePath = sourcePathForAbs(abs);
   if (isConversionPending(sourcePath)) {
     // A manual retry promotes queued work; running work is non-preemptive.
@@ -149,15 +145,7 @@ export async function reprocessFileInFolder(
     return isConvertibleSource(rel) ? 'conversion' : 'index';
   }
 
-  const reprocess = reprocessConvertibleSource(abs, rel, {
-    ...(isAudioFile(rel) ? { language: normalizeLanguageOverride(options.language) } : {}),
-  });
-  if (reprocess.status === 'blocked') {
-    const err = new Error(audioReprocessBlockMessage(reprocess.block));
-    (err as any).status = 409;
-    (err as any).code = 'TRANSCRIPTION_NOT_READY';
-    throw err;
-  }
+  const reprocess = reprocessConvertibleSource(abs, rel);
   if (reprocess.status === 'queued') {
     return 'conversion';
   }
@@ -173,14 +161,6 @@ export async function reprocessFileInFolder(
   return 'index';
 }
 
-function audioReprocessBlockMessage(block: ConfiguredTranscriptionBlock): string {
-  if (block.reason === 'runtime-unavailable') return `local transcription runtime is unavailable: ${block.error}`;
-  if (block.reason === 'model-verifying') return `the ${block.modelId} transcription model is still being verified`;
-  if (block.reason === 'model-not-installed') return `download the ${block.modelId} transcription model before reprocessing`;
-  if (block.reason === 'model-unavailable') return `the ${block.modelId} transcription model is unavailable${block.error ? `: ${block.error}` : ''}`;
-  return `the ${block.providerId} transcription provider is unavailable`;
-}
-
 async function cancelFilePreparationInFolder(relPath: string, folderName?: string): Promise<boolean> {
   const rel = typeof relPath === 'string' ? relPath : '';
   if (!rel) {
@@ -191,7 +171,6 @@ async function cancelFilePreparationInFolder(relPath: string, folderName?: strin
   const { folderRoot } = await requireRequestFolder(folderName || undefined);
   const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   const sourcePath = sourcePathForAbs(abs);
-  if (isAudioFile(rel)) return cancelAudioPreparation(sourcePath);
   const cancelled = await cancelConversionAndWait(sourcePath, 'user-request');
   if (cancelled) markCancelled(sourcePath);
   return cancelled;
@@ -213,19 +192,10 @@ async function prepareConvertibleInFolder(relPath: string, folderName?: string):
   const { folderRoot } = await requireRequestFolder(folderName || undefined);
   const abs = await requireExistingFileInFolderAsync(folderRoot, rel);
   if (!prepareConvertibleSource(abs, rel)) {
-    const err = new Error('only DOCX and media files require interactive preparation');
+    const err = new Error('only DOCX files require interactive preparation');
     (err as any).status = 415;
     throw err;
   }
-}
-
-function normalizeLanguageOverride(value: unknown): string | undefined {
-  if (value == null || value === '') return undefined;
-  const normalized = normalizeTranscriptionLanguage(value);
-  if (normalized) return normalized;
-  const err = new Error('language must be `auto` or a language code');
-  (err as any).status = 400;
-  throw err;
 }
 
 export function mount(app: express.Express): void {
@@ -374,7 +344,7 @@ export function mount(app: express.Express): void {
   });
 
   // File reprocess: take a folder-relative path and clear its durable
-  // failure row. PDF/image/DOCX/audio sources also clear stale final derived
+  // failure row. PDF/image/DOCX sources also clear stale final derived
   // artifacts and re-run extraction; directly readable files schedule a
   // reconcile so the index is rebuilt from source.
   app.post('/api/files/reprocess', async (req, res) => {
@@ -383,7 +353,7 @@ export function mount(app: express.Express): void {
       const targetFolder = typeof req.body?.folder === 'string' && req.body.folder.trim()
         ? req.body.folder
         : undefined;
-      const mode = await reprocessFileInFolder(rel, targetFolder, { language: req.body?.language });
+      const mode = await reprocessFileInFolder(rel, targetFolder);
       res.json({ ok: true, mode });
     } catch (err: unknown) {
       sendError(res, err);

@@ -48,6 +48,23 @@ describe('ThinkingSteps', () => {
     await expectNoA11yViolations(view.container);
   });
 
+  it('keeps the trace open when the click was a drag that selected its summary', async () => {
+    render(<RetrievalTrace />);
+    const header = screen.getByRole('button', { name: /Tracing answer/u });
+    // What a drag across the header's label leaves behind; the click that
+    // follows it must not fold the trace and hide the selected text.
+    const range = document.createRange();
+    range.selectNodeContents(header);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    fireEvent.click(header);
+
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    selection?.removeAllRanges();
+  });
+
   it("lists a step's sources as badges beside it", async () => {
     const view = render(<RetrievalTrace />);
     expect(screen.getByText('Project overview.md')).toBeDefined();

@@ -227,57 +227,6 @@ test('file operations cancel queued/running conversion work and await release', 
   }
 });
 
-test('interactive preview interrupts only the source conversion and preserves scoped auxiliary work', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-preview-preemption-'));
-  const previousDataRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
-  process.env.STASHBASE_LOCAL_DATA_ROOT = path.join(root, 'data');
-  const source = path.join(root, 'meeting.wav');
-  const transcript = path.join(root, 'meeting.md');
-  const preview = path.join(root, 'meeting.webm');
-  fs.writeFileSync(source, 'source');
-  try {
-    const {
-      getScheduledConversion,
-      interruptConversionForInteractivePreview,
-      maybeConvert,
-      runAuxiliaryConversion,
-    } = await import('./conversion.ts');
-    const conversion = maybeConvert(source, {
-      kind: 'preview_preemption_test',
-      lane: 'heavy',
-      cost: 20,
-      matches: () => true,
-      derivedNote: () => transcript,
-      convert: async (_abs: string, _progress?: unknown, signal?: AbortSignal) => {
-        await new Promise<void>((_resolve, reject) => {
-          signal?.addEventListener('abort', () => reject(new Error('interrupted')), { once: true });
-        });
-      },
-      cleanupDerived: () => fs.rmSync(transcript, { force: true }),
-    });
-    assert.ok(conversion);
-    for (let attempt = 0; attempt < 10 && getScheduledConversion(source)?.state !== 'running'; attempt += 1) {
-      await tick();
-    }
-    const auxiliary = runAuxiliaryConversion({
-      taskKey: preview,
-      sourcePath: source,
-      lane: 'heavy',
-      urgency: 'interactive',
-      cost: 2,
-      run: async () => { fs.writeFileSync(preview, 'preview'); },
-    });
-
-    assert.equal(await interruptConversionForInteractivePreview(source), true);
-    await Promise.all([conversion, auxiliary]);
-    assert.equal(fs.readFileSync(preview, 'utf8'), 'preview');
-  } finally {
-    closeStateDb();
-    if (previousDataRoot == null) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
-    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousDataRoot;
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
 
 test('converted indexing hands the complete derived projection to MFS', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-derived-projection-'));

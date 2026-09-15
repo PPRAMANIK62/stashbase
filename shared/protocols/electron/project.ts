@@ -4,8 +4,12 @@ export const PROJECT_FOLDER_DIALOG_CAPABILITY = 'project.choose-folder';
 export const PROJECT_FOLDER_DIALOG_CHANNEL = 'project:choose-folder';
 export const PROJECT_LIFECYCLE_CAPABILITY = 'project.lifecycle';
 export const PROJECT_SET_ACTIVE_FOLDER_CHANNEL = 'project:set-active-folder';
+export const PROJECT_ENTRY_CANCEL_CHANNEL = 'project:entry-cancel';
+export const PROJECT_ENTRY_CANCELLED_CHANNEL = 'project:entry-cancelled';
+export const PROJECT_ENTRY_REQUESTED_CHANNEL = 'project:entry-requested';
+export const PROJECT_ENTRY_PENDING_CHANNEL = 'project:entry-pending';
+export const PROJECT_ENTRY_FINISHED_CHANNEL = 'project:entry-finished';
 export const PROJECT_OPEN_FOLDER_WINDOW_CHANNEL = 'project:open-folder-window';
-export const PROJECT_CLAIM_INITIAL_FOLDER_CHANNEL = 'project:claim-initial-folder';
 export const PROJECT_PREPARE_FOLDER_REMOVAL_CHANNEL = 'project:prepare-folder-removal';
 export const PROJECT_FOLDER_REMOVAL_REQUESTED_CHANNEL = 'project:folder-removal-requested';
 export const PROJECT_FOLDER_REMOVAL_READY_CHANNEL = 'project:folder-removal-ready';
@@ -72,27 +76,8 @@ export const projectOpenFolderWindowSuccessSchema = z
   .object({ ok: z.literal(true), action: z.enum(['opened', 'focused']) })
   .strict();
 
-/** Claiming carries nothing: the window asking is the window being answered,
- *  and main reads its identity from the sender it already authorized. Stated
- *  here so both sides refuse a payload rather than one side ignoring it. */
-export const projectInitialFolderRequestSchema = z.undefined();
-
-/** The folder main created this window for, answered at most once: main
- *  forgets it as the claim is made, so a window that reloads does not land
- *  again on a folder its reader has since left. `null` is the ordinary answer
- *  for a window nobody named a folder for, not a failure to report. Strict,
- *  like every other answer main and this preload ship together. */
-export const projectInitialFolderSuccessSchema = z
-  .object({ folderPath: folderPathSchema.nullable(), ok: z.literal(true) })
-  .strict();
-
 export const projectLifecycleResponseSchema = z.union([
   projectLifecycleSuccessSchema,
-  projectFolderDialogFailureSchema,
-]);
-
-export const projectInitialFolderResponseSchema = z.union([
-  projectInitialFolderSuccessSchema,
   projectFolderDialogFailureSchema,
 ]);
 
@@ -121,4 +106,16 @@ export type ProjectPrepareFolderRemovalResponse = z.infer<
 export type ProjectOpenFolderWindowResponse = z.infer<
   typeof projectOpenFolderWindowResponseSchema
 >;
-export type ProjectInitialFolderResponse = z.infer<typeof projectInitialFolderResponseSchema>;
+
+export const projectEntryRequestSchema = z.object({
+  requestId: z.string().uuid(),
+  folderPath: folderPathSchema,
+}).strict();
+export const projectEntryPendingSchema = projectEntryRequestSchema.nullable();
+export const projectEntryFinishedSchema = projectEntryRequestSchema.extend({
+  failure: z.string().min(1).max(500).nullable(),
+}).strict();
+export type ProjectEntryRequest = z.infer<typeof projectEntryRequestSchema>;
+
+export const projectEntryCancelSchema = z.object({ requestId: z.string().uuid() }).strict();
+export const projectEntryStartSchema = projectFolderPathRequestSchema.extend({ requestId: z.string().uuid().optional() }).strict();

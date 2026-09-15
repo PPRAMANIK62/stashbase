@@ -120,21 +120,6 @@ describe('useAgentRuntimes', () => {
     );
   });
 
-  it('uninstalls an agent, reports the removal, and writes it into the catalog cache', async () => {
-    const removed = catalog([]);
-    const resetManagedAgent = vi.fn(async () => removed);
-    const { queryClient, view } = await mount(
-      agentRuntimePort({ listAgents: emptyCatalog(), resetManagedAgent }),
-    );
-    const done = vi.fn();
-
-    act(() => view.result.current.uninstall('codex', done));
-
-    await waitFor(() => expect(resetManagedAgent).toHaveBeenCalledWith('codex', expect.anything()));
-    await waitFor(() => expect(done).toHaveBeenCalled());
-    expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(removed);
-  });
-
   it('reports a failed install against the agent it was asked for, and no other', async () => {
     const { view } = await mount(
       agentRuntimePort({
@@ -161,44 +146,13 @@ describe('useAgentRuntimes', () => {
       agentRuntimePort({ listAgents: emptyCatalog(), updateDebug }),
     );
 
-    act(() => view.result.current.updateDebug({ discoverySource: 'managed-only' }));
+    act(() => view.result.current.updateDebug({ nextSetupResult: 'mcp' }));
 
     await waitFor(() =>
-      expect(updateDebug).toHaveBeenCalledWith(
-        { discoverySource: 'managed-only' },
-        expect.anything(),
-      ),
+      expect(updateDebug).toHaveBeenCalledWith({ nextSetupResult: 'mcp' }, expect.anything()),
     );
     await waitFor(() =>
       expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(patched),
-    );
-  });
-
-  it('resets first run by pinning managed-only discovery before removing the managed install', async () => {
-    const calls: string[] = [];
-    const removed = catalog([]);
-    const port = agentRuntimePort({
-      listAgents: emptyCatalog(),
-      updateDebug: vi.fn(async () => {
-        calls.push('updateDebug');
-        return catalog([]);
-      }),
-      resetManagedAgent: vi.fn(async () => {
-        calls.push('resetManagedAgent');
-        return removed;
-      }),
-    });
-    const { queryClient, view } = await mount(port);
-
-    act(() => view.result.current.resetFirstRun('codex'));
-
-    await waitFor(() => expect(calls).toEqual(['updateDebug', 'resetManagedAgent']));
-    expect(port.updateDebug).toHaveBeenCalledWith(
-      { discoverySource: 'managed-only' },
-      expect.anything(),
-    );
-    await waitFor(() =>
-      expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(removed),
     );
   });
 

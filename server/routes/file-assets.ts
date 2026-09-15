@@ -10,8 +10,7 @@ import { hasFailed } from '../conversion-status.ts';
 import { filesystemPath } from '../filesystem-path.ts';
 import { exactRegisteredFolderRootAsync, runWithFolderRoot, toSourcePath } from '../folder.ts';
 import { sendError } from '../http.ts';
-import { isAudioFile } from '../format.ts';
-import { prepareAudioPreview, readAudioPreviewStatus } from '../audio-transcription.ts';
+
 
 const MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -76,81 +75,6 @@ export function mountFileAssetRoutes(app: express.Express): void {
     }
   });
 
-  // Chromium can play many accepted audio/video sources directly. If a codec
-  // or container is unsupported, AudioPreview retries through this AppData-only
-  // WebM/Opus audio representation. Generation is deduplicated per source.
-  app.get('/asset-audio-preview/*', async (req, res) => {
-    const scope = await parseAssetScope((req.params as any)[0] as string);
-    if (!scope) return res.status(404).end();
-    if (!isAudioFile(scope.rel)) return res.status(415).end();
-    const controller = new AbortController();
-    const abort = () => controller.abort(new Error('audio preview request closed'));
-    const abortOnPrematureClose = () => { if (!res.writableEnded) abort(); };
-    req.once('aborted', abort);
-    res.once('close', abortOnPrematureClose);
-    try {
-      await withAssetScope(scope, async () => {
-          const sourceAbs = await resolveExistingAsync(scope.rel);
-          if (!sourceAbs) return res.status(404).end();
-          const previewAbs = await prepareAudioPreview(sourceAbs, controller.signal);
-          res.type('audio/webm');
-          res.sendFile(previewAbs);
-      });
-    } catch (err: unknown) {
-      if (controller.signal.aborted) return;
-      sendError(res, err);
-    } finally {
-      req.removeListener('aborted', abort);
-      res.removeListener('close', abortOnPrematureClose);
-    }
-  });
-
-  // Explicit preparation lets the renderer show queue/work feedback before
-  // assigning the fallback URL to <audio>. Closing/cancelling the request
-  // releases this caller's waiter and cancels shared native work when it was
-  // the last interested preview.
-  app.post('/api/audio/preview/prepare', async (req, res) => {
-    const rel = typeof req.body?.path === 'string' ? req.body.path.trim() : '';
-    if (!rel || !isAudioFile(rel)) return res.status(415).json({ error: 'media path required' });
-    const scope = await explicitFolderScope(rel, req.body?.folder);
-    if (!scope) return res.status(400).json({ error: 'folder is not a registered project folder' });
-    const controller = new AbortController();
-    const abort = () => controller.abort(new Error('audio preview request closed'));
-    const abortOnPrematureClose = () => { if (!res.writableEnded) abort(); };
-    req.once('aborted', abort);
-    res.once('close', abortOnPrematureClose);
-    try {
-      await withAssetScope(scope, async () => {
-          const sourceAbs = await resolveExistingAsync(rel);
-          if (!sourceAbs) return res.status(404).json({ error: 'file not found' });
-          await prepareAudioPreview(sourceAbs, controller.signal);
-          res.json({ ok: true });
-      });
-    } catch (err: unknown) {
-      if (controller.signal.aborted) return;
-      sendError(res, err);
-    } finally {
-      req.removeListener('aborted', abort);
-      res.removeListener('close', abortOnPrematureClose);
-    }
-  });
-
-  app.get('/api/audio/preview/status', async (req, res) => {
-    const rel = typeof req.query.path === 'string' ? req.query.path.trim() : '';
-    if (!rel || !isAudioFile(rel)) return res.status(415).json({ error: 'media path required' });
-    const scope = await explicitFolderScope(rel, req.query.folder);
-    if (!scope) return res.status(400).json({ error: 'folder is not a registered project folder' });
-    try {
-      await withAssetScope(scope, async () => {
-          const sourceAbs = await resolveExistingAsync(rel);
-          if (!sourceAbs) return res.status(404).json({ error: 'file not found' });
-          res.json(readAudioPreviewStatus(sourceAbs));
-      });
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
-  });
-
   // Derived DOCX HTML is a fallback when renderer-side conversion cannot
   // produce the immediate preview. The visible DOCX stays the source path.
   app.get('/asset-derived/*', async (req, res) => {
@@ -196,19 +120,6 @@ export function mountFileAssetRoutes(app: express.Express): void {
       });
     } catch (err: unknown) { sendError(res, err); }
   });
-}
-
-/** Explicit-folder scope for the JSON audio endpoints: same membership rule
- *  as the path token, but carried as an ordinary `folder` parameter since no
- *  iframe/base-href constraint applies. Returns null for a non-member ref. */
-async function explicitFolderScope(rel: string, folderRaw: unknown): Promise<AssetScope | null> {
-  const ref = typeof folderRaw === 'string' && folderRaw.trim() ? folderRaw.trim() : undefined;
-  if (!ref) return { rel };
-  let folderRoot: string | null;
-  try { folderRoot = await exactRegisteredFolderRootAsync(ref); }
-  catch { return null; }
-  if (!folderRoot) return null;
-  return { rel, folderRoot };
 }
 
 function stripAssetWindowPrefix(rel: string): string {

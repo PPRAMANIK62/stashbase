@@ -7,7 +7,6 @@ import { prepareFileOperation } from './file-operation-guard.ts';
 import { saveFileContent } from './file-save.ts';
 import {
   deleteFileAsync,
-  derivedArtifactsForSource,
   isSameExistingPathAsync,
   pathExistsAsync,
   readTextAsync,
@@ -18,7 +17,6 @@ import { resolveSafe } from './file-paths.ts';
 import { runWithFolderRoot } from './folder.ts';
 import { detectFormat, detectViewerFormat, isConvertibleSource } from './format.ts';
 import { contentSizeError, isRetrievalEligiblePath, shouldIndexFilePath } from './indexable.ts';
-import { remapFileOrderPath, removeFileOrderPath } from './file-order.ts';
 import {
   normalizeProjectFilePath,
   routeError,
@@ -138,7 +136,6 @@ export async function moveProjectFile(
     }
     await prepareFileOperation(oldTarget.folderRel);
 
-    const oldDerivedArtifacts = derivedArtifactsForSource(oldTarget.folderRel);
     const renames: RenameEntry[] = [{ kind: 'file', old: oldTarget.folderRel, new: newTarget.folderRel }];
     const bundleEntry = await bundleRenameEntryAsync(oldTarget.folderRel, newTarget.folderRel, 'pre');
     if (bundleEntry) renames.push(bundleEntry);
@@ -152,10 +149,6 @@ export async function moveProjectFile(
       throw routeError(`failed to update links in ${applied.failed.map((failure) => failure.name).join(', ')}`, 500);
     }
     noteTreeChanged();
-    try { remapFileOrderPath(oldTarget.folderRel, newTarget.folderRel, 'file'); }
-    catch (err: unknown) {
-      log.warn(`project move: file-order remap failed for ${oldTarget.folderRel} -> ${newTarget.folderRel}: ${errorMessage(err)}`);
-    }
 
     let indexWarning: string | undefined;
     try {
@@ -179,12 +172,6 @@ export async function moveProjectFile(
         await indexer.deleteFile(oldTarget.abs).catch((err) => {
           log.warn(`project move: failed to remove old source index row ${oldTarget.abs}: ${errorMessage(err)}`);
         });
-        for (const rel of oldDerivedArtifacts.notes) {
-          const sourcePath = filesystemPath.join(oldTarget.folderRoot, rel);
-          await indexer.deleteFile(sourcePath).catch((err) => {
-            log.warn(`project move: failed to remove legacy derived index row ${sourcePath}: ${errorMessage(err)}`);
-          });
-        }
         if (newPathIsRetrievalEligible) {
           try {
             if (!queueConvertibleSource(newTarget.abs, newTarget.folderRel)) {
@@ -253,7 +240,6 @@ export async function deleteProjectFile(
       throw routeError('source is not a regular file', 415, 'UNSUPPORTED_FORMAT');
     }
     await prepareFileOperation(target.folderRel);
-    const derivedArtifacts = derivedArtifactsForSource(target.folderRel);
     const removed = await deleteFileAsync(target.folderRel);
     try { deleteDerivedForSource(target.abs); }
     catch (err: unknown) { log.warn(`project delete: derived cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
@@ -261,24 +247,17 @@ export async function deleteProjectFile(
     catch (err: unknown) { log.warn(`project delete: preparation status cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
     if (removed) {
       noteTreeChanged();
-      try { removeFileOrderPath(target.folderRel, 'file'); }
-      catch (err: unknown) {
-        log.warn(`project delete: file-order cleanup failed for ${target.folderRel}: ${errorMessage(err)}`);
-      }
     }
-    const failures: string[] = [];
-    for (const rel of [target.folderRel, ...derivedArtifacts.notes]) {
-      const sourcePath = filesystemPath.join(target.folderRoot, rel);
-      try { await indexer.deleteFile(sourcePath); }
-      catch (err: unknown) {
-        failures.push(sourcePath);
-        log.warn(`project delete: index cleanup failed for ${sourcePath}: ${errorMessage(err)}`);
-      }
+    let indexWarning: string | undefined;
+    try { await indexer.deleteFile(target.abs); }
+    catch (err: unknown) {
+      log.warn(`project delete: index cleanup failed for ${target.abs}: ${errorMessage(err)}`);
+      indexWarning = 'Deleted, but search-data cleanup failed. Run sync to reconcile.';
     }
     return {
       path: target.abs,
       alreadyGone: !removed,
-      ...(failures.length ? { indexWarning: `Deleted, but search-data cleanup failed for ${failures.length} path(s). Run sync to reconcile.` } : {}),
+      ...(indexWarning ? { indexWarning } : {}),
     };
   });
 }

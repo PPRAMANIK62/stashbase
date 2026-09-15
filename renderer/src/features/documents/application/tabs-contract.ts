@@ -62,12 +62,16 @@ export interface DocumentTabsRuntime {
    *  set as of now, which is not. */
   capture(): CapturedTabsScope;
   close(tabId: string): Promise<boolean>;
+  dismissOpenFailure(): void;
+  retryOpen(): Promise<DocumentRuntime | null>;
   /** Closes the tab in front of the reader, if there is one. */
   closeActive(): Promise<boolean>;
   /** Closes the tab showing `source`, if one is open. */
   closeSource(source: SourceReference): Promise<boolean>;
   dispose(): void;
   flush(): Promise<boolean>;
+  /** Saves before a rename (path) or deletion (null). Undefined retains a lock until the original outcome is confirmed. */
+  mutate(path: string, operation: () => Promise<string | null | undefined>): Promise<boolean>;
   /** The counterpart of `back`. */
   forward(): Promise<DocumentRuntime | null>;
   getDocument(tabId: string): DocumentRuntime | null;
@@ -85,6 +89,7 @@ export interface DocumentTabsRuntime {
 }
 
 export interface DocumentTabsRuntimeOptions {
+  prepare?: (scope: DocumentScope) => Promise<string | null>;
   api: DocumentSourcePort;
   createId: () => string;
   createQueries: (scope: DocumentScope) => DocumentQueryScope;

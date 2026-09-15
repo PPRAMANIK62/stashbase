@@ -68,7 +68,6 @@ function renderWorkspace(
         onSignIn={vi.fn()}
         onReprocess={onReprocess}
         runtime={runtime}
-        scopeOutline={{ files: ['MISSION.md', 'notes.md'], folders: ['lessons'] }}
       />
     </div>,
     createTestQueryClient(),
@@ -99,7 +98,7 @@ describe('AgentChats', () => {
     );
     const port = idleAgentSessionPort({ list, replay });
     renderWorkspace(port);
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Planning notes' }));
 
@@ -155,6 +154,55 @@ describe('AgentChats', () => {
     expect(await screen.findByRole('button', { name: 'Research thread' })).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Plans thread' })).toBeNull();
     expect(screen.getByLabelText('Chats in Research')).not.toBeNull();
+  });
+
+  it('filters behind the section name and leaves no query standing when closed', async () => {
+    const user = userEvent.setup();
+    renderWorkspace(
+      idleAgentSessionPort({
+        list: vi.fn<AgentSessionPort['list']>(async (agent) =>
+          agent === 'codex'
+            ? [
+                {
+                  agent: 'codex',
+                  hasContent: true,
+                  id: 'research-chat',
+                  lastModified: 30,
+                  scope: { kind: 'folder', path: '/Library/Research' },
+                  title: 'Research thread',
+                },
+                {
+                  agent: 'codex',
+                  hasContent: true,
+                  id: 'budget-chat',
+                  lastModified: 20,
+                  scope: { kind: 'folder', path: '/Library/Research' },
+                  title: 'Budget thread',
+                },
+              ]
+            : [],
+        ),
+      }),
+    );
+
+    await screen.findByRole('button', { name: 'Research thread' });
+    await user.click(screen.getByRole('button', { name: 'Search chats' }));
+
+    // The field takes the name's place rather than adding a row.
+    const field = screen.getByRole('textbox', { name: 'Search chat titles' });
+    expect(field.matches(':focus')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Chats' })).toBeNull();
+
+    await user.type(field, 'budget');
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Research thread' })).toBeNull(),
+    );
+    expect(screen.getByRole('button', { name: 'Budget thread' })).not.toBeNull();
+
+    // Closing must not leave the list filtered behind a name that cannot say so.
+    await user.click(screen.getByRole('button', { name: 'Close search' }));
+    expect(await screen.findByRole('button', { name: 'Research thread' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Chats' })).not.toBeNull();
   });
 
   it('keeps native history visible when its Agent runtime is unavailable', async () => {
@@ -316,10 +364,11 @@ describe('AgentChats', () => {
     );
 
     await screen.findByRole('button', { name: 'Today newer' });
-    // New chat is set off from the history by a rule, and the history is
-    // named before its day groups.
-    expect(screen.getByRole('separator')).not.toBeNull();
+    // The history is named before its day groups, and its name carries the
+    // search: the field is behind that glyph, not standing above the list.
     expect(screen.getByText('Chats')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Search chats' })).not.toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Search chat titles' })).toBeNull();
     expect(screen.queryByText('Open', { exact: true })).toBeNull();
     expect(screen.queryByText('History', { exact: true })).toBeNull();
     expect(screen.queryByRole('button', { name: /^New Chat$/u })).toBeNull();

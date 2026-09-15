@@ -3,7 +3,6 @@ import {
   rendererRuntimeConfigSchema,
 } from '@/protocols/electron/runtime';
 
-import { isBugReportBridge, type BugReportBridge } from './bug-report';
 import type { ExternalNavigationBridge } from './external-navigation';
 import type { ProjectBridge } from './folder-picker';
 import type { ProjectLifecycleBridge } from './project-lifecycle';
@@ -19,7 +18,6 @@ interface DesktopProjectBridge extends ProjectBridge, ProjectLifecycleBridge {}
 
 interface DesktopBridge {
   /** Optional: opening the bug-report review exists only in the desktop shell. */
-  bugReport?: BugReportBridge;
   externalNavigation: ExternalNavigationBridge;
   project: DesktopProjectBridge;
   runtime: RendererRuntimeConfig;
@@ -32,7 +30,6 @@ interface DesktopBridge {
 declare global {
   interface Window {
     stashbase?: {
-      bugReport?: unknown;
       bugReportReview?: unknown;
       externalNavigation?: ExternalNavigationBridge;
       project?: DesktopProjectBridge;
@@ -60,7 +57,9 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
     typeof project.onFolderRemoved !== 'function' ||
     typeof project.onPrepareFolderRemoval !== 'function' ||
     typeof project.prepareFolderRemoval !== 'function' ||
-    typeof project.claimInitialFolder !== 'function' ||
+    typeof project.onEnterFolder !== 'function' ||
+    typeof project.onEntryCancelled !== 'function' ||
+    typeof project.cancelEntry !== 'function' ||
     typeof project.setActiveFolder !== 'function'
   ) {
     throw new Error('The project folder picker is unavailable.');
@@ -75,10 +74,8 @@ export function readBridge(globalWindow: Window = window): DesktopBridge {
   if (!windowLifecycle || typeof windowLifecycle.onPrepareContextRelease !== 'function') {
     throw new Error('The window lifecycle is unavailable.');
   }
-  const bugReport = globalWindow.stashbase?.bugReport;
   const updates = globalWindow.stashbase?.updates;
   return {
-    ...(isBugReportBridge(bugReport) ? { bugReport } : {}),
     ...(isUpdatesBridge(updates) ? { updates } : {}),
     externalNavigation,
     project,

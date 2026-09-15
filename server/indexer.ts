@@ -67,7 +67,8 @@ export interface Indexer {
    *  searchable text comes from a separately-stored derived text file
    *  (app data, never in the user's folder). Indexes `derivedContent` UNDER the
    *  source's own path so folder-scoped retrieval returns the visible source
-   *  identity. MFS owns the projection content hash and unchanged decision. */
+   *  identity. Returns after revision acceptance; semantic builds run separately.
+   * MFS owns the projection content hash and unchanged decision. */
   upsertConvertedFile(sourceAbs: string, derivedContent: string, derivedExt?: string): Promise<IndexUpsertResult>;
 
   /** Drop all chunks for one file. Safe to call on a never-indexed file. */

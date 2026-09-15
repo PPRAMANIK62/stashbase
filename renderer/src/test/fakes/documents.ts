@@ -8,7 +8,6 @@ import type {
   DocumentWindowLifecyclePort,
   DocxPreviewPort,
   GenericFilePreviewPort,
-  MediaPort,
 } from '@/features/documents/application/ports';
 import type { DocumentTabsRuntimeOptions } from '@/features/documents/application/tabs-runtime';
 import type { DocumentTextSource } from '@/features/documents/domain/document';
@@ -58,17 +57,6 @@ export function genericPreviewApi(
   };
 }
 
-export function mediaApi(overrides: Partial<MediaPort> = {}): MediaPort {
-  return {
-    cancelTranscript: vi.fn(async () => true),
-    loadPreviewStatus: vi.fn(async () => ({ status: 'ready' as const })),
-    loadTranscript: vi.fn(async () => ({ status: 'failed' as const })),
-    preparePreview: vi.fn(async () => undefined),
-    reprocessTranscript: vi.fn(async () => undefined),
-    ...overrides,
-  };
-}
-
 export function documentWindowLifecycle(
   overrides: Partial<DocumentWindowLifecyclePort> = {},
 ): DocumentWindowLifecyclePort {
@@ -108,7 +96,6 @@ export function documentAdapters(overrides: Partial<DocumentAdapters> = {}): Doc
     asset: assetApi(),
     docxPreview: docxPreviewApi(),
     genericPreview: genericPreviewApi(),
-    media: mediaApi(),
     source: sourceApi(),
     windowLifecycle: documentWindowLifecycle(),
     ...overrides,

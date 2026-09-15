@@ -6,7 +6,6 @@ import {
   projectFolderDialogResponseSchema,
   projectFolderRemovalReadySchema,
   projectFolderRemovalRequestedSchema,
-  projectInitialFolderResponseSchema,
   projectLifecycleResponseSchema,
   projectPrepareFolderRemovalResponseSchema,
   projectSetActiveFolderRequestSchema,
@@ -94,51 +93,9 @@ test('project lifecycle protocol validates folder identity and correlated releas
   );
 });
 
-test('initial folder protocol answers a folder, answers none, and refuses a rewritten answer', () => {
-  assert.deepEqual(
-    projectInitialFolderResponseSchema.parse({ folderPath: '/workspace/notes', ok: true }),
-    { folderPath: '/workspace/notes', ok: true },
-  );
-  // No folder is the ordinary answer for a window nobody named one for, so it
-  // parses as a success rather than arriving as a failure a caller must sort.
-  assert.deepEqual(projectInitialFolderResponseSchema.parse({ folderPath: null, ok: true }), {
-    folderPath: null,
-    ok: true,
-  });
-  assert.deepEqual(
-    projectInitialFolderResponseSchema.parse({
-      failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
-      ok: false,
-    }),
-    {
-      failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
-      ok: false,
-    },
-  );
-  assert.equal(
-    projectInitialFolderResponseSchema.safeParse({ folderPath: 42, ok: true }).success,
-    false,
-  );
-  assert.equal(
-    projectInitialFolderResponseSchema.safeParse({ folderPath: '', ok: true }).success,
-    false,
-  );
-  // Strict, unlike the folder dialog: main and the preload ship together, so
-  // an unowned field is this build disagreeing with itself.
-  assert.equal(
-    projectInitialFolderResponseSchema.safeParse({
-      folderPath: '/workspace/notes',
-      ok: true,
-      restored: true,
-    }).success,
-    false,
-  );
-});
-
 test('folder lifecycle preserves whitespace in paths while rejecting blank values', () => {
   const folderPath = '/workspace/notes ';
   assert.equal(projectSetActiveFolderRequestSchema.parse({ folderPath }).folderPath, folderPath);
-  assert.equal(projectInitialFolderResponseSchema.parse({ ok: true, folderPath }).ok, true);
   assert.deepEqual(projectFolderRemovalReadySchema.parse({ folderPath, requestId: 'r', ready: true }), {
     folderPath, requestId: 'r', ready: true,
   });

@@ -6,7 +6,6 @@ import test from 'node:test';
 import { syncIndex } from './sync.ts';
 import type { Indexer } from './indexer.ts';
 import { prepareForIndex } from './indexer.mfs.ts';
-import { validatePreparedAudioTranscript } from './prepared-validation.ts';
 import { hasNoExtractableText, indexableFileSizeError, MAX_INDEXABLE_BYTES } from './indexable.ts';
 
 for (const [source, content] of [
@@ -93,23 +92,6 @@ test('JSON reconcile lets MFS classify content and treats an external rename as 
   }
 });
 
-test('large audio transcript parsing and schema validation yield the event loop', async () => {
-  const segments = Array.from({ length: 50_000 }, (_, index) => ({
-    id: index + 1, startMs: index, endMs: index + 1, text: `segment ${index}`,
-  }));
-  const input = Buffer.from(JSON.stringify({
-    schemaVersion: 1,
-    source: { durationMs: segments.length + 1, size: 42, mtimeMs: 1, statIdentity: '1:2:3', contentHash: 'a'.repeat(64) },
-    provider: { id: 'test', version: '1', model: 'test-model' },
-    language: 'en', createdAt: '2025-01-01T00:00:00.000Z', segments,
-  }));
-  let timerRan = false;
-  const validation = validatePreparedAudioTranscript(input);
-  setTimeout(() => { timerRan = true; }, 0);
-  const identity = await validation;
-  assert.equal(timerRan, true);
-  assert.equal(identity.contentHash, 'a'.repeat(64));
-});
 
 test('reconcile offers text to MFS for exact search without an embedding key', async () => {
   let listed = false;
@@ -127,4 +109,40 @@ test('reconcile offers text to MFS for exact search without an embedding key', a
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+
+test('reconcile excludes media while preserving source files and admitting text', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-media-index-'));
+  try {
+    for (const name of ['voice.wav', 'movie.mp4', 'note.md']) fs.writeFileSync(path.join(root, name), 'source text');
+    const admitted: string[] = [];
+    await syncIndex({
+      listDocuments: async () => [],
+      upsertFile: async (source: string) => { admitted.push(path.basename(source)); return { outcome: 'added' }; },
+    } as unknown as Indexer, root);
+    assert.deepEqual(admitted, ['note.md']);
+    assert.deepEqual(fs.readdirSync(root).sort(), ['movie.mp4', 'note.md', 'voice.wav']);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('an unreadable subtree cannot authorize removal of existing projections', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-incomplete-scan-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const child = path.join(root, 'notes');
+  fs.mkdirSync(child);
+  const source = path.join(child, 'note.md');
+  fs.writeFileSync(source, 'still present');
+  const readdir = fs.promises.readdir.bind(fs.promises);
+  t.mock.method(fs.promises, 'readdir', async (candidate: string, ...args: unknown[]) => {
+    if (candidate === child) throw Object.assign(new Error('temporary access denied'), { code: 'EACCES' });
+    return (readdir as Function)(candidate, ...args);
+  });
+  const mutations: string[] = [];
+  await assert.rejects(syncIndex({
+    listDocuments: async () => [source],
+    deleteFile: async (name: string) => { mutations.push(name); },
+    upsertFile: async (name: string) => { mutations.push(name); return { outcome: 'added' }; },
+  } as unknown as Indexer, root), { code: 'EACCES' });
+  assert.deepEqual(mutations, []);
 });

@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import type { Server as HttpServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { pathToFileURL } from 'node:url';
 
 import { filesystemPath } from '../filesystem-path.ts';
 
@@ -17,49 +15,6 @@ const isolatedEnvNames = [
   'STASHBASE_LOCAL_DATA_ROOT',
   'STASHBASE_FOLDER_HOME',
 ] as const;
-
-test('a deliberately removed built-in folder stays out of project membership after restart', (t) => {
-  const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-project-seed-'));
-  t.after(() => fs.rmSync(testHome, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 }));
-
-  const folderHome = path.join(testHome, 'Documents', 'StashBase');
-  fs.mkdirSync(path.join(folderHome, '👋 Start Here'), { recursive: true });
-  const configDirectory = path.join(testHome, '.stashbase');
-  const configFile = path.join(configDirectory, 'config.json');
-  fs.mkdirSync(configDirectory, { recursive: true });
-  fs.writeFileSync(
-    configFile,
-    `${JSON.stringify({ builtinSeeded: true, recentFolders: [] }, null, 2)}\n`,
-  );
-
-  const folderModule = pathToFileURL(path.resolve('server', 'folder.ts')).href;
-  const result = spawnSync(
-    process.execPath,
-    [
-      '--import',
-      'tsx',
-      '--input-type=module',
-      '--eval',
-      `const folder = await import(${JSON.stringify(folderModule)}); folder.seedBuiltinFolder();`,
-    ],
-    {
-      cwd: path.resolve('.'),
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        HOME: testHome,
-        USERPROFILE: testHome,
-        STASHBASE_APP_ROOT: path.resolve('.'),
-      },
-    },
-  );
-
-  assert.equal(result.status, 0, result.stderr);
-  const config = JSON.parse(fs.readFileSync(configFile, 'utf8')) as {
-    recentFolders?: unknown[];
-  };
-  assert.deepEqual(config.recentFolders, []);
-});
 
 test('project routes return authoritative membership and open the selected folder', async (t) => {
   const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-project-route-'));
@@ -207,11 +162,10 @@ test('project routes return authoritative membership and open the selected folde
 
   const lost = await fetch(`${baseUrl}/api/projects`, { headers });
   assert.equal(lost.status, 200);
-  assert.deepEqual(await lost.json(), {
-    current: null,
-    homeDir: testHome,
-    recent: [],
-  });
+  const lostSnapshot = await lost.json() as { current: unknown; homeDir: string; recent: { path: string }[] };
+  assert.equal(lostSnapshot.current, null);
+  assert.equal(lostSnapshot.homeDir, testHome);
+  assert.equal(lostSnapshot.recent[0].path, missingFolder);
 
   const forgotMissing = await fetch(`${baseUrl}/api/projects/remove`, {
     body: JSON.stringify({ path: missingFolder }),
@@ -234,4 +188,24 @@ test('project routes return authoritative membership and open the selected folde
   assert.equal(removedAgain.status, 200);
   const afterRemoval = await fetch(`${baseUrl}/api/projects`, { headers });
   assert.equal((await afterRemoval.json() as { recent: unknown[] }).recent.length, 0);
+});
+
+test('import receipts join duplicate requests, isolate windows, and remember cancellation before POST', async () => {
+  const { createProjectImportOperations } = await import('../project-import-operations.ts');
+  const imports = createProjectImportOperations<string>();
+  let finish!: (result: string) => void;
+  let calls = 0;
+  const acquire = async () => { calls++; return new Promise<string>((resolve) => { finish = resolve; }); };
+  const first = imports.start('one', 'receipt', 'repo/name', acquire);
+  const duplicate = imports.start('one', 'receipt', 'repo/name', acquire);
+  assert.equal(first, duplicate);
+  assert.equal(imports.result('two', 'receipt'), null);
+  assert.throws(() => imports.start('one', 'receipt', 'changed request', acquire));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  finish('/projects/Copy');
+  assert.equal(await imports.result('one', 'receipt'), '/projects/Copy');
+  assert.equal(calls, 1);
+  imports.cancel('one', 'cancelled-before-post', 'cancelled');
+  assert.equal(await imports.start('one', 'cancelled-before-post', 'repo/name', acquire), 'cancelled');
+  assert.equal(calls, 1);
 });

@@ -17,7 +17,7 @@ import {
   type WorkspaceNotice,
 } from '@/app/composition/folder/use-workspace-notices';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
-import type { SettingsSectionId } from '@/features/settings/public';
+import type { SettingsSectionId, SettingsTarget } from '@/features/settings/public';
 import type {
   ProjectRegistrySnapshot,
   WorkspaceRuntime,
@@ -65,8 +65,8 @@ export interface SettingsCommand {
   close(): void;
   onSectionChange(id: SettingsSectionId): void;
   open: boolean;
-  openSettings(section?: SettingsSectionId): void;
-  section: SettingsSectionId;
+  openSettings(section?: SettingsTarget): void;
+  section: SettingsTarget;
 }
 
 export interface WorkspaceCommands {
@@ -103,10 +103,10 @@ export function useWorkspaceCommands({
   const sidebarRuntime = session.runtime;
 
   const settingsSurface = useCommandSurface();
-  const [section, setSection] = useState<SettingsSectionId>(DEFAULT_SECTION);
+  const [section, setSection] = useState<SettingsTarget>(DEFAULT_SECTION);
   const presentSettings = settingsSurface.present;
   const openSettings = useCallback(
-    (next: SettingsSectionId = DEFAULT_SECTION) => {
+    (next: SettingsTarget = DEFAULT_SECTION) => {
       setSection(next);
       presentSettings();
     },

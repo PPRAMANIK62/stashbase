@@ -1,3 +1,4 @@
+import { retireAgentProcess } from './agent-process.ts';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -45,21 +46,21 @@ export type CodexSessionBlock =
  * previewable thumbnail. */
 export type CodexAttachment = RestoredAttachment;
 
-export async function listCodexSessions(folder: string | null): Promise<CodexSessionRow[]> {
-  const cwd = folder ?? process.cwd();
+export async function listCodexSessions(folder: string): Promise<CodexSessionRow[]> {
+  const cwd = folder;
   const result = await withTemporaryCodexAppServer(cwd, (request) => request('thread/list', {
     limit: 100,
     sortKey: 'updated_at',
     sortDirection: 'desc',
     archived: false,
-    cwd: folder ?? null,
+    cwd: folder,
   })) as JsonObject;
   const data = Array.isArray(result.data) ? result.data : [];
   return data.map(codexThreadToRow).filter((row): row is CodexSessionRow => !!row);
 }
 
-export async function getCodexSessionMessages(threadId: string, folder: string | null): Promise<CodexSessionBlock[]> {
-  const cwd = folder ?? process.cwd();
+export async function getCodexSessionMessages(threadId: string, folder: string): Promise<CodexSessionBlock[]> {
+  const cwd = folder;
   const thread = await withTemporaryCodexAppServer(cwd, (request) => readScopedThread(request, threadId, folder, true));
   return codexThreadToBlocks(thread, codexRolloutToolsByTurn(stringValue(thread.path)));
 }
@@ -67,20 +68,20 @@ export async function getCodexSessionMessages(threadId: string, folder: string |
 async function readScopedThread(
   request: (method: string, params: unknown) => Promise<unknown>,
   threadId: string,
-  folder: string | null,
+  folder: string,
   includeTurns = false,
 ): Promise<JsonObject> {
   const result = objectValue(await request('thread/read', { threadId, includeTurns }));
   const thread = objectValue(result.thread);
   const threadCwd = stringValue(thread.cwd);
-  if (folder && (!threadCwd.trim() || !filesystemPath.equal(threadCwd, folder))) {
+  if (!threadCwd.trim() || !filesystemPath.equal(threadCwd, folder)) {
     throw httpError(404, 'session not found for current folder');
   }
   return thread;
 }
 
-export async function renameCodexSession(threadId: string, title: string, folder: string | null): Promise<CodexSessionRow> {
-  const cwd = folder ?? process.cwd();
+export async function renameCodexSession(threadId: string, title: string, folder: string): Promise<CodexSessionRow> {
+  const cwd = folder;
   return withTemporaryCodexAppServer(cwd, async (request) => {
     await readScopedThread(request, threadId, folder);
     await request('thread/name/set', { threadId, name: title });
@@ -90,10 +91,10 @@ export async function renameCodexSession(threadId: string, title: string, folder
   });
 }
 
-export async function deleteCodexSession(threadId: string, folder: string | null): Promise<void> {
-  const cwd = folder ?? process.cwd();
+export async function deleteCodexSession(threadId: string, folder: string): Promise<void> {
+  const cwd = folder;
   await withTemporaryCodexAppServer(cwd, async (request) => {
-    if (folder) await readScopedThread(request, threadId, folder);
+    await readScopedThread(request, threadId, folder);
     await permanentlyDeleteCodexThread(request, threadId);
   });
 }
@@ -179,7 +180,7 @@ class CodexHistoryAppServer {
     this.closed = true;
     this.rpc.close(new Error('Codex app-server history client closed.'));
     this.cleanup();
-    try { this.proc.kill('SIGTERM'); } catch { /* already gone */ }
+    void retireAgentProcess(this.proc);
   }
 
   private cleanup(): void {

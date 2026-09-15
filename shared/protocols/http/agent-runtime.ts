@@ -50,7 +50,6 @@ export const agentBootstrapStatusSchema = z
   })
   .strict();
 
-export const agentDiscoveryPolicySchema = z.enum(['auto', 'managed-only', 'system-only']);
 
 export const agentSetupFailureSimulationSchema = z.enum([
   'none',
@@ -71,7 +70,6 @@ export const agentTurnFailureSimulationSchema = z.enum([
 export const agentRuntimeDebugStateSchema = z
   .object({
     enabled: z.boolean(),
-    discoveryPolicy: agentDiscoveryPolicySchema,
     nextFailure: agentSetupFailureSimulationSchema,
     nextTurnFailure: agentTurnFailureSimulationSchema,
   })
@@ -79,13 +77,12 @@ export const agentRuntimeDebugStateSchema = z
 
 export const agentRuntimeDebugPatchRequestSchema = z
   .object({
-    discoveryPolicy: agentDiscoveryPolicySchema.optional(),
     nextFailure: agentSetupFailureSimulationSchema.optional(),
     nextTurnFailure: agentTurnFailureSimulationSchema.optional(),
   })
   .strict();
 
-export const agentSourceSchema = z.enum(['bundled', 'system', 'managed']);
+export const agentSourceSchema = z.enum(['bundled', 'system']);
 
 export const agentCapabilitiesSchema = z
   .object({

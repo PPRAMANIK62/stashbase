@@ -8,9 +8,8 @@ import {
   DOCUMENT_SOURCE_MESSAGES,
   DOCX_PREVIEW_MESSAGES,
   GENERIC_PREVIEW_MESSAGES,
-  MEDIA_MESSAGES,
 } from './failure-messages';
-import { DocumentSaveError, DocumentSourceError, MediaError } from './ports';
+import { DocumentSaveError, DocumentSourceError, DocumentAssetError } from './ports';
 
 const FAMILIES = [
   DOCUMENT_SOURCE_MESSAGES,
@@ -18,7 +17,6 @@ const FAMILIES = [
   DOCUMENT_OVERWRITE_MESSAGES,
   DOCUMENT_ASSET_MESSAGES,
   DOCX_PREVIEW_MESSAGES,
-  MEDIA_MESSAGES,
   GENERIC_PREVIEW_MESSAGES,
 ];
 
@@ -59,16 +57,16 @@ describe('documents failure messages', () => {
   });
 
   it('reads anything off the ladder as the family’s unavailable line', () => {
-    expect(documentFailure(new Error('socket'), 'MediaError', MEDIA_MESSAGES).message).toBe(
-      MEDIA_MESSAGES.unavailable,
-    );
-    expect(documentFailure('not an error', 'MediaError', MEDIA_MESSAGES).message).toBe(
-      MEDIA_MESSAGES.unavailable,
-    );
+    expect(
+      documentFailure(new Error('socket'), 'DocumentAssetError', DOCUMENT_ASSET_MESSAGES).message,
+    ).toBe(DOCUMENT_ASSET_MESSAGES.unavailable);
+    expect(
+      documentFailure('not an error', 'DocumentAssetError', DOCUMENT_ASSET_MESSAGES).message,
+    ).toBe(DOCUMENT_ASSET_MESSAGES.unavailable);
   });
 
   it('refuses to read another capability’s failure as its own', () => {
-    const other = new MediaError('scope-lost', 'a media refusal');
+    const other = new DocumentAssetError('scope-lost', 'a media refusal');
     expect(documentFailure(other, 'DocumentSaveError', DOCUMENT_SAVE_MESSAGES).message).toBe(
       DOCUMENT_SAVE_MESSAGES.unavailable,
     );

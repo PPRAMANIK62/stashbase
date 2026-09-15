@@ -64,6 +64,10 @@ function toAgent(wire: AgentWire): Agent {
     label: wire.label,
     models: toRememberedModels(wire.catalog),
     needsSignIn: wire.bootstrap?.failure?.code === 'authentication-required',
+    preparing: ['installing', 'authenticating', 'configuring'].includes(
+      wire.bootstrap?.phase ?? '',
+    ),
+    ...(wire.bootstrap?.failure ? { setupFailure: wire.bootstrap.failure.message } : {}),
     ready: wire.bootstrap?.phase === 'ready' && wire.state !== 'failed',
   };
 }

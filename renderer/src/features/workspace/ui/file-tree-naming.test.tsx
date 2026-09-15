@@ -52,14 +52,14 @@ function treeRuntime(client: QueryClient): WorkspaceRuntime {
 function renderTree(
   api: FilesPort,
   onOpenSource: ComponentProps<typeof FileTree>['onOpenSource'],
-  retireSources?: ComponentProps<typeof FileTree>['retireSources'],
+  mutateSources?: ComponentProps<typeof FileTree>['mutateSources'],
 ) {
   const client = createTestQueryClient();
   return withQueryClient(
     <FileTree
       api={api}
       onOpenSource={onOpenSource}
-      retireSources={retireSources}
+      mutateSources={mutateSources}
       revealLabel="Show in file manager"
       runtime={treeRuntime(client)}
     />,
@@ -150,13 +150,14 @@ describe('file tree naming', () => {
     expect(api.createEntry).toHaveBeenCalledTimes(2);
   });
 
-  it('renames from F2 with the stem selected and from a double click, retiring open documents first', async () => {
+  it('renames from F2 with the stem selected and from a double click, coordinating open documents', async () => {
     const api = treeApi();
     const onOpenSource = vi.fn();
-    const retireSources = vi.fn(async () => [
-      { folderPath: RESEARCH_FOLDER.path, path: 'docs/plan.md' },
-    ]);
-    renderTree(api, onOpenSource, retireSources);
+    const mutateSources = vi.fn(async (_entry, operation: () => Promise<string | null>) => {
+      await operation();
+      return true;
+    });
+    renderTree(api, onOpenSource, mutateSources);
     const user = userEvent.setup();
 
     const docs = await screen.findByRole('treeitem', { name: 'docs' });
@@ -177,13 +178,11 @@ describe('file tree naming', () => {
         expect.any(AbortSignal),
       ),
     );
-    expect(retireSources).toHaveBeenCalledWith({ kind: 'file', path: 'docs/plan.md' });
-    await waitFor(() =>
-      expect(onOpenSource).toHaveBeenCalledWith(
-        { folderPath: RESEARCH_FOLDER.path, path: 'docs/outline.md' },
-        { keep: true },
-      ),
+    expect(mutateSources).toHaveBeenCalledWith(
+      { kind: 'file', path: 'docs/plan.md' },
+      expect.any(Function),
     );
+    expect(onOpenSource).not.toHaveBeenCalled();
 
     fireEvent.doubleClick(screen.getByRole('treeitem', { name: 'docs' }));
     const folderField = await screen.findByRole<HTMLInputElement>('textbox', {

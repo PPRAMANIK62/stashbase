@@ -1,20 +1,13 @@
-/** The quick way into a fresh conversation, at the right end of the Chat
- *  pane's name row. It starts the same chat the Chats panel's **New chat**
- *  starts, with the same preferred Agent and scope, so the two entries can
- *  never disagree about what "new" means. With no runtime ready there is
- *  nothing to start, so the button waits, disabled, and says where to go. */
+/** A new draft is always available, even before Agent sign-in or setup. */
 import { MessageCirclePlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { AgentCatalogPort } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
-import { preferredAgent } from '@/features/agent/domain/agent-catalog';
 import type { AgentScope } from '@/features/agent/domain/session';
-import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
 
 export function NewChatButton({
-  catalog,
   runtime,
   scope,
 }: {
@@ -22,18 +15,12 @@ export function NewChatButton({
   runtime: AgentWorkspaceRuntime;
   scope: AgentScope;
 }) {
-  const { readyAgents } = useAgentCatalog(catalog);
-  const defaultAgent = preferredAgent(readyAgents);
   return (
-    <Tooltip
-      content={defaultAgent ? 'New chat' : 'Set up an Agent in Settings first'}
-      side="bottom"
-    >
+    <Tooltip content="New chat" side="bottom">
       <Button
         aria-label="New chat"
-        disabled={defaultAgent === undefined}
         onClick={() => {
-          if (defaultAgent) runtime.newChat(defaultAgent.id, scope);
+          runtime.newChat(undefined, scope);
         }}
         // The compact square: 28px around a 14px glyph, the same box and
         // weight as the Markdown viewer's Writer and Reading items across the

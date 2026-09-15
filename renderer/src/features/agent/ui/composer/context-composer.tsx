@@ -1,8 +1,4 @@
-/** The composer card: the mention editor in place of the textarea, the `@`
- *  and `/` listbox above it, source drops, transient uploads and the preview
- *  row of tiles, all reading as one surface. This module is the shell —
- *  binding what the user drops, pastes or types to the session's context —
- *  while the suggestion panel and the tiles are owned beside it. */
+/** Binds the visible request, source context, uploads, and queue to its session. */
 import { Paperclip } from 'lucide-react';
 import {
   useId,
@@ -22,6 +18,7 @@ import {
   type InputMessageEditorContext,
   type QueuedMessage,
 } from '@/components/ui/input-message';
+import { Tooltip } from '@/components/ui/tooltip';
 import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import {
   contextItemKey,
@@ -47,10 +44,6 @@ import { MentionListbox } from './mention-listbox';
 const ATTACH_ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf';
 
 export interface AgentContextComposerProps {
-  /** The runtime advertises that it can read transient uploads. It gates the
-   *  attach control and the paste path only: a source dragged from the tree or
-   *  a tab is a path reference, not an upload, and stays available either
-   *  way. */
   attachments: boolean;
   environment: AgentScopeEnvironment | null;
   leftSlot?: ReactNode;
@@ -58,21 +51,16 @@ export interface AgentContextComposerProps {
   minRows?: number;
   onQueueChange: (queue: QueuedMessage[]) => void;
   onReprocess?: ((source: SourceReference) => void) | undefined;
-  /** Asks the runtime to re-read the skills it can run in this scope. */
   onRefreshSkills: () => void;
-  /** Arms a skill for the next turn, or disarms it with null. */
   onSkillChange: (skill: string | null) => void;
   onStop: () => void;
+  onSend?: (text: string, options?: { queuedId?: string }) => void;
   placeholder: string;
-  /** The placeholder is one of the blank Chat's requests: Tab takes it. */
   placeholderIsPrompt?: boolean;
   queue: QueuedMessage[];
   rightSlot?: ReactNode;
-  /** When false the composer still takes and keeps a draft but cannot send
-   *  it, which is what a window with no ready runtime offers. */
   sendable?: boolean;
   session: AgentSessionRuntime;
-  /** The runtime advertises that it can run `/` skills. */
   skills: boolean;
   status: 'idle' | 'streaming';
 }
@@ -87,38 +75,32 @@ function onDragOverCapture(event: DragEvent<HTMLDivElement>) {
   event.dataTransfer.dropEffect = 'copy';
 }
 
-/** The bottom-left slot: an attach control when the runtime can read
- *  uploads, then whatever the workspace places there. */
 function attachSlot(attachments: boolean, leftSlot: ReactNode) {
   return ({ openFilePicker }: { openFilePicker: () => void }) => (
     <>
       {attachments && (
-        <Button
-          aria-label="Attach files"
-          onClick={() => openFilePicker()}
-          size="icon-compact"
-          variant="ghost"
-        >
-          <Paperclip />
-        </Button>
+        <Tooltip content="Attach files" side="top">
+          <Button
+            aria-label="Attach files"
+            onClick={() => openFilePicker()}
+            size="icon-compact"
+            variant="ghost"
+          >
+            <Paperclip />
+          </Button>
+        </Tooltip>
       )}
       {leftSlot}
     </>
   );
 }
 
-/** The editor slot: built outside render so the shared composer receives a
- *  stable render function rather than a component defined per render. */
 function mentionEditorSlot(
   props: Omit<MentionEditorProps, 'ctx'> & { ref: Ref<MentionEditorHandle> },
 ) {
   return (ctx: InputMessageEditorContext) => <MentionEditor {...props} ctx={ctx} />;
 }
 
-/** The composer card: the mention editor in place of the textarea, the `@`
- *  listbox, source drops, transient uploads, and the preview row of tiles,
- *  all reading as one surface. A non-visual source lives inline as a chip
- *  where it was typed; a visual source and every upload sit in the row. */
 export function AgentContextComposer({
   attachments,
   environment,
@@ -130,6 +112,7 @@ export function AgentContextComposer({
   onReprocess,
   onSkillChange,
   onStop,
+  onSend,
   placeholder,
   placeholderIsPrompt = false,
   queue,
@@ -165,9 +148,12 @@ export function AgentContextComposer({
         listing: scoped?.listing ?? null,
         readiness: scoped?.readiness ?? {},
         scope,
+        versions: scoped?.versions,
+        hasUpload: (path) => Boolean(session.fileForTransient(path)),
       }),
-    [context, scope, scoped],
+    [context, scope, scoped, session],
   );
+  const issue = contextIssue ?? validations.find((item) => item.status === 'stale')?.reason;
   const chipPaths = useMemo(
     () => context.flatMap((item) => (item.kind === 'source' ? [item.source.path] : [])),
     [context],
@@ -192,11 +178,10 @@ export function AgentContextComposer({
       ),
     [draft],
   );
-  const tileValidations = validations.filter(
-    (validation) =>
-      validation.item.kind === 'source' &&
-      isVisualSource(validation.item) &&
-      !mentioned.has(validation.item.source.path),
+  const tileValidations = validations.filter((validation) =>
+    validation.item.kind === 'transient'
+      ? validation.status === 'stale'
+      : !mentioned.has(validation.item.source.path),
   );
 
   // Uploads render as the shared composer's own tiles, so the File behind
@@ -208,8 +193,6 @@ export function AgentContextComposer({
       ),
     [context, session],
   );
-  /** A File the composer hands back that this session already uploaded: a
-   *  queued message being edited, or a tile re-added after removal. */
   const knownUpload = (file: File): AgentContextItem | undefined => {
     for (const item of [...context, ...queuedPrompts.flatMap((prompt) => prompt.context)]) {
       if (item.kind === 'transient' && session.fileForTransient(item.path) === file) return item;
@@ -255,8 +238,6 @@ export function AgentContextComposer({
     });
   };
 
-  /** A chip entered the text: bind the listed file behind it. A folder
-   *  mention stays text. */
   const onMentionAdded = (path: string) => {
     if (scope.kind !== 'folder') return;
     if (!scoped?.listing.files.some((file) => file.path === path)) return;
@@ -322,9 +303,14 @@ export function AgentContextComposer({
           rows={panel.rows}
         />
       )}
-      {contextIssue && (
+      {!attachments && uploads.length > 0 && (
         <FailureLine className="m-0 px-3 pt-2" tone="input">
-          {contextIssue}
+          This Agent cannot use these uploads. Remove them or choose another Agent.
+        </FailureLine>
+      )}
+      {issue && (
+        <FailureLine className="m-0 px-3 pt-2" tone="input">
+          {issue}
         </FailureLine>
       )}
       <InputMessage
@@ -332,7 +318,9 @@ export function AgentContextComposer({
         // The card above carries the surface and the focus ring; the inner
         // component must not draw its own edge, including its inline one.
         className="bg-transparent shadow-none!"
-        {...(attachments ? { files: uploads, onFilesChange: syncUploads } : {})}
+        files={uploads}
+        onFilesChange={syncUploads}
+        onEditQueued={session.editQueued}
         editor={mentionEditorSlot({
           chipPaths,
           listbox: panel.binding,
@@ -350,7 +338,10 @@ export function AgentContextComposer({
         minRows={minRows}
         onQueueChange={onQueueChange}
         onSend={(text, _files, meta) =>
-          void session.sendPrompt(text, meta?.queuedId ? { queuedId: meta.queuedId } : undefined)
+          void (onSend ?? session.sendPrompt)(
+            text,
+            meta?.queuedId ? { queuedId: meta.queuedId } : undefined,
+          )
         }
         onStop={onStop}
         onValueChange={session.setDraft}
@@ -370,7 +361,11 @@ export function AgentContextComposer({
         }
         queue={queue}
         rightSlot={rightSlot}
-        sendable={sendable}
+        sendable={
+          sendable &&
+          (attachments || uploads.length === 0) &&
+          !validations.some((item) => item.status === 'stale')
+        }
         // A skill or a bound tile is a sendable prompt on its own.
         sendableWithoutText={armedSkill !== null || context.length > 0}
         status={status}

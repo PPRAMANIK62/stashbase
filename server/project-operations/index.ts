@@ -68,11 +68,8 @@ export interface ProjectOperations {
     pathPrefix?: string;
   }): Promise<{ files: ProjectKeywordFile[]; totalMatches: number; truncated: boolean }>;
   reindex(input?: { folder?: string }): Promise<unknown>;
-  /** Create a new project folder and register it as a project.
-   * `agentSessionId` is request attribution (header-derived, never a tool
-   * argument): a live unbound calling session is rebound to the new
-   * project; folder-bound and unattributed callers only create + register. */
-  createProject(input: { name: unknown; location?: unknown; agentSessionId?: string; windowId?: string }): Promise<unknown>;
+  /** Explicitly create and register a project without changing any conversation. */
+  createProject(input: { name: unknown; location?: unknown }): Promise<unknown>;
   listDirectory(path?: unknown): Promise<unknown>;
   read(path: unknown, range?: ProjectFileLineRange): Promise<unknown>;
   write(input: { path: unknown; content: unknown; baseVersion?: string }): Promise<unknown>;

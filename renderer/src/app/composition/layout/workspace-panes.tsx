@@ -11,11 +11,7 @@ import type { DocumentSources } from '@/app/composition/folder/use-document-sour
  * scope outline, the document to every viewer transport and to preparation —
  * so the split row itself only owns the seam between them.
  */
-import {
-  AgentWorkspace,
-  type AgentScopeOutline,
-  type AgentWorkspaceRuntime,
-} from '@/features/agent/public';
+import { AgentWorkspace, type AgentWorkspaceRuntime } from '@/features/agent/public';
 import {
   DocumentWorkspace,
   NewTabPage,
@@ -23,7 +19,7 @@ import {
   type NewTab,
 } from '@/features/documents/public';
 import { SourcePreparationStatus, type FolderIndexStatus } from '@/features/preparation/public';
-import { useAccountView } from '@/features/settings/public';
+import { LocalComponentRecovery, useAccountView } from '@/features/settings/public';
 import type { WorkspaceSessionController } from '@/features/workspace/public';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
@@ -31,7 +27,7 @@ import { AgentDocumentWorkspace } from './agent-document-workspace';
 
 export interface WorkspacePanesProps {
   chatPaneOpen: boolean;
-  agent: { outline: AgentScopeOutline | null; runtime: AgentWorkspaceRuntime };
+  agent: { runtime: AgentWorkspaceRuntime };
   documents: DocumentTabsRuntime | null;
   /** The sidebar mode. In Chats the Agent has the whole card and no name
    *  row of its own; in Documents it docks beside the open document. */
@@ -73,6 +69,7 @@ export function WorkspacePanes({
       agent={
         <AgentWorkspace
           catalog={dependencies.agent.catalog}
+          accountSignedIn={account.account?.signedIn ?? false}
           header={mode === 'documents'}
           instructions={dependencies.agent.instructions}
           onOpenAgentSettings={() => settings.openSettings('agents')}
@@ -81,9 +78,8 @@ export function WorkspacePanes({
           onReprocess={onReprocess}
           // The bundled runtime's only gate is the account, so the picker's
           // row starts the same browser sign-in the sidebar's footer row does.
-          onSignIn={account.signIn}
+          onSignIn={(signal) => (signal ? account.signInAndWait(signal) : account.signIn())}
           runtime={agent.runtime}
-          scopeOutline={agent.outline}
         />
       }
       onPaneWidthChange={session.runtime.setAgentPaneWidth}
@@ -99,7 +95,6 @@ export function WorkspacePanes({
                 assetApi={dependencies.documents.adapters.asset}
                 docxPreviewApi={dependencies.documents.adapters.docxPreview}
                 genericPreviewApi={dependencies.documents.adapters.genericPreview}
-                mediaApi={dependencies.documents.adapters.media}
                 onNavigate={sources.navigate}
                 onOpenExternal={dependencies.documents.openExternal}
                 onOpenPrepared={onPrepare}
@@ -111,12 +106,19 @@ export function WorkspacePanes({
                   )
                 }
                 renderPreparation={(source, format) => (
-                  <SourcePreparationStatus
-                    controlApi={dependencies.preparation.controlApi}
-                    format={format}
-                    source={source}
-                    status={status}
-                  />
+                  <>
+                    {(format === 'pdf' || format === 'image') &&
+                      status?.folderPath === source.folderPath &&
+                      status.pendingConversions.includes(source.path) && (
+                        <LocalComponentRecovery port={dependencies.settings.localComponentApi} />
+                      )}
+                    <SourcePreparationStatus
+                      controlApi={dependencies.preparation.controlApi}
+                      format={format}
+                      source={source}
+                      status={status}
+                    />
+                  </>
                 )}
                 revealLabel={dependencies.workspace.revealLabel}
                 runtime={documents}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { sessionInfoMatchesCwd } from './agent.ts';
-import { sessionInfoMatchesFolder } from './routes/sessions.ts';
+import { sessionInfoMatchesFolder } from './claude-history.ts';
 
 test('empty external session paths are non-matches instead of path errors', () => {
   assert.doesNotThrow(() => sessionInfoMatchesCwd({ cwd: '' }, '/workspace'));

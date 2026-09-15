@@ -1,31 +1,50 @@
-import type { ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 
+import { useWindowCommand } from '@/app/composition/commands/use-window-command';
 import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
 import { useDependencies } from '@/app/composition/dependency-context';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
-import { Settings } from '@/features/settings/public';
+import { DeveloperTools, Settings } from '@/features/settings/public';
 import { useSoftwareUpdate } from '@/features/updates/public';
 import { type WorkspaceRuntime } from '@/features/workspace/public';
 
 import { WorkspaceQuickOpen } from './workspace-quick-open';
+
+function isDeveloperShortcut(event: KeyboardEvent): boolean {
+  return (
+    import.meta.env.DEV &&
+    (event.metaKey || event.ctrlKey) &&
+    event.altKey &&
+    event.shiftKey &&
+    event.code === 'KeyD'
+  );
+}
 
 /** Quick open and Settings, bound to their ports above the workspace. */
 export function WorkspaceDialogs({
   documents,
   quickOpen,
   settings,
-  updatePreview,
+  renderUpdatePreview,
   workspace,
 }: {
   documents: DocumentTabsRuntime | null;
   quickOpen: { close(): void; open: boolean };
   settings: SettingsCommand;
-  updatePreview?: ReactNode;
+  renderUpdatePreview?: (onClose: () => void) => ReactNode;
   workspace: WorkspaceRuntime | null;
 }) {
   const dependencies = useDependencies();
   const softwareUpdate = useSoftwareUpdate(dependencies.updates);
-  const bugReport = dependencies.bugReport;
+  const [developerOpen, setDeveloperOpen] = useState(false);
+  const closeSettings = settings.close;
+  useWindowCommand(
+    isDeveloperShortcut,
+    useCallback(() => {
+      closeSettings();
+      setDeveloperOpen(true);
+    }, [closeSettings]),
+  );
   return (
     <>
       {workspace && documents && (
@@ -36,23 +55,26 @@ export function WorkspaceDialogs({
           workspace={workspace}
         />
       )}
+      {import.meta.env.DEV && (
+        <DeveloperTools
+          agentRuntimeApi={dependencies.settings.agentRuntimeApi}
+          onClose={() => setDeveloperOpen(false)}
+          open={developerOpen}
+          updatePreview={renderUpdatePreview?.(() => setDeveloperOpen(false))}
+        />
+      )}
       <Settings
-        accountApi={dependencies.settings.accountApi}
         agentRuntimeApi={dependencies.settings.agentRuntimeApi}
         appearanceApi={dependencies.settings.appearanceApi}
         telemetryApi={dependencies.settings.telemetryApi}
         embedderApi={dependencies.settings.embedderApi}
         mcpAccessApi={dependencies.settings.mcpAccessApi}
-        localComponentApi={dependencies.settings.localComponentApi}
         onClose={settings.close}
         onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
-        onReportBug={bugReport ? () => void bugReport.open() : null}
         onSectionChange={settings.onSectionChange}
         open={settings.open}
         section={settings.section}
         softwareUpdate={dependencies.updates ? softwareUpdate : null}
-        transcriptionApi={dependencies.settings.transcriptionApi}
-        updatePreview={updatePreview}
       />
     </>
   );

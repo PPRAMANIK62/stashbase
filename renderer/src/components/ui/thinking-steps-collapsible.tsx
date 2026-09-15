@@ -31,6 +31,7 @@ import { useIsoLayoutEffect } from '@/lib/use-iso-layout-effect';
 import { useMeasuredSize } from '@/lib/use-measured-size';
 import { useMotionTier } from '@/lib/use-motion-tier';
 import { cn } from '@/lib/utils';
+import { holdsTextSelection } from '@/shared/utils/click-intent';
 
 interface TriggerRowProps extends HTMLAttributes<HTMLButtonElement> {
   open: boolean;
@@ -58,6 +59,14 @@ const TriggerRow = forwardRef<HTMLButtonElement, TriggerRowProps>(
         className="relative w-fit"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
+        // The row's summary is selectable, so the drag that copies it ends as
+        // a click on the trigger. Capture is where a wrapper can answer for a
+        // trigger it does not own: stopping here keeps Base UI's own toggle
+        // from running, so the trace does not fold shut and take the selected
+        // text with it.
+        onClickCapture={(event) => {
+          if (holdsTextSelection(event.currentTarget)) event.stopPropagation();
+        }}
       >
         <AnimatePresence>
           {isHovered && (
@@ -75,7 +84,7 @@ const TriggerRow = forwardRef<HTMLButtonElement, TriggerRowProps>(
           className={cn(
             `relative z-10 flex items-center gap-2.5 ${shape.item} ${sizeClasses.px} ${
               sizeClasses.variant === 'compact' ? 'py-1.5' : 'py-2'
-            } cursor-pointer outline-none select-none`,
+            } cursor-pointer outline-none select-text`,
             focusRing('focus-visible:ring-offset-0'),
             className,
           )}

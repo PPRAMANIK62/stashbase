@@ -2,7 +2,7 @@
  * Where search by meaning gets its embeddings: a key the reader brings. There
  * is no other source, so the panel is one row that either holds a key or asks
  * for one. Nothing here signs anyone in; the StashBase account belongs to the
- * Agents section and buys OpenQuill's credits, not search.
+ * Agents section and buys the Agent's credits, not search.
  */
 
 import { useState, type FormEvent } from 'react';
@@ -34,7 +34,7 @@ import { FailureNotice } from '@/shared/ui/failure-notice';
  *  failed, so the section never collapses into a bare sentence. */
 const TITLE = 'Search by Meaning';
 const LEDE =
-  'Find files by meaning, even when the words differ. Add an API key to enable this for your projects. Keyword search works without a key.';
+  'Find files by meaning, even when the words differ. Keyword search works without a key.';
 
 export interface AiIndexPanelProps {
   embedderApi: EmbedderPort;
@@ -117,11 +117,11 @@ function KeyRow({ embedder, state }: { embedder: EmbedderViewModel; state: Embed
             <InputGroup className="flex-1" size="compact">
               <InputField
                 autoComplete="off"
-                filled
                 label={`${EMBEDDER_PROVIDER_LABELS[provider]} API key`}
                 labelHidden
                 onChange={setKey}
                 placeholder="Paste your API key"
+                resting="outline"
                 spellCheck={false}
                 type="password"
                 value={key}
@@ -182,7 +182,9 @@ export function AiIndexPanel({ embedderApi }: AiIndexPanelProps) {
 
   return (
     <SettingsPane lede={LEDE} title={TITLE}>
-      <SettingsGroup hint={describeEmbedderSource(state)} title="Embedding key">
+      {/* No group heading: the pane's title names the setting, the row names
+          the key, and a third heading between them says nothing. */}
+      <SettingsGroup hint={describeEmbedderSource(state)}>
         <SettingsList>
           <KeyRow embedder={embedder} state={state} />
         </SettingsList>

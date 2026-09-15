@@ -59,10 +59,10 @@ export async function agentContextFile(rawPath: unknown): Promise<AgentContextFi
   const folderName = path.basename(target.folderRoot);
   return runWithFolderRoot(target.folderRoot, async () => {
     const sourceFormat = detectViewerFormat(target.folderRel);
-    if (!sourceFormat) throw routeError('unsupported format', 415, 'UNSUPPORTED_FORMAT');
+    if (!sourceFormat || sourceFormat === 'audio') throw routeError('unsupported format', 415, 'UNSUPPORTED_FORMAT');
     if (!(await pathExistsAsync(target.folderRel))) throw routeError('not found', 404);
 
-    if (sourceFormat !== 'pdf' && sourceFormat !== 'docx' && sourceFormat !== 'audio') {
+    if (sourceFormat !== 'pdf' && sourceFormat !== 'docx') {
       return {
         path: target.abs,
         folder: folderName,
@@ -101,8 +101,6 @@ export async function agentContextFile(rawPath: unknown): Promise<AgentContextFi
       available: true,
       reason: sourceFormat === 'docx'
         ? 'Read the extracted HTML file (an absolute app-data path) first for this DOCX; the original DOCX stays as the source identity.'
-        : sourceFormat === 'audio'
-          ? 'Read the timestamped transcript Markdown (an absolute app-data path) first; the original audio stays as the source identity.'
           : 'Read the extracted Markdown note (an absolute app-data path) first for this PDF; use the original only when raw visual or binary detail is needed.',
     };
   });
@@ -169,9 +167,6 @@ async function readWholeProjectFile(rawPath: unknown): Promise<ProjectFileRead> 
       if (viewerFormat === 'docx') {
         return readSourceDerivedFile(target.abs, target.folderRel, 'docx');
       }
-      if (viewerFormat === 'audio') {
-        return readSourceDerivedFile(target.abs, target.folderRel, 'audio');
-      }
       if (viewerFormat === 'image') {
         throw routeError('read_file cannot return image bytes; image OCR text is used for search evidence, while the image remains the source file', 415, 'UNSUPPORTED_FORMAT');
       }
@@ -190,7 +185,7 @@ async function readWholeProjectFile(rawPath: unknown): Promise<ProjectFileRead> 
 async function readSourceDerivedFile(
   sourceAbs: string,
   folderRel: string,
-  sourceFormat: 'pdf' | 'docx' | 'audio',
+  sourceFormat: 'pdf' | 'docx',
 ): Promise<ProjectFileRead> {
   const label = sourceFormat === 'docx' ? 'HTML' : 'Markdown';
   if (!(await pathExistsAsync(folderRel))) throw routeError('not found', 404);
@@ -209,7 +204,7 @@ async function readSourceDerivedFile(
   }
   return {
     path: sourceAbs,
-    format: sourceFormat === 'docx' ? 'docx-derived-html' : sourceFormat === 'audio' ? 'audio-transcript-md' : 'pdf-derived-md',
+    format: sourceFormat === 'docx' ? 'docx-derived-html' : 'pdf-derived-md',
     sourceFormat,
     readPath: derivedAbs,
     derived: true,

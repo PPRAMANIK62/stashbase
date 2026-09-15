@@ -45,7 +45,6 @@ function match(pattern) {
 test('native reuse invalidates on source/build changes but survives an app version bump', () => {
   for (const [id, files] of [
     ['python-cache', ['python/stashbase_daemon.py', 'python/extract_main.py', 'python/constraints.txt', 'scripts/build-python-sidecar.mjs', 'scripts/setup-python.mjs']],
-    ['transcription-cache', ['native/transcription/toolchain.json', 'scripts/build-transcription-sidecar.sh', 'scripts/check-transcription-media.mjs']],
   ]) {
     const original = fingerprint(id);
     for (const file of [...files, actionPath]) {
@@ -79,7 +78,6 @@ test('shared caches are populated on main before signing and reused by every rel
     const componentIndex = release.steps.findIndex((step) => step.run === 'pnpm build:extractor-component');
     const packageIndex = release.steps.findIndex((step) => step.env?.STASHBASE_SKIP_SIDECAR_BUILD === '1');
     assert.ok(prepareIndex >= 0 && componentIndex > prepareIndex && packageIndex > componentIndex);
-    assert.equal(release.steps[packageIndex].env.STASHBASE_SKIP_TRANSCRIPTION_BUILD, '1');
     assert.equal(release.steps.some((step) => step.uses?.startsWith('msys2/')), false);
   }
 });

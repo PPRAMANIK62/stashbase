@@ -8,9 +8,10 @@ import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { WebSocket } from 'ws';
-import { clearAgentRuntimeFailure } from '../agent-contract.ts';
 import { codexAccessOptions, isStashbaseWorkspaceEdit, isWorkspaceFileChange, permanentlyDeleteCodexThread } from '../codex-agent.ts';
 import { CodexRpcPeer } from '../codex-rpc-transport.ts';
+import { runtimeDescriptorFor } from '../agent-contract.ts';
+import { BUILT_IN_AGENT_ADAPTERS } from '../agent-adapters.ts';
 import { CodexSession } from '../codex-session-runtime.ts';
 import { resolveAgentInstructions, setAgentInstructions } from '../agent-instructions.ts';
 import { clearCurrentFolder, runWithWindowId, openProjectFolder } from '../folder.ts';
@@ -159,7 +160,7 @@ test('Codex publishes its native model catalog before ready and forwards a selec
   t.after(() => { runWithWindowId('model-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess();
-  const session = new CodexSession(ws as unknown as WebSocket, 'model-window', undefined, undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'model-window', undefined, undefined, undefined, 'native-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -202,7 +203,6 @@ test('Codex keeps Agent Instructions user-visible while injecting hidden StashBa
     undefined,
     undefined,
     undefined,
-    undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   t.after(() => session.dispose());
@@ -233,7 +233,7 @@ test('Codex changes the model for the next turn without replacing its thread', a
     { id: 'model-one', displayName: 'Model One', isDefault: true },
     { id: 'model-two', displayName: 'Model Two' },
   ], { turnIds: ['turn-1', 'turn-2', 'turn-3'] });
-  const session = new CodexSession(ws as unknown as WebSocket, 'model-switch-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'model-switch-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -263,46 +263,6 @@ test('Codex changes the model for the next turn without replacing its thread', a
   session.dispose();
 });
 
-test('Codex project rebind changes the next native turn cwd without replacing the thread', async (t) => {
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-rebound-'));
-  t.after(() => fs.rmSync(project, { recursive: true, force: true }));
-  const ws = new FakeWebSocket();
-  const native = catalogProcess(undefined, { turnIds: ['turn-1', 'turn-2'] });
-  const session = new CodexSession(
-    ws as unknown as WebSocket,
-    'rebound-window',
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    'unbound',
-    undefined,
-    () => native.proc as unknown as ChildProcessWithoutNullStreams,
-  );
-  session.begin();
-  await settle();
-
-  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'create the project' }));
-  await settle();
-  emitCodexTurnCompleted(native.proc, 'turn-1', 'completed');
-  await settle();
-
-  assert.equal(session.rebindToFolder(project), true);
-  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'continue in the project' }));
-  await settle();
-
-  const threads = native.requests.filter((request) => request.method === 'thread/start');
-  const turns = native.requests.filter((request) => request.method === 'turn/start');
-  assert.equal(threads.length, 1);
-  assert.equal(turns.length, 2);
-  assert.equal(turns[0]?.params.threadId, 'thread-1');
-  assert.notEqual(turns[0]?.params.cwd, project);
-  assert.equal(turns[1]?.params.threadId, 'thread-1');
-  assert.equal(turns[1]?.params.cwd, project);
-  session.dispose();
-});
-
 test('Codex recovers unavailable selections to Default and never forwards an override while resuming', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-'));
   await runWithWindowId('stale-window', () => openProjectFolder(folder));
@@ -311,7 +271,7 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
 
   const staleWs = new FakeWebSocket();
   const staleNative = catalogProcess();
-  const stale = new CodexSession(staleWs as unknown as WebSocket, 'stale-window', undefined, undefined, undefined, 'withdrawn-model', undefined, undefined, undefined, () => staleNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const stale = new CodexSession(staleWs as unknown as WebSocket, 'stale-window', undefined, undefined, undefined, 'withdrawn-model', undefined, undefined, () => staleNative.proc as unknown as ChildProcessWithoutNullStreams);
   stale.begin();
   await settle();
   const staleModels = staleWs.sent.map((item) => JSON.parse(item) as { t: string; fallback?: string }).find((event) => event.t === 'models');
@@ -323,7 +283,7 @@ test('Codex recovers unavailable selections to Default and never forwards an ove
 
   const resumeWs = new FakeWebSocket();
   const resumeNative = catalogProcess();
-  const resumed = new CodexSession(resumeWs as unknown as WebSocket, 'resume-window', undefined, 'thread-old', undefined, 'native-model', undefined, undefined, undefined, () => resumeNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const resumed = new CodexSession(resumeWs as unknown as WebSocket, 'resume-window', undefined, 'thread-old', undefined, 'native-model', undefined, undefined, () => resumeNative.proc as unknown as ChildProcessWithoutNullStreams);
   resumed.begin();
   await settle();
   const resumedModels = resumeWs.sent.map((item) => JSON.parse(item) as { t: string; activeModel?: string }).filter((event) => event.t === 'models').at(-1);
@@ -341,7 +301,7 @@ test('Codex reports the native Default model after starting a new thread', async
   t.after(() => { runWithWindowId('default-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { threadModel: 'runtime-default' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'default-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'default-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -361,7 +321,7 @@ test('Codex does not speculate about the active Default model before a new threa
     { id: 'catalog-default', displayName: 'Catalog Default', isDefault: true },
     { id: 'thread-model', displayName: 'Thread Model' },
   ], { threadModel: 'thread-model' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'default-truth-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'default-truth-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -392,7 +352,7 @@ test('Codex invokes an enabled selected skill and never publishes disabled skill
       { name: 'disabled-skill', path: '/skills/disabled-skill/SKILL.md', enabled: false },
     ],
   });
-  const session = new CodexSession(ws as unknown as WebSocket, 'skills-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'skills-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -417,7 +377,7 @@ test('Codex reports an empty or failed skill catalog without blocking the sessio
   t.after(() => { runWithWindowId('empty-skills-window', () => clearCurrentFolder()); runWithWindowId('failed-skills-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
 
   const emptyWs = new FakeWebSocket();
-  const empty = new CodexSession(emptyWs as unknown as WebSocket, 'empty-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => catalogProcess().proc as unknown as ChildProcessWithoutNullStreams);
+  const empty = new CodexSession(emptyWs as unknown as WebSocket, 'empty-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, () => catalogProcess().proc as unknown as ChildProcessWithoutNullStreams);
   empty.begin();
   await settle();
   assert.equal(emptyWs.sent.map((item) => JSON.parse(item) as { t: string; state?: string }).find((event) => event.t === 'skills')?.state, 'empty');
@@ -426,7 +386,7 @@ test('Codex reports an empty or failed skill catalog without blocking the sessio
 
   const failedWs = new FakeWebSocket();
   const failedNative = catalogProcess(undefined, { skillsListError: 'skills unavailable' });
-  const failed = new CodexSession(failedWs as unknown as WebSocket, 'failed-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => failedNative.proc as unknown as ChildProcessWithoutNullStreams);
+  const failed = new CodexSession(failedWs as unknown as WebSocket, 'failed-skills-window', undefined, undefined, undefined, undefined, undefined, undefined, () => failedNative.proc as unknown as ChildProcessWithoutNullStreams);
   failed.begin();
   await settle();
   assert.equal(failedWs.sent.map((item) => JSON.parse(item) as { t: string; state?: string }).find((event) => event.t === 'skills')?.state, 'failed');
@@ -440,7 +400,7 @@ test('Codex forwards a runtime-native effort identifier without remapping it', a
   t.after(() => { runWithWindowId('native-effort-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess([{ id: 'native-model', displayName: 'Native model', supportedReasoningEfforts: [{ reasoningEffort: 'ultra' }] }]);
-  const session = new CodexSession(ws as unknown as WebSocket, 'native-effort-window', 'ultra', undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'native-effort-window', 'ultra', undefined, undefined, 'native-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -456,7 +416,7 @@ test('Codex retries a rejected selected model with Default and publishes recover
   t.after(() => { runWithWindowId('reject-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { selectedTurnError: 'model unavailable' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'reject-window', undefined, undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'reject-window', undefined, undefined, undefined, 'native-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -479,7 +439,7 @@ test('Codex does not misclassify an unrelated turn failure as a model fallback',
   t.after(() => { runWithWindowId('turn-error-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
   const ws = new FakeWebSocket();
   const native = catalogProcess(undefined, { selectedTurnError: 'sandbox service unavailable' });
-  const session = new CodexSession(ws as unknown as WebSocket, 'turn-error-window', undefined, undefined, undefined, 'native-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'turn-error-window', undefined, undefined, undefined, 'native-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -501,7 +461,7 @@ test('Codex combines every catalog page and preserves advertised effort options'
     [{ id: 'early-model', displayName: 'Early' }],
     [{ id: 'late-model', displayName: 'Late', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'xhigh' }] }],
   ] });
-  const session = new CodexSession(ws as unknown as WebSocket, 'pages-window', undefined, undefined, undefined, 'late-model', undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'pages-window', undefined, undefined, undefined, 'late-model', undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   const modelsEvent = ws.sent.map((item) => JSON.parse(item) as { t: string; models?: Array<{ id: string; supportedEfforts?: string[] }>; activeModel?: string }).find((event) => event.t === 'models');
@@ -540,14 +500,13 @@ test('Codex RPC peer rejects pending work when its owner closes', async () => {
 });
 
 test('stale Codex process events and stdout cannot affect a replacement generation', (t) => {
-  t.after(() => clearAgentRuntimeFailure('codex'));
+
   const first = new FakeCodexProcess();
   const second = new FakeCodexProcess();
   const processes = [first, second];
   const session = new CodexSession(
     new FakeWebSocket() as unknown as WebSocket,
     'test-window',
-    undefined,
     undefined,
     undefined,
     undefined,
@@ -591,13 +550,12 @@ test('Codex app-server exit after ready fatally ends an idle session once', asyn
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
   await runWithWindowId('idle-exit-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('idle-exit-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
   const ws = new FakeWebSocket();
   const native = catalogProcess();
-  const session = new CodexSession(ws as unknown as WebSocket, 'idle-exit-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'idle-exit-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -614,14 +572,13 @@ test('Codex app-server exit during startup retains its fatal cause on exit', asy
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
   await runWithWindowId('startup-exit-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('startup-exit-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
   const ws = new FakeWebSocket();
   const native = new FakeCodexProcess();
   native.stdin.once('data', () => native.emit('close', 23, null));
-  const session = new CodexSession(ws as unknown as WebSocket, 'startup-exit-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'startup-exit-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 
@@ -637,13 +594,12 @@ test('Codex app-server exit while working emits no duplicate failed turn', async
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-exit-'));
   await runWithWindowId('busy-exit-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('busy-exit-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
   const ws = new FakeWebSocket();
   const native = catalogProcess();
-  const session = new CodexSession(ws as unknown as WebSocket, 'busy-exit-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'busy-exit-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
   ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
@@ -651,6 +607,8 @@ test('Codex app-server exit while working emits no duplicate failed turn', async
 
   native.proc.emit('close', null, 'SIGKILL');
   await settle();
+  const adapter = BUILT_IN_AGENT_ADAPTERS.find((item) => item.id === 'codex')!;
+  assert.equal(runtimeDescriptorFor(adapter, '/native/codex').state, 'available');
 
   const events = ws.sent.map((item) => JSON.parse(item) as { t: string; message?: string });
   assert.deepEqual(events.filter((event) => event.t === 'exit'), [
@@ -806,7 +764,7 @@ test('Codex Session handles startup timeout by reaching fatal error path', async
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'startup-timeout-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => proc as unknown as ChildProcessWithoutNullStreams,
     30,
   );
@@ -844,7 +802,7 @@ test('Codex Session handles turn/start timeout by sending error and clearing bus
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'turn-timeout-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => proc as unknown as ChildProcessWithoutNullStreams,
     30,
   );
@@ -906,7 +864,7 @@ test('Codex Session fences a timed-out turn/start generation before accepting an
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'turn-timeout-fence-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => processes.shift() as unknown as ChildProcessWithoutNullStreams,
     30,
   );
@@ -961,7 +919,7 @@ test('Codex Session handles steer timeout without ending an active turn', async 
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'steer-timeout-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => proc as unknown as ChildProcessWithoutNullStreams,
     30,
   );
@@ -993,7 +951,6 @@ test('Codex Session failed turn completed with message preserves it', async (t) 
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-preserve-'));
   await runWithWindowId('err-preserve-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('err-preserve-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -1003,7 +960,7 @@ test('Codex Session failed turn completed with message preserves it', async (t) 
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'err-preserve-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1038,7 +995,7 @@ test('Codex Session suppresses successful automatic approval reviews but preserv
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'notice-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1114,7 +1071,6 @@ test('Codex Session classified turn failure carries its failure kind', async (t)
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-kind-'));
   await runWithWindowId('err-kind-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('err-kind-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -1124,7 +1080,7 @@ test('Codex Session classified turn failure carries its failure kind', async (t)
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'err-kind-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1147,7 +1103,6 @@ test('Codex Session failed turn completed without message uses fallback', async 
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-fallback-'));
   await runWithWindowId('err-fallback-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('err-fallback-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -1157,7 +1112,7 @@ test('Codex Session failed turn completed without message uses fallback', async 
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'err-fallback-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1183,7 +1138,6 @@ test('Codex Session failed turn completed with a blank message uses fallback', a
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-blank-'));
   await runWithWindowId('err-blank-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('err-blank-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -1193,7 +1147,7 @@ test('Codex Session failed turn completed with a blank message uses fallback', a
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'err-blank-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1219,7 +1173,6 @@ test('Codex Session error with willRetry: true stays active through successful c
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-willretry-true-'));
   await runWithWindowId('willretry-true-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('willretry-true-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -1229,7 +1182,7 @@ test('Codex Session error with willRetry: true stays active through successful c
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'willretry-true-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1263,7 +1216,6 @@ test('Codex Session terminal errors settle only their matching active turn once'
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-willretry-false-'));
   await runWithWindowId('willretry-false-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('willretry-false-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -1273,7 +1225,7 @@ test('Codex Session terminal errors settle only their matching active turn once'
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'willretry-false-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1333,7 +1285,6 @@ test('Codex Session retains a terminal error received before its turn/start cont
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-early-terminal-'));
   await runWithWindowId('early-terminal-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('early-terminal-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -1343,7 +1294,7 @@ test('Codex Session retains a terminal error received before its turn/start cont
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'early-terminal-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1365,7 +1316,6 @@ test('Codex Session user interruption stays non-error across terminal notificati
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-cancel-'));
   await runWithWindowId('cancel-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('codex');
     runWithWindowId('cancel-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -1375,7 +1325,7 @@ test('Codex Session user interruption stays non-error across terminal notificati
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'cancel-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1427,7 +1377,7 @@ test('Codex Session treats an already-idle interrupt rejection as a completed st
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'already-idle-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1462,7 +1412,7 @@ test('Codex Session keeps other interrupt rejections visible', async (t) => {
   const session = new CodexSession(
     ws as unknown as WebSocket,
     'interrupt-failure-window',
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined,
     () => native.proc as unknown as ChildProcessWithoutNullStreams,
   );
   session.begin();
@@ -1494,7 +1444,7 @@ test('Codex forwards which model and level run by default and drops hidden entri
     { id: 'odd', displayName: 'Odd', isDefault: false, defaultReasoningEffort: 'max', supportedReasoningEfforts: [{ reasoningEffort: 'low' }] },
     { id: 'retired', displayName: 'Retired', hidden: true },
   ]);
-  const session = new CodexSession(ws as unknown as WebSocket, 'catalog-default-window', undefined, undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  const session = new CodexSession(ws as unknown as WebSocket, 'catalog-default-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
   session.begin();
   await settle();
 

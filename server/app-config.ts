@@ -11,8 +11,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { logger, errorMessage } from './log.ts';
-import { normalizeTranscriptionLanguage } from '../shared/transcription.ts';
-import transcriptionToolchain from '../native/transcription/toolchain.json' with { type: 'json' };
 import type {
   AppearancePreferences,
   AppearanceScale,
@@ -21,7 +19,6 @@ import type {
   WorkspacePreferences,
 } from '../shared/preferences.ts';
 import type { EmbedderProvider } from '../shared/embedding.ts';
-import type { LocalTranscriptionModelId } from '../shared/transcription.ts';
 import { normalizeHostedDisplayName, parseGoogleAvatarUrl } from './hosted-account-profile.ts';
 
 export type {
@@ -46,7 +43,6 @@ export interface RecentFolder {
   favorite?: boolean;
 }
 
-export type TranscriptionModelId = LocalTranscriptionModelId;
 export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
   theme: 'system',
   uiScale: 'default',
@@ -98,6 +94,7 @@ export function isEmbedderProvider(value: unknown): value is EmbedderProvider {
 }
 
 export interface AppConfigFile {
+  agentPreferences?: Array<{ scope: string; agent: 'stashbase' | 'codex' | 'claude' }>;
   telemetry?: import('./telemetry.ts').TelemetryState;
   recentFolders?: RecentFolder[];
   /** Application-wide embedding provider configuration. */
@@ -110,11 +107,6 @@ export interface AppConfigFile {
   account?: {
     session?: HostedAccountSession;
   };
-  /** Set once the bundled built-in folder (the product manual) has been
-   *  seeded into a fresh folder home on first launch. A latch, not live state:
-   *  it stays true even if the user later deletes the folder, so we
-   *  never recreate it behind their back. See `seedBuiltinFolder`. */
-  builtinSeeded?: boolean;
   /** Settings-managed bearer credential and explicit exposure preference for
    *  the Streamable HTTP MCP transport. The token lives beside the existing
    *  API key so config.json remains the only persistent app config file. */
@@ -122,17 +114,6 @@ export interface AppConfigFile {
     token?: string;
     dockerAccess?: boolean;
     dockerPort?: number;
-  };
-  /** Local audio-transcription preferences. Model weights themselves live
-   *  under AppData and are managed explicitly from Settings. */
-  transcription?: {
-    /** Provider ids are registry keys; only whisper.cpp is registered in the
-     * current product, while the persisted shape does not assume local-only
-     * inference. */
-    providerId?: string;
-    modelId?: string;
-    /** Whisper language code or `auto`. */
-    language?: string;
   };
   /** Bounded, user-wide presentation preferences. These deliberately avoid
    * arbitrary theme, font, spacing, and layout customization. */
@@ -145,11 +126,9 @@ export interface AppConfigFile {
    * config writer. */
   updates?: Partial<UpdatePreferences>;
   /** User-authored Chat guidance owned by StashBase. Folder entries use the
-   * exact spelling of project membership paths; `unbound` customizes the
-   * unbound default; no project file is created. */
+   * exact spelling of project membership paths; no project file is created. */
   agentInstructions?: {
     folders?: Array<{ path: string; text: string }>;
-    unbound?: string;
   };
   /** Each native runtime's last-read model catalog and the model it last ran
    * with nothing chosen. A memory rather than a preference: losing it costs
@@ -212,13 +191,6 @@ export async function readAppConfigAsync(): Promise<AppConfigFile> {
 // not cross-process safe (last write wins), and the tmp+rename below
 // only protects against torn writes, not lost updates. If the MCP host
 // ever needs to write config, add real cross-process locking first.
-export function writeAppConfig(cfg: AppConfigFile): void {
-  try {
-    writeAppConfigStrict(cfg);
-  } catch (err: any) {
-    log.warn(`failed to persist config: ${errorMessage(err)}`);
-  }
-}
 
 function isConfigAccessError(err: unknown): err is NodeJS.ErrnoException {
   const code = (err as NodeJS.ErrnoException)?.code;
@@ -366,43 +338,7 @@ export function getEmbedderProvider(): EmbedderProvider {
   return getEmbedderConfig().provider;
 }
 
-export interface TranscriptionPreferences {
-  providerId: string;
-  modelId: string;
-  language: string;
-}
 
-const TRANSCRIPTION_MODEL_IDS = new Set<TranscriptionModelId>(['tiny', 'base', 'small']);
-
-export function getTranscriptionPreferences(): TranscriptionPreferences {
-  const raw = readAppConfig().transcription;
-  const providerId = typeof raw?.providerId === 'string' && raw.providerId.trim()
-    ? raw.providerId.trim()
-    : transcriptionToolchain.providerId;
-  const modelId = typeof raw?.modelId === 'string' && raw.modelId.trim()
-    ? raw.modelId.trim()
-    : 'small';
-  const language = normalizeTranscriptionLanguage(raw?.language) ?? 'auto';
-  return { providerId, modelId, language };
-}
-
-export function setTranscriptionPreferences(next: Partial<TranscriptionPreferences>): TranscriptionPreferences {
-  const current = getTranscriptionPreferences();
-  const providerId = next.providerId?.trim() || current.providerId;
-  const modelId = next.modelId ?? current.modelId;
-  if (!providerId) throw new Error('transcription provider id is required');
-  if (providerId === transcriptionToolchain.providerId && !TRANSCRIPTION_MODEL_IDS.has(modelId as TranscriptionModelId)) {
-    throw new Error(`unsupported transcription model: ${modelId}`);
-  }
-  const language = next.language === undefined
-    ? current.language
-    : normalizeTranscriptionLanguage(next.language);
-  if (!language) throw new Error('transcription language must be `auto` or a language code');
-  const cfg = readAppConfigStrict();
-  cfg.transcription = { providerId, modelId, language };
-  writeAppConfigStrict(cfg);
-  return { providerId, modelId, language };
-}
 
 function isAppearanceTheme(value: unknown): value is AppearanceTheme {
   return value === 'system' || value === 'light' || value === 'dark';

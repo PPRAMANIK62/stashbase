@@ -12,7 +12,10 @@ export const githubImportErrorCodeSchema = z.enum([
   'UNSUPPORTED_LFS',
   'UNSUPPORTED_SUBMODULES',
   'CLONE_FAILED',
+  'LOCAL_IMPORT_FAILED',
   'IMPORT_CANCELLED',
+  'IMPORT_INCOMPLETE',
+  'OUTCOME_UNKNOWN',
 ]);
 
 export const githubImportRequestSchema = z
@@ -20,6 +23,7 @@ export const githubImportRequestSchema = z
     /** The canonical `https://github.com/<owner>/<repo>` the reader pasted.
      *  The server parses it again; sending the raw text keeps one owner for
      *  the rule rather than trusting a client-side normalization. */
+    operationId: z.string().uuid().optional(),
     url: z.string().trim().min(1).max(2_048),
     folderName: z.string().trim().min(1).max(64),
   })
@@ -32,6 +36,8 @@ export const githubImportResultSchema = z.object({ path: z.string().min(1) }).st
 export const githubImportFailureSchema = z
   .object({
     code: githubImportErrorCodeSchema.optional(),
+    destination: z.object({ path: z.string().min(1), directory: z.boolean() }).optional(),
+    retainedPath: z.string().min(1).optional(),
     error: z.string().trim().min(1).max(500),
   })
   .strip();

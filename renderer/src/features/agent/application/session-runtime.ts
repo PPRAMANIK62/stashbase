@@ -1,9 +1,4 @@
-/** One Agent conversation, assembled. The runtime owns the store and the
- *  session's public verbs; the transport, the prompt ledger and the event
- *  applier next to this file own the parts that used to be tangled together
- *  inside it. Work that spans an await captures the scope it started under,
- *  so a completion arriving after the conversation moved folders is refused
- *  instead of being applied to the folder the user is now looking at. */
+/** One conversation owns prompt delivery, native history, and retained work. */
 import { createStore } from 'zustand/vanilla';
 
 import { agentFailure, RESTORE_FAILED } from '@/features/agent/application/failure-messages';
@@ -11,6 +6,7 @@ import {
   createAgentTransport,
   createDefaultScheduler,
 } from '@/features/agent/application/session/connection';
+import { createSessionControls } from '@/features/agent/application/session/controls';
 import {
   createPromptDispatcher,
   unavailableContextPort,
@@ -25,7 +21,6 @@ import {
 } from '@/features/agent/application/session/files-changed';
 import {
   createPromptLedger,
-  planQueue,
   type PendingPrompt,
 } from '@/features/agent/application/session/prompts';
 import type {
@@ -33,10 +28,15 @@ import type {
   AgentSessionRuntimeOptions,
 } from '@/features/agent/application/session/runtime-contract';
 import { createAgentUsage } from '@/features/agent/application/session/usage';
-import { addContextItem, removeContextItem } from '@/features/agent/domain/context';
-import { modelChoice } from '@/features/agent/domain/model-choice';
+import {
+  addContextItem,
+  removeContextItem,
+  validateContext,
+  staleContext,
+} from '@/features/agent/domain/context';
 import {
   agentScopesEqual,
+  agentSessionIsBusy,
   agentSessionIsBlank,
   agentTurnIsActive,
   createAgentSessionState,
@@ -62,17 +62,17 @@ export function createAgentSessionRuntime({
   scope,
   title,
 }: AgentSessionRuntimeOptions): AgentSessionRuntime {
-  const usage = createAgentUsage(agent, recordUsage);
+  const usage = createAgentUsage(() => state().agent, recordUsage);
   const controller = new AbortController();
   const store = createStore<AgentSessionState>(() =>
     createAgentSessionState({ agent, id, scope, title }),
   );
   const ledger = createPromptLedger();
-  /** Uploaded Files by their temp path, so tiles can render what was sent. */
   const transientFiles = new Map<string, File>();
   let disposed = false;
   let started = false;
   let blockSequence = 0;
+  let restoreEntry: Parameters<AgentSessionRuntime['restore']>[0] | null = null;
 
   const state = () => store.getState();
   const { accept, capture, retireOperations } = createScopeGuard({
@@ -84,6 +84,16 @@ export function createAgentSessionRuntime({
   const transition = (action: Parameters<typeof transitionAgentSession>[1]) => {
     usage.action(action);
     store.setState((current) => transitionAgentSession(current, action), true);
+    if (action.kind === 'fail' || action.kind === 'close' || action.kind === 'schedule-reconnect')
+      ledger.takeHeld();
+    if (action.kind === 'settle-turn') {
+      controls.dispose();
+      if (state().delivery === 'completed' && !state().queuePaused) {
+        queueMicrotask(() => {
+          void runtime.continueQueue();
+        });
+      }
+    }
   };
 
   const notifyFilesChanged = (changed: string[]) => {
@@ -92,29 +102,57 @@ export function createAgentSessionRuntime({
     if (change) onFilesChanged(change);
   };
 
-  /** Sends the wire prompt and records the user's own view of it. */
   const submit = (prompt: PendingPrompt): boolean => {
+    const current = state();
+    if (
+      prompt.queuedId &&
+      !current.queuedPrompts.some(
+        (item) =>
+          item.id === prompt.queuedId &&
+          item.text.trim() === prompt.display &&
+          item.context === prompt.context,
+      )
+    )
+      return false;
+    const titleHint = current.transcript.some((block) => block.kind === 'user')
+      ? undefined
+      : current.titleEdited
+        ? current.title
+        : (prompt.display || (prompt.skill ? `/${prompt.skill.label}` : 'Attached files'))
+            .replace(/\s+/g, ' ')
+            .slice(0, 80);
     const sent = transport.send({
       kind: 'prompt',
       skill: prompt.skill?.id ?? null,
       text: prompt.wire,
+      ...(titleHint ? { titleHint } : {}),
     });
     if (!sent) return false;
     const blockId = nextBlockId('user');
     ledger.recordTurn(blockId, {
       display: prompt.display,
+      context: prompt.context,
       skill: prompt.skill?.id ?? null,
       wire: prompt.wire,
     });
     transition({
       at: Date.now(),
+      clearDraft: prompt.draft
+        ? state().draft === prompt.draft.text &&
+          state().context === prompt.draft.context &&
+          state().skill === prompt.draft.skill
+        : false,
+      ...(titleHint ? { titleHint } : {}),
       context: prompt.context,
       id: blockId,
-      // The server composes the skill into the wire prompt, so the
-      // transcript states which skill ran beside what was typed.
       text: prompt.skill ? `/${prompt.skill.label} ${prompt.display}`.trimEnd() : prompt.display,
       kind: 'submit-prompt',
     });
+    if (prompt.queuedId)
+      transition({
+        kind: 'set-queue',
+        queue: state().queuedPrompts.filter((item) => item.id !== prompt.queuedId),
+      });
     return true;
   };
 
@@ -151,6 +189,22 @@ export function createAgentSessionRuntime({
     transition,
   });
 
+  const controls = createSessionControls({
+    state,
+    transition,
+    disposed: () => disposed,
+    dispatcher,
+    transport,
+    session: () => runtime,
+    isStarted: () => started,
+    resetStart: () => {
+      started = false;
+    },
+    onInterrupt: () => usage.interrupt(),
+    ledger,
+    transientFiles,
+  });
+
   const runtime: AgentSessionRuntime = {
     id,
     signal: controller.signal,
@@ -160,53 +214,53 @@ export function createAgentSessionRuntime({
     isBlank() {
       return agentSessionIsBlank(state());
     },
-    interrupt() {
-      if (disposed || !agentTurnIsActive(state().connection)) return false;
-      const sent = transport.send({ kind: 'interrupt' });
-      if (sent) usage.interrupt();
-      return sent;
-    },
-    replyPermission(toolUseId, permissionId, allow, always) {
-      if (disposed) return false;
-      const tool = state().transcript.find(
-        (block) => block.kind === 'tool' && block.id === toolUseId,
-      );
-      if (
-        tool?.kind !== 'tool' ||
-        tool.permissionId !== permissionId ||
-        tool.status !== 'awaiting'
-      ) {
-        return false;
-      }
-      const sent = transport.send({
-        allow,
-        always: always ?? null,
-        id: permissionId,
-        kind: 'reply-permission',
-      });
-      if (sent) transition({ allow, toolUseId, kind: 'reply-permission' });
-      return sent;
-    },
+    interrupt: controls.interrupt,
+    continueQueue: controls.continueQueue,
+    confirmOutcome: controls.confirmOutcome,
+    changeAgent: controls.changeAgent,
+    editQueued: controls.editQueued,
+    replyPermission: controls.replyPermission,
     rename(nextTitle) {
-      if (!disposed) transition({ title: nextTitle, kind: 'titled' });
+      if (!disposed) transition({ title: nextTitle, kind: 'rename' });
     },
     reconnect() {
       if (disposed || state().connection.kind === 'retired') return;
+      if (restoreEntry) {
+        void runtime.restore(restoreEntry);
+        return;
+      }
       started = true;
       transport.open({ attempt: 0, resume: state().nativeSessionId ?? undefined });
     },
     retry(errorBlockId) {
       const current = state();
-      if (disposed || agentTurnIsActive(current.connection)) return false;
+      if (disposed || agentSessionIsBusy(current) || current.delivery === 'unknown') return false;
       const failure = current.transcript.find(
         (block) => block.kind === 'error' && block.id === errorBlockId,
       );
-      // A skill-only turn goes out with empty text, so presence — not
-      // emptiness — decides whether the failed turn can be resent.
       if (failure?.kind !== 'error' || failure.retryablePrompt === undefined) return false;
       if (current.connection.kind !== 'live') return false;
+      if (failure.failure && failure.failure !== 'network' && failure.failure !== 'rate-limit')
+        return false;
       usage.start();
-      const skill = ledger.turnFor(errorBlockId)?.skill ?? null;
+      const turn = ledger.turnFor(errorBlockId);
+      const stale = staleContext(
+        validateContext(turn?.context ?? [], {
+          listing: null,
+          readiness: {},
+          ...environment(),
+          scope: current.scope,
+          hasUpload: (path) => transientFiles.has(path),
+        }),
+      );
+      if (stale.length) {
+        transition({
+          kind: 'set-context-issue',
+          message: stale[0]?.reason ?? 'Review the request context before retrying.',
+        });
+        return false;
+      }
+      const skill = turn?.skill ?? null;
       const sent = transport.send({
         kind: 'prompt',
         skill,
@@ -214,27 +268,13 @@ export function createAgentSessionRuntime({
       });
       if (!sent) usage.finish('blocked');
       if (sent) {
+        transition({ kind: 'delivery', value: 'idle' });
         transition({ id: errorBlockId, kind: 'settle-error' });
         transition({ kind: 'turn-started' });
       }
       return sent;
     },
-    editPrompt(blockId) {
-      const current = state();
-      if (disposed || agentTurnIsActive(current.connection)) return false;
-      const prompt = current.transcript.find(
-        (block) => block.kind === 'user' && block.id === blockId,
-      );
-      if (prompt?.kind !== 'user') return false;
-      // A live send remembers the text as typed and the skill it ran under;
-      // restored history has only the transcript's own text, and never the
-      // bytes behind its attachments, so those do not come back.
-      const turn = ledger.turnFor(blockId);
-      transition({ draft: turn?.display ?? prompt.text, kind: 'set-draft' });
-      transition({ context: prompt.context ?? [], kind: 'set-context' });
-      transition({ skill: turn?.skill ?? null, kind: 'set-skill' });
-      return true;
-    },
+    editPrompt: controls.editPrompt,
     addContext(item) {
       if (disposed) return;
       transition({ context: addContextItem(state().context, item), kind: 'set-context' });
@@ -263,37 +303,9 @@ export function createAgentSessionRuntime({
         throw error;
       }
     },
-    setAccessMode(mode) {
-      if (disposed || state().accessMode === mode) return;
-      transition({ mode, kind: 'set-access-mode' });
-      transport.applyAccessMode(mode);
-    },
-    setEffort(effort) {
-      const current = state();
-      if (disposed || agentTurnIsActive(current.connection) || current.effort === effort) return;
-      if (effort && !modelChoice(current).efforts.includes(effort)) return;
-      transition({ effort, kind: 'set-effort' });
-      if (started) transport.open({ resume: current.nativeSessionId ?? undefined });
-    },
-    setModel(model) {
-      const current = state();
-      if (
-        disposed ||
-        agentTurnIsActive(current.connection) ||
-        current.model === model ||
-        (model !== null && !current.models.some((entry) => entry.id === model))
-      ) {
-        return;
-      }
-      const nextModel = current.models.find((entry) => entry.id === model);
-      const nextEffort =
-        current.effort && !nextModel?.supportedEfforts?.includes(current.effort)
-          ? null
-          : current.effort;
-      transition({ model, kind: 'set-model' });
-      if (nextEffort !== current.effort) transition({ effort: nextEffort, kind: 'set-effort' });
-      transport.send({ kind: 'select-model', model });
-    },
+    setAccessMode: controls.setAccessMode,
+    setEffort: controls.setEffort,
+    setModel: controls.setModel,
     setSkill(skill) {
       if (disposed || state().skill === skill) return;
       transition({ skill, kind: 'set-skill' });
@@ -311,25 +323,19 @@ export function createAgentSessionRuntime({
     setDraft(draft) {
       if (!disposed) transition({ draft, kind: 'set-draft' });
     },
-    setQueue(queue) {
-      if (disposed) return;
-      const plan = planQueue(state(), queue);
-      transition({ queue: plan.queue, kind: 'set-queue' });
-      for (const stashed of plan.stash) ledger.stash(stashed.id, stashed.prompt);
-      if (plan.context) transition({ context: plan.context, kind: 'set-context' });
-      if (plan.skill !== undefined) transition({ skill: plan.skill, kind: 'set-skill' });
-    },
+    setQueue: controls.setQueue,
     async restore(entry, connectWhenReady = true) {
       if (disposed) return false;
-      // A restore retires whatever was already restoring, then runs under the
-      // token it captures — so only the newest replay may land.
       retireOperations();
       const capturedScope = capture();
       transport.close();
+      restoreEntry = entry;
       transition({ title: entry.title, kind: 'begin-restore' });
+      store.setState({ nativeSessionId: entry.id });
       try {
         const replay = await port.replay(entry, controller.signal);
         return accept(capturedScope, () => {
+          restoreEntry = null;
           transition({
             effort: replay.effort,
             lastModified: entry.lastModified,
@@ -343,8 +349,6 @@ export function createAgentSessionRuntime({
           } else transition({ message: null, kind: 'close' });
         });
       } catch (cause) {
-        // The refusal itself decides the sentence; a rejection that is not on
-        // the Agent's ladder keeps the generic restore line.
         const message = isFeatureError(cause) ? agentFailure(cause).message : RESTORE_FAILED;
         accept(capturedScope, () => transition({ message, kind: 'fail' }));
         return false;
@@ -355,8 +359,9 @@ export function createAgentSessionRuntime({
       const current = state();
       if (current.scope.kind !== 'folder' || current.scope.path !== folderPath) return;
       retireOperations();
+      controls.dispose();
+      dispatcher.cancel();
       transport.invalidate();
-      ledger.clearStashed();
       transport.close();
       transition({ kind: 'retire' });
     },
@@ -370,7 +375,8 @@ export function createAgentSessionRuntime({
       disposed = true;
       retireOperations();
       transport.invalidate();
-      ledger.clearStashed();
+      controls.dispose();
+      dispatcher.cancel();
       transientFiles.clear();
       controller.abort();
       transport.close();

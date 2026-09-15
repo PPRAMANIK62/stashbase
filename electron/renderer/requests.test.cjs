@@ -185,7 +185,7 @@ test('case variants and retired socket routes never gain window authority', () =
 });
 
 test('read-only document and PDF resources retain their separate asset authorization', () => {
-  for (const prefix of ['asset', 'asset-derived', 'asset-audio-preview', 'pdfjs-assets']) {
+  for (const prefix of ['asset', 'asset-derived', 'asset-derived', 'pdfjs-assets']) {
     const details = {
       method: 'GET',
       requestHeaders: { 'X-StashBase-Window-Id': 'forged', Accept: '*/*' },

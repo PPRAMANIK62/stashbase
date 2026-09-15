@@ -47,19 +47,16 @@ vi.mock('@milkdown/crepe/builder', () => ({
       return 'body';
     }
 
-    on(
-      register: (listener: {
-        markdownUpdated(callback: typeof editorHarness.change): void;
-      }) => void,
-    ) {
-      register({ markdownUpdated: (callback) => (editorHarness.change = callback) });
-      return this;
-    }
-
     setReadonly(value: boolean) {
       this.instance.readonlyValues.push(value);
       return this;
     }
+  },
+}));
+
+vi.mock('./changes', () => ({
+  watchMarkdownChanges: (_editor: unknown, report: (markdown: string) => void) => {
+    editorHarness.change = (_context, markdown) => report(markdown);
   },
 }));
 

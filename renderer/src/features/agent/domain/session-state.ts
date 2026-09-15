@@ -14,9 +14,13 @@ import type { AgentId } from '@/shared/domain/agent-id';
 
 export type { AgentId };
 
-export type AgentScope = { kind: 'unbound' } | { kind: 'folder'; path: string };
+export type AgentScope = { kind: 'folder'; path: string };
 
 export const MAX_QUEUED_PROMPTS = 20;
+
+/** What a conversation is called before it has a name of its own: the same
+ *  word an unnamed document takes, so nothing unnamed reads as an action. */
+export const UNTITLED_CHAT_TITLE = 'Untitled';
 
 /** The turn the runtime is streaming right now. A turn exists only while the
  *  connection is live, which is why it lives inside that member. */
@@ -77,6 +81,9 @@ export interface AgentSessionState {
   readonly agent: AgentId;
   readonly scope: AgentScope;
   title: string;
+  titleEdited: boolean;
+  delivery: 'idle' | 'preparing' | 'stopping' | 'stopped' | 'completed' | 'failed' | 'unknown';
+  queuePaused: boolean;
   accessMode: AgentAccessMode;
   draft: string;
   /** Bound context for the draft: mentioned sources and transient uploads. */
@@ -111,7 +118,10 @@ export function createAgentSessionState(options: {
     id: options.id,
     agent: options.agent,
     scope: options.scope,
-    title: options.title?.trim() || 'Untitled',
+    title: options.title?.trim() || UNTITLED_CHAT_TITLE,
+    titleEdited: false,
+    delivery: 'idle',
+    queuePaused: false,
     accessMode: 'auto',
     connection: { kind: 'draft' },
     draft: '',
@@ -143,7 +153,6 @@ type AgentSessionStateEvent =
   | { kind: 'ready' }
   | { kind: 'identified'; id: string }
   | { kind: 'titled'; title: string }
-  | { kind: 'scope-changed'; scope: Extract<AgentScope, { kind: 'folder' }> }
   | {
       kind: 'models';
       models: AgentModel[];
@@ -206,10 +215,23 @@ type AgentSessionLocalAction =
   | { kind: 'set-effort'; effort: string | null }
   | { kind: 'set-skill'; skill: string | null }
   | { kind: 'set-draft'; draft: string }
+  | { kind: 'select-agent'; agent: AgentId }
+  | { kind: 'reset-draft-connection' }
+  | { kind: 'rename'; title: string }
+  | { kind: 'delivery'; value: AgentSessionState['delivery'] }
+  | { kind: 'pause-queue'; paused: boolean }
   | { kind: 'set-context'; context: AgentContextItem[] }
   | { kind: 'set-context-issue'; message: string | null }
   | { kind: 'set-queue'; queue: AgentQueuedPrompt[] }
-  | { kind: 'submit-prompt'; id: string; text: string; context: AgentContextItem[]; at: number }
+  | {
+      kind: 'submit-prompt';
+      id: string;
+      text: string;
+      context: AgentContextItem[];
+      at: number;
+      clearDraft?: boolean;
+      titleHint?: string;
+    }
   | { kind: 'append-text'; id: string; delta: string }
   | { kind: 'append-thinking'; id: string; delta: string }
   | { kind: 'reply-permission'; toolUseId: string; allow: boolean }

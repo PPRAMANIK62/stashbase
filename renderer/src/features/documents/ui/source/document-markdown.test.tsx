@@ -9,7 +9,6 @@ import {
   assetApi,
   docxPreviewApi,
   genericPreviewApi,
-  mediaApi,
   sourceApi,
   textSource,
 } from '@/test/fakes/documents';
@@ -53,7 +52,6 @@ function renderSource(
       assetApi={assetApi({ load: vi.fn(pending()) })}
       docxPreviewApi={docxPreviewApi({ load: vi.fn(pending()) })}
       genericPreviewApi={genericPreviewApi({ load: vi.fn(pending()) })}
-      mediaApi={mediaApi({ loadTranscript: vi.fn(pending()) })}
       onNavigate={options.onNavigate}
       onOpenExternal={options.onOpenExternal}
       onReveal={vi.fn(async () => undefined)}

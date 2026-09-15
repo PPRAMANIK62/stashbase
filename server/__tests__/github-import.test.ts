@@ -418,7 +418,7 @@ test('publication refuses a file arriving after the final directory reservation'
     await fs.promises.writeFile(destination, 'user bytes');
     return link(source, destination);
   });
-  await assert.rejects(publishStagedRepository(staged, target, new AbortController().signal), { code: 'EEXIST' });
+  await assert.rejects(publishStagedRepository(staged, target, new AbortController().signal), { code: 'IMPORT_INCOMPLETE' });
   assert.equal(fs.readFileSync(path.join(target, 'notes.txt'), 'utf8'), 'user bytes');
 });
 
@@ -433,7 +433,7 @@ test('failed publication preserves unrelated content and removes only its own fi
     }
     return link(source, destination);
   });
-  await assert.rejects(publishStagedRepository(staged, target, new AbortController().signal), /controlled publication failure/);
+  await assert.rejects(publishStagedRepository(staged, target, new AbortController().signal), { code: 'IMPORT_INCOMPLETE', retainedPath: target });
   assert.equal(fs.readFileSync(path.join(target, 'user.txt'), 'utf8'), 'keep');
   assert.equal(fs.existsSync(path.join(target, 'notes.txt')), false);
 });
@@ -446,7 +446,7 @@ test('rollback preserves a replaced final directory', async (t) => {
     await fs.promises.writeFile(path.join(target, 'user.txt'), 'replacement');
     throw new Error('controlled publication failure');
   });
-  await assert.rejects(publishStagedRepository(staged, target, new AbortController().signal), /controlled publication failure/);
+  await assert.rejects(publishStagedRepository(staged, target, new AbortController().signal), { code: 'IMPORT_INCOMPLETE', retainedPath: target });
   assert.equal(fs.readFileSync(path.join(target, 'user.txt'), 'utf8'), 'replacement');
   assert.equal(fs.existsSync(`${target}-moved`), true);
 });
@@ -460,7 +460,7 @@ test('rollback preserves edits to an already published file', async (t) => {
     await fs.promises.writeFile(destination, 'edited by the user');
     controller.abort();
   });
-  await assert.rejects(publishStagedRepository(staged, target, controller.signal), { code: 'IMPORT_CANCELLED' });
+  await assert.rejects(publishStagedRepository(staged, target, controller.signal), { code: 'IMPORT_INCOMPLETE', retainedPath: target });
   assert.equal(fs.readFileSync(path.join(target, 'notes.txt'), 'utf8'), 'edited by the user');
 });
 
@@ -489,7 +489,7 @@ test('publication uses exclusive copies on filesystems without hard links', asyn
     return copyFile(source, destination, flags);
   });
   const second = `${target}-second`;
-  await assert.rejects(publishStagedRepository(staged, second, new AbortController().signal), { code: 'EEXIST' });
+  await assert.rejects(publishStagedRepository(staged, second, new AbortController().signal), { code: 'IMPORT_INCOMPLETE' });
   assert.equal(fs.readFileSync(path.join(second, 'notes.txt'), 'utf8'), 'concurrent');
 });
 
@@ -578,7 +578,7 @@ test('registration failure rolls publication back and permits a clean retry', as
   const { deps, home, log } = fakeDeps({});
   const register = deps.register;
   deps.register = async () => { throw new Error('config write refused'); };
-  await assert.rejects(importPublicGitHubRepository({ url: 'https://github.com/owner/register-failure' }, deps), { code: 'CLONE_FAILED' });
+  await assert.rejects(importPublicGitHubRepository({ url: 'https://github.com/owner/register-failure' }, deps), { code: 'LOCAL_IMPORT_FAILED' });
   assert.deepEqual(log.registered, []);
   assert.deepEqual(fs.readdirSync(home), []);
   deps.register = register;

@@ -43,6 +43,15 @@ interface FakeMarkdownEditor {
 
 const editors = vi.hoisted(() => ({ instances: [] as FakeMarkdownEditor[] }));
 
+vi.mock('@/features/documents/ui/markdown/changes', () => ({
+  watchMarkdownChanges: (
+    editor: { instance: FakeMarkdownEditor },
+    report: (markdown: string) => void,
+  ) => {
+    editor.instance.change = (_context, markdown) => report(markdown);
+  },
+}));
+
 vi.mock('@milkdown/kit/utils', () => ({
   replaceAll: (markdown: string) => ({ markdown }),
 }));
@@ -330,9 +339,9 @@ describe('J07 converge chat into a document', () => {
     expect(
       await screen.findByRole('heading', { name: 'Canvas.md changed on disk' }, { timeout: 3_000 }),
     ).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Use disk version' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Merge' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Overwrite' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Keep my version' })).not.toBeNull();
     expect(test.saves).toEqual([]);
   });
 });

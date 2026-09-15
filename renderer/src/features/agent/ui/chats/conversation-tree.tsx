@@ -2,8 +2,8 @@
  *  that opens on a click and renames in place on a slow second click or F2,
  *  and a per-row menu for deletion. Grouping and ordering are decided in the
  *  domain; this module owns the interaction and the editing affordance. */
-import { MoreHorizontal, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { DropdownContent, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
@@ -23,36 +23,39 @@ import type {
 } from '@/features/agent/domain/conversation-history';
 import { fontWeights } from '@/lib/font-weight';
 import { AGENT_ICONS } from '@/shared/brand/agent-icons';
-import { SINGLE_CLICK_DELAY_MS } from '@/shared/utils/click-intent';
 
 const CONVERSATION_PAGE_SIZE = 100;
 
 function HistoryActions({
   entry,
+  title,
   onDelete,
+  onRename,
 }: {
-  entry: AgentHistoryEntry;
+  entry: AgentHistoryEntry | undefined;
+  title: string;
   onDelete(entry: AgentHistoryEntry): void;
+  onRename(): void;
 }) {
   return (
     <DropdownMenu>
       <DropdownTrigger
         render={
-          <SidebarMenuAction
-            aria-label={`Actions for ${entry.title || 'conversation'}`}
-            showOnHover
-          >
+          <SidebarMenuAction aria-label={`Actions for ${title || 'conversation'}`} showOnHover>
             <MoreHorizontal aria-hidden="true" />
           </SidebarMenuAction>
         }
       />
       <DropdownContent align="end" className="w-40">
-        <MenuItem
-          className="text-destructive"
-          icon={Trash2}
-          label="Delete"
-          onSelect={() => onDelete(entry)}
-        />
+        <MenuItem icon={Pencil} label="Rename" onSelect={onRename} />
+        {entry && (
+          <MenuItem
+            className="text-destructive"
+            icon={Trash2}
+            label="Delete"
+            onSelect={() => onDelete(entry)}
+          />
+        )}
       </DropdownContent>
     </DropdownMenu>
   );
@@ -74,23 +77,13 @@ function ConversationRow({
   const [editing, setEditing] = useState(false);
   const [caretOffset, setCaretOffset] = useState<number | undefined>();
   const [title, setTitle] = useState(conversation.title);
-  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const AgentIcon = AGENT_ICONS[conversation.agent];
-
-  const cancelPendingClick = () => {
-    if (clickTimer.current === null) return;
-    clearTimeout(clickTimer.current);
-    clickTimer.current = null;
-  };
-
-  useEffect(() => cancelPendingClick, []);
 
   const activate = () => {
     if (conversation.tabId) onActivate(conversation.tabId);
     else if (conversation.entry) onRestore(conversation.entry);
   };
   const beginEdit = (nextCaretOffset?: number) => {
-    cancelPendingClick();
     activate();
     setCaretOffset(nextCaretOffset);
     setTitle(conversation.title);
@@ -108,18 +101,6 @@ function ConversationRow({
     }
     setEditing(false);
     void onRename(conversation, nextTitle);
-  };
-  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
-    if (event.detail === 0) {
-      activate();
-      return;
-    }
-    cancelPendingClick();
-    if (event.detail > 1) return;
-    clickTimer.current = setTimeout(() => {
-      clickTimer.current = null;
-      activate();
-    }, SINGLE_CLICK_DELAY_MS);
   };
 
   return (
@@ -152,7 +133,7 @@ function ConversationRow({
           data-conversation=""
           icon={AgentIcon}
           isActive={conversation.active}
-          onClick={handleClick}
+          onClick={activate}
           onDoubleClick={(event) => {
             event.preventDefault();
             const target = event.target instanceof HTMLElement ? event.target : event.currentTarget;
@@ -165,11 +146,25 @@ function ConversationRow({
             }
           }}
           label={conversation.title}
+          aria-label={`${conversation.title}${conversation.draft ? ', Draft' : ''}${conversation.status ? `, ${conversation.status}` : ''}`}
           title={conversation.title}
-        />
+        >
+          {conversation.status === 'Working…' || conversation.status === 'Waiting for approval' ? (
+            <span className="text-caption text-muted-foreground">
+              {conversation.status === 'Working…' ? 'Working' : 'Approval'}
+            </span>
+          ) : conversation.draft ? (
+            <span className="text-caption text-muted-foreground">Draft</span>
+          ) : undefined}
+        </SidebarMenuButton>
       )}
-      {!editing && conversation.entry && (
-        <HistoryActions entry={conversation.entry} onDelete={onDelete} />
+      {!editing && (
+        <HistoryActions
+          entry={conversation.entry}
+          title={conversation.title}
+          onDelete={onDelete}
+          onRename={() => beginEdit()}
+        />
       )}
     </SidebarMenuItem>
   );

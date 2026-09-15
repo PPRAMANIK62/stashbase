@@ -5,7 +5,7 @@ import type { Server as HttpServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { attachRoot, mount, transientAttachmentPreviewPath } from './attach.ts';
+import { attachRoot, cleanupStaleAttachments, mount, transientAttachmentPreviewPath } from './attach.ts';
 
 test('transient attachment upload preserves ordered UTF-8 filenames', async (t) => {
   const root = attachRoot();
@@ -39,6 +39,14 @@ test('transient attachment upload preserves ordered UTF-8 filenames', async (t) 
   uploadedBatch = path.dirname(uploadedPaths[0]);
   assert.deepEqual(payload.files.map((file) => file.name), ['研究报告.pdf', '中文资料.pdf', 'café.pdf']);
   assert.deepEqual(uploadedPaths.map((filePath) => path.basename(filePath)), ['研究报告.pdf', '中文资料.pdf', 'café.pdf']);
+  const staleTime = new Date(Date.now() - 25 * 60 * 60_000);
+  fs.utimesSync(uploadedBatch, staleTime, staleTime);
+  const abandoned = fs.mkdtempSync(path.join(root, 'abandoned-'));
+  fs.utimesSync(abandoned, staleTime, staleTime);
+  cleanupStaleAttachments(root);
+  assert.equal(fs.existsSync(abandoned), false);
+  assert.equal(fs.readFileSync(uploadedPaths[0], 'utf8'), 'pdf bytes', 'live draft bytes survive age cleanup');
+
 });
 
 test('attachment previews reject a transient-tree symlink to an outside file', () => {

@@ -27,6 +27,8 @@ export function CodeEditorDocument({
 }) {
   const registrationOwnerRef = useRef(Symbol(runtime.scope.id));
   const { hostRef, sessionRef } = useCodeEditorSession({
+    owner: runtime,
+    label: ariaLabel,
     content,
     create: (host, report) =>
       createCodeEditor(host, { ariaLabel, content, language, onChange: report, readOnly }),
@@ -39,7 +41,7 @@ export function CodeEditorDocument({
     const controller = sessionRef.current?.find;
     if (!active || !controller) return;
     return navigation.claimFind(runtime.scope.id, registrationOwnerRef.current, controller);
-  }, [active, navigation, runtime.scope.id, sessionRef]);
+  }, [active, ariaLabel, navigation, runtime.scope.id, sessionRef]);
 
   return (
     <div

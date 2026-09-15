@@ -43,7 +43,8 @@ function lifecycleHarness() {
   let removedHandler: ((folderPath: string) => void) | undefined;
   let prepareHandler: ((folderPath: string) => boolean | Promise<boolean>) | undefined;
   const lifecycle: ProjectLifecyclePort = {
-    claimInitialFolder: vi.fn(async () => null),
+    enterFolder: vi.fn(async () => {}),
+    onEnterFolder: vi.fn(() => () => {}),
     notifyFolderRemoved: vi.fn(async () => undefined),
     onFolderRemoved: vi.fn((handler) => {
       removedHandler = handler;

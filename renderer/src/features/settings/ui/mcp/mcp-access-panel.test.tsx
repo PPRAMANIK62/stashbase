@@ -32,6 +32,7 @@ describe('McpAccessPanel', () => {
 
   it('keeps the bearer token out of the page until it is revealed', async () => {
     renderPanel(mcpAccessPort());
+    await userEvent.setup().click(await screen.findByRole('tab', { name: 'HTTP' }));
 
     expect(await screen.findByText('Bearer token')).not.toBeNull();
     expect(screen.queryByText('token-abc')).toBeNull();
@@ -44,6 +45,7 @@ describe('McpAccessPanel', () => {
   it('rotates the token only after the confirmation is accepted', async () => {
     const port = mcpAccessPort();
     renderPanel(port);
+    await userEvent.setup().click(await screen.findByRole('tab', { name: 'HTTP' }));
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Rotate token…' }));
@@ -57,6 +59,7 @@ describe('McpAccessPanel', () => {
   it('opens Docker access and reports a listener that did not come up', async () => {
     const port = mcpAccessPort();
     renderPanel(port);
+    await userEvent.setup().click(await screen.findByRole('tab', { name: 'HTTP' }));
 
     await userEvent.setup().click(await screen.findByRole('switch', { name: 'Docker access' }));
     await waitFor(() =>
@@ -77,6 +80,7 @@ describe('McpAccessPanel', () => {
       ),
     });
     renderPanel(port);
+    await userEvent.setup().click(await screen.findByRole('tab', { name: 'HTTP' }));
 
     expect(await screen.findByText('Not listening')).not.toBeNull();
     const statuses = await screen.findAllByRole('status');
@@ -87,8 +91,10 @@ describe('McpAccessPanel', () => {
   it('refuses a privileged Docker port and saves one in range', async () => {
     const port = mcpAccessPort();
     renderPanel(port);
+    await userEvent.setup().click(await screen.findByRole('tab', { name: 'HTTP' }));
     const user = userEvent.setup();
 
+    await user.click(screen.getByText('Docker port settings'));
     const field = await screen.findByRole('spinbutton', { name: 'Docker port' });
     await user.clear(field);
     await user.type(field, '80');

@@ -11,8 +11,8 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   consumeAgentSetupFailure,
-  managedAgentRuntimeRoot,
-  type ManagedAgentId,
+  agentInstallerTempRoot,
+  type NativeAgentId,
 } from './agent-runtime-paths.ts';
 import { probeAgentCommand } from './agent-probe.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
@@ -43,42 +43,42 @@ export type {
 type ProgressUpdate = Pick<AgentBootstrapStatus, 'progress' | 'message'>;
 
 export interface AgentBootstrapDependencies {
-  resolveExecutable(id: ManagedAgentId, options?: { probeLoginShell?: boolean; signal?: AbortSignal }): string | null | Promise<string | null>;
-  installRuntime(id: ManagedAgentId, update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void>;
-  isAuthenticated(id: ManagedAgentId, executable: string, signal?: AbortSignal): boolean | Promise<boolean>;
-  login(id: ManagedAgentId, executable: string, signal: AbortSignal): Promise<void>;
-  configureMcp(id: ManagedAgentId): void;
+  resolveExecutable(id: NativeAgentId, options?: { probeLoginShell?: boolean; signal?: AbortSignal }): string | null | Promise<string | null>;
+  installRuntime(id: NativeAgentId, update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void>;
+  isAuthenticated(id: NativeAgentId, executable: string, signal?: AbortSignal): boolean | Promise<boolean>;
+  login(id: NativeAgentId, executable: string, signal: AbortSignal): Promise<void>;
+  configureMcp(id: NativeAgentId): void;
   consumeFailure(stage: 'installation' | 'authentication' | 'mcp'): boolean;
 }
 
 const IDLE_STATUS: AgentBootstrapStatus = { phase: 'idle' };
 
 export class AgentBootstrapCoordinator {
-  private readonly statuses = new Map<ManagedAgentId, AgentBootstrapStatus>();
-  private readonly controllers = new Map<ManagedAgentId, AbortController>();
-  private readonly runs = new Map<ManagedAgentId, Promise<void>>();
+  private readonly statuses = new Map<NativeAgentId, AgentBootstrapStatus>();
+  private readonly controllers = new Map<NativeAgentId, AbortController>();
+  private readonly runs = new Map<NativeAgentId, Promise<void>>();
 
   constructor(private readonly dependencies: AgentBootstrapDependencies) {}
 
-  status(id: ManagedAgentId): AgentBootstrapStatus {
+  status(id: NativeAgentId): AgentBootstrapStatus {
     return this.statuses.get(id) ?? IDLE_STATUS;
   }
 
-  begin(id: ManagedAgentId): AgentBootstrapStatus {
+  begin(id: NativeAgentId): AgentBootstrapStatus {
     return this.start(id, 'prepare', { probeLoginShell: true });
   }
 
-  login(id: ManagedAgentId): AgentBootstrapStatus {
+  login(id: NativeAgentId): AgentBootstrapStatus {
     return this.start(id, 'login', { probeLoginShell: true });
   }
 
   /** Startup and explicit recheck can repair installed runtimes, never download. */
-  connectIfInstalled(id: ManagedAgentId, options?: { probeLoginShell?: boolean }): AgentBootstrapStatus {
+  connectIfInstalled(id: NativeAgentId, options?: { probeLoginShell?: boolean }): AgentBootstrapStatus {
     return this.start(id, 'connect', options);
   }
 
   private start(
-    id: ManagedAgentId,
+    id: NativeAgentId,
     action: 'prepare' | 'connect' | 'login',
     options?: { probeLoginShell?: boolean },
   ): AgentBootstrapStatus {
@@ -151,7 +151,7 @@ export class AgentBootstrapCoordinator {
   }
 
   private async checkAuthentication(
-    id: ManagedAgentId, executable: string, allowSimulation: boolean, signal: AbortSignal,
+    id: NativeAgentId, executable: string, allowSimulation: boolean, signal: AbortSignal,
   ): Promise<boolean> {
     if (allowSimulation && id === 'codex' && this.dependencies.consumeFailure('authentication')) {
       this.fail(id, 'authentication', 'authentication-required', new Error('Simulated signed-out Codex runtime.'));
@@ -169,7 +169,7 @@ export class AgentBootstrapCoordinator {
     return false;
   }
 
-  private configure(id: ManagedAgentId, allowSimulation = true): void {
+  private configure(id: NativeAgentId, allowSimulation = true): void {
     if (allowSimulation && this.dependencies.consumeFailure('mcp')) {
       this.fail(id, 'mcp', 'simulated', new Error('Simulated MCP configuration failure.'));
       return;
@@ -182,18 +182,12 @@ export class AgentBootstrapCoordinator {
     }
   }
 
-  async reset(id: ManagedAgentId): Promise<void> {
-    this.controllers.get(id)?.abort();
-    await this.runs.get(id);
-    this.statuses.delete(id);
-  }
-
-  async wait(id: ManagedAgentId): Promise<AgentBootstrapStatus> {
+  async wait(id: NativeAgentId): Promise<AgentBootstrapStatus> {
     await this.runs.get(id);
     return this.status(id);
   }
 
-  async cancelAll(): Promise<ManagedAgentId[]> {
+  async cancelAll(): Promise<NativeAgentId[]> {
     const ids = [...this.runs.keys()];
     for (const id of ids) this.controllers.get(id)?.abort();
     await Promise.allSettled(ids.map((id) => this.runs.get(id)));
@@ -201,7 +195,7 @@ export class AgentBootstrapCoordinator {
   }
 
   private fail(
-    id: ManagedAgentId,
+    id: NativeAgentId,
     stage: AgentBootstrapFailureStage,
     code: AgentBootstrapFailureCode,
     error: unknown,
@@ -221,17 +215,17 @@ export class AgentBootstrapCoordinator {
   }
 }
 
-function agentLabel(id: ManagedAgentId): string {
+function agentLabel(id: NativeAgentId): string {
   return id === 'codex' ? 'Codex' : 'Claude Code';
 }
 
-function agentCliSpec(id: ManagedAgentId) {
+function agentCliSpec(id: NativeAgentId) {
   return id === 'codex'
     ? { name: 'codex', envNames: ['STASHBASE_CODEX_BIN', 'CODEX_CLI_BIN', 'CODEX_CLI_PATH'], logLabel: 'Codex' }
     : { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude Code' };
 }
 
-function resolveManagedOrSystemExecutable(id: ManagedAgentId): string | null {
+function resolveInstalledExecutable(id: NativeAgentId): string | null {
   return resolveAgentCli(agentCliSpec(id));
 }
 
@@ -239,7 +233,7 @@ function resolveManagedOrSystemExecutable(id: ManagedAgentId): string | null {
  * exposes a cheap, side-effect-free status command, so preparation can stop
  * before opening an app-server that cannot serve a turn. */
 export async function agentIsAuthenticated(
-  id: ManagedAgentId, executable: string, signal?: AbortSignal,
+  id: NativeAgentId, executable: string, signal?: AbortSignal,
 ): Promise<boolean> {
   if (id !== 'codex') return true;
   const result = await probeAgentCommand(executable, ['login', 'status'], {
@@ -260,7 +254,7 @@ const CODEX_LOGIN_TIMEOUT_MS = 10 * 60_000;
  * page and writes credentials to its normal home; no token passes through
  * StashBase. */
 export async function loginToAgent(
-  id: ManagedAgentId,
+  id: NativeAgentId,
   executable: string,
   signal: AbortSignal,
 ): Promise<void> {
@@ -313,51 +307,47 @@ export async function loginToAgent(
 export const agentBootstrapCoordinator = new AgentBootstrapCoordinator({
   resolveExecutable: (id, options) => options?.probeLoginShell
     ? resolveAgentCliWithLoginShell(agentCliSpec(id), undefined, options.signal)
-    : resolveManagedOrSystemExecutable(id),
-  installRuntime: installManagedRuntime,
+    : resolveInstalledExecutable(id),
+  installRuntime: installNativeRuntime,
   isAuthenticated: agentIsAuthenticated,
   login: loginToAgent,
   configureMcp: (id) => { ensureAgentMcp(id); },
   consumeFailure: consumeAgentSetupFailure,
 });
 
-export function agentBootstrapStatus(id: ManagedAgentId): AgentBootstrapStatus {
+export function agentBootstrapStatus(id: NativeAgentId): AgentBootstrapStatus {
   return agentBootstrapCoordinator.status(id);
 }
 
-export function beginAgentBootstrap(id: ManagedAgentId): AgentBootstrapStatus {
+export function beginAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
   return agentBootstrapCoordinator.begin(id);
 }
 
-export function loginAgentBootstrap(id: ManagedAgentId): AgentBootstrapStatus {
+export function loginAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
   return agentBootstrapCoordinator.login(id);
 }
 
 /** Explicit user recovery after fixing an installation outside StashBase.
  * Re-run discovery (including the login-shell probe) and MCP preparation for
  * an executable that now exists, but never authorize another download. */
-export function recheckAgentBootstrap(id: ManagedAgentId): AgentBootstrapStatus {
+export function recheckAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
   return agentBootstrapCoordinator.connectIfInstalled(id, { probeLoginShell: true });
 }
 
 /** One asynchronous startup pass includes login-shell discovery. */
-export async function connectInstalledAgentMcpOnStartup(): Promise<Array<{ id: ManagedAgentId; status: AgentBootstrapStatus }>> {
+export async function connectInstalledAgentMcpOnStartup(): Promise<Array<{ id: NativeAgentId; status: AgentBootstrapStatus }>> {
   return Promise.all((['codex', 'claude'] as const).map(async (id) => {
     agentBootstrapCoordinator.connectIfInstalled(id, { probeLoginShell: true });
     return { id, status: await agentBootstrapCoordinator.wait(id) };
   }));
 }
 
-export function resetAgentBootstrap(id: ManagedAgentId): Promise<void> {
-  return agentBootstrapCoordinator.reset(id);
-}
-
-export function cancelAgentRuntimeInstalls(): Promise<ManagedAgentId[]> {
+export function cancelAgentRuntimeInstalls(): Promise<NativeAgentId[]> {
   return agentBootstrapCoordinator.cancelAll();
 }
 
-async function installManagedRuntime(
-  id: ManagedAgentId,
+async function installNativeRuntime(
+  id: NativeAgentId,
   update: (next: ProgressUpdate) => void,
   signal: AbortSignal,
 ): Promise<void> {
@@ -390,7 +380,7 @@ export async function installClaude(
   const resolveInstallerShell = dependencies.resolveInstallerShell ?? resolveClaudeInstallerShell;
   const runScript = dependencies.runInstallerScript ?? claudeInstallerScriptRunner;
   const resolveInstalled = dependencies.resolveInstalledExecutable
-    ?? (() => resolveManagedOrSystemExecutable('claude'));
+    ?? (() => resolveInstalledExecutable('claude'));
   update({ message: 'Downloading the official Claude Code installer…' });
   const script = await fetchBoundedText(CLAUDE_INSTALLER, signal, 2_000_000);
   const env: NodeJS.ProcessEnv = {
@@ -474,7 +464,7 @@ function claudeInstallerScriptRunner(
   onLine: (line: string) => void,
 ): Promise<void> {
   return runInstallerScript(shell, script, env, signal, onLine, {
-    tempRoot: managedAgentRuntimeRoot('claude'),
+    tempRoot: agentInstallerTempRoot('claude'),
     bootstrap: CLAUDE_PS1_BOOTSTRAP,
   });
 }
@@ -508,7 +498,7 @@ export interface AgentInstallDependencies {
   resolveInstallerShell: () => CodexInstallerShell;
   runInstallerScript: InstallerScriptRunner;
   /** Post-install discovery of the freshly installed executable. Defaults to
-   * the same system-then-managed resolution the coordinator uses, which
+   * the same system CLI discovery the coordinator uses, which
    * covers the official user-level locations (`~/.local/bin`, the official
    * Windows standalone bin). Injected by tests so a developer machine's own
    * CLIs can never satisfy an install check. */
@@ -590,7 +580,7 @@ export async function installCodex(
   const resolveInstallerShell = dependencies.resolveInstallerShell ?? resolveCodexInstallerShell;
   const runScript = dependencies.runInstallerScript ?? codexInstallerScriptRunner;
   const resolveInstalled = dependencies.resolveInstalledExecutable
-    ?? (() => resolveManagedOrSystemExecutable('codex'));
+    ?? (() => resolveInstalledExecutable('codex'));
   update({ message: 'Downloading the official Codex installer…' });
   const script = await fetchBoundedText(CODEX_INSTALLER, signal, 2_000_000);
   // The official installer owns its layout and the user's PATH profile:
@@ -637,7 +627,7 @@ function codexInstallerScriptRunner(
   onLine: (line: string) => void,
 ): Promise<void> {
   return runInstallerScript(shell, script, env, signal, onLine, {
-    tempRoot: managedAgentRuntimeRoot('codex'),
+    tempRoot: agentInstallerTempRoot('codex'),
     bootstrap: CODEX_PS1_BOOTSTRAP,
   });
 }

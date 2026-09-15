@@ -1,9 +1,8 @@
 /**
  * The one row grammar every Settings section is built from: a pane title,
- * titled groups, hairline lists, and rows of `lead · title and detail ·
- * trailing control`. Rows carry their own title, so a control inside one
- * never renders a label of its own. A row that picks one of several options
- * is a `ChoiceRow`, which lives beside this file in `choice-rows.tsx`.
+ * groups (titled where a pane holds more than one), hairline lists, and rows
+ * of `lead · title and detail · trailing control`. Rows carry their own title,
+ * so a control inside one never renders a label of its own.
  * Nothing here has a surface fill; the only tint is the one pressable
  * controls share.
  *
@@ -56,17 +55,27 @@ export function SettingsGroup({
   count?: string;
   /** One sentence under the list that explains what the group's choice does. */
   hint?: ReactNode;
-  title: string;
+  /** Left off where the pane holds one list: a heading that only repeats the
+   *  pane's own title is a level the reader has to look past. Untitled, the
+   *  group is the list and the sentence under it, and `count` has no heading
+   *  to sit beside. */
+  title?: string;
 }) {
   const titleId = useId();
+  const body = (
+    <>
+      {children}
+      {hint && <p className="px-0.5 text-caption text-muted-foreground">{hint}</p>}
+    </>
+  );
+  if (!title) return <div className="flex flex-col gap-1.5">{body}</div>;
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-1.5">
       <h3 className="text-caption font-semibold text-foreground" id={titleId}>
         {title}
         {count && <span className="ml-1.5 font-normal text-muted-foreground">{count}</span>}
       </h3>
-      {children}
-      {hint && <p className="px-0.5 text-caption text-muted-foreground">{hint}</p>}
+      {body}
     </section>
   );
 }

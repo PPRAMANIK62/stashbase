@@ -20,10 +20,6 @@ export function appStateDbPath(): string {
   return path.join(appDataRoot(), 'state', 'state.db');
 }
 
-export function fileOrderDir(): string {
-  return path.join(appDataRoot(), 'file-order');
-}
-
 /** The single global MFS store root for the whole app. The daemon maps every
  *  member Folder to one Internal namespace below it. `.nosync` keeps iCloud
  *  off the database files even though this

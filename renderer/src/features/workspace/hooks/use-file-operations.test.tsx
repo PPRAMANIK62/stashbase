@@ -86,19 +86,20 @@ describe('file operations', () => {
     expect(hook.result.current.failure).toBeNull();
   });
 
-  it('retires open documents before a rename and reopens them at their new path', async () => {
+  it('coordinates a rename and leaves document rebinding to its owner', async () => {
     const api = operationsApi();
     const onOpenSource = vi.fn();
-    const retireSources = vi.fn(async () => [
-      { folderPath: RESEARCH_FOLDER.path, path: 'docs/plan.md' },
-    ]);
-    const { hook, runtime } = harness(api, { onOpenSource, retireSources });
+    const mutateSources = vi.fn(async (_entry, operation: () => Promise<string | null>) => {
+      await operation();
+      return true;
+    });
+    const { hook, runtime } = harness(api, { onOpenSource, mutateSources });
     act(() => runtime.store.setState((state) => selectTreePath(state, 'docs/plan.md')));
 
     act(() => hook.result.current.beginRename(PLAN));
     await act(() => hook.result.current.commitNaming('outline.md'));
 
-    expect(retireSources).toHaveBeenCalledWith(PLAN);
+    expect(mutateSources).toHaveBeenCalledWith(PLAN, expect.any(Function));
     expect(api.renameEntry).toHaveBeenCalledWith(
       RESEARCH_FOLDER.path,
       PLAN,
@@ -106,10 +107,7 @@ describe('file operations', () => {
       expect.any(AbortSignal),
     );
     expect(runtime.store.getState().selectedPath).toBe('docs/outline.md');
-    expect(onOpenSource).toHaveBeenCalledWith(
-      { folderPath: RESEARCH_FOLDER.path, path: 'docs/outline.md' },
-      { keep: true },
-    );
+    expect(onOpenSource).not.toHaveBeenCalled();
   });
 
   it('creates a draft with the name it was handed, opens it at once, and hands its row a rename', async () => {
@@ -145,11 +143,14 @@ describe('file operations', () => {
 
   it('keeps an entry when its open document cannot be saved, and deletes when it can', async () => {
     const api = operationsApi();
-    const retireSources = vi
-      .fn<NonNullable<FileOperationsOptions['retireSources']>>()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce([]);
-    const { hook, runtime } = harness(api, { retireSources });
+    const mutateSources = vi
+      .fn<NonNullable<FileOperationsOptions['mutateSources']>>()
+      .mockResolvedValueOnce(false)
+      .mockImplementationOnce(async (_entry, operation) => {
+        await operation();
+        return true;
+      });
+    const { hook, runtime } = harness(api, { mutateSources });
     act(() => runtime.store.setState((state) => selectTreePath(state, 'docs/plan.md')));
 
     act(() => hook.result.current.requestDelete(PLAN));

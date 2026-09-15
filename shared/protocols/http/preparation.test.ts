@@ -7,17 +7,16 @@ import {
   preparationReprocessResponseSchema,
 } from './preparation.ts';
 
-test('reprocess carries an explicit folder and an optional media language', () => {
+test('reprocess carries an explicit folder without media options', () => {
   assert.equal(
     preparationReprocessRequestSchema.safeParse({
       folder: '/project/research',
-      language: 'en',
-      path: 'talks/keynote.mp3',
+      path: 'papers/report.pdf',
     }).success,
     true,
   );
   assert.equal(
-    preparationReprocessRequestSchema.safeParse({ path: 'talks/keynote.mp3' }).success,
+    preparationReprocessRequestSchema.safeParse({ path: 'papers/report.pdf' }).success,
     false,
   );
 });

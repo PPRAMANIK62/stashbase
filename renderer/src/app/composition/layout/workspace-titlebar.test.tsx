@@ -31,7 +31,7 @@ describe('workspace titlebar', () => {
     );
 
     expect(await screen.findByText('Welcome')).not.toBeNull();
-    expect(screen.queryByText('New chat')).toBeNull();
+    expect(screen.queryByText('Untitled')).toBeNull();
   });
 
   it('leaves the slot to the Chat pane once a folder is open', async () => {

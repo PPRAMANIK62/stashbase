@@ -4,13 +4,13 @@ import { SURFACE_FAILED } from '@/features/agent/application/failure-messages';
 import type { AgentCatalogPort, AgentInstructionsPort } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
-import type { AgentScopeOutline } from '@/features/agent/domain/starters';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { lazySurface } from '@/shared/runtime/lazy-surface';
 import { SurfaceBoundary } from '@/shared/runtime/surface-boundary';
 
 export interface AgentWorkspaceProps {
   catalog: AgentCatalogPort;
+  accountSignedIn?: boolean;
   /** Whether the pane draws its own name row with the conversation's actions
    *  (default true). False while the Chat has the whole card: the titlebar
    *  names the chat then, and the Chats panel beside it manages the history
@@ -20,18 +20,14 @@ export interface AgentWorkspaceProps {
   instructions: AgentInstructionsPort;
   onOpenExternal(href: string): void;
   onOpenAgentSettings(): void;
-  /** Starts the StashBase account sign-in. The bundled runtime installs
-   *  nothing and holds no key, so the account is the only thing that can
-   *  stand between it and a turn, and no catalog command can clear it. */
-  onSignIn(): void;
+  /** Explicit account choice; a caller signal waits for completion without
+   *  carrying account tokens or authorizing a send after cancellation. */
+  onSignIn(signal?: AbortSignal): void | Promise<boolean>;
   /** Opens a file the Agent changed beside the chat; the user chose it. */
   onOpenSource?: ((source: SourceReference) => void) | undefined;
   /** Restarts preparation for a bound source whose prepared text failed. */
   onReprocess?: ((source: SourceReference) => void) | undefined;
   runtime: AgentWorkspaceRuntime;
-  /** Top-level entries of the scoped folder, or null while unknown. Seeds the
-   *  empty chat's starter prompts. */
-  scopeOutline: AgentScopeOutline | null;
 }
 
 export interface AgentChatsProps {

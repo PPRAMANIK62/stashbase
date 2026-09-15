@@ -21,16 +21,19 @@ export type GitHubImportErrorCode =
   | 'INVALID_GITHUB_URL'
   | 'INVALID_FOLDER_NAME'
   | 'DESTINATION_EXISTS'
+  | 'IMPORT_INCOMPLETE'
   | 'GIT_NOT_AVAILABLE'
   | 'PRIVATE_OR_NOT_FOUND'
   | 'UNSUPPORTED_LFS'
   | 'UNSUPPORTED_SUBMODULES'
   | 'CLONE_FAILED'
+  | 'LOCAL_IMPORT_FAILED'
   | 'IMPORT_CANCELLED';
 
 export class GitHubImportError extends Error {
   readonly status: number;
   readonly code: GitHubImportErrorCode;
+  retainedPath?: string;
 
   constructor(message: string, code: GitHubImportErrorCode, status = 400) {
     super(message);
@@ -236,7 +239,14 @@ export async function publishStagedRepository(
     throwIfCancelled(signal);
     await commit?.();
   } catch (err) {
-    if (root) await rollbackPublication(root);
+    if (root) {
+      await rollbackPublication(root);
+      if (await pathExists(target)) {
+        const retained = new GitHubImportError('Some files were retained after the import failed.', 'IMPORT_INCOMPLETE', 500);
+        retained.retainedPath = target;
+        throw retained;
+      }
+    }
     throw err;
   }
 }
@@ -345,6 +355,8 @@ async function runImport(
 
   throwIfCancelled(signal);
   const folderHome = deps.folderHome();
+  await fs.promises.mkdir(folderHome, { recursive: true });
+  throwIfCancelled(signal);
   const target = path.join(folderHome, rawFolderName);
   if (await pathExists(target)) throw destinationExists(rawFolderName);
 
@@ -435,6 +447,7 @@ async function runImport(
     try {
       await deps.publish(stagedRepository, target, signal, () => deps.register(target, signal));
     } catch (err: unknown) {
+      if (err instanceof GitHubImportError && err.retainedPath) throw err;
       if (signal.aborted || isAbortError(err)) throw cancelled();
       if (isDestinationCollision(err)) throw destinationExists(rawFolderName);
       throw err;
@@ -446,7 +459,7 @@ async function runImport(
     if (signal.aborted || isAbortError(err)) throw cancelled();
     const code = (err as NodeJS.ErrnoException)?.code;
     log.warn(`GitHub import failed during local staging${code ? ` (${code})` : ''}`);
-    throw new GitHubImportError('Failed to import repository.', 'CLONE_FAILED', 500);
+    throw new GitHubImportError('Failed to save or register the local copy.', 'LOCAL_IMPORT_FAILED', 500);
   } finally {
     try {
       await fs.promises.rm(operationRoot, { recursive: true, force: true });

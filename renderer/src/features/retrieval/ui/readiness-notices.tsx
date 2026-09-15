@@ -90,22 +90,13 @@ export function SemanticReadinessNotice({
 
 export interface PreparationReadinessNoticeProps {
   line: PreparationReadinessLine;
-  onOpenSettings(): void;
 }
 
-export function PreparationReadinessNotice({
-  line,
-  onOpenSettings,
-}: PreparationReadinessNoticeProps) {
+export function PreparationReadinessNotice({ line }: PreparationReadinessNoticeProps) {
   return (
     <div className="mx-2 mb-2 px-3 py-1" role="status">
       <p className="text-caption font-medium text-foreground">{line.title}</p>
       <p className="text-caption leading-relaxed text-muted-foreground">{line.detail}</p>
-      {line.action === 'open-settings' && (
-        <Button className="mt-1" onClick={onOpenSettings} size="compact" variant="tertiary">
-          Open Settings
-        </Button>
-      )}
     </div>
   );
 }

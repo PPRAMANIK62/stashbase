@@ -66,7 +66,6 @@ const EMPTY_LISTING: WorkspaceListing = {
   showHiddenFiles: false,
 };
 const TREE_PAGE_SIZE = 240;
-
 export type { FileTreeRowMarker };
 
 export interface FileTreeProps {
@@ -83,7 +82,9 @@ export interface FileTreeProps {
   /** Settles the open documents under an entry before it is renamed or
    *  deleted: saves and closes them and answers their sources, or null when
    *  a save failed and the entry must stay put. */
-  retireSources?: ((entry: WorkspaceEntry) => Promise<SourceReference[] | null>) | undefined;
+  mutateSources?:
+    | ((entry: WorkspaceEntry, operation: () => Promise<string | null>) => Promise<boolean>)
+    | undefined;
   revealLabel: string;
   /** Keyed by folder-relative file path. */
   rowMarkers?: Readonly<Record<string, FileTreeRowMarker>> | undefined;
@@ -96,7 +97,7 @@ export function FileTree({
   onOpenSource,
   onReprocess,
   onScopeLost,
-  retireSources,
+  mutateSources,
   revealLabel,
   rowMarkers,
   runtime,
@@ -106,7 +107,7 @@ export function FileTree({
   const reveal = useReveal(runtime, api);
   const operations = useFileOperations(runtime, api, {
     onOpenSource,
-    retireSources,
+    mutateSources,
   });
   const [limit, setLimit] = useState(TREE_PAGE_SIZE);
   const [renameCaret, setRenameCaret] = useState<number | undefined>();
@@ -200,7 +201,7 @@ export function FileTree({
 
   const reprocessableRow = (row: TreeRow): boolean => {
     const marker = row.node.type === 'file' ? rowMarkers?.[row.node.path] : undefined;
-    return Boolean(marker && marker.kind !== 'blocked' && onReprocess && !rowIsRestricted(row));
+    return Boolean(marker && onReprocess && !rowIsRestricted(row));
   };
 
   const resolveMenuTarget = (event: MouseEvent<HTMLElement>): FileTreeMenuTarget => {
@@ -224,7 +225,7 @@ export function FileTree({
   });
 
   if (files.isPending) return <FileTreeLoading />;
-  if (files.isError) {
+  if (files.isError && !files.data) {
     return <FileTreeUnavailable error={files.error} onRetry={() => void files.refetch()} />;
   }
 
@@ -322,11 +323,17 @@ export function FileTree({
         onReveal: (entry) => void reveal.reveal(entry.path),
       }}
       render={
-        <section aria-label="Files" className="min-w-0 px-2 pt-2 pb-2" ref={sectionElement} />
+        // pt-0: the navigator's group already sets the 8px the strip floats
+        // on, the same gap the Document outline's first row keeps, so the tree
+        // adds none of its own and both panels start on one line.
+        <section aria-label="Files" className="min-w-0 px-2 pb-2" ref={sectionElement} />
       }
       resolveTarget={resolveMenuTarget}
       revealLabel={revealLabel}
     >
+      {files.isError && (
+        <FileTreeUnavailable error={files.error} onRetry={() => void files.refetch()} />
+      )}
       {items.length === 0 ? (
         <p className="px-2 py-4 text-caption leading-relaxed text-muted-foreground">
           This folder has no visible files yet.

@@ -301,7 +301,7 @@ test('server convertible membership follows the shared extension catalog', () =>
     assert.equal(isConvertibleSource(`~$document.${extension}`), false);
   }
   for (const extension of AUDIO_SOURCE_EXTENSIONS) {
-    assert.equal(isConvertibleSource(`recording.${extension}`), true);
+    assert.equal(isConvertibleSource(`recording.${extension}`), false);
     assert.equal(detectViewerFormat(`recording.${extension}`), 'audio');
   }
 });
@@ -383,4 +383,25 @@ test('folder rename scan includes legacy derived notes for stale index cleanup',
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('PDF rename and delete preserve neighboring files that match retired extraction names', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-source-neighbors-'));
+  try {
+    for (const asyncMode of [false, true]) {
+      const source = asyncMode ? 'async.pdf' : 'sync.pdf';
+      const target = asyncMode ? 'async-new.pdf' : 'sync-new.pdf';
+      fs.writeFileSync(path.join(root, source), 'source');
+      const siblings = ['.' + source + '.md', '.' + source.replace('.pdf', '') + '.md', '.' + target + '.md'];
+      for (const sibling of siblings) fs.writeFileSync(path.join(root, sibling), 'user note');
+      const bundle = path.join(root, '.' + source + '_files.tmp-user');
+      fs.mkdirSync(bundle); fs.writeFileSync(path.join(bundle, 'keep.txt'), 'user asset');
+      await runWithFolderRoot(root, async () => {
+        if (asyncMode) { await renameOnDiskAsync(source, target); await deleteFileAsync(target); }
+        else { renameOnDisk(source, target); deleteFile(target); }
+      });
+      for (const sibling of siblings) assert.equal(fs.readFileSync(path.join(root, sibling), 'utf8'), 'user note');
+      assert.equal(fs.readFileSync(path.join(bundle, 'keep.txt'), 'utf8'), 'user asset');
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

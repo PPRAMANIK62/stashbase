@@ -34,15 +34,8 @@ interface ExactGroup {
   readonly totalMatches: number;
 }
 
-function timestamp(milliseconds: number): string {
-  const seconds = Math.floor(milliseconds / 1000);
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
-}
-
 function matchLocation(match: ExactSearchMatch): string {
   if (match.pdfPage) return `Page ${match.pdfPage}`;
-  if (match.audioTimestampMs !== undefined) return timestamp(match.audioTimestampMs);
   return `Line ${match.line}`;
 }
 
@@ -157,7 +150,6 @@ export function exactSearchBackend(api: ExactSearchPort): SearchBackend {
     emptyMessage: 'No exact matches.',
     icon: TextSearch,
     id: 'exact',
-    idleMessage: 'Type to search exact text.',
     label: 'By keyword',
     lane: ({ folderPath, query }) => {
       const request: ExactSearchRequest = {
@@ -171,7 +163,7 @@ export function exactSearchBackend(api: ExactSearchPort): SearchBackend {
         key: retrievalQueryKeys.exact(request),
       };
     },
-    placeholder: 'Search files',
+    placeholder: 'Search',
     resultsLabel: 'Keyword search results',
     surfaceLabel: 'Exact workspace search',
     tabTitle: 'Match the exact text you type',

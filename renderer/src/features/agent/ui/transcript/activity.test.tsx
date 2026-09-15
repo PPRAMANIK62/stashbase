@@ -19,7 +19,7 @@ afterEach(cleanup);
 
 describe('Agent activity', () => {
   it('keeps ordinary activity collapsed behind an accessible disclosure', async () => {
-    render(<AgentActivityGroup tools={[command]} />);
+    render(<AgentActivityGroup steps={[command]} />);
 
     const summary = screen.getByRole('button', { name: 'Ran command…' });
     expect(summary.getAttribute('aria-expanded')).toBe('false');
@@ -95,7 +95,7 @@ describe('Agent activity', () => {
             ? { folderPath: '/project/Research', path: path.slice('/project/Research/'.length) }
             : null
         }
-        tools={[
+        steps={[
           {
             id: 'write-1',
             input: { content: '# Plan', file_path: '/project/Research/plan.md' },
@@ -128,7 +128,7 @@ describe('Agent activity', () => {
     expect(screen.queryByRole('button', { name: 'Open notes.md' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Open plan.md' }));
     expect(onOpenSource).toHaveBeenCalledWith({ folderPath: '/project/Research', path: 'plan.md' });
-    await userEvent.click(screen.getByRole('button', { expanded: false }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edited files', expanded: false }));
     expect(screen.getByRole('button', { name: /Changed.*notes\.md.*Done/u })).not.toBeNull();
   });
 });

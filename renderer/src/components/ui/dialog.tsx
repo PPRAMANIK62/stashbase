@@ -8,11 +8,12 @@
 
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { motion } from 'framer-motion';
-import { forwardRef, type ReactNode, type HTMLAttributes } from 'react';
+import { forwardRef, useRef, type ReactNode, type HTMLAttributes } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useIcon } from '@/lib/icon-context';
 import { motionStyle } from '@/lib/local/motion-style';
+import { useMergedRef } from '@/lib/merge-refs';
 import { useShape } from '@/lib/shape-context';
 import { useSize, useSizeVariant } from '@/lib/size-context';
 import { spring } from '@/lib/springs';
@@ -67,6 +68,12 @@ interface DialogContentProps extends HTMLAttributes<HTMLDivElement> {
   presentation?: 'dialog' | 'command' | 'shell';
   /** How much of the viewport the panel claims; density comes from the size ladder. */
   width?: 'narrow' | 'wide';
+  /** Where focus lands when the panel opens. `first` is Base UI's default: the
+   *  first tabbable element, which is the first field of a form and the right
+   *  place for one. `panel` opens on the panel itself, for a dialog whose only
+   *  controls are the answers to its question — opening on one of those draws
+   *  a focus ring around an answer the reader has not given. @default 'first' */
+  initialFocus?: 'first' | 'panel';
   /** Portal target. When set, the overlay and panel render inside this element
    *  (positioned `absolute`) instead of covering the viewport (`fixed`). Pair
    *  with a `position: relative; overflow: hidden` container — and usually
@@ -81,6 +88,7 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
       className,
       children,
       closeDisabled = false,
+      initialFocus = 'first',
       presentation = 'dialog',
       width = 'narrow',
       container,
@@ -88,6 +96,8 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
     },
     ref,
   ) => {
+    const panelRef = useRef<HTMLDivElement | null>(null);
+    const popupRef = useMergedRef(panelRef, ref);
     const XIcon = useIcon('x');
     const shape = useShape();
     const substrate = useSurface();
@@ -137,7 +147,8 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
           }}
         />
         <DialogPrimitive.Popup
-          ref={ref}
+          ref={popupRef}
+          initialFocus={initialFocus === 'panel' ? panelRef : undefined}
           render={(popupProps, state) => {
             const exiting = state.transitionStatus === 'ending';
             const {

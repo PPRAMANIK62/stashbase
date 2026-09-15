@@ -5,6 +5,7 @@
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
+import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import { agentLabel } from '@/features/agent/domain/agent-catalog';
 import { agentSessionIsUnstarted } from '@/features/agent/domain/session';
@@ -12,8 +13,11 @@ import { cn } from '@/lib/utils';
 import { AGENT_ICONS } from '@/shared/brand/agent-icons';
 
 export function ChatTitle({ runtime }: { runtime: AgentWorkspaceRuntime }) {
-  const activeId = useStore(runtime.store, (state) => state.activeId);
-  const active = runtime.session(activeId) ?? runtime.activeSession();
+  const active = useStore(runtime.store, (state) => runtime.session(state.activeId));
+  return active ? <SessionTitle active={active} /> : null;
+}
+
+function SessionTitle({ active }: { active: AgentSessionRuntime }) {
   const state = useStore(
     active.store,
     useShallow((current) => ({

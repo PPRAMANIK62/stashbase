@@ -3,11 +3,8 @@ import { createRequire } from 'node:module';
 import type BetterSqlite3 from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import { logger, errorMessage } from './log.ts';
 import { appStateDbPath } from './local-data.ts';
 import { filesystemPath } from './filesystem-path.ts';
-
-const log = logger('state-db');
 
 export type ConversionStatus = 'in-flight' | 'done' | 'failed' | 'cancelled';
 
@@ -24,48 +21,39 @@ const nodeRequire = createRequire(import.meta.url);
 let DatabaseCtor: typeof BetterSqlite3 | null | undefined;
 let db: BetterSqlite3.Database | null = null;
 let dbPath: string | null = null;
-let stateDbUnavailable = false;
+type StatusWrite = { pathKey: string; status: ConversionStatus; opts: { error?: string; incrementAttempts?: boolean } };
+// Failed terminal writes remain pending in this process. Reads fail closed until
+// storage is usable, then replay them before discovery can admit more work.
+const pendingWrites = new Map<string, Map<string, StatusWrite>>();
 
 function stateDbPath(): string {
   return appStateDbPath();
 }
 
-function loadDatabaseCtor(): typeof BetterSqlite3 | null {
-  if (DatabaseCtor !== undefined) return DatabaseCtor;
-  try {
-    DatabaseCtor = nodeRequire('better-sqlite3') as typeof BetterSqlite3;
-  } catch (err: unknown) {
-    DatabaseCtor = null;
-    log.warn(`state db disabled: ${errorMessage(err)}`);
-  }
-  return DatabaseCtor;
-}
-
-function getStateDb(): BetterSqlite3.Database | null {
-  if (stateDbUnavailable) return null;
-  const Database = loadDatabaseCtor();
-  if (!Database) return null;
+function getStateDb(): BetterSqlite3.Database {
   const target = stateDbPath();
-  if (db && dbPath === target) return db;
-  if (db) {
-    try { db.close(); } catch { /* ignore */ }
-    db = null;
-  }
-  fs.mkdirSync(path.dirname(target), { recursive: true });
   try {
-    db = new Database(target);
-    dbPath = target;
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initializeSchema(db);
-  } catch (err: unknown) {
-    log.warn(`state db disabled: ${errorMessage(err)}`);
-    stateDbUnavailable = true;
-    try { db?.close(); } catch { /* ignore */ }
-    db = null;
-    dbPath = null;
+    DatabaseCtor ??= nodeRequire('better-sqlite3') as typeof BetterSqlite3;
+    if (!db || dbPath !== target) {
+      closeStateDb();
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      db = new DatabaseCtor(target);
+      dbPath = target;
+      db.pragma('journal_mode = WAL');
+      db.pragma('foreign_keys = ON');
+      initializeSchema(db);
+    }
+    const pending = pendingWrites.get(target);
+    for (const [key, write] of pending ?? []) {
+      writeStatus(db, write);
+      pending!.delete(key);
+    }
+    pendingWrites.delete(target);
+    return db;
+  } catch (cause: unknown) {
+    closeStateDb();
+    throw new Error('Preparation status could not be saved or read. Check local storage and retry.', { cause });
   }
-  return db;
 }
 
 export function closeStateDb(): void {
@@ -93,7 +81,6 @@ function initializeSchema(conn: BetterSqlite3.Database): void {
 
 export function readConversionStatusMap(): Record<string, ConversionStatusEntry> {
   const conn = getStateDb();
-  if (!conn) return {};
   const rows = conn.prepare(`
     SELECT path, status, attempts, last_error AS lastError,
            last_attempt_at AS lastAttemptAt, done_at AS doneAt
@@ -116,7 +103,6 @@ export function readConversionStatusMap(): Record<string, ConversionStatusEntry>
 
 export function getConversionStatus(pathKey: string): ConversionStatusEntry | undefined {
   const conn = getStateDb();
-  if (!conn) return undefined;
   const row = conn.prepare(`
     SELECT status, attempts, last_error AS lastError,
            last_attempt_at AS lastAttemptAt, done_at AS doneAt
@@ -136,9 +122,16 @@ export function getConversionStatus(pathKey: string): ConversionStatusEntry | un
 
 
 export function setConversionStatus(pathKey: string, status: ConversionStatus, opts: { error?: string; incrementAttempts?: boolean } = {}): void {
-  const conn = getStateDb();
-  if (!conn) return;
-  const prev = getConversionStatus(pathKey);
+  const target = stateDbPath();
+  let pending = pendingWrites.get(target);
+  if (!pending) { pending = new Map(); pendingWrites.set(target, pending); }
+  pending.set(filesystemPath.identity(pathKey), { pathKey, status, opts });
+  getStateDb();
+}
+
+function writeStatus(conn: BetterSqlite3.Database, { pathKey, status, opts }: StatusWrite): void {
+  const prev = conn.prepare('SELECT attempts FROM conversions WHERE path_identity = ?')
+    .get(filesystemPath.identity(pathKey)) as { attempts: number } | undefined;
   const sourcePath = filesystemPath.absolute(pathKey);
   const pathIdentity = filesystemPath.identity(sourcePath);
   const now = new Date().toISOString();
@@ -164,14 +157,12 @@ export function setConversionStatus(pathKey: string, status: ConversionStatus, o
 
 export function clearConversionStatus(pathKey: string): void {
   const conn = getStateDb();
-  if (!conn) return;
   conn.prepare('DELETE FROM conversions WHERE path_identity = ?')
     .run(filesystemPath.identity(pathKey));
 }
 
 export function clearConversionStatusUnder(pathKey: string, excludedRoots: readonly string[] = []): void {
   const conn = getStateDb();
-  if (!conn) return;
   const rows = conn.prepare('SELECT path_identity AS pathIdentity FROM conversions')
     .all() as Array<{ pathIdentity: string }>;
   const matches = rows
@@ -187,7 +178,6 @@ export function clearConversionStatusUnder(pathKey: string, excludedRoots: reado
 
 export function listConversionStatus(status: ConversionStatus): Array<{ path: string; entry: ConversionStatusEntry }> {
   const conn = getStateDb();
-  if (!conn) return [];
   const rows = conn.prepare(`
     SELECT path, status, attempts, last_error AS lastError,
            last_attempt_at AS lastAttemptAt, done_at AS doneAt

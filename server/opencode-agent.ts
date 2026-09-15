@@ -22,7 +22,7 @@ import {
   registerAttributedAgentSession,
   unregisterAttributedAgentSession,
 } from './agent-session-registry.ts';
-import { getCurrentFolder, getFolderHome, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, runWithWindowId } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { agentTurnErrorEvent } from './agent-turn-failure.ts';
 import {
@@ -226,8 +226,6 @@ export class OpenCodePanelSession {
   private readonly abort = new AbortController();
   private readonly translator = new OpenCodeEventTranslator();
   private readonly cwd: string;
-  private readonly unbound: boolean;
-  private rebound: string | null = null;
   readonly agentId = 'stashbase' as const;
   readonly attributionId = randomUUID();
   readonly windowId: string;
@@ -245,19 +243,15 @@ export class OpenCodePanelSession {
     runtime?: OpenCodeSessionRuntime,
   ) {
     const binding = runWithWindowId(options.windowId, () => resolveSessionBinding({
-      scope: options.scope,
       folder: options.folder,
       currentFolder: getCurrentFolder(),
-      folderHome: getFolderHome(),
     }));
     this.cwd = binding.cwd;
-    this.unbound = binding.unbound;
     this.windowId = options.windowId;
     this.runtime = runtime ?? createOpenCodeSessionRuntime({
       windowId: this.windowId,
       agentSessionId: this.attributionId,
       cwd: this.cwd,
-      scope: this.unbound ? 'unbound' : 'folder',
     });
     this.stopRuntimeExitListener = this.runtime.onExit((error) => {
       if (!this.disposed) this.fail(error, true);
@@ -268,18 +262,8 @@ export class OpenCodePanelSession {
     void this.initialize();
   }
 
-  boundFolder(): string | null { return this.rebound ?? (this.unbound ? null : this.cwd); }
-  isUnbound(): boolean { return this.unbound && !this.rebound; }
+  boundFolder(): string | null { return this.cwd; }
   turnInFlight(): boolean { return this.translator.isTurnActive(); }
-  /** OpenCode cannot yet move a native session between directory projects,
-   * so no durable history override is claimed during project creation. */
-  nativeSessionId(): null { return null; }
-  rebindToFolder(folderAbs: string): boolean {
-    if (this.disposed || !this.isUnbound()) return false;
-    this.rebound = folderAbs;
-    send(this.ws, { t: 'scope-changed', scope: { kind: 'folder', path: folderAbs } });
-    return true;
-  }
   ownedByWindow(windowId: string): boolean { return this.options.windowId === windowId; }
 
   dispose(termination?: AgentSessionTermination): void {
@@ -363,7 +347,7 @@ export class OpenCodePanelSession {
             path: { id: this.sessionId },
             body: {
               model: { providerID: 'stashbase', modelID: 'stashbase-agent-default' },
-              agent: this.unbound ? 'stashbase-unbound' : 'stashbase-folder',
+              agent: 'stashbase-folder',
               parts: [{ type: 'text', text: event.text }],
             },
           });
@@ -382,7 +366,7 @@ export class OpenCodePanelSession {
           send(this.ws, { t: 'skills', skills: [], state: 'empty' });
           break;
         case 'steer':
-          send(this.ws, { t: 'steer-result', id: event.id, ok: false, message: 'OpenQuill queues follow-up prompts.' });
+          send(this.ws, { t: 'steer-result', id: event.id, ok: false, message: 'The Default Agent queues follow-up prompts.' });
           break;
       }
     } catch (error) {
@@ -502,8 +486,9 @@ async function sessionBlocks(
   ];
 }
 
-async function clientFor(folder: string | null) {
-  const cwd = folder ?? getFolderHome();
+async function clientFor(folder: string) {
+  if (!folder) throw new Error('Open a project before reading chat history.');
+  const cwd = folder;
   return { client: await openCodeClient(cwd), cwd };
 }
 

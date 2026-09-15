@@ -75,8 +75,6 @@ describe('document asset API', () => {
         new AbortController().signal,
       ),
     ).resolves.toEqual({
-      fallbackUrl:
-        'http://127.0.0.1:8090/asset-audio-preview/__folder/%252Fproject/recordings/demo.mp4?v=v1',
       kind: 'media',
       url: 'http://127.0.0.1:8090/asset/__folder/%252Fproject/recordings/demo.mp4?v=v1',
       version: 'v1',

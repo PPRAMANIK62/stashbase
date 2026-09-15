@@ -75,7 +75,6 @@ jobs:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
           STASHBASE_SKIP_SIDECAR_BUILD: '1'
-          STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1'
         run: pnpm dist:win
 
       - name: Verify optional Windows signature
@@ -117,7 +116,7 @@ jobs:
           }
 
       - name: Smoke packaged Windows server
-        run: node scripts/smoke-packaged-server.mjs --require-transcription
+        run: node scripts/smoke-packaged-server.mjs
 
       - name: Upload Windows assets to release
         env:

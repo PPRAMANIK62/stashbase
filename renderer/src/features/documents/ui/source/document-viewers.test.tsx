@@ -15,7 +15,6 @@ import {
   assetApi as assetApiFake,
   docxPreviewApi as docxPreviewApiFake,
   genericPreviewApi as genericPreviewApiFake,
-  mediaApi,
   sourceApi,
 } from '@/test/fakes/documents';
 import { createTestQueryClient, withQueryClient } from '@/test/query';
@@ -63,7 +62,6 @@ function renderSource(
       genericPreviewApi={
         options.genericPreviewApi ?? genericPreviewApiFake({ load: vi.fn(pending()) })
       }
-      mediaApi={mediaApi({ loadTranscript: vi.fn(pending()) })}
       onOpenPrepared={options.onOpenPrepared}
       onReveal={options.onReveal ?? vi.fn(async () => undefined)}
       renderPreparation={options.renderPreparation}
@@ -178,11 +176,11 @@ describe('document viewer routing', () => {
     },
   );
 
-  it('queues DOCX and media preparation once on open and never for PDF', async () => {
+  it('queues DOCX preparation once on open and never for PDF or media', async () => {
     const assetApi = assetApiFake({ load: vi.fn(pending()) });
     for (const [path, queued] of [
       ['report.docx', 'docx'],
-      ['interview.mp4', 'audio'],
+      ['interview.mp4', null],
       ['paper.pdf', null],
     ] as const) {
       const onOpenPrepared = vi.fn();

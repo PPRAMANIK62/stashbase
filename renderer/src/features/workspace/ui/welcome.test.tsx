@@ -1,9 +1,17 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { projectFailureMessage } from '@/features/workspace/application/failure-messages';
-import { ProjectError, type ProjectRegistryPort } from '@/features/workspace/application/ports';
+import {
+  ProjectError,
+  type ProjectRegistryPort,
+  type ProjectFolderPickerPort,
+  type GitHubImportPort,
+} from '@/features/workspace/application/ports';
+import { workspaceQueryKeys } from '@/features/workspace/application/queries';
+import { useProjectEntry } from '@/features/workspace/hooks/use-project-entry';
 import {
   folderPicker,
   githubImportApi,
@@ -14,17 +22,15 @@ import {
 } from '@/test/fakes/workspace';
 import { withQueryClient } from '@/test/query';
 
+import { ImportGitHubDialog } from './import-github-dialog';
 import { ProjectWelcome, type ProjectWelcomeProps } from './welcome';
 
 const emptyProject = projectRegistrySnapshot({ activeFolder: null, projects: [] });
 
-type WelcomeTestProps = Omit<
-  ProjectWelcomeProps,
-  'api' | 'folderPicker' | 'githubImport' | 'lifecycle'
-> & {
+type WelcomeTestProps = Omit<ProjectWelcomeProps, 'api' | 'entry' | 'lifecycle'> & {
   api: Partial<ProjectRegistryPort>;
-  folderPicker?: ProjectWelcomeProps['folderPicker'];
-  githubImport?: ProjectWelcomeProps['githubImport'];
+  folderPicker?: ProjectFolderPickerPort;
+  githubImport?: GitHubImportPort;
   lifecycle?: ProjectWelcomeProps['lifecycle'];
 };
 
@@ -35,19 +41,38 @@ function renderWelcome({
   lifecycle,
   ...props
 }: WelcomeTestProps) {
-  return withQueryClient(
-    <ProjectWelcome
-      {...props}
-      api={projectApi(api)}
-      folderPicker={picker ?? folderPicker()}
-      githubImport={githubImport ?? githubImportApi()}
-      lifecycle={lifecycle ?? projectLifecycle()}
-    />,
-  );
+  const registry = projectApi(api);
+
+  const picking = picker ?? folderPicker();
+  const importing = githubImport ?? githubImportApi();
+  function Welcome() {
+    const cache = useQueryClient();
+    const host =
+      lifecycle ??
+      projectLifecycle({
+        enterFolder: vi.fn(async (path: string) => {
+          const snapshot = await registry.openFolder(path, new AbortController().signal);
+          registry.load = vi.fn(async () => snapshot);
+          cache.setQueryData(workspaceQueryKeys.project, snapshot);
+        }),
+      });
+    const entry = useProjectEntry(picking, host, importing);
+    return (
+      <>
+        <ProjectWelcome {...props} api={registry} entry={entry} lifecycle={host} />
+        <ImportGitHubDialog
+          import={entry.importDialog.request}
+          onClose={entry.importDialog.close}
+          open={entry.importDialog.open}
+        />
+      </>
+    );
+  }
+  return withQueryClient(<Welcome />);
 }
 
 function recentList() {
-  return within(screen.getByRole('list', { name: 'Recent folders' }));
+  return within(screen.getByRole('list', { name: 'Recent projects' }));
 }
 
 afterEach(cleanup);
@@ -74,12 +99,12 @@ describe('project welcome', () => {
       ),
     ).not.toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Recent' })).not.toBeNull();
-    expect(screen.getByText('Folders you open will be listed here.')).not.toBeNull();
-    expect(screen.queryByRole('list', { name: 'Recent folders' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Open folder as a project' }));
+    expect(screen.getByText('Projects you open will appear here.')).not.toBeNull();
+    expect(screen.queryByRole('list', { name: 'Recent projects' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Open a project' }));
     expect(chooseFolder).toHaveBeenLastCalledWith(undefined);
 
-    await user.click(screen.getByRole('button', { name: 'Create a new project' }));
+    await user.click(screen.getByRole('button', { name: 'Create a project' }));
     expect(chooseFolder).toHaveBeenLastCalledWith({
       defaultPath: '/home/person',
     });
@@ -110,7 +135,7 @@ describe('project welcome', () => {
     });
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Open folder as a project' }));
+    await user.click(await screen.findByRole('button', { name: 'Open a project' }));
 
     expect(screen.queryByRole('heading', { name: 'StashBase' })).toBeNull();
     expect(openFolder).toHaveBeenCalledWith('/home/person/Research', expect.any(AbortSignal));
@@ -143,13 +168,42 @@ describe('project welcome', () => {
 
     expect(await screen.findByRole('heading', { name: 'Recent' })).not.toBeNull();
     expect(recentList().getAllByRole('listitem')).toHaveLength(2);
-    expect(screen.queryByText('Folders you open will be listed here.')).toBeNull();
+    expect(screen.queryByText('Projects you open will appear here.')).toBeNull();
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /^Writing/u }));
 
     expect(openFolder).toHaveBeenCalledWith('/home/person/Writing', expect.any(AbortSignal));
     expect(screen.queryByRole('heading', { name: 'StashBase' })).toBeNull();
+  });
+
+  it('copies a project path instead of opening it when the click was a drag to select', async () => {
+    const knownProject = projectRegistrySnapshot({
+      ...emptyProject,
+      projects: [
+        {
+          favorite: false,
+          openedAt: '2026-08-31T12:00:00.000Z',
+          path: '/home/person/Research',
+        },
+      ],
+    });
+    const openFolder = vi.fn(async () => knownProject);
+    renderWelcome({ api: { load: vi.fn(async () => knownProject), openFolder } });
+
+    const row = await screen.findByRole('button', { name: /^Research/u });
+    // What a drag across the row's text leaves behind: the browser then
+    // delivers the row's click, which must not open the project.
+    const range = document.createRange();
+    range.selectNodeContents(row);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    await userEvent.setup().click(row);
+
+    expect(openFolder).not.toHaveBeenCalled();
+    expect(selection?.toString()).toContain('Research');
   });
 
   it('keeps the temporary directories a smoke test registers out of the list', async () => {
@@ -170,7 +224,7 @@ describe('project welcome', () => {
     });
     renderWelcome({ api: { load: vi.fn(async () => knownProject) } });
 
-    expect(await screen.findByRole('list', { name: 'Recent folders' })).not.toBeNull();
+    expect(await screen.findByRole('list', { name: 'Recent projects' })).not.toBeNull();
     expect(recentList().getAllByRole('listitem')).toHaveLength(1);
     expect(screen.queryByRole('button', { name: /stashbase-smoke/u })).toBeNull();
   });
@@ -237,12 +291,12 @@ describe('project welcome', () => {
     });
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Open folder as a project' }));
+    await user.click(await screen.findByRole('button', { name: 'Open a project' }));
     expect((await screen.findByRole('alert')).textContent).toContain(
       projectFailureMessage('unavailable', 'opened'),
     );
 
-    await user.click(screen.getByRole('button', { name: 'Open folder as a project' }));
+    await user.click(screen.getByRole('button', { name: 'Open a project' }));
     expect(screen.queryByRole('heading', { name: 'StashBase' })).toBeNull();
     expect(openFolder).toHaveBeenCalledTimes(2);
   });

@@ -87,7 +87,7 @@ export function GenericFileDocument({
           <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role="alert">
             {formatSpecific
               ? GENERIC_PREVIEW_MESSAGES['not-generic']
-              : documentFailure<'not-generic'>(
+              : documentFailure<'not-generic' | 'missing'>(
                   preview.error,
                   'GenericFilePreviewError',
                   GENERIC_PREVIEW_MESSAGES,
@@ -119,49 +119,64 @@ export function GenericFileDocument({
     );
   }
 
+  const refreshFailure = preview.isError && (
+    <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
+      <span role="status">Refresh failed. Showing the last loaded preview.</span>
+      <Button onClick={() => void preview.refetch()} size="compact" variant="tertiary">
+        Retry
+      </Button>
+    </div>
+  );
+
   if (preview.data.kind === 'text') {
     return (
-      <CodeEditorDocument
-        active={active}
-        ariaLabel={`Read-only ${name} source`}
-        content={preview.data.content}
-        language={{ fileName: preview.data.name, kind: 'filename' }}
-        navigation={navigation}
-        onChange={() => undefined}
-        readOnly
-        runtime={runtime}
-      />
+      <>
+        {refreshFailure}
+        <CodeEditorDocument
+          active={active}
+          ariaLabel={`Read-only ${name} source`}
+          content={preview.data.content}
+          language={{ fileName: preview.data.name, kind: 'filename' }}
+          navigation={navigation}
+          onChange={() => undefined}
+          readOnly
+          runtime={runtime}
+        />
+      </>
     );
   }
 
   const copy = genericPreviewCopy(preview.data);
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
-      <div className="max-w-md">
-        <FileQuestion
-          aria-hidden="true"
-          className="mx-auto size-4 text-muted-foreground"
-          strokeWidth={1.5}
-        />
-        <h2 className="mt-3 text-body font-medium">{copy.title}</h2>
-        <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role="status">
-          {copy.description}
-        </p>
-        <p className="mt-3 font-mono text-caption break-all text-muted-foreground">
-          {preview.data.name}
-          {preview.data.size === undefined ? '' : ` · ${formatFileSize(preview.data.size)}`}
-        </p>
-        <Button
-          className="mt-4"
-          loading={revealState === 'pending'}
-          onClick={() => void reveal()}
-          size="compact"
-          variant="tertiary"
-        >
-          {revealLabel}
-        </Button>
-        {revealError}
+    <>
+      {refreshFailure}
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-8 text-center">
+        <div className="max-w-md">
+          <FileQuestion
+            aria-hidden="true"
+            className="mx-auto size-4 text-muted-foreground"
+            strokeWidth={1.5}
+          />
+          <h2 className="mt-3 text-body font-medium">{copy.title}</h2>
+          <p className="mt-1 text-caption leading-relaxed text-muted-foreground" role="status">
+            {copy.description}
+          </p>
+          <p className="mt-3 font-mono text-caption break-all text-muted-foreground">
+            {preview.data.name}
+            {preview.data.size === undefined ? '' : ` · ${formatFileSize(preview.data.size)}`}
+          </p>
+          <Button
+            className="mt-4"
+            loading={revealState === 'pending'}
+            onClick={() => void reveal()}
+            size="compact"
+            variant="tertiary"
+          >
+            {revealLabel}
+          </Button>
+          {revealError}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

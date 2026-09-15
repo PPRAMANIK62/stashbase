@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import {
   createDocumentQueryScope,
+  prepareDocument,
   createDocumentTabsRuntime,
   type DocumentAdapters,
   type DocumentTabsRuntime,
@@ -15,6 +16,7 @@ export function useDocumentWorkspace(
   session: Pick<WorkspaceSessionController, 'runtime' | 'status'>,
   sourceApi: DocumentAdapters['source'],
   createId: () => string,
+  previewAdapters?: Pick<DocumentAdapters, 'asset' | 'genericPreview'>,
 ): DocumentTabsRuntime | null {
   const queryClient = useQueryClient();
   // Only a settled session names a folder to restore tabs from.
@@ -33,6 +35,12 @@ export function useDocumentWorkspace(
     const restoredFolder = restoredRef.current?.folderPath === path ? restoredRef.current : null;
     return createDocumentTabsRuntime({
       api: sourceApi,
+      ...(previewAdapters
+        ? {
+            prepare: (scope) =>
+              prepareDocument(queryClient, { ...previewAdapters, source: sourceApi }, scope),
+          }
+        : {}),
       createId,
       createQueries: (scope) => createDocumentQueryScope(queryClient, scope),
       folderPath: path,
@@ -47,7 +55,7 @@ export function useDocumentWorkspace(
           }
         : null,
     });
-  }, [createId, folderPath, generation, queryClient, sourceApi]);
+  }, [createId, folderPath, generation, previewAdapters, queryClient, sourceApi]);
 
   const runtime =
     useScopedRuntime(

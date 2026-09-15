@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 
 import { GeneralPanel } from './general-panel';
+import { LocalComponentRecovery } from './local-component-recovery';
 
 const softwareUpdate: SoftwareUpdateRow = {
   autoCheckEnabled: true,
@@ -16,11 +18,31 @@ const softwareUpdate: SoftwareUpdateRow = {
 };
 
 function GeneralHarness({ updates = null }: { updates?: SoftwareUpdateRow | null }) {
-  return <GeneralPanel onReportBug={() => undefined} softwareUpdate={updates} />;
+  return (
+    <GeneralPanel
+      appearanceApi={{
+        load: async () => ({ theme: 'system', uiScale: 'default', readingTextSize: 'default' }),
+        update: async (change) => ({
+          theme: 'system',
+          uiScale: 'default',
+          readingTextSize: 'default',
+          ...change,
+        }),
+      }}
+      softwareUpdate={updates}
+    />
+  );
 }
 
 const meta = {
   title: 'Settings/GeneralPanel',
+  decorators: [
+    (Story) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <Story />
+      </QueryClientProvider>
+    ),
+  ],
   parameters: { fluidCanvas: { width: '40rem', minHeight: '20rem' } },
 } satisfies Meta;
 
@@ -38,17 +60,10 @@ export const WithSoftwareUpdates: Story = {
 
 export const ComponentDownloadFailed: Story = {
   render: () => (
-    <GeneralPanel
-      onReportBug={() => undefined}
-      softwareUpdate={softwareUpdate}
-      localComponent={{
-        busy: false,
-        canRetry: true,
-        description:
-          'The download could not finish. Check your connection and retry. Waiting files stay queued. Retry here or restart StashBase to try again.',
-        failure: null,
-        retry: () => undefined,
-        reload: () => undefined,
+    <LocalComponentRecovery
+      port={{
+        load: async () => ({ status: 'failed', error: 'network' }),
+        retry: async () => ({ status: 'downloading', error: null }),
       }}
     />
   ),

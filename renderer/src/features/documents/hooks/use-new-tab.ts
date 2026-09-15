@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 
 import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
 export interface NewTab {
   /** Whether the strip carries the New tab, selected, and the card shows
@@ -21,6 +22,7 @@ export interface NewTab {
 }
 
 interface Opened {
+  request: SourceReference | null;
   /** The document that was in front when the tab opened; another coming
    *  in front is what closes the tab. */
   behind: string | null;
@@ -34,6 +36,8 @@ export function useNewTab(runtime: DocumentTabsRuntime | null): NewTab {
   );
   const read = useCallback(() => runtime?.store.getState().activeTabId ?? null, [runtime]);
   const activeTabId = useSyncExternalStore(subscribe, read, read);
+  const readRequest = useCallback(() => runtime?.store.getState().openRequest ?? null, [runtime]);
+  const request = useSyncExternalStore(subscribe, readRequest, readRequest);
   const [opened, setOpened] = useState<Opened | null>(null);
   // Derived rather than effected, so the strip and the card never show a
   // document in front and the New tab selected on the same frame. A folder
@@ -42,6 +46,7 @@ export function useNewTab(runtime: DocumentTabsRuntime | null): NewTab {
   const open =
     opened !== null &&
     opened.runtime === runtime &&
+    opened.request === request &&
     (activeTabId === null || activeTabId === opened.behind);
   useEffect(() => {
     // Once a document in front has closed the tab, the record is spent: the
@@ -49,8 +54,8 @@ export function useNewTab(runtime: DocumentTabsRuntime | null): NewTab {
     if (opened !== null && !open) setOpened(null);
   }, [open, opened]);
   const add = useCallback(() => {
-    if (runtime) setOpened({ behind: activeTabId, runtime });
-  }, [activeTabId, runtime]);
+    if (runtime) setOpened({ behind: activeTabId, request, runtime });
+  }, [activeTabId, request, runtime]);
   const close = useCallback(() => setOpened(null), []);
   return { add, close, open };
 }

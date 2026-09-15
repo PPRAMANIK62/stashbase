@@ -10,7 +10,6 @@ import type {
   DocxDocumentAsset,
   DocxPreviewPort,
   GenericFilePreviewPort,
-  MediaPort,
 } from './ports';
 
 export const documentQueryKeys = {
@@ -29,10 +28,6 @@ export const documentQueryKeys = {
   asset: (scope: DocumentScope) => [...documentQueryKeys.scope(scope), 'asset'] as const,
   docxPreview: (scope: DocumentScope, version: string) =>
     [...documentQueryKeys.scope(scope), 'docx-preview', version] as const,
-  mediaTranscript: (scope: DocumentScope, version: string) =>
-    [...documentQueryKeys.scope(scope), 'media-transcript', version] as const,
-  mediaPreviewStatus: (scope: DocumentScope, version: string) =>
-    [...documentQueryKeys.scope(scope), 'media-preview-status', version] as const,
 };
 
 /** Refetches the open documents behind sources something else wrote to.
@@ -105,24 +100,6 @@ export function genericFilePreviewQuery(api: GenericFilePreviewPort, scope: Docu
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => api.load(scope.source, signal),
     queryKey: documentQueryKeys.genericPreview(scope),
-    retry: false,
-    staleTime: 0,
-  } as const;
-}
-
-export function mediaTranscriptQuery(api: MediaPort, scope: DocumentScope, version: string) {
-  return {
-    queryFn: ({ signal }: { signal: AbortSignal }) => api.loadTranscript(scope.source, signal),
-    queryKey: documentQueryKeys.mediaTranscript(scope, version),
-    retry: false,
-    staleTime: 0,
-  } as const;
-}
-
-export function mediaPreviewStatusQuery(api: MediaPort, scope: DocumentScope, version: string) {
-  return {
-    queryFn: ({ signal }: { signal: AbortSignal }) => api.loadPreviewStatus(scope.source, signal),
-    queryKey: documentQueryKeys.mediaPreviewStatus(scope, version),
     retry: false,
     staleTime: 0,
   } as const;

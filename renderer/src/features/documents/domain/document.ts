@@ -1,11 +1,4 @@
-/**
- * One open document's editable state.
- *
- * The save lifecycle is a single discriminated union rather than a phase enum
- * beside loose flags, so a conflict always carries its two versions and a
- * failure always carries its sentence. `dirty` is derived from the text —
- * `value !== baseline` — because storing it separately let the two disagree.
- */
+/** Versioned editor state and explicit save/conflict decisions for one open source. */
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { basePathName } from '@/shared/utils/file-path';
 
@@ -23,7 +16,9 @@ export interface DocumentState {
   jsonSession: JsonDocumentSession;
   lifecycle: 'active' | 'disposed';
   markdownMode: MarkdownViewMode;
+  mutationPending: boolean;
   pdfPage: number;
+  readingRequest: number;
   scope: DocumentScope;
 }
 
@@ -61,14 +56,10 @@ export interface DocumentConflictState {
   resolving: DocumentConflictResolution | null;
 }
 
-/**
- * Where one document sits in the save lifecycle. Exactly one variant holds at
- * a time and each carries only what that outcome means: a warning sentence
- * belongs to a landed save, a conflict to the two versions being compared.
- */
 export type DocumentSaveState =
   | { kind: 'clean' }
   | { kind: 'conflict'; conflict: DocumentConflictState }
+  | { kind: 'merging'; message: string | null; finishing: boolean }
   | { kind: 'dirty' }
   | { kind: 'failed'; message: string }
   | { kind: 'saved' }
@@ -83,16 +74,18 @@ export interface DocumentEditorState {
   version: string;
 }
 
-/** Unsaved text, or a conflict whose editor side is still the user's draft. */
 export function isDocumentDirty(editor: DocumentEditorState): boolean {
-  return editor.save.kind === 'conflict' || editor.value !== editor.baseline;
+  return (
+    editor.save.kind === 'conflict' ||
+    editor.save.kind === 'merging' ||
+    editor.value !== editor.baseline
+  );
 }
 
 export function documentConflict(editor: DocumentEditorState): DocumentConflictState | null {
   return editor.save.kind === 'conflict' ? editor.save.conflict : null;
 }
 
-/** The sentence a save outcome shows, if it has one. */
 export function documentSaveMessage(save: DocumentSaveState): string | null {
   switch (save.kind) {
     case 'failed':
@@ -100,6 +93,8 @@ export function documentSaveMessage(save: DocumentSaveState): string | null {
       return save.message;
     case 'conflict':
       return save.conflict.resolutionMessage;
+    case 'merging':
+      return save.message;
     case 'clean':
     case 'dirty':
     case 'saved':
@@ -144,8 +139,10 @@ export function createDocumentState(scope: DocumentScope, access: DocumentAccess
       viewMode: null,
     },
     lifecycle: 'active',
+    mutationPending: false,
     markdownMode: access === 'editable' ? 'writer' : 'reading',
     pdfPage: 1,
+    readingRequest: 0,
     scope,
   };
 }
@@ -191,7 +188,8 @@ export function reconcileDocumentSource(
   state: DocumentState,
   source: DocumentTextSource,
 ): DocumentState {
-  if (state.lifecycle === 'disposed' || state.access !== 'editable') return state;
+  if (state.lifecycle === 'disposed' || state.access !== 'editable' || state.mutationPending)
+    return state;
   const baseline = documentEditorText(source.content);
   const editor = state.editor;
   if (editor && (isDocumentDirty(editor) || editor.save.kind === 'saving')) return state;
@@ -215,17 +213,26 @@ export function reconcileDocumentSource(
 }
 
 export function changeDocumentText(state: DocumentState, value: string): DocumentState {
-  if (state.lifecycle === 'disposed' || state.access !== 'editable' || !state.editor) return state;
+  if (
+    state.lifecycle === 'disposed' ||
+    state.access !== 'editable' ||
+    state.mutationPending ||
+    !state.editor
+  )
+    return state;
   const editor = state.editor;
-  if (editor.save.kind === 'conflict') return state;
+  if (editor.save.kind === 'conflict' || (editor.save.kind === 'merging' && editor.save.finishing))
+    return state;
   if (editor.value === value) return state;
   const dirty = value !== editor.baseline;
   const save: DocumentSaveState =
-    editor.save.kind === 'saving'
-      ? { kind: 'saving' }
-      : dirty
-        ? { kind: 'dirty' }
-        : { kind: 'saved' };
+    editor.save.kind === 'merging'
+      ? { kind: 'merging', finishing: false, message: null }
+      : editor.save.kind === 'saving'
+        ? { kind: 'saving' }
+        : dirty
+          ? { kind: 'dirty' }
+          : { kind: 'saved' };
   return {
     ...state,
     editor: { ...editor, revision: editor.revision + 1, save, value },
@@ -263,7 +270,11 @@ export function acceptDocumentSave(
 
 export function rejectDocumentSave(state: DocumentState, message: string): DocumentState {
   if (!state.editor || state.lifecycle === 'disposed') return state;
-  return { ...state, editor: { ...state.editor, save: { kind: 'failed', message } } };
+  const save: DocumentSaveState =
+    state.editor.save.kind === 'merging'
+      ? { kind: 'merging', finishing: false, message }
+      : { kind: 'failed', message };
+  return { ...state, editor: { ...state.editor, save } };
 }
 
 export function enterDocumentConflict(
@@ -354,7 +365,7 @@ export function mergeDocumentConflict(state: DocumentState, mergedContent: strin
       ...editor,
       baseline: conflict.diskContent,
       revision: editor.revision + 1,
-      save: mergedContent === conflict.diskContent ? { kind: 'saved' } : { kind: 'dirty' },
+      save: { kind: 'merging', finishing: false, message: null },
       value: mergedContent,
       version: conflict.diskVersion,
     },

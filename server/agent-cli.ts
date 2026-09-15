@@ -2,12 +2,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { probeAgentCommand } from './agent-probe.ts';
-import {
-  agentDiscoveryPolicy,
-  managedAgentExecutable,
-  type ManagedAgentId,
-} from './agent-runtime-paths.ts';
-
 export interface AgentCliSpec {
   name: string;
   envNames: string[];
@@ -15,7 +9,6 @@ export interface AgentCliSpec {
 }
 
 const WINDOWS_EXECUTABLE_EXTENSIONS = new Set(['.com', '.exe', '.cmd', '.bat']);
-const LOGIN_SHELL_HIT_CACHE_MS = 5 * 60_000;
 const LOGIN_SHELL_MISS_CACHE_MS = 10_000;
 const loginShellCache = new Map<string, { checkedAt: number; executable: string | null }>();
 
@@ -98,11 +91,6 @@ export function agentCliExecutableCandidates(name: string, platform: NodeJS.Plat
   return [`${name}.exe`, `${name}.cmd`, `${name}.bat`, `${name}.com`, name];
 }
 
-function managedIdForName(name: string): ManagedAgentId | null {
-  if (name === 'claude' || name === 'codex') return name;
-  return null;
-}
-
 function resolveSystemAgentCli(
   spec: AgentCliSpec,
   warn?: (message: string) => void,
@@ -124,32 +112,13 @@ function resolveSystemAgentCli(
   }
 
   const cached = loginShellCache.get(spec.name);
-  const lifetime = cached?.executable ? LOGIN_SHELL_HIT_CACHE_MS : LOGIN_SHELL_MISS_CACHE_MS;
-  if (cached && Date.now() - cached.checkedAt < lifetime) {
-    return cached.executable && isExecutable(cached.executable) ? cached.executable : null;
-  }
+  if (cached?.executable && isExecutable(cached.executable)) return cached.executable;
 
   return null;
 }
 
-/** Resolve according to the product policy: an existing user installation
- * wins in normal operation, with the application-scoped runtime as fallback.
- * Development can isolate either source without uninstalling anything. */
-function resolveAgentCliWithPolicy(
-  spec: AgentCliSpec,
-  warn: ((message: string) => void) | undefined,
-): string | null {
-  const managedId = managedIdForName(spec.name);
-  if (!managedId) return resolveSystemAgentCli(spec, warn);
-  const policy = agentDiscoveryPolicy();
-  if (policy === 'managed-only') return managedAgentExecutable(managedId);
-  const system = resolveSystemAgentCli(spec, warn);
-  if (system || policy === 'system-only') return system;
-  return managedAgentExecutable(managedId);
-}
-
 export function resolveAgentCli(spec: AgentCliSpec, warn?: (message: string) => void): string | null {
-  return resolveAgentCliWithPolicy(spec, warn);
+  return resolveSystemAgentCli(spec, warn);
 }
 
 /** Readiness can discover version-manager installations without blocking HTTP. */
@@ -159,12 +128,10 @@ export async function resolveAgentCliWithLoginShell(
   signal?: AbortSignal,
 ): Promise<string | null> {
   signal?.throwIfAborted();
-  const policy = agentDiscoveryPolicy();
-  if (policy === 'managed-only') return resolveAgentCli(spec, warn);
   const system = resolveSystemAgentCli(spec, warn);
   const cached = loginShellCache.get(spec.name);
-  const lifetime = cached?.executable ? LOGIN_SHELL_HIT_CACHE_MS : LOGIN_SHELL_MISS_CACHE_MS;
-  if (!system && !(cached && Date.now() - cached.checkedAt < lifetime)
+  const recentMiss = cached?.executable === null && Date.now() - cached.checkedAt < LOGIN_SHELL_MISS_CACHE_MS;
+  if (!system && !recentMiss
       && process.platform !== 'win32' && /^[A-Za-z0-9_-]+$/.test(spec.name)) {
     let executable: string | null = null;
     try {

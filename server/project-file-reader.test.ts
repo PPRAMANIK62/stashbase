@@ -4,9 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { AudioTranscription } from './audio-transcription.ts';
 import { clearRecord, markCancelled, markFailed } from './conversion-status.ts';
-import { derivedNoteFor, derivedTranscriptFor, registerDerivedSource } from './derived-store.ts';
+import { derivedNoteFor, registerDerivedSource } from './derived-store.ts';
 import { derivedHtmlPathForDocx } from './docx.ts';
 import { registerProjectFolderAsync } from './folder.ts';
 import { agentContextFile, readProjectFile } from './project-file-reader.ts';
@@ -18,28 +17,17 @@ test('prepared reads and context require a current source and complete output, i
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-prepared-read-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   await registerProjectFolderAsync(root);
-  for (const format of ['pdf', 'docx', 'audio'] as const) {
+  for (const format of ['pdf', 'docx'] as const) {
     await t.test(format, async () => {
-      const source = path.join(root, format === 'audio' ? 'recording.wav' : `document.${format}`);
+      const source = path.join(root, `document.${format}`);
       fs.writeFileSync(source, 'source bytes');
       fs.utimesSync(source, 100, 100);
       registerDerivedSource(source);
       const derived = format === 'docx' ? derivedHtmlPathForDocx(source) : derivedNoteFor(source);
-      if (format === 'audio') {
-        await new AudioTranscription({
-          id: 'fixture', version: '1',
-          transcribe: async () => ({ language: 'en', segments: [{ startMs: 0, endMs: 1000, text: 'prepared speech' }] }),
-        }, {
-          probe: async () => ({ durationMs: 2000 }),
-          decodeChunk: async ({ wavPath }) => { fs.writeFileSync(wavPath, 'wav'); },
-          createPreview: async (_source, preview) => { fs.writeFileSync(preview, 'preview'); },
-        }).prepare(source, { model: { id: 'tiny' }, language: 'auto' });
-      } else {
         fs.mkdirSync(path.dirname(derived), { recursive: true });
         fs.writeFileSync(derived, format === 'docx'
           ? '<p>prepared document</p>\n<!-- stashbase-docx-conversion: complete -->'
           : 'prepared document\n<!-- stashbase-pdf-conversion: complete -->');
-      }
       const completed = fs.readFileSync(derived, 'utf8');
       assert.equal((await agentContextFile(source)).available, true);
       const read = await readProjectFile(source);
@@ -64,13 +52,6 @@ test('prepared reads and context require a current source and complete output, i
         fail();
         await unavailable();
         clearRecord(source);
-      }
-      if (format === 'audio') {
-        const transcript = derivedTranscriptFor(source);
-        const json = fs.readFileSync(transcript);
-        fs.writeFileSync(transcript, '{"schemaVersion":1}');
-        await unavailable();
-        fs.writeFileSync(transcript, json);
       }
       assert.equal((await agentContextFile(source)).available, true);
       const future = new Date(Date.now() + 10_000);
@@ -98,9 +79,7 @@ test('legacy derived reads retain project scope, source containment, and the bou
   fs.mkdirSync(path.dirname(derived), { recursive: true });
   fs.writeFileSync(derived, 'prepared\n<!-- stashbase-pdf-conversion: complete -->');
   registerAttributedAgentSession('other-project', {
-    agentId: 'claude', windowId: 'scope', boundFolder: () => other,
-    isUnbound: () => false, turnInFlight: () => true, nativeSessionId: () => null, rebindToFolder: () => false,
-  });
+    agentId: 'claude', windowId: 'scope', boundFolder: () => other, turnInFlight: () => true,});
   t.after(() => unregisterAttributedAgentSession('other-project'));
   await assert.rejects(withAgentProjectScope('other-project', () => readProjectFile(derived)), { code: 'PROJECT_SCOPE_MISMATCH' });
   fs.truncateSync(derived, 8 * 1024 * 1024 + 1);
@@ -110,4 +89,30 @@ test('legacy derived reads retain project scope, source containment, and the bou
   fs.writeFileSync(outside, 'outside');
   fs.symlinkSync(outside, source);
   await assert.rejects(readProjectFile(derived), { status: 404 });
+});
+
+
+test('media remains a project file but has no prepared content or Agent read path', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-media-read-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  await registerProjectFolderAsync(root);
+  const { listFilesAsync, listImmediateDirectoryAsync } = await import('./file-listing.ts');
+  const { runWithFolderRoot } = await import('./folder.ts');
+  const { reprocessFileInFolder } = await import('./routes/indexing.ts');
+  const { queueConvertibleSource, currentPreparedTextPathAsync } = await import('./conversion-dispatch.ts');
+  for (const name of ['recording.wav', 'movie.mp4']) {
+    const source = path.join(root, name);
+    const bytes = Buffer.from([0, 1, 2, 255]);
+    fs.writeFileSync(source, bytes);
+    assert.equal(queueConvertibleSource(source), false);
+    assert.equal(await currentPreparedTextPathAsync(source), null);
+    await assert.rejects(agentContextFile(source), { status: 415, code: 'UNSUPPORTED_FORMAT' });
+    await assert.rejects(readProjectFile(source), { status: 415, code: 'UNSUPPORTED_FORMAT' });
+    await assert.rejects(reprocessFileInFolder(name, root), { status: 415 });
+    assert.deepEqual(fs.readFileSync(source), bytes);
+  }
+  await runWithFolderRoot(root, async () => {
+    assert.deepEqual((await listFilesAsync()).map((file) => file.name).sort(), ['movie.mp4', 'recording.wav']);
+    assert.deepEqual(await listImmediateDirectoryAsync(), []);
+  });
 });

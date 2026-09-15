@@ -1,7 +1,7 @@
 /**
  * One-time Python sidecar installer.
  *
- * 1. Find Python 3.13 on PATH. The embedded MFS revision intentionally
+ * 1. Find Python 3.13 on PATH. The embedded MFS release intentionally
  *    supports only Python >=3.13,<3.14.
  * 2. Create `python/.venv.nosync` if missing (the `.nosync` suffix keeps
  *    iCloud Drive from corrupting it when the repo is under ~/Documents).
@@ -92,23 +92,25 @@ execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip'], { stdio:
 // Remove it before installing the new project so stale modules cannot survive
 // an in-place development environment upgrade.
 execFileSync(VENV_PYTHON, ['-m', 'pip', 'uninstall', '-y', 'mfs-cli'], { stdio: 'inherit' });
-// Upstream can change its Git revision without changing the package version.
-// pip otherwise keeps the old code, even with --upgrade.
-const mfsRevision = readFileSync(REQS, 'utf8').match(/^mfs @ git\+.+@([a-f0-9]{40})\s*$/m)?.[1];
-if (!mfsRevision) throw new Error('requirements.txt must pin MFS to an exact Git revision');
-const installedMfsRevision = () => execFileSync(VENV_PYTHON, ['-c', `
+// Check both release provenance and version: pip may retain a different source
+// with the same package version when moving from a Git checkout to a release.
+const mfsRelease = readFileSync(REQS, 'utf8').match(/^mfs @ (https:\/\/github\.com\/liliu-z\/mfs\/archive\/refs\/tags\/v(\d+\.\d+\.\d+)\.tar\.gz)\s*$/m);
+if (!mfsRelease) throw new Error('requirements.txt must pin MFS to a versioned release archive');
+const [, mfsUrl, mfsVersion] = mfsRelease;
+const installedMfsMatchesRelease = () => JSON.parse(execFileSync(VENV_PYTHON, ['-c', `
 import importlib.metadata as metadata, json
 try:
-    installed = json.loads(metadata.distribution('mfs').read_text('direct_url.json') or '{}')
-    print(installed.get('vcs_info', {}).get('commit_id', ''))
+    distribution = metadata.distribution('mfs')
+    installed = json.loads(distribution.read_text('direct_url.json') or '{}')
+    print(json.dumps(distribution.version == ${JSON.stringify(mfsVersion)} and installed.get('url') == ${JSON.stringify(mfsUrl)}))
 except metadata.PackageNotFoundError:
-    print('')
-`], { encoding: 'utf8' }).trim();
-if (installedMfsRevision() !== mfsRevision) {
+    print('false')
+`], { encoding: 'utf8' }).trim());
+if (!installedMfsMatchesRelease()) {
   execFileSync(VENV_PYTHON, ['-m', 'pip', 'uninstall', '-y', 'mfs'], { stdio: 'inherit' });
 }
 execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-r', REQS], { stdio: 'inherit' });
-if (installedMfsRevision() !== mfsRevision) throw new Error('Installed MFS does not match its pinned Git revision');
+if (!installedMfsMatchesRelease()) throw new Error('Installed MFS does not match its pinned release');
 if (WITH_EXTRACT) {
   console.log(`[setup:python] installing extraction deps from ${EXTRACT_REQS}`);
   execFileSync(VENV_PYTHON, ['-m', 'pip', 'install', '-r', EXTRACT_REQS], { stdio: 'inherit' });

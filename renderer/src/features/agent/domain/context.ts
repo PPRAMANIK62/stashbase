@@ -191,11 +191,21 @@ export interface ContextEnvironment {
   listing: AgentScopeListing | null;
   readiness: Readonly<Record<string, AgentContextReadiness>>;
   scope: AgentScope;
+  versions?: Readonly<Record<string, number>> | undefined;
+  hasUpload?: ((path: string) => boolean) | undefined;
 }
 
 function validateItem(item: AgentContextItem, environment: ContextEnvironment): ContextValidation {
   const key = contextItemKey(item);
-  if (item.kind === 'transient') return { item, key, reason: null, status: 'ready' };
+  if (item.kind === 'transient')
+    return environment.hasUpload && !environment.hasUpload(item.path)
+      ? {
+          item,
+          key,
+          reason: 'Attachment unavailable. Reattach it or remove it before sending.',
+          status: 'stale',
+        }
+      : { item, key, reason: null, status: 'ready' };
   if (environment.scope.kind !== 'folder' || environment.scope.path !== item.source.folderPath) {
     return { item, key, reason: 'This file belongs to a different folder.', status: 'stale' };
   }
@@ -205,6 +215,14 @@ function validateItem(item: AgentContextItem, environment: ContextEnvironment): 
   ) {
     return { item, key, reason: 'This file is no longer in the folder.', status: 'stale' };
   }
+  const version = environment.versions?.[item.source.path];
+  if (version !== undefined && item.boundVersion !== null && version !== item.boundVersion)
+    return {
+      item,
+      key,
+      reason: 'This file changed. Remove it and attach the latest version.',
+      status: 'stale',
+    };
   switch (environment.readiness[item.source.path]) {
     case 'pending':
       return { item, key, reason: 'Searchable text is still being prepared.', status: 'preparing' };

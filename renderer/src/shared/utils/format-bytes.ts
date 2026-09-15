@@ -2,7 +2,7 @@
  * A byte count as a reader should see it.
  *
  * One ladder for the whole app. The same file was being sized three different
- * ways depending on which screen asked — a transcription model, a bug-report
+ * ways depending on which screen asked — a local component, a bug-report
  * attachment and a JSON document each carried their own version — so a
  * 500-byte file could read as `512 B` on one surface and `1 KB` on another.
  *

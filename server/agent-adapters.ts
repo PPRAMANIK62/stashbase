@@ -7,8 +7,8 @@
 import { attachAgentWebSocket, killActiveAgent, killAgentSessionsForFolder } from './agent.ts';
 import { AGENT_ACCESS_MODES, type AgentAdapter } from './agent-contract.ts';
 import { attachCodexWebSocket, killActiveCodex, killCodexSessionsForFolder } from './codex-agent.ts';
-import { claudeHistoryActions } from './routes/sessions.ts';
-import { codexHistoryActions } from './routes/codex-sessions.ts';
+import { claudeHistoryActions } from './claude-history.ts';
+import { codexHistoryActions } from './codex-history-adapter.ts';
 import {
   attachOpenCodeWebSocket,
   killActiveOpenCode,
@@ -35,7 +35,7 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
   {
     id: 'codex', label: 'Codex', vendor: 'OpenAI',
     capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: true, titleHint: true },
-    attach: (ws, options) => attachCodexWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder, options.scope),
+    attach: (ws, options) => attachCodexWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder),
     stop: killActiveCodex,
     stopFolder: killCodexSessionsForFolder,
     history: codexHistoryActions(),
@@ -43,13 +43,13 @@ export const BUILT_IN_AGENT_ADAPTERS: readonly AgentAdapter[] = [
   {
     id: 'claude', label: 'Claude Code', vendor: 'Anthropic',
     capabilities: { ...SHARED_PANEL_CAPABILITIES, steering: false, titleHint: false },
-    attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder, options.scope),
+    attach: (ws, options) => attachAgentWebSocket(ws, options.windowId, options.effort, options.resume, options.access, options.model, options.folder),
     stop: killActiveAgent,
     stopFolder: killAgentSessionsForFolder,
     history: claudeHistoryActions(),
   },
   {
-    id: 'stashbase', label: 'OpenQuill', vendor: 'StashBase · OpenCode · DeepSeek',
+    id: 'stashbase', label: 'Default', vendor: 'StashBase · OpenCode · DeepSeek',
     capabilities: {
       ...SHARED_PANEL_CAPABILITIES,
       attachments: false,

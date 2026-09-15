@@ -4,15 +4,13 @@ export interface ShutdownCleanupOptions {
   cancelAgentInstalls(): Promise<string[]>;
   closeBundledAgent(): Promise<void>;
   cancelGitHubImports(): Promise<number>;
-  cancelModelDownloads(): Promise<string[]>;
   cancelConversions(): Promise<string[]>;
   closeStateDb(): void;
   closeIndexer(): Promise<void>;
   onCancelled?(paths: string[]): void;
-  onModelDownloadsCancelled?(ids: string[]): void;
   onAgentInstallsCancelled?(ids: string[]): void;
   onGitHubImportsCancelled?(count: number): void;
-  onError(step: 'mcp-http' | 'agent-installs' | 'bundled-agent' | 'github-imports' | 'model-downloads' | 'conversions' | 'state-db' | 'indexer', error: unknown): void;
+  onError(step: 'mcp-http' | 'agent-installs' | 'bundled-agent' | 'github-imports' | 'conversions' | 'state-db' | 'indexer', error: unknown): void;
 }
 
 export async function runShutdownCleanup(options: ShutdownCleanupOptions): Promise<void> {
@@ -42,12 +40,6 @@ export async function runShutdownCleanup(options: ShutdownCleanupOptions): Promi
     options.onError('github-imports', err);
   }
 
-  try {
-    const cancelled = await options.cancelModelDownloads();
-    options.onModelDownloadsCancelled?.(cancelled);
-  } catch (err: unknown) {
-    options.onError('model-downloads', err);
-  }
 
   try {
     const cancelled = await options.cancelConversions();

@@ -9,19 +9,15 @@ const GALLERY_QUERY_KEY = ['gallery', 'index'] as const;
 
 export interface GalleryView {
   entries: readonly GalleryEntry[];
-  /** True while the shop is showing the bundled list because the published one
-   *  could not be read. Nothing renders differently for it; a surface that
-   *  wants to say so has the fact rather than having to infer it. */
   bundled: boolean;
+  recovery: { pending: boolean; retry(): void } | null;
 }
 
 /**
  * The freshest index this window can offer.
  *
- * The bundled snapshot is the initial data rather than a fallback branch, so
- * the shop paints on its first frame and never shows a spinner or an empty
- * state; the published index replaces it in place. The gallery is browsed, not
- * watched, so it is fetched once and kept for the session.
+ * Paint the bundled catalog until a publication is available. Successful data
+ * stays fresh for the session; failure remains retryable on reconnect or entry.
  */
 export function useGallery(port: Pick<GalleryPort, 'loadIndex'>): GalleryView {
   // Fetched once and kept: the gallery is browsed, not watched. No initial
@@ -29,18 +25,32 @@ export function useGallery(port: Pick<GalleryPort, 'loadIndex'>): GalleryView {
   // fresh and the published index would never be asked for.
   const query = useQuery({
     gcTime: Infinity,
-    queryFn: ({ signal }) => port.loadIndex(signal),
+    queryFn: async ({ signal }) => {
+      const index = await port.loadIndex(signal);
+      if (index === null) throw new Error('The Gallery catalog is unavailable.');
+      return index;
+    },
     queryKey: GALLERY_QUERY_KEY,
     retry: false,
     staleTime: Infinity,
   });
 
-  return useMemo(() => {
-    const published = query.data ?? null;
-    if (!published) return { bundled: true, entries: GALLERY_SNAPSHOT };
-    return {
-      bundled: false,
-      entries: published.map((entry) => enrichedFromSnapshot(entry, GALLERY_SNAPSHOT)),
-    };
-  }, [query.data]);
+  const entries = useMemo(
+    () =>
+      query.data?.map((entry) => enrichedFromSnapshot(entry, GALLERY_SNAPSHOT)) ?? GALLERY_SNAPSHOT,
+    [query.data],
+  );
+  return {
+    entries,
+    bundled: query.data === undefined,
+    recovery:
+      query.isError || query.isPaused
+        ? {
+            pending: query.isFetching || query.isPaused,
+            retry: () => {
+              void query.refetch();
+            },
+          }
+        : null,
+  };
 }

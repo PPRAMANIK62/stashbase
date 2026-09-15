@@ -7,6 +7,7 @@ import { Bolt, ChevronDown, Compass, FilePenLine, MessageCircleQuestion } from '
 import { Button } from '@/components/ui/button';
 import { DropdownContent, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
 import { MenuItem } from '@/components/ui/menu-item';
+import { Tooltip } from '@/components/ui/tooltip';
 import { AGENT_ACCESS_MODES, type AgentAccessMode } from '@/features/agent/domain/access';
 
 import { NARROW_LABEL, NARROW_TRIGGER } from './narrow';
@@ -45,21 +46,23 @@ export function AgentPermissionMode({
   const offered = AGENT_ACCESS_MODES.filter((entry) => modes.includes(entry));
   return (
     <DropdownMenu>
-      <DropdownTrigger
-        render={
-          <Button
-            aria-label={`Permission mode: ${active.label}. ${active.description}`}
-            className={NARROW_TRIGGER}
-            disabled={disabled}
-            leadingIcon={MODE_ICONS[mode]}
-            size="compact"
-            trailingIcon={ChevronDown}
-            variant="ghost"
-          >
-            <span className={NARROW_LABEL}>{active.label}</span>
-          </Button>
-        }
-      />
+      <Tooltip content={`Permission mode: ${active.label}`} side="top">
+        <DropdownTrigger
+          render={
+            <Button
+              aria-label={`Permission mode: ${active.label}. ${active.description}`}
+              className={NARROW_TRIGGER}
+              disabled={disabled}
+              leadingIcon={MODE_ICONS[mode]}
+              size="compact"
+              trailingIcon={ChevronDown}
+              variant="ghost"
+            >
+              <span className={NARROW_LABEL}>{active.label}</span>
+            </Button>
+          }
+        />
+      </Tooltip>
       <DropdownContent align="start" className="w-80" selectionAppearance="none" side="top">
         {offered.map((entry) => (
           <MenuItem

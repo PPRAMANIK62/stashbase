@@ -44,6 +44,8 @@ interface PendingDocumentAnchor {
 }
 
 interface DocumentNavigationState {
+  searchNotice: string | null;
+  outlineFailed: boolean;
   find: DocumentFindState;
   outline: DocumentOutlineState;
   pendingAnchor: PendingDocumentAnchor | null;
@@ -52,6 +54,8 @@ interface DocumentNavigationState {
 export interface DocumentNavigationRuntime {
   readonly store: StoreApi<DocumentNavigationState>;
   activate(tabId: string | null): void;
+  dismissSearchNotice(): void;
+  setOutlineFailed(tabId: string, failed: boolean): void;
   claimFind(tabId: string, owner: symbol, controller: DocumentFindController): () => void;
   claimOutline(tabId: string, owner: symbol): () => void;
   /** Closes Find; answers whether it was open. */
@@ -87,6 +91,8 @@ export function createDocumentNavigationRuntime(
   initialActiveTabId: string | null,
 ): DocumentNavigationRuntime {
   const store = createStore<DocumentNavigationState>(() => ({
+    searchNotice: null,
+    outlineFailed: false,
     find: {
       available: false,
       caseSensitive: false,
@@ -161,6 +167,15 @@ export function createDocumentNavigationRuntime(
     });
     void Promise.resolve(controller.setQuery(query, { caseSensitive, wholeWord }))
       .then(async (initial) => {
+        if (disposed || sequence !== requestSequence || findController !== controller) return;
+        if (initial.total === 0 || occurrenceIndex >= initial.total) {
+          updateFind(initial);
+          store.setState({
+            searchNotice: 'This search match could not be located. The source may have changed.',
+          });
+          return;
+        }
+        store.setState({ searchNotice: null });
         let match = initial;
         const steps = Math.min(Math.max(0, occurrenceIndex), Math.max(0, initial.total - 1));
         for (let index = 0; index < steps; index += 1) {
@@ -173,6 +188,7 @@ export function createDocumentNavigationRuntime(
       .catch(() => {
         if (disposed || sequence !== requestSequence || findController !== controller) return;
         updateFind({ current: 0, total: 0 });
+        store.setState({ searchNotice: 'The search match could not be located in this preview.' });
       });
   };
 
@@ -192,9 +208,16 @@ export function createDocumentNavigationRuntime(
 
   return {
     store,
+    dismissSearchNotice() {
+      store.setState({ searchNotice: null });
+    },
+    setOutlineFailed(tabId, failed) {
+      if (!disposed && tabId === activeTabId) store.setState({ outlineFailed: failed });
+    },
     activate(tabId) {
       if (disposed || tabId === activeTabId) return;
       activeTabId = tabId;
+      store.setState({ searchNotice: null, outlineFailed: false });
       clearFindOwner();
       clearOutlineOwner();
       pendingSearch = null;
@@ -291,6 +314,9 @@ export function createDocumentNavigationRuntime(
       ) {
         return;
       }
+      store.setState({
+        searchNotice: 'The file is open. Locating the search result in this preview…',
+      });
       pendingSearch = { tabId, target: { ...target } };
       deliverSearch();
     },

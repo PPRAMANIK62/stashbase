@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import os from 'node:os';
+import fs from 'node:fs';
+import { syncIndex } from './sync.ts';
 import path from 'node:path';
 import test from 'node:test';
 import {
@@ -62,22 +64,27 @@ test('removing Folder runtime state invalidates an in-flight reconcile', async (
   assert.equal(result.cancelled, true);
 });
 
-test('a live Folder reconcile retries after shared daemon retirement', async () => {
-  const folder = path.join(os.tmpdir(), 'stashbase-live-sync-through-daemon-retirement');
+for (const stage of ['upsert', 'delete'] as const) test(`a live Folder reconcile retries daemon retirement during ${stage}`, async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-sync-retirement-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const source = path.join(folder, 'note.md');
+  fs.writeFileSync(source, 'current source');
   let bindCalls = 0;
-  let syncCalls = 0;
+  let interrupted = false;
+  const interruptOnce = () => { if (!interrupted) { interrupted = true; throw new MfsDaemonRetiringError(); } };
   const result = await runFolderSyncOperation(folder, { reason: 'project reconcile' }, {
-    indexer: {} as Indexer,
+    indexer: {
+      listDocuments: async () => stage === 'delete' ? [path.join(folder, 'removed.md')] : [],
+      deleteFile: async () => interruptOnce(),
+      upsertFile: async () => { if (stage === 'upsert') interruptOnce(); return { outcome: 'added' }; },
+    } as unknown as Indexer,
     bind: async () => { bindCalls += 1; },
-    sync: async () => {
-      syncCalls += 1;
-      if (syncCalls === 1) throw new MfsDaemonRetiringError();
-      return { added: [], modified: [], removed: [], failed: [] };
-    },
+    sync: syncIndex,
   });
   assert.equal(result.cancelled, undefined);
   assert.equal(bindCalls, 2);
-  assert.equal(syncCalls, 2);
+  assert.deepEqual(result.failed, []);
+  assert.deepEqual(result.added, ['note.md']);
 });
 
 test('a Folder reconcile rebinds once when runtime reset drops the binding', async () => {

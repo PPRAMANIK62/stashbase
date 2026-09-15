@@ -8,11 +8,8 @@ import { GeneralPanel } from './general-panel';
 
 afterEach(cleanup);
 
-function renderPanel(
-  softwareUpdate: SoftwareUpdateRow | null = null,
-  onReportBug: (() => void) | null = null,
-) {
-  return render(<GeneralPanel onReportBug={onReportBug} softwareUpdate={softwareUpdate} />);
+function renderPanel(softwareUpdate: SoftwareUpdateRow | null = null) {
+  return render(<GeneralPanel softwareUpdate={softwareUpdate} />);
 }
 
 function updateRow(overrides: Partial<SoftwareUpdateRow> = {}): SoftwareUpdateRow {
@@ -50,20 +47,6 @@ describe('GeneralPanel', () => {
     expect(row.act).toHaveBeenCalledOnce();
     await user.click(auto);
     expect(row.setAutoCheck).toHaveBeenCalledWith(false);
-  });
-
-  it('offers the bug report where the desktop can open it and says why where it cannot', async () => {
-    const onReportBug = vi.fn();
-    const desktop = renderPanel(null, onReportBug);
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Start report…' }));
-    expect(onReportBug).toHaveBeenCalledOnce();
-    expect(screen.queryByText('Available in the desktop app.')).toBeNull();
-    desktop.unmount();
-
-    renderPanel();
-    const entry = await screen.findByRole('button', { name: 'Start report…' });
-    expect(entry.hasAttribute('disabled')).toBe(true);
-    expect(screen.getByText('Available in the desktop app.')).not.toBeNull();
   });
 
   it('locks both controls while the updater is already working', async () => {

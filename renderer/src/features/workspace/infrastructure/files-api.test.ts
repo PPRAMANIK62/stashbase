@@ -113,7 +113,7 @@ describe('files API', () => {
     expect(client.request).toHaveBeenNthCalledWith(1, {
       body: { dir: 'drafts', name: 'Plan' },
       method: 'POST',
-      path: '/api/files?folder=%2Fproject%2Fnotes',
+      path: expect.stringMatching(/^\/api\/files\?folder=%2Fproject%2Fnotes&operationId=[\w-]+$/u),
       signal,
     });
     await expect(
@@ -122,7 +122,9 @@ describe('files API', () => {
     expect(client.request).toHaveBeenNthCalledWith(2, {
       body: { path: 'drafts/archive' },
       method: 'POST',
-      path: '/api/folders?folder=%2Fproject%2Fnotes',
+      path: expect.stringMatching(
+        /^\/api\/folders\?folder=%2Fproject%2Fnotes&operationId=[\w-]+$/u,
+      ),
       signal,
     });
     await expect(
@@ -159,7 +161,9 @@ describe('files API', () => {
     expect(client.request).toHaveBeenNthCalledWith(1, {
       body: { new_name: 'Outline' },
       method: 'PATCH',
-      path: '/api/files/drafts/a%20%231.md?folder=%2Fproject%2Fnotes',
+      path: expect.stringMatching(
+        /^\/api\/files\/drafts\/a%20%231\.md\?folder=%2Fproject%2Fnotes&operationId=[\w-]+$/u,
+      ),
       signal,
     });
     await expect(
@@ -168,7 +172,9 @@ describe('files API', () => {
     expect(client.request).toHaveBeenNthCalledWith(2, {
       body: { new_name: 'archive' },
       method: 'PATCH',
-      path: '/api/folders/drafts?folder=%2Fproject%2Fnotes',
+      path: expect.stringMatching(
+        /^\/api\/folders\/drafts\?folder=%2Fproject%2Fnotes&operationId=[\w-]+$/u,
+      ),
       signal,
     });
     await expect(
@@ -176,7 +182,9 @@ describe('files API', () => {
     ).resolves.toBeUndefined();
     expect(client.request).toHaveBeenNthCalledWith(3, {
       method: 'DELETE',
-      path: '/api/folders/archive?folder=%2Fproject%2Fnotes',
+      path: expect.stringMatching(
+        /^\/api\/folders\/archive\?folder=%2Fproject%2Fnotes&operationId=[\w-]+$/u,
+      ),
       signal,
     });
     await expect(

@@ -4,42 +4,26 @@ import type { HttpClient } from '@/platform/http/client';
 
 import { createPreparationControlAdapter } from './control-api';
 
-const source = { folderPath: '/project/research', path: 'talks/keynote.mp3' };
+const source = { folderPath: '/project/research', path: 'papers/report.pdf' };
 const signal = new AbortController().signal;
 
 describe('preparation control API', () => {
   it('posts folder-explicit bodies and maps the reprocess mode', async () => {
     const request = vi.fn(async () => ({ body: { mode: 'conversion', ok: true }, status: 200 }));
-    const mode = await createPreparationControlAdapter({ request }).reprocess(
-      source,
-      { language: 'en' },
-      signal,
-    );
+    const mode = await createPreparationControlAdapter({ request }).reprocess(source, signal);
     expect(mode).toBe('conversion');
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: { folder: '/project/research', language: 'en', path: 'talks/keynote.mp3' },
+        body: { folder: '/project/research', path: 'papers/report.pdf' },
         method: 'POST',
         path: '/api/files/reprocess',
       }),
     );
   });
 
-  it('surfaces a blocked transcription runtime with the server reason', async () => {
-    const client: HttpClient = {
-      request: vi.fn(async () => ({
-        body: { code: 'TRANSCRIPTION_NOT_READY', error: 'Download the model first.' },
-        status: 409,
-      })),
-    };
-    await expect(
-      createPreparationControlAdapter(client).reprocess(source, {}, signal),
-    ).rejects.toMatchObject({ kind: 'blocked', message: 'Download the model first.' });
-  });
-
   it('classifies unsupported prepare formats and returns the cancel outcome', async () => {
     const unsupported: HttpClient = {
-      request: vi.fn(async () => ({ body: { error: 'only DOCX and media' }, status: 415 })),
+      request: vi.fn(async () => ({ body: { error: 'only DOCX' }, status: 415 })),
     };
     await expect(
       createPreparationControlAdapter(unsupported).prepare(source, signal),

@@ -59,12 +59,12 @@ describe('AgentSessionRuntime skills', () => {
     });
 
     runtime.refreshSkills();
-    expect(test.sent.at(-1)).toEqual({ kind: 'refresh-skills' });
+    expect(test.sent.at(-1)).toMatchObject({ kind: 'refresh-skills' });
 
     runtime.setSkill('review');
     expect(runtime.store.getState().skill).toBe('review');
     await expect(runtime.sendPrompt('')).resolves.toEqual({ ok: true });
-    expect(test.sent.at(-1)).toEqual({ kind: 'prompt', skill: 'review', text: '' });
+    expect(test.sent.at(-1)).toMatchObject({ kind: 'prompt', skill: 'review', text: '' });
     expect(runtime.store.getState().skill).toBe(null);
     expect(runtime.store.getState().transcript.at(-1)).toMatchObject({
       kind: 'user',
@@ -74,7 +74,7 @@ describe('AgentSessionRuntime skills', () => {
     test.listeners[0]?.onEvent({ kind: 'failed', message: 'Rate limited.' });
     const failure = runtime.store.getState().transcript.find((block) => block.kind === 'error');
     expect(runtime.retry(failure?.id ?? '')).toBe(true);
-    expect(test.sent.at(-1)).toEqual({ kind: 'prompt', skill: 'review', text: '' });
+    expect(test.sent.at(-1)).toMatchObject({ kind: 'prompt', skill: 'review', text: '' });
   });
 
   it('disarms a skill the refreshed catalog no longer offers', async () => {

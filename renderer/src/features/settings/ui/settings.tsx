@@ -7,3 +7,8 @@ import type { SettingsProps } from './settings-types';
 export const Settings = lazySurface<SettingsProps>(() => import('./managed-settings'), {
   when: (props) => props.open,
 });
+
+export const DeveloperTools = lazySurface<import('./developer-tools').DeveloperToolsProps>(
+  () => import('./developer-tools'),
+  { when: (props) => props.open },
+);

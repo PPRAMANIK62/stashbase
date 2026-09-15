@@ -212,6 +212,7 @@ export function AgentDocumentWorkspace({
         </motion.div>
       </motion.div>
       <div
+        data-command-surface="agent"
         aria-hidden={!chatShown}
         className="relative h-full min-w-0 flex-1 overflow-hidden"
         inert={!chatShown}

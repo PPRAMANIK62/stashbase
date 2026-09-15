@@ -270,6 +270,9 @@ async function openProductionDockerListener(
       : options.port,
     close: () => new Promise<void>((resolve, reject) => {
       server.close((err) => err ? reject(err) : resolve());
+      // Disable retires this listener, including incomplete request bodies.
+      // Waiting for clients to finish would block every later transition.
+      server.closeAllConnections();
     }),
   };
 }

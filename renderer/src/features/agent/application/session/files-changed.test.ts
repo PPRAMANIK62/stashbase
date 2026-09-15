@@ -28,11 +28,4 @@ describe('filesChanged', () => {
     expect(change?.paths).toEqual(['/elsewhere/notes.md']);
     expect(change?.sources).toEqual([]);
   });
-
-  it('names no source at all for a unbound write', () => {
-    const change = filesChanged({ kind: 'unbound' }, ['notes.md']);
-
-    expect(change?.scope).toEqual({ kind: 'unbound' });
-    expect(change?.sources).toEqual([]);
-  });
 });

@@ -1,13 +1,12 @@
 /**
  * Shared "unstructured source → extracted structured text" plumbing for
- * PDFs (`pdf_extract.py`), images (`ocr_extract.py`), DOCX (`mammoth`), and
- * audio (provider-neutral transcription).
+ * PDFs (`pdf_extract.py`), images (`ocr_extract.py`), and DOCX (`mammoth`).
  * Each extracts the file's useful text into an AppData-derived representation
- * that becomes the text layer for search. PDFs/DOCX/audio also use that layer
+ * that becomes the text layer for search. PDFs/DOCX also use that layer
  * for Agent text reading. Materialized to disk — unlike HTML's in-memory transform
  * — because these conversions are expensive and worth caching.
  *
- * The two formats differ in only three things — captured by a
+ * The formats differ in only three things — captured by a
  * `ConversionSpec`:
  *   - `matches`     which filenames are convertible sources
  *   - `derivedNote` the AppData derived-text path a source maps to
@@ -67,7 +66,7 @@ interface SourceSignature {
 export interface ConversionSpec {
   /** Short label for logs, e.g. `pdf_extract` / `ocr_extract`. */
   kind: string;
-  /** Resource lane. DOCX is light; subprocess PDF/OCR/audio work is heavy. */
+  /** Resource lane. DOCX is light; subprocess PDF/OCR work is heavy. */
   lane: ConversionLane;
   /** Initial relative cost within one urgency tier. Lower runs first. */
   cost: number;
@@ -96,10 +95,6 @@ export interface ConversionSpec {
   cleanupBeforeConvert?: (absPath: string) => void;
   /** Best-effort cleanup for derived files if the source disappears mid-run. */
   cleanupDerived?: (absPath: string) => void;
-  /** Cleanup after a real extractor failure. Defaults to `cleanupDerived`.
-   *  Resumable converters use this to remove incomplete final output while
-   *  retaining independently-complete checkpoints. */
-  cleanupAfterFailure?: (absPath: string) => void;
 }
 
 export type DerivedFreshnessSpec = Pick<
@@ -166,7 +161,6 @@ const scheduler = new ConversionScheduler({
   ageingMs: 60_000,
   isActive: isSourceInActiveFolder,
 });
-const auxiliaryWaiters = new Map<string, number>();
 
 onSwitch(() => scheduler.prioritiesChanged());
 onClose(() => scheduler.prioritiesChanged());
@@ -188,21 +182,6 @@ export async function cancelConversionAndWait(
   if (cancelled.length === 0) return false;
   await Promise.allSettled(cancelled.map((item) => item.completion));
   return true;
-}
-
-/** Cancel only the visible conversion whose task key is this source, leaving
- * auxiliary work with the same scope intact. Audio uses this to let a
- * user-requested playback fallback take the heavy lane, then resumes from its
- * durable transcription checkpoints. */
-export async function interruptConversionForInteractivePreview(sourcePath: string): Promise<boolean> {
-  const completion = scheduler.cancel(filesystemPath.absolute(sourcePath), 'interactive-preview');
-  if (!completion) return false;
-  await completion;
-  return true;
-}
-
-export function cancelConversionForModelRemoval(sourcePath: string): boolean {
-  return scheduler.cancelScope(filesystemPath.absolute(sourcePath), 'model-removed').length > 0;
 }
 
 export async function cancelAllConversions(timeoutMs = 2500): Promise<string[]> {
@@ -248,61 +227,6 @@ export function promoteConversion(sourcePath: string, urgency: ConversionUrgency
   return scheduler.promote(filesystemPath.absolute(sourcePath), urgency);
 }
 
-/** Run non-text native work through the same bounded lanes without surfacing
- * it as a pending source conversion. `taskKey` must be a stable absolute path
- * distinct from the source path (normally the derived output path). Subtree,
- * source-change, and shutdown cancellation use `sourcePath` as the scope. */
-export async function runAuxiliaryConversion(options: {
-  taskKey: string;
-  sourcePath: string;
-  lane: ConversionLane;
-  urgency: ConversionUrgency;
-  cost: number;
-  signal?: AbortSignal;
-  run: (signal: AbortSignal) => Promise<void>;
-}): Promise<void> {
-  const key = filesystemPath.absolute(options.taskKey);
-  const scope = filesystemPath.absolute(options.sourcePath);
-  if (options.signal?.aborted) throw abortError(options.signal);
-
-  const waiterKey = filesystemPath.identity(key);
-  auxiliaryWaiters.set(waiterKey, (auxiliaryWaiters.get(waiterKey) ?? 0) + 1);
-  const scheduled = scheduler.schedule({
-    key,
-    scope,
-    visible: false,
-    lane: options.lane,
-    urgency: options.urgency,
-    cost: options.cost,
-    run: ({ signal }) => options.run(signal),
-  });
-
-  let waiterReleased = false;
-  const releaseWaiter = (): number => {
-    if (waiterReleased) return auxiliaryWaiters.get(waiterKey) ?? 0;
-    waiterReleased = true;
-    const remaining = Math.max(0, (auxiliaryWaiters.get(waiterKey) ?? 1) - 1);
-    if (remaining > 0) auxiliaryWaiters.set(waiterKey, remaining);
-    else auxiliaryWaiters.delete(waiterKey);
-    return remaining;
-  };
-  let rejectAbort: ((error: Error) => void) | null = null;
-  const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
-  const onAbort = () => {
-    if (releaseWaiter() === 0) {
-      scheduler.cancel(key, 'request-aborted');
-    }
-    rejectAbort?.(abortError(options.signal));
-  };
-  options.signal?.addEventListener('abort', onAbort, { once: true });
-  try {
-    await (options.signal ? Promise.race([scheduled.completion, aborted]) : scheduled.completion);
-  } finally {
-    options.signal?.removeEventListener('abort', onAbort);
-    releaseWaiter();
-  }
-}
-
 /** Absolute POSIX source spelling used by conversion status and the daemon.
  *  Comparison-only keys are derived by `filesystemPath.identity()`. */
 function sourcePathOf(absPath: string): string {
@@ -318,10 +242,6 @@ function sourceSignature(absPath: string): SourceSignature | null {
   }
 }
 
-function abortError(signal?: AbortSignal): Error {
-  const reason = signal?.reason;
-  return reason instanceof Error ? reason : new TransientConversionError('conversion request cancelled');
-}
 
 function sameSourceSignature(a: SourceSignature | null, b: SourceSignature | null): boolean {
   return a != null && b != null && a.size === b.size && a.mtimeMs === b.mtimeMs;
@@ -453,7 +373,7 @@ async function executeConversion(
       clearRecord(sourcePath);
       return 'settled';
     }
-    try { (spec.cleanupAfterFailure ?? spec.cleanupDerived)?.(absPath); } catch (cleanupErr: unknown) {
+    try { spec.cleanupDerived?.(absPath); } catch (cleanupErr: unknown) {
       log.warn(`${spec.kind}: failed-conversion cleanup failed for ${absPath}: ${errorMessage(cleanupErr)}`);
     }
     markFailed(sourcePath, error.message);
@@ -540,7 +460,7 @@ export function maybeConvert(
 }
 
 /** Reindex an already-fresh derived note under its source path. Used when a
- *  PDF/image/DOCX/audio source was converted while semantic indexing was unavailable, then a
+ *  PDF/image/DOCX source was converted while semantic indexing was unavailable, then a
  *  later reconcile runs after an API key has been configured. */
 export async function indexFreshDerived(
   absPath: string,
@@ -640,7 +560,8 @@ async function walkSources(
   state: DiscoveryWalkState = { entriesSinceYield: 0 },
 ): Promise<void> {
   let entries: fs.Dirent[];
-  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { return; }
+  // An incomplete inventory cannot authorize deletion of unseen projections.
+  entries = await fs.promises.readdir(dir, { withFileTypes: true });
   for (const e of entries) {
     state.entriesSinceYield += 1;
     if (state.entriesSinceYield >= FILESYSTEM_SCAN_YIELD_EVERY) {

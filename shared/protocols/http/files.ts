@@ -239,3 +239,9 @@ export type GenericFilePreviewResponseWire = z.infer<typeof genericFilePreviewRe
 export type DocumentTextSaveRequestWire = z.infer<typeof documentTextSaveRequestSchema>;
 export type DocumentTextOverwriteRequestWire = z.infer<typeof documentTextOverwriteRequestSchema>;
 export type DocumentTextSaveResponseWire = z.infer<typeof documentTextSaveResponseSchema>;
+
+/** Original JSON response of a file mutation, queried without replaying it. */
+export const fileOperationReceiptSchema = z.object({
+  status: z.number().int().min(200).max(599),
+  body: z.unknown(),
+}).strict();

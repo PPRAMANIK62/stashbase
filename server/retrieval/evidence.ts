@@ -6,7 +6,6 @@ export interface SourceLocator {
   line?: number;
   endLine?: number;
   page?: number;
-  timestampMs?: number;
 }
 
 /** A single source-safe match. `sourcePath` is always an absolute visible path. */
@@ -69,7 +68,6 @@ export function keywordFilesFromEvidence(evidence: SourceEvidence[], folderRoot:
       text: entry.snippet,
       ranges: entry.ranges ?? [],
       ...(entry.locator.page == null ? {} : { pdfPage: entry.locator.page }),
-      ...(entry.locator.timestampMs == null ? {} : { audioTimestampMs: entry.locator.timestampMs }),
     });
     bucket.totalMatches = Math.max(
       bucket.totalMatches,

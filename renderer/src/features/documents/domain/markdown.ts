@@ -5,8 +5,6 @@ import { documentTextFormat } from './document-format';
 const OPENING_DELIMITER = /^(?:\uFEFF)?---[\t ]*(?:\r\n?|\n)/u;
 const CLOSING_DELIMITER = /^(?:---|\.\.\.)[\t ]*(?:\r\n?|\n|$)/gmu;
 
-export const MAX_RETAINED_MARKDOWN_SURFACES = 5;
-
 export interface MarkdownFrontmatter {
   body: string;
   source: string;
@@ -34,7 +32,8 @@ export function splitLeadingYamlFrontmatter(markdown: string): MarkdownFrontmatt
   };
 }
 
-/** Advance a bounded MRU without coupling editor-resource policy to React. */
+/** An activated Markdown editor lives until its document closes. Its schema,
+ * plugin state and history must remain together across navigation. */
 export function retainMarkdownTabIds(
   retainedIds: readonly string[],
   tabs: readonly RetainableDocumentTab[],
@@ -49,5 +48,5 @@ export function retainMarkdownTabIds(
     if (previousIndex >= 0) next.splice(previousIndex, 1);
     next.unshift(activeTabId);
   }
-  return next.slice(0, MAX_RETAINED_MARKDOWN_SURFACES);
+  return next;
 }

@@ -133,7 +133,6 @@ describe('Agent file changes', () => {
       folderPath: 'C:\\Library\\Research',
       path: 'a.md',
     });
-    expect(changedSource({ kind: 'unbound' }, 'a.md')).toBeNull();
   });
 
   it('names a file by its last segment on either separator', () => {

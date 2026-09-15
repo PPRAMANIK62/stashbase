@@ -33,7 +33,7 @@ import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 /** The commands a reader can aim at one runtime. Each opens a lane of its own
  *  per agent id, so two rows never share an abort. */
-type RuntimeCommand = 'install' | 'login' | 'uninstall' | 'resetFirstRun';
+type RuntimeCommand = 'install' | 'login';
 
 /** One command in flight, or one that refused, for a single runtime. */
 interface RuntimeCommandState {
@@ -65,7 +65,7 @@ interface AgentAllowanceView {
 export interface AgentRuntimesViewModel {
   readonly allowance: AgentAllowanceView;
   readonly catalog: AgentCatalogView;
-  /** A debug write or a first-run reset is open. */
+  /** A debug write is open. */
   readonly debugBusy: boolean;
   readonly debugFailure: FailureView | null;
   /** This runtime has a command of its own in flight. */
@@ -76,10 +76,6 @@ export interface AgentRuntimesViewModel {
   login(id: AgentId): void;
   refreshAllowance(): void;
   refreshCatalog(): void;
-  resetFirstRun(id: AgentId): void;
-  uninstall(id: AgentId, onDone: () => void): void;
-  uninstalling(id: AgentId | null): boolean;
-  uninstallFailure(id: AgentId | null): FailureView | null;
   updateDebug(patch: AgentDebugPatch): void;
 }
 
@@ -102,13 +98,10 @@ export function useAgentRuntimes(port: AgentRuntimePort): AgentRuntimesViewModel
       (runtime) => runtime.id === 'stashbase' && runtime.preparation.kind === 'ready',
     ) ?? false;
 
-  // Appending the catalog's last-successful-fetch timestamp forces a refetch
-  // whenever the catalog changes, in addition to `enabled` flipping true the
-  // moment a stashbase runtime turns ready.
   const allowance = useQuery({
     ...agentAllowanceQuery(port),
-    queryKey: [...settingsQueryKeys.agentAllowance, catalog.dataUpdatedAt] as const,
     enabled: stashbaseReady,
+    refetchInterval: 30_000,
   });
 
   /** A command's response is the freshest truth about the catalog, so the poll
@@ -167,15 +160,6 @@ export function useAgentRuntimes(port: AgentRuntimePort): AgentRuntimesViewModel
   const stateFor = (id: AgentId | null): RuntimeCommandState =>
     (id === null ? undefined : commands[id]) ?? IDLE;
 
-  const refusalOf = (id: AgentId | null, wanted: (command: RuntimeCommand) => boolean) => {
-    const refusal = stateFor(id).refusal;
-    return refusal && wanted(refusal.command) ? refusal.failure : null;
-  };
-
-  const openStates = Object.values(commands).filter((state) => state !== undefined);
-  const resetRefusal = openStates.find(
-    (state) => state.refusal?.command === 'resetFirstRun',
-  )?.refusal;
   const debug = catalog.data?.debug ?? null;
 
   return {
@@ -190,28 +174,14 @@ export function useAgentRuntimes(port: AgentRuntimePort): AgentRuntimesViewModel
       loading: catalog.isLoading,
       runtimes: catalog.data?.runtimes ?? [],
     },
-    debugBusy: updateDebug.busy || openStates.some((state) => state.running === 'resetFirstRun'),
-    debugFailure: updateDebug.failure ?? resetRefusal?.failure ?? null,
-    failure: (id) => refusalOf(id, (command) => command !== 'uninstall'),
+    debugBusy: updateDebug.busy,
+    debugFailure: updateDebug.failure,
+    failure: (id) => stateFor(id).refusal?.failure ?? null,
     install: (id) =>
       void run(id, 'install', (signal) => port.prepareAgent(id, 'bootstrap', signal)),
     login: (id) => void run(id, 'login', (signal) => port.prepareAgent(id, 'login', signal)),
     refreshAllowance: () => void allowance.refetch(),
     refreshCatalog: () => void catalog.refetch(),
-    resetFirstRun: (id) =>
-      void run(id, 'resetFirstRun', async (signal) => {
-        // One signal spans both calls: cancelling the reset must drop the
-        // policy write and the runtime reset together.
-        await port.updateDebug({ discoverySource: 'managed-only' }, signal);
-        return port.resetManagedAgent(id, signal);
-      }),
-    uninstall: (id, onDone) => {
-      void run(id, 'uninstall', (signal) => port.resetManagedAgent(id, signal)).then((done) => {
-        if (done) onDone();
-      });
-    },
-    uninstallFailure: (id) => refusalOf(id, (command) => command === 'uninstall'),
-    uninstalling: (id) => stateFor(id).running === 'uninstall',
     updateDebug: (patch) => updateDebug.run(patch),
   };
 }

@@ -10,9 +10,7 @@ export type PreparationProgress =
     }
   | {
       readonly phase: 'extracting';
-      readonly completedUnits?: number;
       readonly currentPage?: number;
-      readonly totalUnits?: number;
     }
   | { readonly phase: 'indexing' };
 
@@ -43,7 +41,6 @@ export type SemanticIndexStatus =
   | { readonly state: 'ready' };
 
 export interface FolderIndexStatus {
-  readonly blockedConversions: readonly string[];
   readonly conversionProgress: Readonly<Record<string, PreparationProgress>>;
   readonly conversionRevision: number;
   readonly conversionVersions: Readonly<Record<string, number>>;

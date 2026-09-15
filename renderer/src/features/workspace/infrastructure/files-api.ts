@@ -27,6 +27,8 @@ import {
 } from '@/protocols/http/files';
 import { encodePathSegments } from '@/shared/utils/file-path';
 
+import { createFileOperation } from './file-operation';
+
 function mapListing(listing: WorkspaceFilesWire): WorkspaceListing {
   return {
     files: listing.files.map((file) => ({
@@ -96,7 +98,7 @@ function files(
   signal: AbortSignal,
   messages: { invalid: string; unavailable: string },
   extra?: { body?: unknown; method?: TransportRequest['method'] },
-): TransportRequest<'conflict' | 'rejected'> {
+): TransportRequest<'conflict' | 'rejected' | 'outcome-unknown'> {
   return {
     ...(extra?.body === undefined ? {} : { body: extra.body }),
     error: FilesError,
@@ -120,6 +122,7 @@ const entryPathSchema: ResponseSchema<{ path: string }> = {
 };
 
 export function createFilesAdapter(client: HttpClient): FilesPort {
+  const mutate = createFileOperation(client);
   return {
     async load(folderPath, signal) {
       return mapListing(
@@ -157,7 +160,7 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
       });
       if (!create.success) throw new FilesError('rejected', 'That name cannot be used.');
       const { data } = create;
-      return request(client, {
+      return mutate({
         ...files(
           data.kind === 'file'
             ? `/api/files?${folderQuery(data.folderPath)}`
@@ -187,7 +190,7 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
       });
       if (!rename.success) throw new FilesError('rejected', 'That name cannot be used.');
       const { data } = rename;
-      return request(client, {
+      return mutate({
         ...files(
           `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePathSegments(data.path)}?${folderQuery(data.folderPath)}`,
           signal,
@@ -208,7 +211,7 @@ export function createFilesAdapter(client: HttpClient): FilesPort {
       });
       if (!remove.success) throw new FilesError('rejected', 'The item identity is invalid.');
       const { data } = remove;
-      await request(client, {
+      await mutate({
         ...files(
           `/api/${data.kind === 'file' ? 'files' : 'folders'}/${encodePathSegments(data.path)}?${folderQuery(data.folderPath)}`,
           signal,

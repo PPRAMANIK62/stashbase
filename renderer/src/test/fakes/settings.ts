@@ -14,18 +14,12 @@ import type {
   AgentRuntimePort,
   AppearancePort,
   McpAccessPort,
-  TranscriptionPort,
 } from '@/features/settings/application/ports';
 import type { HostedAccount } from '@/features/settings/domain/account';
 import type { AgentAllowance, AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import type { AppearancePreferences } from '@/features/settings/domain/appearance';
 import type { EmbedderState } from '@/features/settings/domain/embedder';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
-import type {
-  TranscriptionModel,
-  TranscriptionProvider,
-  TranscriptionSettings,
-} from '@/features/settings/domain/transcription';
 
 export const SIGNED_OUT_ACCOUNT: HostedAccount = {
   avatarUrl: null,
@@ -101,7 +95,7 @@ export function agentRuntime(overrides: Partial<AgentRuntime> = {}): AgentRuntim
   return {
     id: 'stashbase',
     installed: true,
-    label: 'OpenQuill',
+    label: 'Default',
     ownership: 'bundled',
     preparation: { kind: 'ready' },
     ...overrides,
@@ -114,60 +108,7 @@ export function agentRuntimePort(overrides: Partial<AgentRuntimePort> = {}): Age
     getAllowance: vi.fn(async () => IDLE_ALLOWANCE),
     listAgents: vi.fn(async () => response),
     prepareAgent: vi.fn(async () => response),
-    resetManagedAgent: vi.fn(async () => response),
     updateDebug: vi.fn(async () => response),
-    ...overrides,
-  };
-}
-
-/** A local, downloadable model that is idle and not installed. */
-export function transcriptionModel(
-  overrides: Partial<TranscriptionModel> = {},
-): TranscriptionModel {
-  return {
-    accuracy: null,
-    available: false,
-    id: 'base',
-    label: 'Base',
-    management: 'local-download',
-    operation: { status: 'idle' },
-    resourceUse: null,
-    sizeBytes: null,
-    speed: null,
-    ...overrides,
-  };
-}
-
-export function transcriptionProvider(
-  overrides: Partial<TranscriptionProvider> = {},
-): TranscriptionProvider {
-  return {
-    description: 'Runs on this machine.',
-    id: 'local',
-    kind: 'local',
-    label: 'Local (whisper.cpp)',
-    models: [],
-    runtimeError: null,
-    ...overrides,
-  };
-}
-
-export function transcriptionSettings(
-  overrides: Partial<TranscriptionSettings> = {},
-): TranscriptionSettings {
-  return { language: 'en', modelId: 'base', providerId: 'local', providers: [], ...overrides };
-}
-
-export function transcriptionPort(overrides: Partial<TranscriptionPort> = {}): TranscriptionPort {
-  return {
-    downloadModel: vi.fn(async () => ({ status: 'idle' as const })),
-    load: vi.fn(async () => transcriptionSettings()),
-    removeModel: vi.fn(async () => undefined),
-    updatePreferences: vi.fn(async () => ({
-      language: 'en',
-      modelId: 'base',
-      providerId: 'local',
-    })),
     ...overrides,
   };
 }

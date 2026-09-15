@@ -11,7 +11,6 @@ describe('folder search readiness', () => {
     expect(readiness.semantic).toEqual({ state: 'unknown' });
     expect(readiness.readyCount).toBe(0);
     expect(readiness.counts).toEqual({
-      blocked: 0,
       cancelled: 0,
       failed: 0,
       needsAttention: false,
@@ -19,17 +18,16 @@ describe('folder search readiness', () => {
     });
   });
 
-  it('counts as ready only the sources neither pending nor blocked', () => {
+  it('counts as ready only the sources not pending', () => {
     const readiness = folderSearchReadiness(
       folderIndexStatus({
-        blockedConversions: ['talk.m4a'],
         pendingConversions: ['study.pdf', 'paper.pdf'],
         total: 9,
       }),
     );
 
-    expect(readiness.counts).toMatchObject({ blocked: 1, pending: 2 });
-    expect(readiness.readyCount).toBe(6);
+    expect(readiness.counts).toMatchObject({ pending: 2 });
+    expect(readiness.readyCount).toBe(7);
   });
 
   it('carries each index state with exactly the facts that state has', () => {

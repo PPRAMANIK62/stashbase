@@ -6,6 +6,8 @@ export interface AgentTabState {
   agent: AgentId;
   blank: boolean;
   hasContent: boolean;
+  hasDraft?: boolean;
+  status?: string | null;
   id: string;
   lastModified: number;
   nativeSessionId: string | null;
@@ -16,6 +18,8 @@ export interface AgentTabState {
 
 export interface AgentWorkspaceState {
   activeId: string;
+  visits: string[];
+  visitIndex: number;
   /** The window folder's live listing and preparation state, or null while
    *  no folder is selected or the shell has not published it yet. */
   scopeEnvironment: AgentScopeEnvironment | null;
@@ -24,7 +28,14 @@ export interface AgentWorkspaceState {
 }
 
 export function createAgentWorkspaceState(activeId: string): AgentWorkspaceState {
-  return { activeId, disposed: false, scopeEnvironment: null, tabs: [] };
+  return {
+    activeId,
+    visits: [activeId],
+    visitIndex: 0,
+    disposed: false,
+    scopeEnvironment: null,
+    tabs: [],
+  };
 }
 
 function tabsEqual(left: AgentTabState, right: AgentTabState): boolean {
@@ -48,7 +59,14 @@ export function upsertAgentTab(
 }
 
 export function activateAgentTab(state: AgentWorkspaceState, id: string): AgentWorkspaceState {
-  return state.activeId === id ? state : { ...state, activeId: id };
+  return state.activeId === id
+    ? state
+    : {
+        ...state,
+        activeId: id,
+        visits: [...state.visits.slice(0, state.visitIndex + 1), id].slice(-100),
+        visitIndex: Math.min(state.visitIndex + 1, 99),
+      };
 }
 
 export function removeAgentTab(
@@ -79,4 +97,21 @@ export function removeAgentTab(
 
 export function disposeAgentWorkspace(state: AgentWorkspaceState): AgentWorkspaceState {
   return { ...state, disposed: true };
+}
+
+/** Back/forward visits stay inside the visible project and skip closed chats. */
+export function agentVisitTarget(state: AgentWorkspaceState, direction: -1 | 1): number | null {
+  const scope = state.tabs.find((tab) => tab.id === state.activeId)?.scope;
+  if (!scope) return null;
+  for (
+    let index = state.visitIndex + direction;
+    index >= 0 && index < state.visits.length;
+    index += direction
+  ) {
+    if (
+      state.tabs.some((tab) => tab.id === state.visits[index] && agentScopesEqual(tab.scope, scope))
+    )
+      return index;
+  }
+  return null;
 }

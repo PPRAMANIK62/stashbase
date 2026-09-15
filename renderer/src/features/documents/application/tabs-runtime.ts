@@ -1,13 +1,4 @@
-/**
- * The open-document set: which tabs exist, which one is active, and the
- * per-document runtime behind each. Closing a tab disposes its runtime, so an
- * in-flight load or save for a retired document can never land.
- *
- * Browsing opens a preview: one tab that the next browse reuses. A preview
- * is kept once the reader asks or the moment its text is edited, and the
- * history beside the set records where the reader has been, by source, so
- * stepping back reaches a preview that has since been replaced.
- */
+/** Own the open set, serialize releases and mutations, and retain navigation independently of saves. */
 import { createStore } from 'zustand/vanilla';
 
 import {
@@ -22,6 +13,7 @@ import {
   closeDocumentTab,
   createDocumentTabsState,
   disposeDocumentTabsState,
+  documentTabsSession,
   keepDocumentTab,
   openDocumentTab,
   previewDocumentTab,
@@ -41,17 +33,9 @@ import type {
 
 export type { DocumentOpenOptions, DocumentTabsRuntime, DocumentTabsRuntimeOptions };
 
-/** The location an open or a visit names, with absent fields left out so
- *  the exact-optional shapes downstream accept it. */
-function visitLocation(location: DocumentLocation): DocumentLocation {
-  return {
-    ...(location.anchor === undefined ? {} : { anchor: location.anchor }),
-    ...(location.search === undefined ? {} : { search: location.search }),
-  };
-}
-
 export function createDocumentTabsRuntime({
   api,
+  prepare,
   createId,
   createQueries,
   folderPath,
@@ -73,16 +57,16 @@ export function createDocumentTabsRuntime({
   const history = createDocumentHistoryRuntime();
   const documents = new Map<string, DocumentRuntime>();
   const sourceIds = new Map<string, string>();
-  /** Each child's watch for its first edit, which is what keeps a preview. */
   const editWatches = new Map<string, () => void>();
   let nextDocumentGeneration = 0;
   let disposed = false;
-  /** Derived from the tab list and rebuilt only when that list changes, so a
-   *  subscriber can compare snapshots by identity. */
+  const uncertainMutations = new Set<string>();
   let sourcesCache: { tabs: unknown; sources: readonly SourceReference[] } = {
     sources: [],
     tabs: null,
   };
+  let preparing: ReturnType<typeof createQueries> | null = null;
+  let retryOpen: (() => Promise<DocumentRuntime | null>) | null = null;
   let transitionTail: Promise<void> = Promise.resolve();
 
   const guard = createScopeGuard<DocumentTabsScope>({
@@ -103,7 +87,11 @@ export function createDocumentTabsRuntime({
 
   const saveDocuments = async (items: Iterable<DocumentRuntime>): Promise<boolean> => {
     for (const document of items) {
-      if (!(await document.save(api))) return false;
+      if (!(await document.save(api))) {
+        store.setState((state) => activateDocumentTab(state, document.scope.id));
+        navigation.activate(document.scope.id);
+        return false;
+      }
     }
     return true;
   };
@@ -118,6 +106,7 @@ export function createDocumentTabsRuntime({
     const childGeneration = ++nextDocumentGeneration;
     const childScope = { generation: childGeneration, id, source };
     const runtime = createDocumentRuntime({
+      api,
       activeFolderPath: folderPath,
       generation: childGeneration,
       id,
@@ -126,8 +115,7 @@ export function createDocumentTabsRuntime({
     });
     documents.set(id, runtime);
     sourceIds.set(sourceIdentity(source), id);
-    // An edit is the reader saying the document is theirs to work in, so a
-    // preview stops being one the moment its text moves.
+
     editWatches.set(
       id,
       runtime.store.subscribe((state) => {
@@ -148,19 +136,21 @@ export function createDocumentTabsRuntime({
   };
 
   const requestDocumentLocation = (document: DocumentRuntime, options: DocumentLocation) => {
+    if (options.scroll) {
+      document.readingPosition = options.scroll;
+      document.store.setState((state) => ({ ...state, readingRequest: state.readingRequest + 1 }));
+    } else if (options.anchor || options.search) document.readingPosition = null;
     if (options.anchor) navigation.requestAnchor(document.scope.id, options.anchor);
     if (!options.search) return;
     navigation.requestSearch(document.scope.id, options.search);
   };
 
-  /** The synchronous half of `open`, run only once a captured transition has
-   *  been accepted: it reads the open set as it stands now, not as the
-   *  transition found it before its save. */
   const openSource = (
     source: SourceReference,
     identity: string,
     options: DocumentOpenOptions,
     record: boolean,
+    preparedId?: string,
   ): DocumentRuntime | null => {
     const preview = options.preview === true;
     const existingId = sourceIds.get(identity);
@@ -170,18 +160,16 @@ export function createDocumentTabsRuntime({
         store.setState((current) => openDocumentTab(current, { id: existingId, source }, preview));
         navigation.activate(existingId);
         requestDocumentLocation(existing, options);
-        if (record) history.record({ source, ...visitLocation(options) });
+        if (record) history.record({ source, ...options });
         guard.retireOperations();
       }
       return existing;
     }
-    const id = createId();
+    const id = preparedId ?? createId();
     if (id.trim().length === 0 || documents.has(id)) {
       throw new Error('Document tab IDs must be non-empty and unique.');
     }
-    // The standing preview gives its slot to the new one, unless it holds
-    // an edit, in which case it is kept and the new preview goes beside it.
-    // An edit keeps a tab the moment it is made, so this is a last guard.
+
     const standing = preview ? previewDocumentTab(store.getState()) : null;
     const standingEditor = standing ? documents.get(standing.id)?.store.getState().editor : null;
     if (standing && standingEditor && isDocumentDirty(standingEditor)) keep(standing.id);
@@ -191,39 +179,44 @@ export function createDocumentTabsRuntime({
     if (replaced) retireChild(replaced.id);
     navigation.activate(id);
     requestDocumentLocation(document, options);
-    if (record) history.record({ source, ...visitLocation(options) });
+    if (record) history.record({ source, ...options });
     guard.retireOperations();
     return document;
   };
 
-  /** The whole open, run inside the transition queue. `record` is false for
-   *  the history's own steps, which are returns rather than new visits. */
   const openTransition = async (
     source: SourceReference,
     options: DocumentOpenOptions,
     record: boolean,
   ): Promise<DocumentRuntime | null> => {
     if (disposed) return null;
+    store.setState({ openRequest: { ...source } });
     const identity = sourceIdentity(source);
     const openedId = sourceIds.get(identity);
-    if (openedId !== undefined && openedId === store.getState().activeTabId) {
-      const existing = documents.get(openedId) ?? null;
-      if (existing) {
-        if (options.preview !== true) keep(openedId);
-        requestDocumentLocation(existing, options);
-        if (record) history.record({ source, ...visitLocation(options) });
-      }
-      return existing;
-    }
     const captured = guard.capture();
-    const active = documents.get(store.getState().activeTabId ?? '') ?? null;
-    if (active && !(await active.save(api))) return null;
-    // The save spanned an await, so what was read before it — which tab was
-    // active, whether this source was already open — is re-read here rather
-    // than trusted.
+    let preparedId: string | undefined;
+    if (openedId === undefined && prepare) {
+      preparedId = createId();
+      const candidate = { generation: nextDocumentGeneration + 1, id: preparedId, source };
+      const candidateQueries = createQueries(candidate);
+      preparing = candidateQueries;
+      const message = await prepare(candidate);
+      if (preparing === candidateQueries) preparing = null;
+      if (!guard.accept(captured, () => undefined)) {
+        createQueries(candidate).remove();
+        return null;
+      }
+      if (message) {
+        createQueries(candidate).remove();
+        retryOpen = () => openTransition(source, options, record);
+        store.setState((state) => ({ ...state, openFailure: { source, message } }));
+        return null;
+      }
+    }
+    store.setState((state) => ({ ...state, openFailure: null }));
     let opened: DocumentRuntime | null = null;
     guard.accept(captured, () => {
-      opened = openSource(source, identity, options, record);
+      opened = openSource(source, identity, options, record, preparedId);
     });
     return opened;
   };
@@ -235,18 +228,13 @@ export function createDocumentTabsRuntime({
     enqueueTransition(async () => {
       const target = visit();
       if (!target) return null;
-      const opened = await openTransition(
-        target.source,
-        { ...visitLocation(target), preview: true },
-        false,
-      );
+      const opened = await openTransition(target.source, { ...target, preview: true }, false);
       if (opened) step();
       return opened;
     });
 
   for (const tab of initialState.tabs) createChild(tab.id, tab.source);
-  // The tab the window comes back on is where the reader is, so the first
-  // browse away from it has somewhere to step back to.
+
   const restoredActive = initialState.tabs.find((tab) => tab.id === initialState.activeTabId);
   if (restoredActive) history.record({ source: restoredActive.source });
 
@@ -263,24 +251,13 @@ export function createDocumentTabsRuntime({
     accept: guard.accept,
     activate(tabId) {
       return enqueueTransition(async () => {
-        if (disposed) return false;
-        const state = store.getState();
-        if (state.activeTabId === tabId) return documents.has(tabId);
-        if (!documents.has(tabId)) return false;
-        const captured = guard.capture();
-        const active = state.activeTabId ? documents.get(state.activeTabId) : null;
-        if (active && !(await active.save(api))) return false;
-        let activated = false;
-        guard.accept(captured, () => {
-          const document = documents.get(tabId);
-          if (!document) return;
-          store.setState((current) => activateDocumentTab(current, tabId));
-          navigation.activate(tabId);
-          history.record({ source: document.scope.source });
-          guard.retireOperations();
-          activated = true;
-        });
-        return activated;
+        const tab = store.getState().tabs.find((candidate) => candidate.id === tabId);
+        if (disposed || !tab) return false;
+        if (store.getState().activeTabId === tabId) return true;
+        return (
+          openSource(tab.source, sourceIdentity(tab.source), { preview: tab.preview }, true) !==
+          null
+        );
       });
     },
     back: () => stepHistory(history.previous, history.stepBack),
@@ -298,7 +275,8 @@ export function createDocumentTabsRuntime({
         if (disposed) return false;
         const document = documents.get(tabId);
         const captured = guard.capture();
-        if (!document || !(await document.save(api))) return false;
+        if (!document || document.store.getState().mutationPending || !(await document.save(api)))
+          return false;
         let closed = false;
         guard.accept(captured, () => {
           if (documents.get(tabId) !== document) return;
@@ -311,28 +289,96 @@ export function createDocumentTabsRuntime({
         return closed;
       });
     },
+    retryOpen() {
+      return enqueueTransition(() => retryOpen?.() ?? Promise.resolve(null));
+    },
+    dismissOpenFailure() {
+      store.setState((state) => ({ ...state, openFailure: null }));
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
       guard.retireOperations();
       controller.abort();
-      // A Map iterates safely over its own deletions.
+      void preparing?.cancel();
+      preparing?.remove();
+      preparing = null;
+
       for (const id of documents.keys()) retireChild(id);
       navigation.dispose();
       store.setState(disposeDocumentTabsState);
     },
     flush() {
       return enqueueTransition(async () => {
-        if (disposed) return false;
+        if (disposed || uncertainMutations.size) return false;
         return saveDocuments([...documents.values()]);
       });
     },
-    forward: () => stepHistory(history.next, history.stepForward),
-    getDocument(tabId) {
-      return documents.get(tabId) ?? null;
+    mutate(path, operation) {
+      return enqueueTransition(async () => {
+        if (disposed) return false;
+        if (
+          [...uncertainMutations].some(
+            (p) => p !== path && (p.startsWith(`${path}/`) || path.startsWith(`${p}/`)),
+          )
+        )
+          return false;
+        const affected = [...documents.values()].filter(
+          (document) =>
+            document.scope.source.folderPath === folderPath &&
+            (document.scope.source.path === path ||
+              document.scope.source.path.startsWith(`${path}/`)),
+        );
+        for (const document of affected) {
+          keep(document.scope.id);
+          document.setMutationPending(true);
+        }
+        try {
+          if (!(await saveDocuments(affected)) || disposed) return false;
+          const destination = await operation();
+          if (destination === undefined) {
+            uncertainMutations.add(path);
+            return false;
+          }
+          uncertainMutations.delete(path);
+          if (disposed) return false;
+          for (const document of affected) {
+            const { id, source } = document.scope;
+            if (destination === null) {
+              retireChild(id);
+              store.setState((state) => closeDocumentTab(state, id));
+            } else {
+              sourceIds.delete(sourceIdentity(source));
+              document.rebind(
+                { ...source, path: destination + source.path.slice(path.length) },
+                createQueries,
+              );
+              sourceIds.set(sourceIdentity(document.scope.source), id);
+            }
+          }
+          if (destination !== null) {
+            store.setState((state) => ({
+              ...state,
+              tabs: state.tabs.map((tab) => ({
+                ...tab,
+                source: documents.get(tab.id)?.scope.source ?? tab.source,
+              })),
+            }));
+            history.rename(folderPath, path, destination);
+          }
+          navigation.activate(store.getState().activeTabId);
+          guard.retireOperations();
+          return true;
+        } finally {
+          if (!uncertainMutations.has(path))
+            for (const document of affected) document.setMutationPending(false);
+        }
+      });
     },
+    forward: () => stepHistory(history.next, history.stepForward),
+    getDocument: (tabId) => documents.get(tabId) ?? null,
     hasDocuments() {
-      return store.getState().tabs.length > 0;
+      return store.getState().tabs.length > 0 || store.getState().openFailure !== null;
     },
     keep,
     openSources() {
@@ -342,24 +388,11 @@ export function createDocumentTabsRuntime({
       }
       return sourcesCache.sources;
     },
-    subscribe(listener) {
-      return store.subscribe(listener);
-    },
+    subscribe: store.subscribe,
     open(source, options = {}) {
       return enqueueTransition(() => openTransition(source, options, true));
     },
-    toSession() {
-      const state = store.getState();
-      // A preview was only ever a look, so it is not part of what the window
-      // comes back to.
-      const tabs = state.tabs
-        .filter((tab) => !tab.preview && tab.source.folderPath === scope.folderPath)
-        .map((tab) => ({ id: tab.id, path: tab.source.path }));
-      return {
-        activeTabId: tabs.some((tab) => tab.id === state.activeTabId) ? state.activeTabId : null,
-        tabs,
-      };
-    },
+    toSession: () => documentTabsSession(store.getState(), scope.folderPath),
   };
 
   return runtime;

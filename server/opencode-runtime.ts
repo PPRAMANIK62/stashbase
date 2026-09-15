@@ -180,34 +180,9 @@ export function buildOpenCodeConfig(
     },
     agent: {
       'stashbase-folder': {
-        description: 'StashBase OpenQuill for one authorized project folder.',
+        description: 'The StashBase Agent for one authorized project folder.',
         mode: 'primary',
         prompt: runtimeInstructions,
-      },
-      'stashbase-unbound': {
-        description: 'StashBase OpenQuill for a conversation without a project.',
-        mode: 'primary',
-        prompt: runtimeInstructions,
-        // Unbound conversations do not access local project files. Disable
-        // native filesystem tools; StashBase MCP enforces the live binding.
-        tools: {
-          read: false,
-          write: false,
-          edit: false,
-          patch: false,
-          apply_patch: false,
-          glob: false,
-          grep: false,
-          bash: false,
-          task: false,
-        },
-        permission: {
-          edit: 'deny',
-          bash: 'deny',
-          webfetch: 'ask',
-          doom_loop: 'ask',
-          external_directory: 'deny',
-        },
       },
     },
     permission,
@@ -271,11 +246,11 @@ class OpenCodeRuntime {
           failure: {
             stage: 'authentication',
             code: 'account-required',
-            message: 'Sign in to StashBase to use OpenQuill and its free credits.',
+            message: 'Sign in to StashBase to use the Default Agent and its free credits.',
             retryable: true,
           },
         },
-        error: 'Sign in to StashBase to use OpenQuill.',
+        error: 'Sign in to StashBase to use the Default Agent.',
       };
     }
     return {
@@ -284,7 +259,7 @@ class OpenCodeRuntime {
       installed: true,
       source: 'bundled',
       state: 'available',
-      bootstrap: { phase: 'ready', progress: 1, message: 'OpenQuill is ready.' },
+      bootstrap: { phase: 'ready', progress: 1, message: 'The Default Agent is ready.' },
     };
   }
 
@@ -338,7 +313,7 @@ class OpenCodeRuntime {
     const executable = bundledOpenCodeExecutable();
     if (!executable) throw new Error('The bundled OpenCode runtime is missing.');
     if (this.requireAccount && !getHostedAccountSession()) {
-      throw new Error('Sign in to StashBase to use OpenQuill.');
+      throw new Error('Sign in to StashBase to use the Default Agent.');
     }
     await startHostedAgentBroker();
     if (generation !== this.generation) throw new Error('OpenCode startup was cancelled.');
@@ -348,7 +323,7 @@ class OpenCodeRuntime {
     const password = cryptoRandomSecret();
     const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
     const model = hostedAgentRuntime(this.agentSessionId);
-    if (!model) throw new Error('The OpenQuill model broker is not running.');
+    if (!model) throw new Error('The Agent model broker is not running.');
     const child = spawn(executable, [
       'serve',
       '--hostname=127.0.0.1',
@@ -443,14 +418,13 @@ export function createOpenCodeSessionRuntime(
     windowId: string;
     agentSessionId: string;
     cwd: string;
-    scope: 'folder' | 'unbound';
   },
 ): OpenCodeSessionRuntime {
   const sessionRuntime = new OpenCodeRuntime({
     STASHBASE_WINDOW_ID: context.windowId,
     STASHBASE_AGENT_SESSION_ID: context.agentSessionId,
   }, resolveAgentInstructions(
-    context.scope === 'unbound' ? null : context.cwd,
+    context.cwd,
   ), true, context.agentSessionId);
   return {
     client: (directory) => sessionRuntime.client(directory),

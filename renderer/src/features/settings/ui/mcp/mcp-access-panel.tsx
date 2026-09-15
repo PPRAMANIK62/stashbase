@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { InputField, InputGroup } from '@/components/ui/input-group';
 import { Switch } from '@/components/ui/switch';
+import { TabsSubtle, TabsSubtleItem } from '@/components/ui/tabs-subtle';
 import type { McpAccessPort } from '@/features/settings/application/ports';
 import {
   isMcpDockerPort,
@@ -43,7 +44,7 @@ const PORT_ERROR = `Enter a port from ${MCP_DOCKER_PORT_RANGE.min} to ${MCP_DOCK
 
 /** The pane keeps its title and lede while the read is in flight or has
  *  failed, so the section never collapses into a bare sentence. */
-const TITLE = 'MCP';
+const TITLE = 'External apps (MCP)';
 const LEDE =
   'Connect external AI apps to search, read, and edit supported files in your registered projects.';
 
@@ -116,13 +117,13 @@ function DockerPortForm({
         <InputField
           disabled={disabled}
           error={invalid ? PORT_ERROR : undefined}
-          filled
           inputMode="numeric"
           label="Docker port"
           labelHidden
           max={MCP_DOCKER_PORT_RANGE.max}
           min={MCP_DOCKER_PORT_RANGE.min}
           onChange={setDraft}
+          resting="filled"
           type="number"
           value={draft}
         />
@@ -155,6 +156,7 @@ function dockerListener(
 
 export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
   const mcp = useMcpAccess(mcpAccessApi);
+  const [connection, setConnection] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const access = mcp.access;
@@ -179,157 +181,171 @@ export function McpAccessPanel({ mcpAccessApi }: McpAccessPanelProps) {
 
   return (
     <SettingsPane lede={LEDE} title={TITLE}>
-      <SettingsGroup
-        hint="Copy this JSON into your client's MCP settings, then restart the client."
-        title="Standard configuration"
+      <TabsSubtle
+        aria-label="Connection method"
+        selectedIndex={connection}
+        onSelect={(index) => {
+          setConnection(index);
+          setRevealed(false);
+        }}
+        size="compact"
       >
-        <SettingsList>
-          <SettingsRow
-            detail={<Mono>{access.command}</Mono>}
-            title="JSON configuration"
-            trail={
-              <CopyButton
-                copied={mcp.copied === 'config'}
-                label="configuration"
-                onCopy={() => mcp.copy('config')}
-              />
-            }
-          >
-            <pre className="m-0 max-h-80 overflow-auto font-mono text-caption whitespace-pre text-muted-foreground">
-              {access.config}
-            </pre>
-          </SettingsRow>
-        </SettingsList>
-      </SettingsGroup>
-
-      <SettingsGroup
-        hint="Use the local URL and bearer token for clients that connect over HTTP."
-        title="URL access"
-      >
-        <SettingsList>
-          {http.settingsError !== null && (
+        <TabsSubtleItem label="Standard" />
+        <TabsSubtleItem label="HTTP" />
+      </TabsSubtle>
+      {connection === 0 ? (
+        <SettingsGroup hint="Copy this JSON into your client's MCP settings, then restart the client.">
+          <SettingsList>
             <SettingsRow
-              detail={http.settingsError}
-              role="status"
-              title="MCP settings are unavailable"
-              titleTone="muted"
-            />
-          )}
-          <SettingsRow
-            detail={<Mono>{http.loopbackUrl}</Mono>}
-            title="Local URL"
-            trail={
-              <CopyButton
-                copied={mcp.copied === 'loopback'}
-                label="local URL"
-                onCopy={() => mcp.copy('loopback')}
-              />
-            }
-          />
-          <SettingsRow
-            detail={
-              http.token === null ? (
-                'Could not read the saved token.'
-              ) : (
-                <Mono>{revealed ? http.token : TOKEN_MASK}</Mono>
-              )
-            }
-            title="Bearer token"
-            trail={
-              <>
-                <Button
-                  aria-label={revealed ? 'Hide token' : 'Show token'}
-                  disabled={http.token === null}
-                  onClick={() => setRevealed(!revealed)}
-                  size="compact"
-                  variant="ghost"
-                >
-                  {revealed ? 'Hide' : 'Show'}
-                </Button>
+              title="JSON configuration"
+              trail={
                 <CopyButton
-                  copied={mcp.copied === 'token'}
-                  disabled={http.token === null}
-                  label="token"
-                  onCopy={() => mcp.copy('token')}
+                  copied={mcp.copied === 'config'}
+                  label="configuration"
+                  onCopy={() => mcp.copy('config')}
                 />
-                <Button
-                  disabled={http.token === null}
-                  onClick={() => setConfirming(true)}
-                  size="compact"
-                  variant="tertiary"
-                >
-                  Rotate token…
-                </Button>
-              </>
-            }
-          />
-        </SettingsList>
-      </SettingsGroup>
-
-      <SettingsGroup
-        hint="Opens a network port that requires the bearer token. Other StashBase APIs stay local."
-        title="Docker access"
-      >
-        <SettingsList>
-          <SettingsRow
-            detail="Allow containers on this computer to connect to MCP."
-            title="Docker access"
-            trail={
-              <Switch
-                checked={http.dockerAccess}
-                disabled={mcp.busy || unreadable}
-                label="Docker access"
-                labelHidden
-                onToggle={() => mcp.setDockerAccess(!http.dockerAccess)}
-              />
-            }
-          />
-          <SettingsRow
-            detail={
-              http.dockerAccess
-                ? 'Turn Docker access off to change the port.'
-                : 'Port used when Docker access is enabled.'
-            }
-            title="Port"
-            trail={
-              <DockerPortForm
-                disabled={mcp.busy || http.dockerAccess || unreadable}
-                key={http.dockerPort}
-                onSave={(port) => mcp.setDockerPort(port)}
-                port={http.dockerPort}
-              />
-            }
-          />
-          {listener && (
-            <>
+              }
+            >
+              <pre className="m-0 max-h-80 overflow-auto font-mono text-caption leading-snug whitespace-pre text-foreground">
+                {access.config}
+              </pre>
+            </SettingsRow>
+          </SettingsList>
+        </SettingsGroup>
+      ) : (
+        <>
+          <SettingsGroup
+            hint="Use the local URL and bearer token for clients that connect over HTTP."
+            title="URL access"
+          >
+            <SettingsList>
+              {http.settingsError !== null && (
+                <SettingsRow
+                  detail={http.settingsError}
+                  role="status"
+                  title="MCP settings are unavailable"
+                  titleTone="muted"
+                />
+              )}
               <SettingsRow
-                detail={<Mono>{http.dockerUrl}</Mono>}
-                title="Docker URL"
+                detail={<Mono>{http.loopbackUrl}</Mono>}
+                title="Local URL"
                 trail={
                   <CopyButton
-                    copied={mcp.copied === 'docker'}
-                    label="Docker URL"
-                    onCopy={() => mcp.copy('docker')}
+                    copied={mcp.copied === 'loopback'}
+                    label="local URL"
+                    onCopy={() => mcp.copy('loopback')}
                   />
                 }
               />
               <SettingsRow
-                detail={listener.detail}
-                role="status"
-                title="Listener"
-                trail={listener.chip}
+                detail={
+                  http.token === null ? (
+                    'Could not read the saved token.'
+                  ) : (
+                    <Mono>{revealed ? http.token : TOKEN_MASK}</Mono>
+                  )
+                }
+                title="Bearer token"
+                trail={
+                  <>
+                    <Button
+                      aria-label={revealed ? 'Hide token' : 'Show token'}
+                      disabled={http.token === null}
+                      onClick={() => setRevealed(!revealed)}
+                      size="compact"
+                      variant="ghost"
+                    >
+                      {revealed ? 'Hide' : 'Show'}
+                    </Button>
+                    <CopyButton
+                      copied={mcp.copied === 'token'}
+                      disabled={http.token === null}
+                      label="token"
+                      onCopy={() => mcp.copy('token')}
+                    />
+                    <Button
+                      disabled={http.token === null}
+                      onClick={() => setConfirming(true)}
+                      size="compact"
+                      variant="tertiary"
+                    >
+                      Rotate token…
+                    </Button>
+                  </>
+                }
               />
-            </>
-          )}
-        </SettingsList>
-        <Disclosure summary="Native Linux Docker Engine">
-          <p className="text-caption text-muted-foreground">
-            On Linux, add <Mono>host.docker.internal</Mono> using{' '}
-            <Mono>--add-host=host.docker.internal:host-gateway</Mono> or a Compose{' '}
-            <Mono>extra_hosts</Mono> entry.
-          </p>
-        </Disclosure>
-      </SettingsGroup>
+            </SettingsList>
+          </SettingsGroup>
+
+          <SettingsGroup
+            hint="Opens a network port that requires the bearer token. Other StashBase APIs stay local."
+            title="Docker access"
+          >
+            <SettingsList>
+              <SettingsRow
+                detail="Allow containers on this computer to connect to MCP."
+                title="Docker access"
+                trail={
+                  <Switch
+                    checked={http.dockerAccess}
+                    disabled={mcp.busy || unreadable}
+                    label="Docker access"
+                    labelHidden
+                    onToggle={() => mcp.setDockerAccess(!http.dockerAccess)}
+                  />
+                }
+              />
+              {listener && (
+                <>
+                  <SettingsRow
+                    detail={<Mono>{http.dockerUrl}</Mono>}
+                    title="Docker URL"
+                    trail={
+                      <CopyButton
+                        copied={mcp.copied === 'docker'}
+                        label="Docker URL"
+                        onCopy={() => mcp.copy('docker')}
+                      />
+                    }
+                  />
+                  <SettingsRow
+                    detail={listener.detail}
+                    role="status"
+                    title="Listener"
+                    trail={listener.chip}
+                  />
+                </>
+              )}
+            </SettingsList>
+            <Disclosure summary="Docker port settings">
+              <SettingsRow
+                detail={
+                  http.dockerAccess
+                    ? 'Turn Docker access off to change the port.'
+                    : 'Port used when Docker access is enabled.'
+                }
+                title="Port"
+                trail={
+                  <DockerPortForm
+                    disabled={mcp.busy || http.dockerAccess || unreadable}
+                    key={http.dockerPort}
+                    onSave={(port) => mcp.setDockerPort(port)}
+                    port={http.dockerPort}
+                  />
+                }
+              />
+            </Disclosure>
+            <Disclosure summary="Native Linux Docker Engine">
+              <p className="text-caption text-muted-foreground">
+                On Linux, add <Mono>host.docker.internal</Mono> using{' '}
+                <Mono>--add-host=host.docker.internal:host-gateway</Mono> or a Compose{' '}
+                <Mono>extra_hosts</Mono> entry.
+              </p>
+            </Disclosure>
+          </SettingsGroup>
+        </>
+      )}
 
       <ConfirmDialog
         confirmLabel="Rotate token"

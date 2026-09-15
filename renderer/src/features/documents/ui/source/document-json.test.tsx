@@ -10,7 +10,6 @@ import {
   assetApi,
   docxPreviewApi,
   genericPreviewApi,
-  mediaApi,
   sourceApi,
   textSource,
 } from '@/test/fakes/documents';
@@ -48,7 +47,6 @@ function renderSource(api: DocumentSourcePort, source: { folderPath: string; pat
       assetApi={assetApi({ load: vi.fn(pending()) })}
       docxPreviewApi={docxPreviewApi({ load: vi.fn(pending()) })}
       genericPreviewApi={genericPreviewApi({ load: vi.fn(pending()) })}
-      mediaApi={mediaApi({ loadTranscript: vi.fn(pending()) })}
       onReveal={vi.fn(async () => undefined)}
       revealLabel="Show in file manager"
       runtime={runtime}

@@ -5,7 +5,7 @@
  * renderer sends `AgentClientEvent`, the server sends `AgentServerEvent`, and
  * `AgentModel` / `AgentSkill` are the two payload shapes those events carry.
  *
- * They live in `shared/` — beside `conversion.ts` and `transcription.ts` —
+ * They live in `shared/` — beside `conversion.ts` —
  * rather than in `server/agent-contract.ts` because the renderer must be able
  * to import them without reaching into `server/`. `agent-contract.ts` pulls in
  * `ws`, the CLI resolvers, and the runtime installer; a single non-type import

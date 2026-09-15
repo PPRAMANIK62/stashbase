@@ -6,17 +6,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { GalleryEntry } from '@/features/gallery/domain/entry';
+import { FailureLine } from '@/shared/ui/failure-notice';
 
 import { GalleryEntryPage } from './detail';
+import { GalleryIndexRecovery, type GalleryRecovery } from './index-recovery';
 import { GalleryShop } from './shop';
 
 /**
  * The shop, and the entry page it opens inside itself.
  *
  * An overlay rather than a route: the window keeps the folder it was showing,
- * and closing puts the reader back exactly where they were. That is also why a
- * copy opens in a NEW window — this one is the shop the reader returns to for
- * the next entry, which is why nothing here closes when a copy succeeds.
+ * and closing puts the reader back exactly where they were. Copying uses the
+ * shared project-entry flow, which decides whether to reuse or open a window.
  *
  * The entry page replaces the shelf rather than stacking a second modal over
  * it: one dismiss target for one decision, and one way home, which the page
@@ -27,7 +28,8 @@ export function GalleryOverlay({
   copying,
   entries,
   entry,
-  issue,
+  recovery = null,
+  unavailable = false,
   onBack,
   onClose,
   onCopy,
@@ -37,7 +39,8 @@ export function GalleryOverlay({
   copying: boolean;
   entries: readonly GalleryEntry[];
   entry: GalleryEntry | null;
-  issue: string | null;
+  recovery?: GalleryRecovery | null;
+  unavailable?: boolean;
   onBack(): void;
   onClose(): void;
   onCopy(entry: GalleryEntry): void;
@@ -60,14 +63,20 @@ export function GalleryOverlay({
         <DialogHeader className="shrink-0">
           <DialogTitle>Gallery</DialogTitle>
           <DialogDescription>
-            Find something that inspires you. Make a copy and build on it.
+            Explore how people organize files and write with Agents. Find ideas for your own.
           </DialogDescription>
         </DialogHeader>
+        <GalleryIndexRecovery recovery={recovery} />
+        {unavailable && (
+          <FailureLine tone="capability">
+            This project is no longer in the Gallery. Choose another project below.
+          </FailureLine>
+        )}
         {entry ? (
           <GalleryEntryPage
+            key={entry.id}
             copying={copying}
             entry={entry}
-            issue={issue}
             onBack={onBack}
             onCopy={onCopy}
           />

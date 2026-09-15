@@ -50,7 +50,7 @@ export function folderSearchReadiness(
   if (!status) return { counts, readyCount: 0, semantic: { state: 'unknown' } };
   return {
     counts,
-    readyCount: Math.max(0, status.total - counts.pending - counts.blocked),
+    readyCount: Math.max(0, status.total - counts.pending),
     semantic: semanticSearchReadiness(status),
   };
 }

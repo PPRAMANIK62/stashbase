@@ -18,13 +18,10 @@ describe('agent composer provider control', () => {
         agents={[BUILT_IN_AGENT, CODEX_AGENT, CLAUDE_AGENT]}
         disabled={false}
         onAgentChange={onAgentChange}
-        onPrepare={vi.fn()}
-        onSignIn={vi.fn()}
       />,
     );
 
-    const trigger = screen.getByRole('button', { name: 'Provider: OpenQuill' });
-    expect(trigger.title).toBe('Provider: OpenQuill');
+    const trigger = screen.getByRole('button', { name: 'Provider: Default' });
     await user.click(trigger);
 
     expect(await screen.findAllByRole('menuitemradio')).toHaveLength(3);
@@ -32,7 +29,7 @@ describe('agent composer provider control', () => {
       screen
         .getAllByRole('menuitemradio', { checked: true })
         .map((option) => option.getAttribute('aria-label')),
-    ).toEqual(['OpenQuill']);
+    ).toEqual(['Default']);
     for (const name of ['Codex', 'Claude Code']) {
       expect(screen.getByRole('menuitemradio', { name })).not.toBeNull();
     }
@@ -40,64 +37,41 @@ describe('agent composer provider control', () => {
     expect(onAgentChange).toHaveBeenCalledWith('codex');
   });
 
-  it('names a runtime that is not ready yet and starts what it waits for', async () => {
+  it('selects an unavailable Agent without starting setup or login', async () => {
     const onAgentChange = vi.fn();
-    const onPrepare = vi.fn();
-    const onSignIn = vi.fn();
     const user = userEvent.setup();
     render(
       <AgentProviderControl
         activeAgent={CODEX_AGENT}
-        // The bundled runtime before anything has been tried: the catalog
-        // cannot know yet that it wants an account, and it must still not be
-        // offered a setup step it does not have.
-        agents={[
-          agentDefinition({ needsSignIn: false, ready: false }),
-          CODEX_AGENT,
-          agentDefinition({ id: 'claude', label: 'Claude Code', ready: false }),
-        ]}
+        agents={[CODEX_AGENT, agentDefinition({ ready: false })]}
         disabled={false}
         onAgentChange={onAgentChange}
-        onPrepare={onPrepare}
-        onSignIn={onSignIn}
       />,
     );
-
     await user.click(screen.getByRole('button', { name: 'Provider: Codex' }));
-    // The unprepared rows are offers, not choices: they carry no check and
-    // they say what they are waiting for.
-    expect(await screen.findAllByRole('menuitemradio')).toHaveLength(1);
-    expect(screen.getByRole('menuitem', { name: 'OpenQuill. Sign in' })).not.toBeNull();
-    expect(screen.getByRole('menuitem', { name: 'Claude Code. Set up' })).not.toBeNull();
-
-    // The bundled runtime waits on the account, which no catalog command can
-    // start, so the row routes to where the account is signed in.
-    await user.click(screen.getByRole('menuitem', { name: 'OpenQuill. Sign in' }));
-    expect(onSignIn).toHaveBeenCalledOnce();
-    expect(onPrepare).not.toHaveBeenCalled();
-    expect(onAgentChange).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Default' }));
+    expect(onAgentChange).toHaveBeenCalledWith('stashbase');
   });
 
-  it('prepares a runtime whose own installation is what is missing', async () => {
-    const onPrepare = vi.fn();
+  // At the composer's narrow steps the trigger folds down to its icon, so the
+  // hover hint is the only thing left naming what it runs. The hint rides on a
+  // dropdown trigger, where a tooltip that failed to compose would leave the
+  // icon silent rather than break anything visible.
+  it('names the running agent on hover while the trigger is an icon alone', async () => {
     const user = userEvent.setup();
     render(
       <AgentProviderControl
         activeAgent={CODEX_AGENT}
-        agents={[
-          CODEX_AGENT,
-          agentDefinition({ id: 'claude', label: 'Claude Code', ready: false }),
-        ]}
+        agents={[BUILT_IN_AGENT, CODEX_AGENT]}
         disabled={false}
         onAgentChange={vi.fn()}
-        onPrepare={onPrepare}
-        onSignIn={vi.fn()}
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Provider: Codex' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Claude Code. Set up' }));
-    expect(onPrepare).toHaveBeenCalledWith('claude', 'bootstrap');
+    await user.hover(screen.getByRole('button', { name: 'Provider: Codex' }));
+    // The popup is portalled, so it is found on the document rather than the
+    // trigger's subtree.
+    expect(await screen.findByText('Provider: Codex')).not.toBeNull();
   });
 
   it('binds the provider for the run of a streaming turn', () => {
@@ -107,8 +81,6 @@ describe('agent composer provider control', () => {
         agents={[BUILT_IN_AGENT, CODEX_AGENT]}
         disabled
         onAgentChange={vi.fn()}
-        onPrepare={vi.fn()}
-        onSignIn={vi.fn()}
       />,
     );
 

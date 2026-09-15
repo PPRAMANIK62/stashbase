@@ -6,7 +6,7 @@ import { documentTextSourceRequestSchema } from '@/protocols/http/files';
 import { encodePathSegments } from '@/shared/utils/file-path';
 
 function assetPath(
-  prefix: '/asset' | '/asset-audio-preview' | '/asset-derived',
+  prefix: '/asset' | '/asset-derived',
   folderPath: string,
   entryPath: string,
 ): string {
@@ -30,6 +30,10 @@ export function createDocumentAssetAdapter(
       // adapter's own business and only the failure ladder is shared.
       const response = await send(client, {
         error: DocumentAssetError,
+        failure: ({ response: refused }) =>
+          refused.status === 404
+            ? new DocumentAssetError('missing', 'The source file is missing.')
+            : null,
         messages: {
           'scope-lost': 'The file folder is no longer available in this window.',
           unauthorized: 'This window can no longer preview that file.',
@@ -52,14 +56,7 @@ export function createDocumentAssetAdapter(
       if (format !== 'docx' && format !== 'audio') {
         return { kind: 'source', url: url.href, version };
       }
-      if (format === 'audio') {
-        const fallbackUrl = new URL(
-          assetPath('/asset-audio-preview', request.data.folderPath, request.data.path),
-          origin,
-        );
-        fallbackUrl.searchParams.set('v', version);
-        return { fallbackUrl: fallbackUrl.href, kind: 'media', url: url.href, version };
-      }
+      if (format === 'audio') return { kind: 'media', url: url.href, version };
       const fallbackUrl = new URL(
         assetPath('/asset-derived', request.data.folderPath, request.data.path),
         origin,

@@ -38,6 +38,13 @@
   },
   "overrides": [
     {
+      // This viewer previews user-owned media files. StashBase does not generate
+      // captions or accept a caption sidecar; an empty track would misrepresent
+      // availability. The rule remains enabled for application-authored media.
+      "files": ["**/renderer/src/features/documents/ui/media/document.tsx"],
+      "rules": { "jsx-a11y/media-has-caption": "off" }
+    },
+    {
       "files": [
         "**/renderer/src/features/*/domain/**",
         "**/renderer/src/shared/domain/**",

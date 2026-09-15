@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import './isolated-home.ts';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -194,4 +197,18 @@ test('only a runtime that can run a turn and offers a model choice carries a cat
   assert.equal(rememberedCatalogFor({ ...ready, state: 'failed' }), undefined);
   assert.equal(rememberedCatalogFor({ ...ready, capabilities: { models: false } }), undefined);
   assert.equal(rememberedCatalogFor({ ...ready, id: 'stashbase' }), undefined);
+});
+
+
+test('catalog refresh preserves malformed settings and remains available in memory', () => {
+  const configPath = path.join(os.homedir(), '.stashbase', 'config.json');
+  const previous = fs.readFileSync(configPath);
+  try {
+    fs.writeFileSync(configPath, '{"unfinished":');
+    assert.doesNotThrow(() => rememberAgentModels('codex', [{ id: 'fresh', label: 'Fresh' }]));
+    assert.equal(recallAgentModels('codex')?.models[0].id, 'fresh');
+    assert.equal(fs.readFileSync(configPath, 'utf8'), '{"unfinished":');
+  } finally {
+    fs.writeFileSync(configPath, previous);
+  }
 });

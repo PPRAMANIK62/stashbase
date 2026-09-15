@@ -29,7 +29,7 @@ function refused(fallback: string) {
 function preferences(
   signal: AbortSignal,
   fallback: string,
-): TransportRequest<'conflict' | 'rejected'> {
+): TransportRequest<'conflict' | 'rejected' | 'outcome-unknown'> {
   return requestOptions({
     error: FilesError,
     failure: refused(fallback),

@@ -56,3 +56,31 @@ test('conversion progress and durable failures use filesystem path identity', as
   assert.equal(status.isPendingOrFailed(source), false);
   assert.deepEqual(status.listFailed(), []);
 });
+
+test('unavailable status storage rejects cancellation and retries its durable write after repair', async (t) => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-status-repair-'));
+  const previous = process.env.STASHBASE_LOCAL_DATA_ROOT;
+  process.env.STASHBASE_LOCAL_DATA_ROOT = temp;
+  const { closeStateDb } = await import('./state-db.ts');
+  const { appStateDbPath } = await import('./local-data.ts');
+  const status = await import('./conversion-status.ts');
+  t.after(() => {
+    closeStateDb();
+    if (previous === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
+    else process.env.STASHBASE_LOCAL_DATA_ROOT = previous;
+    fs.rmSync(temp, { recursive: true, force: true });
+  });
+  closeStateDb();
+  const database = appStateDbPath();
+  fs.mkdirSync(path.dirname(database), { recursive: true });
+  fs.writeFileSync(database, 'not a sqlite database');
+  const source = path.join(temp, 'draft.pdf');
+  assert.throws(() => status.markCancelled(source), /Preparation status/);
+  assert.throws(() => status.isPendingOrFailed(source), /Preparation status/);
+  fs.rmSync(database);
+  assert.equal(status.isPendingOrFailed(source), true);
+  closeStateDb();
+  assert.equal(status.readAll()[source]?.status, 'cancelled');
+  status.clearRecord(source);
+  assert.equal(status.isPendingOrFailed(source), false);
+});

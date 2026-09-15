@@ -17,7 +17,6 @@ import {
 /** One sample per readiness kind. The map is total over the union, so a new
  *  kind cannot be added without a sample the projections below must answer. */
 const SAMPLES: Record<SourceReadinessKind, SourceReadiness> = {
-  blocked: { kind: 'blocked' },
   cancelled: { kind: 'cancelled' },
   current: { kind: 'current' },
   failed: { attempts: 1, detail: 'boom', kind: 'failed' },
@@ -53,9 +52,8 @@ describe('source readiness', () => {
     expect(sourceReadiness(null, 'c.md')).toEqual({ kind: 'current' });
   });
 
-  it('marks blocked, failed, and cancelled rows but never pending rows', () => {
+  it('marks failed, and cancelled rows but never pending rows', () => {
     expect(treeMarker({ kind: 'pending', progress: null })).toBeNull();
-    expect(treeMarker({ kind: 'blocked' })?.kind).toBe('blocked');
     expect(treeMarker({ kind: 'cancelled' })?.kind).toBe('cancelled');
     expect(treeMarker({ attempts: 1, detail: '', kind: 'failed' })?.kind).toBe('failed');
   });
@@ -86,10 +84,9 @@ describe('source readiness', () => {
     const idle = status();
     expect(folderPreparationSummary(idle).needsAttention).toBe(false);
     expect(preparationPollInterval(idle)).toBe(8_000);
-    const busy = status({ blockedConversions: ['talk.mp3'], pendingConversions: ['a.pdf'] });
+    const busy = status({ pendingConversions: ['a.pdf'] });
     expect(folderPreparationSummary(busy)).toMatchObject({
-      blocked: 1,
-      needsAttention: true,
+      needsAttention: false,
       pending: 1,
     });
     expect(preparationPollInterval(busy)).toBe(1_500);
@@ -101,12 +98,11 @@ describe('source readiness', () => {
     expect([...availableActions(SAMPLES.cancelled)]).toEqual(['reprocess']);
     expect([...availableActions(SAMPLES.failed)]).toEqual(['reprocess']);
     expect([...availableActions(SAMPLES.current)]).toEqual([]);
-    expect([...availableActions(SAMPLES.blocked)]).toEqual([]);
   });
 
   it('answers every readiness kind in each projection', () => {
     const kinds = Object.keys(SAMPLES) as SourceReadinessKind[];
-    expect(kinds).toHaveLength(5);
+    expect(kinds).toHaveLength(4);
     for (const kind of kinds) {
       const readiness = SAMPLES[kind];
       // A marker is optional, but the decision must be a deliberate null

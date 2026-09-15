@@ -33,12 +33,10 @@ export const CONVERTIBLE_SOURCE_EXTENSIONS = [
   ...PDF_EXTENSIONS,
   ...IMAGE_SOURCE_EXTENSIONS,
   ...DOCX_EXTENSIONS,
-  ...AUDIO_SOURCE_EXTENSIONS,
 ] as const;
 
 /** Formats that historically wrote hidden sibling derived notes inside the
- * user folder. Audio launched with AppData-only output and must never broaden
- * this compatibility-only hiding rule. */
+ * user folder. */
 export const LEGACY_DERIVED_SOURCE_EXTENSIONS = [
   ...PDF_EXTENSIONS,
   ...IMAGE_SOURCE_EXTENSIONS,
@@ -55,6 +53,7 @@ export const LEGACY_EXTENSIONLESS_DERIVED_SOURCE_EXTENSIONS = [
 export const VIEWABLE_FILE_EXTENSIONS = [
   ...DIRECT_TEXT_EXTENSIONS,
   ...CONVERTIBLE_SOURCE_EXTENSIONS,
+  ...AUDIO_SOURCE_EXTENSIONS,
 ] as const;
 
 export const AUDIO_SOURCE_EXTENSION_ALTERNATION = extensionAlternation(AUDIO_SOURCE_EXTENSIONS);
@@ -82,8 +81,8 @@ export type DirectTextFormat = 'md' | 'html' | 'json' | 'txt';
 
 /**
  * Everything the renderer can open in the file tree: the direct text
- * formats plus the convertible binaries (pdf, image, docx, audio) that are
- * viewable but searched via AppData-derived text.
+ * formats, convertible binaries (PDF, image, DOCX), and direct-playback media.
+ * Playback alone never grants retrieval access.
  *
  * Deliberately wider than `DirectTextFormat` so a convertible source cannot
  * enter the direct-text path. This is the `format` field on the wire — the
@@ -102,6 +101,6 @@ export type KnownViewerFormat = DirectTextFormat | 'pdf' | 'image' | 'docx' | 'a
 export type ViewerFormat = KnownViewerFormat | 'generic';
 
 /** Search and automatic Agent context may consume only these formats. */
-export function isRetrievableViewerFormat(format: ViewerFormat): format is KnownViewerFormat {
-  return format !== 'generic';
+export function isRetrievableViewerFormat(format: ViewerFormat): format is Exclude<KnownViewerFormat, 'audio'> {
+  return format !== 'generic' && format !== 'audio';
 }

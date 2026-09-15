@@ -24,12 +24,7 @@ import {
   consumeAgentSetupFailure,
   consumeAgentTurnFailure,
   getAgentRuntimeDebugState,
-  initialAgentDiscoveryPolicy,
-  managedAgentExecutable,
-  managedAgentRuntimeRoot,
-  managedCodexBinDir,
-  managedCodexInstallerHome,
-  managedCodexReleasesDir,
+  agentInstallerTempRoot,
   setAgentRuntimeDebugState,
   simulatedTurnFailureScript,
   type AgentTurnFailureSimulation,
@@ -650,7 +645,7 @@ if (scriptPath && scriptPath.endsWith('.ps1')) {
       },
     );
     assert.equal(
-      fs.readdirSync(managedAgentRuntimeRoot('codex')).some((entry) => entry.startsWith('.installer-script.')),
+      fs.readdirSync(agentInstallerTempRoot('codex')).some((entry) => entry.startsWith('.installer-script.')),
       false,
     );
   } finally {
@@ -751,68 +746,7 @@ test('Codex installation reports missing output without a fabricated ENOENT chec
   }
 });
 
-test('legacy managed discovery still accepts the official current and release layouts', async (context) => {
-  const target = process.platform === 'win32'
-    ? process.arch === 'arm64' ? 'x86_64-pc-windows-msvc' : 'aarch64-pc-windows-msvc'
-    : process.platform === 'darwin'
-      ? process.arch === 'arm64' ? 'x86_64-apple-darwin' : 'aarch64-apple-darwin'
-      : process.platform === 'linux'
-        ? process.arch === 'arm64' ? 'x86_64-unknown-linux-gnu' : 'aarch64-unknown-linux-gnu'
-        : null;
-  if (!target || !['arm64', 'x64'].includes(process.arch)) {
-    context.skip('Codex does not publish a managed runtime for this test platform.');
-    return;
-  }
-  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-legacy-layout-test-'));
-  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
-  const binaryName = process.platform === 'win32' ? 'codex.exe' : 'codex';
-  const write = (executable: string) => {
-    fs.mkdirSync(path.dirname(executable), { recursive: true });
-    fs.writeFileSync(executable, 'installed Codex');
-    if (process.platform !== 'win32') fs.chmodSync(executable, 0o755);
-  };
-  try {
-    // Installs performed by older StashBase versions live under the private
-    // AppData root; they stay discovered (and uninstallable) even though new
-    // installs land in the official user-level locations.
-    const currentExecutable = path.join(
-      managedCodexInstallerHome(), 'packages', 'standalone', 'current', 'bin', binaryName,
-    );
-    write(currentExecutable);
-    assert.equal(managedAgentExecutable('codex'), currentExecutable);
-    fs.rmSync(path.dirname(path.dirname(currentExecutable)), { recursive: true, force: true });
 
-    const releaseExecutable = path.join(managedCodexReleasesDir(), `0.147.0-${target}`, 'bin', binaryName);
-    write(releaseExecutable);
-    assert.equal(managedAgentExecutable('codex'), releaseExecutable);
-  } finally {
-    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
-    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('development fixtures can isolate discovery from developer-installed Agents', () => {
-  assert.equal(initialAgentDiscoveryPolicy({}), 'auto');
-  assert.equal(initialAgentDiscoveryPolicy({ STASHBASE_AGENT_DISCOVERY_POLICY: 'managed-only' }), 'auto');
-  assert.equal(initialAgentDiscoveryPolicy({
-    STASHBASE_DEV_RUNTIME: '1',
-    STASHBASE_AGENT_DISCOVERY_POLICY: 'managed-only',
-  }), 'managed-only');
-  assert.equal(initialAgentDiscoveryPolicy({
-    STASHBASE_DEV_VITE: '1',
-    STASHBASE_AGENT_DISCOVERY_POLICY: 'system-only',
-  }), 'system-only');
-  assert.equal(initialAgentDiscoveryPolicy({
-    STASHBASE_AGENT_DEBUG: '1',
-    STASHBASE_AGENT_DISCOVERY_POLICY: 'managed-only',
-  }), 'managed-only');
-  assert.equal(initialAgentDiscoveryPolicy({
-    STASHBASE_AGENT_DEBUG: '1',
-    STASHBASE_AGENT_DISCOVERY_POLICY: 'invalid',
-  }), 'auto');
-});
 
 test('development failure injection is mutually exclusive and one-shot', () => {
   const previousDebug = process.env.STASHBASE_AGENT_DEBUG;
@@ -863,38 +797,6 @@ test('every turn failure script is bounded prose and only crash is session-fatal
   }
 });
 
-test('managed-only discovery ignores the global Agent without uninstalling it', () => {
-  const previousRoot = process.env.STASHBASE_LOCAL_DATA_ROOT;
-  const previousDebug = process.env.STASHBASE_AGENT_DEBUG;
-  const previousCodexBin = process.env.STASHBASE_CODEX_BIN;
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-agent-runtime-test-'));
-  const systemExecutable = path.join(root, process.platform === 'win32' ? 'system-codex.exe' : 'system-codex');
-  process.env.STASHBASE_LOCAL_DATA_ROOT = root;
-  process.env.STASHBASE_AGENT_DEBUG = '1';
-  process.env.STASHBASE_CODEX_BIN = systemExecutable;
-  try {
-    const executable = path.join(managedCodexBinDir(), process.platform === 'win32' ? 'codex.exe' : 'codex');
-    fs.mkdirSync(path.dirname(executable), { recursive: true });
-    fs.writeFileSync(executable, process.platform === 'win32' ? '' : '#!/bin/sh\nexit 0\n');
-    fs.writeFileSync(systemExecutable, process.platform === 'win32' ? '' : '#!/bin/sh\nexit 0\n');
-    if (process.platform !== 'win32') fs.chmodSync(executable, 0o755);
-    if (process.platform !== 'win32') fs.chmodSync(systemExecutable, 0o755);
-
-    setAgentRuntimeDebugState({ discoveryPolicy: 'auto' });
-    assert.equal(resolveAgentCli({ name: 'codex', envNames: ['STASHBASE_CODEX_BIN'], logLabel: 'Codex' }), systemExecutable);
-    setAgentRuntimeDebugState({ discoveryPolicy: 'managed-only' });
-    assert.equal(resolveAgentCli({ name: 'codex', envNames: ['STASHBASE_CODEX_BIN'], logLabel: 'Codex' }), executable);
-  } finally {
-    setAgentRuntimeDebugState({ discoveryPolicy: 'auto', nextFailure: 'none' });
-    if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
-    else process.env.STASHBASE_LOCAL_DATA_ROOT = previousRoot;
-    if (previousDebug === undefined) delete process.env.STASHBASE_AGENT_DEBUG;
-    else process.env.STASHBASE_AGENT_DEBUG = previousDebug;
-    if (previousCodexBin === undefined) delete process.env.STASHBASE_CODEX_BIN;
-    else process.env.STASHBASE_CODEX_BIN = previousCodexBin;
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
 
 test('explicit readiness finds a version-manager Agent through the login shell', { skip: process.platform === 'win32' }, async () => {
   const previousShell = process.env.SHELL;
@@ -946,7 +848,7 @@ test('login-shell discovery is requested explicitly; catalog discovery stays che
   assert.equal(configured, 1);
 });
 
-test('pending authentication keeps the event loop live, deduplicates checks, and is cancelled on reset', async () => {
+test('pending authentication keeps the event loop live, deduplicates checks, and is cancelled on shutdown', async () => {
   let started!: () => void;
   const entered = new Promise<void>((resolve) => { started = resolve; });
   let checks = 0;
@@ -967,9 +869,8 @@ test('pending authentication keeps the event loop live, deduplicates checks, and
   coordinator.begin('codex');
   coordinator.connectIfInstalled('codex');
   assert.equal(checks, 1);
-  await coordinator.reset('codex');
+  assert.deepEqual(await coordinator.cancelAll(), ['codex']);
   assert.equal(configured, 0);
-  assert.equal(coordinator.status('codex').phase, 'idle');
 });
 
 test('CLI probes time out and cancel while unrelated event-loop work remains live', async () => {

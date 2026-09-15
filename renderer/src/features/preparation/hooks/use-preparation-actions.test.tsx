@@ -22,9 +22,9 @@ describe('preparation actions', () => {
       wrapper: queryWrapper(queryClient),
     });
 
-    await act(() => hook.result.current.reprocess({ language: 'en' }));
+    await act(() => hook.result.current.reprocess());
 
-    expect(api.reprocess).toHaveBeenCalledWith(source, { language: 'en' }, expect.any(AbortSignal));
+    expect(api.reprocess).toHaveBeenCalledWith(source, expect.any(AbortSignal));
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: preparationQueryKeys.folderStatus(RESEARCH_FOLDER.path),
     });
@@ -32,14 +32,14 @@ describe('preparation actions', () => {
     expect(hook.result.current.error).toBeNull();
   });
 
-  it('keeps the daemon’s own sentence when setup is blocked', async () => {
+  it('keeps the daemon’s own sentence for unsupported formats', async () => {
     const queryClient = createTestQueryClient();
     // The transport seam carries the server's sentence as the failure's cause;
     // only that sentence names the missing setup step.
     const blocked = controlApi({
       reprocess: vi.fn(async () => {
-        throw new PreparationError('blocked', 'Transcription is not set up.', {
-          cause: new Error('Download the transcription model first.'),
+        throw new PreparationError('unsupported', 'This format cannot be prepared.', {
+          cause: new Error('This format cannot be prepared.'),
         });
       }),
     });
@@ -48,7 +48,7 @@ describe('preparation actions', () => {
     });
 
     await act(() => hook.result.current.reprocess());
-    expect(hook.result.current.error).toBe('Download the transcription model first.');
+    expect(hook.result.current.error).toBe('This format cannot be prepared.');
   });
 
   it('explains every other refusal by its kind rather than by its message', async () => {
@@ -56,16 +56,14 @@ describe('preparation actions', () => {
     // Blocked without a server sentence still falls back to the mapped line.
     const blocked = controlApi({
       reprocess: vi.fn(async () => {
-        throw new PreparationError('blocked', 'Download the transcription model first.');
+        throw new PreparationError('unsupported', 'This format cannot be prepared.');
       }),
     });
     const hook = renderHook(() => usePreparationActions(blocked, source), {
       wrapper: queryWrapper(queryClient),
     });
     await act(() => hook.result.current.reprocess());
-    expect(hook.result.current.error).toBe(
-      'Transcription setup is required before this file can be prepared.',
-    );
+    expect(hook.result.current.error).toBe('This file format cannot be prepared.');
 
     // A server sentence on any other kind is a cause, not a recovery.
     const failing = controlApi({
@@ -99,7 +97,7 @@ describe('preparation actions', () => {
         throw new PreparationError('unsupported', 'only DOCX and media');
       }),
       reprocess: vi.fn(
-        (_source, _options, signal) =>
+        (_source, signal) =>
           new Promise<'conversion'>(() => {
             inFlight.signal = signal;
           }),

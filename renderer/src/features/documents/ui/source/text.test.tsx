@@ -11,6 +11,7 @@ import { createDocumentQueryScope } from '@/features/documents/application/queri
 import { sourceApi, textSource } from '@/test/fakes/documents';
 import { createTestQueryClient, withQueryClient } from '@/test/query';
 
+import { documentStatusRenderer } from './status';
 import { TextSurface } from './text';
 
 const runtimes: ReturnType<typeof createDocumentRuntime>[] = [];
@@ -49,9 +50,10 @@ function renderSurface(
         error === undefined ? (
           <p data-testid="status">Loading {name}</p>
         ) : (
-          <button data-testid="status-retry" onClick={retry} type="button">
-            Reload {name}
-          </button>
+          documentStatusRenderer<'unsupported-encoding' | 'missing'>(
+            'DocumentSourceError',
+            DOCUMENT_SOURCE_MESSAGES,
+          )({ error, name, retry })
         )
       }
     >

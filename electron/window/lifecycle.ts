@@ -19,7 +19,7 @@ interface LifecycleWebContents {
   id: number;
   isDestroyed(): boolean;
   send(channel: string, payload: unknown): void;
-  on(event: 'did-finish-load', listener: () => void): void;
+  on(event: 'did-finish-load' | 'render-process-gone', listener: () => void): void;
 }
 
 type LifecycleWindow = BrowserWindow & { webContents: LifecycleWebContents };
@@ -126,6 +126,12 @@ export function registerWindowLifecycle(
       window.webContents.on('did-finish-load', () => {
         loaded.add(window);
         pushFullScreen();
+      });
+      window.webContents.on('render-process-gone', () => {
+        // A gone renderer has already lost its buffers and cannot acknowledge
+        // a save barrier. A live but unresponsive renderer still must do so.
+        loaded.delete(window);
+        settle(webContentsId, true);
       });
       window.on('close', (event) => {
         if (approvedClose.has(window) || !loaded.has(window)) return;

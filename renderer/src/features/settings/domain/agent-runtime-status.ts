@@ -30,7 +30,6 @@ export interface AgentRuntimeStatus {
 
 function ownershipLabel(ownership: AgentRuntime['ownership']): string {
   if (ownership === 'bundled') return 'Included with StashBase';
-  if (ownership === 'managed') return 'Managed by StashBase';
   return 'Installed on your system';
 }
 

@@ -1,3 +1,5 @@
+import { mountFileOperationReceipts } from './file-operations.ts';
+import { withWindowContext } from '../http.ts';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -84,5 +86,47 @@ test("entry mutations honor an explicit folder that names the active folder and 
     await removeRecentAsync(root);
     fs.rmSync(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
     fs.rmSync(other, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
+  }
+});
+
+
+test('a lost rename response can be confirmed without repeating its filesystem write', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-file-receipt-'));
+  fs.writeFileSync(path.join(root, 'source.bin'), 'original bytes');
+  await openProjectFolder(root);
+  const app = express();
+  app.use(express.json());
+  app.use(withWindowContext);
+  mountFileOperationReceipts(app);
+  app.use((req, res, next) => {
+    if (req.headers['x-lose-response']) {
+      const json = res.json.bind(res);
+      res.json = body => { res.destroy(); return json(body); };
+    }
+    next();
+  });
+  mountFiles(app);
+  const server = await listen(app);
+  const query = `?folder=${encodeURIComponent(root)}`;
+  const operation = `${server.origin}/api/files/source.bin${query}&operationId=rename-once`;
+  try {
+    await assert.rejects(fetch(operation, { method: 'PATCH', headers: { 'content-type': 'application/json', 'x-lose-response': 'true' }, body: JSON.stringify({ new_name: 'target.bin' }) }));
+    assert.equal(fs.existsSync(path.join(root, 'source.bin')), false);
+    assert.equal(fs.readFileSync(path.join(root, 'target.bin'), 'utf8'), 'original bytes');
+    const receipt = await fetch(`${server.origin}/api/file-operations/rename-once${query}`);
+    assert.equal(receipt.status, 200);
+    assert.equal(((await receipt.json()) as { body: { name: string } }).body.name, 'target.bin');
+    // A replay cannot rename a newly created source at the original path.
+    fs.writeFileSync(path.join(root, 'source.bin'), 'newer file');
+    const replay = await fetch(operation, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ new_name: 'target.bin' }) });
+    assert.equal(replay.status, 200);
+    assert.equal(fs.readFileSync(path.join(root, 'source.bin'), 'utf8'), 'newer file');
+    const foreign = await fetch(`${server.origin}/api/file-operations/rename-once`, { headers: { 'x-stashbase-window-id': 'another-window' } });
+    assert.equal(foreign.status, 404);
+    const changed = await fetch(operation, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ new_name: 'different.bin' }) });
+    assert.equal(changed.status, 409);
+  } finally {
+    await server.close(); clearCurrentFolder(); await removeRecentAsync(root);
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

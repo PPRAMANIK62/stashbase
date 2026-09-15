@@ -9,6 +9,8 @@
  * Settings → MCP exposes read-only.
  */
 import fs from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
+import { parseTOML, getStaticTOMLValue } from 'toml-eslint-parser';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -114,8 +116,7 @@ function writeMcpWrapper(homeDir = os.homedir()): string {
         '',
       ].join('\n');
   fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(wrapper, content, { mode: 0o755 });
-  try { fs.chmodSync(wrapper, 0o755); } catch { /* best-effort on Windows/special filesystems */ }
+  writeTextAtomic(wrapper, content, 0o755);
   return wrapper;
 }
 
@@ -150,28 +151,22 @@ function configureJsonMcp(file: string, serverConfig: Record<string, unknown>): 
   writeJson(file, config);
 }
 
-function replaceTomlTable(raw: string, tableName: string, block: string): string {
-  const lines = raw.split(/\r?\n/);
-  const out: string[] = [];
-  const headerRe = /^\s*\[([^\]]+)\]\s*$/;
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(headerRe);
-    if (!match || match[1] !== tableName) {
-      out.push(lines[i]);
-      continue;
-    }
-    i += 1;
-    while (i < lines.length) {
-      const nextMatch = lines[i].match(headerRe);
-      if (nextMatch && nextMatch[1] !== tableName && !nextMatch[1].startsWith(`${tableName}.`)) {
-        break;
-      }
-      i += 1;
-    }
-    i -= 1;
+/** Source ranges preserve comments, quoted keys and multiline strings outside our tables.
+ * Unsupported shapes or invalid TOML fail before publishing any config bytes. */
+function replaceCodexMcpTables(raw: string, block: string): string {
+  const ast = parseTOML(raw);
+  const current = getStaticTOMLValue(ast) as { mcp_servers?: { stashbase?: unknown } };
+  const desired = getStaticTOMLValue(parseTOML(block)) as { mcp_servers: { stashbase: unknown } };
+  if (isDeepStrictEqual(current.mcp_servers?.stashbase, desired.mcp_servers.stashbase)) return raw;
+  let updated = raw;
+  const tables = ast.body[0].body.filter((node) => node.type === 'TOMLTable'
+    && node.resolvedKey[0] === 'mcp_servers' && node.resolvedKey[1] === 'stashbase');
+  for (const table of tables.reverse()) {
+    updated = updated.slice(0, table.range[0]) + updated.slice(table.range[1]);
   }
-  const trimmed = out.join('\n').trimEnd();
-  return `${trimmed ? `${trimmed}\n\n` : ''}${block}\n`;
+  const result = `${updated}\n${block}\n`;
+  parseTOML(result);
+  return result;
 }
 
 function configureCodex(file: string, wrapper: string): void {
@@ -187,7 +182,10 @@ function configureCodex(file: string, wrapper: string): void {
       '',
     ]),
   ].join('\n');
-  writeTextAtomic(file, replaceTomlTable(raw, 'mcp_servers.stashbase', block));
+  let updated: string;
+  try { updated = replaceCodexMcpTables(raw, block); }
+  catch { throw new Error(`Could not safely update StashBase MCP in ${file}; leaving it untouched. Check the TOML configuration.`); }
+  if (updated !== raw) writeTextAtomic(file, updated);
 }
 
 const CODEX_AUTO_APPROVED_STASHBASE_TOOLS = [
@@ -198,12 +196,12 @@ const CODEX_AUTO_APPROVED_STASHBASE_TOOLS = [
   'search_project',
 ];
 
-function writeTextAtomic(file: string, content: string): void {
+function writeTextAtomic(file: string, content: string, mode?: number): void {
   const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive: true });
   const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
   try {
-    fs.writeFileSync(tmp, content, { encoding: 'utf8' });
+    fs.writeFileSync(tmp, content, { encoding: 'utf8', ...(mode === undefined ? {} : { mode }) });
     fs.renameSync(tmp, file);
   } catch (err) {
     try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }

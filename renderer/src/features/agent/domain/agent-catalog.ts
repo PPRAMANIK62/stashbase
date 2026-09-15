@@ -44,6 +44,8 @@ export interface Agent {
   readonly ready: boolean;
   /** Whether the one thing between it and ready is the user signing in. */
   readonly needsSignIn: boolean;
+  readonly preparing?: boolean;
+  readonly setupFailure?: string;
   readonly abilities: AgentAbilities;
   /** The catalog the service remembers for this runtime, so a fresh chat can
    *  name the model and level it will run on before a session exists. Empty
@@ -59,17 +61,17 @@ export interface AgentCatalog {
 
 /** A declared runtime: the id the transport names it by and the label a
  *  reader sees. */
-export interface AgentRuntimeEntry {
+interface AgentRuntimeEntry {
   readonly id: AgentId;
   readonly label: string;
 }
 
-/** The runtime a chat opens on when the catalog names nothing ready. */
-const BUILT_IN: AgentRuntimeEntry = { id: 'stashbase', label: 'OpenQuill' };
+/** The runtime a project uses until the user chooses another Agent. */
+const BUILT_IN: AgentRuntimeEntry = { id: 'stashbase', label: 'Default' };
 
 /** Every runtime this window can hold a conversation with, in the order
  *  chats and history lists present them. */
-export const AGENT_RUNTIMES: readonly AgentRuntimeEntry[] = [
+const AGENT_RUNTIMES: readonly AgentRuntimeEntry[] = [
   { id: 'codex', label: 'Codex' },
   { id: 'claude', label: 'Claude Code' },
   BUILT_IN,
@@ -82,43 +84,6 @@ export const AGENT_ORDER: readonly AgentId[] = AGENT_RUNTIMES.map((entry) => ent
 
 export function agentLabel(id: AgentId): string {
   return AGENT_RUNTIMES.find((entry) => entry.id === id)?.label ?? id;
-}
-
-/** What a runtime that cannot carry a turn is waiting for. `AgentGate` below
- *  answers the same question for the window; this one answers it for one
- *  runtime, which is what a picker row has to say.
- *
- *  `account` is the StashBase account and nothing else: the bundled runtime
- *  installs nothing and holds no model key, so the account is the only thing
- *  that can stand between it and a turn. It is decided from the registry
- *  rather than from `needsSignIn`, which the catalog can only report once a
- *  bootstrap attempt has come back `authentication-required` — too late for a
- *  reader looking at the runtime before anything has been tried, who would
- *  otherwise be offered a setup step the runtime does not have.
- *
- *  `login` is a runtime's own provider sign-in, and `setup` its installation.
- *  The three names are the ones `describeRuntime` already uses in Settings, so
- *  the two surfaces say the same word for the same wait. */
-export type AgentRuntimeGate = 'account' | 'login' | 'setup';
-
-export function runtimeGate(agent: Pick<Agent, 'id' | 'needsSignIn'>): AgentRuntimeGate {
-  if (agent.id === BUILT_IN.id) return 'account';
-  return agent.needsSignIn ? 'login' : 'setup';
-}
-
-/**
- * Which runtime a new chat should open on, given the ones the catalog reports
- * ready. The declared default wins whenever it is ready; otherwise the first
- * ready runtime in registry order. Callers pass whatever they hold — catalog
- * rows or registry entries — so this one rule answers for every "New chat".
- */
-export function preferredAgent<Entry extends { readonly id: AgentId }>(
-  ready: readonly Entry[],
-): Entry | undefined {
-  const byRegistryOrder = AGENT_RUNTIMES.flatMap(
-    (entry) => ready.find((candidate) => candidate.id === entry.id) ?? [],
-  );
-  return byRegistryOrder.find((entry) => entry.id === DEFAULT_AGENT_ID) ?? byRegistryOrder[0];
 }
 
 /**

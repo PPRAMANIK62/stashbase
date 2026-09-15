@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vite-plus/test';
 
-import { CodexIcon, OpenQuillIcon } from './agent-marks';
+import { CodexIcon, StashBaseIcon } from './agent-marks';
 
 describe('Agent brand icons', () => {
   it('gives every inlined mark gradient ids of its own', () => {
@@ -24,13 +24,16 @@ describe('Agent brand icons', () => {
     }
   });
 
-  it("paints the OpenQuill feather at the vendor marks' footprint", () => {
-    const { container } = render(<OpenQuillIcon size={16} />);
-    // The feather is lucide's own svg; the widened box is the whole fix, so
-    // the attribute is the fact under test.
-    const svg = container.querySelector('svg'); // dom-contract: lucide renders one svg root
-    expect(svg?.getAttribute('viewBox')).toBe('-4 -4 32 32');
+  it("paints the StashBase mark at the vendor marks' footprint", () => {
+    const { container } = render(<StashBaseIcon size={16} strokeWidth={1.75} />);
+    // The recentred box and the thickened strokes are the whole fix, and a
+    // caller's icon stroke must not reach the mark, so the attributes the
+    // logo renders are the fact under test.
+    const svg = container.querySelector('svg'); // dom-contract: the logo renders one svg root
+    expect(svg?.getAttribute('viewBox')).toBe('6 -21 512 512');
     expect(svg?.getAttribute('width')).toBe('16');
-    expect(svg?.getAttribute('stroke-width')).toBe('2.5');
+    const paths = container.querySelectorAll('path'); // dom-contract: logo stroke attributes
+    const strokes = [...paths].map((path) => path.getAttribute('stroke-width'));
+    expect(strokes).toEqual(['30', '40']);
   });
 });

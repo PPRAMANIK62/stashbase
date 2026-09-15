@@ -18,7 +18,6 @@ import {
   appearancePort,
   embedderPort,
   mcpAccessPort,
-  transcriptionPort,
 } from './settings';
 import { folderPicker, workspaceAdapters } from './workspace';
 
@@ -27,7 +26,6 @@ import { folderPicker, workspaceAdapters } from './workspace';
  *  empty shelf. */
 export function galleryPort(overrides: Partial<GalleryPort> = {}): GalleryPort {
   return {
-    copy: vi.fn(async () => '/project/Copy'),
     loadIndex: vi.fn(async () => null),
     ...overrides,
   };
@@ -46,7 +44,6 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       instructions: agentInstructionsApi(),
       session: agentSessionPort().port,
     },
-    bugReport: null,
     documents: documentsApi(),
     gallery: galleryPort(),
     project: { api: adapters.project, folderPicker: folderPicker(), lifecycle: adapters.lifecycle },
@@ -73,7 +70,6 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
         load: async () => ({ status: 'not-installed', error: null }),
         retry: async () => ({ status: 'downloading', error: null }),
       },
-      transcriptionApi: transcriptionPort(),
     },
     // Outside Electron, so there is no updater to reach.
     updates: null,

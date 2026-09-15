@@ -65,7 +65,7 @@ describe('describeRuntime', () => {
         preparation: {
           kind: 'failed',
           failure: {
-            note: 'An account is required to use OpenQuill.',
+            note: 'An account is required to use the Default Agent.',
             refusal: 'account-required',
             stage: 'install',
           },
@@ -74,7 +74,7 @@ describe('describeRuntime', () => {
       false,
     );
     expect(display).toEqual({
-      description: 'An account is required to use OpenQuill.',
+      description: 'An account is required to use the Default Agent.',
       stage: 'install',
       action: { kind: 'account', label: 'Sign in' },
     });
@@ -158,7 +158,6 @@ describe('describeRuntime', () => {
 
   it.each([
     ['bundled', 'Included with StashBase'],
-    ['managed', 'Managed by StashBase'],
     ['system', 'Installed on your system'],
   ] as const)(
     'describes a ready %s runtime with the "Ready to chat" prefix and matching ownership text',

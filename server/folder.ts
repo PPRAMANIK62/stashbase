@@ -13,9 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { fileURLToPath } from 'node:url';
 import { logger, errorMessage } from './log.ts';
-import { copyDirectoryDereferenced } from './fs-move.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { projectRegistrySnapshotSchema, type ProjectRegistrySnapshotWire } from '../shared/protocols/http/project.ts';
 import { validateFolderName as validatePortableFolderName } from '../shared/folder-name.ts';
@@ -35,21 +33,6 @@ export type { EmbedderProvider, RecentFolder } from './app-config.ts';
 const log = logger('folder');
 
 export const WINDOW_ID_HEADER = 'x-stashbase-window-id';
-
-/** Folder name of the bundled product introduction, seeded into a brand-new
- *  default folder home and added to project membership without selecting it.
- *  Doubles as the disk directory name and the project label. */
-const BUILTIN_FOLDER_NAME = '👋 Start Here';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-/** Where bundled assets live. Packaged: `extraResources` under
- *  `process.resourcesPath` (injected via `STASHBASE_RESOURCES_PATH`).
- *  Dev: the project root. Mirrors `mfs-daemon.ts`'s resolution. */
-const RESOURCES_ROOT = process.env.STASHBASE_RESOURCES_PATH
-  ? path.resolve(process.env.STASHBASE_RESOURCES_PATH)
-  : process.env.STASHBASE_APP_ROOT
-    ? path.resolve(process.env.STASHBASE_APP_ROOT)
-    : path.resolve(__dirname, '..');
 
 const DEFAULT_WINDOW_ID = 'default';
 const MAX_RETIRED_WINDOW_IDS = 2048;
@@ -231,7 +214,7 @@ function normalizeWindowId(windowId: string | null | undefined): string {
 // ---------- Default folder home ----------
 
 /** Absolute path of the **default folder home** — the fixed directory where
- *  "new folder by name" is created and the built-in manual is seeded. It is
+ *  "new folder by name" is created. It is
  *  NOT a configurable root, an isolation boundary, or an index scope: each
  *  Folder has its own MFS namespace derived from its comparison identity, and
  *  folders are opened in place from anywhere on disk. There is no UI to change it.
@@ -283,7 +266,7 @@ export function fromSourcePath(sourcePath: string): string | null {
   return cs ? filesystemPath.relative(cs, sourcePath) : null;
 }
 
-/** Establish the default folder home and seed the manual on first launch.
+/** Establish the default folder home without adding projects or source files.
  *  Disk availability never changes durable project membership. */
 export function ensureFolderHome(): void {
   const root = getFolderHome();
@@ -291,73 +274,6 @@ export function ensureFolderHome(): void {
     fs.mkdirSync(root, { recursive: true });
   } catch (err) {
     log.warn(`failed to create folder home ${root}: ${errorMessage(err)}`);
-  }
-  seedBuiltinFolder();
-}
-
-/** Absolute path of the bundled built-in folder's source content, or null
- *  if it isn't shipped with this build. */
-function builtinFolderSource(): string | null {
-  const src = path.join(RESOURCES_ROOT, 'assets', 'builtin-project');
-  try {
-    return fs.statSync(src).isDirectory() ? src : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Seed the introduction only into an empty home, without selecting a folder.
- *  The latch preserves explicit removal/deletion. After a config reset, an
- *  existing introduction is registered without overwriting it. Copy failures
- *  leave no partial final folder and remain retryable on the next launch. */
-export function seedBuiltinFolder(): void {
-  const root = getFolderHome();
-  const dest = path.join(root, BUILTIN_FOLDER_NAME);
-  let staging: string | undefined;
-  const latch = () => {
-    const cfg = readConfigStrict();
-    cfg.builtinSeeded = true;
-    writeConfigStrict(cfg);
-  };
-
-  try {
-    const config = readConfigStrict();
-    if (config.builtinSeeded) return;
-    const entries = fs.readdirSync(root);
-    if (entries.length > 0) {
-      // A config reset may forget an existing introduction. Never overwrite it
-      // or register a plain file that happens to have the same name.
-      if (entries.includes(BUILTIN_FOLDER_NAME) && fs.statSync(dest).isDirectory()) {
-        const registered = (config.recentFolders ?? []).some((r) =>
-          storedFolderPathEquals(r.path, dest),
-        );
-        if (!registered) pushRecent(dest);
-      }
-      latch();
-      return;
-    }
-
-    const src = builtinFolderSource();
-    if (!src) return; // Retry when a build supplies the bundle.
-
-    // Stage beside the home so a killed process cannot leave a partial final
-    // folder or make the home nonempty. Publish only by a completed rename.
-    staging = fs.mkdtempSync(`${root}.seed-`);
-    const stagedFolder = path.join(staging, BUILTIN_FOLDER_NAME);
-    copyDirectoryDereferenced(src, stagedFolder);
-    // Content added while copying belongs to the user; leave it untouched.
-    if (fs.readdirSync(root).length > 0) { latch(); return; }
-    fs.renameSync(stagedFolder, dest);
-    pushRecent(dest);
-    latch();
-    log.info(`seeded built-in folder at ${dest}`);
-  } catch (err) {
-    log.warn(`failed to seed built-in folder: ${errorMessage(err)}`);
-  } finally {
-    if (staging) {
-      try { fs.rmSync(staging, { recursive: true, force: true }); }
-      catch (err) { log.warn(`failed to clean up built-in staging: ${errorMessage(err)}`); }
-    }
   }
 }
 
@@ -420,7 +336,7 @@ export async function getProjectRegistrySnapshot(): Promise<ProjectRegistrySnaps
     const snapshot = projectRegistrySnapshotSchema.parse({
       current: current && available ? await activeProjectFolder(current) : null,
       homeDir: os.homedir(),
-      recent: await getRecentFoldersAsync(),
+      recent: readConfigStrict().recentFolders ?? [],
     });
     if (windowFolderVersions.get(windowId) !== version) continue;
     if (current && !available) clearFolderBinding(windowId);
@@ -431,10 +347,11 @@ export async function getProjectRegistrySnapshot(): Promise<ProjectRegistrySnaps
 
 /** Prepare every fallible read and response check before the atomic config
  * write and window binding. No asynchronous work follows that commit. */
-export async function openProjectFolder(absPath: string): Promise<{
+export async function openProjectFolder(absPath: string, signal?: AbortSignal): Promise<{
   changed: boolean;
   snapshot: ProjectRegistrySnapshotWire;
 }> {
+  signal?.throwIfAborted();
   const windowId = currentWindowId();
   assertWindowOpen(windowId);
   const normalized = normalizeOpenFolderPath(absPath);
@@ -445,7 +362,7 @@ export async function openProjectFolder(absPath: string): Promise<{
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const registration = await prepareProjectRegistration(normalized);
       const current = await activeProjectFolder(registration.root);
-      const recent = await availableRecentFolders(registration.config.recentFolders!);
+      const recent = registration.config.recentFolders!;
       if (!recent.some((member) => member.path === current.path)) {
         throw new Error('folder is no longer available');
       }
@@ -458,10 +375,13 @@ export async function openProjectFolder(absPath: string): Promise<{
       const previous = getCurrentFolder();
       const changed = !previous || !await filesystemPath.equalAsync(previous, current.path);
       await assertProjectFolderAvailableAsync(normalized);
+      if (!(await fs.promises.stat(normalized)).isDirectory()) throw new Error('path is not a directory');
+      await fs.promises.access(normalized, fs.constants.R_OK | fs.constants.X_OK);
       assertWindowOpen(windowId);
       if (windowOpenIntents.get(windowId) !== version) throw folderChangedError();
       if (windowFolderVersions.get(windowId) !== previousVersion) continue;
       if (JSON.stringify(readConfigStrict()) !== registration.revision) continue;
+      signal?.throwIfAborted();
       writeConfigStrict(registration.config);
       windowFolderVersions.set(windowId, {});
       currentFolders.set(windowId, current.path);
@@ -561,32 +481,6 @@ async function availableRecentFolders(all: RecentFolder[]): Promise<RecentFolder
   return all.filter((_, index) => checks[index]);
 }
 
-function pushRecent(absPath: string): void {
-  const cfg = readConfigStrict();
-  const list = (cfg.recentFolders ?? []).map(currentRecentFolder);
-  // Deduplicate the reopened folder, retaining even currently unavailable members.
-  const existing = list.find((v) => storedFolderPathEquals(v.path, absPath));
-  const filtered = list.filter((v) => !storedFolderPathEquals(v.path, absPath));
-  // Reopening the same folder through an equivalent filesystem spelling must
-  // not rewrite the durable source spelling: index rows, derived keys, and
-  // daemon replay all continue from the first established root.
-  const retainedPath = existing
-    ? filesystemPath.absolute(existing.path)
-    : filesystemPath.absolute(absPath);
-  filtered.unshift({
-    path: retainedPath,
-    openedAt: new Date().toISOString(),
-    ...(existing?.favorite === true ? { favorite: true } : {}),
-  });
-  // No cap: this is the durable project registry, not a transient recency
-  // log. Each folder keeps its own search namespace. The only way
-  // out is an explicit remove (`removeRecentAsync`). A hard cap would silently
-  // evict the oldest member's searchability — see the project-membership
-  // boundary in code-review/architecture.md#project-scope-and-paths.
-  cfg.recentFolders = filtered;
-  writeConfigStrict(cfg);
-}
-
 async function prepareProjectRegistration(normalized: string) {
   const config = readConfigStrict();
   const revision = JSON.stringify(config);
@@ -663,13 +557,16 @@ export async function removeRecentAsync(absPath: string): Promise<void> {
     const instructionMatches = await Promise.all(
       instructionFolders.map((value) => storedFolderPathEqualsAsync(value?.path, target)),
     );
+    const preferenceMatches = await Promise.all((snapshot.agentPreferences ?? []).map(entry =>
+      storedFolderPathEqualsAsync(entry.scope, target)));
     const current = readConfigStrict();
     if (JSON.stringify(current) !== revision) continue;
     const filtered = list.filter((_, index) => !matches[index]);
     const retainedInstructions = instructionFolders.filter((_, index) => !instructionMatches[index]);
     const instructionsChanged = retainedInstructions.length !== instructionFolders.length;
-    if (filtered.length === list.length && !instructionsChanged) return;
+    if (filtered.length === list.length && !instructionsChanged && !preferenceMatches.some(Boolean)) return;
     current.recentFolders = filtered;
+    if (preferenceMatches.some(Boolean)) current.agentPreferences = current.agentPreferences!.filter((_, index) => !preferenceMatches[index]);
     if (instructionsChanged) {
       if (retainedInstructions.length) current.agentInstructions!.folders = retainedInstructions;
       else delete current.agentInstructions!.folders;

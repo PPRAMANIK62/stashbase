@@ -2,7 +2,15 @@ import crypto from 'node:crypto';
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 
 import {
-  PROJECT_CLAIM_INITIAL_FOLDER_CHANNEL,
+  PROJECT_ENTRY_REQUESTED_CHANNEL,
+  PROJECT_ENTRY_CANCEL_CHANNEL,
+  PROJECT_ENTRY_CANCELLED_CHANNEL,
+  projectEntryStartSchema,
+  projectEntryCancelSchema,
+  PROJECT_ENTRY_PENDING_CHANNEL,
+  PROJECT_ENTRY_FINISHED_CHANNEL,
+  projectEntryFinishedSchema,
+  type ProjectEntryRequest,
   PROJECT_FOLDER_REMOVAL_READY_CHANNEL,
   PROJECT_FOLDER_REMOVAL_REQUESTED_CHANNEL,
   PROJECT_FOLDER_REMOVED_CHANNEL,
@@ -14,8 +22,6 @@ import {
   type ProjectFolderDialogFailure,
   projectFolderPathRequestSchema,
   projectFolderRemovalReadySchema,
-  projectInitialFolderRequestSchema,
-  projectInitialFolderSuccessSchema,
   projectLifecycleResponseSchema,
   projectOpenFolderWindowResponseSchema,
   projectPrepareFolderRemovalResponseSchema,
@@ -34,19 +40,14 @@ interface WindowWebContents {
 type LifecycleWindow = BrowserWindow & { webContents: WindowWebContents };
 
 export interface LifecycleDependencies extends SenderAuthorization {
-  /** The folder this window was created for, and never twice: main hands it
-   *  over and forgets it. A window nobody named a folder for answers null,
-   *  which is an ordinary answer rather than a failure. */
-  claimInitialFolder(window: BrowserWindow): string | null;
   ipcMain: Pick<IpcMain, 'handle'>;
   liveWindows(): LifecycleWindow[];
-  /** Shows a member in a window of its own, or focuses the one already
-   *  showing it. Main owns which of the two happens; null means neither
-   *  could. The sender is passed so main can exclude it from the match — a
-   *  window asking for a folder means a second window, not itself. */
+  /** Main applies the shared window rule and waits for renderer readiness. */
   openFolderWindow(
     window: BrowserWindow,
     folderPath: string,
+    enterFolder: (window: BrowserWindow, path: string) => Promise<void>,
+    signal: AbortSignal,
   ): Promise<'opened' | 'focused' | null>;
   setActiveFolder(window: BrowserWindow, folderPath: string | null): boolean;
   windowsForFolder(folderPath: string): LifecycleWindow[] | Promise<LifecycleWindow[]>;
@@ -127,6 +128,27 @@ export function createFolderRemovalCoordinator({
 
 export function registerLifecycle(dependencies: LifecycleDependencies): void {
   const coordinator = createFolderRemovalCoordinator();
+  const entries = createProjectEntryCoordinator();
+  const requests = new Map<string, AbortController>();
+  dependencies.ipcMain.handle(PROJECT_ENTRY_CANCEL_CHANNEL, (event, payload) => {
+    if (!authorizeSender(event, dependencies, PROJECT_LIFECYCLE_CAPABILITY)) return failure('unauthorized', 'This window cannot cancel project entry.');
+    const parsed = projectEntryCancelSchema.safeParse(payload);
+    if (!parsed.success) return failure('invalid-response', 'Invalid project entry cancellation.');
+    requests.get(`${event.sender.id}:${parsed.data.requestId}`)?.abort();
+    return { ok: true };
+  });
+  dependencies.ipcMain.handle(PROJECT_ENTRY_PENDING_CHANNEL, (event) => {
+    if (!authorizeSender(event, dependencies, PROJECT_LIFECYCLE_CAPABILITY)) return null;
+    return entries.pending(event.sender.id);
+  });
+  dependencies.ipcMain.handle(PROJECT_ENTRY_FINISHED_CHANNEL, (event, payload) => {
+    if (!authorizeSender(event, dependencies, PROJECT_LIFECYCLE_CAPABILITY)) {
+      return failure('unauthorized', 'This window cannot acknowledge project entry.');
+    }
+    return entries.finish(event.sender.id, payload)
+      ? { ok: true }
+      : failure('invalid-response', 'That project entry is no longer pending.');
+  });
 
   dependencies.ipcMain.handle(PROJECT_SET_ACTIVE_FOLDER_CHANNEL, (event, rawRequest) => {
     const senderWindow = authorizeSender(event, dependencies, PROJECT_LIFECYCLE_CAPABILITY);
@@ -148,30 +170,30 @@ export function registerLifecycle(dependencies: LifecycleDependencies): void {
     if (!senderWindow) {
       return failure('unauthorized', 'This window cannot open another window.');
     }
-    const request = projectFolderPathRequestSchema.safeParse(rawRequest);
+    const request = projectEntryStartSchema.safeParse(rawRequest);
     if (!request.success) {
       return failure('invalid-response', 'The folder window request was invalid.');
     }
     // The path is a folder path the schema accepted, not a membership claim.
     // Main decides whether it can be shown, exactly as it does for every other
     // way a folder reaches a window.
-    const action = await dependencies.openFolderWindow(senderWindow, request.data.folderPath);
-    if (!action) return failure('unavailable', 'That folder could not be opened in a window.');
-    return projectOpenFolderWindowResponseSchema.parse({ action, ok: true });
-  });
-
-  dependencies.ipcMain.handle(PROJECT_CLAIM_INITIAL_FOLDER_CHANNEL, (event, rawRequest) => {
-    const senderWindow = authorizeSender(event, dependencies, PROJECT_LIFECYCLE_CAPABILITY);
-    if (!senderWindow) {
-      return failure('unauthorized', 'This window cannot claim an initial folder.');
+    const controller = new AbortController();
+    const key = `${event.sender.id}:${request.data.requestId}`;
+    requests.set(key, controller);
+    const closed = () => controller.abort();
+    senderWindow.once?.('closed', closed);
+    try {
+      const action = await dependencies.openFolderWindow(senderWindow, request.data.folderPath,
+        (window, path) => entries.request(window, path, controller.signal), controller.signal);
+      if (!action) return failure('unavailable', 'That project could not be opened.');
+      return projectOpenFolderWindowResponseSchema.parse({ action, ok: true });
+    } catch (error) {
+      return failure('unavailable', error instanceof Error
+        ? error.message.slice(0, 240) : 'That project could not be opened.');
+    } finally {
+      requests.delete(key);
+      senderWindow.removeListener?.('closed', closed);
     }
-    if (!projectInitialFolderRequestSchema.safeParse(rawRequest).success) {
-      return failure('invalid-response', 'The initial folder request was invalid.');
-    }
-    return projectInitialFolderSuccessSchema.parse({
-      folderPath: dependencies.claimInitialFolder(senderWindow),
-      ok: true,
-    });
   });
 
   dependencies.ipcMain.handle(PROJECT_PREPARE_FOLDER_REMOVAL_CHANNEL, async (event, rawRequest) => {
@@ -223,4 +245,52 @@ export function registerLifecycle(dependencies: LifecycleDependencies): void {
     }
     return projectLifecycleResponseSchema.parse({ ok: true });
   });
+}
+
+/** A request remains claimable until acknowledged: a newly created renderer
+ * can subscribe after the initial event. Only its authorized window can finish. */
+export function createProjectEntryCoordinator(timeoutMs = 30_000) {
+  const pending = new Map<number, {
+    request: ProjectEntryRequest;
+    settle(error: string | null): void;
+  }>();
+  return {
+    pending: (id: number) => pending.get(id)?.request ?? null,
+    request(window: BrowserWindow, folderPath: string, signal?: AbortSignal): Promise<void> {
+      if (signal?.aborted) return Promise.reject(new Error('Opening was cancelled.'));
+      if (window.isDestroyed()) return Promise.reject(new Error('The project window closed.'));
+      const id = window.webContents.id;
+      if (pending.has(id)) return Promise.reject(new Error('A project is already opening.'));
+      return new Promise((resolve, reject) => {
+        const closed = () => settle('The project window closed before it was ready.');
+        const aborted = () => settle('Opening was cancelled.');
+        const timer = setTimeout(() => settle('The project did not become ready. Try opening it again.'), timeoutMs);
+        const settle = (error: string | null) => {
+          pending.delete(id);
+          clearTimeout(timer);
+          window.removeListener('closed', closed);
+          signal?.removeEventListener('abort', aborted);
+          if (error && !window.isDestroyed()) {
+            try { window.webContents.send(PROJECT_ENTRY_CANCELLED_CHANNEL, { requestId: request.requestId }); }
+            catch { /* A destroyed renderer cannot acknowledge cancellation. */ }
+          }
+          if (error) reject(new Error(error)); else resolve();
+        };
+        const request = { folderPath, requestId: crypto.randomUUID() };
+        pending.set(id, { request, settle });
+        window.once('closed', closed);
+        signal?.addEventListener('abort', aborted, { once: true });
+        try { window.webContents.send(PROJECT_ENTRY_REQUESTED_CHANNEL, request); }
+        catch { settle('The project window could not receive the entry request.'); }
+      });
+    },
+    finish(id: number, payload: unknown) {
+      const parsed = projectEntryFinishedSchema.safeParse(payload);
+      const entry = pending.get(id);
+      if (!parsed.success || !entry || entry.request.requestId !== parsed.data.requestId
+        || entry.request.folderPath !== parsed.data.folderPath) return false;
+      entry.settle(parsed.data.failure);
+      return true;
+    },
+  };
 }

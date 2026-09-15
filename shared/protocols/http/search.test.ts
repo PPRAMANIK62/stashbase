@@ -11,7 +11,6 @@ test('exact search accepts folder-qualified source evidence', () => {
           folder: '/project/research',
           matches: [
             {
-              audioTimestampMs: 12_500,
               line: 7,
               ranges: [[4, 10]],
               text: 'The exact answer is here.',

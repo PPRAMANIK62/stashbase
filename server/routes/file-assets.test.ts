@@ -77,3 +77,13 @@ test('DOCX fallback serves only current, complete, nonempty prepared HTML', asyn
   assert.equal(ready.status, 200);
   assert.match(await ready.text(), /current preview/);
 });
+
+
+test('original media assets retain Range playback without conversion routes', async (t) => {
+  const { root, origin } = await harness(t);
+  fs.writeFileSync(path.join(root, 'movie.mp4'), '0123456789');
+  const response = await fetch(`${origin}/asset/movie.mp4`, { headers: { range: 'bytes=2-4' } });
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get('content-type'), 'video/mp4');
+  assert.equal(await response.text(), '234');
+});

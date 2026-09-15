@@ -7,6 +7,7 @@ import {
   commandDir,
   resolveAgentCli,
 } from './agent-cli.ts';
+import { ownAgentProcess } from './agent-process.ts';
 import { logger } from './log.ts';
 
 const log = logger('codex-app-server');
@@ -27,12 +28,14 @@ export function spawnCodexAppServerProcess(
     throw new Error('Codex CLI not found. Install Codex or set STASHBASE_CODEX_BIN to the codex executable.');
   }
   log.info(`spawning Codex app-server via ${command}`);
-  return spawn(command, ['app-server', '--listen', 'stdio://'], {
+  return ownAgentProcess(spawn(command, ['app-server', '--listen', 'stdio://'], {
     cwd,
+    detached: process.platform !== 'win32',
+    windowsHide: true,
     env: agentCliEnv(extraEnv, [commandDir(command)]),
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: agentCliNeedsShell(command),
-  });
+  }));
 }
 
 export function appVersion(): string {

@@ -191,3 +191,24 @@ test('settings failures stay closed and status recovers after config repair', ()
   assert.equal(service.status().token, value.token);
   assert.equal(service.status().settingsError, undefined);
 });
+
+test('disabling the real Docker listener retires incomplete HTTP requests', async (t) => {
+  const { request } = await import('node:http');
+  const service = createMcpHttpService({
+    webPort: 8090, dockerPort: 0,
+    settings: memorySettings({ token: 'a'.repeat(64), dockerAccess: false, dockerPort: 8091 }),
+  });
+  t.after(() => service.close());
+  await service.start();
+  await service.setDockerAccess(true);
+  const client = request({ hostname: '127.0.0.1', port: service.status().dockerPort,
+    path: '/mcp', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': 100 } });
+  client.on('error', () => {});
+  t.after(() => client.destroy());
+  client.write('{');
+  await new Promise<void>((resolve) => client.once('socket', (socket) => socket.once('connect', resolve)));
+  await service.setDockerAccess(false);
+  assert.equal(service.status().dockerActive, false);
+  await service.setDockerAccess(true);
+  assert.equal(service.status().dockerActive, true);
+});

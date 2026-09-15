@@ -93,14 +93,4 @@ describe('useFolderRefresh', () => {
       expect(isStale(preparationQueryKeys.folderStatus(RESEARCH_FOLDER.path))).toBe(true),
     );
   });
-
-  it('leaves a unbound change alone', () => {
-    const { result, syncFolder } = mount();
-
-    act(() =>
-      result.current.onAgentFilesChanged({ paths: [], scope: { kind: 'unbound' }, sources: [] }),
-    );
-
-    expect(syncFolder).not.toHaveBeenCalled();
-  });
 });

@@ -23,7 +23,7 @@ import { createTestQueryClient, queryWrapper } from '@/test/query';
 
 import { ProjectSearch, type ProjectSearchProps } from './project-search';
 
-const noPreparation: PreparationCounts = { blocked: 0, cancelled: 0, failed: 0, pending: 0 };
+const noPreparation: PreparationCounts = { cancelled: 0, failed: 0, pending: 0 };
 
 const READY_INDEX: SemanticReadiness = { state: 'ready' };
 
@@ -75,9 +75,9 @@ const result: ExactSearchResult = {
 afterEach(cleanup);
 
 interface RenderOptions {
+  onConfigureSearch?: () => void;
   decisions?: IndexDecisionPort;
   onNavigate?: ProjectSearchProps['onNavigate'];
-  onOpenSettings?: ProjectSearchProps['onOpenSettings'];
   preparation?: PreparationCounts;
   readiness?: SemanticReadiness;
   readyCount?: number;
@@ -88,8 +88,6 @@ function renderSearch(api: ExactSearchPort, options: RenderOptions = {}) {
   const queryClient = createTestQueryClient();
   const QueryWrapper = queryWrapper(queryClient);
   const onNavigate = options.onNavigate ?? vi.fn(async (_intent: SearchNavigationIntent) => true);
-  const onOpenSettings =
-    options.onOpenSettings ?? vi.fn((_section: 'ai-index' | 'transcription') => undefined);
   const decisions = options.decisions ?? indexDecisionApi();
   const semantic = options.semanticApi ?? semanticSearchApi();
   const element = (focusRevision: number) => (
@@ -101,7 +99,7 @@ function renderSearch(api: ExactSearchPort, options: RenderOptions = {}) {
         exactApi={api}
         focusRevision={focusRevision}
         onNavigate={onNavigate}
-        onOpenSettings={onOpenSettings}
+        onConfigureSearch={options.onConfigureSearch}
         preparation={options.preparation ?? noPreparation}
         readiness={options.readiness ?? READY_INDEX}
         readyCount={options.readyCount ?? 5}
@@ -110,7 +108,7 @@ function renderSearch(api: ExactSearchPort, options: RenderOptions = {}) {
     </QueryWrapper>
   );
   const rendered = render(element(0));
-  return { ...rendered, decisions, element, onNavigate, onOpenSettings, queryClient };
+  return { ...rendered, decisions, element, onNavigate, queryClient };
 }
 
 describe('Library Search', () => {
@@ -315,21 +313,6 @@ describe('Library Search', () => {
     expect(screen.getByText('40 files remaining.')).not.toBeNull();
   });
 
-  it('shows the preparation readiness line with a transcription setup action', async () => {
-    const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
-    const rendered = renderSearch(exactApi, {
-      preparation: { blocked: 2, cancelled: 0, failed: 0, pending: 0 },
-      readyCount: 7,
-    });
-
-    expect(screen.getByText('Transcription setup required')).not.toBeNull();
-    expect(
-      screen.getByText('7 files ready to search. 2 media files need transcription setup.'),
-    ).not.toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Open Settings' }));
-    expect(rendered.onOpenSettings).toHaveBeenCalledWith('transcription');
-  });
-
   it('surfaces the index warning with retry and dismiss', async () => {
     const exactApi = exactSearchApi({ search: vi.fn(async () => result) });
     const rendered = renderSearch(exactApi, {
@@ -346,4 +329,21 @@ describe('Library Search', () => {
       ),
     );
   });
+});
+
+it('offers search setup without sending a semantic query or losing the current keyword query', async () => {
+  const onConfigureSearch = vi.fn();
+  const semanticApi = semanticSearchApi();
+  renderSearch(exactSearchApi(), {
+    readiness: { state: 'not-set-up' },
+    onConfigureSearch,
+    semanticApi,
+  });
+  const user = userEvent.setup();
+  const input = screen.getByRole('combobox', { name: 'Search current workspace' });
+  await user.type(input, 'draft');
+  await user.click(screen.getByRole('button', { name: 'Set up search by meaning' }));
+  expect(onConfigureSearch).toHaveBeenCalledOnce();
+  expect(input).toHaveProperty('value', 'draft');
+  expect(semanticApi.search).not.toHaveBeenCalled();
 });

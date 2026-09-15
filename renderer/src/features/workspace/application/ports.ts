@@ -30,7 +30,7 @@ export interface ProjectRegistryPort {
   removeFolder(path: string, signal: AbortSignal): Promise<ProjectRegistrySnapshot>;
 }
 
-export interface FolderPickerOptions {
+interface FolderPickerOptions {
   defaultPath?: string;
 }
 
@@ -49,13 +49,10 @@ export interface WorkspaceSessionPort {
 }
 
 export interface ProjectLifecyclePort {
-  /** The folder the desktop created this window to show, in the desktop's own
-   *  spelling, or null when nobody named one. Idempotent for the life of this
-   *  renderer: the transport answers once and the desktop then forgets, so the
-   *  adapter holds the answer and every later caller reads the same one.
-   *  Signal-free on purpose — a cancelled claim would lose the folder for
-   *  good, since there is no second copy left to ask for. */
-  claimInitialFolder(): Promise<string | null>;
+  enterFolder(folderPath: string, signal: AbortSignal): Promise<void>;
+  onEnterFolder(
+    handler: (folderPath: string, signal: AbortSignal) => Promise<string | null>,
+  ): () => void;
   notifyFolderRemoved(folderPath: string): Promise<void>;
   onFolderRemoved(handler: (folderPath: string) => void): () => void;
   onPrepareFolderRemoval(handler: (folderPath: string) => boolean | Promise<boolean>): () => void;
@@ -78,6 +75,7 @@ export interface WorkspacePreferencesPort {
  *  the caller turns into a sentence, so no transport prose reaches a reader,
  *  and a cancelled request leaves no partial member behind. */
 export interface GitHubImportPort {
+  home(signal: AbortSignal): Promise<string>;
   /** Why the server would refuse this destination name, or null when usable.
    *  Carried here rather than re-derived in the feature so inline feedback is
    *  the same rule the request will meet. */
@@ -119,17 +117,19 @@ interface UploadFile {
   readonly name: string;
 }
 
+export interface UploadResult {
+  readonly paths: readonly string[];
+  /** Request indices of refused files; successful files must not be retried. */
+  readonly refused: readonly number[];
+}
+
 export interface UploadPort {
-  /**
-   * Imports files into `folderPath` and answers the folder-relative paths the
-   * server settled on, in request order, after any collision renaming.
-   *
-   * A file the server refused raises on the files ladder rather than arriving
-   * as a field inside a resolved result: a refusal every caller has to remember
-   * to look for is one most callers do not, and this one used to reach the
-   * reader as a sentence the server wrote.
-   */
-  upload(folderPath: string, files: readonly UploadFile[], signal: AbortSignal): Promise<string[]>;
+  /** Imports into one captured project, preserving successful partial results. */
+  upload(
+    folderPath: string,
+    files: readonly UploadFile[],
+    signal: AbortSignal,
+  ): Promise<UploadResult>;
 }
 
 export type ProjectError = FeatureError;
@@ -143,9 +143,22 @@ export const WorkspaceSessionError = featureErrorClass('WorkspaceSessionError');
 
 /** Files failures add the mutation outcomes the listing never meets: a
  *  name already taken, and a request the server refused as invalid. */
-type FilesExtra = 'conflict' | 'rejected';
+type FilesExtra = 'conflict' | 'rejected' | 'outcome-unknown';
 
 export type FilesFailureKind = FeatureFailureKind<FilesExtra>;
 
 export type FilesError = FeatureError<FilesExtra>;
 export const FilesError = featureErrorClass<FilesExtra>('FilesError');
+
+/** Actionable import outcomes, including a receipt that must be resolved
+ * before another copy can be attempted. Messages are authored by the adapter. */
+export class ProjectImportError extends FilesError {
+  constructor(
+    message: string,
+    readonly outcome: 'conflict' | 'retained' | 'unknown' | 'refused',
+    readonly destination: { path: string; directory: boolean } | null = null,
+    readonly retainedPath: string | null = null,
+  ) {
+    super('rejected', message);
+  }
+}

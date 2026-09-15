@@ -51,6 +51,8 @@ function saveFailure({ response, serverMessage }: TransportFailure): DocumentSav
   ) {
     return new DocumentSaveError('scope-lost', SAVE_SCOPE_LOST, cause(serverMessage));
   }
+  if (response.status === 404)
+    return new DocumentSaveError('missing', 'The source file is missing.', cause(serverMessage));
   return null;
 }
 
@@ -64,7 +66,9 @@ function readScopeFailure({
   return failure.success &&
     (failure.data.code === 'FOLDER_UNAVAILABLE' || failure.data.code === 'NO_FOLDER')
     ? new DocumentSourceError('scope-lost', READ_SCOPE_LOST, cause(serverMessage))
-    : null;
+    : response.status === 404
+      ? new DocumentSourceError('missing', 'The source file is missing.', cause(serverMessage))
+      : null;
 }
 
 function saveRequest(
@@ -72,7 +76,7 @@ function saveRequest(
   body: unknown,
   signal: AbortSignal,
   unavailable: string,
-): TransportRequest<'conflict'> {
+): TransportRequest<'conflict' | 'missing'> {
   return {
     body,
     error: DocumentSaveError,

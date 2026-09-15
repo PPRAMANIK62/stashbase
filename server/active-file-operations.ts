@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { errorCode, errorMessage, logger } from './log.ts';
-import { isImageFile, matchNoteStem, NOTE_EXTS } from './format.ts';
+import { errorCode } from './log.ts';
+import { matchNoteStem } from './format.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import {
   renameAbsPreservingCase,
@@ -12,8 +12,6 @@ import {
 } from './file-paths.ts';
 import { MAX_INDEXABLE_BYTES } from './indexable.ts';
 import { decodeDirectTextBytes } from './text-decoding.ts';
-
-const log = logger('files');
 
 /** One synchronous text read is capped to the same admission ceiling as the
  * local index. This bounds HTTP/MCP response memory and main-loop stalls. */
@@ -213,9 +211,6 @@ export function renameOnDisk(oldRel: string, newRel: string): void {
   resolveSafe(newRel, 'creatable', 'target file');
   renameAbsPreservingCase(o, n);
   renameBundleSibling(oldRel, newRel);
-  if (/\.pdf$/i.test(oldRel) || isImageFile(oldRel)) {
-    renameDerivedArtifactsForSource(oldRel, newRel);
-  }
 }
 
 export async function renameOnDiskAsync(oldRel: string, newRel: string): Promise<void> {
@@ -231,9 +226,6 @@ export async function renameOnDiskAsync(oldRel: string, newRel: string): Promise
   await resolveSafeAsync(newRel, 'creatable', 'target file');
   await renameAbsPreservingCaseAsync(o, n);
   await renameBundleSiblingAsync(oldRel, newRel);
-  if (/\.pdf$/i.test(oldRel) || isImageFile(oldRel)) {
-    await renameDerivedArtifactsForSourceAsync(oldRel, newRel);
-  }
 }
 
 /** Resolve a folder-relative path to an absolute filesystem path for
@@ -360,7 +352,6 @@ export function deleteFile(relPath: string): boolean {
   }
   if (removed) {
     deleteBundleSibling(relPath);
-    if (/\.pdf$/i.test(relPath) || isImageFile(relPath)) deleteDerivedArtifactsForSource(relPath);
   }
   return removed;
 }
@@ -376,9 +367,6 @@ export async function deleteFileAsync(relPath: string): Promise<boolean> {
     throw err;
   }
   await deleteBundleSiblingAsync(relPath);
-  if (/\.pdf$/i.test(relPath) || isImageFile(relPath)) {
-    await deleteDerivedArtifactsForSourceAsync(relPath);
-  }
   return true;
 }
 
@@ -456,168 +444,6 @@ async function deleteBundleSiblingAsync(noteRel: string): Promise<void> {
       await fs.promises.rm(abs, { recursive: true, force: true });
     }
   } catch { /* no bundle — fine */ }
-}
-
-export interface DerivedArtifacts {
-  notes: string[];
-  bundles: string[];
-}
-
-/** Legacy sibling-derived artifacts for a PDF/image/DOCX source. Current
- *  derived text lives in AppData (`derived-store.ts`); these names are kept
- *  only to clean up older on-disk artifacts and stale index rows. */
-export function derivedArtifactsForSource(relPath: string): DerivedArtifacts {
-  const base = path.posix.basename(relPath);
-  const parent = path.posix.dirname(relPath);
-  const join = (name: string) => (parent === '.' ? name : `${parent}/${name}`);
-  const notes: string[] = [];
-  const bundles: string[] = [];
-  const addNote = (name: string) => {
-    if (!notes.includes(name)) notes.push(name);
-  };
-  const addBundle = (name: string) => {
-    if (!bundles.includes(name)) bundles.push(name);
-  };
-
-  if (/\.pdf$/i.test(base)) {
-    const stem = base.replace(/\.pdf$/i, '');
-    for (const sourceBase of [base, stem]) {
-      if (!sourceBase) continue;
-      for (const ext of NOTE_EXTS) addNote(join(`.${sourceBase}.${ext}`));
-      addBundle(join(`.${sourceBase}_files`));
-    }
-  } else if (isImageFile(base)) {
-    const stem = base.replace(/\.[^.]+$/, '');
-    for (const sourceBase of [base, stem]) {
-      if (!sourceBase) continue;
-      addNote(join(`.${sourceBase}.md`));
-      addNote(join(`.${sourceBase}.markdown`));
-    }
-  }
-
-  return { notes, bundles };
-}
-
-/** Tear down a source file's legacy app-derived siblings. Best-effort: missing
- *  artifacts are fine, but permission/IO failures are logged so hidden
- *  stale conversion output is diagnosable. */
-function deleteDerivedArtifactsForSource(sourceRel: string): void {
-  const artifacts = derivedArtifactsForSource(sourceRel);
-  for (const rel of artifacts.notes) {
-    let abs: string;
-    try { abs = resolveSafe(rel); } catch { continue; }
-    try { fs.unlinkSync(abs); } catch (err: any) {
-      if (errorCode(err) !== 'ENOENT') {
-        log.warn(`failed to unlink derived ${rel}: ${errorMessage(err)}`);
-      }
-    }
-  }
-  for (const rel of artifacts.bundles) {
-    let abs: string;
-    try { abs = resolveSafe(rel); } catch { continue; }
-    try {
-      if (fs.statSync(abs).isDirectory()) {
-        fs.rmSync(abs, { recursive: true, force: true });
-      }
-    } catch { /* no bundle — fine */ }
-  }
-  deleteDerivedScratchBundlesForSource(sourceRel);
-}
-
-async function deleteDerivedArtifactsForSourceAsync(sourceRel: string): Promise<void> {
-  const artifacts = derivedArtifactsForSource(sourceRel);
-  for (const rel of artifacts.notes) {
-    let abs: string;
-    try { abs = await resolveSafeAsync(rel); } catch { continue; }
-    try { await fs.promises.unlink(abs); } catch (err: any) {
-      if (errorCode(err) !== 'ENOENT') {
-        log.warn(`failed to unlink derived ${rel}: ${errorMessage(err)}`);
-      }
-    }
-  }
-  for (const rel of artifacts.bundles) {
-    let abs: string;
-    try { abs = await resolveSafeAsync(rel); } catch { continue; }
-    try {
-      if ((await fs.promises.stat(abs)).isDirectory()) {
-        await fs.promises.rm(abs, { recursive: true, force: true });
-      }
-    } catch { /* no bundle — fine */ }
-  }
-  await deleteDerivedScratchBundlesForSourceAsync(sourceRel);
-}
-
-function renameDerivedArtifactsForSource(oldSourceRel: string, newSourceRel: string): void {
-  const oldArtifacts = derivedArtifactsForSource(oldSourceRel);
-  const newArtifacts = derivedArtifactsForSource(newSourceRel);
-  renameFirstExistingArtifact(oldArtifacts.notes, newArtifacts.notes[0], 'file');
-  renameFirstExistingArtifact(oldArtifacts.bundles, newArtifacts.bundles[0], 'dir');
-}
-
-async function renameDerivedArtifactsForSourceAsync(oldSourceRel: string, newSourceRel: string): Promise<void> {
-  const oldArtifacts = derivedArtifactsForSource(oldSourceRel);
-  const newArtifacts = derivedArtifactsForSource(newSourceRel);
-  await renameFirstExistingArtifactAsync(oldArtifacts.notes, newArtifacts.notes[0], 'file');
-  await renameFirstExistingArtifactAsync(oldArtifacts.bundles, newArtifacts.bundles[0], 'dir');
-}
-
-function renameFirstExistingArtifact(oldRels: string[], newRel: string | undefined, kind: 'file' | 'dir'): void {
-  let moved = false;
-  for (const oldRel of oldRels) {
-    let oldAbs: string;
-    try { oldAbs = resolveSafe(oldRel); } catch { continue; }
-    if (!fs.existsSync(oldAbs)) continue;
-    if (!moved && newRel) {
-      let newAbs: string;
-      try { newAbs = resolveSafe(newRel); } catch { continue; }
-      try {
-        fs.mkdirSync(path.dirname(newAbs), { recursive: true });
-        fs.rmSync(newAbs, { recursive: kind === 'dir', force: true });
-        fs.renameSync(oldAbs, newAbs);
-        moved = true;
-        continue;
-      } catch (err: unknown) {
-        log.warn(`failed to rename derived ${oldRel} -> ${newRel}: ${errorMessage(err)}`);
-      }
-    }
-    try {
-      fs.rmSync(oldAbs, { recursive: kind === 'dir', force: true });
-    } catch (err: unknown) {
-      log.warn(`failed to remove stale derived ${oldRel}: ${errorMessage(err)}`);
-    }
-  }
-}
-
-async function renameFirstExistingArtifactAsync(
-  oldRels: string[],
-  newRel: string | undefined,
-  kind: 'file' | 'dir',
-): Promise<void> {
-  let moved = false;
-  for (const oldRel of oldRels) {
-    let oldAbs: string;
-    try { oldAbs = await resolveSafeAsync(oldRel); } catch { continue; }
-    const exists = await fs.promises.stat(oldAbs).then(() => true, () => false);
-    if (!exists) continue;
-    if (!moved && newRel) {
-      let newAbs: string;
-      try { newAbs = await resolveSafeAsync(newRel); } catch { continue; }
-      try {
-        await fs.promises.mkdir(path.dirname(newAbs), { recursive: true });
-        await fs.promises.rm(newAbs, { recursive: kind === 'dir', force: true });
-        await fs.promises.rename(oldAbs, newAbs);
-        moved = true;
-        continue;
-      } catch (err: unknown) {
-        log.warn(`failed to rename derived ${oldRel} -> ${newRel}: ${errorMessage(err)}`);
-      }
-    }
-    try {
-      await fs.promises.rm(oldAbs, { recursive: kind === 'dir', force: true });
-    } catch (err: unknown) {
-      log.warn(`failed to remove stale derived ${oldRel}: ${errorMessage(err)}`);
-    }
-  }
 }
 
 /** Create a (possibly nested) folder inside the folder. Returns false if
@@ -700,54 +526,4 @@ export async function deleteFolderAsync(relPath: string): Promise<boolean> {
     if (errorCode(err) === 'ENOENT') return false;
     throw err;
   }
-}
-
-function deleteDerivedScratchBundlesForSource(sourceRel: string): void {
-  const base = path.posix.basename(sourceRel);
-  if (!/\.pdf$/i.test(base)) return;
-  const stem = base.replace(/\.pdf$/i, '');
-  const sourceNames = [base, stem].filter(Boolean).map(escapeRegExp).join('|');
-  const scratchRe = new RegExp(
-    `^(?:\\.{1,2}(?:${sourceNames})_files\\.(?:tmp|batch)-.*|\\.${escapeRegExp(base)}\\.md\\.tmp-.*|\\.${escapeRegExp(base)}\\.md\\.batches)$`,
-    'i',
-  );
-  let parentAbs: string;
-  try { parentAbs = path.dirname(resolveSafe(sourceRel)); } catch { return; }
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(parentAbs, { withFileTypes: true }); } catch { return; }
-  for (const ent of entries) {
-    if (!scratchRe.test(ent.name)) continue;
-    try {
-      fs.rmSync(path.join(parentAbs, ent.name), { recursive: ent.isDirectory(), force: true });
-    } catch (err: unknown) {
-      log.warn(`failed to remove stale derived scratch ${ent.name}: ${errorMessage(err)}`);
-    }
-  }
-}
-
-async function deleteDerivedScratchBundlesForSourceAsync(sourceRel: string): Promise<void> {
-  const base = path.posix.basename(sourceRel);
-  if (!/\.pdf$/i.test(base)) return;
-  const stem = base.replace(/\.pdf$/i, '');
-  const sourceNames = [base, stem].filter(Boolean).map(escapeRegExp).join('|');
-  const scratchRe = new RegExp(
-    `^(?:\\.{1,2}(?:${sourceNames})_files\\.(?:tmp|batch)-.*|\\.${escapeRegExp(base)}\\.md\\.tmp-.*|\\.${escapeRegExp(base)}\\.md\\.batches)$`,
-    'i',
-  );
-  let parentAbs: string;
-  try { parentAbs = path.dirname(await resolveSafeAsync(sourceRel)); } catch { return; }
-  let entries: fs.Dirent[];
-  try { entries = await fs.promises.readdir(parentAbs, { withFileTypes: true }); } catch { return; }
-  for (const ent of entries) {
-    if (!scratchRe.test(ent.name)) continue;
-    try {
-      await fs.promises.rm(path.join(parentAbs, ent.name), { recursive: ent.isDirectory(), force: true });
-    } catch (err: unknown) {
-      log.warn(`failed to remove stale derived scratch ${ent.name}: ${errorMessage(err)}`);
-    }
-  }
-}
-
-function escapeRegExp(raw: string): string {
-  return raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

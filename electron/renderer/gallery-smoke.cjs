@@ -47,12 +47,12 @@ async function checkGalleryImages(window, serverOrigin) {
     const cover = card.querySelector('img');
     await cover.decode();
     card.click();
-    const hero = await waitFor(() => document.querySelector('img[alt="Gallery image smoke screenshot 1"]'));
+    let hero = await waitFor(() => document.querySelector('img[alt="Gallery image smoke screenshot 1"]'));
     const dialog = hero.closest('[role="dialog"]');
     const pictures = [...dialog.querySelectorAll('img')];
     await Promise.all(pictures.map(image => image.decode()));
     dialog.querySelector('button[aria-label="Screenshot 2"]').click();
-    await waitFor(() => hero.alt === 'Gallery image smoke screenshot 2');
+    hero = await waitFor(() => document.querySelector('img[alt="Gallery image smoke screenshot 2"]'));
     await hero.decode();
     return { count: pictures.length, urls: [cover.src, ...pictures.map(image => image.src)],
       widths: [cover.naturalWidth, ...pictures.map(image => image.naturalWidth)], hero: hero.src };

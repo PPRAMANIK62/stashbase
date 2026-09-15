@@ -1,8 +1,12 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
-import type { CodeEditorSession } from './editor';
+import type { CodeEditorSession, CodeEditorSnapshot } from './editor';
+
+const snapshots = new WeakMap<object, CodeEditorSnapshot>();
 
 export interface CodeEditorBinding {
+  owner?: object;
+  label?: string;
   /** The document text the session must show; later values are patched in. */
   content: string;
   /**
@@ -38,12 +42,16 @@ export function useCodeEditorSession(binding: CodeEditorBinding): {
     const host = hostRef.current;
     if (!host) return;
     const session = latestRef.current.create(host, (value) => latestRef.current.onChange(value));
+    const owner = binding.owner;
+    const snapshot = owner && snapshots.get(owner);
+    if (snapshot) session.restore(snapshot);
     sessionRef.current = session;
     return () => {
       if (sessionRef.current === session) sessionRef.current = null;
+      if (owner) snapshots.set(owner, session.snapshot());
       session.destroy();
     };
-  }, [binding.tabId]);
+  }, [binding.label, binding.owner, binding.tabId]);
 
   useEffect(() => {
     sessionRef.current?.setReadOnly(binding.readOnly);

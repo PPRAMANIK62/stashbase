@@ -22,18 +22,10 @@ export interface GalleryEntry {
   readonly starterPrompts: readonly string[];
   /** Published for the site; the app renders no surface for it. */
   readonly files: readonly string[] | null;
-  /** The request the wiki was built with, shown as its Agent Instructions. */
+  /** The generating request, shown as Prompt; not ongoing Agent instructions. */
   readonly wikiPrompt: string | null;
   /** Already pointed at the daemon's proxy; the renderer may not reach the CDN. */
   readonly screenshots: readonly string[] | null;
-}
-
-/** What Make a copy asks for. The gallery names the entry and its repository
- *  and nothing else: where a copy lands and what it may be called are the
- *  project registry's rules, not the shop's. */
-export interface GalleryCopyRequest {
-  readonly name: string;
-  readonly repo: string;
 }
 
 /**
@@ -55,25 +47,4 @@ export function enrichedFromSnapshot(
     screenshots: entry.screenshots ?? bundled.screenshots,
     wikiPrompt: entry.wikiPrompt ?? bundled.wikiPrompt,
   };
-}
-
-/**
- * Which folder name a copy takes.
- *
- * The entry's own name wins whenever the project registry's rule accepts it, because
- * that is the name the reader just read on the card. The repository's derived
- * segment is the fallback, and the entry name is the last resort so a caller
- * always has something to send and the server owns the refusal.
- *
- * `nameIssue` is null for a usable name. That inversion is why this decision
- * lives here with a test rather than inline at the composition root, where it
- * shipped backwards: a valid name was discarded and an invalid one would have
- * named a folder after its own validation message.
- */
-export function copyFolderName(
-  request: GalleryCopyRequest,
-  { derivedName, nameIssue }: { derivedName: string | null; nameIssue: string | null },
-): string {
-  if (nameIssue === null) return request.name;
-  return derivedName ?? request.name;
 }

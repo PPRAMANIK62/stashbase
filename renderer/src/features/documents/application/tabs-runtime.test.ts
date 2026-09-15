@@ -231,10 +231,10 @@ describe('Document tabs runtime', () => {
     });
     makeDirty(runtime, 'one');
 
-    await expect(runtime.activate('two')).resolves.toBe(false);
+    await expect(runtime.activate('two')).resolves.toBe(true);
     await expect(runtime.close('one')).resolves.toBe(false);
 
-    expect(runtime.store.getState().activeTabId).toBe('one');
+    expect(runtime.store.getState().activeTabId).toBe('two');
     expect(runtime.getDocument('one')?.store.getState().editor?.value).toBe('draft');
     expect(runtime.getDocument('one')?.signal.aborted).toBe(false);
   });
@@ -298,38 +298,23 @@ describe('Document tabs runtime', () => {
     expect(completion).toHaveBeenCalledOnce();
   });
 
-  it('opens nothing when the save an open awaited outlives the collection', async () => {
-    const finishSaves: Array<(value: DocumentTextSaveResult) => void> = [];
-    const createId = vi.fn(idFactory());
-    const api = sourceApi({
-      save: vi.fn(
-        () =>
-          new Promise<DocumentTextSaveResult>((resolve) => {
-            finishSaves.push(resolve);
-          }),
-      ),
-    });
+  it('does not replace a usable preview or add history when opening fails', async () => {
+    const prepare = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce('File is missing.');
     const runtime = createDocumentTabsRuntime({
-      api,
-      createId,
+      api: createApi(),
+      prepare,
+      createId: idFactory(),
       createQueries: () => documentQueryScope(),
       folderPath: '/project/notes',
       generation: 1,
     });
-    await runtime.open({ folderPath: '/project/notes', path: 'one.md' });
-    makeDirty(runtime, 'tab-1');
-
-    const opening = runtime.open({
-      folderPath: '/project/notes',
-      path: 'two.md',
-    });
-    await vi.waitFor(() => expect(api.save).toHaveBeenCalledOnce());
+    const first = await runtime.open(notes('one.md'), { preview: true });
+    expect(await runtime.open(notes('missing.md'), { preview: true })).toBeNull();
+    expect(runtime.getDocument('tab-1')).toBe(first);
+    expect(runtime.activeSource()?.path).toBe('one.md');
+    expect(runtime.history.store.getState().entries).toHaveLength(1);
+    expect(runtime.store.getState().openFailure?.source.path).toBe('missing.md');
     runtime.dispose();
-    finishSaves.shift()?.(textSource({ content: 'draft', version: 'v2' }));
-
-    await expect(opening).resolves.toBeNull();
-    expect(createId).toHaveBeenCalledOnce();
-    expect(runtime.store.getState().tabs).toMatchObject([{ id: 'tab-1' }]);
   });
 });
 

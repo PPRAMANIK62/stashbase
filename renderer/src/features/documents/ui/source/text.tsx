@@ -9,10 +9,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { DocumentRuntime } from '@/features/documents/application/document-runtime';
-import {
-  documentFailure,
-  DOCUMENT_SOURCE_MESSAGES,
-} from '@/features/documents/application/failure-messages';
+import { DOCUMENT_SOURCE_MESSAGES } from '@/features/documents/application/failure-messages';
 import type { DocumentSourcePort } from '@/features/documents/application/ports';
 import {
   documentSaveMessage,
@@ -24,7 +21,7 @@ import { useDocumentSource } from '@/features/documents/hooks/use-document-sourc
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
-import { DocumentFailure, DocumentPending } from './status';
+import { DocumentPending } from './status';
 import type { DocumentViewerStatus } from './viewer';
 
 const DocumentConflict = lazy(async () => {
@@ -106,20 +103,21 @@ export function TextSurface({
   sourceApi,
   status,
 }: TextSurfaceProps) {
-  const { access, change, editor, markdownMode, resolveConflict, retrySave, source } =
-    useDocumentSource(runtime, sourceApi, active);
+  const {
+    access,
+    change,
+    editor,
+    finishMerge,
+    markdownMode,
+    mutationPending,
+    resolveConflict,
+    retrySave,
+    source,
+  } = useDocumentSource(runtime, sourceApi, active);
 
-  if (source.isPending) return <>{status({ name })}</>;
-  if (!source.data) {
-    return (
-      <DocumentFailure
-        message={
-          documentFailure(source.error, 'DocumentSourceError', DOCUMENT_SOURCE_MESSAGES).message
-        }
-        name={name}
-        retry={() => void source.refetch()}
-      />
-    );
+  if (source.isPending && !editor) return <>{status({ name })}</>;
+  if (!source.data && !editor) {
+    return <>{status({ error: source.error, name, retry: () => void source.refetch() })}</>;
   }
   if (access === 'editable' && !editor) return <>{status({ name })}</>;
 
@@ -147,9 +145,35 @@ export function TextSurface({
       )}
       {source.isError && (
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
-          <span className="text-destructive">Refresh failed. Showing the last loaded source.</span>
+          <span className="text-destructive" role="status">
+            {source.error instanceof Error &&
+            'kind' in source.error &&
+            source.error.kind === 'missing'
+              ? DOCUMENT_SOURCE_MESSAGES.missing
+              : 'Refresh failed. Showing the last loaded source.'}
+          </span>
           <Button onClick={() => void source.refetch()} size="compact" variant="tertiary">
             Retry
+          </Button>
+        </div>
+      )}
+      {mutationPending && (
+        <div className="border-b border-border px-4 py-2 text-caption" role="status">
+          Waiting for the file operation to finish. If it failed, retry it in Files.
+        </div>
+      )}
+      {editor?.save.kind === 'merging' && (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
+          <span role="status">
+            {editor.save.message ?? 'Merge in progress. Autosave is paused until you finish.'}
+          </span>
+          <Button
+            disabled={editor.save.finishing}
+            loading={editor.save.finishing}
+            onClick={() => void finishMerge()}
+            size="compact"
+          >
+            Finish merge
           </Button>
         </div>
       )}
@@ -160,8 +184,12 @@ export function TextSurface({
             editor,
             markdownMode,
             onChange: change,
-            readOnly: access === 'read-only' || editor === null,
-            value: editor?.value ?? source.data.content,
+            readOnly:
+              mutationPending ||
+              access === 'read-only' ||
+              editor === null ||
+              (editor.save.kind === 'merging' && editor.save.finishing),
+            value: editor?.value ?? source.data?.content ?? '',
           })}
         </Suspense>
         {access === 'editable' && editor && (

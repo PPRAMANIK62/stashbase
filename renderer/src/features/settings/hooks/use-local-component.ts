@@ -10,6 +10,7 @@ import { useSettingsCommand } from '@/features/settings/hooks/use-settings-comma
 import type { FailureView } from '@/shared/domain/feature-error';
 
 export interface LocalComponentViewModel {
+  readonly status: 'not-installed' | 'downloading' | 'installed' | 'failed' | null;
   readonly description: string;
   readonly busy: boolean;
   readonly canRetry: boolean;
@@ -47,6 +48,7 @@ export function useLocalComponent(
   const busy = retry.busy || query.data?.status === 'downloading';
   return {
     busy,
+    status: query.data?.status ?? null,
     canRetry: query.data?.status === 'failed',
     description: query.data ? localComponentDescription(query.data) : 'Loading component status…',
     failure: retry.failure ?? (query.isError ? settingsFailure(query.error) : null),

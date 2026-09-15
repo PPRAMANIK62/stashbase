@@ -13,7 +13,6 @@ import {
   documentQueryScope,
   docxPreviewApi,
   genericPreviewApi,
-  mediaApi,
   sourceApi,
   textSource,
 } from '@/test/fakes/documents';
@@ -61,7 +60,6 @@ const documentWorkspaceProps = {
   assetApi: assetApi({ load: vi.fn(pending()) }),
   docxPreviewApi: docxPreviewApi({ load: vi.fn(pending()) }),
   genericPreviewApi: genericPreviewApi({ load: vi.fn(pending()) }),
-  mediaApi: mediaApi({ loadTranscript: vi.fn(pending()) }),
   onReveal: vi.fn(async () => undefined),
   revealLabel: 'Show in file manager',
 };
@@ -117,8 +115,8 @@ describe('document tabs', () => {
     const { rerender } = render(<DocumentOutline runtime={runtime} />);
 
     expect(screen.getByLabelText('Document outline section')).not.toBeNull();
-    expect(screen.getByLabelText('other.md outline, unavailable')).not.toBeNull();
-    expect(screen.getByText('No outline available for this document')).not.toBeNull();
+    expect(screen.getByLabelText('other.md outline, loading')).not.toBeNull();
+    expect(screen.getByText('Loading outline…')).not.toBeNull();
 
     const owner = Symbol('empty-outline-test');
     runtime.navigation.claimOutline('tab-2', owner);
@@ -249,13 +247,13 @@ describe('document tabs', () => {
     expect(within(modes).queryByText('Writer')).toBeNull();
     expect(within(modes).queryByText('Reading')).toBeNull();
 
-    await userEvent.setup().click(within(modes).getByRole('tab', { name: 'Reading' }));
+    await userEvent.setup().click(within(modes).getByRole('tab', { name: 'Read' }));
 
     expect(runtime.getDocument('tab-2')?.store.getState().markdownMode).toBe('reading');
     await waitFor(() => expect(editor?.getAttribute('contenteditable')).toBe('false'));
     expect(document.querySelector('.ProseMirror')).toBe(editor); // dom-contract: ProseMirror internals
 
-    await userEvent.setup().click(within(modes).getByRole('tab', { name: 'Writer' }));
+    await userEvent.setup().click(within(modes).getByRole('tab', { name: 'Edit' }));
 
     expect(runtime.getDocument('tab-2')?.store.getState().markdownMode).toBe('writer');
     await waitFor(() => expect(editor?.getAttribute('contenteditable')).toBe('true'));

@@ -1,6 +1,11 @@
 import { memo, type ComponentProps } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+
+import 'katex/dist/katex.min.css';
+import type { SourceReference } from '@/shared/domain/source-reference';
 
 function isHttpUrl(href: string): boolean {
   try {
@@ -11,7 +16,17 @@ function isHttpUrl(href: string): boolean {
   }
 }
 
-function markdownComponents(onOpenExternal?: (href: string) => void): Components {
+interface MarkdownLinks {
+  onOpenExternal?: ((href: string) => void) | undefined;
+  onOpenSource?: ((source: SourceReference) => void) | undefined;
+  sourceFor?: ((path: string) => SourceReference | null) | undefined;
+}
+
+function markdownComponents({
+  onOpenExternal,
+  onOpenSource,
+  sourceFor,
+}: MarkdownLinks): Components {
   return {
     a: ({ href = '', children, ...props }: ComponentProps<'a'>) => {
       if (href.startsWith('#'))
@@ -40,9 +55,28 @@ function markdownComponents(onOpenExternal?: (href: string) => void): Components
           </a>
         );
       }
-      // Local file navigation belongs to the source-context and artifact tasks.
-      // Keep an untrusted relative link visibly inert until that authority exists.
-      return <span>{children}</span>;
+      let source: SourceReference | null = null;
+      try {
+        const path = decodeURIComponent(href.split(/[?#]/u)[0] ?? '');
+        if (path && !/^[a-z][a-z0-9+.-]*:/iu.test(path) && !path.startsWith('//'))
+          source = sourceFor?.(path) ?? null;
+      } catch {
+        /* Malformed links stay inert. */
+      }
+      if (!source || !onOpenSource) return <span>{children}</span>;
+      const target = source;
+      return (
+        <a
+          {...props}
+          href={href}
+          onClick={(event) => {
+            event.preventDefault();
+            onOpenSource(target);
+          }}
+        >
+          {children}
+        </a>
+      );
     },
     img: () => null,
   };
@@ -51,9 +85,10 @@ function markdownComponents(onOpenExternal?: (href: string) => void): Components
 export const AgentMarkdown = memo(function AgentMarkdown({
   markdown,
   onOpenExternal,
-}: {
+  onOpenSource,
+  sourceFor,
+}: MarkdownLinks & {
   markdown: string;
-  onOpenExternal?: (href: string) => void;
 }) {
   return (
     <div
@@ -79,7 +114,13 @@ export const AgentMarkdown = memo(function AgentMarkdown({
         '[&_td]:border-b [&_td]:border-border [&_td]:px-3 [&_td]:py-2 [&_td]:align-top',
       ].join(' ')}
     >
-      <ReactMarkdown components={markdownComponents(onOpenExternal)} remarkPlugins={[remarkGfm]}>
+      <ReactMarkdown
+        components={markdownComponents({ onOpenExternal, onOpenSource, sourceFor })}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[
+          [rehypeKatex, { trust: false, strict: 'ignore', maxExpand: 1000, maxSize: 20 }],
+        ]}
+      >
         {markdown}
       </ReactMarkdown>
     </div>

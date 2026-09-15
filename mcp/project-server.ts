@@ -178,8 +178,6 @@ export function createProjectMcpServer(opts: ProjectMcpServerOptions): Server {
     }
 
     if (req.params.name === 'create_project') {
-      // Attribution comes from the transport (env → header), never from the
-      // model-controlled arguments.
       const result = await operations.createProject({
         name: args.name,
         location: args.location,
@@ -258,7 +256,7 @@ const BUILTIN_TOOLS = [
       description:
         'Read a file from StashBase by absolute path ' +
         '(for example `/Users/me/notes/topic/note.md`). Markdown, HTML, JSON, and UTF-8 plain text return source text. ' +
-        'PDFs, DOCX, and media return current prepared text. Images are visible in ' +
+        'PDFs and DOCX return current prepared text. Images are visible in ' +
         '`list_directory` and searchable through OCR evidence, but are not returned as bytes. ' +
         'Generic Workbench-only files are not listed or readable through MCP. ' +
         'Use `offset` and `limit` to read a long file one window at a time instead of ' +
@@ -341,7 +339,7 @@ const BUILTIN_TOOLS = [
     {
       name: 'search_project',
       description:
-        'Search one registered project, including current prepared text for PDFs, DOCX, images, and media. ' +
+        'Search one registered project, including current prepared text for PDFs, DOCX, and images. ' +
         'Omit `mode` to use hybrid retrieval when an embedding key is configured, or grep otherwise. ' +
         'Two explicit modes: `semantic` searches by meaning — hybrid ' +
         '(vector + full-text) retrieval that needs an embedding provider set up in StashBase; `keyword` is ' +
@@ -350,7 +348,7 @@ const BUILTIN_TOOLS = [
         'Explicit `semantic` requires a key and reports configuration or provider errors without silently changing strategy. ' +
         'The response `mode` reports the strategy used in the same wire vocabulary. ' +
         'Every request searches one Folder. A Folder Chat may omit `folder` to use its bound Folder; ' +
-        'An unbound Chat must first open or create a project. External clients must pass an absolute root from `list_projects` as `folder`. ' +
+        'External clients must pass an absolute root from `list_projects` as `folder`. ' +
         'A bound Chat cannot override its project. Only external clients can select another registered project per request. ' +
         'The response `folder` reports the effective root. For finer control, `path_prefix` restricts hits to sources ' +
         'starting with that prefix (e.g. "/Users/me/notes/transcripts/"). Each hit returns the absolute file path, ' +
@@ -385,7 +383,7 @@ const BUILTIN_TOOLS = [
             type: 'array',
             description:
               'Optional source file categories. Omit for all types; combine categories to ' +
-              'search notes, PDFs, images, DOCX files, or audio/video transcripts.',
+              'search notes, PDFs, images, or DOCX files.',
             items: { type: 'string', enum: [...SEARCH_TYPE_CATEGORIES] },
             uniqueItems: true,
           },
@@ -410,16 +408,13 @@ const BUILTIN_TOOLS = [
     {
       name: 'create_project',
       description:
-        'Create a NEW project folder and register it into the StashBase project so it ' +
-        'appears in "Your Folders" immediately. Use this when the user wants a fresh ' +
+        'Create a NEW project folder and register it in StashBase so it ' +
+        'appears in Recent immediately. Use this when the user wants a fresh ' +
         'working context (a new project/topic). `name` is a single folder name (no ' +
         'slashes). By default the project is created under `folder_home`; pass ' +
         '`location` only when the user names an existing directory inside the folder ' +
-        'home or inside a project folder. When the CALLING chat is a unbound ' +
-        'StashBase panel chat, that chat is automatically rebound to the new project ' +
-        '(its scope pill and history move there); a chat already bound to a folder ' +
-        'stays bound — the result reports which happened. Write project files with the ' +
-        'StashBase file tools under the returned absolute `path`.',
+        'home or inside a project folder. Creation does not move the current chat. ' +
+        'Open the created project to start a chat there; external clients can select its returned `path`.',
       inputSchema: {
         type: 'object',
         properties: {

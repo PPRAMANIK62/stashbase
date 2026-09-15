@@ -184,7 +184,7 @@ function normalizeSeparators(path: string): string {
 
 /** The workspace source behind a changed path: a path already relative to
  *  the folder, or an absolute one inside it. A path outside the scoped
- *  folder, or any path in a unbound chat, has no openable source. */
+ *  folder has no openable source. */
 export function changedSource(scope: AgentScope, rawPath: string): SourceReference | null {
   if (scope.kind !== 'folder') return null;
   const folder = normalizeSeparators(scope.path).replace(/\/+$/u, '');

@@ -18,13 +18,19 @@
   position: absolute;
   z-index: 2;
   /* 6px puts the 28px control's centre 20px below the pane top, the same
-     line the Chat pane's header control sits on across the seam. 8px is the
-     titlebar's own inset, so the track's right edge meets the panel toggle's
-     box in the corner above it when the Chat is hidden, and 8px plus the
-     track's 2px plus half a 24px item puts the Reading glyph's centre 22px
-     in, that toggle's glyph column. */
+     line the Chat pane's header control sits on across the seam.
+
+     5px is what puts the Reading glyph in the panel toggle's column. That
+     toggle is a 28px square inside the titlebar's 8px inset, so its glyph
+     centre is 22px from the pane's right edge, and the control here has to
+     reach the same 22px: 5px plus the track's 2px padding plus half of a
+     glyph segment's 30px width. The segment is wider than it is tall on a
+     track — that is what makes the selected pill read as a pill rather than
+     a square — so the track's own edge lands 3px outside the toggle's box.
+     The glyph column is what the eye reads down; the ghost toggle's box is
+     invisible until it is hovered. */
   top: 6px;
-  right: 8px;
+  right: 5px;
 }
 
 .markdown-link-failure {

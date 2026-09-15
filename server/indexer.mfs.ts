@@ -15,7 +15,7 @@
  * the generic text chunker handles them without parsing or serialization.
  */
 import { analyzeHtml } from './html.ts';
-import { detectFormat, isAudioFile } from './format.ts';
+import { detectFormat } from './format.ts';
 import { contentSizeError, shouldIndexSourcePath } from './indexable.ts';
 import { logger } from './log.ts';
 import { getDaemon } from './mfs-daemon.ts';
@@ -46,7 +46,7 @@ export function prepareForIndex(filePath: string, content: string): string {
     // in-memory "targeted optimization" that turns <h1-6> into `#`
     // headings + flattened body. Done here at feed time (not materialized
     // to a hidden .md) because the transform is cheap and the source HTML
-    // already covers viewing. PDF/image/media use durable prepared Markdown;
+    // already covers viewing. PDF/images use durable prepared Markdown;
     // DOCX uses prepared HTML. Their format owners cache these expensive
     // conversions outside the visible project.
     const { plaintext } = analyzeHtml(content);
@@ -80,21 +80,6 @@ interface DaemonGrepFile {
 
 const EXACT_MAX_LINE_CHARS = 240;
 
-function transcriptTimestampPrefix(line: string): string {
-  return line.match(/^\s*-\s*\[\d{1,3}:\d{2}:\d{2}(?:\.\d{1,3})?\]\s*/)?.[0] ?? '';
-}
-
-function audioTimestampForLine(line: string): number | undefined {
-  const match = line.match(/^\s*-\s*\[(\d{1,3}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]/);
-  if (!match) return undefined;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  const seconds = Number(match[3]);
-  if (minutes > 59 || seconds > 59) return undefined;
-  const millis = Number((match[4] ?? '').padEnd(3, '0')) || 0;
-  return ((hours * 3600) + (minutes * 60) + seconds) * 1000 + millis;
-}
-
 function grepSnippet(match: DaemonGrepMatch): DaemonGrepMatch {
   const { text, ranges } = match;
   let windowStart = 0;
@@ -105,10 +90,7 @@ function grepSnippet(match: DaemonGrepMatch): DaemonGrepMatch {
     ));
   }
   const windowEnd = Math.min(text.length, windowStart + EXACT_MAX_LINE_CHARS);
-  const timestamp = windowStart > 0 ? transcriptTimestampPrefix(text) : '';
-  const leading = windowStart > 0
-    ? timestamp && windowStart >= timestamp.length ? `${timestamp.trimEnd()} … ` : '…'
-    : '';
+  const leading = windowStart > 0 ? '…' : '';
   const trailing = windowEnd < text.length ? '…' : '';
   const snippet = leading + text.slice(windowStart, windowEnd) + trailing;
   return {
@@ -128,10 +110,6 @@ function grepSnippet(match: DaemonGrepMatch): DaemonGrepMatch {
 
 export class MfsIndexer implements Indexer {
   private loggedBindings = new Map<string, string>();
-  /** Folders that have successfully received at least one daemon status
-   *  response in this process. */
-  private folderReady = new Set<string>();
-
   /** Cleanup for a Folder that was never bound cannot have an MFS row to
    * remove. Avoid spawning the daemon only to turn that idempotent case into
    * a binding error. */
@@ -154,7 +132,6 @@ export class MfsIndexer implements Indexer {
       dimension: cfg.dimension,
       baseUrl: cfg.baseUrl,
     });
-    this.folderReady.delete(key);
     const bindingKey = `${cfg.provider}:${cfg.model ?? ''}:${cfg.dimension ?? ''}:${cfg.baseUrl ?? ''}`;
     if (this.loggedBindings.get(key) === bindingKey) {
       log.debug(`bound ${source} → ${cfg.provider}`);
@@ -168,7 +145,6 @@ export class MfsIndexer implements Indexer {
     const source = normalizeDaemonPath(folder);
     const key = filesystemPath.identity(source);
     await getDaemon().unbindFolder(source);
-    this.folderReady.delete(key);
     this.loggedBindings.delete(key);
   }
 
@@ -243,6 +219,7 @@ export class MfsIndexer implements Indexer {
         path: normalizeDaemonPath(sourceAbs),
         path_identity: filesystemPath.identity(sourceAbs),
         content,
+        wait_for_index: false,
       },
     );
     log.info(`upsert(converted) ${sourceAbs}: ${res.outcome} (MFS ${fmtMs(res.total_ms)})`);
@@ -331,16 +308,7 @@ export class MfsIndexer implements Indexer {
       files: result.files.map((file) => ({
         path: file.path,
         totalMatches: file.total_matches,
-        matches: file.matches.map((raw) => {
-          const match = grepSnippet(raw);
-          const audioTimestampMs = isAudioFile(file.path)
-            ? audioTimestampForLine(raw.text)
-            : undefined;
-          return {
-            ...match,
-            ...(audioTimestampMs == null ? {} : { audioTimestampMs }),
-          };
-        }),
+        matches: file.matches.map(grepSnippet),
       })),
       totalMatches: result.total_matches,
       truncated: result.truncated,
@@ -362,9 +330,6 @@ export class MfsIndexer implements Indexer {
       orphaned: string[];
       up_to_date: boolean;
     }>('status', args);
-    if (folder) {
-      this.folderReady.add(filesystemPath.identity(folder));
-    }
     return {
       total: res.total,
       indexed: res.indexed,
@@ -373,7 +338,7 @@ export class MfsIndexer implements Indexer {
       orphanedCount: res.orphaned_count,
       orphaned: res.orphaned.map(normalizeDaemonPath),
       upToDate: res.up_to_date,
-      indexReady: !folder ? true : this.folderReady.has(filesystemPath.identity(folder)),
+      indexReady: true,
     };
   }
 
@@ -392,7 +357,6 @@ export class MfsIndexer implements Indexer {
     } finally {
       await daemon.close();
     }
-    this.folderReady.clear();
   }
 
   async close(): Promise<void> {

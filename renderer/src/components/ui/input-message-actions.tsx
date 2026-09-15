@@ -13,6 +13,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import { useIcon } from '@/lib/icon-context';
 import { useShape } from '@/lib/shape-context';
 import { useSize } from '@/lib/size-context';
@@ -42,9 +43,7 @@ export interface InputMessageActionProps {
   rightSlot?: InputMessageSlot;
   /** Accessible label for the send button. */
   sendLabel?: string;
-  /** Fired when the Stop control is pressed (streaming, empty draft). The
-   *  consumer should halt the current response and flip `status` to `"idle"`,
-   *  which immediately dispatches the next queued message. */
+  /** Requests cancellation; the owning conversation decides when work stops. */
   onStop?: () => void;
   /** Lets the consumer send with an empty draft and no files, for a prompt
    *  that carries something else the composer cannot see — a selected skill,
@@ -121,45 +120,62 @@ export function ComposerActions({
       <div className="flex min-w-0 items-center gap-1.5">{leftContent}</div>
       <div className="flex shrink-0 items-center gap-1.5">
         {rightContent}
-        <Button
-          type="button"
-          variant="primary"
-          size="icon-compact"
-          // A circle in both modes. Send and Stop are the same control — the
-          // glyph swaps, the box does not — and a terminal action is one of
-          // the two semantics `design-docs/visual-style.md` lets a box become
-          // a circle for, so the shape is chosen rather than inherited.
-          className={shape.circle}
-          onClick={mode === 'stop' ? () => onStop?.() : onSend}
-          disabled={mode === 'stop' ? disabled : !canSend}
-          aria-label={label}
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={mode === 'stop' ? 'stop' : 'arrow'}
-              initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.6, transition: swapOut }}
-              transition={swapIn}
-              className="flex items-center justify-center leading-none"
+        {mode === 'queue' && onStop && (
+          <Tooltip content="Stop" side="top">
+            <Button
+              aria-label="Stop"
+              className={shape.circle}
+              disabled={disabled}
+              onClick={onStop}
+              size="icon-compact"
+              type="button"
+              variant="secondary"
             >
-              {mode === 'stop' ? (
-                <span className={`h-3 w-3 ${shape.glyph} bg-current`} />
-              ) : (
-                // Override icon-sm's small 14px svg — the send glyph reads
-                // better a touch larger. `size` matches the attribute to
-                // the CSS so the svg box stays centered.
-                <ArrowUpIcon
-                  size={compactStep ? 15 : 19}
-                  className={cn(
-                    'block',
-                    compactStep ? '!h-[15px] !w-[15px]' : '!h-[19px] !w-[19px]',
-                  )}
-                />
-              )}
-            </motion.span>
-          </AnimatePresence>
-        </Button>
+              <span className={`h-3 w-3 ${shape.glyph} bg-current`} />
+            </Button>
+          </Tooltip>
+        )}
+        <Tooltip content={label} side="top">
+          <Button
+            type="button"
+            variant="primary"
+            size="icon-compact"
+            // A circle in both modes. Send and Stop are the same control — the
+            // glyph swaps, the box does not — and a terminal action is one of
+            // the two semantics `design-docs/visual-style.md` lets a box become
+            // a circle for, so the shape is chosen rather than inherited.
+            className={shape.circle}
+            onClick={mode === 'stop' ? () => onStop?.() : onSend}
+            disabled={mode === 'stop' ? disabled : !canSend}
+            aria-label={label}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={mode === 'stop' ? 'stop' : 'arrow'}
+                initial={{ opacity: 0, scale: 0.6 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.6, transition: swapOut }}
+                transition={swapIn}
+                className="flex items-center justify-center leading-none"
+              >
+                {mode === 'stop' ? (
+                  <span className={`h-3 w-3 ${shape.glyph} bg-current`} />
+                ) : (
+                  // Override icon-sm's small 14px svg — the send glyph reads
+                  // better a touch larger. `size` matches the attribute to
+                  // the CSS so the svg box stays centered.
+                  <ArrowUpIcon
+                    size={compactStep ? 15 : 19}
+                    className={cn(
+                      'block',
+                      compactStep ? '!h-[15px] !w-[15px]' : '!h-[19px] !w-[19px]',
+                    )}
+                  />
+                )}
+              </motion.span>
+            </AnimatePresence>
+          </Button>
+        </Tooltip>
       </div>
     </div>
   );

@@ -125,6 +125,7 @@ function DirectDocxDocument({
   return (
     <div
       className="relative min-h-0 flex-1 overflow-auto bg-surface-2 p-5 max-sm:p-0"
+      data-document-scroller
       ref={scrollerRef}
     >
       {linkFailed && (

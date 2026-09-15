@@ -29,7 +29,7 @@ function authorizeRequest(details, {
 
   const vite = rendererOrigins.has(httpOrigin);
   const isRead = details.method === 'GET' || details.method === 'HEAD';
-  const isResource = /^\/(?:asset|asset-derived|asset-audio-preview|pdfjs-assets)\//u.test(url.pathname);
+  const isResource = /^\/(?:asset|asset-derived|pdfjs-assets)\//u.test(url.pathname);
   // These read-only resources have their own server-side path/membership
   // checks and also load from document frames and PDF workers. Vite's static
   // requests must work before its initial document has an authorized origin.

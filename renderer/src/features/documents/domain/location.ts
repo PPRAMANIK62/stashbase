@@ -11,7 +11,6 @@ export interface FindOptions {
 }
 
 export interface DocumentSearchTarget extends FindOptions {
-  audioTimestampMs?: number;
   line?: number;
   occurrenceIndex: number;
   pdfPage?: number;
@@ -20,6 +19,7 @@ export interface DocumentSearchTarget extends FindOptions {
 
 /** The place inside a document an open lands on. Both absent means the top. */
 export interface DocumentLocation {
+  scroll?: { top: number; left: number };
   anchor?: string;
   search?: DocumentSearchTarget;
 }

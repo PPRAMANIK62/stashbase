@@ -85,7 +85,6 @@ export function similarSearchBackend(api: SemanticSearchPort): SearchBackend {
     emptyMessage: 'No similar results.',
     icon: Sparkles,
     id: 'similar',
-    idleMessage: 'Type to search by meaning.',
     indexGate: {
       ready: canSemanticSearch,
       unavailableTitle: 'Find matches even when the wording differs — needs setup',

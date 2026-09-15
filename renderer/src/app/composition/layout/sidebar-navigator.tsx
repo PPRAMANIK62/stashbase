@@ -158,11 +158,14 @@ export function SidebarNavigator({
          *  loose buttons. A track is an object rather than a row, so it is
          *  centred in the column. It sits under the folder header rather than
          *  over it, so switching modes changes what is beneath the name and
-         *  never where the name is; pt-2 gives it the same air above as the tree
-         *  group's own 8px gives it beneath, so it floats evenly between the
-         *  header and the first row. */}
+         *  never where the name is. 8px above and 12px beneath, not the even
+         *  8/8 it used to keep: above, the header row's own leading is part of
+         *  the gap, while beneath, the track's fill meets the first row or the
+         *  search field's box edge to edge, and equal numbers read tighter
+         *  under than over. The 4px here plus the 8px each panel already
+         *  carries is what makes the 12. */}
         {hasStrip && (
-          <div className="flex shrink-0 justify-center pt-2">
+          <div className="flex shrink-0 justify-center pt-2 pb-1">
             <TabsSubtle
               aria-label="Sidebar navigator"
               iconOnly

@@ -5,7 +5,7 @@ import { FailureNotice } from '@/shared/ui/failure-notice';
 
 export function LocalComponentGroup({ model }: { model: LocalComponentViewModel }) {
   return (
-    <SettingsGroup title="Local components">
+    <SettingsGroup title="Text extraction">
       <SettingsList>
         <SettingsRow
           title="PDF and image text extraction"

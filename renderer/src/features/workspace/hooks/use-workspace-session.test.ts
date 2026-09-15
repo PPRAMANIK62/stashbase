@@ -2,18 +2,12 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { workspaceQueryKeys } from '@/features/workspace/application/queries';
-import type { ProjectRegistrySnapshot } from '@/features/workspace/domain/project';
 import {
   createWorkspaceSessionSnapshot,
   type FolderSessionState,
   type WorkspaceSessionSnapshot,
 } from '@/features/workspace/domain/session';
-import {
-  projectApi,
-  projectLifecycle,
-  projectRegistrySnapshot,
-  sessionPersistence,
-} from '@/test/fakes/workspace';
+import { projectApi, projectRegistrySnapshot, sessionPersistence } from '@/test/fakes/workspace';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
 
 import { useWorkspaceSession } from './use-workspace-session';
@@ -71,7 +65,6 @@ describe('workspace session restore', () => {
               shell: { agentPaneWidth: 576, sidebarOpen: true, sidebarWidth: 240 },
             }),
           }),
-          projectLifecycle(),
         );
         sidebarFrames.push(controller.shell.sidebarOpen);
         return controller;
@@ -111,7 +104,6 @@ describe('workspace session restore', () => {
         useWorkspaceSession(
           api,
           sessionPersistence({ load: async () => savedSession(member.path, remembered) }),
-          projectLifecycle(),
         ),
       { wrapper: queryWrapper(queryClient) },
     );
@@ -154,7 +146,6 @@ describe('workspace session restore', () => {
             }),
             save,
           }),
-          projectLifecycle(),
         ),
       { wrapper: queryWrapper(queryClient) },
     );
@@ -169,170 +160,5 @@ describe('workspace session restore', () => {
       folders: [],
       shell: { sidebarOpen: false },
     });
-  });
-
-  it('does not let a late open replace a newer explicit folder selection', async () => {
-    const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.project, settled);
-    let finish: ((value: ProjectRegistrySnapshot) => void) | undefined;
-    const api = projectApi({
-      load: vi.fn(async () => settled),
-      openFolder: vi.fn(
-        () =>
-          new Promise<ProjectRegistrySnapshot>((resolve) => {
-            finish = resolve;
-          }),
-      ),
-      removeFolder: vi.fn(async () => {
-        throw new Error('not expected');
-      }),
-    });
-    renderHook(
-      () =>
-        useWorkspaceSession(
-          api,
-          sessionPersistence(),
-          projectLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
-        ),
-      { wrapper: queryWrapper(queryClient) },
-    );
-    await waitFor(() => expect(api.openFolder).toHaveBeenCalledOnce());
-    const writing = projectRegistrySnapshot({
-      ...settled,
-      activeFolder: { name: 'writing', path: '/project/writing' },
-      projects: [...settled.projects, { ...member, path: '/project/writing' }],
-    });
-    act(() => queryClient.setQueryData(workspaceQueryKeys.project, writing));
-    finish?.(
-      projectRegistrySnapshot({ ...settled, activeFolder: { name: 'notes', path: member.path } }),
-    );
-
-    await waitFor(() =>
-      expect(queryClient.getQueryData(workspaceQueryKeys.project)).toEqual(writing),
-    );
-  });
-});
-
-describe('initial folder landing', () => {
-  const writing = { ...member, path: '/project/writing' };
-  const bothMembers = projectRegistrySnapshot({ ...settled, projects: [member, writing] });
-
-  it('opens the folder the window was created for', async () => {
-    const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.project, settled);
-    const opened = projectRegistrySnapshot({
-      ...settled,
-      activeFolder: { name: 'notes', path: member.path },
-    });
-    const api = projectApi({
-      load: vi.fn(async () => settled),
-      openFolder: vi.fn(async () => opened),
-    });
-
-    renderHook(
-      () =>
-        useWorkspaceSession(
-          api,
-          sessionPersistence(),
-          projectLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
-        ),
-      { wrapper: queryWrapper(queryClient) },
-    );
-
-    await waitFor(() =>
-      expect(api.openFolder).toHaveBeenCalledWith(member.path, expect.any(AbortSignal)),
-    );
-    await waitFor(() =>
-      expect(queryClient.getQueryData(workspaceQueryKeys.project)).toEqual(opened),
-    );
-  });
-
-  it('leaves a window nobody named a folder for where it already was', async () => {
-    const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.project, settled);
-    const api = projectApi({
-      load: vi.fn(async () => settled),
-      openFolder: vi.fn(async () => {
-        throw new Error('not expected');
-      }),
-    });
-
-    const hook = renderHook(
-      () => useWorkspaceSession(api, sessionPersistence(), projectLifecycle()),
-      { wrapper: queryWrapper(queryClient) },
-    );
-
-    await waitFor(() =>
-      expect(hook.result.current.status).toEqual({ kind: 'ready', restoredFolder: null }),
-    );
-    expect(api.openFolder).not.toHaveBeenCalled();
-  });
-
-  it('opens the folder the window was created for, not the saved session', async () => {
-    const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.project, bothMembers);
-    const opened = projectRegistrySnapshot({
-      ...bothMembers,
-      activeFolder: { name: 'notes', path: member.path },
-    });
-    const api = projectApi({
-      load: vi.fn(async () => bothMembers),
-      openFolder: vi.fn(async () => opened),
-    });
-
-    renderHook(
-      () =>
-        useWorkspaceSession(
-          api,
-          sessionPersistence({ load: async () => savedSession(writing.path) }),
-          projectLifecycle({ claimInitialFolder: vi.fn(async () => member.path) }),
-        ),
-      { wrapper: queryWrapper(queryClient) },
-    );
-
-    await waitFor(() => expect(api.openFolder).toHaveBeenCalledOnce());
-    // The person just asked for this folder. The one the session remembers is
-    // never opened on their behalf.
-    expect(api.openFolder).toHaveBeenCalledWith(member.path, expect.any(AbortSignal));
-  });
-
-  it('shows nothing until the desktop has answered, then the welcome screen', async () => {
-    const queryClient = createTestQueryClient();
-    queryClient.setQueryData(workspaceQueryKeys.project, bothMembers);
-    const api = projectApi({
-      load: vi.fn(async () => bothMembers),
-      openFolder: vi.fn(async () => {
-        throw new Error('not expected');
-      }),
-    });
-    let answer: ((folderPath: string | null) => void) | undefined;
-    const claimInitialFolder = vi.fn(
-      () =>
-        new Promise<string | null>((resolve) => {
-          answer = resolve;
-        }),
-    );
-
-    const hook = renderHook(
-      () =>
-        useWorkspaceSession(
-          api,
-          sessionPersistence({ load: async () => savedSession(writing.path) }),
-          projectLifecycle({ claimInitialFolder }),
-        ),
-      { wrapper: queryWrapper(queryClient) },
-    );
-
-    // The session file is local and the claim is an IPC round trip. Neither
-    // the welcome screen nor a folder may show before the desktop has said
-    // whether this window was made for one.
-    await waitFor(() => expect(claimInitialFolder).toHaveBeenCalled());
-    expect(hook.result.current.status.kind).toBe('restoring');
-
-    await act(async () => answer?.(null));
-    await waitFor(() =>
-      expect(hook.result.current.status).toEqual({ kind: 'ready', restoredFolder: null }),
-    );
-    expect(api.openFolder).not.toHaveBeenCalled();
   });
 });

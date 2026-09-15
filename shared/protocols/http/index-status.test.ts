@@ -7,7 +7,6 @@ import {
 } from './index-status.ts';
 
 const baseline = {
-  blockedConversions: ['talks/keynote.mp3'],
   conversionProgress: {
     'papers/report.pdf': { currentPage: 3, phase: 'extracting' },
     'scans/receipt.png': { lane: 'light', phase: 'queued', tasksAhead: 2 },

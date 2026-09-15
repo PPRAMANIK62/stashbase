@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import { isEmbeddingConfigured } from './app-config.ts';
 import { getConversionSchedulerSnapshot, getInFlightConversions } from './conversion.ts';
 import { clearRecord, listPreparationProblems, readProgress, type ConversionProgress } from './conversion-status.ts';
-import { blockedAudioSourcesForFolder } from './audio-transcription.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { isProjectFolderRemovalInProgress } from './folder.ts';
 import { hasNoExtractableText, shouldIndexFilePath } from './indexable.ts';
@@ -102,7 +101,6 @@ export async function buildIndexStatus(folderRoot: string): Promise<IndexStatus>
     visibleIndexingSettled: !keyConfigured || pending.length === 0,
     semanticIndexing: { state: semanticState },
     pendingConversions: getInFlightConversions(curRoot),
-    blockedConversions: await blockedAudioSourcesForFolder(curRoot, treeVersion),
     conversionProgress: conversionProgressForFolder(curRoot, schedulerSnapshot),
     conversionRevision: schedulerSnapshot.revision,
     conversionVersions: conversionVersionsForFolder(curRoot, schedulerSnapshot),

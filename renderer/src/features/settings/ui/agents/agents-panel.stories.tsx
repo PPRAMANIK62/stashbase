@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import type { AccountPort, AgentRuntimePort } from '@/features/settings/application/ports';
 import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
+import { AccountProvider } from '@/features/settings/hooks/account-context';
 
 import { AgentRuntimesPanel } from './agents-panel';
 
@@ -28,7 +29,7 @@ const claude: AgentRuntime = {
 
 const stashbase: AgentRuntime = {
   id: 'stashbase',
-  label: 'OpenQuill',
+  label: 'Default',
   installed: true,
   ownership: 'bundled',
   preparation: { kind: 'ready' },
@@ -45,7 +46,6 @@ function fakePort(): AgentRuntimePort {
     }),
     listAgents: async () => catalog([codex, claude, stashbase]),
     prepareAgent: async () => catalog([codex, claude, stashbase]),
-    resetManagedAgent: async () => catalog([codex, claude, stashbase]),
     updateDebug: async () => catalog([codex, claude, stashbase]),
   };
 }
@@ -97,11 +97,9 @@ function Harness({ account, port }: { account: AccountPort; port: AgentRuntimePo
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={queryClient}>
-      <AgentRuntimesPanel
-        accountApi={account}
-        agentRuntimeApi={port}
-        onOpenExternal={() => undefined}
-      />
+      <AccountProvider port={account} openExternal={() => undefined}>
+        <AgentRuntimesPanel agentRuntimeApi={port} />
+      </AccountProvider>
     </QueryClientProvider>
   );
 }

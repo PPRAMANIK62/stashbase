@@ -62,6 +62,7 @@ export function JsonDocument({
   }, [activePane, runtime, session.viewMode]);
 
   const { hostRef, sessionRef: editorRef } = useCodeEditorSession({
+    owner: runtime,
     content: value,
     create: (host, report) =>
       createJsonSourceEditor(host, { content: value, onChange: report, readOnly }),

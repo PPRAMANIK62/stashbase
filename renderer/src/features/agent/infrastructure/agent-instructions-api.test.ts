@@ -4,7 +4,11 @@ import type { HttpClient } from '@/platform/http/client';
 
 import { createAgentInstructionsAdapter } from './agent-instructions-api';
 
-const STATE = { customized: false, scope: { kind: 'unbound' }, text: 'Packaged.' };
+const STATE = {
+  customized: false,
+  scope: { kind: 'folder', path: '/project/Research' },
+  text: 'Packaged.',
+};
 const signal = () => new AbortController().signal;
 
 function adapter(body: unknown = STATE) {
@@ -13,12 +17,15 @@ function adapter(body: unknown = STATE) {
 }
 
 describe('agent instructions adapter', () => {
-  it('reads the unbound scope by its one wire spelling', async () => {
+  it('reads project instructions', async () => {
     const { adapter: api, request } = adapter();
-    await api.load({ kind: 'unbound' }, signal());
+    await api.load({ kind: 'folder', path: '/project/Research' }, signal());
 
     expect(request).toHaveBeenCalledWith(
-      expect.objectContaining({ method: 'GET', path: '/api/agent-instructions?scope=unbound' }),
+      expect.objectContaining({
+        method: 'GET',
+        path: '/api/agent-instructions?scope=%2Fproject%2FResearch',
+      }),
     );
   });
 
@@ -50,11 +57,11 @@ describe('agent instructions adapter', () => {
   it('answers whether the text is the reader own, never the resolved prompt', async () => {
     const { adapter: api } = adapter({
       customized: true,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
       text: 'Mine.',
     });
 
-    expect(await api.load({ kind: 'unbound' }, signal())).toEqual({
+    expect(await api.load({ kind: 'folder', path: '/project/Research' }, signal())).toEqual({
       customized: true,
       text: 'Mine.',
     });
@@ -62,7 +69,9 @@ describe('agent instructions adapter', () => {
 
   it('refuses a response whose scope names neither kind', async () => {
     const { adapter: api } = adapter({ customized: false, scope: { kind: 'window' }, text: '' });
-    await expect(api.load({ kind: 'unbound' }, signal())).rejects.toMatchObject({
+    await expect(
+      api.load({ kind: 'folder', path: '/project/Research' }, signal()),
+    ).rejects.toMatchObject({
       kind: 'invalid-response',
     });
   });

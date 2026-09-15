@@ -1,3 +1,4 @@
+import { retireAgentProcess } from './agent-process.ts';
 /** What a runtime offers to run on, read at the runtime level.
  *
  * A model catalog is a property of the runtime, not of a chat: Codex answers
@@ -16,7 +17,7 @@ import os from 'node:os';
 import readline from 'node:readline';
 import type { AgentId, AgentModel } from '../shared/agent-protocol.ts';
 import type { AgentModelCatalog } from '../shared/agent-runtime.ts';
-import { readAppConfig, writeAppConfig } from './app-config.ts';
+import { readAppConfig, readAppConfigStrict, writeAppConfigStrict } from './app-config.ts';
 import { readClaudeModelCatalog } from './claude-model-catalog.ts';
 import { appVersion, spawnCodexAppServerProcess } from './codex-app-server-process.ts';
 import { loadCodexModelCatalog } from './codex-model-catalog.ts';
@@ -70,9 +71,15 @@ function load(): void {
 }
 
 function persist(): void {
-  const config = readAppConfig();
-  config.agentModelCatalogs = Object.fromEntries(memory);
-  writeAppConfig(config);
+  try {
+    const config = readAppConfigStrict();
+    config.agentModelCatalogs = Object.fromEntries(memory);
+    writeAppConfigStrict(config);
+  } catch (err: unknown) {
+    // Disposable catalog caching must neither replace unreadable settings nor
+    // interrupt a working Agent session. The fresh catalog remains in memory.
+    log.warn(`could not cache model catalog: ${errorMessage(err)}`);
+  }
 }
 
 export function recallAgentModels(id: AgentId): AgentModelCatalog | undefined {
@@ -143,7 +150,7 @@ export async function readCodexModelCatalog(
   } finally {
     rpc.close();
     stdout.close();
-    try { proc.kill(); } catch { /* already gone */ }
+    await retireAgentProcess(proc);
   }
 }
 

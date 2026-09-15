@@ -24,7 +24,6 @@ export {
   deleteFileAsync,
   deleteFolder,
   deleteFolderAsync,
-  derivedArtifactsForSource,
   fileStatVersion,
   fileStatVersionAsync,
   fileVersion,
@@ -48,7 +47,6 @@ export {
   saveBytesAsync,
   saveText,
   saveTextAsync,
-  type DerivedArtifacts,
 } from './active-file-operations.ts';
 export {
   HIDDEN_DOT_FILES,

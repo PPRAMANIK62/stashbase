@@ -62,7 +62,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
   app.post('/api/project/create-project', (req, res) => {
     stdioCreateProjectBody = req.body as Record<string, unknown>;
     stdioCreateProjectAttribution = req.header('x-stashbase-agent-session-id') ?? undefined;
-    res.json({ path: '/tmp/Project', name: 'Project', registered: true, rebound: true, note: 'ok' });
+    res.json({ path: '/tmp/Project', name: 'Project', registered: true, note: 'ok' });
   });
 
   const server = app.listen(0, '127.0.0.1');
@@ -93,7 +93,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       } },
       createProject: async (input) => {
         createProjectInput = input as unknown as Record<string, unknown>;
-        return { path: '/tmp/Project', name: 'Project', registered: true, rebound: false, note: 'ok' };
+        return { path: '/tmp/Project', name: 'Project', registered: true, note: 'ok' };
       },
       read: async (path, range) => {
         readInput = { path, range };
@@ -121,7 +121,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     const searchTool = listed.body.result.tools.find((tool: any) => tool.name === 'search_project');
     assert.deepEqual(
       searchTool.inputSchema.properties.types.items.enum,
-      ['notes', 'data', 'pdf', 'image', 'docx', 'audio'],
+      ['notes', 'data', 'pdf', 'image', 'docx'],
     );
     assert.deepEqual(searchTool.inputSchema.properties.mode.enum, ['semantic', 'keyword']);
     assert.equal(searchTool.inputSchema.properties.scope, undefined);
@@ -247,9 +247,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.equal(invalidMode.body.result.isError, true);
     assert.match(invalidMode.body.result.content[0].text, /unknown search mode/i);
 
-    // create_project reaches the operations seam with the model-controlled
-    // arguments only — the HTTP MCP transport has no session attribution, so
-    // no `agentSessionId` may appear (external callers never rebind a chat).
+    // External project creation forwards only the requested directory fields.
     const created = await post(base, {
       jsonrpc: '2.0',
       id: 6,
@@ -262,7 +260,6 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
     assert.equal(created.status, 200);
     assert.equal(JSON.parse(created.body.result.content[0].text).registered, true);
     assert.deepEqual(createProjectInput, { name: 'Project', location: '/tmp' });
-    assert.equal('agentSessionId' in (createProjectInput ?? {}), false);
 
     const stdio = await runStdio(address.port);
     assert.equal(stdio.initialized.result.serverInfo.name, 'stashbase');
@@ -294,10 +291,8 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
       totalLines: 3,
       nextOffset: 3,
     });
-    // The stdio host forwards its spawn-time session identity as the
-    // attribution header — this is how a built-in panel session's
-    // create_project call finds the live session to rebind.
-    assert.equal(JSON.parse(stdio.createdProject.result.content[0].text).rebound, true);
+    // The stdio host forwards its session identity for project permission checks.
+    assert.equal(JSON.parse(stdio.createdProject.result.content[0].text).registered, true);
     assert.deepEqual(stdioCreateProjectBody, { name: 'StdioProject' });
     assert.equal(stdioCreateProjectAttribution, 'session-attr-42');
 

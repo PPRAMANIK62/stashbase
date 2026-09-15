@@ -6,9 +6,9 @@
  * differs by — its request, its rows, its copy, its readiness gate — comes
  * from the registry entry, so this module has no per-backend branch.
  */
-import { Search } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { CommandList } from '@/components/ui/command-menu';
 import { InputField, InputGroup } from '@/components/ui/input-group';
 import { retrievalFailure } from '@/features/retrieval/application/failure-messages';
@@ -48,8 +48,8 @@ export interface SearchSurfaceProps {
   decisionApi: IndexDecisionPort;
   focusRevision: number;
   folderPath: string;
+  onConfigureSearch?: (() => void) | undefined;
   onNavigate(intent: SearchNavigationIntent): Promise<boolean>;
-  onOpenSettings(section: 'ai-index' | 'transcription'): void;
   preparation: PreparationCounts;
   readiness: SemanticReadiness;
   /** Visible sources already searchable, for the preparation line. */
@@ -63,7 +63,7 @@ export function SearchSurface({
   focusRevision,
   folderPath,
   onNavigate,
-  onOpenSettings,
+  onConfigureSearch,
   preparation,
   readiness,
   readyCount,
@@ -150,7 +150,12 @@ export function SearchSurface({
 
   return (
     <section aria-label={backend.surfaceLabel} className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 px-2 pb-2">
+      {/* p-2: the 8px above the field is the same step the tree region's own
+       *  group keeps above its first row, so Files, Document outline and
+       *  Search all start on one line under the navigator's strip. The 8px at
+       *  the sides puts the magnifier on the sidebar's shared 16px glyph
+       *  column, level with the tree's file glyphs. */}
+      <div className="shrink-0 p-2">
         <InputGroup className="w-full gap-0" ref={inputGroup} size="compact">
           <InputField
             aria-activedescendant={count > activeIndex ? `${resultsId}-${activeIndex}` : undefined}
@@ -159,17 +164,22 @@ export function SearchSurface({
             aria-expanded={count > 0}
             aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
             autoComplete="off"
-            icon={Search}
             label={INPUT_LABEL}
             labelHidden
             onChange={setQuery}
             onKeyDown={onInputKeyDown}
             placeholder={backend.placeholder}
+            resting="outline"
             role="combobox"
             spellCheck={false}
             value={query}
           />
         </InputGroup>
+        {readiness.state === 'not-set-up' && onConfigureSearch && (
+          <Button variant="ghost" size="compact" onClick={onConfigureSearch}>
+            Set up search by meaning
+          </Button>
+        )}
         {backends.length > 1 && (
           <div className="flex items-center pt-1.5">
             <SearchTabStrip
@@ -191,14 +201,8 @@ export function SearchSurface({
         />
       )}
 
-      {preparationLine && (
-        <PreparationReadinessNotice
-          line={preparationLine}
-          onOpenSettings={() => onOpenSettings('transcription')}
-        />
-      )}
+      {preparationLine && <PreparationReadinessNotice line={preparationLine} />}
 
-      {!lane && ready && <StatusLine>{backend.idleMessage}</StatusLine>}
       {lane && searching && <StatusLine>Searching…</StatusLine>}
 
       {lane && !searching && run.isError && (

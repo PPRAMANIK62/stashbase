@@ -161,15 +161,28 @@ describe('InputMessage composer regions', () => {
     });
   });
 
-  it('queues a draft while streaming and dispatches it when the response ends', async () => {
+  it('queues a draft without interpreting completion as permission to dispatch', async () => {
     const seen: { context: InputMessageEditorContext | null } = { context: null };
     const onQueueChange = vi.fn();
     const onSend = vi.fn();
+    const onStop = vi.fn();
+    const onValueChange = vi.fn();
     const user = userEvent.setup();
     const view = render(
-      fullComposer(seen, { onQueueChange, onSend, status: 'streaming', value: 'hello' }),
+      fullComposer(seen, {
+        onQueueChange,
+        onSend,
+        onStop,
+        onValueChange,
+        status: 'streaming',
+        value: 'hello',
+      }),
     );
 
+    await user.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(onStop).toHaveBeenCalledOnce();
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(onQueueChange).not.toHaveBeenCalled();
     await user.click(screen.getByRole('textbox', { name: 'Message' }));
     await user.keyboard('{Enter}');
     expect(onQueueChange).toHaveBeenCalledWith([
@@ -190,9 +203,8 @@ describe('InputMessage composer regions', () => {
     view.rerender(
       fullComposer(seen, { onQueueChange, onSend, queue: [queued], status: 'idle', value: '' }),
     );
-    expect(onQueueChange).toHaveBeenCalledWith([]);
-    expect(onSend).toHaveBeenCalledWith('hello', [], { queuedId: 'q1' });
-    expect(screen.getByRole('status').textContent).toBe('Message sent.');
+    expect(onQueueChange).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
   });
 
   it('removes an attachment from the preview row', async () => {

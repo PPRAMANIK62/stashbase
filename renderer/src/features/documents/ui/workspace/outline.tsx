@@ -141,6 +141,7 @@ export function DocumentOutline({ runtime }: { runtime: DocumentTabsRuntime }) {
   const activeTab = useStore(runtime.store, (state) =>
     state.tabs.find((tab) => tab.id === state.activeTabId),
   );
+  const failed = useStore(runtime.navigation.store, (state) => state.outlineFailed);
   const outline = useStore(runtime.navigation.store, (state) => state.outline);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const menuRef = useRef<HTMLUListElement | null>(null);
@@ -174,7 +175,9 @@ export function DocumentOutline({ runtime }: { runtime: DocumentTabsRuntime }) {
   const outlineSummary = outline.available
     ? `${outline.headings.length} ${outline.headings.length === 1 ? 'heading' : 'headings'}`
     : outlines
-      ? 'unavailable'
+      ? failed
+        ? 'unavailable'
+        : 'loading'
       : 'not available for this file type';
 
   const toggle = (id: string) => {
@@ -196,19 +199,15 @@ export function DocumentOutline({ runtime }: { runtime: DocumentTabsRuntime }) {
         <span className="min-w-0 truncate" title={name}>
           {name}
         </span>
-        {outline.available && (
-          <span
-            aria-hidden="true"
-            className="ml-auto text-[10px] text-muted-foreground tabular-nums"
-          >
-            {outline.headings.length}
-          </span>
-        )}
       </SidebarGroupLabel>
       <SidebarGroupContent>
         {!outline.available ? (
           <OutlineNote className="leading-relaxed">
-            No outline available for this document
+            {outlines
+              ? failed
+                ? 'Could not load the outline. Retry opening the document.'
+                : 'Loading outline…'
+              : 'This file type has no outline.'}
           </OutlineNote>
         ) : tree.length === 0 ? (
           <OutlineNote>No headings in this document</OutlineNote>

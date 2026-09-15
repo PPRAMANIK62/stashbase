@@ -263,7 +263,6 @@ export function DraftSourceTiles({
     <AnimatePresence initial={false} mode="popLayout">
       {validations.map((validation) => {
         const { item } = validation;
-        if (item.kind !== 'source') return null;
         return (
           <motion.div
             animate={{ opacity: 1, scale: 1 }}
@@ -275,13 +274,23 @@ export function DraftSourceTiles({
             role="listitem"
             transition={spring.fast}
           >
-            <SourceTile
-              item={item}
-              onReprocess={onReprocess}
-              reason={validation.reason}
-              size={size}
-              status={validation.status}
-            />
+            {item.kind === 'source' ? (
+              <SourceTile
+                item={item}
+                onReprocess={onReprocess}
+                reason={validation.reason}
+                size={size}
+                status={validation.status}
+              />
+            ) : (
+              <div
+                className="flex flex-col items-center gap-1"
+                title={validation.reason ?? undefined}
+              >
+                <RemoteTile item={item} size={size} />
+                <span className="text-caption text-destructive">Unavailable</span>
+              </div>
+            )}
             <RemoveBadge name={contextItemName(item)} onRemove={() => onRemove(item)} />
           </motion.div>
         );

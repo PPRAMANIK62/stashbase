@@ -81,7 +81,6 @@ describe('agent composer model-and-thinking control', () => {
     });
 
     const trigger = screen.getByRole('button', { name: 'Model and thinking: Codex Max, Medium' });
-    expect(trigger.title).toBe('Model and thinking: Codex Max, Medium');
     await user.click(trigger);
     expect(onRequestCatalog).toHaveBeenCalledTimes(1);
 

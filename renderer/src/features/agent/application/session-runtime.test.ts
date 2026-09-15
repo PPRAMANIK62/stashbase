@@ -29,7 +29,7 @@ const historyEntry = (id: string, title: string) => ({
   hasContent: true,
   id,
   lastModified: 1,
-  scope: { kind: 'unbound' as const },
+  scope: { kind: 'folder' as const, path: '/project/Research' },
   title,
 });
 
@@ -118,7 +118,7 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({
       activeModel: null,
@@ -145,7 +145,7 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
 
     const entry = {
@@ -153,7 +153,7 @@ describe('AgentSessionRuntime', () => {
       hasContent: true,
       id: 'native-2',
       lastModified: 42,
-      scope: { kind: 'unbound' as const },
+      scope: { kind: 'folder' as const, path: '/project/Research' },
       title: 'Saved conversation',
     };
     await expect(runtime.restore(entry)).resolves.toBe(true);
@@ -179,7 +179,7 @@ describe('AgentSessionRuntime', () => {
       id: 'chat-1',
       port: test.port,
       scheduler: test.scheduler,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
     test.listeners[0]?.onEvent({ id: 'native-3', kind: 'identified' });
     test.listeners[0]?.onEvent({ kind: 'ready' });
@@ -234,7 +234,7 @@ describe('AgentSessionRuntime', () => {
         }),
       }).port,
       scheduler: test.scheduler,
-      scope: { kind: 'unbound' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
 
     const stale = runtime.restore(historyEntry('native-1', 'Stale'), false);
@@ -246,7 +246,7 @@ describe('AgentSessionRuntime', () => {
     expect(runtime.store.getState().nativeSessionId).toBe('native-2');
   });
 
-  it('retires a removed folder without reconnecting it', () => {
+  it('retires a removed folder while stopping without reconnecting it', async () => {
     const test = harness();
     const runtime = createAgentSessionRuntime({
       agent: 'codex',
@@ -255,8 +255,12 @@ describe('AgentSessionRuntime', () => {
       scheduler: test.scheduler,
       scope: { kind: 'folder', path: '/project/Research' },
     });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    await runtime.sendPrompt('Keep the reply');
+    runtime.interrupt();
     runtime.retire('/project/Research');
     runtime.reconnect();
+    expect(runtime.store.getState().delivery).toBe('stopped');
 
     expect(runtime.store.getState().connection).toEqual({ kind: 'retired' });
     expect(test.requests()).toHaveLength(1);

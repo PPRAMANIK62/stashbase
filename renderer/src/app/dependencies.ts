@@ -10,6 +10,7 @@
  */
 import type { ComponentProps } from 'react';
 
+import { createAgentPreferencesAdapter, type AgentPreferencesPort } from '@/features/agent/public';
 import {
   createAgentCatalogAdapter,
   createAgentInstructionsAdapter,
@@ -21,11 +22,7 @@ import {
   type AgentSessionPort,
 } from '@/features/agent/public';
 import { createDocumentAdapters, type DocumentAdapters } from '@/features/documents/public';
-import {
-  copyFolderName,
-  createGalleryIndexAdapter,
-  type GalleryPort,
-} from '@/features/gallery/public';
+import { createGalleryIndexAdapter, type GalleryPort } from '@/features/gallery/public';
 import {
   createPreparationControlAdapter,
   createPreparationStatusAdapter,
@@ -47,7 +44,6 @@ import {
   createAppearanceAdapter,
   createEmbedderAdapter,
   createMcpAccessAdapter,
-  createTranscriptionAdapter,
   createLocalComponentAdapter,
   type LocalComponentPort,
   type AccountPort,
@@ -55,7 +51,6 @@ import {
   type AppearancePort,
   type EmbedderPort,
   type McpAccessPort,
-  type TranscriptionPort,
 } from '@/features/settings/public';
 import { createUpdatesAdapter, type UpdatesPort } from '@/features/updates/public';
 import {
@@ -63,22 +58,20 @@ import {
   FileTree,
   ProjectWelcome,
   type WorkspaceAdapters,
+  type ProjectFolderPickerPort,
 } from '@/features/workspace/public';
 import { readBridge } from '@/platform/electron/bridge';
-import type { BugReportBridge } from '@/platform/electron/bug-report';
 import { createExternalNavigation } from '@/platform/electron/external-navigation';
 import { fileManagerLabel } from '@/platform/electron/file-manager';
 import { createFolderPicker } from '@/platform/electron/folder-picker';
-import { openedFolderWindow } from '@/platform/electron/project-lifecycle';
 import { createHttpClient } from '@/platform/http/client';
 import { createUsageRecorder } from '@/platform/telemetry';
 
 /** The folder chrome's dependencies, as the welcome screen declares them;
  *  the folder window's sidebar takes only the project port from the set. */
-type ProjectChrome = Pick<
-  ComponentProps<typeof ProjectWelcome>,
-  'api' | 'folderPicker' | 'lifecycle'
->;
+type ProjectChrome = Pick<ComponentProps<typeof ProjectWelcome>, 'api' | 'lifecycle'> & {
+  folderPicker: ProjectFolderPickerPort;
+};
 
 export interface AppDependencies {
   recordUsage: ReturnType<typeof createUsageRecorder>;
@@ -86,12 +79,12 @@ export interface AppDependencies {
     /** Which runtimes a conversation can open on. Settings reads the same
      *  endpoint through its own port for its own question. */
     catalog: AgentCatalogPort;
+    preferences?: AgentPreferencesPort;
     context: AgentContextPort;
     instructions: AgentInstructionsPort;
     session: AgentSessionPort;
   };
   /** Opens the bug-report review for this window; null outside Electron. */
-  bugReport: BugReportBridge | null;
   documents: {
     adapters: DocumentAdapters;
     createId: () => string;
@@ -116,7 +109,6 @@ export interface AppDependencies {
     telemetryApi: TelemetryPort;
     embedderApi: EmbedderPort;
     mcpAccessApi: McpAccessPort;
-    transcriptionApi: TranscriptionPort;
     localComponentApi: LocalComponentPort;
   };
   /** Keeping this build current; null outside Electron or when the build has no updater. */
@@ -142,11 +134,11 @@ export function createDependencies(): AppDependencies {
     recordUsage: createUsageRecorder(http),
     agent: {
       catalog: createAgentCatalogAdapter(http),
+      preferences: createAgentPreferencesAdapter(http),
       instructions: createAgentInstructionsAdapter(http),
       context: createAgentContextAdapter(http, bridge.runtime.serverOrigin),
       session: createAgentSessionAdapter(http, bridge.runtime.serverOrigin),
     },
-    bugReport: bridge.bugReport ?? null,
     documents: {
       adapters: createDocumentAdapters({
         http,
@@ -156,27 +148,7 @@ export function createDependencies(): AppDependencies {
       createId: () => globalThis.crypto.randomUUID(),
       openExternal: externalNavigation.open,
     },
-    gallery: {
-      // Taking a copy is the project registry's ordinary public import into folder
-      // home, then a window of its own. Neither is the shop's to own: the
-      // destination and the name rules belong to the project registry, and the window
-      // belongs to the desktop. A copy the project registry made but no window could
-      // show is still a folder in the switcher, so it says exactly that
-      // rather than implying nothing happened.
-      async copy(request, signal) {
-        const derived = workspace.githubImport.readUrl(request.repo);
-        const folderName = copyFolderName(request, {
-          derivedName: derived.ok ? derived.folderName : null,
-          nameIssue: workspace.githubImport.folderNameIssue(request.name),
-        });
-        const path = await workspace.githubImport.run(request.repo, folderName, signal);
-        if (!(await openedFolderWindow(bridge.project, path))) {
-          throw new Error('the copy was made but no window could open it');
-        }
-        return path;
-      },
-      ...createGalleryIndexAdapter(http, bridge.runtime.serverOrigin),
-    },
+    gallery: createGalleryIndexAdapter(http, bridge.runtime.serverOrigin),
     project: {
       api: workspace.project,
       folderPicker: createFolderPicker(bridge.project),
@@ -198,7 +170,6 @@ export function createDependencies(): AppDependencies {
       telemetryApi: createTelemetryAdapter(http),
       embedderApi: createEmbedderAdapter(http),
       mcpAccessApi: createMcpAccessAdapter(http),
-      transcriptionApi: createTranscriptionAdapter(http),
       localComponentApi: createLocalComponentAdapter(http),
     },
     updates: bridge.updates ? createUpdatesAdapter(bridge.updates) : null,

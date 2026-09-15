@@ -29,9 +29,6 @@ function windowFixture(id, url = 'app://renderer/') {
 function harness() {
   const handlers = new Map();
   const opened = [];
-  // What main was created for, one claim each. `second` is a window nobody
-  // named a folder for.
-  const initialFolders = new Map();
   const first = windowFixture(11);
   const second = windowFixture(12);
   const windows = [first, second];
@@ -41,11 +38,6 @@ function harness() {
       fromWebContents: (webContents) => (
         windows.find((candidate) => candidate.webContents === webContents)?.window ?? null
       ),
-    },
-    claimInitialFolder: (window) => {
-      const folder = initialFolders.get(window) ?? null;
-      initialFolders.delete(window);
-      return folder;
     },
     expectedOrigins: new Set(['app://renderer']),
     hasCapability: (_window, capability) => capability === PROJECT_LIFECYCLE_CAPABILITY,
@@ -69,8 +61,7 @@ function harness() {
     senderFrame: fixture.frame,
   });
   registerLifecycle(dependencies);
-  initialFolders.set(first.window, '/workspace/Notes');
-  return { eventFor, first, folders, handlers, initialFolders, opened, second };
+  return { eventFor, first, folders, handlers, opened, second };
 }
 
 test('folder removal coordinator rejects stale acknowledgements and settles current work', async () => {
@@ -172,7 +163,7 @@ test('opening a member in a window authorizes the sender and answers what main d
   assert.deepEqual(
     await handler(setup.eventFor(setup.first), { folderPath: '/workspace/missing' }),
     {
-      failure: { kind: 'unavailable', message: 'That folder could not be opened in a window.' },
+      failure: { kind: 'unavailable', message: 'That project could not be opened.' },
       ok: false,
     },
   );
@@ -199,40 +190,29 @@ test('opening a window refuses an untrusted sender and a malformed request', asy
   assert.deepEqual(setup.opened, []);
 });
 
-test('claiming an initial folder answers the creating folder once and none thereafter', async () => {
-  const setup = harness();
-  const handler = setup.handlers.get('project:claim-initial-folder');
-
-  // The spelling main was created for crosses unchanged; matching main's own
-  // lowercased key here would reopen the folder under a rewritten name.
-  assert.deepEqual(await handler(setup.eventFor(setup.first)), {
-    folderPath: '/workspace/Notes',
-    ok: true,
-  });
-
-  // Spent. A window that reloads re-reads its folder from the server instead.
-  assert.deepEqual(await handler(setup.eventFor(setup.first)), { folderPath: null, ok: true });
-
-  // A window nobody named a folder for answers none, which is a success.
-  assert.deepEqual(await handler(setup.eventFor(setup.second)), { folderPath: null, ok: true });
-});
-
-test('claiming an initial folder refuses an untrusted sender and an unowned payload', async () => {
-  const setup = harness();
-  const handler = setup.handlers.get('project:claim-initial-folder');
-
-  setup.first.frame.url = 'https://example.com/';
-  assert.deepEqual(await handler(setup.eventFor(setup.first)), {
-    failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
-    ok: false,
-  });
-  // Refused before the claim was spent, so the real window can still make it.
-  assert.equal(setup.initialFolders.get(setup.first.window), '/workspace/Notes');
-
-  // The channel carries nothing: the sender main authorized is the window
-  // being answered, so a payload is a caller this build never shipped.
-  assert.deepEqual(await handler(setup.eventFor(setup.second), { folderPath: '/etc' }), {
-    failure: { kind: 'invalid-response', message: 'The initial folder request was invalid.' },
-    ok: false,
-  });
+test('project entry waits for its own renderer acknowledgement and reports close or timeout', async () => {
+  const { EventEmitter } = require('node:events');
+  const { createProjectEntryCoordinator } = require('../../dist/electron/project/lifecycle.cjs');
+  const window = new EventEmitter();
+  window.webContents = { id: 91, send() {} };
+  window.isDestroyed = () => false;
+  const coordinator = createProjectEntryCoordinator(20);
+  let complete = false;
+  const entering = coordinator.request(window, '/projects/Notes').then(() => { complete = true; });
+  const request = coordinator.pending(91);
+  assert.equal(complete, false);
+  assert.equal(coordinator.finish(92, { ...request, failure: null }), false);
+  assert.equal(coordinator.finish(91, { ...request, requestId: '00000000-0000-4000-8000-000000000000', failure: null }), false);
+  assert.equal(coordinator.finish(91, { ...request, failure: null }), true);
+  await entering;
+  assert.equal(coordinator.pending(91), null);
+  const cancellation = new AbortController();
+  const cancelled = coordinator.request(window, '/projects/Cancelled', cancellation.signal);
+  cancellation.abort();
+  await assert.rejects(cancelled, /cancelled/);
+  const closed = coordinator.request(window, '/projects/Next');
+  window.emit('closed');
+  await assert.rejects(closed, /closed/);
+  await assert.rejects(coordinator.request(window, '/projects/Slow'), /did not become ready/);
+  assert.equal(coordinator.finish(91, { ...request, failure: null }), false);
 });

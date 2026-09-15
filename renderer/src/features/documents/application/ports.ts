@@ -12,12 +12,10 @@ import type {
   DocumentTextSource,
 } from '@/features/documents/domain/document';
 import type { GenericFilePreview } from '@/features/documents/domain/generic-preview';
-import type { MediaPreviewStatus, MediaTranscriptState } from '@/features/documents/domain/media';
 import {
   featureErrorClass,
   FeatureError,
   type FeatureFailureKind,
-  type TransportFailureKind,
 } from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
@@ -53,7 +51,6 @@ export interface DocxDocumentAsset {
 }
 
 export interface MediaDocumentAsset {
-  fallbackUrl: string;
   kind: 'media';
   url: string;
   version: string;
@@ -73,14 +70,6 @@ export interface DocxPreviewPort {
   load(resource: DocxDocumentAsset, signal: AbortSignal): Promise<DocxPreview>;
 }
 
-export interface MediaPort {
-  cancelTranscript(source: SourceReference, signal: AbortSignal): Promise<boolean>;
-  loadPreviewStatus(source: SourceReference, signal: AbortSignal): Promise<MediaPreviewStatus>;
-  loadTranscript(source: SourceReference, signal: AbortSignal): Promise<MediaTranscriptState>;
-  preparePreview(source: SourceReference, signal: AbortSignal): Promise<void>;
-  reprocessTranscript(source: SourceReference, signal: AbortSignal): Promise<void>;
-}
-
 export interface DocumentQueryScope {
   cancel(): Promise<void>;
   remove(): void;
@@ -91,36 +80,35 @@ export interface DocumentWindowLifecyclePort {
   onPrepareContextRelease(handler: () => boolean | Promise<boolean>): () => void;
 }
 
-export type DocumentSourceFailureKind = FeatureFailureKind<'unsupported-encoding'>;
+export type DocumentSourceFailureKind = FeatureFailureKind<'unsupported-encoding' | 'missing'>;
 
-export type DocumentSourceError = FeatureError<'unsupported-encoding'>;
-export const DocumentSourceError = featureErrorClass<'unsupported-encoding'>('DocumentSourceError');
+export type DocumentSourceError = FeatureError<'unsupported-encoding' | 'missing'>;
+export const DocumentSourceError = featureErrorClass<'unsupported-encoding' | 'missing'>(
+  'DocumentSourceError',
+);
 
-export type GenericFilePreviewFailureKind = FeatureFailureKind<'not-generic'>;
+export type GenericFilePreviewFailureKind = FeatureFailureKind<'not-generic' | 'missing'>;
 
-export type GenericFilePreviewError = FeatureError<'not-generic'>;
-export const GenericFilePreviewError = featureErrorClass<'not-generic'>('GenericFilePreviewError');
+export type GenericFilePreviewError = FeatureError<'not-generic' | 'missing'>;
+export const GenericFilePreviewError = featureErrorClass<'not-generic' | 'missing'>(
+  'GenericFilePreviewError',
+);
 
-export type DocumentAssetFailureKind = TransportFailureKind;
+export type DocumentAssetFailureKind = FeatureFailureKind<'missing'>;
 
-export type DocumentAssetError = FeatureError;
-export const DocumentAssetError = featureErrorClass('DocumentAssetError');
+export type DocumentAssetError = FeatureError<'missing'>;
+export const DocumentAssetError = featureErrorClass<'missing'>('DocumentAssetError');
 
 export type DocxPreviewFailureKind = FeatureFailureKind<'timeout'>;
 
 export type DocxPreviewError = FeatureError<'timeout'>;
 export const DocxPreviewError = featureErrorClass<'timeout'>('DocxPreviewError');
 
-export type MediaFailureKind = TransportFailureKind;
-
-export type MediaError = FeatureError;
-export const MediaError = featureErrorClass('MediaError');
-
-export type DocumentSaveFailureKind = FeatureFailureKind<'conflict'>;
+export type DocumentSaveFailureKind = FeatureFailureKind<'conflict' | 'missing'>;
 
 /** The only failure that carries state: a conflict reports the version the
  *  server holds so the editor can offer an overwrite against a known base. */
-export class DocumentSaveError extends FeatureError<'conflict'> {
+export class DocumentSaveError extends FeatureError<'conflict' | 'missing'> {
   readonly currentVersion: string | null;
 
   constructor(

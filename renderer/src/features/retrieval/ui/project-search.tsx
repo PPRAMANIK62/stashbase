@@ -20,8 +20,8 @@ export interface ProjectSearchProps {
   decisionApi: IndexDecisionPort;
   exactApi: ExactSearchPort;
   focusRevision: number;
+  onConfigureSearch?: (() => void) | undefined;
   onNavigate(intent: SearchNavigationIntent): Promise<boolean>;
-  onOpenSettings(section: 'ai-index' | 'transcription'): void;
   preparation: PreparationCounts;
   readiness: SemanticReadiness;
   /** Visible sources already searchable, for the preparation line. */

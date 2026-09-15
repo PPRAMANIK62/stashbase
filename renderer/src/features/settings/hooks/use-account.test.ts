@@ -19,6 +19,58 @@ function mount(port = accountPort(), openExternal = vi.fn()) {
 }
 
 describe('useAccount', () => {
+  it('exposes failed initial reads and recovers without starting browser sign-in', async () => {
+    const port = accountPort(SIGNED_OUT_ACCOUNT, {
+      load: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Disconnected'))
+        .mockResolvedValue(SIGNED_OUT_ACCOUNT),
+    });
+    const { hook, openExternal } = mount(port);
+    await waitFor(() => expect(hook.result.current.failure).not.toBeNull());
+    expect(hook.result.current.loading).toBe(false);
+    act(() => hook.result.current.retryAccount());
+    await waitFor(() => expect(hook.result.current.account).toEqual(SIGNED_OUT_ACCOUNT));
+    expect(hook.result.current.failure).toBeNull();
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('accepts only one sign-in until that browser wait is stopped', async () => {
+    const { hook, port } = mount(accountPort(SIGNED_OUT_ACCOUNT));
+    await waitFor(() => expect(hook.result.current.account).not.toBeNull());
+    act(() => {
+      hook.result.current.signIn();
+      hook.result.current.signIn();
+    });
+    await waitFor(() => expect(hook.result.current.canStopWaiting).toBe(true));
+    act(() => hook.result.current.signIn());
+    expect(port.startSignIn).toHaveBeenCalledTimes(1);
+  });
+  it('lets a pending send wait for sign-in and cancel without cancelling other observers', async () => {
+    const { hook, port } = mount();
+    await waitFor(() => expect(hook.result.current.account).not.toBeNull());
+    const cancelled = new AbortController();
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = hook.result.current.signInAndWait(cancelled.signal);
+      second = hook.result.current.signInAndWait(new AbortController().signal);
+    });
+    await waitFor(() => expect(hook.result.current.canStopWaiting).toBe(true));
+    act(() => cancelled.abort());
+    expect(await first).toBe(false);
+    expect(hook.result.current.signInPending).toBe(true);
+    expect(port.startSignIn).toHaveBeenCalledOnce();
+    act(() => hook.result.current.stopWaiting());
+    expect(await second).toBe(false);
+    vi.mocked(port.signInStatus).mockResolvedValue({ state: 'complete' });
+    let completed!: Promise<boolean>;
+    act(() => {
+      completed = hook.result.current.signInAndWait(new AbortController().signal);
+    });
+    await expect(completed).resolves.toBe(true);
+  });
+
   it('opens the browser for a sign-in and holds one pending flag across the whole round trip', async () => {
     const port = accountPort(SIGNED_OUT_ACCOUNT, {
       signInStatus: vi.fn(async () => ({ state: 'complete' as const })),
@@ -63,6 +115,7 @@ describe('useAccount', () => {
       signInStatus: vi.fn(async () => ({ error: 'Denied', state: 'error' as const })),
     });
     const { hook } = mount(port);
+    await waitFor(() => expect(hook.result.current.account).not.toBeNull());
 
     act(() => hook.result.current.signIn());
 

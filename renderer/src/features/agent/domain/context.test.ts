@@ -193,7 +193,7 @@ describe('context validation', () => {
       validateContext([source('docs/agent.md')], {
         listing: null,
         readiness: {},
-        scope: { kind: 'unbound' },
+        scope: { kind: 'folder', path: '/project/Research' },
       })[0],
     ).toMatchObject({ reason: 'This file belongs to a different folder.', status: 'stale' });
     expect(

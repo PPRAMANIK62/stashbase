@@ -134,7 +134,7 @@ describe('conversation tree', () => {
       }),
     ]);
 
-    expect(screen.getAllByRole('button', { name: /^Actions for/u })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^Actions for/u })).toHaveLength(2);
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Reading list' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
     expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'native-1' }));
@@ -152,9 +152,9 @@ describe('conversation tree', () => {
     renderTree([group({ items })]);
 
     const menu = screen.getByRole('list', { name: 'Today chats' });
-    expect(within(menu).getAllByRole('button')).toHaveLength(100);
+    expect(within(menu).getAllByRole('button', { name: /^Chat /u })).toHaveLength(100);
     await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
-    expect(within(menu).getAllByRole('button')).toHaveLength(101);
+    expect(within(menu).getAllByRole('button', { name: /^Chat /u })).toHaveLength(101);
     expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
   });
 });

@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { DependencyProvider } from '@/app/composition/dependency-context';
 import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
-import { ProjectWelcome, type WorkspaceSessionController } from '@/features/workspace/public';
+import {
+  ProjectWelcome,
+  useProjectEntry,
+  type WorkspaceSessionController,
+} from '@/features/workspace/public';
 import { createWorkspaceSessionRuntime } from '@/features/workspace/test-support';
 import { appDependencies } from '@/test/fakes/app';
 import { sessionPersistence } from '@/test/fakes/workspace';
@@ -27,6 +31,20 @@ function session(
 function mount(overrides: Partial<WorkspaceComposition> = {}) {
   const dependencies = appDependencies();
   const active = overrides.session ?? session();
+  function Welcome() {
+    const entry = useProjectEntry(
+      dependencies.project.folderPicker,
+      dependencies.project.lifecycle,
+      dependencies.workspace.adapters.githubImport,
+    );
+    return (
+      <ProjectWelcome
+        {...dependencies.project}
+        entry={entry}
+        isRestoringSession={active.status.kind === 'restoring'}
+      />
+    );
+  }
   const composition: WorkspaceComposition = {
     dialogs: <div data-testid="dialogs" />,
     hasActiveFolder: true,
@@ -38,13 +56,7 @@ function mount(overrides: Partial<WorkspaceComposition> = {}) {
     titlebar: <div data-testid="titlebar" />,
     // Bound the way the shell binds it, so the layout is exercised with the
     // welcome it is actually handed.
-    welcome: (
-      <ProjectWelcome
-        {...dependencies.project}
-        githubImport={dependencies.workspace.adapters.githubImport}
-        isRestoringSession={active.status.kind === 'restoring'}
-      />
-    ),
+    welcome: <Welcome />,
     ...overrides,
   };
   const Wrapper = queryWrapper(createTestQueryClient());

@@ -1,3 +1,4 @@
+import { isRetrievableViewerFormat } from '../shared/file-formats.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -396,7 +397,7 @@ export function listImmediateDirectory(relPrefix = ''): ImmediateDirectoryEntry[
     }
     if (!entry.isFile() || entry.name.endsWith('.tmp')) continue;
     const format = detectViewerFormat(entry.name);
-    if (!format) continue;
+    if (!format || !isRetrievableViewerFormat(format)) continue;
     try {
       out.push({ name: entry.name, path: rel, type: 'file', format, size: fs.statSync(full).size });
     } catch { /* raced with an external filesystem mutation */ }
@@ -422,7 +423,7 @@ export async function listImmediateDirectoryAsync(relPrefix = ''): Promise<Immed
     }
     if (!entry.isFile() || entry.name.endsWith('.tmp')) continue;
     const format = detectViewerFormat(entry.name);
-    if (!format) continue;
+    if (!format || !isRetrievableViewerFormat(format)) continue;
     try {
       out.push({ name: entry.name, path: rel, type: 'file', format, size: (await fs.promises.stat(full)).size });
     } catch { /* raced with an external filesystem mutation */ }

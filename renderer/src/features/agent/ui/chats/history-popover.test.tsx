@@ -62,7 +62,7 @@ describe('ChatHistoryPopover', () => {
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('button', { name: 'Chat history' }));
-    const search = await screen.findByRole('combobox', { name: 'Search recent chats' });
+    const search = await screen.findByRole('combobox', { name: 'Search chat titles' });
     await waitFor(() => expect(search).toBe(document.activeElement));
     expect(await screen.findByRole('option', { name: 'Planning notes, 22h' })).not.toBeNull();
     expect(screen.getByRole('option', { name: 'Refine Gallery subtitle, 2d' })).not.toBeNull();
@@ -74,7 +74,7 @@ describe('ChatHistoryPopover', () => {
     expect(restore).toHaveBeenCalledWith(entries[1]);
     // The popover closes behind the choice.
     await waitFor(() =>
-      expect(screen.queryByRole('combobox', { name: 'Search recent chats' })).toBeNull(),
+      expect(screen.queryByRole('combobox', { name: 'Search chat titles' })).toBeNull(),
     );
   });
 

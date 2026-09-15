@@ -103,7 +103,6 @@ jobs:
       - name: Build and upload macOS assets to draft release
         env:
           STASHBASE_SKIP_SIDECAR_BUILD: '1'
-          STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1'
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}

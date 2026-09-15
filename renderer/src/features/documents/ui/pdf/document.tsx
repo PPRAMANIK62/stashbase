@@ -234,6 +234,7 @@ function PdfViewer({
       <div
         aria-label={`${name} pages`}
         className="min-h-0 flex-1 overflow-auto"
+        data-document-scroller
         ref={scrollerRef}
         role="region"
       >

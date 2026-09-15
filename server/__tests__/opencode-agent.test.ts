@@ -34,7 +34,7 @@ test('OpenCode history distinguishes allocated blanks from started conversations
   assert.equal(openCodeSessionHasContent({ title: 'Summarize the research folder' }, 0), true);
 });
 
-test('OpenQuill publishes scope retirement once before closing its transport', () => {
+test('the Default Agent publishes scope retirement once before closing its transport', () => {
   const ws = new FakeWebSocket();
   let closed = 0;
   const session = new OpenCodePanelSession(ws as unknown as WebSocket, {
@@ -86,13 +86,6 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
   assert.equal(config.permission?.edit, 'ask');
   assert.equal(config.permission?.bash, 'ask');
   assert.equal(config.permission?.external_directory, 'deny');
-  const unboundTools = config.agent?.['stashbase-unbound']?.tools ?? {};
-  for (const tool of ['read', 'write', 'edit', 'patch', 'apply_patch', 'glob', 'grep', 'bash', 'task']) {
-    assert.equal(unboundTools[tool], false, `Unbound profile must deny ${tool}`);
-  }
-  assert.equal(config.agent?.['stashbase-folder']?.tools, undefined);
-  assert.equal(config.agent?.['stashbase-unbound']?.permission?.edit, 'deny');
-  assert.equal(config.agent?.['stashbase-unbound']?.permission?.bash, 'deny');
   assert.equal(config.agent?.['stashbase-folder']?.mode, 'primary');
   assert.equal((config.permission as Record<string, unknown>).stashbase_write_file, 'ask');
   assert.equal((config.permission as Record<string, unknown>).stashbase_delete_file, 'ask');
@@ -113,7 +106,7 @@ test('bundled OpenCode config disables sharing and updates while asking for ever
     enabled: true,
     timeout: 10_000,
   });
-  for (const profile of ['stashbase-folder', 'stashbase-unbound'] as const) {
+  for (const profile of ['stashbase-folder'] as const) {
     const prompt = attributed.agent?.[profile]?.prompt ?? '';
     assert.match(prompt, /StashBase MCP/i);
     assert.match(prompt, /search_project/);
@@ -287,11 +280,11 @@ test('OpenCode translator isolates sessions and classifies hosted allowance fail
     type: 'session.error',
     properties: {
       sessionID: 'ours',
-      error: { name: 'APIError', data: { message: 'OpenQuill free credits are exhausted', isRetryable: false } },
+      error: { name: 'APIError', data: { message: 'Free Agent credits are exhausted', isRetryable: false } },
     },
   });
   assert.deepEqual(events, [
-    { t: 'error', message: 'OpenQuill free credits are exhausted', failure: { kind: 'allowance-exhausted' } },
+    { t: 'error', message: 'Free Agent credits are exhausted', failure: { kind: 'allowance-exhausted' } },
     { t: 'turn-end', isError: true },
   ]);
 });

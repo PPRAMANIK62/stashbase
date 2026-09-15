@@ -60,8 +60,6 @@ export interface SearchBackend {
   readonly emptyMessage: string;
   readonly icon: IconComponent;
   readonly id: string;
-  /** Shown while the backend is ready and the reader has typed nothing. */
-  readonly idleMessage: string;
   /** Present only on a backend that search by meaning gates. Its absence is the whole
    *  statement that this backend is never held back by the index — and it is
    *  what tells the surface whose reader needs the index notice. */

@@ -8,7 +8,7 @@ const catalogBody = {
   clis: [
     {
       id: 'stashbase',
-      label: 'OpenQuill',
+      label: 'Default',
       vendor: 'StashBase',
       installHint: '',
       installed: true,
@@ -17,7 +17,7 @@ const catalogBody = {
       launchCommand: 'stashbase',
     },
   ],
-  debug: { enabled: true, discoveryPolicy: 'auto', nextFailure: 'none', nextTurnFailure: 'none' },
+  debug: { enabled: true, nextFailure: 'none', nextTurnFailure: 'none' },
 };
 
 describe('agent runtime API', () => {
@@ -30,12 +30,12 @@ describe('agent runtime API', () => {
         {
           id: 'stashbase',
           installed: true,
-          label: 'OpenQuill',
+          label: 'Default',
           ownership: 'bundled',
           preparation: { kind: 'ready' },
         },
       ],
-      debug: { discoverySource: 'auto', nextSetupResult: 'none', nextTurnResult: 'none' },
+      debug: { nextSetupResult: 'none', nextTurnResult: 'none' },
     });
     expect(client.request).toHaveBeenCalledWith({
       method: 'GET',
@@ -74,28 +74,12 @@ describe('agent runtime API', () => {
     const client: HttpClient = { request: vi.fn(async () => ({ body: catalogBody, status: 200 })) };
     const signal = new AbortController().signal;
 
-    await createAgentRuntimeAdapter(client).updateDebug(
-      { discoverySource: 'managed-only' },
-      signal,
-    );
+    await createAgentRuntimeAdapter(client).updateDebug({ nextSetupResult: 'mcp' }, signal);
 
     expect(client.request).toHaveBeenCalledWith({
-      body: { discoveryPolicy: 'managed-only' },
+      body: { nextFailure: 'mcp' },
       method: 'PUT',
       path: '/api/terminal/debug',
-      signal,
-    });
-  });
-
-  it('removes a managed runtime over DELETE', async () => {
-    const client: HttpClient = { request: vi.fn(async () => ({ body: catalogBody, status: 200 })) };
-    const signal = new AbortController().signal;
-
-    await createAgentRuntimeAdapter(client).resetManagedAgent('codex', signal);
-
-    expect(client.request).toHaveBeenCalledWith({
-      method: 'DELETE',
-      path: '/api/terminal/clis/codex/managed',
       signal,
     });
   });

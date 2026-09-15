@@ -115,7 +115,6 @@ function toRuntime(wire: AgentWire): AgentRuntime {
 function toDebugControls(wire: AgentRuntimeDebugStateWire | undefined): AgentDebugControls | null {
   if (!wire?.enabled) return null;
   return {
-    discoverySource: wire.discoveryPolicy,
     nextSetupResult: wire.nextFailure,
     nextTurnResult: wire.nextTurnFailure,
   };
@@ -186,17 +185,11 @@ export function createAgentRuntimeAdapter(client: HttpClient): AgentRuntimePort 
     updateDebug(patch, signal) {
       return catalog(client, '/api/terminal/debug', signal, {
         body: agentRuntimeDebugPatchRequestSchema.parse({
-          ...(patch.discoverySource === undefined
-            ? {}
-            : { discoveryPolicy: patch.discoverySource }),
           ...(patch.nextSetupResult === undefined ? {} : { nextFailure: patch.nextSetupResult }),
           ...(patch.nextTurnResult === undefined ? {} : { nextTurnFailure: patch.nextTurnResult }),
         }),
         method: 'PUT',
       });
-    },
-    resetManagedAgent(id, signal) {
-      return catalog(client, `/api/terminal/clis/${id}/managed`, signal, { method: 'DELETE' });
     },
     async getAllowance(signal) {
       return toAllowance(

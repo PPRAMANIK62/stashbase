@@ -50,13 +50,13 @@ function treeRuntime(client: QueryClient): WorkspaceRuntime {
 
 function renderTree(
   api: FilesPort,
-  retireSources?: ComponentProps<typeof FileTree>['retireSources'],
+  mutateSources?: ComponentProps<typeof FileTree>['mutateSources'],
 ) {
   const client = createTestQueryClient();
   return withQueryClient(
     <FileTree
       api={api}
-      retireSources={retireSources}
+      mutateSources={mutateSources}
       revealLabel="Show in file manager"
       runtime={treeRuntime(client)}
     />,
@@ -76,11 +76,14 @@ afterEach(() => {
 describe('file tree menu', () => {
   it('deletes only after confirmation and keeps the entry when a document cannot be saved', async () => {
     const api = treeApi();
-    const retireSources = vi
-      .fn<NonNullable<ComponentProps<typeof FileTree>['retireSources']>>()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce([]);
-    renderTree(api, retireSources);
+    const mutateSources = vi
+      .fn<NonNullable<ComponentProps<typeof FileTree>['mutateSources']>>()
+      .mockResolvedValueOnce(false)
+      .mockImplementationOnce(async (_entry, operation) => {
+        await operation();
+        return true;
+      });
+    renderTree(api, mutateSources);
     const user = userEvent.setup();
 
     const archive = await screen.findByRole('treeitem', {

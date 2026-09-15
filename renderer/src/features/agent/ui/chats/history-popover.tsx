@@ -93,7 +93,7 @@ export function ChatHistoryPopover({
   };
 
   const loading = history.historyLoading && rows.length === 0;
-  const empty = !loading && rows.length === 0;
+  const empty = !loading && rows.length === 0 && !history.historyFailure;
 
   return (
     <Popover.Root
@@ -142,11 +142,11 @@ export function ChatHistoryPopover({
                   aria-autocomplete="list"
                   aria-controls={rows.length > 0 ? listId : undefined}
                   aria-expanded={rows.length > 0}
-                  aria-label="Search recent chats"
+                  aria-label="Search chat titles"
                   autoComplete="off"
                   onChange={(event) => setQuery(event.target.value)}
                   onKeyDown={onInputKeyDown}
-                  placeholder="Search recent chats"
+                  placeholder="Search chat titles"
                   ref={searchField}
                   role="combobox"
                   spellCheck={false}
@@ -157,6 +157,14 @@ export function ChatHistoryPopover({
                 <p className="px-4 py-3 text-caption text-muted-foreground" role="status">
                   Loading chats…
                 </p>
+              )}
+              {history.historyFailure && (
+                <div className="px-4 py-3 text-caption">
+                  <p>{history.historyFailure}</p>
+                  <Button size="compact" variant="ghost" onClick={() => void history.retry()}>
+                    Retry
+                  </Button>
+                </div>
               )}
               {empty && (
                 <p className="px-4 py-3 text-caption text-muted-foreground" role="status">

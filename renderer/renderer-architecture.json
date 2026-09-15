@@ -49,7 +49,6 @@
   "wireSchemaModules": [
     "shared/protocols/agent-model.ts",
     "shared/protocols/electron/bug-report-review.ts",
-    "shared/protocols/electron/bug-report.ts",
     "shared/protocols/electron/external-navigation.ts",
     "shared/protocols/electron/project.ts",
     "shared/protocols/electron/runtime.ts",
@@ -58,6 +57,7 @@
     "shared/protocols/electron/workspace-session.ts",
     "shared/protocols/http/agent-context.ts",
     "shared/protocols/http/agent-instructions.ts",
+    "shared/protocols/http/agent-preferences.ts",
     "shared/protocols/http/agent-runtime.ts",
     "shared/protocols/http/agent-sessions.ts",
     "shared/protocols/http/appearance.ts",
@@ -69,12 +69,10 @@
     "shared/protocols/http/index-status.ts",
     "shared/protocols/http/project.ts",
     "shared/protocols/http/mcp.ts",
-    "shared/protocols/http/media.ts",
     "shared/protocols/http/local-components.ts",
     "shared/protocols/http/preparation.ts",
     "shared/protocols/http/search.ts",
     "shared/protocols/http/semantic-search.ts",
-    "shared/protocols/http/transcription.ts",
     "shared/protocols/http/workspace-preferences.ts",
     "shared/protocols/websocket/agent-session.ts"
   ]

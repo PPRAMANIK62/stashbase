@@ -7,8 +7,6 @@ import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type {
-  GitHubImportPort,
-  ProjectFolderPickerPort,
   ProjectLifecyclePort,
   ProjectRegistryPort,
 } from '@/features/workspace/application/ports';
@@ -19,8 +17,7 @@ import {
   isTemporaryFolderPath,
   parentFolderPath,
 } from '@/features/workspace/domain/project';
-import { useFolders } from '@/features/workspace/hooks/use-folders';
-import { useGitHubImportDialog } from '@/features/workspace/hooks/use-github-import-dialog';
+import type { ProjectEntry } from '@/features/workspace/hooks/use-project-entry';
 import { useRemoveFolder } from '@/features/workspace/hooks/use-remove-folder';
 import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
@@ -28,17 +25,16 @@ import { useSize } from '@/lib/size-context';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/shared/brand/logo';
 import { FailureLine } from '@/shared/ui/failure-notice';
+import { holdsTextSelection } from '@/shared/utils/click-intent';
 
-import { ImportGitHubDialog } from './import-github-dialog';
 import { RemoveFolderDialog } from './remove-folder-dialog';
 
 export interface ProjectWelcomeProps {
   api: ProjectRegistryPort;
-  folderPicker: ProjectFolderPickerPort;
+  entry: ProjectEntry;
   /** The Gallery band. Composed rather than owned here: the shop is its own
    *  feature, and this screen is only one of the two ways in. */
   gallery?: ReactNode;
-  githubImport: GitHubImportPort;
   isRestoringSession?: boolean;
   lifecycle: ProjectLifecyclePort;
 }
@@ -66,7 +62,11 @@ function RecentFolderActions({
       className={cn(
         'absolute top-1/2 right-2 flex size-7 -translate-y-1/2 cursor-pointer items-center justify-center text-muted-foreground opacity-0 transition-[color,opacity] duration-fast outline-none',
         shape.item,
-        'group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100',
+        // group-has-[:focus-visible], not group-focus-within: a mouse click
+        // on the row leaves focus inside it, and focus-within would then keep
+        // the ✕ standing over an untinted row long after the pointer left.
+        // Keyboard focus still reveals it, which is the case focus was for.
+        'group-hover:opacity-100 group-has-[:focus-visible]:opacity-100',
         'hover:text-foreground active:bg-hover disabled:pointer-events-none',
         '[&_svg]:size-4 [&_svg]:stroke-[1.5]',
         focusRing(),
@@ -82,16 +82,14 @@ function RecentFolderActions({
 
 export function ProjectWelcome({
   api,
-  folderPicker,
+  entry: folders,
   gallery,
-  githubImport,
   isRestoringSession = false,
   lifecycle,
 }: ProjectWelcomeProps) {
   const project = useQuery(projectQuery(api));
-  const folders = useFolders(api, folderPicker);
   const removal = useRemoveFolder(api, lifecycle);
-  const importDialog = useGitHubImportDialog(githubImport, folders.select);
+  const importDialog = folders.importDialog;
   const shape = useShape();
   const sizeClasses = useSize();
 
@@ -112,7 +110,7 @@ export function ProjectWelcome({
     {
       action: (
         <Button
-          aria-label="Open folder as a project"
+          aria-label="Open a project"
           className="w-24 shrink-0"
           disabled={folders.isPending}
           loading={folders.isPending && opening}
@@ -121,13 +119,13 @@ export function ProjectWelcome({
           Open
         </Button>
       ),
-      detail: 'Point StashBase at your folder. Files stay where they are.',
-      title: 'Open folder as a project',
+      detail: 'Choose a local folder. Your files stay where they are.',
+      title: 'Open a project',
     },
     {
       action: (
         <Button
-          aria-label="Create a new project"
+          aria-label="Create a project"
           className="w-24 shrink-0"
           disabled={folders.isPending}
           loading={folders.isPending && creating}
@@ -137,13 +135,13 @@ export function ProjectWelcome({
           Create
         </Button>
       ),
-      detail: 'Make an empty folder and open it as a project.',
-      title: 'Create a new project',
+      detail: 'Create a folder, then open it as a project.',
+      title: 'Create a project',
     },
     {
       action: (
         <Button
-          aria-label="Import project from GitHub"
+          aria-label="Import from GitHub"
           className="w-24 shrink-0"
           disabled={folders.isPending}
           onClick={importDialog.start}
@@ -152,8 +150,8 @@ export function ProjectWelcome({
           Import
         </Button>
       ),
-      detail: 'Clone a public repository into a new project.',
-      title: 'Import project from GitHub',
+      detail: 'Create a new local project from a public repository.',
+      title: 'Import from GitHub',
     },
   ];
 
@@ -187,7 +185,7 @@ export function ProjectWelcome({
          * foot of the list's frame rather than leaving the card hanging
          * short beside it. The pane is what is measured, not the window: a
          * sidebar takes its share before this screen sees any width. */}
-        <section aria-label="Choose a folder" className="mt-10 w-full max-w-5xl">
+        <section aria-label="Choose a project" className="mt-10 w-full max-w-5xl">
           <div className="grid grid-cols-1 gap-6 @min-[44rem]:grid-cols-2">
             {/* Rules run edge to edge, as they do in every framed list in the
              * app, so the inset lives on the rows rather than the frame. The
@@ -200,7 +198,10 @@ export function ProjectWelcome({
               )}
             >
               <h2 className="border-b border-border px-4 py-3 text-body font-medium">Start</h2>
-              <ul aria-label="Add a folder" className="flex flex-1 flex-col divide-y divide-border">
+              <ul
+                aria-label="Add a project"
+                className="flex flex-1 flex-col divide-y divide-border"
+              >
                 {ways.map((way) => (
                   <li className="flex flex-1 items-center gap-4 px-4 py-3.5" key={way.title}>
                     <div className="min-w-0 flex-1">
@@ -233,7 +234,7 @@ export function ProjectWelcome({
                  * below the fifth row's text, never across a sliver of the
                  * sixth. Keep this sum in step with the row height below. */
                 <ul
-                  aria-label="Recent folders"
+                  aria-label="Recent projects"
                   className="scroll-fade max-h-[14.25rem] overflow-y-auto p-1 [--scroll-fade-size:1rem]"
                 >
                   {recent.map((member) => {
@@ -261,11 +262,22 @@ export function ProjectWelcome({
                             focusRing(),
                           )}
                           disabled={folders.isPending}
-                          onClick={() => folders.select(member.path)}
+                          // The row's own text is selectable (see the spans
+                          // below), so a drag that ends inside it arrives here
+                          // as a click. Opening the project on the gesture that
+                          // just copied its path would be the wrong answer.
+                          onClick={(event) => {
+                            if (holdsTextSelection(event.currentTarget)) return;
+                            folders.select(member.path);
+                          }}
                           title={member.path}
                           type="button"
                         >
-                          <span className="max-w-[70%] shrink-0 truncate text-body font-medium">
+                          {/* select-text: a button's text is not selectable by
+                              default, and the name and the path beneath the
+                              pointer are exactly what a reader reaches for
+                              when they want to paste this project somewhere. */}
+                          <span className="max-w-[70%] shrink-0 truncate text-body font-medium select-text">
                             {name}
                           </span>
                           {isOpening && (
@@ -280,7 +292,7 @@ export function ProjectWelcome({
                            * the card's far edge leaves a dead gap this wide
                            * card cannot close. It stops at the directory the
                            * folder sits in; the name is already the row. */}
-                          <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground">
+                          <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground select-text">
                             {displayFolderPath(parentFolderPath(member.path), homeDirectory)}
                           </span>
                         </button>
@@ -295,7 +307,7 @@ export function ProjectWelcome({
                 </ul>
               ) : (
                 <p className="px-4 py-3 text-body leading-relaxed text-muted-foreground">
-                  Folders you open will be listed here.
+                  Projects you open will appear here.
                 </p>
               )}
             </div>
@@ -316,18 +328,12 @@ export function ProjectWelcome({
           <section className="mt-10 w-full max-w-5xl">
             <h2 className="text-title font-medium">Or start from a project in the Gallery</h2>
             <p className="mt-1 max-w-lg text-body leading-relaxed text-muted-foreground">
-              Find something that inspires you. Make a copy and build on it.
+              Explore how people organize files and write with Agents. Find ideas for your own.
             </p>
             <div className="mt-4">{gallery}</div>
           </section>
         )}
       </main>
-      <ImportGitHubDialog
-        folderHome={homeDirectory}
-        import={importDialog.request}
-        onClose={importDialog.close}
-        open={importDialog.open}
-      />
       <RemoveFolderDialog
         failure={removal.failure}
         folderPath={removal.target}

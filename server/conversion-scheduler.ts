@@ -19,11 +19,8 @@ export type ConversionCancellationReason =
   | 'source-change'
   | 'folder-removed'
   | 'shutdown'
-  | 'request-aborted'
-  | 'interactive-preview'
   | 'user-request'
   | 'file-operation'
-  | 'model-removed'
   | 'conversion-started';
 
 export interface ConversionRunContext {
@@ -39,15 +36,8 @@ export interface ConversionRunContext {
 }
 
 export interface ConversionJob {
-  /** Canonical absolute task identity. Normally the source path; auxiliary
-   *  work may use its derived output path so it can share the same lanes
-   *  without colliding with the source's text conversion. */
+  /** Canonical absolute source path, used for identity, priority and cancellation. */
   key: string;
-  /** Source path used for subtree cancellation and active-folder priority. */
-  scope?: string;
-  /** Hidden tasks consume capacity and affect queue positions but do not
-   *  appear as user-visible source conversions in scheduler snapshots. */
-  visible?: boolean;
   lane: ConversionLane;
   urgency: ConversionUrgency;
   /** Lower values run first after urgency. */
@@ -114,7 +104,6 @@ interface Task extends ConversionJob {
 
 interface ClassifierRun {
   key: string;
-  scope: string;
   controller: AbortController;
   completion: Promise<void>;
 }
@@ -239,14 +228,14 @@ export class ConversionScheduler {
 
   hasUnder(prefix: string): boolean {
     for (const task of this.tasks.values()) {
-      if (this.paths.contains(prefix, this.scopeOf(task))) return true;
+      if (this.paths.contains(prefix, task.key)) return true;
     }
     return false;
   }
 
   hasRunningUnder(prefix: string): boolean {
     for (const task of this.tasks.values()) {
-      if (task.ownsLane && this.paths.contains(prefix, this.scopeOf(task))) return true;
+      if (task.ownsLane && this.paths.contains(prefix, task.key)) return true;
     }
     return false;
   }
@@ -286,10 +275,10 @@ export class ConversionScheduler {
       && !excludedRoots.some((root) => this.paths.contains(root, scope));
     const keys = new Set<string>();
     for (const task of this.tasks.values()) {
-      if (matches(this.scopeOf(task))) keys.add(task.key);
+      if (matches(task.key)) keys.add(task.key);
     }
     for (const run of this.classifierRuns) {
-      if (matches(run.scope)) keys.add(run.key);
+      if (matches(run.key)) keys.add(run.key);
     }
     return [...keys].map((key) => ({
       key,
@@ -300,10 +289,10 @@ export class ConversionScheduler {
   cancelScope(scope: string, reason?: ConversionCancellationReason): Array<{ key: string; completion: Promise<void> }> {
     const keys = new Set<string>();
     for (const task of this.tasks.values()) {
-      if (this.paths.equal(scope, this.scopeOf(task))) keys.add(task.key);
+      if (this.paths.equal(scope, task.key)) keys.add(task.key);
     }
     for (const run of this.classifierRuns) {
-      if (this.paths.equal(scope, run.scope)) keys.add(run.key);
+      if (this.paths.equal(scope, run.key)) keys.add(run.key);
     }
     return [...keys].map((key) => ({
       key,
@@ -340,11 +329,9 @@ export class ConversionScheduler {
         .sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0) || a.seq - b.seq);
       const queued = this.sortedQueued(lane);
       tasks.push(...running
-        .filter((task) => task.visible !== false)
         .map((task) => this.publicTask(task)));
       tasks.push(...queued
         .map((task, index) => ({ task, index }))
-        .filter(({ task }) => task.visible !== false)
         .map(({ task, index }) => ({
           ...this.publicTask(task),
           tasksAhead: running.length + index,
@@ -387,7 +374,7 @@ export class ConversionScheduler {
   private effectiveUrgency(task: Task): ConversionUrgency {
     if (task.urgency === 'interactive') return 'interactive';
     if (task.urgency === 'active-folder') return 'active-folder';
-    if (this.isActive(this.scopeOf(task))) return 'active-folder';
+    if (this.isActive(task.key)) return 'active-folder';
     if (task.aged) return 'active-folder';
     return 'background';
   }
@@ -535,7 +522,7 @@ export class ConversionScheduler {
         if (task.classifierState === 'running') task.classifierState = 'done';
         this.scheduleClassifierDrain();
       });
-    run = { key: task.key, scope: this.scopeOf(task), controller, completion };
+    run = { key: task.key, controller, completion };
     this.classifierRuns.add(run);
   }
 
@@ -586,7 +573,7 @@ export class ConversionScheduler {
 
   private noteLaneChange(lane: ConversionLane, extraKeys: string[] = []): void {
     const affected = [...this.tasks.values()]
-      .filter((task) => task.lane === lane && task.visible !== false)
+      .filter((task) => task.lane === lane)
       .map((task) => task.key);
     this.bump([...affected, ...extraKeys]);
   }
@@ -602,9 +589,6 @@ export class ConversionScheduler {
     return this.paths.identity(key);
   }
 
-  private scopeOf(task: Pick<ConversionJob, 'key' | 'scope'>): string {
-    return task.scope ?? task.key;
-  }
 }
 
 function positiveInteger(value: number | undefined, fallback: number): number {

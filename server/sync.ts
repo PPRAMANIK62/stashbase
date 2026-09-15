@@ -9,6 +9,7 @@
  * removed by DocumentId.
  */
 import fs from 'node:fs';
+import { isMfsDaemonRetiringError } from './mfs-daemon.ts';
 import {
   discoverConvertibleSources,
   indexFreshConvertibleSource,
@@ -128,6 +129,7 @@ async function removeAbsentDocuments(
       await indexer.deleteFile(sourcePath);
       removed.push(sourcePath);
     } catch (err: unknown) {
+      if (isMfsDaemonRetiringError(err)) throw err;
       failed.push({ name: sourcePath, error: `stale projection cleanup failed: ${errorMessage(err)}` });
     }
   }
@@ -173,8 +175,9 @@ async function indexDirectSource(
     return { outcome: 'removed' };
   }
   try {
-    return await indexer.upsertFile(sourcePath, content);
+    return await indexer.upsertFile(sourcePath, content, { waitForIndex: false });
   } catch (err: unknown) {
+    if (isMfsDaemonRetiringError(err)) throw err;
     const message = errorMessage(err);
     failed.push({ name: sourcePath, error: message });
     log.warn(`failed ${sourcePath}: ${message}`);
@@ -232,6 +235,7 @@ export async function syncIndex(
           removed.push(sourcePath);
         }
       } catch (err: unknown) {
+        if (isMfsDaemonRetiringError(err)) throw err;
         failed.push({ name: sourcePath, error: errorMessage(err) });
       }
       continue;

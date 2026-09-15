@@ -38,12 +38,15 @@ function viewerEntry<const Service extends DocumentViewerService>(
   return entry;
 }
 
-const sourceStatus = documentStatusRenderer<'unsupported-encoding'>(
+const sourceStatus = documentStatusRenderer<'unsupported-encoding' | 'missing'>(
   'DocumentSourceError',
   DOCUMENT_SOURCE_MESSAGES,
 );
-const assetStatus = documentStatusRenderer('DocumentAssetError', DOCUMENT_ASSET_MESSAGES);
-const genericStatus = documentStatusRenderer<'not-generic'>(
+const assetStatus = documentStatusRenderer<'missing'>(
+  'DocumentAssetError',
+  DOCUMENT_ASSET_MESSAGES,
+);
+const genericStatus = documentStatusRenderer<'not-generic' | 'missing'>(
   'GenericFilePreviewError',
   GENERIC_PREVIEW_MESSAGES,
 );
@@ -123,10 +126,10 @@ const pdf = viewerEntry({
 
 const audio = viewerEntry({
   component: lazy(() => import('./viewers/audio')),
-  find: true,
+  find: false,
   icon: (path) => (mediaKind(path) === 'video' ? FileVideo : FileAudio),
   outline: false,
-  services: ['assetApi', 'mediaApi', 'navigation', 'onOpenPrepared'],
+  services: ['assetApi'],
   status: assetStatus,
 });
 

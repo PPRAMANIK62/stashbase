@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
+import { afterEach, describe, expect, it } from 'vite-plus/test';
 
 import {
   createAgentWorkspaceRuntime,
@@ -45,31 +45,25 @@ describe('ChatNavButtons', () => {
     expect(next.disabled).toBe(true);
   });
 
-  it('steps back and forward through the open chats in tab order', async () => {
+  it('follows visits instead of creation order and discards forward history on a new visit', async () => {
     const runtime = createRuntime();
-    // A blank chat is reused rather than duplicated, so the first must hold
-    // a draft before a second tab can exist.
-    runtime.newChat().setDraft('keep me');
-    runtime.newChat();
-    const tabs = runtime.store.getState().tabs;
-    expect(tabs.length).toBeGreaterThanOrEqual(2);
-    const activate = vi.spyOn(runtime, 'activate');
+    const first = runtime.newChat();
+    first.setDraft('first draft');
+    const second = runtime.newChat();
+    second.setDraft('second draft');
+    const third = runtime.newChat();
+    third.setDraft('third draft');
+    runtime.activate(first.id);
     render(<ChatNavButtons runtime={runtime} />);
-
-    // The newest chat is active, so only the step back is available.
-    const { next, previous } = navButtons();
-    expect(previous.disabled).toBe(false);
-    expect(next.disabled).toBe(true);
-
     const user = userEvent.setup();
-    await user.click(previous);
-    const activeIndex = tabs.findIndex((tab) => tab.id === runtime.store.getState().activeId);
-    expect(activate).toHaveBeenCalledTimes(1);
-    expect(runtime.store.getState().activeId).toBe(tabs[activeIndex]?.id);
-
-    // A step back opens the way forward again.
-    expect(navButtons().next.disabled).toBe(false);
+    await user.click(navButtons().previous);
+    expect(runtime.store.getState().activeId).toBe(third.id);
+    await user.click(navButtons().previous);
+    expect(runtime.store.getState().activeId).toBe(second.id);
     await user.click(navButtons().next);
-    expect(runtime.store.getState().activeId).toBe(tabs[activeIndex + 1]?.id);
+    expect(runtime.store.getState().activeId).toBe(third.id);
+    runtime.activate(second.id);
+    expect(runtime.store.getState().visits.at(-1)).toBe(second.id);
+    expect(runtime.store.getState().visitIndex).toBe(runtime.store.getState().visits.length - 1);
   });
 });

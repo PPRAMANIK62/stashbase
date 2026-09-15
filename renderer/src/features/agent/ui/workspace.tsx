@@ -10,17 +10,19 @@ import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import type { QueuedMessage } from '@/components/ui/input-message';
 import type { AgentCatalogPort } from '@/features/agent/application/ports';
+import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import { honoredAccessMode } from '@/features/agent/domain/access';
-import { agentGate, type Agent } from '@/features/agent/domain/agent-catalog';
+import { agentGate, agentLabel, type Agent } from '@/features/agent/domain/agent-catalog';
 import { changedSource } from '@/features/agent/domain/file-change';
 import {
   agentSkills,
   agentTurnIsActive,
+  agentSessionIsBusy,
+  agentCanChangeAgent,
   scopeLabel,
-  type AgentConnection,
-  type AgentId,
 } from '@/features/agent/domain/session';
-import { emptyChatPrompts } from '@/features/agent/domain/starters';
+import { EMPTY_CHAT_PROMPTS } from '@/features/agent/domain/starters';
+import { useAgentAccess } from '@/features/agent/hooks/use-agent-access';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
 import { useAgentInstructions } from '@/features/agent/hooks/use-agent-instructions';
 import { useRenameConversation } from '@/features/agent/hooks/use-conversation-history';
@@ -28,6 +30,7 @@ import { useRotatingPrompt } from '@/features/agent/hooks/use-rotating-prompt';
 import { cn } from '@/lib/utils';
 import { useStickToBottom } from '@/shared/runtime/use-stick-to-bottom';
 
+import { AgentAccessDialog } from './access-dialog';
 import { ChatHeader } from './chat-header';
 import { ChatHistoryPopover } from './chats/history-popover';
 import { AgentContextComposer } from './composer/context-composer';
@@ -35,53 +38,21 @@ import { useAgentComposerFocused } from './composer/focus';
 import { AgentPermissionMode } from './composer/permission-mode';
 import { AgentProviderControl } from './composer/provider';
 import { AgentThinkingControl } from './composer/thinking';
+import { connectionNotice } from './connection-notice';
 import { AgentInstructionsControl } from './instructions/agent-instructions-control';
 import { NewChatButton } from './new-chat-button';
-import { AgentSetupNotice } from './setup';
 import { AgentTranscript } from './transcript/transcript';
+import { AgentWorkStatus } from './work-status';
 import type { AgentWorkspaceProps } from './workspace-lazy';
 
-/** What the status strip under the transcript says, or null when a working
- *  connection needs no explanation. `settled` marks a connection that has
- *  stopped for good rather than one still moving. */
-/** What the conversation needs to know about the runtimes this window can
- *  reach: which exist, which can carry a turn, and how to prepare one. */
 interface WorkspaceCatalog {
   agents: Agent[];
   error: boolean;
   loading: boolean;
-  prepare(id: AgentId, action: 'bootstrap' | 'login'): void;
-  preparingAgentId: AgentId | undefined;
-  readyAgents: Agent[];
+  refresh(): void;
 }
 
-function connectionNotice(connection: AgentConnection): { settled: boolean; text: string } | null {
-  switch (connection.kind) {
-    case 'draft':
-    case 'restoring':
-    case 'connecting':
-    case 'reconnecting':
-    case 'live':
-      return null;
-    case 'closed':
-      return { settled: true, text: connection.message ?? 'Disconnected' };
-    case 'failed':
-      return { settled: true, text: connection.message };
-    case 'retired':
-      return { settled: true, text: 'Folder removed · transcript preserved' };
-    case 'disposed':
-      return { settled: true, text: 'Conversation closed' };
-    default: {
-      const unreachable: never = connection;
-      return unreachable;
-    }
-  }
-}
-
-/** The conversation surface, whether or not a runtime can carry a turn yet.
- *  A gated window is the same canvas with the agent-specific controls absent,
- *  an unsendable composer, and the setup notice beneath it — not a second
- *  screen that replaces the draft. */
+/** Draft first; request account or native runtime access only on Send. */
 function ChatWorkspace({
   catalog,
   catalogPort,
@@ -93,15 +64,15 @@ function ChatWorkspace({
   onOpenSource,
   onReprocess,
   runtime,
-  scopeOutline,
+  active,
 }: Omit<AgentWorkspaceProps, 'catalog'> & {
+  active: AgentSessionRuntime;
   catalog: WorkspaceCatalog;
   /** The catalog as a Port, for the new-chat control that reads it itself. */
   catalogPort: AgentCatalogPort;
 }) {
-  const activeId = useStore(runtime.store, (state) => state.activeId);
+  const activeId = active.id;
   const scopeEnvironment = useStore(runtime.store, (state) => state.scopeEnvironment);
-  const active = runtime.session(activeId) ?? runtime.activeSession();
   const state = useStore(
     active.store,
     useShallow((session) => ({
@@ -109,6 +80,8 @@ function ChatWorkspace({
       accessMode: session.accessMode,
       activeModel: session.activeModel,
       connection: session.connection,
+      delivery: session.delivery,
+      queuePaused: session.queuePaused,
       effort: session.effort,
       model: session.model,
       models: session.models,
@@ -120,37 +93,41 @@ function ChatWorkspace({
       transcript: session.transcript,
     })),
   );
-  // The gate is decided from this component's own store read. A provider
-  // switch remounts the session under the same tab, which leaves the id — and
-  // so a parent that only watches the id — unchanged; deciding here is what
-  // keeps the gate and the session's runtime from disagreeing.
   const gate = agentGate({
     agents: catalog.agents,
     loading: catalog.loading,
     selected: state.agent,
   });
-  // Null is a window with nothing ready: the composer still takes a draft, and
-  // advertises no ability it cannot currently deliver.
   const readyAgent = gate.kind === 'ready' ? gate.agent : null;
+  const preferences = useStore(runtime.preferences);
+  const selectedAgent = catalog.agents.find((agent) => agent.id === state.agent) ?? {
+    id: state.agent,
+    label: agentLabel(state.agent),
+    ready: false,
+    needsSignIn: false,
+    models: [],
+    abilities: { attachments: false, effort: false, models: false, modes: [], skills: false },
+  };
+  const access = useAgentAccess({
+    runtime,
+    agents: catalog.agents,
+    catalog: catalogPort,
+    onSignIn,
+    onRefresh: catalog.refresh,
+  });
   const activeTurn = agentTurnIsActive(state.connection);
+  const busy = agentSessionIsBusy(active.store.getState());
   const notice = connectionNotice(state.connection);
   const armedSkill = agentSkills(state.skillCatalog).find((skill) => skill.id === state.skill);
   const empty = state.transcript.length === 0;
   const scopeName = scopeLabel(state.scope);
   const instructions = useAgentInstructions(instructionsApi, state.scope);
-  // A mode is a promise the runtime must be able to keep. A session that
-  // lands on a runtime honoring a different set settles on one it does
-  // honor before the next turn binds it; a runtime honoring none takes no
-  // mode, so nothing is sent for it.
   const honoredModes = readyAgent?.abilities.modes;
   useEffect(() => {
     if (!honoredModes || honoredModes.length === 0) return;
     const settled = honoredAccessMode(honoredModes, state.accessMode);
     if (settled !== state.accessMode) active.setAccessMode(settled);
   }, [active, honoredModes, state.accessMode]);
-  // A fresh chat names what it will run on from the catalog the service
-  // remembers for its runtime; once the session starts, the socket's own
-  // catalog takes over and the seed is refused.
   const rememberedModels = readyAgent?.models;
   const unstarted = state.connection.kind === 'draft';
   useEffect(() => {
@@ -158,22 +135,23 @@ function ChatWorkspace({
       active.seedModels(rememberedModels);
     }
   }, [active, rememberedModels, unstarted]);
-  const prompts = useMemo(
-    () => (scopeOutline ? emptyChatPrompts(scopeName, scopeOutline) : []),
-    [scopeName, scopeOutline],
-  );
-  // The blank Chat's placeholder cycles through the three requests, holding
-  // still while the reader is on the field. An armed skill's own hint and a
-  // conversation already under way take the field back.
   const composerFocused = useAgentComposerFocused();
-  const rotatingPrompt = useRotatingPrompt(prompts, composerFocused || !empty);
+  const rotatingPrompt = useRotatingPrompt(EMPTY_CHAT_PROMPTS, composerFocused || !empty);
   const promptPlaceholder = empty && armedSkill === undefined ? rotatingPrompt : null;
   const scope = state.scope;
-  const sourceFor = useMemo(() => (path: string) => changedSource(scope, path), [scope]);
+  const sourceFor = useMemo(
+    () => (path: string) => {
+      const source = changedSource(scope, path);
+      return source &&
+        scopeEnvironment?.folderPath === source.folderPath &&
+        scopeEnvironment.listing.files.some((file) => file.path === source.path)
+        ? source
+        : null;
+    },
+    [scope, scopeEnvironment],
+  );
   const composerRef = useRef<HTMLDivElement>(null);
   const composerShown = state.connection.kind !== 'retired' && state.connection.kind !== 'disposed';
-  // The editor takes the returned text on its next render, so focus follows
-  // a frame later and the caret lands after it.
   const editPrompt = useCallback(
     (blockId: string) => {
       if (!active.editPrompt(blockId)) return;
@@ -184,24 +162,16 @@ function ChatWorkspace({
     [active],
   );
   const logRef = useRef<HTMLDivElement>(null);
-  useStickToBottom(logRef, activeId);
+  const scroll = useStickToBottom(logRef, activeId);
   const renaming = useRenameConversation(runtime);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-surface-2">
-      {/* The name row is drawn in both layouts. With the whole card the
-       *  titlebar names the chat and the Chats panel beside it manages the
-       *  history and New chat, so the row has nothing to say and stands empty
-       *  rather than absent: a row that came and went with the layout would
-       *  move everything under it, the composer included, on every crossing. */}
       <ChatHeader
         blank={!header}
         failure={renaming.failure}
         onRename={(session, title) => void renaming.rename(session, title)}
         session={active}
-        // The conversation's own actions sit with its name: the quick way to
-        // the rest of the folder's chats, then a new one. The Chats panel
-        // stays the manager.
         trailing={
           <>
             <ChatHistoryPopover runtime={runtime} scope={state.scope} />
@@ -224,14 +194,9 @@ function ChatWorkspace({
             empty ? 'px-4 pt-8 pb-7 max-sm:px-3' : 'px-5 pt-4 pb-6 max-sm:px-4',
           )}
         >
-          {empty ? (
-            // The one line that says what this space is for, and in which
-            // order: a wiki is built from the folder first, and the writing
-            // comes from it. `design-docs` calls it durable, so it is not a
-            // generic chat prompt to be reworded, and it claims nothing about
-            // whose the words are.
+          {empty && !notice && state.connection.kind !== 'restoring' ? (
             <h2 className="text-center text-[28px] leading-none font-semibold tracking-[-0.03em] text-foreground max-sm:text-[24px]">
-              From wiki to words.
+              What’s on your mind?
             </h2>
           ) : (
             <AgentTranscript
@@ -250,7 +215,18 @@ function ChatWorkspace({
         </div>
       </div>
 
-      {notice && (
+      <AgentWorkStatus session={active} onOpenSettings={onOpenAgentSettings} />
+      {!scroll.atBottom && !empty && (
+        <Button
+          className="mx-auto mb-2"
+          size="compact"
+          variant="secondary"
+          onClick={scroll.scrollToBottom}
+        >
+          Back to latest
+        </Button>
+      )}
+      {notice && state.delivery !== 'unknown' && (
         <div className="mx-auto flex w-full max-w-[46rem] shrink-0 items-center gap-2 px-5 pb-2 text-caption text-muted-foreground max-sm:px-4">
           <span
             className={cn(
@@ -278,7 +254,7 @@ function ChatWorkspace({
           <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-surface-2 to-transparent" />
           <div className="@container relative mx-auto w-full max-w-[46rem]" ref={composerRef}>
             <AgentContextComposer
-              attachments={readyAgent?.abilities.attachments ?? false}
+              attachments={selectedAgent.abilities.attachments}
               environment={scopeEnvironment}
               maxRows={6}
               minRows={3}
@@ -289,9 +265,7 @@ function ChatWorkspace({
               onReprocess={onReprocess}
               onSkillChange={active.setSkill}
               onStop={active.interrupt}
-              // An armed skill says what it wants next, so its hint replaces
-              // the cycling request; a conversation under way gets the plain
-              // prompt.
+              onSend={access.send}
               placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Ask or write…'}
               placeholderIsPrompt={promptPlaceholder !== null}
               queue={state.queuedPrompts.map(({ context, id, text }) => ({
@@ -301,30 +275,24 @@ function ChatWorkspace({
                 id,
                 text,
               }))}
-              // The left cluster is who runs the turn and under what rules;
-              // the right is what it runs on, read last before Send.
               leftSlot={
                 <>
-                  {readyAgent && (
-                    <AgentProviderControl
-                      activeAgent={readyAgent}
-                      // The whole catalog, so a runtime waiting on sign-in or
-                      // setup is still named. The gate below only appears when
-                      // nothing at all is ready, so this control is the one
-                      // place an unprepared runtime is offered.
-                      agents={catalog.agents}
-                      disabled={activeTurn}
-                      onAgentChange={(agent) => {
-                        if (agent !== state.agent) runtime.newChat(agent, state.scope);
-                      }}
-                      onPrepare={catalog.prepare}
-                      // The bundled runtime waits on the StashBase account,
-                      // which no catalog command starts.
-                      onSignIn={onSignIn}
-                    />
-                  )}
+                  <AgentProviderControl
+                    activeAgent={selectedAgent}
+                    startsNewChat={!agentCanChangeAgent(state)}
+                    agents={
+                      catalog.agents.some((agent) => agent.id === selectedAgent.id)
+                        ? catalog.agents
+                        : [selectedAgent, ...catalog.agents]
+                    }
+                    disabled={busy || preferences.loading || Boolean(preferences.failure)}
+                    onAgentChange={(agent) => {
+                      void runtime.chooseAgent(agent);
+                    }}
+                  />
                   {readyAgent && readyAgent.abilities.modes.length > 0 && (
                     <AgentPermissionMode
+                      disabled={busy}
                       mode={state.accessMode}
                       modes={readyAgent.abilities.modes}
                       onChange={active.setAccessMode}
@@ -340,31 +308,62 @@ function ChatWorkspace({
                     onEffortChange={active.setEffort}
                     onModelChange={active.setModel}
                     onRequestCatalog={active.start}
-                    state={{ ...state, activeTurn }}
+                    state={{ ...state, activeTurn: busy }}
                   />
                 ) : null
               }
-              sendable={readyAgent !== null}
+              sendable={
+                !catalog.loading &&
+                !catalog.error &&
+                !preferences.loading &&
+                !preferences.failure &&
+                state.delivery !== 'unknown' &&
+                state.delivery !== 'stopping' &&
+                state.delivery !== 'preparing' &&
+                (activeTurn ||
+                  state.connection.kind === 'draft' ||
+                  state.connection.kind === 'live') &&
+                state.queuedPrompts.length < 20
+              }
               session={active}
               skills={readyAgent?.abilities.skills ?? false}
-              status={activeTurn ? 'streaming' : 'idle'}
+              status={busy && state.delivery !== 'stopping' ? 'streaming' : 'idle'}
             />
           </div>
         </div>
       )}
-      {gate.kind !== 'ready' && (
-        // One call to action at a time: while no runtime can carry a turn,
-        // the gate sits where the composer's own requests would otherwise be
-        // the only thing on offer.
-        <AgentSetupNotice
-          checking={gate.kind === 'checking'}
-          error={catalog.error}
-          onOpenSettings={onOpenAgentSettings}
-          onPrepare={catalog.prepare}
-          onSignIn={onSignIn}
-          pending={gate.kind === 'setup' ? gate.pending : []}
-          preparingAgentId={catalog.preparingAgentId}
-        />
+      <AgentAccessDialog
+        agent={access.agent}
+        open={access.open}
+        working={access.working}
+        failure={access.failure}
+        onConfirm={() => {
+          void access.confirm();
+        }}
+        onCancel={access.cancel}
+      />
+      {(catalog.loading || catalog.error || preferences.failure) && (
+        <div className="mx-auto flex w-full max-w-[46rem] items-center gap-2 px-4 pb-3 text-caption text-muted-foreground">
+          <span>
+            {preferences.failure ??
+              (catalog.error ? 'Agent runtime status is unavailable.' : 'Checking runtimes…')}
+          </span>
+          {(preferences.failure || catalog.error) && (
+            <Button
+              variant="ghost"
+              size="compact"
+              onClick={
+                preferences.failure
+                  ? () => {
+                      void runtime.loadPreferences();
+                    }
+                  : catalog.refresh
+              }
+            >
+              Retry
+            </Button>
+          )}
+        </div>
       )}
       {empty && <div aria-hidden className="min-h-0 grow-[1.3] basis-0" />}
     </div>
@@ -373,22 +372,27 @@ function ChatWorkspace({
 
 export default function ManagedAgentWorkspace(props: AgentWorkspaceProps) {
   const catalog = useAgentCatalog(props.catalog);
+  const active = useStore(props.runtime.store, (state) => props.runtime.session(state.activeId));
+  const { refresh } = catalog;
+  useEffect(() => {
+    if (props.accountSignedIn !== undefined) refresh();
+  }, [props.accountSignedIn, refresh]);
 
   useEffect(() => {
     props.runtime.start(catalog.readyAgents.map((agent) => agent.id));
   }, [catalog.readyAgents, props.runtime]);
 
+  if (!active) return null;
   return (
     <ChatWorkspace
+      active={active}
       {...props}
       catalogPort={props.catalog}
       catalog={{
         agents: catalog.agents,
         error: catalog.error,
         loading: catalog.loading,
-        prepare: (id, action) => catalog.prepare({ action, id }),
-        preparingAgentId: catalog.preparingAgentId,
-        readyAgents: catalog.readyAgents,
+        refresh: catalog.refresh,
       }}
     />
   );

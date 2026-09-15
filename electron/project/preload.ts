@@ -1,5 +1,14 @@
 import {
-  PROJECT_CLAIM_INITIAL_FOLDER_CHANNEL,
+  PROJECT_ENTRY_REQUESTED_CHANNEL,
+  PROJECT_ENTRY_CANCEL_CHANNEL,
+  PROJECT_ENTRY_CANCELLED_CHANNEL,
+  projectEntryStartSchema,
+  projectEntryCancelSchema,
+  PROJECT_ENTRY_PENDING_CHANNEL,
+  PROJECT_ENTRY_FINISHED_CHANNEL,
+  projectEntryRequestSchema,
+  projectEntryPendingSchema,
+  type ProjectEntryRequest,
   PROJECT_FOLDER_DIALOG_CHANNEL,
   PROJECT_FOLDER_REMOVAL_READY_CHANNEL,
   PROJECT_FOLDER_REMOVAL_REQUESTED_CHANNEL,
@@ -11,7 +20,6 @@ import {
   type ProjectFolderDialogFailure,
   type ProjectFolderDialogRequest,
   type ProjectFolderDialogResponse,
-  type ProjectInitialFolderResponse,
   type ProjectLifecycleResponse,
   type ProjectOpenFolderWindowResponse,
   type ProjectPrepareFolderRemovalResponse,
@@ -20,7 +28,6 @@ import {
   projectFolderDialogResponseSchema,
   projectFolderRemovalReadySchema,
   projectFolderRemovalRequestedSchema,
-  projectInitialFolderResponseSchema,
   projectLifecycleResponseSchema,
   projectOpenFolderWindowResponseSchema,
   projectPrepareFolderRemovalResponseSchema,
@@ -36,9 +43,11 @@ export interface ProjectPreload {
   chooseFolder(
     request?: Partial<ProjectFolderDialogRequest>,
   ): Promise<ProjectFolderDialogResponse>;
-  claimInitialFolder(): Promise<ProjectInitialFolderResponse>;
+  onEnterFolder(handler: (request: ProjectEntryRequest) => Promise<string | null>): () => void;
   notifyFolderRemoved(folderPath: string): Promise<ProjectLifecycleResponse>;
-  openFolderWindow(folderPath: string): Promise<ProjectOpenFolderWindowResponse>;
+  cancelEntry(requestId: string): Promise<ProjectLifecycleResponse>;
+  onEntryCancelled(handler: (requestId: string) => void): () => void;
+  openFolderWindow(folderPath: string, requestId?: string): Promise<ProjectOpenFolderWindowResponse>;
   onFolderRemoved(handler: (folderPath: string) => void): () => void;
   onPrepareFolderRemoval(
     handler: (folderPath: string) => boolean | Promise<boolean>,
@@ -80,6 +89,27 @@ const lifecycleUnavailable = (): ProjectFolderDialogFailure => ({
 });
 
 export function createProjectPreload(ipcRenderer: IpcRenderer): ProjectPreload {
+  let entryHandler: ((request: ProjectEntryRequest) => Promise<string | null>) | null = null;
+  const cancelledHandlers = new Set<(requestId: string) => void>();
+  ipcRenderer.on(PROJECT_ENTRY_CANCELLED_CHANNEL, (_event, payload) => {
+    const parsed = projectEntryCancelSchema.safeParse(payload);
+    if (parsed.success) for (const handler of cancelledHandlers) handler(parsed.data.requestId);
+  });
+  const running = new Set<string>();
+  async function receiveEntry(payload: unknown) {
+    const parsed = projectEntryRequestSchema.safeParse(payload);
+    if (!parsed.success || !entryHandler || running.has(parsed.data.requestId)) return;
+    running.add(parsed.data.requestId);
+    const request = parsed.data;
+    let failure: string | null;
+    try { failure = await entryHandler(request); }
+    catch { failure = 'The project could not be opened. Try again.'; }
+    try {
+      await ipcRenderer.invoke(PROJECT_ENTRY_FINISHED_CHANNEL, { ...request, failure });
+    } catch { /* Main reports its bounded readiness timeout to the caller. */ }
+    finally { running.delete(request.requestId); }
+  }
+  ipcRenderer.on(PROJECT_ENTRY_REQUESTED_CHANNEL, (_event, payload) => { void receiveEntry(payload); });
   const folderRemovedHandlers = new Set<(folderPath: string) => void>();
   const prepareRemovalHandlers = new Set<
     (folderPath: string) => boolean | Promise<boolean>
@@ -126,6 +156,14 @@ export function createProjectPreload(ipcRenderer: IpcRenderer): ProjectPreload {
   }
 
   return Object.freeze({
+    onEnterFolder(handler: (request: ProjectEntryRequest) => Promise<string | null>) {
+      entryHandler = handler;
+      void ipcRenderer.invoke(PROJECT_ENTRY_PENDING_CHANNEL).then((payload) => {
+        const parsed = projectEntryPendingSchema.safeParse(payload);
+        if (parsed.success && parsed.data) void receiveEntry(parsed.data);
+      }).catch(() => {});
+      return () => { if (entryHandler === handler) entryHandler = null; };
+    },
     async chooseFolder(request = {}) {
       const parsedRequest = projectFolderDialogRequestSchema.parse(request);
       let response: unknown;
@@ -137,23 +175,21 @@ export function createProjectPreload(ipcRenderer: IpcRenderer): ProjectPreload {
       const parsedResponse = projectFolderDialogResponseSchema.safeParse(response);
       return parsedResponse.success ? parsedResponse.data : invalidResponse();
     },
-    async claimInitialFolder() {
-      try {
-        const response = await ipcRenderer.invoke(PROJECT_CLAIM_INITIAL_FOLDER_CHANNEL);
-        const parsed = projectInitialFolderResponseSchema.safeParse(response);
-        return parsed.success ? parsed.data : invalidLifecycleResponse();
-      } catch {
-        return lifecycleUnavailable();
-      }
-    },
     notifyFolderRemoved(folderPath: string) {
       return invokeLifecycle(
         PROJECT_NOTIFY_FOLDER_REMOVED_CHANNEL,
         projectFolderPathRequestSchema.parse({ folderPath }),
       );
     },
-    async openFolderWindow(folderPath: string) {
-      const request = projectFolderPathRequestSchema.parse({ folderPath });
+    cancelEntry(requestId: string) {
+      return invokeLifecycle(PROJECT_ENTRY_CANCEL_CHANNEL, projectEntryCancelSchema.parse({ requestId }));
+    },
+    onEntryCancelled(handler: (requestId: string) => void) {
+      cancelledHandlers.add(handler);
+      return () => cancelledHandlers.delete(handler);
+    },
+    async openFolderWindow(folderPath: string, requestId?: string) {
+      const request = projectEntryStartSchema.parse({ folderPath, ...(requestId ? { requestId } : {}) });
       try {
         const response = await ipcRenderer.invoke(PROJECT_OPEN_FOLDER_WINDOW_CHANNEL, request);
         const parsed = projectOpenFolderWindowResponseSchema.safeParse(response);

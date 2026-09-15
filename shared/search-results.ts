@@ -41,9 +41,6 @@ export interface KeywordMatch {
   text: string;
   ranges: Array<[number, number]>;
   pdfPage?: number;
-  /** Exact transcript position retained independently from display snippet
-   * truncation. Present only for AppData-derived audio Markdown. */
-  audioTimestampMs?: number;
 }
 
 export interface KeywordHitFile {

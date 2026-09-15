@@ -1,8 +1,5 @@
-/** The scope whose product-owned Agent Instructions can customize a packaged
- * default: a concrete working directory, or an unbound conversation (a Chat
- * with no working folder). Each kind has its own packaged default, and
- * instructions are never stored in the user's source folder. */
-export type AgentInstructionsScope = { kind: 'folder'; path: string } | { kind: 'unbound' };
+/** Instructions customize Agent responses within one project. */
+export type AgentInstructionsScope = { kind: 'folder'; path: string };
 
 export interface AgentInstructionsState {
   scope: AgentInstructionsScope;

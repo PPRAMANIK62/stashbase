@@ -12,7 +12,6 @@ import { RESEARCH_FOLDER } from './workspace';
  *  until a test turns it on. */
 export function folderIndexStatus(overrides: Partial<FolderIndexStatus> = {}): FolderIndexStatus {
   return {
-    blockedConversions: [],
     conversionProgress: {},
     conversionRevision: 1,
     conversionVersions: {},

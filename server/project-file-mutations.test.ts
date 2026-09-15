@@ -305,20 +305,12 @@ $$`;
   const audioTarget = path.join(root, 'Archive', 'meeting.wav');
   fs.mkdirSync(path.dirname(audioSource), { recursive: true });
   fs.writeFileSync(audioSource, Buffer.from([0x52, 0x49, 0x46, 0x46, 0xff, 0x00, 0x80]));
-  const staleAudioNote = derivedStore.derivedNoteFor(audioSource);
-  const staleAudioTranscript = derivedStore.derivedTranscriptFor(audioSource);
-  fs.mkdirSync(path.dirname(staleAudioNote), { recursive: true });
-  fs.writeFileSync(staleAudioNote, 'stale transcript');
-  fs.writeFileSync(staleAudioTranscript, '{}');
-
   const movedAudio = await callTool(base, token, 'move_file', {
     path: audioSource,
     new_path: audioTarget,
   });
   assert.equal(movedAudio.path, audioTarget.replace(/\\/g, '/'));
   assert.deepEqual(fs.readFileSync(audioTarget), Buffer.from([0x52, 0x49, 0x46, 0x46, 0xff, 0x00, 0x80]));
-  assert.equal(fs.existsSync(staleAudioNote), false);
-  assert.equal(fs.existsSync(staleAudioTranscript), false);
 
   // Workbench-visible hidden directories remain outside semantic and
   // Preparation lifecycles when a source is moved into them.

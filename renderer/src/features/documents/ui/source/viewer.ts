@@ -15,7 +15,6 @@ import type {
   DocumentSourcePort,
   DocxPreviewPort,
   GenericFilePreviewPort,
-  MediaPort,
 } from '@/features/documents/application/ports';
 import type { DocumentViewerFormat } from '@/features/documents/domain/document-format';
 import type { SourceReference } from '@/shared/domain/source-reference';
@@ -24,7 +23,7 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 export type PreparationSlotFormat = Extract<DocumentViewerFormat, 'docx' | 'image' | 'pdf'>;
 
 /** Formats whose preparation is promoted the moment a tab opens them. */
-export type PreparedOnOpenFormat = Extract<DocumentViewerFormat, 'audio' | 'docx'>;
+export type PreparedOnOpenFormat = Extract<DocumentViewerFormat, 'docx'>;
 
 export interface DocumentNavigationTarget {
   anchor?: string | undefined;
@@ -39,7 +38,6 @@ export interface DocumentViewerServices {
   assetApi: DocumentAssetPort;
   docxPreviewApi: DocxPreviewPort;
   genericPreviewApi: GenericFilePreviewPort;
-  mediaApi: MediaPort;
   navigation: DocumentNavigationRuntime;
   onNavigate(target: DocumentNavigationTarget): void;
   onOpenExternal(href: string): Promise<boolean>;

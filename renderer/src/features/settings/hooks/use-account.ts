@@ -4,10 +4,10 @@
  *
  * A browser sign-in is tracked by its flow id and polled until the server
  * reports the flow finished. Either way the account changes, everything that
- * depends on it is re-read: OpenQuill's readiness and credits.
+ * depends on it is re-read: the bundled Agent's readiness and credits.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { settingsFailure } from '@/features/settings/application/failure-messages';
 import type { AccountPort } from '@/features/settings/application/ports';
@@ -33,6 +33,8 @@ export interface AccountViewModel {
   readonly busy: boolean;
   readonly failure: FailureView | null;
   readonly loading: boolean;
+  readonly loadFailed: boolean;
+  retryAccount(): void;
   /** The browser round trip is open: started, and not yet reported finished. */
   readonly signInPending: boolean;
   /** A browser flow is open and its local wait can be stopped. */
@@ -41,6 +43,8 @@ export interface AccountViewModel {
   stopWaiting(): void;
   /** Starts the flow and hands the URL to the browser. */
   signIn(): void;
+  /** Waits for this explicit sign-in; aborting the caller never revokes browser authorization. */
+  signInAndWait(signal: AbortSignal): Promise<boolean>;
   signOut(): void;
 }
 
@@ -52,6 +56,13 @@ export function useAccount(
   const account = useQuery(accountQuery(port));
   const [signInFlow, setSignInFlow] = useState<string | null>(null);
   const [signInError, setSignInError] = useState<FailureView | null>(null);
+  const command = useRef<'sign-in' | 'sign-out' | null>(null);
+  const waiters = useRef(new Set<(success: boolean) => void>());
+  const finishWaiters = useCallback((success: boolean) => {
+    for (const finish of waiters.current) finish(success);
+    waiters.current.clear();
+  }, []);
+  useEffect(() => () => finishWaiters(false), [finishWaiters]);
 
   const flow = useQuery({
     enabled: signInFlow !== null,
@@ -67,21 +78,35 @@ export function useAccount(
 
   useEffect(() => {
     if (signInFlow && flow.isError) {
+      finishWaiters(false);
+      command.current = null;
       setSignInFlow(null);
       setSignInError(settingsFailure(flow.error));
       return;
     }
     if (!signInFlow || !flow.data || flow.data.state === 'pending') return;
+    command.current = null;
     setSignInFlow(null);
     if (flow.data.state === 'error') {
+      finishWaiters(false);
       setSignInError({ message: flow.data.error, tone: 'input' });
       return;
     }
     void queryClient.invalidateQueries({ queryKey: settingsQueryKeys.account });
     invalidateDependents();
-  }, [flow.data, flow.error, flow.isError, invalidateDependents, queryClient, signInFlow]);
+    finishWaiters(true);
+  }, [
+    finishWaiters,
+    flow.data,
+    flow.error,
+    flow.isError,
+    invalidateDependents,
+    queryClient,
+    signInFlow,
+  ]);
 
   const stopWaiting = () => {
+    finishWaiters(false);
     if (!signInFlow) return;
     void queryClient.cancelQueries({
       queryKey: [...settingsQueryKeys.account, 'sign-in', signInFlow],
@@ -89,25 +114,44 @@ export function useAccount(
     });
     setSignInFlow(null);
     setSignInError(null);
+    command.current = null;
   };
 
   const startSignIn = useSettingsCommand(
     'startSignIn',
-    (_input: void, signal) => port.startSignIn(signal),
+    async (_input: void, signal) => {
+      const started = await port.startSignIn(signal);
+      signal.throwIfAborted();
+      return started;
+    },
     {
       onStart: () => setSignInError(null),
+      onFailed: () => {
+        finishWaiters(false);
+        command.current = null;
+      },
       onDone: (started) => {
-        setSignInFlow(started.flowId);
         openExternal(started.url);
+        setSignInFlow(started.flowId);
       },
     },
   );
   const signOut = useSettingsCommand('signOut', (_input: void, signal) => port.signOut(signal), {
+    onStart: () => queryClient.cancelQueries({ queryKey: settingsQueryKeys.account, exact: true }),
+    onSettled: () => {
+      command.current = null;
+    },
     onDone: (next) => {
       queryClient.setQueryData(settingsQueryKeys.account, next);
       invalidateDependents();
     },
   });
+
+  const signIn = () => {
+    if (command.current || !account.data) return;
+    command.current = 'sign-in';
+    startSignIn.run();
+  };
 
   // One pending flag spans the whole browser round trip: the start call and
   // the poll that follows it are a single wait as far as the reader is
@@ -117,12 +161,38 @@ export function useAccount(
   return {
     account: account.data ?? null,
     busy: signInPending || anyBusy(signOut),
-    failure: signInError ?? firstCommandFailure(startSignIn, signOut),
-    loading: account.isPending,
-    signIn: () => startSignIn.run(),
+    failure:
+      (account.isError ? settingsFailure(account.error) : null) ??
+      signInError ??
+      firstCommandFailure(startSignIn, signOut),
+    loading: account.isFetching,
+    loadFailed: account.isError,
+    retryAccount: () => {
+      void account.refetch({ cancelRefetch: false });
+    },
+    signIn,
+    signInAndWait: (signal) => {
+      if (signal.aborted || !account.data || command.current === 'sign-out')
+        return Promise.resolve(false);
+      return new Promise<boolean>((resolve) => {
+        const finish = (success: boolean) => {
+          signal.removeEventListener('abort', abort);
+          waiters.current.delete(finish);
+          resolve(success);
+        };
+        const abort = () => finish(false);
+        waiters.current.add(finish);
+        signal.addEventListener('abort', abort, { once: true });
+        signIn();
+      });
+    },
     signInPending,
     canStopWaiting: signInFlow !== null,
     stopWaiting,
-    signOut: () => signOut.run(),
+    signOut: () => {
+      if (command.current) return;
+      command.current = 'sign-out';
+      signOut.run();
+    },
   };
 }

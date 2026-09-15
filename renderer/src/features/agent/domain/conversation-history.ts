@@ -1,4 +1,4 @@
-import { agentScopesEqual, type AgentId, type AgentScope } from './session';
+import { agentScopesEqual, UNTITLED_CHAT_TITLE, type AgentId, type AgentScope } from './session';
 import { dayLabel, startOfLocalDay } from './time';
 import type { AgentTabState } from './workspace';
 
@@ -13,6 +13,8 @@ export interface AgentHistoryEntry {
 
 export interface AgentConversationItem {
   active: boolean;
+  status?: string | null | undefined;
+  draft?: boolean | undefined;
   agent: AgentId;
   entry?: AgentHistoryEntry;
   id: string;
@@ -36,7 +38,9 @@ export function buildConversationGroups(options: {
 }): AgentConversationGroup[] {
   const openByNativeId = new Map<string, AgentTabState>();
   const visibleTabs = options.tabs.filter(
-    (tab) => tab.hasContent && agentScopesEqual(tab.scope, options.scope),
+    (tab) =>
+      (tab.hasContent || tab.hasDraft || tab.phase === 'restoring') &&
+      agentScopesEqual(tab.scope, options.scope),
   );
   for (const tab of visibleTabs) {
     if (tab.nativeSessionId) openByNativeId.set(`${tab.agent}:${tab.nativeSessionId}`, tab);
@@ -50,11 +54,13 @@ export function buildConversationGroups(options: {
       if (tab) representedTabs.add(tab.id);
       const conversation: AgentConversationItem = {
         active: tab?.id === options.activeId,
+        status: tab?.status,
+        draft: tab?.hasDraft,
         agent: entry.agent,
         entry,
         id: `${entry.agent}:${entry.id}`,
         lastModified: Math.max(entry.lastModified, tab?.lastModified ?? 0),
-        title: (tab?.title ?? entry.title).trim() || 'Untitled',
+        title: (tab?.title ?? entry.title).trim() || UNTITLED_CHAT_TITLE,
       };
       if (tab) conversation.tabId = tab.id;
       return conversation;
@@ -64,11 +70,25 @@ export function buildConversationGroups(options: {
     if (representedTabs.has(tab.id)) continue;
     conversations.push({
       active: tab.id === options.activeId,
+      status: tab.status,
+      draft: tab.hasDraft,
       agent: tab.agent,
+      ...(tab.nativeSessionId
+        ? {
+            entry: {
+              agent: tab.agent,
+              hasContent: tab.hasContent,
+              id: tab.nativeSessionId,
+              lastModified: tab.lastModified,
+              scope: tab.scope,
+              title: tab.title,
+            },
+          }
+        : {}),
       id: `local:${tab.id}`,
       lastModified: tab.lastModified,
       tabId: tab.id,
-      title: tab.title.trim() || 'Untitled',
+      title: tab.title.trim() || UNTITLED_CHAT_TITLE,
     });
   }
 

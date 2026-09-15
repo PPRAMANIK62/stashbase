@@ -68,8 +68,8 @@ describe('document outline states', () => {
   it('reads as waiting for a format that does publish headings', () => {
     render(<DocumentOutline runtime={createRuntime(['report.md'])} />);
 
-    expect(screen.getByLabelText('report.md outline, unavailable')).not.toBeNull();
-    expect(screen.getByText('No outline available for this document')).not.toBeNull();
+    expect(screen.getByLabelText('report.md outline, loading')).not.toBeNull();
+    expect(screen.getByText('Loading outline…')).not.toBeNull();
   });
 
   it('says so plainly for a format that never publishes headings', () => {
@@ -78,7 +78,7 @@ describe('document outline states', () => {
     expect(
       screen.getByLabelText('config.json outline, not available for this file type'),
     ).not.toBeNull();
-    expect(screen.getByText('No outline available for this document')).not.toBeNull();
+    expect(screen.getByText('This file type has no outline.')).not.toBeNull();
   });
 
   it('separates a document with no headings from one whose outline never arrived', () => {

@@ -10,10 +10,10 @@ test('state carries the text and whether it is the reader own', () => {
   assert.deepEqual(
     agentInstructionsStateSchema.parse({
       customized: true,
-      scope: { kind: 'unbound' },
-      text: 'Find work across folders.',
+      scope: { kind: 'folder', path: '/project' },
+      text: 'Help with this project.',
     }),
-    { customized: true, scope: { kind: 'unbound' }, text: 'Find work across folders.' },
+    { customized: true, scope: { kind: 'folder', path: '/project' }, text: 'Help with this project.' },
   );
 });
 
@@ -47,16 +47,16 @@ test('a project scope carries no path, and a folder scope must', () => {
 });
 
 test('the write sends the scope spelling the route reads, not the object', () => {
-  assert.deepEqual(agentInstructionsRequestSchema.parse({ scope: 'unbound', text: 'Be terse.' }), {
-    scope: 'unbound',
+  assert.deepEqual(agentInstructionsRequestSchema.parse({ scope: '/project', text: 'Be terse.' }), {
+    scope: '/project',
     text: 'Be terse.',
   });
   assert.equal(
-    agentInstructionsRequestSchema.safeParse({ scope: { kind: 'unbound' }, text: '' }).success,
+    agentInstructionsRequestSchema.safeParse({ scope: { kind: 'folder', path: '/project' }, text: '' }).success,
     false,
   );
 });
 
 test('an empty text is a valid write: it restores the packaged default', () => {
-  assert.equal(agentInstructionsRequestSchema.safeParse({ scope: 'unbound', text: '' }).success, true);
+  assert.equal(agentInstructionsRequestSchema.safeParse({ scope: '/project', text: '' }).success, true);
 });

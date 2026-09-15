@@ -39,21 +39,21 @@ function renderButton(agents: readonly Agent[]) {
     <NewChatButton catalog={agentCatalogPort(agents)} runtime={runtime} scope={RESEARCH_SCOPE} />,
     createTestQueryClient(),
   );
-  return { newChat };
+  return { newChat, runtime };
 }
 
 describe('NewChatButton', () => {
-  it('starts a chat with the preferred ready Agent in the current scope', async () => {
+  it('starts a draft using the project choice regardless of readiness', async () => {
     const { newChat } = renderButton([CODEX_AGENT, BUILT_IN_AGENT]);
     const button = await screen.findByRole('button', { name: 'New chat' });
     await userEvent.setup().click(button);
-    expect(newChat).toHaveBeenCalledWith(BUILT_IN_AGENT.id, RESEARCH_SCOPE);
+    expect(newChat).toHaveBeenCalledWith(undefined, RESEARCH_SCOPE);
   });
 
-  it('waits, disabled, while no runtime is ready', async () => {
-    const { newChat } = renderButton([]);
+  it('allows a Default draft while no runtime is ready', async () => {
+    const { runtime } = renderButton([]);
     const button = await screen.findByRole('button', { name: 'New chat' });
-    expect(button.hasAttribute('disabled')).toBe(true);
-    expect(newChat).not.toHaveBeenCalled();
+    await userEvent.setup().click(button);
+    expect(runtime.activeSession().store.getState().agent).toBe('stashbase');
   });
 });

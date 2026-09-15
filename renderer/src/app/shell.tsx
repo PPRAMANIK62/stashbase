@@ -23,6 +23,9 @@ import {
 } from '@/features/updates/public';
 import {
   ProjectWelcome,
+  useProjectEntry,
+  useProjectEntryReceiver,
+  ImportGitHubDialog,
   useFiles,
   useHiddenFiles,
   useProject,
@@ -77,12 +80,16 @@ function WorkspaceWindow() {
   const session = useWorkspaceSession(
     workspaceDeps.adapters.project,
     workspaceDeps.adapters.session,
-    workspaceDeps.adapters.lifecycle,
   );
   const project = useProject(workspaceDeps.adapters.project).data ?? null;
   const workspace = useWorkspace(workspaceDeps.adapters.project, session);
-  const documents = useDocumentWorkspace(workspace, session, docs.adapters.source, docs.createId);
-  useDocumentCommands(documents?.navigation ?? null, documents);
+  const documents = useDocumentWorkspace(
+    workspace,
+    session,
+    docs.adapters.source,
+    docs.createId,
+    docs.adapters,
+  );
   useDocumentSaveBarrier(documents, docs.adapters.windowLifecycle);
   const newTab = useNewTab(documents);
   const sources = useDocumentSources(workspaceDeps.adapters, workspace, documents);
@@ -124,6 +131,7 @@ function WorkspaceWindow() {
     folderPath: selectedPath,
     onFilesChanged: refresh.onAgentFilesChanged,
     session: dependencies.agent.session,
+    ...(dependencies.agent.preferences ? { preferences: dependencies.agent.preferences } : {}),
     subscribeFolderRemoved: workspaceDeps.adapters.lifecycle.onFolderRemoved,
   });
   useEffect(() => runtime.setScopeEnvironment(agent.environment), [agent.environment, runtime]);
@@ -137,7 +145,27 @@ function WorkspaceWindow() {
     workspace,
   });
 
-  const gallery = useGalleryShop(dependencies.gallery);
+  useDocumentCommands(documents?.navigation ?? null, documents, {
+    enabled: chrome.navigator.mode === 'documents',
+    newTab,
+  });
+
+  const entry = useProjectEntry(
+    dependencies.project.folderPicker,
+    workspaceDeps.adapters.lifecycle,
+    workspaceDeps.adapters.githubImport,
+  );
+  useProjectEntryReceiver(
+    workspaceDeps.adapters.project,
+    workspaceDeps.adapters.lifecycle,
+    documents ? folderPath : null,
+  );
+  const gallery = useGalleryShop(
+    dependencies.gallery,
+    entry.copy,
+    entry.isPending,
+    activeFolder?.path ?? null,
+  );
   const updateNotice = useUpdateNotice(dependencies.updates);
   const updatePreview = useUpdatePreview(import.meta.env.DEV);
   // A new draft is the tree's to make, beside its selection, and its name is
@@ -162,16 +190,22 @@ function WorkspaceWindow() {
         dialogs={
           <>
             {gallery.surfaces}
+            <ImportGitHubDialog
+              import={entry.importDialog.request}
+              onClose={entry.importDialog.close}
+              open={entry.importDialog.open}
+            />
             <WorkspaceDialogs
               documents={documents}
               quickOpen={chrome.quickOpen}
               settings={chrome.settings}
-              updatePreview={
+              renderUpdatePreview={(closeDeveloper) =>
                 import.meta.env.DEV ? (
                   <UpdatePreview
                     active={updatePreview.notice !== null}
                     onShow={(previewStatus) => {
                       updatePreview.show(previewStatus);
+                      closeDeveloper();
                       session.runtime.setSidebarOpen(true);
                       chrome.settings.close();
                     }}
@@ -188,7 +222,7 @@ function WorkspaceWindow() {
         panes={
           <WorkspacePanes
             chatPaneOpen={chatPaneOpen}
-            agent={{ outline: agent.outline, runtime }}
+            agent={{ runtime }}
             documents={documents}
             mode={chrome.navigator.mode}
             newTab={newTab}
@@ -247,7 +281,7 @@ function WorkspaceWindow() {
           <ProjectWelcome
             {...dependencies.project}
             gallery={gallery.band}
-            githubImport={workspaceDeps.adapters.githubImport}
+            entry={entry}
             isRestoringSession={session.status.kind === 'restoring'}
           />
         }

@@ -15,7 +15,6 @@ export function keywordEvidence(files: KeywordHitFile[], folderRoot: string): So
         locator: {
           line: match.line,
           ...(match.pdfPage == null ? {} : { page: match.pdfPage }),
-          ...(match.audioTimestampMs == null ? {} : { timestampMs: match.audioTimestampMs }),
         },
       });
     }

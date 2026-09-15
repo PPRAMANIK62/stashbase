@@ -9,13 +9,7 @@
  */
 import { validateFolderName } from '@/contracts/folder-name';
 import { parseGitHubRepositoryUrl } from '@/contracts/github-import';
-import { FilesError, type GitHubImportPort } from '@/features/workspace/application/ports';
-import {
-  request,
-  requestOptions,
-  type TransportFailure,
-  type TransportRequest,
-} from '@/platform/http/classify';
+import { ProjectImportError, type GitHubImportPort } from '@/features/workspace/application/ports';
 import type { HttpClient } from '@/platform/http/client';
 import {
   githubImportFailureSchema,
@@ -26,9 +20,16 @@ import {
 
 const REFUSALS: Readonly<Record<GitHubImportErrorCode, string>> = {
   CLONE_FAILED: 'That repository could not be downloaded. Check your connection and try again.',
-  DESTINATION_EXISTS: 'A folder with that name already exists. Choose a different name.',
+  LOCAL_IMPORT_FAILED:
+    'The local copy could not be saved or registered. Check destination permissions and disk space, then try again.',
+  DESTINATION_EXISTS:
+    'That destination already exists. Choose a different name, or open the existing folder. Its contents may be different from this repository.',
   GIT_NOT_AVAILABLE: 'Importing needs Git installed and on your PATH.',
-  IMPORT_CANCELLED: 'The import was cancelled.',
+  IMPORT_CANCELLED: 'The import was cancelled. You can try again.',
+  IMPORT_INCOMPLETE:
+    'Some files were kept after the import failed. Inspect the retained folder, then choose a different name or remove it before retrying.',
+  OUTCOME_UNKNOWN:
+    'The import result could not be confirmed. Check again before starting another copy.',
   INVALID_FOLDER_NAME: 'That folder name cannot be used. Choose a different one.',
   INVALID_GITHUB_URL: 'Enter a complete https://github.com/<owner>/<repo> URL.',
   PRIVATE_OR_NOT_FOUND: 'That repository is private or does not exist.',
@@ -36,31 +37,17 @@ const REFUSALS: Readonly<Record<GitHubImportErrorCode, string>> = {
   UNSUPPORTED_SUBMODULES: 'Repositories with submodules are not supported yet.',
 };
 
-/** A refusal is the reader's own request coming back, so it reads as the files
- *  ladder's `rejected` with the sentence its code selects. */
-function refused({ response }: TransportFailure): FilesError | null {
-  if (response.status >= 500) return null;
-  const failure = githubImportFailureSchema.safeParse(response.body);
-  if (!failure.success) return null;
-  const code = failure.data.code;
-  return new FilesError('rejected', code ? REFUSALS[code] : failure.data.error);
-}
-
-function importRequest(signal: AbortSignal): TransportRequest<'conflict' | 'rejected'> {
-  return requestOptions({
-    error: FilesError,
-    failure: refused,
-    messages: {
-      'invalid-response': 'The import answered unexpectedly.',
-      unavailable: 'That repository could not be imported.',
-    },
-    path: '/api/github/import',
-    signal,
-  });
-}
-
 export function createGitHubImportAdapter(client: HttpClient): GitHubImportPort {
+  const receipts = new Map<string, string>();
+  const unknown = () => new ProjectImportError(REFUSALS.OUTCOME_UNKNOWN, 'unknown');
   return {
+    async home(signal) {
+      const response = await client.request({ path: '/api/folder-home', signal });
+      const parsed = githubImportResultSchema.safeParse(response.body);
+      if (response.status !== 200 || !parsed.success)
+        throw new ProjectImportError('The copy destination is unavailable.', 'refused');
+      return parsed.data.path;
+    },
     // The URL and destination-name rules are the server's own, mapped here
     // because this is the layer where a repository contract becomes feature
     // vocabulary. Refusing inline with a second approximation would let the
@@ -74,13 +61,65 @@ export function createGitHubImportAdapter(client: HttpClient): GitHubImportPort 
         : { message: parsed.message, ok: false as const };
     },
     async run(url, folderName, signal) {
-      const parsed = await request(client, {
-        ...importRequest(signal),
-        body: githubImportRequestSchema.parse({ folderName, url }),
-        method: 'POST',
-        schema: githubImportResultSchema,
-      });
-      return parsed.path;
+      const input = githubImportRequestSchema.parse({ folderName, url });
+      const key = JSON.stringify(input);
+      const previous = receipts.get(key);
+      const id = previous ?? crypto.randomUUID();
+      receipts.set(key, id);
+      const receiptPath = `/api/github/import/${id}`;
+      const cancel = () => {
+        void client.request({ path: receiptPath, method: 'DELETE' }).catch(() => {});
+      };
+      signal.addEventListener('abort', cancel, { once: true });
+      try {
+        if (signal.aborted) {
+          cancel();
+          throw unknown();
+        }
+        let response;
+        try {
+          response = await client.request(
+            previous
+              ? { path: receiptPath, signal }
+              : {
+                  path: '/api/github/import',
+                  method: 'POST',
+                  body: { ...input, operationId: id },
+                  signal,
+                },
+          );
+        } catch {
+          // A lost response does not mean the server failed to publish. Recover
+          // this exact receipt; never infer ownership from a destination name.
+          if (signal.aborted) throw unknown();
+          try {
+            response = await client.request({ path: receiptPath, signal });
+          } catch {
+            throw unknown();
+          }
+        }
+        if (response.status >= 200 && response.status < 300) {
+          const parsed = githubImportResultSchema.safeParse(response.body);
+          if (!parsed.success) throw unknown();
+          receipts.delete(key);
+          return parsed.data.path;
+        }
+        const failure = githubImportFailureSchema.safeParse(response.body);
+        if (!failure.success || !failure.data.code || failure.data.code === 'OUTCOME_UNKNOWN')
+          throw unknown();
+        receipts.delete(key);
+        const { code, destination, retainedPath } = failure.data;
+        throw new ProjectImportError(
+          code === 'DESTINATION_EXISTS' && destination?.directory === false
+            ? 'A file already uses that destination. Choose a different folder name.'
+            : REFUSALS[code],
+          code === 'DESTINATION_EXISTS' ? 'conflict' : retainedPath ? 'retained' : 'refused',
+          destination ?? null,
+          retainedPath ?? null,
+        );
+      } finally {
+        signal.removeEventListener('abort', cancel);
+      }
     },
   };
 }

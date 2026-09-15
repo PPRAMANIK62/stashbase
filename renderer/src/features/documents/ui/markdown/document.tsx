@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { writeToClipboard } from '@/shared/ui/clipboard';
 
+import { watchMarkdownChanges } from './changes';
 import { createMarkdownFindController } from './find-controller';
 
 import '@milkdown/crepe/theme/common/style.css';
@@ -135,7 +136,7 @@ export function MarkdownDocument({
       .addFeature(cursor)
       .addFeature(listItem)
       .addFeature(linkTooltip, {
-        inputPlaceholder: 'Paste a URL or note path…',
+        inputPlaceholder: 'Paste a URL or file path…',
         onCopyLink: (href) =>
           void writeToClipboard(href).catch(() => {
             // swallowed: the link tooltip is already gone by the time a refusal
@@ -164,18 +165,17 @@ export function MarkdownDocument({
     };
     refreshHeadingsRef.current = updateHeadings;
     editor.setReadonly(readOnlyRef.current);
-    editor.on((listener) =>
-      listener.markdownUpdated((_context, markdown, previous) => {
-        if (readOnlyRef.current || suppressChangeRef.current || markdown === previous) {
-          return;
-        }
-        onChangeRef.current(frontmatterRef.current + markdown);
-        updateHeadings();
-      }),
-    );
+    watchMarkdownChanges(editor, (markdown) => {
+      if (readOnlyRef.current || suppressChangeRef.current) return;
+      onChangeRef.current(frontmatterRef.current + markdown);
+      updateHeadings();
+    });
 
     const stopCreation = startMarkdownEditorCreation(editor, {
-      failed: () => setCreationState('failed'),
+      failed: () => {
+        setCreationState('failed');
+        if (activeRef.current) navigation.setOutlineFailed(tabId, true);
+      },
       ready: () => {
         editorRef.current = editor;
         editor.setReadonly(readOnlyRef.current);
@@ -191,7 +191,7 @@ export function MarkdownDocument({
       }
       stopCreation();
     };
-  }, [attempt, name]);
+  }, [attempt, navigation, tabId]);
 
   useEffect(() => {
     editorRef.current?.setReadonly(readOnly);
@@ -329,13 +329,8 @@ export function MarkdownDocument({
           size="compact"
           track
         >
-          {/* No width of its own: a glyph-only item on a track takes the
-           *  ladder's segment height and its one-step-wider glyph width, so
-           *  the lifted pill reads as a pill. The `w-6` these carried made
-           *  them 24px squares — the one segmented control in the app that
-           *  contradicted that rule, against the sidebar's two. */}
-          <TabsSubtleItem icon={PenLine} label="Writer" title="Writer" />
-          <TabsSubtleItem icon={BookOpen} label="Reading" title="Reading" />
+          <TabsSubtleItem icon={PenLine} label="Edit" title="Edit" />
+          <TabsSubtleItem icon={BookOpen} label="Read" title="Read" />
         </TabsSubtle>
       )}
       {creationState === 'creating' && (

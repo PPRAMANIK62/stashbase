@@ -208,7 +208,7 @@ describe('file tree', () => {
       files: [
         ...RESEARCH_LISTING.files,
         listingFile({ format: 'pdf', path: 'paper.pdf', size: 9 }),
-        listingFile({ format: 'audio', path: 'talk.mp3', size: 9 }),
+        listingFile({ format: 'pdf', path: 'cancelled.pdf', size: 9 }),
       ],
     });
     const onReprocess = vi.fn();
@@ -216,9 +216,9 @@ describe('file tree', () => {
       onReprocess,
       rowMarkers: {
         'paper.pdf': { kind: 'failed', title: 'File preparation failed.' },
-        'talk.mp3': {
-          kind: 'blocked',
-          title: 'Transcription setup is required.',
+        'cancelled.pdf': {
+          kind: 'cancelled',
+          title: 'Preparation was cancelled.',
         },
       },
     });
@@ -230,10 +230,10 @@ describe('file tree', () => {
     // The marker icon is aria-hidden and picked from a kind→icon map with no other observable
     // signal, so which lucide icon rendered is only readable from its own generated class name.
     expect(failed.querySelector('svg.lucide-triangle-alert')).not.toBeNull(); // dom-contract: see comment above
-    const blocked = screen.getByRole('treeitem', {
-      name: 'talk.mp3, Transcription setup is required.',
+    const cancelled = screen.getByRole('treeitem', {
+      name: 'cancelled.pdf, Preparation was cancelled.',
     });
-    expect(blocked.querySelector('svg.lucide-circle-alert')).not.toBeNull(); // dom-contract: see comment above
+    expect(cancelled.querySelector('svg.lucide-circle-slash')).not.toBeNull(); // dom-contract: see comment above
     expect(screen.getByRole('treeitem', { name: 'docs' }).getAttribute('title')).toBe('docs');
 
     fireEvent.contextMenu(failed, { clientX: 12, clientY: 12 });
@@ -243,8 +243,8 @@ describe('file tree', () => {
       path: 'paper.pdf',
     });
 
-    fireEvent.contextMenu(blocked, { clientX: 12, clientY: 12 });
-    expect(screen.queryByRole('menuitem', { name: 'Reprocess' })).toBeNull();
+    fireEvent.contextMenu(cancelled, { clientX: 12, clientY: 12 });
+    expect(screen.getByRole('menuitem', { name: 'Reprocess' })).not.toBeNull();
   });
 
   it('keeps initial rendering bounded and progressively reveals more rows', async () => {

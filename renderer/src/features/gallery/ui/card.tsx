@@ -3,6 +3,8 @@ import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
+import { GalleryImage } from './image';
+
 /**
  * One ready-made Wiki on the shelf.
  *
@@ -40,7 +42,8 @@ export function GalleryCard({
       type="button"
     >
       {hero && (
-        <img
+        <GalleryImage
+          key={hero}
           alt=""
           className="absolute inset-0 size-full object-cover object-top transition-transform duration-slow group-hover:scale-[1.03] motion-reduce:transition-none"
           loading="lazy"
@@ -66,7 +69,11 @@ export function GalleryCard({
           )}
         >
           <span className="overflow-hidden">
-            <span className="line-clamp-2 block text-caption text-muted-foreground">
+            {/* No `block` beside the clamp: `line-clamp-2` sets its own
+                display (-webkit-box), and Tailwind emits `.block` after it, so
+                a display utility here silently unclamps the description and
+                the card grows a paragraph over its picture. */}
+            <span className="line-clamp-2 text-caption text-muted-foreground">
               {entry.description}
             </span>
           </span>

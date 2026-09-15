@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type RefObject } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
 const PIN_THRESHOLD_PX = 48;
 
@@ -7,10 +7,17 @@ const PIN_THRESHOLD_PX = 48;
  *  follows only while pinned, so scrolling up to read is never undone. */
 export function useStickToBottom(ref: RefObject<HTMLElement | null>, key: string) {
   const pinned = useRef(true);
+  const [atBottom, setAtBottom] = useState(true);
+  const scrollToBottom = useCallback(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+    pinned.current = true;
+    setAtBottom(true);
+  }, [ref]);
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
     pinned.current = true;
+    setAtBottom(true);
     const scrollToEnd = () => {
       element.scrollTop = element.scrollHeight;
     };
@@ -18,6 +25,7 @@ export function useStickToBottom(ref: RefObject<HTMLElement | null>, key: string
     const onScroll = () => {
       pinned.current =
         element.scrollHeight - element.scrollTop - element.clientHeight <= PIN_THRESHOLD_PX;
+      setAtBottom(pinned.current);
     };
     element.addEventListener('scroll', onScroll, { passive: true });
     const observer =
@@ -33,4 +41,5 @@ export function useStickToBottom(ref: RefObject<HTMLElement | null>, key: string
       observer?.disconnect();
     };
   }, [key, ref]);
+  return { atBottom, scrollToBottom };
 }

@@ -13,6 +13,7 @@ import type {
 import { fileChangesForTool } from '@/features/agent/domain/file-change';
 import {
   latestUserBlock,
+  agentTurnIsActive,
   type AgentSessionAction,
   type AgentSessionEvent,
   type AgentSessionState,
@@ -36,8 +37,11 @@ export interface AgentEventContext {
 function flushHeldPrompt(context: AgentEventContext) {
   const prompt = context.ledger.takeHeld();
   if (!prompt || context.submit(prompt)) return;
-  context.transition({ draft: prompt.display, kind: 'set-draft' });
-  context.transition({ context: prompt.context, kind: 'set-context' });
+  context.transition({ kind: 'delivery', value: 'failed' });
+  context.transition({
+    kind: 'set-context-issue',
+    message: 'The request was not sent. Your input was kept.',
+  });
 }
 
 /** A failure during a turn is transcript work with a retry offer; the same
@@ -48,19 +52,24 @@ function applyFailure(
 ) {
   const state = context.state();
   if (state.connection.kind !== 'live') {
+    context.ledger.takeHeld();
     context.transition({ kind: 'fail', message: event.message });
     return;
   }
   const prompt = latestUserBlock(state.transcript);
-  const turn = prompt ? context.ledger.turnFor(prompt.id) : undefined;
+  const turn =
+    prompt && agentTurnIsActive(state.connection) ? context.ledger.turnFor(prompt.id) : undefined;
   const errorId = context.nextBlockId('error');
   if (turn) context.ledger.recordTurn(errorId, turn);
   context.transition({
     failure: event.failure,
     id: errorId,
     kind: 'turn-fail',
-    message: event.message,
-    retryablePrompt: prompt && (turn?.wire ?? prompt.text),
+    message:
+      prompt && !turn && agentTurnIsActive(state.connection)
+        ? `${event.message} Use Reuse message to review this saved request and its attachments before sending again.`
+        : event.message,
+    retryablePrompt: turn?.wire,
   });
 }
 
@@ -122,8 +131,8 @@ export function applyAgentSessionEvent(context: AgentEventContext, event: AgentS
       transition({ kind: 'close', message: event.message });
       return;
     case 'scope-retired':
+      if (context.state().scope.path !== event.folderPath) return;
       transport.expectClose();
-      transition({ kind: 'scope-changed', scope: { kind: 'folder', path: event.folderPath } });
       transition({ kind: 'retire' });
       return;
     default:

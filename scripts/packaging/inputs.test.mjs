@@ -68,22 +68,6 @@ test('the supported renderer build is the only packaged renderer input', () => {
   assert.match(pkg.scripts?.build ?? '', /build:electron-boundary/);
 });
 
-test('bundled Start Here filenames preserve the intended reading order', () => {
-  const files = fs.readdirSync(path.join(root, 'assets', 'builtin-project'))
-    .filter((name) => !name.startsWith('.'))
-    .sort();
-
-  assert.deepEqual(files, [
-    '00 Welcome.html',
-    '01 Getting Started and Workflows.md',
-    '02 Product and Mental Model.md',
-    '03 Capabilities and Boundaries.md',
-    '04 FAQ and Comparisons.md',
-    '05 Troubleshooting and Reference.md',
-    'AGENTS.md',
-  ]);
-});
-
 test('packaged Agent Instructions include the canonical default prompt', () => {
   const prompt = fs.readFileSync(path.join(root, 'assets', 'agent-instructions', 'default.md'), 'utf8').trim();
   // The three things the shipped prompt has to still say: who the Agent is,
@@ -98,14 +82,6 @@ test('packaged Agent Instructions include the canonical default prompt', () => {
   assert.match(prompt, /Keep Wiki Pages in `wiki\/`/);
   assert.match(prompt, /follow an existing wiki's structure, naming, and linking conventions/);
 
-  // The unbound prompt ships from the same directory and is what an
-  // unattributed Chat runs on; a missing one would leave that Chat with none.
-  const unbound = fs
-    .readFileSync(path.join(root, 'assets', 'agent-instructions', 'unbound.md'), 'utf8')
-    .trim();
-  assert.match(unbound, /not yet bound to a project/);
-  assert.match(unbound, /without searching my local projects/);
-  assert.match(unbound, /`create_project`/);
   assert.deepEqual(
     pkg.build?.extraResources?.find((entry) => entry?.to === 'assets/agent-instructions'),
     {
@@ -113,15 +89,6 @@ test('packaged Agent Instructions include the canonical default prompt', () => {
       to: 'assets/agent-instructions',
     },
   );
-});
-
-test('packaged unbound Chat instructions require a project before file access', () => {
-  const prompt = fs.readFileSync(path.join(root, 'assets', 'agent-instructions', 'unbound.md'), 'utf8').trim();
-  assert.match(prompt, /not yet bound to a project/);
-  assert.match(prompt, /Before reading, searching, or changing project files/);
-  assert.match(prompt, /ask me to open a project/);
-  assert.match(prompt, /explicitly ask to create a project/);
-  assert.match(prompt, /Never combine projects into a global knowledge scope/);
 });
 
 test('electron-builder includes local CommonJS dependencies outside electron/', () => {
@@ -162,7 +129,7 @@ test('the packaged daemon pins the public MFS project and excludes retired ONNX 
   const daemonExcludes = build.match(/const daemonExcludedModules = \[([\s\S]*?)\n\];/)?.[1] ?? '';
   const daemonForbidden = build.match(/const daemonForbiddenEntries = \[([\s\S]*?)\n\];/)?.[1] ?? '';
 
-  assert.match(requirements, /^mfs @ git\+https:\/\/github\.com\/liliu-z\/mfs\.git@[0-9a-f]{40}$/m);
+  assert.match(requirements, /^mfs @ https:\/\/github\.com\/liliu-z\/mfs\/archive\/refs\/tags\/v\d+\.\d+\.\d+\.tar\.gz$/m);
   assert.doesNotMatch(requirements, /mfs-cli|\[onnx\]/);
   assert.doesNotMatch(build, /mfs\.embedder\.onnx|mfs\.store|mfs\.ingest\.scanner/);
   assert.match(build, /'--hidden-import',\s*'mfs\._process_supervisor'/);
@@ -201,7 +168,7 @@ test('the packaging CLI validates component version and bytes before invoking th
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'package-input-validation-'));
   t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
   for (const relative of ['scripts/package-desktop.mjs', 'scripts/macos-release-contract.mjs',
-    'scripts/windows-release-contract.mjs', 'shared/extractor-runtime.ts', 'native/transcription/toolchain.json', 'package.json']) {
+    'scripts/windows-release-contract.mjs', 'shared/extractor-runtime.ts', 'package.json']) {
     fs.mkdirSync(path.dirname(path.join(tmp, relative)), { recursive: true });
     fs.copyFileSync(path.join(root, relative), path.join(tmp, relative));
   }
@@ -221,11 +188,11 @@ test('the packaging CLI validates component version and bytes before invoking th
     cp.execFileSync = () => ''; syncBuiltinESMExports();`;
   const run = () => spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`,
     path.join(tmp, 'scripts', 'package-desktop.mjs'), '--linux', '--skip-sidecar-build'], {
-    encoding: 'utf8', env: { ...process.env, STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1' },
+    encoding: 'utf8', env: process.env,
   });
   fs.writeFileSync(manifestPath, JSON.stringify(manifest));
   // Passing the component checks reaches the next real guard, without packaging an installer.
-  assert.match(run().stderr, /requires a verified native transcription toolchain/);
+  assert.doesNotMatch(run().stderr, /component archive does not match/i);
   fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, version: '0.0.0' }));
   assert.match(run().stderr, /Extractor component manifest does not match this app build/);
   fs.writeFileSync(manifestPath, JSON.stringify(manifest));

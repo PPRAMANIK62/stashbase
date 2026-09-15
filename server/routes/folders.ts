@@ -21,7 +21,6 @@ import { indexer } from '../state.ts';
 import { guardExplicitFolder, sendError } from '../http.ts';
 import { renameWithRollback } from '../rename-helpers.ts';
 import { noteTreeChanged } from '../watcher.ts';
-import { remapFileOrderPath, removeFileOrderPath } from '../file-order.ts';
 import { clearRecordsUnder } from '../conversion-status.ts';
 import { cancelConversionsUnderAndWait } from '../conversion.ts';
 import { discoverConvertibleSources } from '../conversion-dispatch.ts';
@@ -71,8 +70,6 @@ export function mount(app: express.Express): void {
       const removed = await deleteFolderAsync(p);
       if (removed) {
         noteTreeChanged();
-        try { removeFileOrderPath(p, 'folder'); }
-        catch (err: unknown) { log.warn(`file-order cleanup failed for ${p}: ${errorMessage(err)}`); }
       }
       try { clearRecordsUnder(toSourcePath(p)); }
       catch (err: unknown) { log.warn(`delete_prefix: preparation status cleanup failed for ${p}: ${errorMessage(err)}`); }
@@ -179,8 +176,6 @@ export function mount(app: express.Express): void {
         catch (err: unknown) { log.warn(`rename_folder: old derived cleanup failed for ${oldPath}: ${errorMessage(err)}`); }
         if (newPrefixIsRetrievalEligible) scheduleConversionRediscovery(newSourcePrefix, newPath);
         noteTreeChanged();
-        try { remapFileOrderPath(oldPath, newPath, 'folder'); }
-        catch (err: unknown) { log.warn(`file-order remap failed for ${oldPath} -> ${newPath}: ${errorMessage(err)}`); }
         return { path: newPath };
       },
     });

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
 import { appDependencies } from '@/test/fakes/app';
-import { accountPort, SIGNED_IN_ACCOUNT } from '@/test/fakes/settings';
+import { accountPort, SIGNED_IN_ACCOUNT, SIGNED_OUT_ACCOUNT } from '@/test/fakes/settings';
 import { filesApi, workspaceAdapters } from '@/test/fakes/workspace';
 
 afterEach(cleanup);
@@ -17,49 +17,6 @@ const LAZY = { timeout: 10_000 };
  *  headroom above ten is for the slowest runner under coverage instrumentation,
  *  where this file's work costs about ten times what it does locally. */
 const LAZY_TEST_MS = 20_000;
-
-describe('bug-report entry', () => {
-  it(
-    'lives in Settings rather than the sidebar and asks main to open the review',
-    async () => {
-      const open = vi.fn(async () => ({ ok: true as const }));
-      render(
-        <Providers>
-          <App dependencies={appDependencies({ bugReport: { open } })} />
-        </Providers>,
-      );
-
-      const user = userEvent.setup();
-      await screen.findByRole('button', { name: 'Settings' });
-      expect(screen.queryByRole('button', { name: /Report a bug/u })).toBeNull();
-
-      // Settings is a lazy surface, and it opens on General, so the row is
-      // there as soon as the chunk lands.
-      await user.click(screen.getByRole('button', { name: 'Settings' }));
-      await user.click(await screen.findByRole('button', { name: 'Start report…' }, LAZY));
-      expect(open).toHaveBeenCalledOnce();
-    },
-    LAZY_TEST_MS,
-  );
-
-  it(
-    'stays visible but disabled outside the desktop app',
-    async () => {
-      render(
-        <Providers>
-          <App dependencies={appDependencies()} />
-        </Providers>,
-      );
-
-      const user = userEvent.setup();
-      await user.click(await screen.findByRole('button', { name: 'Settings' }));
-      const entry = await screen.findByRole('button', { name: 'Start report…' }, LAZY);
-      expect(entry.hasAttribute('disabled')).toBe(true);
-      expect(screen.getByText('Available in the desktop app.')).not.toBeNull();
-    },
-    LAZY_TEST_MS,
-  );
-});
 
 describe('account row', () => {
   it('sits at the foot of the sidebar and starts the browser sign-in in one click', async () => {
@@ -77,20 +34,62 @@ describe('account row', () => {
       </Providers>,
     );
 
-    const signIn = await screen.findByRole('button', {
-      name: 'Sign in for free OpenQuill credits',
-    });
+    // The row is the action alone; the free-credits offer lives in
+    // Settings → Agents, not in the sidebar's label.
+    const signIn = await screen.findByRole('button', { name: 'Sign in' });
     await userEvent.setup().click(signIn);
 
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledOnce());
     expect(openExternal).toHaveBeenCalledWith('https://accounts.example/sign-in');
     expect(await screen.findByRole('button', { name: 'Waiting for browser…' })).not.toBeNull();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Stop waiting' }));
-    await userEvent
-      .setup()
-      .click(await screen.findByRole('button', { name: 'Sign in for free OpenQuill credits' }));
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Sign in' }));
     await waitFor(() => expect(account.startSignIn).toHaveBeenCalledTimes(2));
   });
+
+  it(
+    'recovers account loading and shares the browser wait with Settings across reopening',
+    async () => {
+      const account = accountPort(SIGNED_OUT_ACCOUNT, {
+        load: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('Disconnected'))
+          .mockResolvedValue(SIGNED_OUT_ACCOUNT),
+      });
+      const base = appDependencies();
+      render(
+        <Providers>
+          <App
+            dependencies={appDependencies({ settings: { ...base.settings, accountApi: account } })}
+          />
+        </Providers>,
+      );
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: 'Retry account' }));
+      await user.click(await screen.findByRole('button', { name: 'Sign in' }));
+      await screen.findByRole('button', { name: 'Waiting for browser…' });
+      await user.click(screen.getByRole('button', { name: 'Settings' }));
+      await user.click(await screen.findByRole('button', { name: 'Agents' }, LAZY));
+      let dialog = within(screen.getByRole('dialog', { name: 'Settings' }));
+      expect(
+        dialog.getByRole<HTMLButtonElement>('button', { name: 'Waiting for browser…' }).disabled,
+      ).toBe(true);
+      expect(dialog.queryByRole('button', { name: 'Sign in' })).toBeNull();
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      await user.click(screen.getByRole('button', { name: 'Settings' }));
+      dialog = within(await screen.findByRole('dialog', { name: 'Settings' }));
+      await user.click(dialog.getByRole('button', { name: 'Agents' }));
+      await user.click(await dialog.findByRole('button', { name: 'Stop waiting' }));
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Sign in' }).disabled).toBe(
+        false,
+      );
+      expect(account.startSignIn).toHaveBeenCalledOnce();
+    },
+    LAZY_TEST_MS,
+  );
 
   it('names the signed-in person and offers the credits and sign-out from a menu', async () => {
     const account = accountPort(SIGNED_IN_ACCOUNT);
@@ -112,7 +111,7 @@ describe('account row', () => {
     // provider picture — beside the name and email.
     expect(within(menu).getByText('AL')).not.toBeNull();
     expect(within(menu).getByText('ada@example.com')).not.toBeNull();
-    expect(within(menu).getByText('OpenQuill credits')).not.toBeNull();
+    expect(within(menu).getByText('Agent credits')).not.toBeNull();
     expect(await within(menu).findByText('100%')).not.toBeNull();
     // Settings and sign-out are the only actions in the menu.
     expect(within(menu).getAllByRole('menuitem')).toHaveLength(2);
@@ -121,9 +120,7 @@ describe('account row', () => {
 
     await user.click(within(menu).getByRole('menuitem', { name: 'Sign out' }));
     await waitFor(() => expect(account.signOut).toHaveBeenCalledOnce());
-    expect(
-      await screen.findByRole('button', { name: 'Sign in for free OpenQuill credits' }),
-    ).not.toBeNull();
+    expect(await screen.findByRole('button', { name: 'Sign in' })).not.toBeNull();
   });
 });
 

@@ -19,9 +19,6 @@ function mapResult(result: ExactSearchResponseWire): ExactSearchResult {
       return {
         id: exactSearchFileId(source),
         matches: file.matches.map((match) => ({
-          ...(match.audioTimestampMs === undefined
-            ? {}
-            : { audioTimestampMs: match.audioTimestampMs }),
           line: match.line,
           ...(match.pdfPage === undefined ? {} : { pdfPage: match.pdfPage }),
           ranges: match.ranges.map(([start, end]) => ({ end, start })),

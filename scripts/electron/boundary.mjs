@@ -9,8 +9,6 @@ await build({
   absWorkingDir: repositoryRoot,
   bundle: true,
   entryPoints: {
-    'bug-report/open': 'electron/bug-report/open.ts',
-    'bug-report/preload': 'electron/bug-report/preload.ts',
     'bug-report/review-ipc': 'electron/bug-report/review-ipc.ts',
     'bug-report/review-preload': 'electron/bug-report/review-preload.ts',
     'bug-report/review-window-preload': 'electron/bug-report/review-window-preload.ts',

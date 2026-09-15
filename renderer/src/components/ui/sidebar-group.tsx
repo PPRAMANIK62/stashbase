@@ -37,6 +37,12 @@ interface SidebarGroupProps extends SidebarGroupSectionProps {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Buttons that overlay the label row's right end, at the rows' own 24px
+   *  action size. The label reserves room for them, so a long section name
+   *  truncates before it reaches them rather than running underneath. A
+   *  collapsible group only: a plain group's label is static text, and an
+   *  action beside it would have no row of its own to sit on. */
+  headerActions?: ReactNode;
 }
 
 const SidebarGroup = forwardRef<HTMLDivElement, SidebarGroupProps>(
@@ -47,6 +53,7 @@ const SidebarGroup = forwardRef<HTMLDivElement, SidebarGroupProps>(
       open: openProp,
       defaultOpen = true,
       onOpenChange,
+      headerActions,
       children,
       ...props
     },
@@ -75,8 +82,20 @@ const SidebarGroup = forwardRef<HTMLDivElement, SidebarGroupProps>(
             {kids.slice(0, labelIdx)}
             {/* Header hover scope: hovering anywhere on the row reveals the
                 label's chevron, including the parts of the row the label
-                element itself never :hovers. */}
-            <div className="group/group-header w-full">{kids[labelIdx]}</div>
+                element itself never :hovers. It is also what the actions
+                overlay, so they must not be nested inside the label: the
+                label is the toggle button, and a button inside a button is
+                neither valid nor clickable. right-1.5 puts the last box's
+                centre 18px in from the row's edge, the axis the folder
+                header's actions and a tree row's trailing action both keep. */}
+            <div className="group/group-header relative w-full">
+              {kids[labelIdx]}
+              {headerActions && (
+                <div className="absolute inset-y-0 right-1.5 flex items-center gap-1">
+                  {headerActions}
+                </div>
+              )}
+            </div>
             <Collapse
               height={content.size}
               hideWhenClosed
@@ -94,12 +113,13 @@ const SidebarGroup = forwardRef<HTMLDivElement, SidebarGroupProps>(
       }
     }
 
-    // No part overlays the group label any more, so the label reserves no
-    // trailing room. The field stays on the context for the label's padding
-    // rule to read.
+    // How much trailing room the label pads out, published rather than
+    // counted twice: the cluster above and the label's reservation have to
+    // agree, and only the group can see both.
+    const actionsCount = Children.count(headerActions);
     const ctx = useMemo(
-      () => ({ open, toggle, contentId, actionsCount: 0 }),
-      [open, toggle, contentId],
+      () => ({ open, toggle, contentId, actionsCount }),
+      [open, toggle, contentId, actionsCount],
     );
 
     return (

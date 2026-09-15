@@ -15,7 +15,6 @@ import type {
 export type SourceReadiness =
   | { readonly kind: 'current' }
   | { readonly kind: 'pending'; readonly progress: PreparationProgress | null }
-  | { readonly kind: 'blocked' }
   /** `detail` is the daemon's own sentence about this file. It names the step
    *  that stopped, which no fixed line here could, so it is carried as a
    *  sentence rather than read off a thrown error. */
@@ -24,14 +23,13 @@ export type SourceReadiness =
 
 export type SourceReadinessKind = SourceReadiness['kind'];
 
-export type PreparedFormat = 'pdf' | 'image' | 'docx' | 'media';
+export type PreparedFormat = 'pdf' | 'image' | 'docx';
 
 /** The explicit controls a source's state can offer. The server stays the
  *  authority: offering an action is not a promise that it will succeed. */
 export type PreparationAction = 'cancel' | 'reprocess';
 
 export interface FolderPreparationSummary {
-  readonly blocked: number;
   readonly cancelled: number;
   readonly failed: number;
   /** A failure, a blocked source, or an index warning needs the user. */
@@ -40,7 +38,6 @@ export interface FolderPreparationSummary {
 }
 
 const CURRENT: SourceReadiness = { kind: 'current' };
-const BLOCKED: SourceReadiness = { kind: 'blocked' };
 const CANCELLED: SourceReadiness = { kind: 'cancelled' };
 
 const POLL_BUSY_MS = 1_500;
@@ -78,7 +75,6 @@ export function sourceReadiness(
       ? CANCELLED
       : { attempts: failure.attempts, detail: failure.lastError, kind: 'failed' };
   }
-  if (status.blockedConversions.includes(sourcePath)) return BLOCKED;
   const progress = status.conversionProgress[sourcePath];
   if (progress) return { kind: 'pending', progress };
   if (status.pendingConversions.includes(sourcePath)) return { kind: 'pending', progress: null };
@@ -91,7 +87,6 @@ export function sourceReadiness(
 function reportedPaths(status: FolderIndexStatus): Set<string> {
   return new Set([
     ...status.preparationFailures.map((failure) => sourcePathForRecord(failure.path)),
-    ...status.blockedConversions,
     ...status.pendingConversions,
   ]);
 }
@@ -100,7 +95,6 @@ function reportedPaths(status: FolderIndexStatus): Set<string> {
  *  to be answered here rather than silently counting as nothing. */
 function readinessCounts(status: FolderIndexStatus): Record<SourceReadinessKind, number> {
   const counts: Record<SourceReadinessKind, number> = {
-    blocked: 0,
     cancelled: 0,
     current: 0,
     failed: 0,
@@ -113,13 +107,12 @@ function readinessCounts(status: FolderIndexStatus): Record<SourceReadinessKind,
 export function folderPreparationSummary(
   status: FolderIndexStatus | null | undefined,
 ): FolderPreparationSummary {
-  if (!status) return { blocked: 0, cancelled: 0, failed: 0, needsAttention: false, pending: 0 };
+  if (!status) return { cancelled: 0, failed: 0, needsAttention: false, pending: 0 };
   const counts = readinessCounts(status);
   return {
-    blocked: counts.blocked,
     cancelled: counts.cancelled,
     failed: counts.failed,
-    needsAttention: counts.failed > 0 || counts.blocked > 0 || status.indexWarning !== null,
+    needsAttention: counts.failed > 0 || status.indexWarning !== null,
     pending: counts.pending,
   };
 }
@@ -127,10 +120,7 @@ export function folderPreparationSummary(
 /** Poll quickly while preparation or embedding work is moving, slowly when idle. */
 export function preparationPollInterval(status: FolderIndexStatus | null | undefined): number {
   if (!status) return POLL_BUSY_MS;
-  const busy =
-    status.pendingConversions.length > 0 ||
-    status.blockedConversions.length > 0 ||
-    !status.indexSettled;
+  const busy = status.pendingConversions.length > 0 || !status.indexSettled;
   return busy ? POLL_BUSY_MS : POLL_IDLE_MS;
 }
 
@@ -143,20 +133,13 @@ function progressCopy(progress: PreparationProgress | null, format: PreparedForm
         ? 'Waiting for other file preparation to finish…'
         : 'Waiting to prepare searchable text…';
     case 'indexing':
-      return format === 'media' ? 'Indexing transcript…' : 'Indexing searchable text…';
+      return 'Indexing searchable text…';
     case 'extracting':
       if (format === 'pdf' && progress.currentPage !== undefined) {
         return `Reading page ${progress.currentPage}…`;
       }
       if (format === 'image') return 'Reading image text…';
-      if (
-        format === 'media' &&
-        progress.completedUnits !== undefined &&
-        progress.totalUnits !== undefined
-      ) {
-        return `Transcribing ${progress.completedUnits} of ${progress.totalUnits} segments…`;
-      }
-      return format === 'media' ? 'Transcribing…' : 'Preparing searchable text…';
+      return 'Preparing searchable text…';
   }
 }
 
@@ -170,12 +153,8 @@ export function readinessStatusLine(
       return null;
     case 'pending':
       return progressCopy(readiness.progress, format);
-    case 'blocked':
-      return 'Transcription setup is required before this file becomes searchable.';
     case 'cancelled':
-      return format === 'media'
-        ? 'Transcription was cancelled. Reprocess when you are ready.'
-        : 'Preparation was cancelled. Reprocess it when you want searchable text.';
+      return 'Preparation was cancelled. Reprocess it when you want searchable text.';
     case 'failed':
       switch (format) {
         case 'pdf':
@@ -184,10 +163,6 @@ export function readinessStatusLine(
           return 'Searchable text is unavailable. The image still opens normally.';
         case 'docx':
           return 'The document is visible, but its searchable text is unavailable.';
-        case 'media':
-          return readiness.detail
-            ? `Transcription failed: ${readiness.detail}`
-            : 'Transcription failed. Reprocess it to try again.';
         default:
           return exhausted(format);
       }
@@ -197,7 +172,7 @@ export function readinessStatusLine(
 }
 
 export interface TreeMarker {
-  readonly kind: 'blocked' | 'cancelled' | 'failed';
+  readonly kind: 'cancelled' | 'failed';
   readonly title: string;
 }
 
@@ -211,11 +186,6 @@ export function treeMarker(readiness: SourceReadiness): TreeMarker | null {
       return {
         kind: 'cancelled',
         title: 'File preparation was cancelled. Reprocess it when you want searchable text.',
-      };
-    case 'blocked':
-      return {
-        kind: 'blocked',
-        title: 'Transcription setup is required to make this file searchable.',
       };
     case 'current':
     case 'pending':
@@ -232,7 +202,6 @@ const REPROCESS_ONLY: ReadonlySet<PreparationAction> = new Set(['reprocess']);
 /** One action set per readiness kind. Written as a total map so a new kind
  *  cannot inherit an empty set by accident: it has to be answered here. */
 const ACTIONS: Record<SourceReadinessKind, ReadonlySet<PreparationAction>> = {
-  blocked: NO_ACTIONS,
   cancelled: REPROCESS_ONLY,
   current: NO_ACTIONS,
   failed: REPROCESS_ONLY,
@@ -248,7 +217,6 @@ export function availableActions(readiness: SourceReadiness): ReadonlySet<Prepar
  *  `quiet` is progress. Written as a total map for the same reason the action
  *  sets are — a new kind is answered here, not defaulted. */
 const TONES: Record<SourceReadinessKind, 'attention' | 'quiet'> = {
-  blocked: 'attention',
   cancelled: 'quiet',
   current: 'quiet',
   failed: 'attention',

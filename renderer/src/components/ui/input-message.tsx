@@ -68,11 +68,7 @@ interface InputMessageProps
   value: string;
   /** Called with the new value on every change the field reports. */
   onValueChange: (value: string) => void;
-  /** Fired on submit (the field's own submit, or the send button) and when a
-   *  queued message auto-dispatches. Receives the trimmed value, the attached
-   *  files, and — for auto-dispatched queue items — `meta.queuedId`, so a
-   *  consumer can morph the queued item into the sent message with a
-   *  shared-layout transition. */
+  /** Submits the trimmed draft and files. The owner handles queued delivery. */
   onSend?: (value: string, files: File[], meta?: { queuedId?: string }) => void;
   /** Disables the field, send button, and drag-and-drop. */
   disabled?: boolean;
@@ -112,6 +108,7 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
       onStop,
       queue,
       onQueueChange,
+      onEditQueued,
       showQueue = true,
       sendable = true,
       sendableWithoutText = false,
@@ -132,21 +129,19 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
 
     const composerFiles = useComposerFiles({ accept, disabled, files, maxFiles, onFilesChange });
 
-    /** Puts a queued message back into the composer, overwriting the draft. */
+    /** Puts a queued message back only when the current draft can be preserved. */
     const restoreQueued = useCallback(
       (item: QueuedMessage) => {
+        if (onEditQueued) return onEditQueued(item.id);
+        if (value || composerFiles.items.length > 0) return false;
         onValueChange(item.text);
         composerFiles.replace(item.files);
         requestAnimationFrame(focusInput);
+        return true;
       },
-      [composerFiles, onValueChange, focusInput],
-    );
-    const dispatchQueued = useCallback(
-      (item: QueuedMessage) => onSend?.(item.text, item.files, { queuedId: item.id }),
-      [onSend],
+      [composerFiles, onValueChange, focusInput, onEditQueued, value],
     );
     const composerQueue = useComposerQueue({
-      onDispatch: dispatchQueued,
       onQueueChange,
       onRestore: restoreQueued,
       queue,
@@ -266,10 +261,6 @@ const InputMessage = forwardRef<HTMLDivElement, InputMessageProps>(
             slotContext={slotContext}
             streaming={composerQueue.streaming}
           />
-          {/* Politely announces auto-dispatch of queued messages. */}
-          <span className="sr-only" role="status" aria-live="polite">
-            {composerQueue.liveMessage}
-          </span>
         </SurfaceProvider>
       </div>
     );

@@ -1,5 +1,3 @@
-import { useId } from 'react';
-
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -45,6 +43,12 @@ export interface AgentInstructionsDialogProps {
 /**
  * The standing instructions every Chat in one scope runs under.
  *
+ * Which scope this is, and when an edit takes effect, are both said in the
+ * header. They used to sit as two muted lines hugging the field, at the same
+ * size and colour as each other and indented short of the field's own text,
+ * so neither read as a label and neither read as a note. The panel now holds
+ * one object, and the field takes its accessible name from the scope.
+ *
  * Monospace because this is a prompt the runtime carries verbatim, where a
  * line break is content rather than styling. Clearing the field restores the
  * packaged default, which is the only way back once a scope is customized, so
@@ -56,24 +60,27 @@ export function AgentInstructionsDialog({
   open,
   scopeName,
 }: AgentInstructionsDialogProps) {
-  const fieldId = useId();
-
   return (
     <Dialog onOpenChange={(next) => !next && onClose()} open={open}>
       <DialogContent width="wide">
         <DialogHeader>
-          <DialogTitle>Instructions for {scopeName}</DialogTitle>
-          <DialogDescription>
-            Customize how the Agent responds and works with your files.
+          <DialogTitle>Instructions</DialogTitle>
+          {/* Both lines are context, not content, so they take the quieter ink
+           *  the sidebar's group labels already use rather than the muted tone
+           *  a dialog states facts in. The field is the thing to look at. */}
+          <DialogDescription className="text-muted-foreground/70">
+            Tailor the Agent’s responses in {scopeName}.
+            {/* Its own line: when an edit takes effect is a separate fact from
+             *  what the field is for, and a scope with a long name would
+             *  otherwise push the two into one ragged block. The break alone
+             *  separates them at this weight, so it takes no step above it. */}
+            <span className="block">Changes apply to new chats.</span>
           </DialogDescription>
         </DialogHeader>
-        <label className="sr-only" htmlFor={fieldId}>
-          Agent Instructions for {scopeName}
-        </label>
         <textarea
+          aria-label={`Instructions for ${scopeName}`}
           className={FIELD_CLASS}
           disabled={editor.loading || editor.saving}
-          id={fieldId}
           onChange={(event) => editor.setDraft(event.target.value)}
           spellCheck={false}
           value={editor.draft}

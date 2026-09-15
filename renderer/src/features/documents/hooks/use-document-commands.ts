@@ -11,10 +11,28 @@ import type { DocumentTabsRuntime } from '@/features/documents/application/tabs-
 export function useDocumentCommands(
   runtime: DocumentNavigationRuntime | null,
   tabs: DocumentTabsRuntime | null = null,
+  options: { enabled?: boolean; newTab?: { open: boolean; close(): void } } = {},
 ): void {
+  const { enabled = true, newTab } = options;
   useEffect(() => {
-    if (!runtime) return;
+    if (!runtime || !enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('[role="dialog"], [role="alertdialog"], [data-command-surface="agent"]'))
+        return;
+      if (newTab?.open) {
+        if (
+          (event.metaKey || event.ctrlKey) &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.key.toLowerCase() === 'w'
+        ) {
+          event.preventDefault();
+          newTab.close();
+        }
+        return;
+      }
       if (event.key === 'Escape') {
         if (runtime.closeFind()) event.preventDefault();
         return;
@@ -36,5 +54,5 @@ export function useDocumentCommands(
     };
     globalThis.document.addEventListener('keydown', onKeyDown);
     return () => globalThis.document.removeEventListener('keydown', onKeyDown);
-  }, [runtime, tabs]);
+  }, [enabled, newTab, runtime, tabs]);
 }

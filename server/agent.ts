@@ -4,12 +4,8 @@
  * stream of structured panel events (text / thinking / tool calls /
  * permission prompts), so the renderer can paint a VSCode-style chat
  * panel instead of a terminal. One session per chat tab. Every session
- * is pinned to an explicit scope at connect time — a member folder (its
- * cwd) or the unbound conversation (cwd = the folder home) — so a window-folder
- * switch leaves it running. The one deliberate scope transition is an
- * attributed unbound Chat creating a project; its next native prompt resumes
- * from that project cwd. Teardown happens on window close, project folder
- * removal (folder-bound sessions only), and app quit.
+ * is pinned to its project at connection time. Navigation preserves it;
+ * window close, project removal, and app quit retire it.
  *
  * Auth: the SDK reads the same credential store the user's `claude`
  * login populated (Keychain / `~/.claude`), so a Pro/Max subscription
@@ -55,11 +51,11 @@ import {
   type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk';
 import { logger, errorMessage } from './log.ts';
-import { getCurrentFolder, getFolderHome, registeredRootForAbs, runWithWindowId } from './folder.ts';
+import { getCurrentFolder, registeredRootForAbs, runWithWindowId } from './folder.ts';
 import { resolveAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
 import { agentCliEnv, agentCliNeedsShell, commandDir, resolveAgentCli } from './agent-cli.ts';
 import { ensureClaudeFolderTrust } from './agent-rules.ts';
-import { disposeSessionsBoundToFolder, isAgentAccessMode, reportAgentRuntimeFailure, resolveSessionBinding, type AgentAccessMode, type AgentSessionTermination } from './agent-contract.ts';
+import { disposeSessionsBoundToFolder, isAgentAccessMode, resolveSessionBinding, type AgentAccessMode, type AgentSessionTermination } from './agent-contract.ts';
 import { rememberAgentDefaultModel, rememberAgentModels } from './agent-model-catalog.ts';
 import { claudeCatalog, readClaudeUserSettings } from './claude-model-catalog.ts';
 import type { AgentClientEvent, AgentModel, AgentServerEvent, AgentSkill } from './agent-contract.ts';
@@ -68,7 +64,6 @@ import {
   unregisterAttributedAgentSession,
   type AttributedAgentSession,
 } from './agent-session-registry.ts';
-import { agentSessionFolderOverride } from './agent-session-folders.ts';
 import {
   consumeAgentTurnFailure,
   simulatedTurnFailureScript,
@@ -178,10 +173,10 @@ function needsPrompt(name: string): boolean {
   return !LOW_RISK_TOOLS.has(name);
 }
 
-type AgentReadableDerivedFormat = 'pdf' | 'docx' | 'audio';
+type AgentReadableDerivedFormat = 'pdf' | 'docx';
 
 function agentReadableDerivedFormat(format: string | null): AgentReadableDerivedFormat | null {
-  return format === 'pdf' || format === 'docx' || format === 'audio' ? format : null;
+  return format === 'pdf' || format === 'docx' ? format : null;
 }
 
 function nativeReadPath(input: Record<string, unknown>, cwd: string): string | null {
@@ -218,8 +213,6 @@ async function nativeDerivedReadRedirect(
   alreadyRedirected.add(key);
   const textKind = sourceFormat === 'docx'
     ? 'derived HTML'
-    : sourceFormat === 'audio'
-      ? 'transcript Markdown'
       : 'extracted Markdown';
   return {
     behavior: 'deny',
@@ -282,18 +275,9 @@ export class AgentSession implements AttributedAgentSession {
   private sessionId: string | null = null;
   /** The folder this session is bound to, captured at start. */
   private cwd: string | null = null;
-  /** True for an unbound session: cwd is the folder home and the
-   *  session is NOT bound to any member folder — member-folder removal
-   *  never tears it down (window close / app quit still do). */
-  private unbound = false;
-  /** Member folder this unbound session was migrated to by `create_project`.
-   *  The next prompt resumes the same native session from this cwd; binding,
-   *  teardown scope, and history move immediately. */
-  private rebound: string | null = null;
   private models: AgentModel[] = [];
   private skills = new Set<string>();
   private pumpTask: Promise<void> | null = null;
-  private nativeMigrationTask: Promise<void> | null = null;
   private retirementTask: Promise<void> | null = null;
 
   constructor(
@@ -308,11 +292,8 @@ export class AgentSession implements AttributedAgentSession {
     private resolveBinary: () => string | null = resolveClaudeBinary,
     private resumeBelongsToFolder: typeof resumeMatchesCwd = resumeMatchesCwd,
     /** Explicit, membership-validated session folder. Undefined with no
-     *  unbound scope follows the window's current folder at connect time
-     *  (legacy clients), else an unbound conversation. */
+     *  follows the window folder before startup. */
     private folder?: string,
-    /** Explicit unbound scope (`scope=unbound` on the connect URL). */
-    private scope?: 'unbound',
   ) {
     this.windowId = normalizeAgentWindowId(windowId);
     registerAttributedAgentSession(this.attributionId, this);
@@ -328,38 +309,13 @@ export class AgentSession implements AttributedAgentSession {
    *  host-side MCP tools can find the live calling session. */
   readonly attributionId = randomUUID();
 
-  /** The member folder this session is (or will be) bound to. `cwd` is the
-   *  authoritative binding once the session started; before that, the
-   *  explicit connect-time folder is the best answer. An unbound
-   *  session is bound to no member folder and reports null — unless
-   *  `create_project` rebound it to the new project. */
+  /** The project pinned at startup, or its explicit connection-time folder. */
   boundFolder(): string | null {
-    if (this.rebound) return this.rebound;
-    if (this.unbound || this.scope === 'unbound') return null;
     return this.cwd ?? this.folder ?? null;
   }
 
   turnInFlight(): boolean {
     return this.turnActive;
-  }
-
-  isUnbound(): boolean {
-    return !this.rebound && (this.unbound || this.scope === 'unbound');
-  }
-
-  nativeSessionId(): string | null {
-    return this.sessionId;
-  }
-
-
-  /** Migrate this unbound session to a member folder (create_project).
-   *  The current turn finishes in the original process; the next prompt
-   *  resumes the same native session from the project cwd. */
-  rebindToFolder(folderAbs: string): boolean {
-    if (this.closed || !this.isUnbound()) return false;
-    this.rebound = folderAbs;
-    this.send({ t: 'scope-changed', scope: { kind: 'folder', path: folderAbs } });
-    return true;
   }
 
   get isClosed(): boolean { return this.closed; }
@@ -373,18 +329,9 @@ export class AgentSession implements AttributedAgentSession {
 
   private async start(beforeNativeStart?: () => Promise<boolean>): Promise<void> {
     if (this.closed) return;
-    // An explicit folder pins the session; an explicit unbound scope (or
-    // no folder anywhere) binds the folder home as the historical unbound
-    // cwd. Ordinary window navigation never changes it; an attributed
-    // create_project transition is the one deliberate exception.
-    const binding = resolveSessionBinding({
-      scope: this.scope,
-      folder: this.folder,
-      currentFolder: getCurrentFolder(),
-      folderHome: getFolderHome(),
-    });
-    const cwd = binding.cwd;
-    this.unbound = binding.unbound;
+    let cwd: string;
+    try { cwd = resolveSessionBinding({ folder: this.folder, currentFolder: getCurrentFolder() }).cwd; }
+    catch (error) { this.finish(errorMessage(error)); return; }
     this.cwd = cwd;
     if (this.closed) return;
     if (this.resume && !(await this.resumeBelongsToFolder(this.resume, cwd))) {
@@ -403,9 +350,9 @@ export class AgentSession implements AttributedAgentSession {
       if (!mayStart || this.closed) return;
       // Legacy clients inherit the window folder at connect time, so a
       // folder switch during ownership handoff invalidates that start.
-      // Explicit folder/unbound scopes are pinned independently of later
+      // Explicit project scopes are pinned independently of later
       // window navigation and must survive it.
-      if (!this.folder && this.scope !== 'unbound') {
+      if (!this.folder) {
         const activeFolder = getCurrentFolder();
         if (!activeFolder || !filesystemPath.equal(activeFolder, cwd)) {
           this.finish('The folder changed before the session started.');
@@ -423,9 +370,9 @@ export class AgentSession implements AttributedAgentSession {
     // folder's headless session hangs at "working" with no visible prompt.
     ensureClaudeFolderTrust(cwd);
     try {
-      this.q = this.createNativeQuery(cwd, this.resume, this.unbound ? 'unbound' : 'folder', claudeCodeExecutable);
+      this.q = this.createNativeQuery(cwd, this.resume, claudeCodeExecutable);
     } catch (err: unknown) {
-      reportAgentRuntimeFailure('claude', err);
+
       this.finish(errorMessage(err));
       return;
     }
@@ -442,7 +389,6 @@ export class AgentSession implements AttributedAgentSession {
   private createNativeQuery(
     cwd: string,
     resume: string | undefined,
-    scope: 'unbound' | 'folder',
     claudeCodeExecutable: string,
   ): Query {
     return this.queryFactory({
@@ -459,7 +405,7 @@ export class AgentSession implements AttributedAgentSession {
           systemPrompt: {
             type: 'preset',
             preset: 'claude_code',
-            append: resolveAgentRuntimeInstructions(scope === 'unbound' ? null : cwd),
+            append: resolveAgentRuntimeInstructions(cwd),
           },
           // Resuming a past session loads its conversation history so the
           // user can continue it. The transcript itself is rendered from
@@ -539,7 +485,7 @@ export class AgentSession implements AttributedAgentSession {
       if (!this.closed) failure = 'Claude session ended unexpectedly.';
     } catch (err: unknown) {
       if (!this.closed && query === this.q) {
-        reportAgentRuntimeFailure('claude', err);
+
         failure = errorMessage(err);
       }
     }
@@ -735,46 +681,6 @@ export class AgentSession implements AttributedAgentSession {
     } as SDKUserMessage);
   }
 
-  private async migrateAndEnqueuePrompt(body: string, skill?: string): Promise<void> {
-    try {
-      const target = this.rebound;
-      const resume = this.sessionId;
-      if (!target || !resume) throw new Error('The project scope is not ready yet. Try again.');
-
-      const previousQuery = this.q;
-      const previousPump = this.pumpTask;
-      this.q = null;
-      this.pumpTask = null;
-      this.input.end();
-      if (previousPump) {
-        await previousPump;
-      } else if (previousQuery) {
-        try { await previousQuery.return(undefined); } catch { /* already retired */ }
-      }
-      if (this.closed) return;
-
-      const claudeCodeExecutable = this.resolveBinary();
-      if (!claudeCodeExecutable) throw new Error(missingClaudeMessage());
-      ensureClaudeFolderTrust(target);
-
-      this.input = new Pushable<SDKUserMessage>();
-      const nextQuery = this.createNativeQuery(target, resume, 'folder', claudeCodeExecutable);
-      this.q = nextQuery;
-      this.cwd = target;
-      this.unbound = false;
-      await this.publishSkills();
-      if (this.closed || this.q !== nextQuery) return;
-      this.pumpTask = this.pump(nextQuery);
-      this.enqueuePrompt(body, skill);
-    } catch (err: unknown) {
-      if (this.closed) return;
-      reportAgentRuntimeFailure('claude', err);
-      this.turnActive = false;
-      this.sendTurnError(errorMessage(err));
-      this.send({ t: 'turn-end', isError: true });
-    }
-  }
-
   private onMessage(text: string): void {
     let msg: AgentClientEvent;
     try { msg = JSON.parse(text); } catch { return; }
@@ -796,15 +702,7 @@ export class AgentSession implements AttributedAgentSession {
         this.turnGeneration += 1;
         this.interruptRequested = false;
         this.send({ t: 'turn-start' });
-        if (this.rebound && (!this.cwd || !filesystemPath.equal(this.cwd, this.rebound))) {
-          const migration = this.migrateAndEnqueuePrompt(body, skill);
-          this.nativeMigrationTask = migration;
-          void migration.finally(() => {
-            if (this.nativeMigrationTask === migration) this.nativeMigrationTask = null;
-          });
-        } else {
-          this.enqueuePrompt(body, skill);
-        }
+        this.enqueuePrompt(body, skill);
         break;
       }
       case 'refresh-skills': void this.publishSkills(); break;
@@ -955,8 +853,6 @@ export class AgentSession implements AttributedAgentSession {
   }
 
   private async retireNativeQuery(): Promise<void> {
-    const migration = this.nativeMigrationTask;
-    if (migration) await migration.catch(() => { /* migration already reported */ });
     const query = this.q;
     if (!query) return;
     try { await query.interrupt(); } catch { /* continue through cleanup */ }
@@ -971,16 +867,6 @@ export class AgentSession implements AttributedAgentSession {
 }
 
 export async function resumeMatchesCwd(sessionId: string, cwd: string): Promise<boolean> {
-  // A project session migrated to a project by create_project keeps its
-  // native cwd (the folder home) while its history lists under the project
-  // (the persisted override). Resuming it from that project's History must
-  // therefore accept the override folder as a match.
-  try {
-    const override = agentSessionFolderOverride('claude', sessionId);
-    if (override && filesystemPath.equal(override, cwd)) return true;
-  } catch {
-    // Fall through to the native cwd check.
-  }
   try {
     const info = await getSessionInfo(sessionId);
     return sessionInfoMatchesCwd(info, cwd);
@@ -1085,7 +971,6 @@ export function attachAgentWebSocket(
   access?: AgentAccessMode,
   model?: string,
   folder?: string,
-  scope?: 'unbound',
 ): void {
   const session = new AgentSession(
     ws,
@@ -1102,7 +987,6 @@ export function attachAgentWebSocket(
     undefined,
     undefined,
     folder,
-    scope,
   );
   sessions.add(session);
   if (resume) session.begin(() => nativeOwnership.acquire(resume, session));

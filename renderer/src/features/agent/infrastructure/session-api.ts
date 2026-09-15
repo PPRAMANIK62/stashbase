@@ -57,8 +57,7 @@ function browserSocket(url: string): SocketLike {
 
 function scopeQuery(scope: AgentScope): URLSearchParams {
   const query = new URLSearchParams();
-  if (scope.kind === 'unbound') query.set('scope', 'unbound');
-  else query.set('folder', scope.path);
+  query.set('folder', scope.path);
   return query;
 }
 
@@ -111,6 +110,7 @@ function clientEvent(command: AgentSessionCommand): AgentClientEvent {
       return {
         t: 'prompt',
         text: command.text,
+        ...(command.titleHint ? { titleHint: command.titleHint } : {}),
         ...(command.skill === null ? {} : { skill: command.skill }),
       };
     case 'interrupt':
@@ -139,8 +139,6 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
       return { id: event.id, kind: 'identified' };
     case 'session-title':
       return { kind: 'titled', title: event.title };
-    case 'scope-changed':
-      return { kind: 'scope-changed', scope: event.scope };
     case 'turn-start':
       return { kind: 'turn-started' };
     case 'text':
@@ -228,9 +226,7 @@ function socketUrl(serverOrigin: string, request: AgentConnectRequest): string {
     effort: request.effort,
     model: request.model,
     resume: request.resume,
-    ...(request.scope.kind === 'folder'
-      ? { folder: request.scope.path }
-      : { scope: 'unbound' as const }),
+    folder: request.scope.path,
   });
   for (const [key, value] of Object.entries(wire)) {
     if (value !== undefined) url.searchParams.set(key, value);

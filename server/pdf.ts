@@ -5,7 +5,7 @@
  * spawn the extractor in the background. It writes derived Markdown and any
  * extracted asset bundle under AppData (`derived-store.ts`), never next to
  * the user's PDF. On completion the derived Markdown is pushed into the
- * semantic index under the original PDF path when an API key is available.
+ * index under the original PDF path, independently of embedding availability.
  * The PDF itself stays on disk as the user-facing source.
  *
  * Default `pymupdf` route uses `pymupdf4llm` for LLM-friendly markdown
@@ -27,7 +27,7 @@ import {
   TransientConversionError,
   type ConversionSpec,
 } from './conversion.ts';
-import { lowerExtractorPriority, spawnOptionsForPdfOcr, terminateExtractorTree } from './extractor-process.ts';
+import { lowerExtractorPriority, spawnOptionsForPdfOcr, terminateExtractorTree, waitForExtractorTree } from './extractor-process.ts';
 import type { ConversionProgress } from './conversion-status.ts';
 import { logger } from './log.ts';
 import {
@@ -309,7 +309,7 @@ async function convertPdf(
       signal?.removeEventListener('abort', onAbort);
       reject(new Error(`spawn failed: ${err.message}`));
     });
-    proc.on('exit', (code) => {
+    void waitForExtractorTree(proc).then((code) => {
       signal?.removeEventListener('abort', onAbort);
       if (stderrLineBuffer) {
         handleStderrLine(stderrLineBuffer);
@@ -326,7 +326,7 @@ async function convertPdf(
         const message = `pdf_extract exit ${code}: ${tail || '(no stderr)'}`;
         reject(code === null ? new TransientConversionError(message) : new Error(message));
       }
-    });
+    }, reject);
   });
 }
 

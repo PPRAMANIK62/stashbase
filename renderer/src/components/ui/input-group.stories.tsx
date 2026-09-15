@@ -28,6 +28,25 @@ function InputGroupExample({ error = false }: { error?: boolean }) {
   );
 }
 
+/** The standing field a panel is built around, rather than a row of a form:
+ *  its box is drawn at rest, the pointer crossing it changes nothing, and
+ *  focus only fills it to the card. */
+function StandingFieldExample() {
+  const [query, setQuery] = useState('');
+  return (
+    <InputGroup className="w-64 max-w-full" size="compact">
+      <InputField
+        label="Search current workspace"
+        labelHidden
+        onChange={setQuery}
+        placeholder="Search"
+        resting="outline"
+        value={query}
+      />
+    </InputGroup>
+  );
+}
+
 const meta = {
   title: 'Inputs/Input Group',
   component: InputGroup,
@@ -40,3 +59,4 @@ type Story = StoryObj;
 
 export const Fields: Story = { render: () => <InputGroupExample /> };
 export const ValidationError: Story = { render: () => <InputGroupExample error /> };
+export const StandingField: Story = { render: () => <StandingFieldExample /> };

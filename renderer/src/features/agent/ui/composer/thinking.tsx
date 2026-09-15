@@ -17,6 +17,7 @@ import {
   DropdownTrigger,
 } from '@/components/ui/dropdown';
 import { MenuItem } from '@/components/ui/menu-item';
+import { Tooltip } from '@/components/ui/tooltip';
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { modelChoice, type ModelChoice } from '@/features/agent/domain/model-choice';
 import type { AgentSessionState } from '@/features/agent/domain/session';
@@ -212,42 +213,43 @@ export function AgentThinkingControl({
         if (open) setLayer(firstLayer);
       }}
     >
-      <DropdownTrigger
-        render={
-          <Button
-            aria-label={label}
-            className={cn('max-w-56', NARROWEST_TRIGGER)}
-            disabled={disabled}
-            leadingIcon={Zap}
-            onClick={onRequestCatalog}
-            size="compact"
-            title={label}
-            trailingIcon={ChevronDown}
-            variant="ghost"
-          >
-            {/* As the pane narrows the model's name folds away first and the
-                level, the thing changed turn to turn, stays until the
-                narrowest step. While no level is known, before the catalog
-                has been read, the name stays in its place instead, so the
-                trigger is never a bare icon above the narrowest step. */}
-            <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-              <span
-                className={cn(
-                  'min-w-0 truncate',
-                  effortName === null ? NARROWEST_LABEL : NARROW_LABEL,
-                )}
-              >
-                {modelName}
-              </span>
-              {effortName !== null && (
-                <span className={cn('shrink-0 text-muted-foreground', NARROWEST_LABEL)}>
-                  {effortName}
+      <Tooltip content={label} side="top">
+        <DropdownTrigger
+          render={
+            <Button
+              aria-label={label}
+              className={cn('max-w-56', NARROWEST_TRIGGER)}
+              disabled={disabled}
+              leadingIcon={Zap}
+              onClick={onRequestCatalog}
+              size="compact"
+              trailingIcon={ChevronDown}
+              variant="ghost"
+            >
+              {/* As the pane narrows the model's name folds away first and the
+                  level, the thing changed turn to turn, stays until the
+                  narrowest step. While no level is known, before the catalog
+                  has been read, the name stays in its place instead, so the
+                  trigger is never a bare icon above the narrowest step. */}
+              <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+                <span
+                  className={cn(
+                    'min-w-0 truncate',
+                    effortName === null ? NARROWEST_LABEL : NARROW_LABEL,
+                  )}
+                >
+                  {modelName}
                 </span>
-              )}
-            </span>
-          </Button>
-        }
-      />
+                {effortName !== null && (
+                  <span className={cn('shrink-0 text-muted-foreground', NARROWEST_LABEL)}>
+                    {effortName}
+                  </span>
+                )}
+              </span>
+            </Button>
+          }
+        />
+      </Tooltip>
       <DropdownContent
         align="end"
         className="w-72 max-w-[calc(100vw-1rem)]"

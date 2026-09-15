@@ -5,11 +5,12 @@
  * column under the band reads; the header's history popover is the quick
  * way in, this is the manager.
  */
-import { Layers, MessageCirclePlus, RefreshCw } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { MessageCirclePlus, RefreshCw, Search, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 
 import { Button } from '@/components/ui/button';
+import { InputField, InputGroup } from '@/components/ui/input-group';
 import {
   SidebarGroup,
   SidebarMenu,
@@ -17,13 +18,12 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { SidebarGroupLabel } from '@/components/ui/sidebar-group-label';
-import { preferredAgent } from '@/features/agent/domain/agent-catalog';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   buildConversationGroups,
   type AgentConversationItem,
   type AgentHistoryEntry,
 } from '@/features/agent/domain/conversation-history';
-import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
 import { useConversationHistory } from '@/features/agent/hooks/use-conversation-history';
 import type { AgentChatsProps } from '@/features/agent/ui/workspace-lazy';
 import { FailureLine } from '@/shared/ui/failure-notice';
@@ -31,27 +31,50 @@ import { FailureLine } from '@/shared/ui/failure-notice';
 import { ConversationTree } from './conversation-tree';
 import { DeleteConversationDialog } from './delete-conversation-dialog';
 
-export default function AgentChats({
-  catalog: catalogPort,
-  onOpenAgentSettings,
-  runtime,
-  scope,
-  workspaceName,
-}: AgentChatsProps) {
-  const { readyAgents } = useAgentCatalog(catalogPort);
+export default function AgentChats({ runtime, scope, workspaceName }: AgentChatsProps) {
   const history = useConversationHistory(runtime, scope);
   const activeId = useStore(runtime.store, (state) => state.activeId);
   const tabs = useStore(runtime.store, (state) => state.tabs);
+  const [query, setQuery] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(true);
+  const filterField = useRef<HTMLDivElement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AgentHistoryEntry | null>(null);
   const conversationGroups = useMemo(
     () => buildConversationGroups({ activeId, history: history.history, scope, tabs }),
     [activeId, history.history, scope, tabs],
   );
+  const filteredGroups = conversationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) =>
+        item.title.toLowerCase().includes(query.trim().toLowerCase()),
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
   const conversationCount = conversationGroups.reduce(
     (total, group) => total + group.items.length,
     0,
   );
-  const defaultAgent = preferredAgent(readyAgents);
+  // The field opens in place of the section's name, so it opens focused:
+  // the click that asked for it was the reader reaching for the keyboard.
+  useEffect(() => {
+    if (!filterOpen) return;
+    filterField.current?.querySelector('input')?.focus();
+  }, [filterOpen]);
+
+  // A folded list cannot show what a filter did to it, so asking to search
+  // unfolds the section first.
+  const openFilter = () => {
+    setListOpen(true);
+    setFilterOpen(true);
+  };
+  // Closing takes the query with it. A filter left standing behind a name
+  // would hide chats with nothing on screen to say why.
+  const closeFilter = () => {
+    setQuery('');
+    setFilterOpen(false);
+  };
 
   const closeDelete = () => {
     history.clearMutationFailure();
@@ -77,37 +100,19 @@ export default function AgentChats({
        *  px-2 and the row's own inset put its glyph on the shared 16px column
        *  with the footer rows' and the folder header's. */}
       <div className="shrink-0 px-2 pt-2 pb-1">
-        {defaultAgent ? (
-          <SidebarMenu aria-label="New chat">
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                aria-label="Start new chat"
-                icon={MessageCirclePlus}
-                onClick={() => runtime.newChat(defaultAgent.id, scope)}
-              >
-                New chat
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        ) : (
-          <Button
-            className="w-full justify-start"
-            leadingIcon={Layers}
-            onClick={onOpenAgentSettings}
-            variant="secondary"
-          >
-            Set up an Agent
-          </Button>
-        )}
+        <SidebarMenu aria-label="New chat">
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              aria-label="Start new chat"
+              icon={MessageCirclePlus}
+              onClick={() => runtime.newChat(undefined, scope)}
+            >
+              New chat
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </div>
 
-      {/* A rule sets the creation control off from the history beneath it,
-       *  and the history says what it is: the folder's recent chats, in
-       *  the day groups that follow. `mx-4` is the footer rules' 16px inset
-       *  — one 8px step inside where a row's hover fill starts — reached
-       *  without a container padding to add to, so every rule in the column
-       *  sits on one line. */}
-      <hr className="mx-4 my-1 h-px border-0 bg-border" />
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           aria-label={`Conversation tree in ${workspaceName}`}
@@ -118,10 +123,97 @@ export default function AgentChats({
            *  size and grey as those headers, the same hover, and the fold
            *  chevron at its end under the pointer. p-0: the scroll region
            *  already carries the 8px inset. */}
-          <SidebarGroup className="p-0" collapsible>
-            <SidebarGroupLabel className="h-7 text-caption text-muted-foreground hover:bg-hover hover:text-foreground">
+          <SidebarGroup
+            className="p-0"
+            collapsible
+            headerActions={
+              filterOpen ? undefined : (
+                <Tooltip content="Search chats" side="bottom">
+                  <Button
+                    aria-label="Search chats"
+                    className="size-6"
+                    data-sidebar="group-action"
+                    onClick={openFilter}
+                    size="icon-compact"
+                    variant="ghost"
+                  >
+                    <Search aria-hidden="true" />
+                  </Button>
+                </Tooltip>
+              )
+            }
+            onOpenChange={setListOpen}
+            open={listOpen}
+          >
+            {/* Searching, the section's name gives way to the field on its
+             *  own row: the same 28px, the same inset, so the header changes
+             *  what it holds rather than the list gaining a row. Placed
+             *  before the label so it stays out of the fold, and the label
+             *  is hidden rather than dropped, because it is the group's
+             *  toggle and the collapse is split around it. Leaving the row
+             *  with nothing typed closes it again; a standing query keeps it,
+             *  since the list is filtered and the reader has to see by what. */}
+            {filterOpen && (
+              // No padding of its own: the row has to stand exactly as tall
+              // as the label it replaces, or opening the search shoves every
+              // day group and chat beneath it down a step. A box reads
+              // tighter over the first group than a line of text does, and
+              // that is the price of a list that does not move.
+              <div
+                className="w-full shrink-0"
+                onBlur={(event) => {
+                  if (query) return;
+                  if (event.currentTarget.contains(event.relatedTarget)) return;
+                  closeFilter();
+                }}
+                ref={filterField}
+              >
+                <InputGroup className="w-full gap-0" size="compact">
+                  <InputField
+                    action={
+                      <Tooltip content="Close search" side="bottom">
+                        <Button
+                          aria-label="Close search"
+                          className="size-5"
+                          onClick={closeFilter}
+                          size="icon-compact"
+                          variant="ghost"
+                        >
+                          <X aria-hidden="true" />
+                        </Button>
+                      </Tooltip>
+                    }
+                    autoComplete="off"
+                    label="Search chat titles"
+                    labelHidden
+                    onChange={setQuery}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        closeFilter();
+                      }
+                    }}
+                    placeholder="Search"
+                    resting="outline"
+                    spellCheck={false}
+                    value={query}
+                  />
+                </InputGroup>
+              </div>
+            )}
+            {/* The attribute, not a class: while the field has the row the
+             *  label is not a toggle, so it should leave the accessibility
+             *  tree too, and it is kept mounted only because the group splits
+             *  its collapse around it. */}
+            <SidebarGroupLabel
+              className="h-7 text-caption text-muted-foreground hover:bg-hover hover:text-foreground"
+              hidden={filterOpen}
+            >
               Chats
             </SidebarGroupLabel>
+            {query && filteredGroups.length === 0 && (
+              <p className="px-2 py-1 text-caption text-muted-foreground">No matching chats.</p>
+            )}
             {history.historyLoading && conversationCount === 0 && (
               <p className="px-2 py-1 text-caption text-muted-foreground">Loading chats…</p>
             )}
@@ -131,7 +223,7 @@ export default function AgentChats({
               </p>
             )}
             <ConversationTree
-              groups={conversationGroups}
+              groups={filteredGroups}
               onActivate={runtime.activate}
               onDelete={(entry) => {
                 history.clearMutationFailure();

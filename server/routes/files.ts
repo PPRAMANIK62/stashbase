@@ -29,7 +29,6 @@ import { readTextSnapshotAsync } from '../text-file-transaction.ts';
 import { readGenericFilePreview } from '../generic-file-preview.ts';
 import { mountFileAssetRoutes } from './file-assets.ts';
 import { mountFileMutationRoutes } from './file-mutations.ts';
-import { mountFileOrderRoutes } from './file-order.ts';
 import {
   documentTextOverwriteRequestSchema,
   documentTextSaveRequestSchema,
@@ -414,6 +413,5 @@ export function mount(
     });
   });
 
-  mountFileOrderRoutes(app);
   mountFileAssetRoutes(app);
 }

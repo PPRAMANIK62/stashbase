@@ -11,12 +11,8 @@ export const preparationSourceRequestSchema = z
   })
   .strict();
 
-/** `POST /api/files/reprocess`; `language` applies to media sources only. */
-export const preparationReprocessRequestSchema = preparationSourceRequestSchema
-  .extend({
-    language: z.string().trim().min(1).max(32).optional(),
-  })
-  .strict();
+/** `POST /api/files/reprocess`. */
+export const preparationReprocessRequestSchema = preparationSourceRequestSchema;
 
 export const preparationAcknowledgementSchema = z.object({ ok: z.literal(true) }).passthrough();
 

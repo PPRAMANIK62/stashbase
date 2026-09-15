@@ -33,6 +33,7 @@ import type { FolderSearchReadiness } from '@/features/preparation/public';
 import { ProjectSearch } from '@/features/retrieval/public';
 import { SidebarAccountRow } from '@/features/settings/public';
 import {
+  FileImport,
   FileTree,
   ProjectSidebar,
   type ActiveProjectFolder,
@@ -48,7 +49,7 @@ import { sidebarModes, sidebarPanels } from './sidebar-panels';
 
 export interface WorkspaceSidebarProps {
   activeFolder: ActiveProjectFolder | null;
-  agent: { runtime: AgentWorkspaceRuntime; scope: AgentScope };
+  agent: { runtime: AgentWorkspaceRuntime; scope: AgentScope | null };
   documents: DocumentTabsRuntime | null;
   folder: {
     /** The Workbench-wide hidden-entry visibility, offered on the tree's own
@@ -94,16 +95,18 @@ export function WorkspaceSidebar({
   // moment, not a standing preference, and the next window starts unfolded.
   const [folderOpen, setFolderOpen] = useState(true);
   const folderContentId = useId();
-  // The creates are the file tree's and show in Documents mode only; the
-  // fold is the section's and works in both modes, one state for the one
-  // section, so a fold made in Documents holds in Chats and back.
-  const creates = sidebar.mode === 'documents';
-  // The header's creates are the tree's: a draft, or a folder named in
-  // place, beside the selection. Either brings Files on screen and unfolds
-  // the section first, because that is where the name is typed.
+  // The creates belong to the file tree, so they show while the tree is the
+  // panel on screen and nowhere else: over the outline or over search there
+  // is nothing for a new file to appear in, and a header action that changes
+  // the panel under the reader is a worse offer than no action. The fold is
+  // the section's and works in both modes, one state for the one section, so
+  // a fold made in Documents holds in Chats and back.
+  const creates = sidebar.selected === 'files';
+  // A draft, or a folder named in place, beside the tree's selection. The
+  // section is unfolded first, because the name is typed in the tree and the
+  // creates stay reachable on the header while it is rolled up.
   const requestCreate = workspace
     ? (kind: 'draft' | 'folder') => () => {
-        sidebar.select('files');
         setFolderOpen(true);
         workspace.requestCreate(kind);
       }
@@ -115,12 +118,7 @@ export function WorkspaceSidebar({
         contentId={folderContentId}
         onNewFile={creates ? requestCreate?.('draft') : undefined}
         onNewFolder={creates ? requestCreate?.('folder') : undefined}
-        // Collapse all is the tree's, so it shows only while the tree does.
-        onCollapseAll={
-          creates && sidebar.selected === 'files' && workspace
-            ? () => workspace.collapseAll()
-            : undefined
-        }
+        onCollapseAll={creates && workspace ? () => workspace.collapseAll() : undefined}
         onOpenChange={setFolderOpen}
         open={folderOpen}
       />
@@ -202,7 +200,7 @@ export function WorkspaceSidebar({
             onSelect={sidebar.select}
             open={folderOpen}
             panels={sidebarPanels({
-              chats: (
+              chats: agent.scope ? (
                 <AgentChats
                   catalog={dependencies.agent.catalog}
                   onOpenAgentSettings={() => settings.openSettings('agents')}
@@ -210,33 +208,39 @@ export function WorkspaceSidebar({
                   scope={agent.scope}
                   workspaceName={activeFolder.name}
                 />
-              ),
+              ) : null,
               files: workspace ? (
-                <FileTree
-                  api={dependencies.workspace.adapters.files}
-                  {...(folder.hiddenFiles ? { hiddenFiles: folder.hiddenFiles } : {})}
+                <FileImport
+                  api={dependencies.workspace.adapters.upload}
                   key={workspace.scope.generation}
-                  onOpenSource={sources.open}
-                  onReprocess={onReprocess}
-                  onScopeLost={sources.recoverLostScope}
-                  retireSources={sources.retire}
-                  revealLabel={dependencies.workspace.revealLabel}
-                  rowMarkers={folder.rowMarkers}
                   runtime={workspace}
-                />
+                >
+                  <FileTree
+                    api={dependencies.workspace.adapters.files}
+                    {...(folder.hiddenFiles ? { hiddenFiles: folder.hiddenFiles } : {})}
+                    key={workspace.scope.generation}
+                    onOpenSource={sources.open}
+                    onReprocess={onReprocess}
+                    onScopeLost={sources.recoverLostScope}
+                    mutateSources={sources.mutate}
+                    revealLabel={dependencies.workspace.revealLabel}
+                    rowMarkers={folder.rowMarkers}
+                    runtime={workspace}
+                  />
+                </FileImport>
               ) : (
                 <p className="px-4 py-2 text-caption text-muted-foreground">Loading files…</p>
               ),
               outline: documents,
               search: (
                 <ProjectSearch
+                  onConfigureSearch={() => settings.openSettings('search')}
                   active={sidebar.selected === 'search'}
                   activeFolderPath={activeFolder.path}
                   decisionApi={dependencies.retrieval.decisionApi}
                   exactApi={dependencies.retrieval.exactSearchApi}
                   focusRevision={sidebar.focusRevision}
                   onNavigate={sources.navigateToMatch}
-                  onOpenSettings={settings.openSettings}
                   preparation={folder.search.counts}
                   readiness={folder.search.semantic}
                   readyCount={folder.search.readyCount}

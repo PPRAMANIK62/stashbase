@@ -25,7 +25,7 @@ export function DocumentPending({ label }: { label: string }) {
   );
 }
 
-export function DocumentFailure({
+function DocumentFailure({
   message,
   name,
   retry,

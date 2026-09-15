@@ -86,14 +86,14 @@ describe('applyAgentSessionEvent', () => {
     );
   });
 
-  it('hands a refused held prompt back to the composer', () => {
-    const test = harness();
+  it('keeps newer input when a held prompt is refused', () => {
+    const test = harness({ draft: 'Newer idea' });
     vi.mocked(test.context.submit).mockReturnValue(false);
     test.context.ledger.hold({ context: [], display: 'Go', skill: null, wire: 'Go' });
 
     test.apply({ kind: 'ready' });
 
-    expect(test.state()).toMatchObject({ context: [], draft: 'Go' });
+    expect(test.state()).toMatchObject({ context: [], draft: 'Newer idea', delivery: 'failed' });
   });
 
   it('gives every stream delta a transcript block id of its own', () => {
@@ -174,6 +174,7 @@ describe('applyAgentSessionEvent', () => {
     const inTurn = harness({ connection: { kind: 'live', turn: { promptBlockId: 'u1' } } });
     inTurn.context.transition({ at: 1, context: [], id: 'u1', kind: 'submit-prompt', text: 'Go' });
 
+    inTurn.context.ledger.recordTurn('u1', { display: 'Go', skill: null, wire: 'Go' });
     inTurn.apply({ kind: 'failed', message: 'Rate limited.' });
 
     expect(inTurn.state().transcript.at(-1)).toMatchObject({
@@ -187,6 +188,26 @@ describe('applyAgentSessionEvent', () => {
     expect(idle.state().connection).toEqual({ kind: 'failed', message: 'Rate limited.' });
   });
 
+  it('does not offer a lossy retry for an active request recovered only from native history', () => {
+    const restored = harness({
+      connection: { kind: 'live', turn: { promptBlockId: null } },
+      transcript: [
+        {
+          kind: 'user',
+          id: 'old',
+          text: 'Describe this',
+          attachments: [{ path: '/tmp/old.png', name: 'old.png' }],
+        },
+      ],
+    });
+    restored.apply({ kind: 'failed', message: 'Connection interrupted.', failure: 'network' });
+    expect(restored.state().transcript.at(-1)).toMatchObject({
+      kind: 'error',
+      retryablePrompt: undefined,
+      text: expect.stringContaining('Reuse message'),
+    });
+  });
+
   it('settles the transport before an ending it was told about', () => {
     const exited = harness(live);
     exited.apply({ kind: 'exited', message: 'Session closed.' });
@@ -194,11 +215,11 @@ describe('applyAgentSessionEvent', () => {
     expect(exited.state().connection).toEqual({ kind: 'closed', message: 'Session closed.' });
 
     const retired = harness(live);
-    retired.apply({ folderPath: '/project/Archive', kind: 'scope-retired' });
+    retired.apply({ folderPath: '/project/Research', kind: 'scope-retired' });
     expect(retired.transport.expectClose).toHaveBeenCalledOnce();
     expect(retired.state()).toMatchObject({
       connection: { kind: 'retired' },
-      scope: { kind: 'folder', path: '/project/Archive' },
+      scope: { kind: 'folder', path: '/project/Research' },
     });
   });
 });

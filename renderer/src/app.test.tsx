@@ -253,7 +253,7 @@ describe('workspace shell', () => {
     expect(generalSearch.defaultPrevented).toBe(true);
     expect(searchTab.getAttribute('aria-selected')).toBe('true');
     expect(view.getByLabelText('Exact workspace search')).not.toBeNull();
-    expect(view.getByPlaceholderText('Search files').matches(':focus')).toBe(true);
+    expect(view.getByPlaceholderText('Search').matches(':focus')).toBe(true);
 
     const elsewhere = document.createElement('button');
     container.append(elsewhere);
@@ -270,7 +270,7 @@ describe('workspace shell', () => {
       );
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
-    expect(view.getByPlaceholderText('Search files').matches(':focus')).toBe(true);
+    expect(view.getByPlaceholderText('Search').matches(':focus')).toBe(true);
 
     await act(async () => outlineTab.click());
 

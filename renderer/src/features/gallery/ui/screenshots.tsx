@@ -10,6 +10,8 @@ import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
 
+import { GalleryImage } from './image';
+
 /** The hero is a 16:9 frame, full stop. It never trades its ratio for the
  *  column's width: a wide window gives the frame a wider column only up to
  *  the cap the entry page sets on that column, and the width past it goes to
@@ -86,7 +88,9 @@ export function GalleryScreenshots({
           )}
           style={HERO_FRAME}
         >
-          <img
+          <GalleryImage
+            key={hero}
+            retryable
             alt={`${name} screenshot ${shot + 1}`}
             className="absolute inset-0 size-full object-cover object-top"
             src={hero}
@@ -101,7 +105,7 @@ export function GalleryScreenshots({
           style={HERO_FRAME}
         >
           <p className="m-0 max-w-xs text-center text-caption text-muted-foreground">
-            Screenshots for this Wiki aren’t published yet.
+            Screenshots for this project aren’t published yet.
           </p>
         </div>
       )}
@@ -132,7 +136,8 @@ export function GalleryScreenshots({
                 onClick={() => setShot(index)}
                 type="button"
               >
-                <img
+                <GalleryImage
+                  key={url}
                   alt=""
                   className="block aspect-video w-full object-cover object-top"
                   src={url}

@@ -45,7 +45,6 @@ export interface AgentBootstrapStatus {
   failure?: AgentBootstrapFailure;
 }
 
-export type AgentDiscoveryPolicy = 'auto' | 'managed-only' | 'system-only';
 
 export type AgentSetupFailureSimulation = 'none' | 'installation' | 'authentication' | 'mcp';
 
@@ -59,7 +58,6 @@ export type AgentTurnFailureSimulation =
 
 export interface AgentRuntimeDebugState {
   enabled: boolean;
-  discoveryPolicy: AgentDiscoveryPolicy;
   /** Development-only, mutually exclusive failure for the next matching
    * readiness stage. A consumed failure resets this field to `none`. */
   nextFailure: AgentSetupFailureSimulation;
@@ -83,9 +81,9 @@ export interface Agent {
   vendor: string;
   installHint: string;
   installed: boolean;
-  /** Runtime ownership. `bundled` ships with StashBase, `managed` is a legacy
-   * private install under AppData, and `system` is a user installation. */
-  source?: 'bundled' | 'system' | 'managed' | null;
+  /** Runtime ownership. `bundled` ships with StashBase, `system` is a provider-owned
+   * installation discovered on the user’s machine. */
+  source?: 'bundled' | 'system' | null;
   bootstrap?: AgentBootstrapStatus;
   /** Full shell command the panel feeds to the shell once it's ready
    *  (e.g. `claude --theme light`). Built by the server from the agent

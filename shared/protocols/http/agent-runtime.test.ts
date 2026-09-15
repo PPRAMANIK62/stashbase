@@ -76,7 +76,6 @@ test('agents response accepts a mixed catalog of installed, mid-bootstrap, and f
     ],
     debug: {
       enabled: true,
-      discoveryPolicy: 'auto',
       nextFailure: 'none',
       nextTurnFailure: 'none',
     },
@@ -97,7 +96,7 @@ test('agents response rejects an unlisted field', () => {
 
 test('debug patch accepts a partial update and rejects an unknown field', () => {
   assert.equal(
-    agentRuntimeDebugPatchRequestSchema.safeParse({ discoveryPolicy: 'managed-only' }).success,
+    agentRuntimeDebugPatchRequestSchema.safeParse({ nextFailure: 'mcp' }).success,
     true,
   );
   assert.equal(agentRuntimeDebugPatchRequestSchema.safeParse({}).success, true);

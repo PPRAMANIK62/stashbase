@@ -117,49 +117,19 @@ test('project preload validates the folder-window call and its answer', async ()
   });
 });
 
-test('project preload claims the initial folder and refuses a rewritten answer', async () => {
-  const ipc = createIpc({ folderPath: '/workspace/Notes', ok: true });
+test('a new renderer claims a missed entry event and acknowledges only after readiness', async () => {
+  const request = { requestId: 'd876e56e-d2e6-4786-ad71-702ea9fb6330', folderPath: '/projects/Notes' };
+  const ipc = createIpc((channel) => channel === 'project:entry-pending' ? request : { ok: true });
   const api = createProjectPreload(ipc);
-
-  assert.deepEqual(await api.claimInitialFolder(), {
-    folderPath: '/workspace/Notes',
-    ok: true,
-  });
-  // The channel carries nothing: main answers the sender it authorized.
-  assert.deepEqual(ipc.invocations.at(-1), ['project:claim-initial-folder', undefined]);
-
-  // No folder is an ordinary answer a caller reads without sorting a failure.
-  const none = createProjectPreload(createIpc({ folderPath: null, ok: true }));
-  assert.deepEqual(await none.claimInitialFolder(), { folderPath: null, ok: true });
-
-  // Main's refusal of a sender it would not authorize reaches the renderer as
-  // that refusal, not as a window with no folder.
-  const denied = createProjectPreload(createIpc({
-    failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
-    ok: false,
-  }));
-  assert.deepEqual(await denied.claimInitialFolder(), {
-    failure: { kind: 'unauthorized', message: 'This window cannot claim an initial folder.' },
-    ok: false,
-  });
-
-  // A shape this build does not understand and a bridge that threw both read
-  // as a refusal rather than as a window that was named no folder.
-  const malformed = createProjectPreload(createIpc({ folderPath: 42, ok: true }));
-  assert.deepEqual(await malformed.claimInitialFolder(), {
-    failure: {
-      kind: 'invalid-response',
-      message: 'The folder lifecycle returned an invalid response.',
-    },
-    ok: false,
-  });
-  const extra = createProjectPreload(
-    createIpc({ folderPath: '/workspace/Notes', ok: true, restored: true }),
-  );
-  assert.equal((await extra.claimInitialFolder()).ok, false);
-  const broken = createProjectPreload(createIpc(new Error('no bridge')));
-  assert.deepEqual(await broken.claimInitialFolder(), {
-    failure: { kind: 'unavailable', message: 'The folder lifecycle is unavailable.' },
-    ok: false,
-  });
+  let ready;
+  let calls = 0;
+  const unsubscribe = api.onEnterFolder(async () => { calls++; return new Promise((resolve) => { ready = resolve; }); });
+  await new Promise(setImmediate);
+  ipc.emit('project:entry-requested', request);
+  assert.equal(calls, 1);
+  assert.equal(ipc.invocations.some(([channel]) => channel === 'project:entry-finished'), false);
+  ready(null);
+  await new Promise(setImmediate);
+  assert.deepEqual(ipc.invocations.at(-1), ['project:entry-finished', { ...request, failure: null }]);
+  unsubscribe();
 });

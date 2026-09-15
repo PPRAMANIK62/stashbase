@@ -1,4 +1,4 @@
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { defaultKeymap, history, historyField, historyKeymap } from '@codemirror/commands';
 import { LanguageDescription } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
@@ -11,7 +11,16 @@ import { codeSurfaceExtensions, codeSyntaxHighlighting } from './surface';
 
 export type CodeEditorLanguage = { kind: 'filename'; fileName: string } | { kind: 'plain' };
 
+export interface CodeEditorSnapshot {
+  content: string;
+  state: unknown;
+  top: number;
+  left: number;
+}
+
 export interface CodeEditorSession {
+  snapshot(): CodeEditorSnapshot;
+  restore(snapshot: CodeEditorSnapshot): void;
   applyContent(content: string): void;
   destroy(): void;
   find: DocumentFindController;
@@ -46,29 +55,27 @@ export function createCodeEditor(host: HTMLElement, options: CodeEditorOptions):
   const syntax = new Compartment();
   let applyingExternal = false;
   let destroyed = false;
-  const view = new EditorView({
-    parent: host,
-    state: EditorState.create({
-      doc: normalizeEditorText(options.content),
-      extensions: [
-        history(),
-        syntax.of([]),
-        readOnly.of(readOnlyExtensions(options.readOnly)),
-        codeSurfaceExtensions,
-        options.extensions ?? [],
-        keymap.of([...(options.keyBindings ?? []), ...defaultKeymap, ...historyKeymap]),
-        EditorView.contentAttributes.of({
-          'aria-label': options.ariaLabel,
-          autocapitalize: 'off',
-          spellcheck: 'false',
-        }),
-        EditorView.updateListener.of((update) => {
-          if (!update.docChanged || applyingExternal) return;
-          options.onChange(update.state.doc.toString());
-        }),
-      ],
-    }),
-  });
+  const config = {
+    doc: normalizeEditorText(options.content),
+    extensions: [
+      history(),
+      syntax.of([]),
+      readOnly.of(readOnlyExtensions(options.readOnly)),
+      codeSurfaceExtensions,
+      options.extensions ?? [],
+      keymap.of([...(options.keyBindings ?? []), ...defaultKeymap, ...historyKeymap]),
+      EditorView.contentAttributes.of({
+        'aria-label': options.ariaLabel,
+        autocapitalize: 'off',
+        spellcheck: 'false',
+      }),
+      EditorView.updateListener.of((update) => {
+        if (!update.docChanged || applyingExternal) return;
+        options.onChange(update.state.doc.toString());
+      }),
+    ],
+  };
+  const view = new EditorView({ parent: host, state: EditorState.create(config) });
 
   if (options.language?.kind === 'filename') {
     const description = LanguageDescription.matchFilename(languages, options.language.fileName);
@@ -81,6 +88,20 @@ export function createCodeEditor(host: HTMLElement, options: CodeEditorOptions):
   }
 
   return {
+    snapshot() {
+      return {
+        content: view.state.doc.toString(),
+        state: view.state.toJSON({ history: historyField }),
+        top: view.scrollDOM.scrollTop,
+        left: view.scrollDOM.scrollLeft,
+      };
+    },
+    restore(snapshot) {
+      if (snapshot.content !== normalizeEditorText(options.content)) return;
+      view.setState(EditorState.fromJSON(snapshot.state, config, { history: historyField }));
+      view.scrollDOM.scrollTop = snapshot.top;
+      view.scrollDOM.scrollLeft = snapshot.left;
+    },
     applyContent(next) {
       const normalizedNext = normalizeEditorText(next);
       const current = view.state.doc.toString();

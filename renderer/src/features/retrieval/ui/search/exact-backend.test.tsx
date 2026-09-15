@@ -77,7 +77,6 @@ describe('exact search backend', () => {
     expect(backendReady(backend, { state: 'failed', warning: 'index broken' })).toBe(true);
     expect(backendTabTitle(backend, READY)).toBe('Match the exact text you type');
     expect(backend.emptyMessage).toBe('No exact matches.');
-    expect(backend.idleMessage).toBe('Type to search exact text.');
   });
 
   it('makes a query with a capital letter case-sensitive and keys the request by it', async () => {
@@ -155,25 +154,6 @@ describe('exact search rows', () => {
       screen.getByRole('option', { name: 'plan.md, docs, Line 12, the alpha ray' }),
     ).not.toBeNull();
     expect(screen.getByRole('option', { name: /Line 40/u })).not.toBeNull();
-  });
-
-  it('locates a PDF match by page and an audio match by timestamp', async () => {
-    const { rows } = await fetchRows(
-      result({
-        files: [
-          file({ matches: [match({ pdfPage: 3 })], source: { folderPath: FOLDER, path: 'p.pdf' } }),
-          file({
-            id: 'audio',
-            matches: [match({ audioTimestampMs: 65_000 })],
-            source: { folderPath: FOLDER, path: 'talk.mp3' },
-          }),
-        ],
-      }),
-    );
-    renderRows(rows);
-
-    expect(screen.getByRole('option', { name: /^p\.pdf, Page 3,/u })).not.toBeNull();
-    expect(screen.getByRole('option', { name: /^talk\.mp3, 1:05,/u })).not.toBeNull();
   });
 
   it('falls back to a stand-in phrase for a match whose line is only whitespace', async () => {

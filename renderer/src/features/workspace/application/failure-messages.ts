@@ -14,9 +14,11 @@ import {
   type FeatureFailureKind,
 } from '@/shared/domain/feature-error';
 
-import type { FilesFailureKind } from './ports';
+import { FilesError, ProjectError, ProjectImportError, type FilesFailureKind } from './ports';
 
 const FILES_MESSAGES: Readonly<Record<FilesFailureKind, string>> = {
+  'outcome-unknown':
+    'Could not confirm the file operation. Retry the same action to check its result without repeating it.',
   conflict: 'Something with that name already exists.',
   'invalid-response': 'StashBase returned an unexpected response.',
   rejected: 'That name cannot be used.',
@@ -32,7 +34,7 @@ const FILES_INPUT_KINDS: readonly FilesFailureKind[] = ['conflict', 'rejected'];
  *  files failure — a transport that threw, or a bug — reads as the unavailable
  *  line rather than repeating its own message. */
 export function filesFailure(error: unknown): FailureView {
-  return readFailure<'conflict' | 'rejected'>(error, FILES_MESSAGES, {
+  return readFailure<'conflict' | 'rejected' | 'outcome-unknown'>(error, FILES_MESSAGES, {
     inputKinds: FILES_INPUT_KINDS,
   });
 }
@@ -43,11 +45,6 @@ export const SESSION_MESSAGES: Readonly<Record<'load' | 'save', string>> = {
   load: 'StashBase could not read your saved session, so this window starts fresh.',
   save: "StashBase could not save this window's session.",
 };
-
-/** The sentence one workspace command reads as when a folder change could not
- *  go ahead because the window would have lost unsaved work. */
-export const FOLDER_CHANGE_BLOCKED =
-  'The folder could not be changed because a document could not be saved.';
 
 /** A window still holding the folder open, and the delay another window may
  *  take to notice one that was removed. */
@@ -72,7 +69,42 @@ export function projectFailureMessage(
     'invalid-response': `StashBase returned an unexpected response, so the folder was not ${verb}.`,
     'scope-lost': `That folder is no longer in your registered projects, so it could not be ${verb}.`,
     unauthorized: `This window can no longer change your project, so the folder was not ${verb}.`,
-    unavailable: `StashBase is unavailable, so the folder was not ${verb}.`,
+    unavailable: `The project could not be ${verb}. Check that its folder is available and accessible, then try again.`,
   };
   return messages[kind ?? 'unavailable'];
+}
+
+/** Import messages are authored from protocol codes by the import adapter;
+ * unrelated exceptions never become user-facing transport prose. */
+export function projectEntryFailure(error: unknown, retainedPath: string | null): FailureView {
+  if (error instanceof ProjectImportError) {
+    return {
+      tone: 'input',
+      message: error.retainedPath ? `${error.message} ${error.retainedPath}` : error.message,
+    };
+  }
+  return {
+    tone: 'capability',
+    message: retainedPath
+      ? `The project is available at ${retainedPath}. It could not be opened. Try opening it again.`
+      : error instanceof ProjectError
+        ? projectFailureMessage(error.kind, 'opened')
+        : filesFailure(error).message,
+  };
+}
+
+export const ENTRY_MESSAGES = {
+  interrupted: 'Opening the project was interrupted. Try again.',
+  failed: 'The project could not be opened. Try again.',
+  occupied: 'This window has another project open. Try opening the project again.',
+  notReady: 'The project did not become ready. Try opening it again.',
+} as const;
+
+export function fileImportFailure(error: unknown): FailureView {
+  if (error instanceof FilesError && error.kind === 'scope-lost') return filesFailure(error);
+  return {
+    message:
+      'Could not confirm the import. Check the file list before importing these files again.',
+    tone: 'capability',
+  };
 }

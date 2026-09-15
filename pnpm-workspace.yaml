@@ -6,7 +6,6 @@ allowBuilds:
   electron: true
   electron-winstaller: true
   esbuild: true
-  node-pty: true
   # Copies the matching optional platform binary into opencode-ai/bin.
   # The exact package versions are pinned below and verified by package tests.
   opencode-ai: true

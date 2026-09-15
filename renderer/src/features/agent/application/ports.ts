@@ -103,3 +103,9 @@ export interface AgentContextPort {
    *  request order. */
   upload(files: File[], signal: AbortSignal): Promise<AgentUploadOutcome[]>;
 }
+
+/** Explicit choices only: opening history and catalog readiness never write this. */
+export interface AgentPreferencesPort {
+  load(signal: AbortSignal): Promise<Array<{ scope: string; agent: AgentId }>>;
+  save(scope: AgentScope, agent: AgentId, signal: AbortSignal): Promise<void>;
+}

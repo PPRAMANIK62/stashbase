@@ -97,12 +97,12 @@ describe('reading a failure', () => {
 
   it('keeps the server sentence for the kinds only the server can explain', () => {
     const named = new SaveError('conflict', 'diagnostic', {
-      cause: new Error('Download the transcription model first.'),
+      cause: new Error('This format cannot be prepared.'),
     });
 
     expect(
       readFailure<'conflict'>(named, SAVE_MESSAGES, { serverSentenceFor: ['conflict'] }).message,
-    ).toBe('Download the transcription model first.');
+    ).toBe('This format cannot be prepared.');
     // The same refusal without a sentence falls back to the mapped line, and a
     // kind that was not named keeps the mapped line either way.
     expect(

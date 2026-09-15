@@ -27,8 +27,8 @@ interface ControlMessages {
   readonly unavailable: string;
 }
 
-/** Control refusals the shared ladder cannot see: a transcript the user has
- *  not set up yet, a format preparation does not handle, and a folder the
+/** Control refusals the shared ladder cannot see: a format preparation
+ *  does not handle, and a folder the
  *  daemon names in the body instead of in the status. Each carries the
  *  server's own sentence, because it names what to do next. */
 function controlFailure(fallback: string) {
@@ -36,9 +36,6 @@ function controlFailure(fallback: string) {
     const failure = preparationFailureResponseSchema.safeParse(response.body);
     const cause = serverMessage === null ? undefined : { cause: new Error(serverMessage) };
     const message = serverMessage ?? fallback;
-    if (response.status === 409 && failure.data?.code === 'TRANSCRIPTION_NOT_READY') {
-      return new PreparationError('blocked', message, cause);
-    }
     if (response.status === 415) return new PreparationError('unsupported', message, cause);
     if (failure.data?.code === 'FOLDER_NOT_FOUND' || failure.data?.code === 'NO_FOLDER') {
       return new PreparationError('scope-lost', SCOPE_LOST, cause);
@@ -52,7 +49,7 @@ function control(
   body: unknown,
   signal: AbortSignal,
   messages: ControlMessages,
-): TransportRequest<'blocked' | 'unsupported'> {
+): TransportRequest<'unsupported'> {
   return requestOptions({
     ...(body === undefined ? {} : { body }),
     error: PreparationError,
@@ -84,10 +81,9 @@ export function createPreparationControlAdapter(client: HttpClient): Preparation
         schema: preparationAcknowledgementSchema,
       });
     },
-    async reprocess(source, options, signal) {
+    async reprocess(source, signal) {
       const body = preparationReprocessRequestSchema.parse({
         folder: source.folderPath,
-        ...(options.language ? { language: options.language } : {}),
         path: source.path,
       });
       const parsed = await request(client, {

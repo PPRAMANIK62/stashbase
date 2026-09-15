@@ -45,18 +45,12 @@ const log = logger('routes/project-files');
 
 
 export function mount(app: express.Express, operations: ProjectOperations = createProjectOperations()): void {
-  // create_project owns authorized locations and rebind eligibility. Keep it
-  // outside existing-file scope: stale/external callers can create and register
-  // an authorized project, but cannot rebind another chat or access its files.
+  // Creation validates authorized destinations independently of existing-file scope.
   app.post('/api/project/create-project', async (req, res) => {
     try {
       res.json(await operations.createProject({
         name: req.body?.name,
         location: req.body?.location,
-        agentSessionId: req.header(AGENT_SESSION_ID_HEADER),
-        // Fallback identity for MCP hosts that don't forward the session
-        // header (stale installed binaries): the request's window id.
-        windowId: req.header('x-stashbase-window-id'),
       }));
     } catch (err: unknown) {
       sendError(res, err);

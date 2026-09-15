@@ -7,7 +7,7 @@ import { createAgentWorkspaceRuntime } from './workspace-runtime';
 const noop = (): void => undefined;
 
 describe('AgentWorkspaceRuntime', () => {
-  it('starts with one OpenQuill chat and reuses only a completely blank tab', () => {
+  it('starts with one Default chat and reuses only a completely blank tab', () => {
     let nextId = 0;
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
@@ -167,7 +167,7 @@ describe('AgentWorkspaceRuntime', () => {
     expect(runtime.store.getState().tabs[0]?.lastModified).toBe(41);
   });
 
-  it('moves only blank removed-folder chats to Library and retires retained work', () => {
+  it('retires every removed-project chat without moving its scope', () => {
     let nextId = 0;
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
@@ -184,11 +184,14 @@ describe('AgentWorkspaceRuntime', () => {
     runtime.retireFolder('/project/Research');
 
     expect(retained.store.getState().connection.kind).toBe('retired');
-    expect(blank.store.getState().connection.kind).toBe('disposed');
-    expect(runtime.session(blank.id)?.store.getState().scope).toEqual({ kind: 'unbound' });
+    expect(blank.store.getState().connection.kind).toBe('retired');
+    expect(runtime.session(blank.id)?.store.getState().scope).toEqual({
+      kind: 'folder',
+      path: '/project/Research',
+    });
 
     runtime.setWindowFolder('/project/Plans');
-    expect(runtime.session(blank.id)?.store.getState().scope).toEqual({
+    expect(runtime.activeSession().store.getState().scope).toEqual({
       kind: 'folder',
       path: '/project/Plans',
     });
@@ -198,7 +201,7 @@ describe('AgentWorkspaceRuntime', () => {
     });
   });
 
-  it('moves an unstarted chat onto a runtime set up after the window opened', () => {
+  it('keeps Default and the draft when another runtime becomes ready', () => {
     let nextId = 0;
     const runtime = createAgentWorkspaceRuntime({
       createId: () => `chat-${++nextId}`,
@@ -219,7 +222,7 @@ describe('AgentWorkspaceRuntime', () => {
     runtime.start(['codex']);
 
     const state = runtime.activeSession().store.getState();
-    expect(state.agent).toBe('codex');
+    expect(state.agent).toBe('stashbase');
     expect(state.draft).toBe('Build wiki pages for this folder');
     expect(state.context).toMatchObject([{ source: { path: 'MISSION.md' } }]);
     expect(runtime.store.getState().tabs).toHaveLength(1);
@@ -348,4 +351,18 @@ describe('AgentWorkspaceRuntime', () => {
     expect(session.store.getState().title).toBe('Before');
     expect(session.store.getState().connection.kind).not.toBe('disposed');
   });
+});
+
+it('Welcome creates no session; entering a project creates its first chat', () => {
+  const runtime = createAgentWorkspaceRuntime({
+    createId: () => 'first',
+    folderPath: null,
+    port: idleAgentSessionPort(),
+  });
+  expect(runtime.store.getState().tabs).toEqual([]);
+  expect(() => runtime.newChat()).toThrow('Open a project');
+  runtime.setWindowFolder('/project/Research');
+  expect(runtime.store.getState().tabs).toHaveLength(1);
+  expect(runtime.activeSession().store.getState().scope.path).toBe('/project/Research');
+  runtime.dispose();
 });

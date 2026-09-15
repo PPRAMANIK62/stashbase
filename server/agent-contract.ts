@@ -8,7 +8,6 @@
 import type { WebSocket } from 'ws';
 import { CLIS } from './terminal.ts';
 import { resolveAgentCli } from './agent-cli.ts';
-import { agentExecutableSource } from './agent-runtime-paths.ts';
 import { agentBootstrapStatus } from './agent-runtime-installer.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
 import { rememberedCatalogFor } from './agent-model-catalog.ts';
@@ -77,14 +76,8 @@ export interface AgentConnectionOptions {
   access?: AgentAccessMode;
   /** Undefined deliberately means "use the runtime's configured default". */
   model?: string;
-  /** Explicit session folder (a registered project-member root). Mutually
-   * exclusive with `scope`. Undefined with no `scope` means "use the
-   * window's current folder when one exists, else the project". Callers
-   * must have validated with `resolveAgentSessionScope`. */
+  /** Registered project folder captured at connection time. */
   folder?: string;
-  /** Explicit unbound session scope. The session binds the folder
-   * home as its cwd and is NOT bound to any member folder. */
-  scope?: 'unbound';
 }
 
 export type AgentSessionFolderResolution =
@@ -115,64 +108,43 @@ export function resolveAgentSessionFolder(
   return { ok: false, message: 'folder is not a registered project folder' };
 }
 
-/** Explicit session scope: one project folder, or an unbound conversation. */
-export type AgentSessionScope = { kind: 'unbound' } | { kind: 'folder'; path: string };
-
+/** A session always belongs to one registered project. */
+export type AgentSessionScope = { kind: 'folder'; path: string };
 export type AgentSessionScopeResolution =
-  | { ok: true; scope?: AgentSessionScope }
+  | { ok: true; scope: AgentSessionScope }
   | { ok: false; message: string };
 
-/** Resolve the optional explicit scope of a connect / history request.
- * `scope=unbound` is the only recognized scope value; an explicit folder
- * stays membership-validated through `resolveAgentSessionFolder`; sending
- * both is contradictory and rejected. Both absent → no explicit scope:
- * the caller falls back to the window's current folder when one exists,
- * else an unbound conversation. */
 export function resolveAgentSessionScope(
   requestedScope: unknown,
   requestedFolder: unknown,
   memberRoots: readonly string[],
 ): AgentSessionScopeResolution {
-  const rawScope = typeof requestedScope === 'string' ? requestedScope.trim() : requestedScope == null ? '' : null;
-  if (rawScope == null) return { ok: false, message: 'scope must be "unbound"' };
-  const rawFolder = typeof requestedFolder === 'string' ? requestedFolder.trim() : requestedFolder == null ? '' : requestedFolder;
-  if (rawScope) {
-    if (rawScope !== 'unbound') return { ok: false, message: 'scope must be "unbound"' };
-    if (rawFolder) return { ok: false, message: 'scope=unbound cannot be combined with a folder' };
-    return { ok: true, scope: { kind: 'unbound' } };
-  }
-  const folder = resolveAgentSessionFolder(requestedFolder, memberRoots);
-  if (!folder.ok) return folder;
-  return folder.folder ? { ok: true, scope: { kind: 'folder', path: folder.folder } } : { ok: true };
+  if (requestedScope != null) return { ok: false, message: 'scope is unsupported; select a project folder' };
+  const result = resolveAgentSessionFolder(requestedFolder, memberRoots);
+  if (!result.ok) return result;
+  return result.folder
+    ? { ok: true, scope: { kind: 'folder', path: result.folder } }
+    : { ok: false, message: 'Open a project before starting a chat.' };
 }
 
-/** Resolve the cwd and unbound flag a session binds at start time.
- * Explicit unbound scope → the folder home (the historical unbound cwd —
- * unbound history persists under it, not under any member folder).
- * Explicit folder → that member root. Neither → the window's current
- * folder when one exists, else the unbound fallback. `unbound`
- * sessions report no bound folder, so member-folder removal never tears
- * them down. */
+/** Native adapters pin the project before starting their process. */
 export function resolveSessionBinding(options: {
-  scope?: 'unbound';
   folder?: string;
   currentFolder: string | null;
-  folderHome: string;
-}): { cwd: string; unbound: boolean } {
-  if (options.scope === 'unbound') return { cwd: options.folderHome, unbound: true };
-  if (options.folder) return { cwd: options.folder, unbound: false };
-  if (options.currentFolder) return { cwd: options.currentFolder, unbound: false };
-  return { cwd: options.folderHome, unbound: true };
+}): { cwd: string } {
+  const cwd = options.folder ?? options.currentFolder;
+  if (!cwd) throw new Error('Open a project before starting a chat.');
+  return { cwd };
 }
 
 export interface AgentHistoryActions {
-  list(folder: string | null): Promise<unknown[]>;
-  messages(id: string, folder: string | null): Promise<unknown[]>;
+  list(folder: string): Promise<unknown[]>;
+  messages(id: string, folder: string): Promise<unknown[]>;
   /** Protocol-v2 replay metadata. Optional keeps third-party/older adapters
    * compatible with the established messages-only history contract. */
-  replay?(id: string, folder: string | null): Promise<unknown>;
-  rename(id: string, title: string, folder: string | null): Promise<unknown>;
-  remove(id: string, folder: string | null): Promise<void>;
+  replay?(id: string, folder: string): Promise<unknown>;
+  rename(id: string, title: string, folder: string): Promise<unknown>;
+  remove(id: string, folder: string): Promise<void>;
 }
 
 export interface AgentAdapter {
@@ -234,7 +206,7 @@ export interface AgentRuntimeDescriptor {
   launchCommand: string;
   endpoint: '/ws/agent';
   installed: boolean;
-  source: 'bundled' | 'system' | 'managed' | null;
+  source: 'bundled' | 'system' | null;
   state: AgentRuntimeState;
   bootstrap: ReturnType<typeof agentBootstrapStatus>;
   error?: string;
@@ -244,7 +216,6 @@ export interface AgentRuntimeDescriptor {
 }
 
 const adapters = new Map<AgentId, AgentAdapter>();
-const runtimeFailures = new Map<AgentId, string>();
 
 export function agentExecutableFor(id: Exclude<AgentId, 'stashbase'>): string | null {
   const config = id === 'claude'
@@ -275,8 +246,7 @@ export function runtimeDescriptorFor(
   if (adapter.id === 'stashbase') throw new Error('Bundled Agent adapter must describe its runtime.');
   const cli = CLIS[adapter.id];
   const installed = executable !== null;
-  const failure = runtimeFailures.get(adapter.id);
-  const state: AgentRuntimeState = !installed ? 'unavailable' : failure ? 'failed' : 'available';
+  const state: AgentRuntimeState = installed ? 'available' : 'unavailable';
   return {
     id: adapter.id,
     label: adapter.label,
@@ -285,10 +255,9 @@ export function runtimeDescriptorFor(
     launchCommand: cli.bin,
     endpoint: '/ws/agent',
     installed,
-    source: agentExecutableSource(adapter.id, executable),
+    source: installed ? 'system' : null,
     state,
     bootstrap: agentBootstrapStatus(adapter.id),
-    ...(failure ? { error: failure } : {}),
     capabilities: adapter.capabilities,
   };
 }
@@ -335,7 +304,6 @@ export function attachAgentRuntime(id: string, ws: WebSocket, options: AgentConn
     ws.close();
     return;
   }
-  clearAgentRuntimeFailure(adapter.id);
   adapter.attach(ws, options);
 }
 
@@ -346,13 +314,4 @@ export function stopAgentRuntime(id: AgentId, windowId?: string): void {
 /** Retire every adapter's sessions before releasing any window binding. */
 export function stopAgentRuntimesForFolder(folderAbs: string): void {
   for (const adapter of adapters.values()) adapter.stopFolder(folderAbs);
-}
-
-export function reportAgentRuntimeFailure(id: AgentId, error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
-  runtimeFailures.set(id, message.slice(0, 500));
-}
-
-export function clearAgentRuntimeFailure(id: AgentId): void {
-  runtimeFailures.delete(id);
 }

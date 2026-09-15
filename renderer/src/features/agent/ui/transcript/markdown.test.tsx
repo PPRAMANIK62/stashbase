@@ -45,4 +45,37 @@ describe('Agent Markdown', () => {
     await userEvent.click(screen.getByRole('link', { name: 'OpenAI' }));
     expect(onOpenExternal).toHaveBeenCalledWith('https://openai.com/codex/');
   });
+  it('renders math without enabling trusted HTML or external resource commands', () => {
+    const { container } = render(
+      <AgentMarkdown
+        markdown={String.raw`Inline $x^2$.
+
+$$
+\frac{1}{2}
+$$
+
+$\href{javascript:alert(1)}{unsafe}$`}
+      />,
+    );
+    expect(container.querySelectorAll('math')).toHaveLength(3); // dom-contract: KaTeX's accessible MathML output
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(container.textContent).not.toContain('$$');
+  });
+
+  it('opens only project-resolved file references and keeps refused paths inert', async () => {
+    const source = { folderPath: '/project', path: 'draft notes.md' };
+    const sourceFor = vi.fn((path: string) => (path === 'draft notes.md' ? source : null));
+    const onOpenSource = vi.fn();
+    render(
+      <AgentMarkdown
+        markdown="[Draft](draft%20notes.md) [Outside](../secret.md) [Protocol](file:///private/note.md)"
+        sourceFor={sourceFor}
+        onOpenSource={onOpenSource}
+      />,
+    );
+    await userEvent.click(screen.getByRole('link', { name: 'Draft' }));
+    expect(onOpenSource).toHaveBeenCalledWith(source);
+    expect(screen.queryByRole('link', { name: 'Outside' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Protocol' })).toBeNull();
+  });
 });

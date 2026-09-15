@@ -78,9 +78,6 @@ export interface IndexStatus {
   indexReady: boolean;
   /** Folder-relative paths of sources that are queued or running. */
   pendingConversions: string[];
-  /** Incomplete convertible sources that cannot be queued until setup is
-   *  resolved (currently audio with an unavailable runtime/provider/model). */
-  blockedConversions: string[];
   /** Folder-relative conversion progress keyed by visible source path.
    *  Used by PDF/image preview banners for queue/extraction/indexing copy. */
   conversionProgress: Record<string, ConversionProgress>;

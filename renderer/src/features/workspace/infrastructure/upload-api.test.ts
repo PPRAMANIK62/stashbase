@@ -21,7 +21,7 @@ describe('upload API', () => {
       ],
       signal,
     );
-    expect(settled).toEqual(['image.png']);
+    expect(settled).toEqual({ paths: ['image.png'], refused: [] });
     const call = fetchRequest.mock.calls[0];
     if (!call) throw new Error('upload never reached fetch');
     const [url, init] = call;
@@ -32,16 +32,23 @@ describe('upload API', () => {
     expect((form.get('files') as File).name).toBe('image.png');
   });
 
-  it('raises a per-file refusal on the files ladder instead of resolving with it', async () => {
-    const fetchRequest = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ files: [{ error: 'unsupported type', file: 'x.bin' }] }), {
-          status: 200,
-        }),
+  it('preserves partial success and identifies only refused request indices', async () => {
+    const fetchRequest = vi.fn(async () =>
+      Response.json({ files: [{ file: 'kept-2.md' }, { error: 'access denied', file: 'x.bin' }] }),
     );
+    const files = ['kept.md', 'x.bin'].map((name) => ({ name, blob: new Blob(['fixture']) }));
+    await expect(
+      createUploadAdapter('http://127.0.0.1:43123', fetchRequest).upload('/project', files, signal),
+    ).resolves.toEqual({ paths: ['kept-2.md'], refused: [1] });
+  });
+
+  it('does not turn a lost response into a safe-to-retry failure', async () => {
+    const fetchRequest = vi.fn(async () => {
+      throw new Error('response lost');
+    });
     await expect(
       createUploadAdapter('http://127.0.0.1:43123', fetchRequest).upload('/project', [], signal),
-    ).rejects.toMatchObject({ kind: 'rejected' });
+    ).rejects.toMatchObject({ kind: 'outcome-unknown' });
   });
 
   it('classifies a missing folder as a lost scope', async () => {

@@ -1,19 +1,6 @@
-/**
- * Attribution registry for live Agent Panel sessions.
- *
- * Each panel session gets a private per-session attribution id at spawn.
- * The id travels through the session's process environment
- * (`STASHBASE_AGENT_SESSION_ID`) into the stdio MCP host, which forwards it
- * as the `x-stashbase-agent-session-id` request header — alongside the
- * existing window id. It is request identity only: it never resolves paths
- * and never grants extra access; it lets a host-side MCP tool
- * (`create_project`) find the LIVE session that made the call so the
- * session's scope binding can react (unbound chats rebind to a newly
- * created project; folder-bound chats never do).
- *
- * Kept dependency-free so the stdio MCP host can import the header name
- * without pulling server runtime modules.
- */
+/** Live-session attribution for project operations. The private session id
+ * travels through the native process and MCP host; it selects the calling
+ * conversation's project without granting additional file access. */
 
 export const AGENT_SESSION_ID_HEADER = 'x-stashbase-agent-session-id';
 
@@ -24,19 +11,11 @@ export interface AttributedAgentSession {
   readonly agentId: AttributedAgentId;
   /** The window that owns this panel session. */
   readonly windowId: string;
-  /** Member folder the session is bound to; null for unbound. */
+  /** Member folder the session is bound to; null before startup or after retirement. */
   boundFolder(): string | null;
-  /** True while the session is unbound (and not yet rebound). */
-  isUnbound(): boolean;
   /** True while the session is running a turn (a tool call from the agent
    * necessarily happens inside its own active turn). */
   turnInFlight(): boolean;
-  /** Native session/thread id (history identity), when known. */
-  nativeSessionId(): string | null;
-  /** Migrate an unbound session's binding to a member folder and
-   * notify its renderer (`scope-changed`). Returns false when the session
-   * is closed or already folder-bound — a bound chat is NEVER rebound. */
-  rebindToFolder(folderAbs: string): boolean;
 }
 
 const sessions = new Map<string, AttributedAgentSession>();
@@ -82,23 +61,4 @@ export function attributedRequestSession(
   return sessionId != null
     ? attributedAgentSession(sessionId)
     : attributedSessionForWindow(windowId);
-}
-
-export type CreateProjectRebindPlan =
-  | { kind: 'none'; reason: 'no-session' }
-  | { kind: 'none'; reason: 'folder-bound'; folder: string }
-  | { kind: 'rebind' };
-
-/** The rebind decision for a `create_project` call: only a LIVE,
- * unbound calling session migrates its binding. A folder-bound chat
- * keeps its folder, and a call without session attribution (external MCP
- * clients) only creates + registers. */
-export function createProjectRebindPlan(
-  session: Pick<AttributedAgentSession, 'boundFolder' | 'isUnbound'> | null,
-): CreateProjectRebindPlan {
-  if (!session) return { kind: 'none', reason: 'no-session' };
-  const bound = session.boundFolder();
-  if (bound != null) return { kind: 'none', reason: 'folder-bound', folder: bound };
-  if (!session.isUnbound()) return { kind: 'none', reason: 'no-session' };
-  return { kind: 'rebind' };
 }

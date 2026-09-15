@@ -42,7 +42,8 @@ export function DocumentConflict({ conflict, name, resolve }: DocumentConflictPr
               {name} changed on disk
             </h2>
             <p className="text-caption text-muted-foreground">
-              Compare the newer file with your unsaved changes.
+              Use disk version discards your changes. Keep my version replaces the disk version
+              shown. Merge lets you review both before saving.
             </p>
           </div>
         </div>
@@ -54,7 +55,7 @@ export function DocumentConflict({ conflict, name, resolve }: DocumentConflictPr
             size="compact"
             variant="secondary"
           >
-            Reload
+            Use disk version
           </Button>
           <Button
             disabled={resolving !== null}
@@ -72,7 +73,7 @@ export function DocumentConflict({ conflict, name, resolve }: DocumentConflictPr
             size="compact"
             variant="tertiary"
           >
-            Overwrite
+            Keep my version
           </Button>
         </div>
       </div>

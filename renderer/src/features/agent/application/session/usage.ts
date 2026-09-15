@@ -12,7 +12,7 @@ export type AgentUsageEvent =
 /** Counts submitted work once across preparation, streaming, and repeated
  * terminal signals. Only action kind and the error flag enter the outcome. */
 export function createAgentUsage(
-  runtime: AgentId,
+  runtime: AgentId | (() => AgentId),
   record: ((event: AgentUsageEvent) => void) | undefined,
   now = Date.now,
 ) {
@@ -24,7 +24,7 @@ export function createAgentUsage(
     startedAt = null;
     record?.({
       event: 'agent_turn_finished',
-      runtime,
+      runtime: typeof runtime === 'function' ? runtime() : runtime,
       outcome,
       duration:
         elapsed < 10000
@@ -41,7 +41,10 @@ export function createAgentUsage(
       if (startedAt !== null) return;
       interrupted = false;
       startedAt = now();
-      record?.({ event: 'agent_turn_started', runtime });
+      record?.({
+        event: 'agent_turn_started',
+        runtime: typeof runtime === 'function' ? runtime() : runtime,
+      });
     },
     interrupt() {
       interrupted = true;

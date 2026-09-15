@@ -180,7 +180,6 @@ if (!skipBuild) {
 if (!skipSmoke && process.platform === 'darwin') {
   run(process.execPath, [
     path.join(root, 'scripts', 'smoke-packaged-server.mjs'),
-    '--require-transcription',
   ]);
 }
 if (process.platform === 'darwin') {

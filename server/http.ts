@@ -87,7 +87,7 @@ const FOLDER_EXPLICIT_ROUTES = new Set([
 function hasFolderScopedAssetPath(req: express.Request): boolean {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
   const routePath = `${req.baseUrl}${req.path}`;
-  return /^\/asset(?:-audio-preview|-derived)?\/(?:__window\/[^/]+\/)?__folder\/[^/]+\//u.test(
+  return /^\/asset(?:-derived)?\/(?:__window\/[^/]+\/)?__folder\/[^/]+\//u.test(
     routePath,
   );
 }
@@ -124,9 +124,7 @@ export const withWindowContext: express.RequestHandler = (req, _res, next) => {
 };
 
 function assetWindowIdFromPath(reqPath: string): string | undefined {
-  const prefix = reqPath.startsWith('/asset-audio-preview/__window/')
-    ? '/asset-audio-preview/__window/'
-    : reqPath.startsWith('/asset-derived/__window/')
+  const prefix = reqPath.startsWith('/asset-derived/__window/')
     ? '/asset-derived/__window/'
     : reqPath.startsWith('/asset/__window/')
       ? '/asset/__window/'

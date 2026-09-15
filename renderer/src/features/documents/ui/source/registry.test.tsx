@@ -5,13 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createDocumentQueryScope } from '@/features/documents/application/queries';
 import { createDocumentTabsRuntime } from '@/features/documents/application/tabs-runtime';
 import { DocumentWorkspace } from '@/features/documents/ui/workspace/workspace';
-import {
-  assetApi,
-  docxPreviewApi,
-  genericPreviewApi,
-  mediaApi,
-  sourceApi,
-} from '@/test/fakes/documents';
+import { assetApi, docxPreviewApi, genericPreviewApi, sourceApi } from '@/test/fakes/documents';
 import { createTestQueryClient, withQueryClient } from '@/test/query';
 
 import { documentViewerEntry, documentViewers } from './registry';
@@ -60,7 +54,6 @@ function renderWith(path: string, entry: DocumentViewerEntry) {
       assetApi={assetApi()}
       docxPreviewApi={docxPreviewApi()}
       genericPreviewApi={genericPreviewApi()}
-      mediaApi={mediaApi()}
       onReveal={vi.fn(async () => undefined)}
       revealLabel="Show in file manager"
       runtime={runtime}
@@ -99,7 +92,8 @@ describe('document viewer registry', () => {
 
   it('offers Find only for the formats whose viewers claim a controller', () => {
     expect(documentViewerEntry('image').find).toBe(false);
-    for (const format of ['audio', 'docx', 'html', 'json', 'md', 'pdf', 'txt'] as const) {
+    expect(documentViewerEntry('audio').find).toBe(false);
+    for (const format of ['docx', 'html', 'json', 'md', 'pdf', 'txt'] as const) {
       expect(documentViewerEntry(format).find, format).toBe(true);
     }
   });

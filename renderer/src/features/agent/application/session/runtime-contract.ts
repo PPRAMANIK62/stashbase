@@ -39,6 +39,10 @@ export interface AgentSessionRuntime {
   capture(): AgentSessionScope;
   isBlank(): boolean;
   interrupt(): boolean;
+  continueQueue(): Promise<boolean>;
+  confirmOutcome(): void;
+  changeAgent(agent: AgentId): boolean;
+  editQueued(id: string): boolean;
   replyPermission(
     toolUseId: string,
     permissionId: string,
@@ -49,8 +53,8 @@ export interface AgentSessionRuntime {
   reconnect(): void;
   retry(errorBlockId: string): boolean;
   /** Takes a sent prompt back into the composer: its text, bound context and
-   *  armed skill replace the draft. Refused while a turn is active or when
-   *  the block is not a prompt. */
+   *  armed skill become a new draft. Refused while busy, when another draft
+   *  needs keeping, or when the block is not a prompt. */
   editPrompt(blockId: string): boolean;
   addContext(item: AgentContextItem): void;
   removeContext(key: string): void;

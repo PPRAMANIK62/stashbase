@@ -79,14 +79,12 @@ export function semanticIndexNotice(readiness: SemanticReadiness): SemanticIndex
 }
 
 export interface PreparationCounts {
-  readonly blocked: number;
   readonly cancelled: number;
   readonly failed: number;
   readonly pending: number;
 }
 
 export interface PreparationReadinessLine {
-  readonly action: 'open-settings' | null;
   readonly detail: string;
   readonly title: string;
   readonly tone: 'attention' | 'progress';
@@ -107,7 +105,6 @@ export function preparationReadinessLine(
       counts.cancelled > 0 ? `${counts.cancelled} cancelled` : null,
     ].filter((part): part is string => part !== null);
     return {
-      action: null,
       detail: `${parts.join(' · ')}. Open a file to retry it.`,
       title:
         counts.failed > 0
@@ -116,17 +113,8 @@ export function preparationReadinessLine(
       tone: 'attention',
     };
   }
-  if (counts.blocked > 0) {
-    return {
-      action: 'open-settings',
-      detail: `${plural(readyCount, 'file')} ready to search. ${plural(counts.blocked, 'media file')} need transcription setup.`,
-      title: 'Transcription setup required',
-      tone: 'attention',
-    };
-  }
   if (counts.pending > 0) {
     return {
-      action: null,
       detail: `${plural(readyCount, 'file')} ready to search. ${counts.pending} still being prepared.`,
       title: 'Preparing text for search',
       tone: 'progress',

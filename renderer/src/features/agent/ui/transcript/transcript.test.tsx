@@ -105,7 +105,10 @@ describe('Agent transcript permission decisions', () => {
     );
 
     expect(screen.queryByRole('heading', { name: 'Apply these changes?' })).toBeNull();
-    const summary = screen.getByRole('button', { expanded: false });
+    const summary = screen.getByRole('button', {
+      name: /Ran command, Edited file/u,
+      expanded: false,
+    });
     expectFocused(summary);
     await userEvent.click(summary);
     expect(screen.getByRole('button', { name: /Wrote.*plan\.md.*Denied/u })).not.toBeNull();
@@ -168,10 +171,10 @@ describe('Agent transcript prompt actions', () => {
     );
     const { rerender } = render(transcript(true));
     expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2);
-    expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reuse message' })).toBeNull();
 
     rerender(transcript(false));
-    const edit = screen.getAllByRole('button', { name: 'Edit message' });
+    const edit = screen.getAllByRole('button', { name: 'Reuse message' });
     expect(edit).toHaveLength(1);
     await userEvent.click(edit[0] as HTMLElement);
     expect(onEditPrompt).toHaveBeenCalledWith('u2');
@@ -179,7 +182,7 @@ describe('Agent transcript prompt actions', () => {
 
   it('renders no edit control when nothing can take the prompt back', () => {
     renderTranscript(twoTurns, false);
-    expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reuse message' })).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2);
   });
 });

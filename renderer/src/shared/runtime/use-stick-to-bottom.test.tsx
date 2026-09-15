@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, render, fireEvent } from '@testing-library/react';
 import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -6,11 +6,14 @@ import { useStickToBottom } from './use-stick-to-bottom';
 
 function Log({ conversation }: { conversation: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  useStickToBottom(ref, conversation);
+  const { atBottom, scrollToBottom } = useStickToBottom(ref, conversation);
   return (
-    <div data-testid="log" ref={ref}>
-      <div>{conversation}</div>
-    </div>
+    <>
+      <div data-testid="log" ref={ref}>
+        <div>{conversation}</div>
+      </div>
+      {!atBottom && <button onClick={scrollToBottom}>Back to latest</button>}
+    </>
   );
 }
 
@@ -44,10 +47,13 @@ describe('useStickToBottom', () => {
     expect(log.scrollTop).toBe(1_000);
 
     log.scrollTop = 100;
-    log.dispatchEvent(new Event('scroll'));
+    fireEvent.scroll(log);
     act(() => grow());
     expect(log.scrollTop).toBe(100);
 
+    fireEvent.click(view.getByRole('button', { name: 'Back to latest' }));
+    expect(log.scrollTop).toBe(1_000);
+    expect(view.queryByRole('button', { name: 'Back to latest' })).toBeNull();
     view.rerender(<Log conversation="b" />);
     expect(log.scrollTop).toBe(1_000);
   });

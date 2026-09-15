@@ -26,11 +26,7 @@ function mapConversionProgress(
       progress.phase === 'extracting'
         ? {
             phase: 'extracting',
-            ...(progress.completedUnits === undefined
-              ? {}
-              : { completedUnits: progress.completedUnits }),
             ...(progress.currentPage === undefined ? {} : { currentPage: progress.currentPage }),
-            ...(progress.totalUnits === undefined ? {} : { totalUnits: progress.totalUnits }),
           }
         : progress;
   }
@@ -62,7 +58,6 @@ function mapSemanticStatus(wire: IndexStatusResponseWire): SemanticIndexStatus {
 
 function mapIndexStatus(wire: IndexStatusResponseWire): FolderIndexStatus {
   return {
-    blockedConversions: wire.blockedConversions,
     conversionProgress: mapConversionProgress(wire.conversionProgress),
     conversionRevision: wire.conversionRevision,
     conversionVersions: wire.conversionVersions,

@@ -1,4 +1,8 @@
-import { FilesError, type UploadPort } from '@/features/workspace/application/ports';
+import {
+  FilesError,
+  type UploadPort,
+  type UploadResult,
+} from '@/features/workspace/application/ports';
 import { classifyResponse } from '@/platform/http/classify';
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -9,24 +13,21 @@ interface UploadResponseBody {
   error?: unknown;
 }
 
-/** The route reports a per-file refusal inside an otherwise successful body.
- *  It becomes a rejection on the files ladder here, so no caller has to
- *  remember to inspect a resolved result for a failure. */
-function settledPaths(body: UploadResponseBody | null): string[] {
-  if (!body || !Array.isArray(body.files)) {
-    throw new FilesError('invalid-response', 'The upload returned an invalid response.');
+/** Preserve per-file outcomes so retry cannot duplicate successful imports. */
+function settledPaths(body: UploadResponseBody | null, count: number): UploadResult {
+  if (!body || !Array.isArray(body.files) || body.files.length !== count) {
+    throw new FilesError('outcome-unknown', 'The upload returned an invalid response.');
   }
-  return body.files.map((entry) => {
+  const paths: string[] = [];
+  const refused: number[] = [];
+  body.files.forEach((entry, index) => {
     if (typeof entry?.file !== 'string') {
-      throw new FilesError('invalid-response', 'The upload returned an invalid response.');
+      throw new FilesError('outcome-unknown', 'The upload returned an invalid response.');
     }
-    if (typeof entry.error === 'string') {
-      throw new FilesError('rejected', 'The server refused one of the uploaded files.', {
-        cause: new Error(entry.error),
-      });
-    }
-    return entry.file;
+    if (typeof entry.error === 'string') refused.push(index);
+    else paths.push(entry.file);
   });
+  return { paths, refused };
 }
 
 /** Multipart import through `POST /api/upload`. The JSON HTTP client cannot
@@ -46,7 +47,7 @@ export function createUploadAdapter(serverOrigin: string, fetchRequest: Fetch = 
         response = await fetchRequest(target, { body: form, method: 'POST', signal });
       } catch (error) {
         if (signal.aborted) throw error;
-        throw new FilesError('unavailable', 'The upload could not reach StashBase.', {
+        throw new FilesError('outcome-unknown', 'The upload could not reach StashBase.', {
           cause: error,
         });
       }
@@ -65,7 +66,7 @@ export function createUploadAdapter(serverOrigin: string, fetchRequest: Fetch = 
           typeof body?.error === 'string' ? body.error : 'The upload failed.',
         );
       }
-      return settledPaths(body);
+      return settledPaths(body, files.length);
     },
   };
 }

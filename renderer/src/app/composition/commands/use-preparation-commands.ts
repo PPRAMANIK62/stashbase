@@ -55,7 +55,7 @@ export function usePreparationCommands(controlApi: PreparationControlPort): Prep
     async (source: SourceReference) => {
       const signal = openSignal(`reprocess:${sourceKey(source)}`);
       try {
-        await controlApi.reprocess(source, {}, signal);
+        await controlApi.reprocess(source, signal);
       } catch (error: unknown) {
         report(signal, error);
       }

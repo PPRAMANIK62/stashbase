@@ -9,7 +9,6 @@
 import {
   ChevronDown,
   ChevronRight,
-  CircleAlert,
   CircleSlash,
   ExternalLink,
   FileAudio,
@@ -59,12 +58,11 @@ const FILE_ICONS: Record<ViewerFormat, LucideIcon> = {
 
 /** Preparation states that need the user. Pending work stays unmarked. */
 export interface FileTreeRowMarker {
-  kind: 'blocked' | 'cancelled' | 'failed';
+  kind: 'cancelled' | 'failed';
   title: string;
 }
 
 const MARKER_ICONS: Record<FileTreeRowMarker['kind'], LucideIcon> = {
-  blocked: CircleAlert,
   cancelled: CircleSlash,
   failed: TriangleAlert,
 };

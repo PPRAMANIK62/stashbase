@@ -4,8 +4,7 @@
  * The image analogue of `pdf.ts`: whenever a `.png` / `.jpg` / `.jpeg`
  * / `.webp` lands in a folder (file import or an external copy)
  * we spawn RapidOCR in the background. It writes OCR Markdown under AppData;
- * on completion the note is pushed into the index directly when an API key is
- * available — so a screenshot's text becomes searchable. The image itself
+ * on completion the note is admitted to the index directly — so a screenshot's text becomes searchable. The image itself
  * stays on disk as the user-facing file.
  *
  * Unlike PDFs there is no image bundle — OCR yields only text.
@@ -20,7 +19,7 @@ import { isImageFile } from './format.ts';
 import { derivedNoteFor, derivedDir } from './derived-store.ts';
 import { extractorSpawn, prepareExtractorRuntime } from './python-host.ts';
 import { derivedIsFresh, discoverCandidateSources, discoverNewSources, indexFreshDerived, maybeConvert, TransientConversionError, type ConversionSpec } from './conversion.ts';
-import { lowerExtractorPriority, spawnOptionsForPdfOcr, terminateExtractorTree } from './extractor-process.ts';
+import { lowerExtractorPriority, spawnOptionsForPdfOcr, terminateExtractorTree, waitForExtractorTree } from './extractor-process.ts';
 
 const OCR_COMPLETE_MARKER = '<!-- stashbase-ocr-conversion: complete -->';
 
@@ -111,7 +110,7 @@ async function convertImage(
       signal?.removeEventListener('abort', onAbort);
       reject(new Error(`spawn failed: ${err.message}`));
     });
-    proc.on('exit', (code) => {
+    void waitForExtractorTree(proc).then((code) => {
       signal?.removeEventListener('abort', onAbort);
       if (cancelled) {
         reject(new TransientConversionError('ocr_extract cancelled'));
@@ -129,7 +128,7 @@ async function convertImage(
         }
         reject(new Error(`ocr_extract exit ${code}: ${tail || '(no stderr)'}`));
       }
-    });
+    }, reject);
   });
 }
 

@@ -34,37 +34,15 @@ describe('prompt ledger', () => {
     expect(ledger.takeHeld()).toBeNull();
   });
 
-  it('remembers what went out per block and consumes a stashed snapshot once', () => {
+  it('remembers the exact submission for a retry', () => {
     const ledger = createPromptLedger();
     ledger.recordTurn('user-1', { display: 'Review this', skill: 'review', wire: 'Review this' });
-    ledger.stash('queued-1', { context: [source], skill: null, text: 'Later' });
-
     expect(ledger.turnFor('user-1')).toEqual({
       display: 'Review this',
       skill: 'review',
       wire: 'Review this',
     });
     expect(ledger.turnFor('user-2')).toBeUndefined();
-    expect(ledger.takeStashed('queued-1')?.context).toEqual([source]);
-    expect(ledger.takeStashed('queued-1')).toBeUndefined();
-  });
-
-  it('drops the oldest snapshot once the stash is full', () => {
-    const ledger = createPromptLedger();
-    for (let index = 0; index < 21; index += 1) {
-      ledger.stash(`queued-${index}`, { context: [], skill: null, text: `Message ${index}` });
-    }
-
-    expect(ledger.takeStashed('queued-0')).toBeUndefined();
-    expect(ledger.takeStashed('queued-20')?.text).toBe('Message 20');
-  });
-
-  it('forgets every snapshot when the session is retired', () => {
-    const ledger = createPromptLedger();
-    ledger.stash('queued-1', { context: [], skill: null, text: 'Later' });
-    ledger.clearStashed();
-
-    expect(ledger.takeStashed('queued-1')).toBeUndefined();
   });
 });
 
@@ -77,30 +55,7 @@ describe('queue planning', () => {
     expect(plan.queue).toEqual([
       { context: [source], id: 'queued-1', skill: 'review', text: 'Later' },
     ]);
-    expect(plan.context).toEqual([]);
-    expect(plan.skill).toBeNull();
-    expect(plan.stash).toEqual([]);
-  });
-
-  it('gives the binding back when a queued message returns to the composer', () => {
-    const queued = { context: [source], id: 'queued-1', skill: 'review', text: 'Later' };
-    const plan = planQueue(session({ draft: 'Later', queuedPrompts: [queued] }), []);
-
-    expect(plan.queue).toEqual([]);
-    expect(plan.context).toEqual([source]);
-    expect(plan.skill).toBe('review');
-    expect(plan.stash).toEqual([]);
-  });
-
-  it('stashes a snapshot for a message that leaves the queue to be dispatched', () => {
-    const queued = { context: [source], id: 'queued-1', skill: null, text: 'Later' };
-    const plan = planQueue(session({ queuedPrompts: [queued] }), []);
-
-    expect(plan.stash).toEqual([
-      { id: 'queued-1', prompt: { context: [source], skill: null, text: 'Later' } },
-    ]);
-    expect(plan.context).toBeNull();
-    expect(plan.skill).toBeUndefined();
+    expect(plan.draftTaken).toBe(true);
   });
 
   it('keeps an existing row bound to its own snapshot when only its text is edited', () => {
@@ -110,6 +65,6 @@ describe('queue planning', () => {
     ]);
 
     expect(plan.queue).toEqual([{ ...queued, text: 'Much later' }]);
-    expect(plan.stash).toEqual([]);
+    expect(plan.draftTaken).toBe(false);
   });
 });

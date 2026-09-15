@@ -80,7 +80,6 @@ function renderWorkspace(
         onSignIn={vi.fn()}
         onReprocess={onReprocess}
         runtime={runtime}
-        scopeOutline={{ files: ['MISSION.md', 'notes.md'], folders: ['lessons'] }}
       />
     </div>,
     createTestQueryClient(),
@@ -106,7 +105,7 @@ describe('AgentWorkspace composer context', () => {
   it('suggests scope files for @ and binds the accepted one as an inline chip', async () => {
     const { runtime } = renderWorkspace(idleAgentSessionPort(), undefined, agentContextPort());
     act(() => runtime.setScopeEnvironment(researchEnvironment));
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
     const composer = screen.getByRole('textbox', { name: 'Message' });
 
@@ -151,7 +150,7 @@ describe('AgentWorkspace composer context', () => {
     const port = idleAgentSessionPort();
     const { runtime } = renderWorkspace(port, undefined, agentContextPort());
     act(() => runtime.setScopeEnvironment(researchEnvironment));
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
     const composer = screen.getByRole('textbox', { name: 'Message' });
     typeInto(composer, '@less');
@@ -169,7 +168,7 @@ describe('AgentWorkspace composer context', () => {
   it('sends a plain request while the whole folder is still being prepared', async () => {
     const port = idleAgentSessionPort();
     const { runtime } = renderWorkspace(port);
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
     act(() => {
       runtime.setScopeEnvironment({
@@ -195,7 +194,7 @@ describe('AgentWorkspace composer context', () => {
     const port = idleAgentSessionPort();
     const onReprocess = vi.fn();
     const { runtime } = renderWorkspace(port, undefined, agentContextPort(), onReprocess);
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
     act(() => {
       runtime.setScopeEnvironment({
@@ -216,11 +215,10 @@ describe('AgentWorkspace composer context', () => {
         source: { folderPath: '/Library/Research', path: 'gone.md' },
       });
     });
-    // The PDF is visual and unmentioned, so it is a tile; the Markdown file
-    // is not in the text yet, so it is bound but has no chip.
+    // Unmentioned context stays visible and removable, including missing files.
     const tiles = screen.getByRole('list', { name: 'Attached context' });
     const items = within(tiles).getAllByRole('listitem');
-    expect(items).toHaveLength(1);
+    expect(items).toHaveLength(2);
     expect(items[0]?.textContent).toContain('Preparing');
 
     const composer = screen.getByRole('textbox', { name: 'Message' });
@@ -272,7 +270,7 @@ describe('AgentWorkspace composer context', () => {
     const context = agentContextPort();
     const { runtime } = renderWorkspace(idleAgentSessionPort(), undefined, context);
     act(() => runtime.setScopeEnvironment(researchEnvironment));
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
     expect(screen.queryByRole('button', { name: 'Attach files' })).toBeNull();
 
@@ -304,7 +302,7 @@ describe('AgentWorkspace composer context', () => {
       expect.objectContaining({ format: 'pdf', kind: 'source' }),
     ]);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: OpenQuill' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Default' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     expect(await screen.findByRole('button', { name: 'Attach files' })).not.toBeNull();
     const file = new File(['png'], 'shot.png', { type: 'image/png' });
@@ -318,6 +316,11 @@ describe('AgentWorkspace composer context', () => {
     const tile = await screen.findByRole('img', { name: 'shot.png' });
     expect(tile.getAttribute('src')).toBe('blob:shot');
     await userEvent.click(screen.getByRole('button', { name: 'Remove shot.png' }));
-    await waitFor(() => expect(runtime.activeSession().store.getState().context).toEqual([]));
+    await waitFor(() =>
+      expect(runtime.activeSession().store.getState().context).toEqual([
+        expect.objectContaining({ format: 'md', kind: 'source' }),
+        expect.objectContaining({ format: 'pdf', kind: 'source' }),
+      ]),
+    );
   });
 });

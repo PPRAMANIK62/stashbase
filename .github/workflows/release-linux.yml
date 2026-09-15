@@ -74,11 +74,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STASHBASE_SKIP_SIDECAR_BUILD: '1'
-          STASHBASE_SKIP_TRANSCRIPTION_BUILD: '1'
         run: pnpm dist:linux
 
       - name: Smoke packaged Linux server
-        run: node scripts/smoke-packaged-server.mjs --require-transcription
+        run: node scripts/smoke-packaged-server.mjs
 
       - name: Upload Linux packages to release
         env:

@@ -13,7 +13,7 @@ import { createTestQueryClient, queryWrapper } from '@/test/query';
 import type { SearchBackend, SearchLane, SearchRows } from './backend';
 import { SearchSurface } from './surface';
 
-const noPreparation: PreparationCounts = { blocked: 0, cancelled: 0, failed: 0, pending: 0 };
+const noPreparation: PreparationCounts = { cancelled: 0, failed: 0, pending: 0 };
 
 function rowsOf(labels: readonly string[]): SearchRows {
   return {
@@ -44,7 +44,6 @@ function fakeBackend(id: string, overrides: Partial<SearchBackend> = {}): Search
     emptyMessage: `No ${id} results.`,
     icon: Sparkles,
     id,
-    idleMessage: `Type to search ${id}.`,
     label: id,
     lane,
     placeholder: `Search ${id}`,
@@ -69,7 +68,6 @@ function renderSurface(backends: readonly [SearchBackend, ...SearchBackend[]]) {
           focusRevision={0}
           folderPath="/project/research"
           onNavigate={onNavigate}
-          onOpenSettings={vi.fn()}
           preparation={noPreparation}
           readiness={{ state: 'ready' }}
           readyCount={0}
@@ -91,7 +89,6 @@ describe('search surface registry', () => {
     expect(screen.getByRole('tab', { name: 'notes' })).not.toBeNull();
     const tagsTab = screen.getByRole('tab', { name: 'tags' });
     expect(tagsTab.getAttribute('title')).toBe('Match tags');
-    expect(screen.getByText('Type to search notes.')).not.toBeNull();
 
     await user.type(queryField(), 'answer');
     expect(await screen.findByRole('option', { name: 'notes first' })).not.toBeNull();
@@ -144,7 +141,6 @@ describe('search surface registry', () => {
     await userEvent.setup().type(queryField(), 'answer');
 
     await waitFor(() => expect(screen.queryByText('Searching…')).toBeNull());
-    expect(screen.queryByText('Type to search notes.')).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
 });

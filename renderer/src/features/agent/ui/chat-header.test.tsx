@@ -28,16 +28,22 @@ describe('Chat header', () => {
     typeInto(screen.getByRole('textbox', { name: 'Message' }), 'Inspect the workspace');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     act(() => listeners[0]?.onEvent({ kind: 'ready' }));
-    await screen.findByText('Inspect the workspace');
+    await screen.findAllByText('Inspect the workspace');
 
-    const header = await screen.findByRole('button', { name: /^Untitled, / });
-    expect(screen.queryByRole('heading', { name: /^Untitled, / })).toBeNull();
+    const header = await screen.findByRole('button', {
+      name: /^Inspect the workspace, (Default|Codex)$/u,
+    });
+    expect(
+      screen.queryByRole('heading', { name: /^Inspect the workspace, (Default|Codex)$/u }),
+    ).toBeNull();
     pressKey(header, 'F2');
-    const field = screen.getByRole('textbox', { name: 'Rename Untitled' });
+    const field = screen.getByRole('textbox', { name: 'Rename Inspect the workspace' });
     await userEvent.clear(field);
     await userEvent.type(field, 'Reading list{Enter}');
 
-    expect(await screen.findByRole('button', { name: /^Reading list, / })).not.toBeNull();
+    expect(
+      await screen.findByRole('button', { name: /^Reading list, (Default|Codex)$/u }),
+    ).not.toBeNull();
     expect(runtime.activeSession().store.getState().title).toBe('Reading list');
   });
 

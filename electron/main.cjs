@@ -142,9 +142,6 @@ const PROJECT_ROOT = app.isPackaged ? app.getAppPath() : path.resolve(__dirname,
 const SERVER_ENTRY = app.isPackaged
   ? path.join(PROJECT_ROOT, 'dist', 'server', 'index.mjs')
   : path.join(PROJECT_ROOT, 'server', 'index.ts');
-const MCP_ENTRY = app.isPackaged
-  ? path.join(PROJECT_ROOT, 'dist', 'mcp', 'server.mjs')
-  : path.join(PROJECT_ROOT, 'mcp', 'server.ts');
 const RESOURCES_ROOT = app.isPackaged ? process.resourcesPath : PROJECT_ROOT;
 
 let serverProc = null;
@@ -160,7 +157,6 @@ let projectLifecycleCapability = null;
 let workspaceSessionCapability = null;
 let windowLifecycleCapability = null;
 let externalNavigationCapability = null;
-let bugReportCapability = null;
 let updatesCapability = null;
 let replacementWindowLifecycle = null;
 let replacementUpdates = null;
@@ -222,13 +218,6 @@ function installReplacementBoundary() {
     'window',
     'lifecycle.cjs',
   ));
-  const bugReportOpen = require(path.join(
-    PROJECT_ROOT,
-    'dist',
-    'electron',
-    'bug-report',
-    'open.cjs',
-  ));
   const bugReportReview = require(path.join(
     PROJECT_ROOT,
     'dist',
@@ -248,18 +237,7 @@ function installReplacementBoundary() {
   workspaceSessionCapability = workspaceSession.WORKSPACE_SESSION_CAPABILITY;
   windowLifecycleCapability = windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY;
   externalNavigationCapability = externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY;
-  bugReportCapability = bugReportOpen.BUG_REPORT_CAPABILITY;
   updatesCapability = updates.UPDATES_CAPABILITY;
-  bugReportOpen.registerBugReportOpen({
-    BrowserWindow,
-    ipcMain,
-    expectedOrigins: new Set([RENDERER_ORIGIN]),
-    isLiveWindow: (win) => isLiveMainWindow(win),
-    hasCapability: (win, capability) => (
-      replacementWindowCapabilities.get(win)?.has(capability) === true
-    ),
-    openReview: (win) => openBugReportReview(win),
-  });
   bugReportReview.registerBugReportReviewIpc({
     ipcMain,
     bugReports,
@@ -299,16 +277,14 @@ function installReplacementBoundary() {
     hasCapability: (win, capability) => (
       replacementWindowCapabilities.get(win)?.has(capability) === true
     ),
-    claimInitialFolder: (win) => {
-      const windowId = windowRegistry.idForWindow(win);
-      return windowId ? windowRegistry.claimInitialFolder(windowId) : null;
-    },
     liveWindows: () => [...mainWindows].filter((win) => isLiveMainWindow(win)),
     // A folder already showing somewhere is focused rather than opened twice,
     // which is the same rule the File menu and the protocol launch follow.
-    openFolderWindow: async (win, folder) => {
+    openFolderWindow: async (win, folder, enterFolder, signal) => {
       const result = await openOrFocusFolder({
         createWindow,
+        enterFolder,
+        signal,
         folder,
         registry: windowRegistry,
         senderWindow: win,
@@ -431,87 +407,12 @@ const bugReportHandoff = createBugReportHandoff({
   openExternal: (url) => shell.openExternal(url),
 });
 
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`;
-}
-
-function cmdQuote(value) {
-  return `"${cmdValue(value).replace(/"/g, '""')}"`;
-}
-
-function cmdValue(value) {
-  return String(value).replace(/%/g, '%%');
-}
-
 function localBin(name) {
   return path.join(PROJECT_ROOT, 'node_modules', '.bin', process.platform === 'win32' ? `${name}.cmd` : name);
 }
 
 function needsCmdShell(command) {
   return process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
-}
-
-function mcpWrapperPath() {
-  return path.join(
-    os.homedir(),
-    '.stashbase',
-    'bin',
-    process.platform === 'win32' ? 'stashbase-mcp.cmd' : 'stashbase-mcp',
-  );
-}
-
-function writeMcpWrapper() {
-  const wrapper = mcpWrapperPath();
-  const resourcesPath = RESOURCES_ROOT;
-  const content = process.platform === 'win32'
-    ? [
-      '@echo off',
-      `set "STASHBASE_APP_ROOT=${cmdValue(PROJECT_ROOT)}"`,
-      `set "STASHBASE_RESOURCES_PATH=${cmdValue(resourcesPath)}"`,
-      ...(app.isPackaged
-        ? [
-          'set "ELECTRON_RUN_AS_NODE=1"',
-          `${cmdQuote(process.execPath)} ${cmdQuote(MCP_ENTRY)} %*`,
-        ]
-        : [
-          `${cmdQuote(localBin('tsx'))} ${cmdQuote(MCP_ENTRY)} %*`,
-        ]),
-      '',
-    ].join('\r\n')
-    : [
-      '#!/bin/sh',
-      'set -eu',
-      `export STASHBASE_APP_ROOT=${shellQuote(PROJECT_ROOT)}`,
-      `export STASHBASE_RESOURCES_PATH=${shellQuote(resourcesPath)}`,
-      ...(app.isPackaged
-        ? [
-          'export ELECTRON_RUN_AS_NODE=1',
-          `exec ${shellQuote(process.execPath)} ${shellQuote(MCP_ENTRY)} "$@"`,
-        ]
-        : [
-          `exec ${shellQuote(localBin('tsx'))} ${shellQuote(MCP_ENTRY)} "$@"`,
-        ]),
-      '',
-    ].join('\n');
-  writeFileAtomic(wrapper, content, { mode: 0o755 });
-  return wrapper;
-}
-
-function writeFileAtomic(file, content, options = {}) {
-  const dir = path.dirname(file);
-  fs.mkdirSync(dir, { recursive: true });
-  const nonce = Math.random().toString(36).slice(2);
-  const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.${nonce}.tmp`);
-  try {
-    fs.writeFileSync(tmp, content, options);
-    fs.renameSync(tmp, file);
-    if (typeof options.mode === 'number') {
-      try { fs.chmodSync(file, options.mode); } catch { /* best-effort */ }
-    }
-  } catch (err) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort */ }
-    throw err;
-  }
 }
 
 /** Construct the owned server child; readiness and port arbitration live in main-probe. */
@@ -899,7 +800,7 @@ async function openBugReportReview(win) {
   }
 }
 
-async function createWindow(initialFolder) {
+async function createWindow() {
   if (desktopUpdateWindows.isActive()) return;
   try {
     await ensureServer();
@@ -939,14 +840,13 @@ async function createWindow(initialFolder) {
   const webContentsId = win.webContents.id;
   if (!workspaceSessionRestoreWindow) workspaceSessionRestoreWindow = win;
   mainWindows.add(win);
-  windowRegistry.add(windowId, win, initialFolder);
+  windowRegistry.add(windowId, win);
   if (
     projectFolderDialogCapability &&
     projectLifecycleCapability &&
     workspaceSessionCapability &&
     windowLifecycleCapability &&
     externalNavigationCapability &&
-    bugReportCapability &&
     updatesCapability
   ) {
     replacementWindowCapabilities.set(
@@ -957,7 +857,6 @@ async function createWindow(initialFolder) {
         workspaceSessionCapability,
         windowLifecycleCapability,
         externalNavigationCapability,
-        bugReportCapability,
         updatesCapability,
       ]),
     );
@@ -1139,19 +1038,6 @@ if (!hasSingleInstanceLock) {
       await bugReportHandoff.initializeSession();
     } catch {
       console.warn('[electron] bug-report temporary session initialization failed');
-    }
-    // Refresh the MCP wrapper on every launch so the most recently-opened
-    // app owns it. Without this, a wrapper written by an earlier `pnpm
-    // dev` run still points at a vanished `node_modules/.bin/tsx`, and
-    // Claude Code / Claude Desktop spawn it after a brew install with
-    // "command not found" (or, on macOS, "Operation not permitted" when
-    // the old path is under ~/Downloads and TCC blocks it). Skip silently
-    // if the entry for *this* app isn't on disk — partial dev checkouts
-    // shouldn't clobber a working packaged wrapper.
-    try {
-      if (fs.existsSync(MCP_ENTRY)) writeMcpWrapper();
-    } catch (err) {
-      console.warn(`[electron] MCP wrapper refresh failed: ${err && err.message ? err.message : err}`);
     }
     installApplicationMenu();
     await initialWindowFlight.run();

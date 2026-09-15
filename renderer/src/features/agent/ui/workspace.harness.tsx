@@ -62,6 +62,7 @@ export function renderWorkspace(
   context?: AgentContextPort,
   onReprocess?: (source: { folderPath: string; path: string }) => void,
   catalogOverrides: Partial<AgentCatalogPort> = {},
+  onSignIn: (signal?: AbortSignal) => void | Promise<boolean> = vi.fn(),
 ) {
   let id = 0;
   const runtime = createAgentWorkspaceRuntime({
@@ -87,10 +88,9 @@ export function renderWorkspace(
         instructions={agentInstructionsApi()}
         onOpenAgentSettings={vi.fn()}
         onOpenExternal={vi.fn()}
-        onSignIn={vi.fn()}
+        onSignIn={onSignIn}
         onReprocess={onReprocess}
         runtime={runtime}
-        scopeOutline={{ files: ['MISSION.md', 'notes.md'], folders: ['lessons'] }}
       />
     </div>,
     createTestQueryClient(),

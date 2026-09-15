@@ -9,11 +9,10 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { codexThreadHasContent, codexThreadToBlocks } from './codex-history.ts';
-import { nativeTimesByUuid, transcriptToBlocks } from './routes/sessions.ts';
-import { codexHistoryActions } from './routes/codex-sessions.ts';
-import { clearAgentSessionFolderOverride, setAgentSessionFolderOverride } from './agent-session-folders.ts';
+import { nativeTimesByUuid, transcriptToBlocks } from './claude-history.ts';
+import { codexHistoryActions } from './codex-history-adapter.ts';
 
-test('Codex history validates native or overridden project ownership before renaming and deleting', async (t) => {
+test('Codex history validates native project ownership before renaming and deleting', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-history-'));
   const project = path.join(root, 'project');
   const other = path.join(root, 'other');
@@ -60,7 +59,6 @@ test('Codex history validates native or overridden project ownership before rena
     syncBuiltinESMExports();
     if (previousBin === undefined) delete process.env.STASHBASE_CODEX_BIN;
     else process.env.STASHBASE_CODEX_BIN = previousBin;
-    clearAgentSessionFolderOverride('codex', thread.id);
     fs.rmSync(root, { recursive: true, force: true });
   });
   const history = codexHistoryActions();
@@ -78,23 +76,18 @@ test('Codex history validates native or overridden project ownership before rena
   assert.deepEqual(requests.filter(({ method }) => method !== 'initialize').map(({ method }) => method), ['thread/read', 'thread/name/set', 'thread/read']);
   assert.deepEqual(result, { id: thread.id, title: 'Renamed', lastModified: 123_000, hasContent: true, cwd: project });
 
-  setAgentSessionFolderOverride('codex', thread.id, other);
-  requests.length = 0;
-  await assert.rejects(async () => history.rename(thread.id, 'Old scope', project), /session not found/);
-  assert.equal(requests.length, 0);
-  assert.equal((await history.rename(thread.id, 'Rebound', other) as { title: string }).title, 'Rebound');
   missing = true;
   requests.length = 0;
-  await assert.rejects(history.rename(thread.id, 'Missing', other), /thread not found/);
+  await assert.rejects(history.rename(thread.id, 'Missing', project), /thread not found/);
   assert.deepEqual(requests.map(({ method }) => method), ['thread/read']);
   missing = false;
   renamed = false;
   invalidAfterRename = true;
-  await assert.rejects(history.rename(thread.id, 'Invalid metadata', other), /invalid session metadata/);
+  await assert.rejects(history.rename(thread.id, 'Invalid metadata', project), /session not found/);
   invalidAfterRename = false;
   requests.length = 0;
-  await history.remove(thread.id, other);
-  assert.deepEqual(requests.map(({ method }) => method), ['thread/delete']);
+  await history.remove(thread.id, project);
+  assert.deepEqual(requests.map(({ method }) => method), ['thread/read', 'thread/delete']);
 });
 
 test('Codex history distinguishes allocated blanks from started conversations', () => {

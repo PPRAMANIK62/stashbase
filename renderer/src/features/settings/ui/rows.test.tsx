@@ -2,7 +2,6 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { ChoiceList, ChoiceRow } from './choice-rows';
 import { Disclosure, SettingsGroup, SettingsList, SettingsPane, SettingsRow } from './rows';
 
 afterEach(cleanup);
@@ -56,78 +55,6 @@ describe('settings row grammar', () => {
     );
 
     expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
-  });
-
-  it('makes each choice a whole row, selectable by click and by keyboard', async () => {
-    const onValueChange = vi.fn();
-    render(
-      <ChoiceList aria-label="Source" onValueChange={onValueChange} value="a">
-        <ChoiceRow checked label="Account" onSelect={() => onValueChange('a')} value="a" />
-        <ChoiceRow checked={false} label="Key" onSelect={() => onValueChange('b')} value="b" />
-      </ChoiceList>,
-    );
-    const user = userEvent.setup();
-    const group = screen.getByRole('radiogroup', { name: 'Source' });
-    const rows = within(group).getAllByRole('radio');
-
-    expect(rows.map((row) => row.getAttribute('aria-checked'))).toEqual(['true', 'false']);
-    await user.click(within(group).getByRole('radio', { name: 'Key' }));
-    expect(onValueChange).toHaveBeenCalledWith('b');
-
-    onValueChange.mockClear();
-    await user.click(within(group).getByRole('radio', { name: 'Account' }));
-    await user.keyboard('{ArrowDown}');
-    expect(onValueChange).toHaveBeenCalledWith('b');
-  });
-
-  it('keeps the checked row as the group tab stop, or the first row when none is', () => {
-    render(
-      <ChoiceList aria-label="Source" onValueChange={vi.fn()} value="b">
-        <ChoiceRow checked={false} label="Account" onSelect={vi.fn()} value="a" />
-        <ChoiceRow checked label="Key" onSelect={vi.fn()} value="b" />
-      </ChoiceList>,
-    );
-    expect(screen.getAllByRole('radio').map((row) => row.getAttribute('tabindex'))).toEqual([
-      '-1',
-      '0',
-    ]);
-
-    cleanup();
-    render(
-      <ChoiceList aria-label="Source" onValueChange={vi.fn()} value={null}>
-        <ChoiceRow checked={false} firstTabStop label="Account" onSelect={vi.fn()} value="a" />
-        <ChoiceRow checked={false} label="Key" onSelect={vi.fn()} value="b" />
-      </ChoiceList>,
-    );
-    expect(screen.getAllByRole('radio').map((row) => row.getAttribute('tabindex'))).toEqual([
-      '0',
-      '-1',
-    ]);
-  });
-
-  it('leaves a control inside a choice row to its own handler, not the row selection', async () => {
-    const onSelect = vi.fn();
-    const onTrail = vi.fn();
-    render(
-      <ChoiceList aria-label="Source" onValueChange={vi.fn()} value="a">
-        <ChoiceRow
-          checked
-          label="Account"
-          onSelect={onSelect}
-          trail={
-            <button onClick={onTrail} type="button">
-              Sign out
-            </button>
-          }
-          value="a"
-        />
-      </ChoiceList>,
-    );
-
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign out' }));
-
-    expect(onTrail).toHaveBeenCalled();
-    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it('hides disclosure content until the reader opens it', async () => {

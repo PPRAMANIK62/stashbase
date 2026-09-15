@@ -18,10 +18,9 @@ import {
   selectClaudeModel,
 } from '../agent.ts';
 import { resolveAgentInstructions, setAgentInstructions } from '../agent-instructions.ts';
-import { clearAgentRuntimeFailure } from '../agent-contract.ts';
 import { clearCurrentFolder, runWithWindowId, openProjectFolder, registerProjectFolderAsync } from '../folder.ts';
 import { derivedNoteFor, registerDerivedSource } from '../derived-store.ts';
-import { claudeTranscriptEffort } from '../routes/sessions.ts';
+import { claudeTranscriptEffort } from '../claude-history.ts';
 
 class FakeAgentWebSocket extends EventEmitter {
   readyState = 1;
@@ -180,7 +179,7 @@ test('Claude permission callback asks for mutations and unknown tools, and settl
       canUseTool = request.options.canUseTool;
       return streamingClaudeQuery(request.prompt);
     }) as never,
-    () => '/fake/claude', undefined, undefined, 'unbound',
+    () => '/fake/claude', undefined, process.cwd(),
   );
   t.after(() => session.dispose());
   session.begin();
@@ -235,47 +234,6 @@ test('Claude permission callback asks for mutations and unknown tools, and settl
   await settle();
   session.dispose();
   assert.equal((await closing).behavior, 'deny');
-});
-
-test('Claude project rebind resumes the same native session from the project cwd', async (t) => {
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-rebound-'));
-  t.after(() => fs.rmSync(project, { recursive: true, force: true }));
-  const starts: Array<{ cwd?: string; resume?: string }> = [];
-  const ws = new FakeAgentWebSocket();
-  const session = new AgentSession(
-    ws as unknown as WebSocket,
-    'claude-rebound-window',
-    undefined,
-    undefined,
-    'default',
-    undefined,
-    undefined,
-    ((request: { prompt: AsyncIterable<unknown>; options: { cwd?: string; resume?: string } }) => {
-      starts.push({ cwd: request.options.cwd, resume: request.options.resume });
-      return streamingClaudeQuery(request.prompt, 'native-rebound');
-    }) as never,
-    () => '/fake/claude',
-    undefined,
-    undefined,
-    'unbound',
-  );
-  t.after(() => session.dispose());
-
-  session.begin();
-  await settle();
-  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'create the project' }));
-  await settle();
-  assert.equal(session.nativeSessionId(), 'native-rebound');
-
-  assert.equal(session.rebindToFolder(project), true);
-  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'continue in the project' }));
-  await settle();
-  await settle();
-
-  assert.equal(starts.length, 2);
-  assert.equal(starts[1]?.cwd, project);
-  assert.equal(starts[1]?.resume, 'native-rebound');
-  assert.equal(session.nativeSessionId(), 'native-rebound');
 });
 
 function claudeRetryMessage(): SDKMessage {
@@ -336,7 +294,7 @@ async function startScriptedClaudeTurn(
   t.after(() => {
     finishStream();
     session.dispose();
-    clearAgentRuntimeFailure('claude');
+
     runWithWindowId(windowId, () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -693,7 +651,6 @@ test('Claude unexpected iterator EOF after ready emits one useful fatal exit', a
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-exit-'));
   await runWithWindowId('claude-eof-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('claude');
     runWithWindowId('claude-eof-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });
@@ -724,7 +681,6 @@ test('Claude iterator rejection after ready emits its cause once without a dupli
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-exit-'));
   await runWithWindowId('claude-failure-window', () => openProjectFolder(folder));
   t.after(() => {
-    clearAgentRuntimeFailure('claude');
     runWithWindowId('claude-failure-window', () => clearCurrentFolder());
     fs.rmSync(folder, { recursive: true, force: true });
   });

@@ -15,26 +15,31 @@ export interface RuntimeRowProps {
   runtime: AgentRuntime;
   /** This runtime has a preparation command of its own in flight. */
   busy: boolean;
+  hideAccountAction?: boolean;
   /** A failed install, sign-in, or reset stays on the row: a busy spinner that
    *  simply disappeared would contradict the truthful-loading requirement this
    *  panel owns. */
   failure: FailureView | null;
   onAction: (action: AgentRuntimeAction, runtime: AgentRuntime) => void;
-  onUninstall: (runtime: AgentRuntime) => void;
 }
 
 /** One agent runtime: what it is, where its preparation stands, and the single
  *  action that applies right now. */
-export function RuntimeRow({ runtime, busy, failure, onAction, onUninstall }: RuntimeRowProps) {
+export function RuntimeRow({
+  runtime,
+  busy,
+  failure,
+  onAction,
+  hideAccountAction = false,
+}: RuntimeRowProps) {
   const display = describeRuntime(runtime, busy);
   const shape = useShape();
   const Icon = AGENT_ICONS[runtime.id];
-  const action = display.action;
+  const action = hideAccountAction && display.action?.kind === 'account' ? null : display.action;
   /** Nothing here is usable until preparation reaches `ready`. An unusable row
    *  recedes; it does not turn red. A failure the reader can act on says so in
    *  its own sentence and offers the action that clears it. */
   const ready = display.stage === 'ready';
-  const canUninstall = runtime.installed && runtime.ownership === 'managed' && !busy;
 
   return (
     <SettingsRow
@@ -51,10 +56,10 @@ export function RuntimeRow({ runtime, busy, failure, onAction, onUninstall }: Ru
           <Icon aria-hidden="true" className="size-4" strokeWidth={1.5} />
         </span>
       }
-      title={runtime.label}
+      title={hideAccountAction ? 'Connection' : runtime.label}
       titleTone={ready ? 'default' : 'muted'}
       trail={
-        busy || action || canUninstall ? (
+        busy || action ? (
           <>
             {busy && (
               <Button disabled loading size="compact" variant="tertiary">
@@ -64,11 +69,6 @@ export function RuntimeRow({ runtime, busy, failure, onAction, onUninstall }: Ru
             {!busy && action && (
               <Button onClick={() => onAction(action, runtime)} size="compact" variant="tertiary">
                 {action.label}
-              </Button>
-            )}
-            {canUninstall && (
-              <Button onClick={() => onUninstall(runtime)} size="compact" variant="ghost">
-                Uninstall
               </Button>
             )}
           </>

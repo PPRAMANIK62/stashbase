@@ -83,9 +83,6 @@ app
     const workspaceSession = require(
       path.join(repositoryRoot, 'dist', 'electron', 'workspace', 'session.cjs'),
     );
-    const bugReportOpen = require(
-      path.join(repositoryRoot, 'dist', 'electron', 'bug-report', 'open.cjs'),
-    );
     const bugReportReview = require(
       path.join(repositoryRoot, 'dist', 'electron', 'bug-report', 'review-ipc.cjs'),
     );
@@ -106,21 +103,11 @@ app
         capability === externalNavigation.EXTERNAL_NAVIGATION_CAPABILITY ||
         capability === lifecycle.PROJECT_LIFECYCLE_CAPABILITY ||
         capability === workspaceSession.WORKSPACE_SESSION_CAPABILITY ||
-        capability === bugReportOpen.BUG_REPORT_CAPABILITY ||
         capability === updates.UPDATES_CAPABILITY ||
         capability === windowLifecycle.WINDOW_LIFECYCLE_CAPABILITY);
     const windowLifecycleService = windowLifecycle.registerWindowLifecycle({
       BrowserWindow, ipcMain, expectedOrigins: new Set([APP_ORIGIN]),
       isLiveWindow, hasCapability,
-    });
-    const openedBugReviews = [];
-    bugReportOpen.registerBugReportOpen({
-      BrowserWindow,
-      ipcMain,
-      expectedOrigins: new Set([APP_ORIGIN]),
-      isLiveWindow,
-      hasCapability,
-      openReview: async (sourceWindow) => { openedBugReviews.push(sourceWindow); },
     });
     // No draft is ever bound here, so every review channel must answer FORBIDDEN.
     bugReportReview.registerBugReportReviewIpc({
@@ -160,14 +147,13 @@ app
       hasCapability,
       // This harness creates its window for no folder, which is why it expects
       // the welcome screen below rather than a folder workspace.
-      claimInitialFolder: () => null,
       liveWindows: () => [...authorizedWindows].filter(isLiveWindow),
       // Required by the service and never exercised here: this smoke proves
       // the preload surface exists and is frozen, not that a second window
       // opens. Present so the dependency is total rather than latently
       // undefined, since a .cjs harness is not typechecked against the
       // service's interface.
-      openFolderWindow: async () => 'opened',
+      openFolderWindow: async (window, folder, enterFolder) => { await enterFolder(window, folder); return 'opened'; },
       setActiveFolder: (window, folder) => {
         activeFolders.set(window, folder);
         return true;
@@ -256,7 +242,7 @@ app
       const welcomeDeadline = Date.now() + 5000;
       while (
         ![...document.querySelectorAll('button')]
-          .some((button) => button.getAttribute('aria-label') === 'Open folder as a project')
+          .some((button) => button.getAttribute('aria-label') === 'Open a project')
         && Date.now() < welcomeDeadline
       ) {
         await new Promise((resolve) => setTimeout(resolve, 25));
@@ -268,8 +254,6 @@ app
       await new Promise((resolve) => setTimeout(resolve, 25));
       const popup = window.open('https://example.com/');
       return {
-        bugReportFrozen: Object.isFrozen(window.stashbase.bugReport),
-        bugReportOpen: await window.stashbase.bugReport.open(),
         externalNavigation: await window.stashbase.externalNavigation.open('https://example.com/docs'),
         externalNavigationFrozen: Object.isFrozen(window.stashbase.externalNavigation),
         folderResult: await window.stashbase.project.chooseFolder(),
@@ -290,7 +274,7 @@ app
         inlineScriptDenied: window.__stashbaseInlineScriptRan !== true,
         welcomeActions: [...document.querySelectorAll('button')]
           .map((button) => button.getAttribute('aria-label'))
-          .filter((label) => label === 'Open folder as a project' || label === 'Create a new project')
+          .filter((label) => label === 'Open a project' || label === 'Create a project')
           .sort(),
         welcomeTitle: document.querySelector('h1')?.textContent?.trim(),
         workspaceMarginLeft: getComputedStyle(
@@ -310,13 +294,10 @@ app
   `);
 
     assert.deepEqual(result, {
-      bugReportFrozen: true,
-      bugReportOpen: { ok: true },
       externalNavigation: { ok: true },
       externalNavigationFrozen: true,
       folderResult: { ok: true, folderPath: null },
       globalKeys: [
-        'bugReport',
         'externalNavigation',
         'runtime',
         'project',
@@ -331,16 +312,18 @@ app
       runtime: { serverOrigin },
       runtimeFrozen: true,
       inlineScriptDenied: true,
-      welcomeActions: ['Create a new project', 'Open folder as a project'],
+      welcomeActions: ['Create a project', 'Open a project'],
       welcomeTitle: 'StashBase',
       // A window arrives on the welcome screen with the sidebar collapsed,
       // and the collapsed rail leaves the inset its 8px margin.
       workspaceMarginLeft: '8px',
       url: APP_URL,
       projectKeys: [
+        'cancelEntry',
         'chooseFolder',
-        'claimInitialFolder',
         'notifyFolderRemoved',
+        'onEnterFolder',
+        'onEntryCancelled',
         'onFolderRemoved',
         'onPrepareFolderRemoval',
         'openFolderWindow',
@@ -367,7 +350,6 @@ app
       },
     });
     assert.deepEqual(openedExternalUrls, ['https://example.com/docs']);
-    assert.deepEqual(openedBugReviews, [window]);
     assert.deepEqual(receivedProjectRequest, {
       method: 'POST',
       origin: APP_ORIGIN,

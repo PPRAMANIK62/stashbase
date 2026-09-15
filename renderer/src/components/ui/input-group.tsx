@@ -106,12 +106,26 @@ interface InputFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'o
   onChange: (value: string) => void;
   error?: string | undefined;
   disabled?: boolean | undefined;
-  /** Show the field box at rest as a quiet tint instead of only on hover or
-   *  focus — for a field standing alone inside a settings row, where the
-   *  proximity reveal reads as plain text. */
-  filled?: boolean;
+  /** What the field's box looks like when nothing is near it and nothing is
+   *  focused.
+   *
+   *  `ghost` (the default) draws no box until the pointer reaches the field:
+   *  the stacked-form case the proximity reveal exists for, where a box per
+   *  row would be noise. `filled` is a quiet tint at rest, for a field
+   *  standing alone inside a settings row where the reveal reads as plain
+   *  text. `outline` keeps the hairline drawn at all times and lets the
+   *  pointer change nothing at all — the standing search field a panel is
+   *  built around, where a box that materialises under the pointer reads as
+   *  a glitch rather than an affordance. */
+  resting?: InputFieldResting;
+  /** A control the box carries at its trailing edge: the clear or close of a
+   *  field that is its own row. Inside the border rather than beside it, so
+   *  the field fills the row instead of sharing it. Mirrors `icon`. */
+  action?: ReactNode;
   className?: string;
 }
+
+type InputFieldResting = 'ghost' | 'filled' | 'outline';
 
 const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
   (
@@ -124,7 +138,8 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
       onChange,
       error,
       disabled,
-      filled = false,
+      resting = 'ghost',
+      action,
       className,
       ...props
     },
@@ -140,7 +155,11 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
     const sizeClasses = useSize();
     const compact = sizeClasses.variant === 'compact';
 
-    const labelActive = isActive || isFocused;
+    const outlined = resting === 'outline';
+    // An outlined field's box is already drawn, so the glyph inside it holds
+    // still while the pointer passes: only focus lights it, and it is tinted
+    // rather than also thickened, so one event moves one thing.
+    const glyphLit = outlined ? isFocused : isActive || isFocused;
 
     const handleFocus = () => {
       setIsFocused(true);
@@ -155,11 +174,20 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
     let ringClass: string;
 
     if (disabled) {
-      bgClass = filled ? 'bg-hover' : 'bg-transparent';
+      bgClass = resting === 'filled' ? 'bg-hover' : 'bg-transparent';
       ringClass = 'ring-border';
-    } else if (filled) {
+    } else if (resting === 'filled') {
       bgClass = isActive && !isFocused ? 'bg-active' : 'bg-hover';
       ringClass = error ? 'ring-destructive/50' : isFocused ? FOCUS_RING_TINT : 'ring-transparent';
+    } else if (outlined) {
+      // Rest and hover are the same box on the surface's own paper, so the
+      // pointer crossing the field changes nothing. Focus fills it to the
+      // card and leaves the hairline alone: the field this variant is for is
+      // focused the moment its panel opens and holds focus the whole time it
+      // is read, so a tinted ring would be standing colour rather than an
+      // event, and the caret already says where the typing goes.
+      bgClass = isFocused ? 'bg-card' : 'bg-transparent';
+      ringClass = error ? 'ring-destructive/50' : 'ring-border';
     } else if (error) {
       bgClass = isFocused ? 'bg-card' : isActive ? 'bg-destructive-light/60' : 'bg-transparent';
       ringClass = isFocused || isActive ? 'ring-destructive/50' : 'ring-transparent';
@@ -245,10 +273,10 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
           {Icon && (
             <Icon
               size={sizeClasses.icon}
-              strokeWidth={labelActive ? 2 : 1.5}
+              strokeWidth={glyphLit && !outlined ? 2 : 1.5}
               className={cn(
                 'shrink-0 transition-[color,stroke-width] duration-fast',
-                labelActive ? 'text-foreground' : 'text-muted-foreground',
+                glyphLit ? 'text-foreground' : 'text-muted-foreground',
               )}
             />
           )}
@@ -261,12 +289,26 @@ const InputField = forwardRef<HTMLDivElement, InputFieldProps>(
             onBlur={handleBlur}
             placeholder={placeholder}
             className={cn(
-              'w-full bg-transparent font-[inherit] text-foreground outline-none placeholder:text-muted-foreground',
+              'w-full bg-transparent font-[inherit] text-foreground outline-none',
+              // An outlined field's own box says it can be typed into, so the
+              // placeholder is only a name and recedes a step further — the
+              // grey the sidebar's group labels wear.
+              outlined
+                ? 'placeholder:text-muted-foreground/70'
+                : 'placeholder:text-muted-foreground',
               sizeClasses.text,
             )}
             style={{ fontVariationSettings: fontWeights.normal }}
             {...props}
           />
+
+          {/* Pulled a step past the box's own padding so the control's glyph
+              sits on the inset the text keeps, not one padding further in. */}
+          {action && (
+            <span className={cn('flex shrink-0 items-center', compact ? '-mr-1' : '-mr-1.5')}>
+              {action}
+            </span>
+          )}
         </div>
 
         {/* Error message — `match` pins it visible while our controlled

@@ -242,10 +242,8 @@ test('embedding source follows the key provider and has no separate selection en
       try {
         const response = await fetch(origin + '/api/embedder');
         const state = await response.json();
-        assert.equal(state.source, 'openrouter');
         assert.equal(state.provider, 'openrouter');
         assert.equal(state.hasKey, true);
-        assert.equal(state.authorized, true);
         assert.equal('apiKey' in state, false);
         const removed = await fetch(origin + '/api/embedder/source', {
           method: 'PUT', headers: { 'content-type': 'application/json' },
@@ -256,7 +254,7 @@ test('embedding source follows the key provider and has no separate selection en
         assert.equal(config.isEmbeddingConfigured(), true);
         const deleted = await fetch(origin + '/api/embedder/key', { method: 'DELETE' });
         assert.equal(deleted.status, 200);
-        assert.equal((await deleted.json()).authorized, false);
+        assert.equal((await deleted.json()).hasKey, false);
         assert.equal(config.isEmbeddingConfigured(), false);
       } finally {
         await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

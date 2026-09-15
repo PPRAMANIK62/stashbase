@@ -11,7 +11,13 @@ import { Providers } from '@/app/providers';
 import { App } from '@/app/shell';
 import type { GalleryEntry } from '@/features/gallery/public';
 import { appDependencies, galleryPort } from '@/test/fakes/app';
-import { projectApi, projectRegistrySnapshot, workspaceAdapters } from '@/test/fakes/workspace';
+import {
+  projectApi,
+  projectRegistrySnapshot,
+  workspaceAdapters,
+  githubImportApi,
+  projectLifecycle,
+} from '@/test/fakes/workspace';
 
 afterEach(cleanup);
 
@@ -34,9 +40,11 @@ function harness({ folderOpen }: { folderOpen: boolean }) {
   const copy = vi.fn(async () => '/project/Widget Handbook');
   const snapshot = projectRegistrySnapshot();
   const dependencies = appDependencies({
-    gallery: galleryPort({ copy, loadIndex: vi.fn(async () => [PUBLISHED]) }),
+    gallery: galleryPort({ loadIndex: vi.fn(async () => [PUBLISHED]) }),
     workspace: {
       adapters: workspaceAdapters({
+        githubImport: githubImportApi({ run: copy }),
+        lifecycle: projectLifecycle(),
         project: projectApi({
           load: vi.fn(async () => ({
             ...snapshot,
@@ -98,14 +106,15 @@ describe('Gallery shop', () => {
     // never need them, and they are one press away for the ones who do. Copy
     // is all the Gallery ever does with them: it never places composer text.
     expect(within(page).queryByText('Build wiki pages from these notes.')).toBeNull();
-    await user.click(within(page).getByRole('button', { name: 'Agent Instructions' }));
+    await user.click(within(page).getByRole('button', { name: 'Prompt' }));
     expect(within(page).getByText('Build wiki pages from these notes.')).not.toBeNull();
-    expect(within(page).getByRole('button', { name: 'Copy' })).not.toBeNull();
+    expect(within(page).getByRole('button', { name: 'Copy prompt' })).not.toBeNull();
 
     await user.click(within(page).getByRole('button', { name: 'Make a copy' }));
     await waitFor(() =>
       expect(copy).toHaveBeenCalledWith(
-        { name: 'Widget Handbook', repo: 'https://github.com/owner/widgets' },
+        'https://github.com/owner/widgets',
+        'Widget Handbook',
         expect.anything(),
       ),
     );

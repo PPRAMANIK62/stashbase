@@ -6,7 +6,6 @@ export interface ExactSearchRange {
 }
 
 export interface ExactSearchMatch {
-  readonly audioTimestampMs?: number;
   readonly line: number;
   readonly pdfPage?: number;
   readonly ranges: readonly ExactSearchRange[];
@@ -36,7 +35,6 @@ export interface ExactSearchRequest {
 export interface SearchNavigationIntent {
   readonly source: SourceReference;
   readonly target: {
-    readonly audioTimestampMs?: number;
     readonly caseSensitive: boolean;
     readonly line: number;
     readonly occurrenceIndex: number;
@@ -85,9 +83,6 @@ export function exactSearchNavigationIntent(
   return {
     source: occurrence.file.source,
     target: {
-      ...(occurrence.match.audioTimestampMs === undefined
-        ? {}
-        : { audioTimestampMs: occurrence.match.audioTimestampMs }),
       caseSensitive: request.caseSensitive,
       line: occurrence.match.line,
       occurrenceIndex: occurrence.occurrenceIndex,

@@ -129,7 +129,21 @@ export function Collapse({
             data-slot={slot}
             id={id}
             initial={{ height: 0, ...(fade === 'none' ? {} : { opacity: 0 }) }}
-            animate={{ height: height ?? 0, ...(fade === 'none' ? {} : { opacity: 1 }) }}
+            // The height target waits for the measurement, the way the kept
+            // box's does. A region that is already open when it mounts — a
+            // panel arriving with its screen, a section a page opens on — is
+            // put straight at this target by `initial={false}` above, so a
+            // height of zero standing in for the unmeasured content would
+            // make the first measurement a travel from nothing: the section
+            // would unroll itself on arrival, having never been closed.
+            // Unmeasured, the box simply keeps its content's own height, and
+            // the pixels landing a frame later are the height it already has.
+            // A real open still travels: entering through AnimatePresence
+            // applies `initial`, and zero is where that one starts from.
+            animate={{
+              ...(measured ? { height } : {}),
+              ...(fade === 'none' ? {} : { opacity: 1 }),
+            }}
             exit={fade === 'both' ? { height: 0, opacity: 0 } : { height: 0 }}
             transition={settle}
           >

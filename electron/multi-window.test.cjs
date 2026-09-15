@@ -370,29 +370,6 @@ test('folder registry finds an existing context, excludes the sender, and retire
   assert.equal(await registry.findByFolder('C:\\Users\\Ada\\Notes'), null);
 });
 
-test('window registry answers the initial folder spelling once, then forgets it', async () => {
-  const registry = createWindowRegistry({ platform: 'win32' });
-  const created = { name: 'created-for-notes' };
-  const bare = { name: 'bare' };
-  registry.add('window-1', created, 'C:\\Users\\Ada\\Notes');
-  registry.add('window-2', bare);
-
-  // The match key lowercases on Windows and the claim does not: a window
-  // created for a folder must reopen it under its reader's own spelling.
-  assert.equal(await registry.findByFolder('c:/users/ada/notes'), created);
-  assert.equal(registry.claimInitialFolder('window-1'), 'C:\\Users\\Ada\\Notes');
-
-  // One shot. The claim is spent, while the window stays matchable, so a
-  // reload cannot land again on a folder its reader has since left.
-  assert.equal(registry.claimInitialFolder('window-1'), null);
-  assert.equal(await registry.findByFolder('C:\\Users\\Ada\\Notes'), created);
-
-  // A window nobody named a folder for, and a window that is already gone,
-  // both answer the same ordinary "no folder".
-  assert.equal(registry.claimInitialFolder('window-2'), null);
-  assert.equal(registry.claimInitialFolder('missing'), null);
-});
-
 test('window registry resolves main-owned request authorization records', () => {
   const registry = createWindowRegistry({ platform: 'linux' });
   const window = { webContents: { id: 41 } };
@@ -446,7 +423,7 @@ test('OAuth return deep links have one exact, data-free authority', () => {
   }]);
 });
 
-test('folder action follows the user flow: focus another matching window or open a new one', async () => {
+test('folder entry focuses a matching window, including its initiating window', async () => {
   const registry = createWindowRegistry({ platform: 'linux' });
   const notes = {
     isDestroyed: () => false,
@@ -481,8 +458,8 @@ test('folder action follows the user flow: focus another matching window or open
       return { folder };
     },
   });
-  assert.equal(opened.action, 'opened');
-  assert.deepEqual(created, ['/work/notes']);
+  assert.equal(opened.action, 'focused');
+  assert.deepEqual(created, []);
 });
 
 test('window context cleanup retries transient transport failures', async () => {
@@ -732,7 +709,6 @@ test('POSIX registry keeps distinct folder names with trailing spaces distinct',
     const plain = {}, spaced = {};
     registry.add('plain', plain, '/workspace/notes');
     registry.add('spaced', spaced, '/workspace/notes ');
-    assert.equal(registry.claimInitialFolder('spaced'), '/workspace/notes ');
     assert.equal(await registry.findByFolder('/workspace/notes '), spaced);
     assert.deepEqual(await registry.windowsByFolder('/workspace/notes'), [plain]);
     registry.setFolder('plain', '/workspace/other ');
@@ -756,9 +732,8 @@ test('macOS folder matching follows real volume identity and keeps source spelli
   const stat = t.mock.method(fs, 'statSync', () => { throw new Error('native matching must yield'); });
   assert.equal(await registry.findByFolder(alias), sameDirectory ? existing : null);
   assert.deepEqual(await registry.windowsByFolder(alias), sameDirectory ? [existing] : []);
-  assert.equal(registry.claimInitialFolder('existing'), root);
   const result = await openOrFocusFolder({
-    registry, folder: alias, senderWindow: sender, createWindow: async () => ({}),
+    registry, folder: alias, senderWindow: sender, createWindow: async () => ({}), enterFolder: async () => {},
   });
   assert.equal(result.action, sameDirectory ? 'focused' : 'opened');
   stat.mock.restore();
@@ -794,4 +769,32 @@ test('a folder lookup discards a match that changed while a later disk probe wai
   registry.setFolder('first', second);
   release();
   assert.equal(await pending, null);
+});
+
+test('Welcome is reused and concurrent entry requests wait instead of allocating duplicate windows', async () => {
+  const registry = createWindowRegistry({ platform: 'linux' });
+  const makeWindow = () => ({ isDestroyed: () => false, show() {}, focus() {} });
+  const welcome = makeWindow();
+  registry.add('welcome', welcome);
+  let ready;
+  let entered = 0;
+  let created = 0;
+  const options = {
+    registry, folder: '/projects/Notes', senderWindow: welcome,
+    createWindow: async () => { created++; const win = makeWindow(); registry.add(`new-${created}`, win); return win; },
+    enterFolder: async () => { entered++; await new Promise((resolve) => { ready = resolve; }); },
+  };
+  const first = openOrFocusFolder(options);
+  const second = openOrFocusFolder(options);
+  await new Promise(setImmediate);
+  assert.equal(entered, 1);
+  assert.equal(created, 0);
+  ready();
+  assert.equal((await first).win, welcome);
+  assert.equal((await second).action, 'focused');
+  assert.equal(entered, 1);
+  const next = await openOrFocusFolder({ ...options, folder: '/projects/Other', enterFolder: async () => {} });
+  assert.equal(created, 1);
+  assert.notEqual(next.win, welcome);
+  assert.equal(registry.folderForWindow(welcome), '/projects/Notes');
 });

@@ -70,7 +70,6 @@ function renderWorkspace(
         onSignIn={vi.fn()}
         onReprocess={onReprocess}
         runtime={runtime}
-        scopeOutline={{ files: ['MISSION.md', 'notes.md'], folders: ['lessons'] }}
       />
     </div>,
     createTestQueryClient(),
@@ -82,9 +81,9 @@ describe('AgentWorkspace composer skills', () => {
   async function skillWorkspace() {
     const test = agentSessionPort();
     const { runtime } = renderWorkspace(test.port, undefined, agentContextPort());
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
-    await userEvent.click(screen.getByRole('button', { name: 'Provider: OpenQuill' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Provider: Default' }));
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     act(() => runtime.activeSession().start());
     return { ...test, runtime };
@@ -118,16 +117,21 @@ describe('AgentWorkspace composer skills', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() =>
-      expect(test.sent).toContainEqual({ kind: 'prompt', skill: 'review', text: '' }),
+      expect(test.sent).toContainEqual({
+        kind: 'prompt',
+        skill: 'review',
+        text: '',
+        titleHint: '/review',
+      }),
     );
     expect(test.runtime.activeSession().store.getState().skill).toBe(null);
-    expect(await screen.findByText('/review')).not.toBeNull();
+    expect((await screen.findAllByText('/review')).length).toBeGreaterThan(0);
   });
 
   it('leaves / as plain text for a runtime that runs no skills', async () => {
     const test = agentSessionPort();
     const { runtime } = renderWorkspace(test.port, undefined, agentContextPort());
-    await screen.findByText('From wiki to words.');
+    await screen.findByText('What’s on your mind?');
     await agentGateLifted();
     act(() => runtime.activeSession().start());
 

@@ -159,7 +159,7 @@ function FileChangeHarness() {
           const relative = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : path;
           return relative.startsWith('/') ? null : { folderPath: folder, path: relative };
         }}
-        tools={fileChangeTools}
+        steps={fileChangeTools}
       />
     </div>
   );
@@ -170,7 +170,7 @@ function AgentActivityHarness({ compact = false }: { compact?: boolean }) {
   const [decision, setDecision] = useState<AgentToolBlock>(permission);
   return (
     <div className={compact ? 'w-[20rem] space-y-4' : 'w-[34rem] space-y-5'}>
-      <AgentActivityGroup tools={tools} />
+      <AgentActivityGroup steps={tools} />
       <AgentPermissionCard
         onReply={(_toolUseId, _permissionId, allow) => {
           setDecision((tool) => ({
