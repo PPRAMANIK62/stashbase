@@ -60,15 +60,6 @@ describe('updateOffer', () => {
     ]);
   });
 
-  it('offers the release page beside an available update and beside a failure', () => {
-    expect(phasesWhere((status) => updateOffer(status).releasePageLabel !== null)).toEqual([
-      'available',
-      'error',
-    ]);
-    expect(updateOffer(STATUS.available).releasePageLabel).toBe("What's new");
-    expect(updateOffer(STATUS.error).releasePageLabel).toBe('Open the release page');
-  });
-
   it('names what each phase invites, and invites nothing in the rest', () => {
     expect(updateOffer(STATUS.available).action).toEqual({
       kind: 'primary',

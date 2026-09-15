@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import type {
   AccountPort,
@@ -25,6 +27,8 @@ const SETTINGS_SECTION_IDS = [
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
 export interface SettingsProps {
+  /** Optional app-composed development surface; absent in production. */
+  updatePreview?: ReactNode;
   telemetryApi?: TelemetryPort;
   /** The StashBase account, which the Agents section owns. */
   accountApi: AccountPort;

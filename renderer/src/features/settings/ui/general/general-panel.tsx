@@ -1,8 +1,11 @@
+import type { ReactNode } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import type { TelemetryPort } from '@/features/settings/application/telemetry-port';
 import type { LocalComponentViewModel } from '@/features/settings/hooks/use-local-component';
 import {
+  Disclosure,
   SettingsGroup,
   SettingsList,
   SettingsPane,
@@ -15,6 +18,7 @@ import { LocalComponentGroup } from './local-component-group';
 import { TelemetryGroup } from './telemetry-group';
 
 export interface GeneralPanelProps {
+  updatePreview?: ReactNode;
   telemetryApi?: TelemetryPort | undefined;
   onOpenExternal?: ((href: string) => void) | undefined;
   localComponent?: LocalComponentViewModel | null;
@@ -31,6 +35,7 @@ export function GeneralPanel({
   softwareUpdate,
   telemetryApi,
   onOpenExternal,
+  updatePreview,
 }: GeneralPanelProps) {
   return (
     <SettingsPane lede="App updates, local components, and support." title="General">
@@ -102,6 +107,11 @@ export function GeneralPanel({
           />
         </SettingsList>
       </SettingsGroup>
+      {updatePreview && (
+        <SettingsGroup title="Developer">
+          <Disclosure summary="Update notification preview">{updatePreview}</Disclosure>
+        </SettingsGroup>
+      )}
     </SettingsPane>
   );
 }

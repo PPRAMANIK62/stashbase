@@ -7,7 +7,7 @@
  * navigator itself only decides which of them is on screen.
  */
 import { Store } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
 import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
 import type { SidebarNavigatorState } from '@/app/composition/commands/use-workspace-commands';
@@ -64,6 +64,7 @@ export interface WorkspaceSidebarProps {
   navigator: SidebarNavigatorState;
   /** Opens the Gallery over this window. The folder stays where it is. */
   onBrowseGallery(): void;
+  updateNotice?: ReactNode;
   onReprocess(source: SourceReference): void;
   settings: SettingsCommand;
   sources: DocumentSources;
@@ -77,6 +78,7 @@ export function WorkspaceSidebar({
   folder,
   navigator: sidebar,
   onBrowseGallery,
+  updateNotice,
   onReprocess,
   settings,
   sources,
@@ -248,6 +250,7 @@ export function WorkspaceSidebar({
         {/* pt-0: the list above fades out to the region's edge, and the first
          *  rule's own 4px margin is all the room it wants before the rule. */}
         <SidebarFooter className="pt-0">
+          {updateNotice}
           <SidebarMenu>
             {/* Rules bracket the foot: one sets the Gallery shelf off from the
              *  panel above, one sets the person off from the shelf. Settings

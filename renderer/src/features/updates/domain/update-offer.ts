@@ -24,8 +24,6 @@ interface UpdateOfferFor<Phase extends UpdatePhaseName> {
   /** Whether the window volunteers this on its own. A phase the window stays
    *  quiet about is only an answer Settings gives when asked. */
   readonly announce: boolean;
-  /** The secondary route beside the action, or null where there is none. */
-  readonly releasePageLabel: string | null;
   sentence(status: Extract<UpdateStatus, { phase: Phase }>): string;
 }
 
@@ -33,7 +31,6 @@ interface UpdateOfferFor<Phase extends UpdatePhaseName> {
 export interface UpdateOffer {
   readonly action: UpdateAction | null;
   readonly announce: boolean;
-  readonly releasePageLabel: string | null;
   readonly sentence: string;
 }
 
@@ -41,37 +38,31 @@ const UPDATE_OFFERS: { readonly [Phase in UpdatePhaseName]: UpdateOfferFor<Phase
   unsupported: {
     action: null,
     announce: false,
-    releasePageLabel: null,
     sentence: () => 'This build of StashBase does not check for updates.',
   },
   idle: {
     action: null,
     announce: false,
-    releasePageLabel: null,
     sentence: () => 'No update check yet.',
   },
   checking: {
     action: null,
     announce: false,
-    releasePageLabel: null,
     sentence: () => 'Checking for updates…',
   },
   current: {
     action: null,
     announce: false,
-    releasePageLabel: null,
     sentence: () => 'StashBase is up to date.',
   },
   available: {
     action: { kind: 'primary', label: 'Update and restart' },
     announce: true,
-    releasePageLabel: "What's new",
     sentence: (status) => `StashBase ${status.version} is available.`,
   },
   downloading: {
     action: null,
     announce: true,
-    releasePageLabel: null,
     sentence: (status) =>
       status.percent === null
         ? `Downloading StashBase ${status.version}…`
@@ -80,13 +71,11 @@ const UPDATE_OFFERS: { readonly [Phase in UpdatePhaseName]: UpdateOfferFor<Phase
   ready: {
     action: { kind: 'primary', label: 'Install and restart' },
     announce: true,
-    releasePageLabel: null,
     sentence: (status) => `StashBase ${status.version} is ready to install.`,
   },
   installing: {
     action: null,
     announce: true,
-    releasePageLabel: null,
     sentence: () => 'Installing the update. StashBase will restart.',
   },
   // Deliberately generic. Main publishes this same phase for a check that
@@ -95,7 +84,6 @@ const UPDATE_OFFERS: { readonly [Phase in UpdatePhaseName]: UpdateOfferFor<Phase
   error: {
     action: { kind: 'check', label: 'Try again' },
     announce: true,
-    releasePageLabel: 'Open the release page',
     sentence: () => 'StashBase could not finish the update.',
   },
 };
@@ -107,7 +95,6 @@ function resolved<Phase extends UpdatePhaseName>(
   return {
     action: row.action,
     announce: row.announce,
-    releasePageLabel: row.releasePageLabel,
     sentence: row.sentence(status),
   };
 }

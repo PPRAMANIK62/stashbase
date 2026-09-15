@@ -1,9 +1,9 @@
 /**
- * What the notice strip volunteers about updating, and nothing more.
+ * What the sidebar notice volunteers about updating, and nothing more.
  *
- * The strip never decides what to say. The phase table owns every sentence,
+ * The sidebar notice never decides what to say. The phase table owns every sentence,
  * every button word, and the decision whether a phase is worth interrupting
- * for, so this hook is left with the one question that is about the strip:
+ * for, so this hook is left with the one question that is about the sidebar notice:
  * whether the reader still wants to hear it.
  */
 import { useCallback, useState } from 'react';
@@ -17,7 +17,6 @@ import type { FailureView } from '@/shared/domain/feature-error';
 export interface UpdateNoticeOffer {
   readonly actionLabel: string | null;
   readonly message: string;
-  readonly releasePageLabel: string | null;
 }
 
 export interface UpdateNoticeViewModel {
@@ -26,7 +25,6 @@ export interface UpdateNoticeViewModel {
   readonly offer: UpdateNoticeOffer | null;
   act(): void;
   dismiss(): void;
-  openReleasePage(): void;
 }
 
 export function useUpdateNotice(port: UpdatesPort | null): UpdateNoticeViewModel {
@@ -48,22 +46,16 @@ export function useUpdateNotice(port: UpdatesPort | null): UpdateNoticeViewModel
 
   const dismiss = useCallback(() => setDismissed(key), [key]);
 
-  const openReleasePage = useCallback(() => {
-    run((updater) => updater.openReleasePage());
-  }, [run]);
-
   return {
     act,
     dismiss,
-    failure,
+    failure: dismissed === key ? null : failure,
     offer:
       offer.announce && dismissed !== key
         ? {
             actionLabel: action?.label ?? null,
             message: offer.sentence,
-            releasePageLabel: offer.releasePageLabel,
           }
         : null,
-    openReleasePage,
   };
 }

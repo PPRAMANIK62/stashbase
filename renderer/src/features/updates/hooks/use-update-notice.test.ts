@@ -63,7 +63,6 @@ describe('useUpdateNotice', () => {
     expect(result.current.offer).toEqual({
       actionLabel: 'Update and restart',
       message: 'StashBase 1.5.0 is available.',
-      releasePageLabel: "What's new",
     });
   });
 
@@ -122,17 +121,6 @@ describe('useUpdateNotice', () => {
     expect(updates.port.runPrimaryAction).not.toHaveBeenCalled();
   });
 
-  it('opens the release page through the port', async () => {
-    const updates = harness(accepted({ phase: 'error' }));
-    const { result } = renderHook(() => useUpdateNotice(updates.port));
-    await waitFor(() =>
-      expect(result.current.offer?.releasePageLabel).toBe('Open the release page'),
-    );
-
-    await act(async () => result.current.openReleasePage());
-    expect(updates.port.openReleasePage).toHaveBeenCalledTimes(1);
-  });
-
   it('names a refused command and leaves the offer standing', async () => {
     const updates = harness(
       accepted({ phase: 'ready', version: '1.5.0' }),
@@ -150,6 +138,9 @@ describe('useUpdateNotice', () => {
     );
     // Nothing happened, so the window still has the same thing to offer.
     expect(result.current.offer?.message).toBe('StashBase 1.5.0 is ready to install.');
+    act(() => result.current.dismiss());
+    expect(result.current.offer).toBeNull();
+    expect(result.current.failure).toBeNull();
   });
 
   it('stops listening on unmount, so a later transition reaches nothing', async () => {
@@ -170,7 +161,6 @@ describe('useUpdateNotice', () => {
     act(() => {
       result.current.act();
       result.current.dismiss();
-      result.current.openReleasePage();
     });
     expect(result.current.offer).toBeNull();
     expect(result.current.failure).toBeNull();

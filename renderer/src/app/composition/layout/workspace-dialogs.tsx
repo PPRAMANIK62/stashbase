@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import type { SettingsCommand } from '@/app/composition/commands/use-workspace-commands';
 import { useDependencies } from '@/app/composition/dependency-context';
 import type { DocumentTabsRuntime } from '@/features/documents/public';
@@ -12,11 +14,13 @@ export function WorkspaceDialogs({
   documents,
   quickOpen,
   settings,
+  updatePreview,
   workspace,
 }: {
   documents: DocumentTabsRuntime | null;
   quickOpen: { close(): void; open: boolean };
   settings: SettingsCommand;
+  updatePreview?: ReactNode;
   workspace: WorkspaceRuntime | null;
 }) {
   const dependencies = useDependencies();
@@ -48,6 +52,7 @@ export function WorkspaceDialogs({
         section={settings.section}
         softwareUpdate={dependencies.updates ? softwareUpdate : null}
         transcriptionApi={dependencies.settings.transcriptionApi}
+        updatePreview={updatePreview}
       />
     </>
   );

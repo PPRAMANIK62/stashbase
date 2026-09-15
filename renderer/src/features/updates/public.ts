@@ -1,13 +1,9 @@
-/**
- * The Updates feature's whole surface to `renderer/src/app`.
- *
- * One port, two view models, one strip. The window volunteers an offer through
- * `UpdateNotice`; Settings answers the same question on request through
- * `useSoftwareUpdate`, whose row is named in `@/shared/domain/software-update`
- * so the Settings feature can render it without importing this one.
- */
+/** Update adapters, notice and Settings models, and development preview controls.
+ * App composition binds the notice into the sidebar and the controls into Settings. */
 export type { UpdatesPort } from './application/ports';
 export { createUpdatesAdapter } from './infrastructure/updates-bridge';
 export { useSoftwareUpdate } from './hooks/use-software-update';
 export { useUpdateNotice } from './hooks/use-update-notice';
 export { UpdateNotice } from './ui/update-notice';
+export { UpdatePreview } from './ui/update-preview';
+export { useUpdatePreview } from './hooks/use-update-preview';

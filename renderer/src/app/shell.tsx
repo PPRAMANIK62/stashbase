@@ -15,7 +15,12 @@ import {
 } from '@/features/documents/public';
 import { useFolderStatus } from '@/features/preparation/public';
 import { AccountProvider, useSearchKeyConfigured } from '@/features/settings/public';
-import { UpdateNotice, useUpdateNotice } from '@/features/updates/public';
+import {
+  UpdateNotice,
+  UpdatePreview,
+  useUpdateNotice,
+  useUpdatePreview,
+} from '@/features/updates/public';
 import {
   ProjectWelcome,
   useFiles,
@@ -134,6 +139,7 @@ function WorkspaceWindow() {
 
   const gallery = useGalleryShop(dependencies.gallery);
   const updateNotice = useUpdateNotice(dependencies.updates);
+  const updatePreview = useUpdatePreview(import.meta.env.DEV);
   // A new draft is the tree's to make, beside its selection, and its name is
   // typed in the tree, so the request brings the Files panel on screen
   // before the tree takes it up. It starts from the New tab's page; the
@@ -160,6 +166,19 @@ function WorkspaceWindow() {
               documents={documents}
               quickOpen={chrome.quickOpen}
               settings={chrome.settings}
+              updatePreview={
+                import.meta.env.DEV ? (
+                  <UpdatePreview
+                    active={updatePreview.notice !== null}
+                    onShow={(previewStatus) => {
+                      updatePreview.show(previewStatus);
+                      session.runtime.setSidebarOpen(true);
+                      chrome.settings.close();
+                    }}
+                    onStop={updatePreview.stop}
+                  />
+                ) : null
+              }
               workspace={workspace}
             />
           </>
@@ -199,6 +218,12 @@ function WorkspaceWindow() {
                 : null,
             }}
             navigator={chrome.navigator}
+            updateNotice={
+              <UpdateNotice
+                notice={updatePreview.notice ?? updateNotice}
+                preview={updatePreview.notice !== null}
+              />
+            }
             onBrowseGallery={gallery.browse}
             onReprocess={refresh.reprocess}
             settings={chrome.settings}
@@ -218,7 +243,6 @@ function WorkspaceWindow() {
             mode={chrome.navigator.mode}
           />
         }
-        updateNotice={<UpdateNotice notice={updateNotice} />}
         welcome={
           <ProjectWelcome
             {...dependencies.project}
