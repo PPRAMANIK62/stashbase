@@ -21,12 +21,11 @@ search, and MCP supply context when you need it; building a wiki is optional.
 collaboration, local-file preparation, indexing, search, and MCP.
 **Coming soon:** document-specific inline diff for fine revision.
 
-## Demo
+## Product Preview
 
-Browse local sources and work with an Agent in the same workspace. This demo
-uses the bundled guides to answer **“How do I use StashBase?”**
+![StashBase design prototype: reviewing suggested inline document revisions alongside Agent chat](assets/readme/product-preview.png)
 
-![StashBase demo: browsing local guides and asking OpenQuill how to use StashBase](assets/readme/demo.gif)
+*Design prototype. Inline document revisions are coming soon.*
 
 ## From Ideas to Writing
 
