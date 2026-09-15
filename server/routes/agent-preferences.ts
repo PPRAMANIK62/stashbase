@@ -22,9 +22,9 @@ export function mount(app: express.Express): void {
       const scope = await exactRegisteredFolderRootAsync(parsed.data.scope);
       if (!scope) return res.status(404).json({ error: 'Project is no longer registered.' });
       const config = readAppConfigStrict();
-      if (!config.recentFolders?.some(folder => folder.path === scope)) return res.status(404).json({ error: 'Project is no longer registered.' });
+      if (!config.recentFolders?.some(folder => filesystemPath.equal(folder.path, scope))) return res.status(404).json({ error: 'Project is no longer registered.' });
       const existing = agentPreferencesSchema.parse(config.agentPreferences ?? []);
-      config.agentPreferences = [...existing.filter(entry => entry.scope !== scope), { scope, agent }];
+      config.agentPreferences = [...existing.filter(entry => !filesystemPath.equal(entry.scope, scope)), { scope, agent }];
       writeAppConfigStrict(config);
       res.json({ scope, agent });
     } catch (error) { sendError(res, error); }

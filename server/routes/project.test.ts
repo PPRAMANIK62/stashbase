@@ -165,7 +165,7 @@ test('project routes return authoritative membership and open the selected folde
   const lostSnapshot = await lost.json() as { current: unknown; homeDir: string; recent: { path: string }[] };
   assert.equal(lostSnapshot.current, null);
   assert.equal(lostSnapshot.homeDir, testHome);
-  assert.equal(lostSnapshot.recent[0].path, missingFolder);
+  assert.equal(lostSnapshot.recent[0].path, filesystemPath.absolute(missingFolder));
 
   const forgotMissing = await fetch(`${baseUrl}/api/projects/remove`, {
     body: JSON.stringify({ path: missingFolder }),

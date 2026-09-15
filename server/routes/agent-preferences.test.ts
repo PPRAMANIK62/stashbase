@@ -16,6 +16,7 @@ test('project Agent choices persist in isolation, reject unregistered scopes, an
       import express from 'express';
       const config = await import('./server/app-config.ts');
       const { mount } = await import('./server/routes/agent-preferences.ts');
+      const { filesystemPath } = await import('./server/filesystem-path.ts');
       const project = path.join(os.homedir(), 'project');
       const nested = path.join(project, 'nested');
       fs.mkdirSync(nested, { recursive: true });
@@ -30,11 +31,11 @@ test('project Agent choices persist in isolation, reject unregistered scopes, an
       assert.equal((await save(nested, 'claude')).status, 200);
       assert.equal((await save('/unregistered', 'codex')).status, 404);
       assert.equal((await save(project, 'other')).status, 400);
-      assert.deepEqual(await (await fetch(url)).json(), [{scope:project,agent:'codex'}, {scope:nested,agent:'claude'}]);
+      assert.deepEqual(await (await fetch(url)).json(), [{scope:filesystemPath.absolute(project),agent:'codex'}, {scope:filesystemPath.absolute(nested),agent:'claude'}]);
       assert.equal(config.readAppConfigStrict().workspace.showHiddenFiles, true);
       const { removeRecentAsync } = await import('./server/folder.ts');
       await removeRecentAsync(project);
-      assert.deepEqual(config.readAppConfigStrict().agentPreferences, [{scope:nested,agent:'claude'}]);
+      assert.deepEqual(config.readAppConfigStrict().agentPreferences, [{scope:filesystemPath.absolute(nested),agent:'claude'}]);
       assert.ok(fs.existsSync(nested));
       const file = path.join(os.homedir(), '.stashbase/config.json');
       fs.writeFileSync(file, '{broken');

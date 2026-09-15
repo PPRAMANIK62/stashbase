@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { filesystemPath } from './filesystem-path.ts';
 
 
 test('conversion progress and durable failures use filesystem path identity', async (t) => {
@@ -80,7 +81,7 @@ test('unavailable status storage rejects cancellation and retries its durable wr
   fs.rmSync(database);
   assert.equal(status.isPendingOrFailed(source), true);
   closeStateDb();
-  assert.equal(status.readAll()[source]?.status, 'cancelled');
+  assert.equal(status.readAll()[filesystemPath.absolute(source)]?.status, 'cancelled');
   status.clearRecord(source);
   assert.equal(status.isPendingOrFailed(source), false);
 });
