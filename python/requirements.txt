@@ -2,7 +2,7 @@
 # `<project>/python/.venv.nosync/` by the `setup:python` npm script.
 #
 # MFS owns the embedded catalog, chunk index, and search implementation. Pin
-# the exact reviewed upstream revision: this integration uses its public MFS,
+# an upstream release archive: this integration uses its public MFS,
 # Internal namespace, Processor, Chunker, and Embedder interfaces.
 #
 # The remaining packages are used directly by the StashBase adapter:
@@ -17,7 +17,7 @@
 # packaged daemon so normal setup/release avoids their document-parser and
 # computer-vision payloads.
 #
-mfs @ git+https://github.com/liliu-z/mfs.git@357fe2525d663f8d6b510db16b28c209f42f11b9
+mfs @ https://github.com/liliu-z/mfs/archive/refs/tags/v0.1.0.tar.gz
 openai>=1.0
 numpy>=1.26
 blake3>=1.0

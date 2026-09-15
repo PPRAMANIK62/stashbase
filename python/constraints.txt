@@ -20,7 +20,7 @@ httpx2-jsfetch==1.0 ; sys_platform == 'emscripten'
 idna==3.19
 jiter==0.17.0
 macholib==1.16.4 ; sys_platform == 'darwin'
-mfs @ git+https://github.com/liliu-z/mfs.git@357fe2525d663f8d6b510db16b28c209f42f11b9
+mfs @ https://github.com/liliu-z/mfs/archive/refs/tags/v0.1.0.tar.gz
 milvus-lite==3.2.1
 networkx==3.6.1
 numpy==2.5.3
@@ -67,4 +67,4 @@ typing-inspection==0.4.4
 tzdata==2026.4 ; sys_platform == 'emscripten' or sys_platform == 'win32'
 urllib3==2.7.0
 
-# requirements-sha256: f717d469a0c34dc8581b354f0d4079f42bbf0eb69d4c9d88668beea71c3fe1b1
+# requirements-sha256: 16fc1276723ad2c8d82a2295d8585620478689444a86eacb511c1d5a6333c223
