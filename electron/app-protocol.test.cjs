@@ -79,6 +79,10 @@ test('app protocol attaches restrictive CSP to packaged asset responses', async 
     csp.split('; ').find((directive) => directive.startsWith('frame-src ')),
     'frame-src http://127.0.0.1:8090/asset/ http://127.0.0.1:8090/asset-derived/',
   );
+  assert.equal(
+    csp.split('; ').find((directive) => directive.startsWith('img-src ')),
+    "img-src 'self' data: blob: http://127.0.0.1:8090/api/gallery/image",
+  );
   assert.equal(result.headers.get('x-content-type-options'), 'nosniff');
 
   // The bug-report review page is a second document on the same origin, so it

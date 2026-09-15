@@ -26,7 +26,9 @@ function client(response: { body: unknown; status?: number } | Error): HttpClien
 }
 
 const load = (transport: HttpClient) =>
-  createGalleryIndexAdapter(transport).loadIndex(new AbortController().signal);
+  createGalleryIndexAdapter(transport, 'http://127.0.0.1:18196').loadIndex(
+    new AbortController().signal,
+  );
 
 describe('gallery index adapter', () => {
   it('makes every optional slot explicit rather than absent', async () => {
@@ -50,8 +52,8 @@ describe('gallery index adapter', () => {
   });
 
   it('points every published screenshot at the daemon proxy', async () => {
-    // The renderer's CSP pins img-src to 'self'; a CDN URL reaching a view
-    // would simply not load, silently.
+    // app://renderer serves bundled files; image requests must use the daemon
+    // origin, independently of the page's origin and the production port.
     const entries = await load(
       client({
         body: {
@@ -61,7 +63,7 @@ describe('gallery index adapter', () => {
       }),
     );
     expect(entries?.[0]?.screenshots).toEqual([
-      '/api/gallery/image?src=https%3A%2F%2Fassets.stashbase.ai%2Fa.png',
+      'http://127.0.0.1:18196/api/gallery/image?src=https%3A%2F%2Fassets.stashbase.ai%2Fa.png',
       '/local.png',
     ]);
   });

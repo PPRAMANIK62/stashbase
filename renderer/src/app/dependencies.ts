@@ -175,7 +175,7 @@ export function createDependencies(): AppDependencies {
         }
         return path;
       },
-      ...createGalleryIndexAdapter(http),
+      ...createGalleryIndexAdapter(http, bridge.runtime.serverOrigin),
     },
     project: {
       api: workspace.project,

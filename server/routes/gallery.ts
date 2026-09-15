@@ -1,8 +1,8 @@
 /**
  * Gallery proxy routes.
  *
- * The renderer's CSP pins `connect-src` and `img-src` to 'self' — it can
- * never reach the gallery CDN directly, by design. These two routes are
+ * The renderer's CSP permits only the local service for Gallery requests;
+ * it cannot reach the gallery CDN directly. These two routes are
  * the sanctioned path: the daemon fetches the published index and the
  * curated screenshots, and the renderer talks only to localhost. The
  * image route validates the normalized CDN origin and repository path and

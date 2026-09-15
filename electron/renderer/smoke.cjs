@@ -19,6 +19,7 @@ const {
   secureApplicationWindow,
 } = require('../window-security.cjs');
 const { installRequestAuthorization } = require('./requests.cjs');
+const { serveGalleryFixture, checkGalleryImages } = require('./gallery-smoke.cjs');
 
 const smokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-boundary-'));
 app.setPath('userData', path.join(smokeRoot, 'profile'));
@@ -46,6 +47,7 @@ app
         response.end();
         return;
       }
+      if (serveGalleryFixture(request, response)) return;
       response.setHeader('Content-Type', 'application/json');
       receivedProjectRequest = {
         method: request.method,
@@ -372,6 +374,9 @@ app
       windowId: 'replacement-smoke-window',
     });
     assert.equal(activeFolders.get(window), null);
+
+    phase = 'Gallery image loading';
+    await checkGalleryImages(window, serverOrigin);
 
     projectMembers = [
       {
