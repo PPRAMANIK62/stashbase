@@ -28,6 +28,20 @@ binds folders into the daemon. Generation replacement waits for old owners to
 retire; late callbacks cannot mutate replacement state. Cleanup attempts every
 owner independently, even when one fails.
 
+## Shared Capability Owners
+
+Use this table to start horizontal review, then follow callers in code. These
+are responsibility boundaries, not a claim that every path is already unified.
+Journey-specific entry points and evidence stay in [Journey Coverage](journey-coverage.md).
+
+| Product capability | Engineering ownership and seams |
+|---|---|
+| [Project entry and lifetime](../design-docs/capabilities/project-entry.md) | Renderer coordinates entry; Electron selects windows and hands off; Node validates directory identity and membership. See [project scope](#project-scope-and-paths) and [import publication](#import-publication). |
+| [Project files](../design-docs/capabilities/project-files.md) | Renderer owns live drafts; Node owns source/version transactions shared by HTTP, Agent, and MCP; Electron gates window release. See [source transactions](#source-transactions) and [draft durability](#draft-durability). |
+| [Agent sessions](../design-docs/capabilities/agent-sessions.md) | Renderer owns draft/turn interaction; Node owns session routing and adapter lifetime; native runtimes own their sessions and execution. See [sessions and permissions](#agent-sessions-and-permissions). |
+| [Project context](../design-docs/capabilities/project-context.md) | Node schedules preparation and binds project scope; Python/MFS owns published index state and retrieval. See [preparation and retrieval](#preparation-and-retrieval). |
+| [Account and settings](../design-docs/capabilities/account-settings.md) | Node owns persistent settings, account state, and external credentials; renderer owns scoped interaction. See [credentials and access](#credentials-and-external-access) and [native lifecycle](#native-lifecycle-and-updates). |
+
 ## Project Scope and Paths
 
 - One registered folder is one search namespace. Shared storage is not a global
@@ -45,8 +59,8 @@ owner independently, even when one fails.
   Directory absence never silently removes membership or favorites.
 - Project creation stays beneath the default home or an authorized location.
   Entry and Agent startup never seed or rewrite user-owned instruction files.
-  Introductory content seeds only a pristine default home; its durable latch
-  preserves deliberate deletion/removal.
+  Startup creates only the default home directory; it never populates it with
+  sample content or registers projects automatically.
 - Removing membership preserves source files and independently registered nested
   projects, including temporarily missing ones. Gate overlapping removal/open
   operations, retire background work, clean owned state, and remove membership
@@ -55,10 +69,17 @@ owner independently, even when one fails.
   That does not grant preparation, retrieval, or MCP access. Derived artifacts
   never become visible source results or writable targets.
 
+The shared entry experience is owned by [Entering a Project](../design-docs/capabilities/project-entry.md).
+The renderer owns one acquisition/entry operation per window. Electron serializes
+window selection, includes the initiating window in identity matching, and waits
+for the destination renderer's workspace acknowledgement. Entry cancellation and
+window closure retire the handoff; an occupied window keeps its existing work.
+Session restoration restores presentation only and never initiates project entry.
+
 ## Source Transactions
 
 HTTP, Agent, and MCP adapters share file/version authorities. Source capability
-follows the [format matrix](../design-docs/design/writing-workspace.md#format-capability-matrix);
+follows the [format matrix](../design-docs/capabilities/project-files.md#format-capability-matrix);
 preview, content editing, and rename/delete are separate permissions.
 
 - Read content/version from one bounded snapshot. Hash complete bytes, not mtime.
@@ -66,9 +87,9 @@ preview, content editing, and rename/delete are separate permissions.
   publishing. The queue does not provide OS compare-and-swap against external writers.
 - A live editor value is save authority before a dirty badge renders. Navigation,
   folder changes, and native context release cannot skip a fresh edit.
-- Conflict preserves both dirty and disk text until explicit reload, overwrite,
-  or merge. Never automatically retry without the base version. Merge remains a
-  dirty draft against the newer version; competing decisions serialize.
+- Conflict preserves both dirty and disk text until Use disk version, Keep my
+  version, or Merge. Never automatically retry without the base version. Merge
+  drafts require explicit completion; competing decisions serialize.
 - After publication, save waits for projection acceptance, not embeddings.
   Index failure is a save warning, not rollback. Identical saves retry projection
   maintenance. Empty/excluded/unreadable current text cannot expose an old result
@@ -78,7 +99,8 @@ preview, content editing, and rename/delete are separate permissions.
   literally. Invalid UTF-8 is never rewritten lossily. Agent text writes reject
   unintended control bytes without consuming valid literal backslashes.
 - Rename/move/delete validate before cancelling work, await native-handle release,
-  mutate, retire old derived/index identity, then rediscover and notify. Generic
+  mutate, retire current AppData-derived/index identity, then rediscover and notify.
+  Retired extraction filenames never authorize sibling-file migration or deletion. Generic
   Workbench mutations do not broaden Agent content permissions.
 - Link rewrites plan against versions before rename and apply through the shared
   transaction owner. Rollback restores only bytes it still owns. Current cascade
@@ -95,13 +117,22 @@ Inspection and cancellation happen before committing registration.
 Publication and rollback track owned filesystem identities. Preserve concurrent
 edits, replacements, and unrelated additions; never recursively delete an
 ambiguously owned target. Register a successful acquisition before returning its
-path. A later window-open failure keeps the copy registered. Directory publication
+path. A later window-open failure keeps the copy registered and retries entry
+without another download. Window-scoped import receipts recover a lost HTTP
+response; an unknown receipt never authorizes replaying the copy. Explicit cancel
+can overtake POST and remains effective. Recent snapshots retain unavailable
+members until explicit removal. Directory publication
 and exclusive-copy fallback are not atomically visible; tests prove specific
 races, not protection against every adversarial syscall interleaving.
 
 ### Draft Durability
 
-Document text becomes durable through ordinary versioned saves. Close, project
+Document text becomes durable through ordinary versioned saves. The document
+runtime schedules autosave independently of mounted viewers. Browsing and mode
+switches retain work without a save barrier; close and project/window release
+settle it. Merge drafts stay outside autosave until explicit completion against
+the reviewed version; both unresolved markers and save failure retain the draft.
+Keep-my-version uses that same version check, never an unconditional overwrite. Close, project
 switch, and update barriers must finish those saves or retain the live window
 and its dirty buffers. Crash recovery snapshots and their OS-protected key store
 are removed: startup never imports or calls Electron safeStorage, and no recovery
@@ -120,27 +151,35 @@ vector indexing. It sends complete text into MFS Internal namespaces; MFS alone
 owns revisions, unchanged classification, chunking, and index status. Do not add
 a second projection ledger or query MFS implementation tables.
 
+MFS dependency updates follow published upstream releases. Pin the versioned
+release archive in Python requirements and constraints; setup verifies both its
+source URL and installed package version.
+
 - Completion is format-specific and current-source-bound: PDF needs its terminal
-  marker; DOCX needs sanitized marked output with text; media needs valid
-  structured transcript plus marked timestamped text. Empty completed OCR is a
-  successful non-searchable result. Checkpoints and playback previews are not completion.
+  marker; DOCX needs sanitized marked output with text. Empty completed OCR is a
+  successful non-searchable result. Checkpoints are not completion. Media playback never creates prepared text.
 - One process scheduler owns capacity and prioritizes explicit interaction, open
   projects, then background work. Cooperative yield preserves task identity while
-  releasing capacity. User Cancel is durable until Reprocess; shutdown/mutation
+  releasing capacity. Status storage errors fail closed and reject cancellation
+  acknowledgement. Pending terminal writes retry after storage repair before
+  admission resumes; an unrepaired process crash cannot preserve those writes.
+  User Cancel is durable until Reprocess; shutdown/mutation
   interruption remains recoverable. Cancel the full native process tree and await
   handle release. Optional helpers must not block browsing or steal native focus.
-- A resumed media attempt keeps its captured provider/model/language and urgency,
-  rechecks availability, and respects cancellation. Reprocess validates dependencies
-  before resetting output. Settings changes govern future attempts.
 - Reconcile is folder-explicit and rediscovers lost in-memory work. Apply common
   hidden/dependency exclusions before traversal and mutation-triggered scheduling.
-  Queuing invalidates stale final output; source removal retires all owned artifacts.
+  An incomplete directory scan fails reconciliation before unseen projections can
+  be removed. Queuing invalidates stale final output; source removal retires all
+  owned artifacts.
 - The longest registered folder owns a source namespace. Nested binding replay
   retires ancestor projections in order with admission. Daemon readiness waits
   for current config/bindings; reset/removal races retry the authoritative operation
   once from bind instead of recording expected retirement as source failure.
 - Existing namespaces remain usable for exact retrieval without an embedding key.
-  Admission does not await semantic builds. Configuration changes supersede old
+  Direct reconcile and prepared-text admission acknowledge accepted revisions
+  without awaiting semantic builds; completed parsing releases its lane and text.
+  Typed daemon retirement errors cross per-file handlers so the reconcile owner
+  can rebind and retry. Configuration changes supersede old
   credentials/generations; store deletion failure must propagate.
 - UI **By keyword / By meaning** maps to internal grep/hybrid. Active HTTP/MCP
   `keyword`/`semantic` values remain protocol vocabulary. Omitted mode is resolved
@@ -159,9 +198,10 @@ a second projection ledger or query MFS implementation tables.
 One PDF/OCR installation owner shares demand and waiters. Cost/status reads never
 start downloads. Waiting conversions yield their lane. A process makes one
 automatic demand attempt; failure has no timer retry. A durable demand latch
-permits one next-launch attempt; Settings Retry starts one shared attempt.
-Cancellation removes source demand; explicit/startup downloads have component
-ownership. Shutdown retains unfinished demand.
+permits one next-launch attempt; Retry beside a waiting PDF/image starts one shared attempt.
+Cancellation removes source demand and clears the durable latch when its last
+source waiter leaves. Explicit/startup downloads have component ownership and
+survive source cancellation. Shutdown retains unfinished demand.
 
 Only the app's embedded version/platform/asset/size/hash manifest authorizes
 bytes. Verify before confined, bounded extraction and atomic versioned publication;
@@ -172,38 +212,61 @@ Signing and release publication belong to [Release Runbook](release-pipeline.md)
 
 - Boot performs bounded asynchronous discovery/auth/MCP preparation, never install
   or login. Explicit installation runs only the selected runtime's official
-  installer. Preparation/reset/shutdown share one cancellable flight per runtime.
+  installer. Preparation/shutdown share one cancellable flight per runtime.
   Stage/code/retryability are structured; the renderer never parses error prose.
-- User-installed CLIs keep their native account/history ownership. System installs
-  are never uninstalled by StashBase. Legacy private-runtime cleanup is bounded
-  to AppData and remains subject to the previous-version data policy.
+- User-installed CLIs keep their native account/history ownership. StashBase discovers provider-owned
+  installations and never uninstalls them; AppData stores temporary installer
+  scripts, not a second installation. Valid login-shell discoveries remain usable
+  while their executable exists. Session failures do not disable the runtime.
 - Installer completion means successful native exit plus verified discoverable
   output. Own temporary scripts and descendant cancellation; neither cleanup nor
   shell wrappers may mask failure. Do not redirect official installs into private
   paths or destructively rewrite user PATH. Platform details live beside the installer.
+- Codex MCP setup parses TOML and replaces only StashBase table ranges, preserving
+  unrelated configuration. Invalid or unsupported configuration fails untouched.
 - Each OpenQuill chat owns an authenticated loopback OpenCode process; each Codex
-  chat owns its app-server/thread. History readers have separate ownership.
+  chat owns its app-server/thread. History readers have separate ownership. All Codex app-server
+  owners share retirement that waits for exit and escalates process-tree termination;
+  shutdown also awaits readers and already-retiring processes.
   Process death settles pending RPCs/turns, and generation guards reject late
   messages. An ambiguous timed-out start retires its generation before retry.
   Claude replacement waits for native iterator/query cleanup after verifying scope.
+- Project Agent preferences are explicit choices in Node-owned app config, keyed
+  by registered project scope. Readiness and history restore never write them.
+  Missing preference means Default; failed preference reads/writes remain visible.
+  Access requested on Send retains a scope/session/draft snapshot and cancellation
+  owner. Only confirmed readiness may continue that same submission once; navigation,
+  edits, cancellation, and disposal reject late completions. Setup HTTP 202 is an
+  acknowledgement to poll, not permission to initialize or send early.
 - Unstarted means no session/transcript/turn; blank also means no pending user work.
   Blank chats may follow the window and be reused; user work pins scope. Runtime
-  adoption preserves draft/source paths, not transient upload bytes. Mode changes
+  adoption preserves drafts, source bindings, and transient upload bytes. Catalog
+  connections before the first request may be replaced when changing Agent. Mode changes
   never remount ongoing work merely to change presentation.
 - Started sessions survive window folder switches. Member removal retires only
   bound sessions, reports a structured scope-removed event before closure, preserves
   transcripts, and rejects queued/late work. Expected retirement never reconnects.
-- Native history is authoritative. Scope overrides persist before emitting rebind;
-  only an attributed live unbound chat may move after explicit project creation.
-  Persistence failure returns the registered project without rebinding. OpenQuill's
-  incomplete native rebind remains a J11 gap.
+- History restore joins repeated requests for the same project/Agent/native id.
+  Mounted titles carry a manual-rename flag; first submissions supply a fallback
+  title hint. Rename mutations serialize before publishing confirmed titles.
+- Native history is authoritative. Native cwd determines project ownership; no
+  override store or live session migration exists. History and WebSocket startup
+  require a registered project; no aggregate history endpoint is exposed.
 - Instructions are scoped Settings guidance resolved at native mount and composed
   with internal routing policy. They are not permissions, skill contents, or
   project-file edits. Empty reset restores the packaged default; saves do not
   mutate a running native prompt. Brainstorming needs no sources/wiki/index.
+- Attachment age cleanup excludes batches created by the active server process;
+  drafts, queues, and retries may retain them until process exit. They remain
+  temporary files, not durable historical attachments.
 - Context/attachments are explicit. Validate source identity before send; stale
   context blocks it. The queue captures prompt, context, skill, and id, and Retry
-  uses that exact submission. An edited settled prompt starts a new turn rather
+  uses that exact submission after checking locally available context. Sessions,
+  not mounted composers, advance queues only after normal completion; cancellation,
+  failure, and connection loss pause them. Transport refusal retains the queued
+  request; uncertain delivery retains the visible submission and forbids automatic
+  resend. Clear only the accepted draft snapshot, never newer input. Explicit
+  queue/message reuse refuses to overwrite another draft. A reused prompt starts a new turn rather
   than truncating history. Historical metadata cannot restore attachment bytes.
 - Models/effort/modes follow runtime capabilities. Catalogs seed drafts, not live
   identity. No catalog-order default or global CLI rewrite; active turns freeze
@@ -230,23 +293,34 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
 - BYOK keys enter through Settings, never environment or projects. Renderer input
   is transient; account tokens remain Node-only. Account state does not configure
   embeddings. Reconfigure only the dependent runtime; a runtime failure does not
-  undo a successfully persisted key.
+  undo a successfully persisted key. Later key mutations supersede pending
+  validations; runtime changes serialize in the same owner.
 - Account OAuth uses Node-owned PKCE and window-bound opaque flows. The fixed
   app-return deep link carries no code/token/flow id; authenticated native
   acknowledgement proves focus handoff. Cancelled polling is not OAuth revocation.
-  Refresh is single-flight and can update only the session it began with.
+  One renderer account provider owns the browser wait for all window surfaces.
+  New OAuth attempts and successful local sign-out retire earlier unfinished
+  flows across windows; exchange must recheck flow identity/state after awaiting
+  the provider and before persistence. Refresh is single-flight and can update
+  only the session it began with; stale work cannot borrow a newer account token.
+  Only structured provider errors confirming an invalid session may clear matching
+  saved credentials. Network, timeout, rate-limit, and server failures preserve them.
 - Avatar proxying is restricted to validated HTTPS provider hosts with bounded
   redirects/time/bytes/type; it is not a general fetch endpoint.
 - OpenQuill receives a random session-local model broker credential, not account
   secrets. Model calls require an active submitted turn, retain its id/idempotency
   across the one auth-refresh retry, and cannot expose account tokens in history.
+  Turn/channel retirement cancels body reads and pending upstream work; awaited
+  credential acquisition cannot forward a request after retirement.
   Hosted quota/accounting stays external; the desktop exposes only bounded usage.
   Child environment and AppData HOME/config isolate ambient secrets and user config.
 - Built-in HTTP and external MCP share Project Operations. Streamable HTTP checks
   the current Settings token on every POST; rotation invalidates old tokens.
   Loopback is default; Docker opt-in exposes only the separate MCP listener.
   Browser Origins/CORS stay closed. Listener transitions serialize and roll back
-  active exposure if persistence fails. Stdio is scoped to its spawning client.
+  active exposure if persistence fails. Disable closes active HTTP connections
+  so incomplete bodies cannot hold the transition queue. Node alone regenerates
+  the atomic stdio launcher on startup/readiness/Settings. Stdio is scoped to its spawning client.
 - MCP reads are bounded; line windows omit a version so partial content cannot
   authorize a whole-file overwrite. Generic/derived/unsupported entries never
   bypass source admission. Native coding-Agent tools have separate runtime permissions.
@@ -301,9 +375,17 @@ registered host boundaries; renderer shared types are a different layer.
   retain drafts for conflict. Optimistic metadata rollback uses the last confirmed
   value and ignores superseded failures. Network failure is not scope retirement.
 - Viewers declare services/capabilities in one registry. Active-owner claims govern
-  Find/outline/save; old cleanup cannot clear new claims. Heavy rendering is
-  bounded and version-keyed. Milkdown retention is a bounded MRU, and dirty live
-  edits cannot be replaced by late source acknowledgements.
+  Find/outline; old cleanup cannot clear new claims. CodeMirror sessions preserve
+  serialized history and selection across viewer disposal. Each activated open
+  Markdown tab retains its editor, schema, and plugin state together until close;
+  switching tabs does not evict undo history. Inactive source queries do not poll.
+  Dirty live edits cannot be replaced by late source acknowledgements.
+- File mutation coordination saves all affected drafts before changing tabs.
+  Rename rebinds existing document runtimes; confirmed deletion disposes them.
+  Pending mutations lock affected editors. Unknown outcomes keep that lock and
+  are checked using window/project-scoped server receipts, never replayed from
+  a lost HTTP response. Receipts are bounded process-lifetime records; missing
+  receipts after eviction/restart do not establish failure or permission to retry.
 - Milkdown serialization preserves frontmatter outside the body. Find/outline use
   the live document without mutating editor DOM during change callbacks. The sole
   double-cast exemption is its Find controller's structural DOM corpus and guarded
@@ -353,7 +435,9 @@ Single-instance and startup arbitration prevent duplicate initial windows.
 Packaged launches own their server; bounded POSIX orphan reclaim verifies sibling
 identity and a dead parent before killing. Foreign/live-parented listeners remain untouched.
 
-- Close asks the owning loaded renderer and stays open on failure/timeout. Explicit
+- Close asks the owning loaded renderer and stays open on failure/timeout.
+  Confirmed renderer termination releases the barrier because its buffers are
+  already lost; reloading establishes a new renderer that must acknowledge. Explicit
   quit retains intent through asynchronous saves and revokes it on refusal.
   Windows/Linux quit after the last window; macOS activation may create another.
 - Update installation requires every loaded window's acknowledgement. Main locks
@@ -362,8 +446,8 @@ identity and a dead parent before killing. Foreign/live-parented listeners remai
   revokes exactly its approvals, and leaves the download retryable.
 - Renderer requests never choose feed, path, or phase. Automatic checks do not
   authorize downloads/install. Production exposes no development simulator.
-  Update offers render in the sidebar footer. The development Settings controls
-  ask app composition to close Settings, expand the sidebar, and render an
+  Update offers render in the sidebar footer. The separate development tools
+  ask app composition to close their dialog, expand the sidebar, and render an
   Updates-owned visual override in that same slot. Preview state belongs to the
   window, survives closing Settings, and holds no updater port. Dismissal or
   Stop preview drops only the override; the subscribed real state and its
@@ -405,6 +489,12 @@ checks, refuse redirects, validate before caching, and fall back to the bundled
 snapshot on unsupported/unreachable publications. Index reads carry no project
 or composer content. Both entrances share one copy latch. Acquisition uses the
 ordinary import transaction; later window failure preserves the registered copy.
+Only successful catalog loads remain fresh for the window session. Failed loads
+retain any successful catalog (or the bundled fallback) and remain retryable.
+The selected entry is an ID resolved against that catalog, not an independent
+copy of its metadata. Image retries retain the restricted proxy origin. Prompt
+clipboard feedback belongs to the displayed prompt and ignores retired requests;
+Gallery metadata never installs ongoing Agent instructions.
 
 ## Validation
 

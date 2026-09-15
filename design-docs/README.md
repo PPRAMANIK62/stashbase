@@ -1,30 +1,43 @@
 # Design Docs
 
-Start with [Overview](overview.md): product identity, typical uses, and principles.
-[Product Direction](product-direction.md) describes the remaining document-specific
-diff. [Glossary](glossary.md) owns shared terminology.
+Start with [Overview](overview.md) for product identity and principles.
+[Glossary](glossary.md) defines terms; [Visual Style](visual-style.md) sets visual intent.
+Planned behavior stays in its owning design, clearly separate from current behavior.
 
-## Reading Paths
+## Vertical Designs: Journeys
 
-For a feature or design discussion, select its [User Journey](user-journeys.md),
-read the owning area below, then use Journey Coverage to find code entry points
-and the relevant boundary.
-[Journey Coverage](../code-review/journey-coverage.md) records what is proven and
-what still needs evidence. For a code diff, start with the
-[review guide](../code-review/README.md#diff-first-review).
-Read only the affected route.
+Describe how a user completes a task: entry, meaningful steps, result, and recovery.
+Link to shared capabilities instead of restating their rules.
 
-## Product Areas
+- [User Journeys](journeys/README.md): stable J01–J13 task definitions and dependencies.
+- [Working in Documents](journeys/documents.md): navigation, editing, and conflict decisions.
+- [Working in Chat](journeys/chat.md): conversation, first send, and return to work.
 
-| Area | Owns |
+## Horizontal Designs: Capabilities
+
+Describe behavior shared across entry points: common rules, justified differences,
+and consequential failure/cancellation/retry decisions. A capability is not a code
+helper; these documents state product contracts, not implementation inventories.
+
+| Capability | Owns |
 |---|---|
-| [Writing Workspace](design/writing-workspace.md) | Project entry, Documents/Chat modes, document capabilities, Agent collaboration, and work continuity |
-| [Project Context](design/project-context.md) | Preparation, indexing readiness, keyword/meaning-based retrieval, and authorized context |
+| [Project Entry and Lifetime](capabilities/project-entry.md) | Project identity, acquisition, window selection, registration/removal |
+| [Project Files](capabilities/project-files.md) | Format capabilities, source preservation, mutations, saving/release, planned prose diff |
+| [Agent Sessions](capabilities/agent-sessions.md) | Conversation identity, readiness, submissions, execution, continuity and recovery |
+| [Project Context](capabilities/project-context.md) | Preparation, indexing readiness, retrieval, and source evidence |
+| [Account and Settings](capabilities/account-settings.md) | Access prerequisites, configuration scope, credentials, and shared settings decisions |
 
-[Engineering Boundaries](../code-review/architecture.md) owns cross-module rules.
-[Visual Style](visual-style.md) owns visual intent; tokens and styling mechanics
-remain in their implementation owners.
+## Reading and Maintenance
 
-Documentation ownership, status labels, and maintenance rules live in
-[MAINTENANCE.md](../MAINTENANCE.md). Execution and validation gates live in
-[AGENTS.md](../AGENTS.md).
+For a user task, start with its journey and follow its capability links. For a
+shared behavior, start with its capability and compare all affected journeys.
+Read only relevant sections. [AGENTS.md](../AGENTS.md#vertical-and-horizontal-review)
+defines when both reviews are required.
+
+[Engineering Boundaries](../code-review/architecture.md) maps responsibilities to
+implementation owners. [Journey Coverage](../code-review/journey-coverage.md) owns
+current evidence and gaps; [Review Guide](../code-review/README.md) owns review steps.
+
+Keep only decisions that constrain behavior or responsibility. Code explains
+mechanics; tests own exact assertions. Remove repeated rules and completed review
+narrative. [MAINTENANCE.md](../MAINTENANCE.md) owns documentation policy.

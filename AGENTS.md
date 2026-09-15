@@ -26,7 +26,7 @@ These documents are references, not a checklist to read in full for every task.
 | Document | Question it answers |
 |---|---|
 | [README.md](README.md) | What is StashBase, and how do I get started? The short external introduction. |
-| [Design Docs](design-docs/README.md) | What should the product do? Routes to product identity, direction, terminology, user journeys, area designs, and visual intent. |
+| [Design Docs](design-docs/README.md) | What should the product do? Routes to product identity, terminology, vertical journeys, horizontal capabilities, and visual intent. Planned behavior stays in its owning design. |
 | [Review Guide](code-review/README.md) | How should I scope a review, inspect a change, and report findings? |
 | [Engineering Boundaries](code-review/architecture.md) | Which module or process owns a responsibility, and what rules must changes preserve? |
 | [Journey Coverage](code-review/journey-coverage.md) | Which code implements a user journey, what evidence exists, and what remains unproven or broken? |
@@ -46,15 +46,34 @@ Respect the requested scope, including whether frontend UI is excluded.
 
 | Task | Starting point and route |
 |---|---|
-| Discuss a design or feature | Product overview → [owning area](design-docs/README.md#product-areas) → [user journey](design-docs/user-journeys.md) → engineering boundary → current code. Separate an agreed requirement from a proposed change. |
+| Discuss a design or feature | Product overview → [user journey](design-docs/journeys/README.md) → [shared capability](design-docs/README.md#horizontal-designs-capabilities) → engineering boundary → current code. Separate an agreed requirement from a proposed change. |
 | Review a user journey | Select its Jxx section in [Journey Coverage](code-review/journey-coverage.md). Follow its renderer and host/service entries through the operation, failure, cancellation, and recovery paths. Read the linked product intent and boundaries. |
 | Review a branch, commit, PR, or working tree | Pin the comparison point; include relevant uncommitted/new files. Follow the [diff-first route](code-review/README.md#diff-first-review), expanding through callers and crossed boundaries. |
 | Diagnose or fix a bug | Find the affected journey/boundary, reproduce the failure, and trace its state owner. Verify the fix at the lowest useful layer and through the affected runtime flow when needed. |
 | Simplify code or audit shared infrastructure | Start from [Engineering Boundaries](code-review/architecture.md). Trace real callers and the purpose they serve; absence from a journey map alone is not proof of dead code. |
 
+## Vertical and Horizontal Review
+
+- **Vertical — follow a user task.** Start with its Jxx journey and follow the
+  entry through success, failure, cancellation, and recovery. Use Journey
+  Coverage to find code and evidence, then identify the shared capabilities it uses.
+- **Horizontal — compare the callers of a capability.** Start with its design
+  and engineering owner. Trace real UI, Agent, MCP, and background callers as
+  applicable; compare identity, state, permissions, errors, and recovery. Look
+  for duplicate rules and bypasses, while preserving intentional differences.
+- **Use both when a change affects shared state or multiple entries.** Check
+  the shared rule once at its owner, then the distinct risks at each affected
+  entry. A local change does not require an audit of every journey.
+
+Do not infer a unified implementation from a unified design. Identify current
+owners in code; report consolidation opportunities separately from defects.
+See the [review method](code-review/README.md#horizontal-review) for tracing details.
+
 ## Review Principles
 
 - **Necessity:** connect code to a current user task or required infrastructure.
+  For whole-product audits, follow the [necessity review](code-review/README.md#necessity-review):
+  a caller, test, or old design paragraph alone does not justify retaining a feature.
   Question assumptions inherited from the former knowledge-base/global-Library
   model; optional wiki work must not become a prerequisite for writing.
 - **Simplicity:** prefer one owner for each rule, state, and operation. Remove
@@ -78,7 +97,7 @@ command or a complete map with a complete review.
 
 ## Documentation and Implementation
 
-Before writing code, read the affected product area and engineering boundary.
+Before writing code, read the affected journey, shared capability, and engineering boundary.
 Update them in the same change when behavior or constraints change; update the
 Jxx entry when code ownership, evidence, or gaps change. Preserve stable journey IDs.
 

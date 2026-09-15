@@ -12,12 +12,45 @@ four documents support review; they are not a second implementation manual.
 
 ## Intent-first Review
 
-For a design discussion or feature audit:
-[product direction](../design-docs/overview.md) → corresponding
-[area](../design-docs/README.md#product-areas) → affected
-[user journey](../design-docs/user-journeys.md) → its row in
-[Journey Coverage](journey-coverage.md#traceability-map) → relevant boundary and code.
-Pin the checkout being audited. Read only the sections the task crosses.
+Pin the checkout being audited and choose the affected
+[journey](../design-docs/journeys/README.md) or
+[capability](../design-docs/README.md#horizontal-designs-capabilities).
+Read only the sections the task crosses.
+
+### Vertical Review
+
+Follow a Jxx outcome through its entry, state transitions, failure, cancellation,
+and recovery. Use [Journey Coverage](journey-coverage.md#traceability-map) to
+locate code and evidence; inspect the shared capabilities crossed by that path.
+A working entry does not establish that other entries apply the same rules.
+
+### Horizontal Review
+
+1. Find the capability's [engineering owner](architecture.md#shared-capability-owners)
+   and trace actual callers, including non-UI paths when applicable.
+2. Compare shared identity, state, permissions, publication, cancellation, and
+   recovery rules. Identify which differences are required by the caller.
+3. Locate duplicate decisions, bypasses, and competing owners. Propose a common
+   owner only where the responsibility is the same; similar-looking code alone
+   is insufficient. Record current implementation separately from target design.
+4. Test shared behavior at its owner; use entry tests for distinct integration
+   risks. Name callers and failure paths that remain unproven.
+
+Use both routes for changes to shared state or behavior used by multiple entries.
+Infrastructure can be necessary without a direct user journey.
+
+### Necessity Review
+
+Periodically reverse the route: inventory active UI entries, native commands,
+HTTP/MCP surfaces, background owners, and build/release tools, then name the current
+user outcome or infrastructure obligation each serves. Existing callers, tests,
+and design text alone do not justify a feature; check whether that originating
+requirement still exists. Story-only controls are not product features.
+
+Remove retired behavior through every owner: entry, protocol, state, persistence,
+provider branches, tests, and documentation. Keep current recovery and external
+protocol obligations. Record deliberate feature retirement under the existing
+journey ID; do not preserve an inaccessible feature as an indefinite evidence gap.
 
 ## Diff-first Review
 
@@ -26,7 +59,8 @@ Pin the checkout being audited. Read only the sections the task crosses.
 2. Read the originating request. Use Journey Coverage to recover intent and
    locate the implementation owners; follow callers for unnamed helpers.
 3. Read the affected Engineering Boundaries sections, then trace the diff through
-   callers, state changes, failures, and focused tests.
+   callers, state changes, failures, and focused tests. Apply horizontal review
+   when the diff changes a shared rule or owner.
 4. Compare required results with actual evidence. A passing suite proves only
    exercised paths; name missing runtime or real-provider evidence.
 
@@ -45,7 +79,8 @@ Answer three questions:
   preserve the required behavior?
 
 Each finding needs a code location, violated requirement, consequence, and
-evidence. Separate confirmed defects, unproven behavior, and product proposals.
+evidence. Separate confirmed defects, unproven behavior, product proposals, and
+consolidation opportunities.
 Do not report mechanically enforced style as a product defect.
 
 Product behavior belongs in Design Docs. Local implementation rationale belongs

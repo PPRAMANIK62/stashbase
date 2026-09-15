@@ -4,7 +4,7 @@ OpenQuill receives an attributed MCP connection automatically. StashBase
 also configures Codex and Claude Code when their built-in Chat readiness runs.
 Nothing needs to be pasted for those panel runtimes. Every external
 MCP-compatible client is configured by you: copy the standard configuration or
-the URL access details from **Settings -> MCP** and register them in the client,
+the URL access details from **Settings -> Advanced -> External apps (MCP)** and register them in the client,
 as in the examples below.
 
 ## Manual stdio Setup
@@ -54,7 +54,7 @@ Restart the client after changing its MCP configuration.
 ## URL-based Clients
 
 Server-side clients that cannot spawn a local process can use Streamable HTTP.
-Open **Settings -> MCP -> Server connection** to copy the current URL and
+Open **Settings -> Advanced -> External apps (MCP) -> HTTP** to copy the current URL and
 bearer token.
 Requests send:
 

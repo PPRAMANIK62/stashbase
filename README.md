@@ -95,9 +95,7 @@ troubleshooting.
 You can already write and revise this way. The [document diff](#document-diff--coming-soon)
 for reviewing fine edits inside the prose is coming soon.
 
-See [Using StashBase](docs/using-stashbase.md) for everyday document, search,
-and transcription workflows. Open the bundled **Start Here** project for
-local guides, then ask its Chat **“How do I use StashBase?”**
+See [Using StashBase](docs/using-stashbase.md) for everyday document and search workflows.
 
 ### Build Your First Wiki
 
@@ -113,7 +111,7 @@ wiki pages is an explicit request; opening a folder does not schedule automatic
 wiki maintenance.
 
 **Search by meaning** is off until you add your own OpenAI or OpenRouter key
-under **Settings → Search by Meaning**. Keyword search works without it;
+under **Settings → Advanced → Search by Meaning**. Keyword search works without it;
 neither setting is required to brainstorm or write.
 
 ## Explore the Gallery
@@ -138,7 +136,7 @@ search indexes are app-managed data. Removing a registered project clears
 StashBase's state for it without deleting your files.
 
 Local browsing, editing, preview, and keyword search need no cloud account.
-OCR and optional audio/video transcription run locally. With your own
+OCR runs locally. With your own
 embedding key added, search by meaning sends relevant text to that provider
 for indexing and queries for retrieval.
 
@@ -159,7 +157,7 @@ Claude Code or Codex used in the built-in Chat. You can review tool calls and
 file edits in the app.
 
 To use an external MCP client, keep StashBase running and copy the connection
-configuration from **Settings → MCP** into that client. It searches one explicitly selected project at a time, reads prepared source
+configuration from **Settings → Advanced → External apps (MCP)** into that client. It searches one explicitly selected project at a time, reads prepared source
 content, and uses bounded file operations within registered project folders.
 
 See [MCP Configuration](docs/mcp-configuration.md) for client examples,

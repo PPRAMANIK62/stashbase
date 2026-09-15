@@ -10,9 +10,8 @@ unimplemented behavior is Shipping.
 | Record | Owns | Update when |
 |---|---|---|
 | [Overview](design-docs/overview.md) | Product identity, uses, principles | A product decision changes |
-| [Product Direction](design-docs/product-direction.md) | Remaining feature direction | The agreed scope changes |
-| [User Journeys](design-docs/user-journeys.md) | Observable tasks, results, recovery | A user flow changes |
-| [Area designs](design-docs/README.md#product-areas) | Capability scope and experience | An area's behavior changes |
+| [Vertical designs](design-docs/journeys/README.md) | User flows, choices, results, recovery | A user flow changes |
+| [Horizontal designs](design-docs/README.md#horizontal-designs-capabilities) | Shared capability rules and intentional entry differences | A shared rule changes |
 | [Glossary](design-docs/glossary.md) | Shared terminology | A term or relationship is settled |
 | [Engineering Boundaries](code-review/architecture.md) | Cross-module ownership, invariants, validation | A boundary, risk, or guarantee changes |
 | [Journey Coverage](code-review/journey-coverage.md) | Journey-to-code routes and evidence limits | Ownership, evidence, or gaps change |
@@ -25,7 +24,9 @@ and unresolved risks into the owning document, then delete completed reports.
 Use issues and PRs for chronology, scheduling, and task ownership.
 
 Design docs describe outcomes, capability boundaries, and consequential user
-choices. Do not freeze current button positions, pane arrangements, gesture
+choices. Keep planned behavior and open product decisions in the owning design,
+clearly distinguished from current behavior. Do not maintain a separate product
+direction document. Do not freeze current button positions, pane arrangements, gesture
 lists, animation choreography, or component implementation as product intent.
 Record current renderer mechanics only where engineering review needs them;
 a layout change that preserves the behavioral contract need not preserve an
@@ -70,23 +71,24 @@ its tests and affected boundaries together with the removal.
 
 ## The Maintenance Loop
 
-1. **Design:** identify the user outcome, owning area, journey, required behavior,
-   non-goals, and meaningful failure/recovery. Start with the narrowest existing
-   area; a new helper or screen does not require a new contract or journey.
-2. **Implement:** read the selected area and engineering boundaries, keep policy
+1. **Design:** locate the vertical journey and horizontal capabilities. Keep
+   entry-specific choices in the journey and shared rules in the capability.
+   Record only consequential decisions; a new helper or screen needs no new doc.
+2. **Implement:** read those designs and engineering boundaries, keep policy
    with its owner, and keep adapters narrow. Revisit unexpected boundary changes
    before widening scope. Run focused validation and update affected docs in the
    same change as code.
 3. **Review:** follow the [review guide](code-review/README.md), preferably in a
    fresh context. Pin a diff or audit snapshot; assess necessity, simplicity,
-   and correctness. Trace code back to intent and each Required journey result
+   and correctness using the vertical and horizontal routes as applicable.
+   Trace code back to intent and each Required journey result
    forward to evidence. Infrastructure may have a cross-cutting contract without
    a user journey; user-visible behavior without one is a traceability gap.
 4. **Close:** preserve stable Jxx IDs, reconcile affected boundaries and coverage,
    record unresolved gaps, and apply the [execution gates](AGENTS.md).
 
 When behavior varies by format, client, or representation, keep one qualified
-capability matrix in the narrowest owning area. Compare that matrix with
+capability matrix in the owning capability. Compare that matrix with
 implementation dispatch, UI affordances, public tools, and representative tests.
 A capability proven on one surface does not establish it on another.
 

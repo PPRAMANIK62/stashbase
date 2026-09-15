@@ -6,7 +6,7 @@ and media seams that no automated suite fakes.
 It is not a second copy of the automated smoke suite.
 
 `Jxx` labels refer to the stable product flows in
-[`design-docs/user-journeys.md`](../design-docs/user-journeys.md). They show
+[`design-docs/journeys/README.md`](../design-docs/journeys/README.md). They show
 which journey owns a residual check without duplicating the automated
 coverage matrix.
 
@@ -83,15 +83,7 @@ reason when a platform cannot exercise it.
   approve the write, review and edit the file, then close and reopen it. Confirm
   keyword search can find the new durable content. This is a packaged integration
   check, not the semantic-quality threshold owned by the J05 Eval.
-- [ ] **J11** — From an unbound Chat, explicitly ask the real Agent to create a
-  disposable project. Decline the first `create_project` approval and confirm no
-  folder or membership appears. Ask again and approve: confirm the ordinary
-  folder is created under the configured owned root, the same Chat transcript
-  remains selected and changes to the new project scope, the originating window
-  enters the folder, and a harmless next turn stays in that scope. Remove its
-  membership in StashBase after the check, then delete the disposable source
-  folder through the external test setup rather than treating membership
-  removal as filesystem deletion.
+- **J11 is retired:** chat starts in an open project; no conversation migration.
 - [ ] **J06** — Paste one non-sensitive clipboard image into the Agent composer. Confirm
   the attachment preview appears and accompanying text remains.
 - [ ] **J09** — Open **Report a Bug…** from the native Help menu. Review the bounded
@@ -104,8 +96,8 @@ reason when a platform cannot exercise it.
   installed release. Confirm the live release component downloads without a
   confirmation, waiting preparation resumes, and macOS accepts the independently
   signed/notarized executable. Interrupt an initial download and confirm it
-  waits for Settings → General → Local components → Retry download or one
-  attempt on the next launch. Restart offline after installation and prepare
+  shows the contextual Retry download action in preparation or search, or waits
+  for one attempt on the next launch. Restart offline after installation and prepare
   another fixture using the same cache. Local HTTP fixture transport is not evidence for this check.
 - [ ] **J03 / J04** — Open representative real PDF, DOCX, image, and audio fixtures in the
   packaged app on platforms where those formats ship. The automated journey

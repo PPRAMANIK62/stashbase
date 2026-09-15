@@ -27,9 +27,8 @@ For a source-filled project, [Build Your First Wiki](../README.md#build-your-fir
 is an optional way to organize references. Search always targets one project,
 and wiki maintenance runs only when requested.
 
-A fresh default folder home also receives **Start Here**, a folder of local
-product and troubleshooting guides. Open it from Welcome / Recent and ask its
-Chat **“How do I use StashBase?”**
+First launch starts at Welcome with no sample projects or documents. Open your
+own folder or create an empty project to begin.
 
 ## Read and Work Alongside Chat
 
@@ -57,13 +56,13 @@ accept/reject; those controls are not currently available.
 Some files can be listed without being searchable or editable. Muted files
 are excluded from Search and automatic Chat context. Preview, editing,
 retrieval text, and Agent file access vary by format; see the canonical
-[Format Capability Matrix](../design-docs/design/writing-workspace.md#format-capability-matrix).
+[Format Capability Matrix](../design-docs/capabilities/project-files.md#format-capability-matrix).
 
 ## Turn On Search by Meaning
 
 Keyword search needs no account or API key and is on from the start. Search
 by meaning, which finds files even when the wording differs, is off until you
-add an OpenAI or OpenRouter key under **Settings → Search by Meaning**. The
+add an OpenAI or OpenRouter key under **Settings → Advanced → Search by Meaning**. The
 key is billed to you and is used only for search by meaning; signing in to
 StashBase does not turn it on.
 
@@ -87,26 +86,20 @@ OpenQuill's free credits have nothing to do with search. Check the account
 menu at the bottom of the sidebar or **Settings → Agents** for the remaining
 percentage and refill date.
 
-## Prepare Recordings
+## Preview Recordings
 
-For audio or video transcription, download a local speech model from
-**Settings → Transcription**. Small (465 MiB) is the default; Tiny (74 MiB) and
-Base (141 MiB) use less space. Transcription runs on your machine without a
-transcription API cost and produces searchable timestamped text.
-
-Original media remain the visible files. They play directly when supported;
-otherwise, StashBase creates a compatible local audio preview. Extracted text
-and previews remain app-managed data. See
-[Project Context](../design-docs/design/project-context.md) for format behavior.
+Audio and video files play directly when their codec is supported. Unsupported
+files can be opened externally. Media is not prepared, searchable, or readable
+as Agent/MCP content.
 
 ## Manage Access
 
-Apart from the bundled Start Here introduction, folders join the project registry only
-when you explicitly add or open them, including making a Gallery copy.
+Folders join the project registry only when you explicitly add or open them,
+including making a Gallery copy.
 Removing a folder clears StashBase's state for it without deleting its files.
 
 For an external Agent client, keep StashBase running and register the
-configuration from **Settings → MCP**. See
+configuration from **Settings → Advanced → External apps (MCP)**. See
 [MCP Configuration](mcp-configuration.md) for setup and access boundaries, and
 [Your Files and Your Data](../README.md#your-files-and-your-data) for local and
 cloud processing boundaries.

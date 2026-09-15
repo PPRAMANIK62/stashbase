@@ -23,6 +23,13 @@ pnpm electron
 pnpm dev
 ```
 
+`pnpm count:lines` reports hand-written source lines per area, splitting the
+renderer from the host processes and keeping tests and Stories out of the
+production totals. It reads the working tree, so the numbers include
+uncommitted work. It needs `cloc` (`brew install cloc`) and fails if a
+production file falls outside every bucket, so a new top-level source
+directory has to be added to the script.
+
 ## Testing
 
 During implementation, run the smallest suite that exercises the changed behavior:
@@ -74,3 +81,9 @@ API keys are configured in Settings, not environment variables.
 Follow the [Release Runbook](code-review/release-pipeline.md) for versioning,
 source-CI gating, signing, packaging, publication, and residual checks.
 Packaging is release-only; outputs stay in `release.nosync/` and are never committed.
+
+## Development Controls
+
+In development builds, Cmd/Ctrl+Alt+Shift+D opens Developer tools for Agent setup
+and turn simulations and sidebar update previews. These controls are separate
+from Settings; the production application does not offer the shortcut.

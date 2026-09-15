@@ -84,6 +84,13 @@ for (const [source, markdown] of contents) {
 }
 
 const forbidden = [
+  'design-docs/user-journeys.md',
+  'design-docs/documents.md',
+  'design-docs/agent-chat.md',
+  'design-docs/project-entry.md',
+  'design-docs/product-direction.md',
+  'design-docs/design/writing-workspace.md',
+  'design-docs/design/project-context.md',
   'design-docs/use-cases.md',
   'design-docs/principles.md',
   'design-docs/product-scenarios.md',
@@ -140,28 +147,22 @@ for (const [file, markdown] of contents) {
   }
 }
 
-const requiredAreaHeadings = [
-  'User Outcome',
-  'Scope and Non-goals',
-  'Current Experience',
-  'Experience Contract',
-  'Cross-area Seams',
-  'Contribution Direction',
-  'Related Journeys and Contracts',
-];
 const designGuide = fs.readFileSync(path.join(repoRoot, 'design-docs', 'README.md'), 'utf8');
-const areaFiles = fs.readdirSync(path.join(repoRoot, 'design-docs', 'design'))
-  .filter((name) => name.endsWith('.md'))
-  .sort();
-for (const name of areaFiles) {
-  const markdown = fs.readFileSync(path.join(repoRoot, 'design-docs', 'design', name), 'utf8');
-  for (const heading of requiredAreaHeadings) {
-    if (!markdown.includes(`## ${heading}`)) failures.push(`design-docs/design/${name}: missing ${heading}`);
+for (const category of ['journeys', 'capabilities']) {
+  const directory = path.join(repoRoot, 'design-docs', category);
+  if (!fs.existsSync(directory)) {
+    failures.push(`design-docs/${category}: missing design category`);
+    continue;
   }
-  if (!designGuide.includes(`(design/${name})`)) failures.push(`design-docs/README.md: missing product-area route to ${name}`);
+  for (const name of fs.readdirSync(directory).filter((name) => name.endsWith('.md'))) {
+    if (!designGuide.includes(`(${category}/${name})`)) {
+      failures.push(`design-docs/README.md: missing route to ${category}/${name}`);
+    }
+  }
 }
 
-const journeyDoc = fs.readFileSync(path.join(repoRoot, 'design-docs/user-journeys.md'), 'utf8');
+const journeyDoc = contents.get(path.join(repoRoot, 'design-docs/journeys/README.md')) ?? '';
+if (!journeyDoc) failures.push('design-docs/journeys/README.md: missing journey definitions');
 const coverageDoc = fs.readFileSync(path.join(repoRoot, 'code-review/journey-coverage.md'), 'utf8');
 const journeyMatches = [...journeyDoc.matchAll(/^## (J\d{2}):[^\n]*$/gm)];
 const journeyIds = journeyMatches.map((match) => match[1]);
@@ -177,13 +178,13 @@ for (const line of coverageDoc.split('\n')) {
   const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
   const id = /^\[(J\d{2}) /.exec(cells[0])?.[1];
   if (!id) continue;
-  traceRows.set(id, { areas: cells[1] ?? '', boundaries: cells[2] ?? '' });
+  traceRows.set(id, { capabilities: cells[1] ?? '', boundaries: cells[2] ?? '' });
 }
 for (const [index, id] of uniqueJourneyIds.entries()) {
   const expected = `J${String(index + 1).padStart(2, '0')}`;
-  if (id !== expected) failures.push(`design-docs/user-journeys.md: expected ${expected}, found ${id}`);
+  if (id !== expected) failures.push(`design-docs/journeys/README.md: expected ${expected}, found ${id}`);
   const headingCount = journeyIds.filter((candidate) => candidate === id).length;
-  if (headingCount !== 1) failures.push(`design-docs/user-journeys.md: expected one ${id} heading, found ${headingCount}`);
+  if (headingCount !== 1) failures.push(`design-docs/journeys/README.md: expected one ${id} heading, found ${headingCount}`);
   const coverageCount = [...coverageDoc.matchAll(new RegExp(`^\\| \\[${id} `, 'gm'))].length;
   if (coverageCount !== 1) failures.push(`code-review/journey-coverage.md: expected one ${id} evidence row, found ${coverageCount}`);
 
@@ -193,14 +194,15 @@ for (const [index, id] of uniqueJourneyIds.entries()) {
     journeyMatch.index,
     nextJourneyMatch?.index ?? journeyDoc.length,
   );
-  for (const heading of requiredJourneyHeadings) {
+  const retired = journeySection.includes('**Retired.**');
+  for (const heading of retired ? [] : requiredJourneyHeadings) {
     if (!journeySection.includes(`### ${heading}`)) {
-      failures.push(`design-docs/user-journeys.md: ${id} missing ${heading}`);
+      failures.push(`design-docs/journeys/README.md: ${id} missing ${heading}`);
     }
   }
 
-  if (!journeySection.includes(`**Evidence:** [${id}](../code-review/journey-coverage.md#`)) {
-    failures.push(`design-docs/user-journeys.md: ${id} missing evidence route`);
+  if (!journeySection.includes(`**Evidence:** [${id}](../../code-review/journey-coverage.md#`)) {
+    failures.push(`design-docs/journeys/README.md: ${id} missing evidence route`);
   }
 
   const coverageHeading = new RegExp(`^## ${id}:[^\\n]*$`, 'm').exec(coverageDoc);
@@ -214,7 +216,12 @@ for (const [index, id] of uniqueJourneyIds.entries()) {
       coverageHeading.index,
       nextCoverageHeading?.index ?? coverageDoc.indexOf('\n## Maintenance Rule', coverageHeading.index),
     );
-    for (const label of ['Implementation', 'Status', 'Contract Test', 'Driven Runtime Pass', 'AI Eval', 'Release Check']) {
+    if (retired !== coverageSection.includes('**Status:** Retired.')) {
+      failures.push(`code-review/journey-coverage.md: ${id} retirement status differs from its design`);
+    }
+    const labels = retired ? ['Implementation', 'Status', 'Evidence']
+      : ['Implementation', 'Status', 'Contract Test', 'Driven Runtime Pass', 'AI Eval', 'Release Check'];
+    for (const label of labels) {
       if (!coverageSection.includes(`**${label}:**`)) {
         failures.push(`code-review/journey-coverage.md: ${id} missing ${label}`);
       }
@@ -223,16 +230,21 @@ for (const [index, id] of uniqueJourneyIds.entries()) {
 
   const trace = traceRows.get(id);
   if (!trace) continue;
-  const areaTargets = [...trace.areas.matchAll(/\]\(\.\.\/design-docs\/design\/([^)]+\.md)\)/g)]
+  const capabilityTargets = [...trace.capabilities.matchAll(/\]\(\.\.\/design-docs\/capabilities\/([^)]+\.md)\)/g)]
+    .map((match) => match[1]);
+  const journeyCapabilities = [...journeySection.matchAll(/\]\(\.\.\/capabilities\/([^)]+\.md)\)/g)]
     .map((match) => match[1]);
   const boundaryTargets = [...trace.boundaries.matchAll(/\]\(architecture\.md#([^)]+)\)/g)];
-  if (areaTargets.length === 0) failures.push(`code-review/journey-coverage.md: ${id} has no product area`);
+  if (capabilityTargets.length === 0) failures.push(`code-review/journey-coverage.md: ${id} has no shared capability`);
   if (boundaryTargets.length === 0) failures.push(`code-review/journey-coverage.md: ${id} has no engineering boundary`);
+  if (JSON.stringify([...new Set(capabilityTargets)].sort()) !== JSON.stringify([...new Set(journeyCapabilities)].sort())) {
+    failures.push(`code-review/journey-coverage.md: ${id} capabilities differ from its journey definition`);
+  }
 
-  for (const target of areaTargets) {
-    const area = path.join(repoRoot, 'design-docs', 'design', target);
-    if (!contents.get(area)?.includes(`[${id}](`)) {
-      failures.push(`design-docs/design/${target}: missing reciprocal ${id} route from Journey Coverage`);
+  for (const target of capabilityTargets) {
+    const capability = path.join(repoRoot, 'design-docs', 'capabilities', target);
+    if (!contents.get(capability)?.includes(`[${id}](`)) {
+      failures.push(`design-docs/capabilities/${target}: missing reciprocal ${id} route from Journey Coverage`);
     }
   }
 }

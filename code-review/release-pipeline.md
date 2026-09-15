@@ -44,8 +44,8 @@ before its metadata and payloads coexist.
   those outputs for `test:electron:smoke:built`. Host type checks and service
   builds do not repeat renderer work. Local `pnpm check` follows the same
   build-once rule; standalone smoke builds its own prerequisites.
-- Source CI does not build installers or frozen sidecars. Windows package and
-  transcription verification remains mandatory in `release-windows.yml` before
+- Source CI does not build installers or frozen sidecars. Windows package
+  verification remains mandatory in `release-windows.yml` before
   upload. Packaging failures are therefore detected at the release stage;
   source CI alone does not prove packaged delivery.
 - Linux source Electron may use `--no-sandbox` under hosted Xvfb. Packaged apps
@@ -89,13 +89,6 @@ toolchain rather than the linter any gate runs.
 
 ## Native Packaging
 
-- Each platform restores an exact-input transcription sidecar or builds it for
-  its target. Native
-  archives may use declared mirrors only when the accepted bytes match the
-  pinned digest. The transcription build runs `scripts/check-transcription-media.mjs`
-  against its staged binaries: an AVI fixture must probe successfully, decode
-  inference audio, and produce a single Opus playback stream. System FFmpeg is
-  not evidence for the staged toolchain.
 - The independently downloaded PDF/OCR extractor keeps its console-enabled stderr channel for
   progress and failure reporting, while its Windows bootloader hides consoles
   owned by both the entry process and frozen multiprocessing workers.
@@ -113,9 +106,7 @@ toolchain rather than the linter any gate runs.
   packaging excludes source maps and SQLite development sources while retaining
   its native binary and runtime loaders. PyArrow/OpenCV and the independent
   Python environments are preserved.
-- Packaging rejects missing/empty binaries, licenses, or notices; wrong binary
-  formats; version/build-option drift; unacceptable FFmpeg licensing/features;
-  and target ABI or minimum-OS drift.
+- Packaging validates Python daemon and extractor inputs before assembling the app.
 - Every unbundled local dependency loaded by the Electron main process must be
   included in the electron-builder input. The package-input test scans relative
   CommonJS dependencies that cross out of `electron/` so a source-only smoke
@@ -152,11 +143,9 @@ toolchain rather than the linter any gate runs.
 - Packaged smoke checks that the extractor is absent from the base installer,
   installs the release archive through the production download/verification
   owner using a local HTTP transport, exercises real PDF/OCR, and checks offline
-  reuse. It also starts the server, exercises DOCX, explicitly
-  loads the Electron main-process dependency graph from app.asar, downloads and
-  verifies the Tiny speech model, transcodes media, runs local inference,
-  validates transcript output, and serves the compatible preview before
-  upload.
+  reuse. It also starts the server, exercises DOCX, and explicitly loads the
+  Electron main-process dependency graph from app.asar before upload. Media
+  playback uses the source file; no speech model or transcoder is packaged.
 - The application icon is generated, never hand-edited. `build/icon.svg` is
   the only source; `pnpm build:icons` renders it through Electron's own
   Chromium into `build/icon.png`, the `build/icons/` set, `build/icon.ico`,
@@ -167,7 +156,7 @@ toolchain rather than the linter any gate runs.
 
 ### Native Component Reuse
 
-`native-components.yml` prepares unsigned Python and transcription bundles on
+`native-components.yml` prepares unsigned Python bundles on
 each push to `main`, independently of source CI. It produces no installer and
 uses no signing credentials. The shared `prepare-native-components` action is
 also used by all three release Adapters. GitHub release tags can restore the
@@ -201,7 +190,7 @@ declare Python <3.13; the hosted cold component builds verify actual installatio
 Save Python bundles before macOS signing mutates the extractor. Every release
 still signs/notarizes its macOS components, creates its own versioned extractor
 archive and hash manifest, validates package inputs, and runs the packaged
-smoke. Transcription media checks also run after restoration. Cached binaries
+smoke. Cached binaries
 are build inputs, not evidence that the new assembled application passed.
 
 The compression policy remains electron-builder's default `normal`. Compare
@@ -279,7 +268,7 @@ credential-free and does not run this probabilistic check.
 | Publication coordinator | `.github/workflows/release.yml` |
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
 | Native build reuse | `.github/workflows/native-components.yml`, `.github/actions/prepare-native-components/action.yml`, `python/constraints.txt`, `scripts/lock-python.mjs`; contracts in `scripts/packaging/native-cache.test.mjs` |
-| Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/build-transcription-sidecar.sh`, `scripts/after-pack-macos.cjs` |
+| Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/after-pack-macos.cjs` |
 | Application icon | `scripts/icons/build.mjs` behind `pnpm build:icons`, rendering `build/icon.svg` in `scripts/icons/render.mjs` with the size table and containers in `scripts/icons/encode.mjs` |
 | Packaged verification | `scripts/smoke-packaged-server.mjs` (including the explicit OpenCode resource version probe) and platform release verifiers |
 | Focused evidence | `scripts/packaging/inputs.test.mjs`, `scripts/icons/encode.test.mjs`, `server/__tests__/opencode-native-smoke.test.ts`, `scripts/require-green-ci.test.mjs`, signing contract tests, `scripts/update-release-contract.test.mjs`, `electron/update-install-strategy.test.cjs`, the platform workflows, applicable retained semantic retrieval reports, and the N→N+1 release check |

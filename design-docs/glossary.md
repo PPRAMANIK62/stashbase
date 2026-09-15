@@ -10,21 +10,10 @@ established technical terms; renaming a persisted field, protocol, or path
 requires checking current readers and writers; historical-data-only compatibility follows
 the [maintenance policy](../MAINTENANCE.md#previous-version-data-policy).
 
-| Earlier wording | Current meaning |
-|---|---|
-| StashBase as a Wiki or knowledge base | IDE for writing; wiki building is an optional project task |
-| Library as a global knowledge/search scope | Separate local projects; the registry remembers membership only |
-| Folder / project | Folder names the filesystem directory; project names the user's working scope |
-| Source as reference material only | Any authoritative document input, including an earlier draft |
-| Canvas as a required output | An optional role of an ordinary Markdown document |
-| Similarity / exact search in product copy | Search by meaning / keyword search |
-| Search allowance / credits | Search uses the user's provider key; free credits belong to OpenQuill |
-| Diff without qualification | Distinguish implemented file/conflict comparisons from the coming-soon document-specific diff |
-
 ## IDE for writing
 
 A local project environment for developing ideas with an Agent and writing
-documents. [Overview](overview.md) owns product direction and principles.
+documents. [Overview](overview.md) owns product identity and principles.
 
 ## Brainstorming
 
@@ -41,7 +30,7 @@ types. Format capabilities determine whether its body can be edited.
 
 Inline prose revision with individually reviewable suggestions; **coming soon**.
 It is distinct from current file/conflict comparisons and Agent action approval.
-See [Product Direction](product-direction.md).
+See [Project Files](capabilities/project-files.md#document-specific-diff).
 
 ## Active-folder workspace
 
@@ -67,15 +56,16 @@ mount. It is distinct from access control, internal routing, and user-owned
 
 ## OpenQuill
 
-The included Agent, using the pinned local OpenCode runtime and account-backed
-free credits that refill on a fixed seven-day window. Account sign-in serves
-OpenQuill, not search by meaning. Its implementation identifier is `stashbase`.
+The included Agent runtime, named **Default** in the app. It uses StashBase
+account access and **free Agent credits**, separate from embedding-provider billing.
+OpenQuill remains the external/runtime name; `stashbase` is its implementation
+identifier. [Agent Sessions](capabilities/agent-sessions.md) owns selection behavior.
 
 ## Search by meaning
 
 Optional project retrieval combining text matching and vector similarity,
 returning visible source evidence. It uses the embedding key configured in
-Settings. [Project Context](design/project-context.md#search-by-meaning-is-opt-in) owns the opt-in
+Settings. [Project Context](capabilities/project-context.md#retrieval-and-access-differences) owns the opt-in
 and default-query behavior.
 
 UI labels are **By keyword / By meaning**; full names are **keyword search /
@@ -104,7 +94,7 @@ open questions. It is not a separate editor, file type, or automatic Chat summar
 
 ## Document Workbench
 
-The browsing, reading, editing, and navigation capability within Writing Workspace.
+The browsing, reading, editing, and navigation capability in Documents mode.
 
 ## Preview tab
 
@@ -118,8 +108,8 @@ currently open tabs, and can return to a replaced preview.
 
 ## Draft
 
-Writing in progress in an ordinary document. A **recovered draft** is unsaved
-application recovery text, distinct from the file on disk.
+Writing in progress in an ordinary document. A live unsaved draft is distinct
+from the saved file; it does not imply durable crash recovery.
 
 ## Format capability
 
@@ -144,7 +134,7 @@ matters. Use the narrow capability instead:
   or current prepared text for the source. A muted generic file is explicitly
   not retrieval-eligible even when its bytes can be shown read-only.
 
-See the [format matrix](design/writing-workspace.md#format-capability-matrix).
+See the [format matrix](capabilities/project-files.md#format-capability-matrix).
 
 ## Generic workspace file
 
@@ -161,10 +151,24 @@ the workspace. Visible Agent-written documents are not derived data.
 One ordinary local folder, possibly empty, defining working scope and an
 independent search namespace. The registry remembers projects and authorization.
 
+Entry actions and project history use **project**. Use **folder** when explaining
+directory selection, creation, naming, or storage. Open and Create may share the
+system directory picker: Create guides the user to create a folder there and
+then open it as a project.
+
+A project's display name is not its identity. Different local directories may
+have the same name; alternate paths to the same directory refer to one project.
+
+## Project entry
+
+The user operation of choosing a project and reaching its working environment.
+It may start with an existing folder or with making a local copy. Making the
+copy and entering the project are separate outcomes.
+
 ## Unbound Chat
 
 A conversation without project-file access until binding. Its in-app entry is
-unavailable; see [J11](user-journeys.md#j11-turn-a-conversation-into-a-project).
+unavailable; see [J11](journeys/README.md#j11-turn-a-conversation-into-a-project).
 
 ## Local RAG layer
 
@@ -173,7 +177,7 @@ to source/data ownership; configured embedding requests may use a hosted provide
 
 ## Preparation
 
-Extraction, OCR, or transcription that makes a source usable for retrieval or
+Extraction or OCR that makes a source usable for retrieval or
 Agent reading. It is separate from vector-index readiness.
 
 ## Product scenario
