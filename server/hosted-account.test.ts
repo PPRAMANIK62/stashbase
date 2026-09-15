@@ -379,18 +379,104 @@ test('concurrent hosted token refreshes share one request', () => {
 
 test('a stale failed refresh cannot clear a newer hosted session', () => {
   const result = runIsolated(`
-    let rejectRefresh;
-    globalThis.fetch = async () => new Promise((_resolve, reject) => { rejectRefresh = reject; });
+    let finishRefresh;
+    globalThis.fetch = async () => new Promise((resolve) => { finishRefresh = resolve; });
     const config = await import('./server/app-config.ts');
     const account = await import('./server/hosted-account.ts');
     config.setHostedAccountSession({ accessToken: 'access-old', refreshToken: 'refresh-old', expiresAt: 1, userId: 'user-old', email: 'old@example.com' });
     const pending = account.hostedAccessToken().catch((error) => error.message);
     await new Promise((resolve) => setImmediate(resolve));
     config.setHostedAccountSession({ accessToken: 'access-new', refreshToken: 'refresh-new', expiresAt: 4102444800, userId: 'user-new', email: 'new@example.com' });
-    rejectRefresh(new Error('old refresh failed'));
+    finishRefresh(Response.json({ error_code: 'refresh_token_not_found' }, { status: 400 }));
     await pending;
     process.stdout.write(JSON.stringify(config.getHostedAccountSession()));
   `);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).refreshToken, 'refresh-new');
+});
+
+test('transient refresh failures preserve credentials, while a revoked refresh token clears them', () => {
+  const result = runIsolated(`
+    const assert = (await import('node:assert/strict')).default;
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    const session = { accessToken: 'access', refreshToken: 'refresh', expiresAt: 1, userId: 'user', email: 'person@example.com' };
+    for (const failure of [
+      async () => { throw new Error('Network unavailable'); },
+      async () => Response.json({ error_code: 'unexpected_failure' }, { status: 503 }),
+      async () => Response.json({ error_code: 'over_request_rate_limit' }, { status: 429 }),
+      async () => Response.json({ error_code: 'validation_failed' }, { status: 400 }),
+      async () => Response.json({}),
+    ]) {
+      config.setHostedAccountSession(session);
+      globalThis.fetch = failure;
+      await assert.rejects(account.hostedAccessToken());
+      assert.deepEqual(config.getHostedAccountSession(), session);
+    }
+    globalThis.fetch = async () => Response.json({ error_code: 'refresh_token_not_found' }, { status: 400 });
+    await assert.rejects(account.hostedAccessToken());
+    assert.equal(config.getHostedAccountSession(), undefined);
+  `);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('sign-out invalidates both delayed and not-yet-exchanged OAuth callbacks', () => {
+  const result = runIsolated(`
+    const assert = (await import('node:assert/strict')).default;
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    const flow = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', 'window');
+    let finish;
+    globalThis.fetch = async () => new Promise(resolve => { finish = resolve; });
+    const pending = account.exchangeHostedOAuthCode(flow.flowId, 'code');
+    await account.signOutHostedAccount();
+    finish(Response.json({access_token:'late',refresh_token:'late',expires_at:4102444800,user:{id:'late',email:'late@example.com'}}));
+    await assert.rejects(pending);
+    assert.equal(config.getHostedAccountSession(), undefined);
+    const unopened = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', 'window');
+    await account.signOutHostedAccount();
+    globalThis.fetch = async () => { throw new Error('must not exchange'); };
+    await assert.rejects(account.exchangeHostedOAuthCode(unopened.flowId, 'code'));
+    assert.equal(config.getHostedAccountSession(), undefined);
+  `);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('a newer OAuth attempt wins over an older exchange that is already in flight', () => {
+  const result = runIsolated(`
+    const assert = (await import('node:assert/strict')).default;
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    const payload = (name) => Response.json({access_token:name,refresh_token:name,expires_at:4102444800,user:{id:name,email:name+'@example.com'}});
+    let finish;
+    globalThis.fetch = async () => new Promise(resolve => { finish = resolve; });
+    const older = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', 'first');
+    const pending = account.exchangeHostedOAuthCode(older.flowId, 'old-code');
+    const newer = account.beginHostedOAuth('google', 'http://127.0.0.1:8090', 'second');
+    finish(payload('old'));
+    await assert.rejects(pending);
+    globalThis.fetch = async () => payload('new');
+    await account.exchangeHostedOAuthCode(newer.flowId, 'new-code');
+    assert.equal(config.getHostedAccountSession().userId, 'new');
+  `);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+
+test('a stale successful refresh neither overwrites nor returns a newer account token', () => {
+  const result = runIsolated(`
+    const assert = (await import('node:assert/strict')).default;
+    let finish;
+    globalThis.fetch = async () => new Promise(resolve => { finish = resolve; });
+    const config = await import('./server/app-config.ts');
+    const account = await import('./server/hosted-account.ts');
+    config.setHostedAccountSession({accessToken:'old',refreshToken:'old',expiresAt:1,userId:'old',email:'old@example.com'});
+    const pending = account.hostedAccessToken();
+    const next = {accessToken:'new',refreshToken:'new',expiresAt:4102444800,userId:'new',email:'new@example.com'};
+    config.setHostedAccountSession(next);
+    finish(Response.json({access_token:'refreshed-old',refresh_token:'refreshed-old',expires_at:4102444800,user:{id:'old',email:'old@example.com'}}));
+    await assert.rejects(pending, /changed while.*refreshing/);
+    assert.deepEqual(config.getHostedAccountSession(), next);
+  `);
+  assert.equal(result.status, 0, result.stderr);
 });

@@ -56,7 +56,7 @@ test('hosted Agent broker keeps the account credential upstream and streams an O
 });
 
 for (const scenario of [
-  { code: 'agent_allowance_exhausted', message: 'OpenQuill free credits are exhausted.', kind: 'allowance-exhausted' },
+  { code: 'agent_allowance_exhausted', message: 'Free Agent credits are exhausted.', kind: 'allowance-exhausted' },
   { code: 'agent_turn_budget_exhausted', message: 'This Agent turn reached its spending limit.', kind: 'quota' },
 ]) {
   test(`hosted Agent broker preserves ${scenario.code} through the OpenCode translator`, async (t) => {
@@ -142,3 +142,57 @@ test('hosted Agent broker isolates session credentials and rejects calls outside
     /turn id must be a valid UUID/,
   );
 });
+
+for (const during of ['token', 'refresh', 'upstream'] as const) {
+  test(`retiring a turn cancels a model call waiting on ${during}`, async (t) => {
+    const entered = deferred<void>();
+    const token = deferred<string>();
+    let upstreamCalls = 0;
+    let upstreamSignal: AbortSignal | null | undefined;
+    const broker = new HostedAgentBroker({
+      accessToken: async ({ forceRefresh } = {}) => {
+        if (during === 'token' || (during === 'refresh' && forceRefresh)) {
+          entered.resolve();
+          return token.promise;
+        }
+        return 'fixture-token';
+      },
+      fetch: async (_url, init) => {
+        upstreamCalls++;
+        upstreamSignal = init?.signal;
+        if (during === 'refresh') return new Response('{}', { status: 401 });
+        if (during === 'upstream') {
+          entered.resolve();
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new Error('cancelled')), { once: true });
+          });
+        }
+        return new Response('{}');
+      },
+      upstreamUrl: 'https://gateway.invalid',
+      clientVersion: () => 'fixture',
+    });
+    await broker.start();
+    t.after(() => broker.close());
+    const runtime = broker.runtime('retired')!;
+    broker.beginTurn('retired', '00000000-0000-4000-8000-000000000003');
+    const request = fetch(`${runtime.baseUrl}/chat/completions`, {
+      method: 'POST', headers: { authorization: `Bearer ${runtime.apiKey}` }, body: '{}',
+    });
+    const rejected = assert.rejects(request);
+    await entered.promise;
+    broker.endTurn('retired');
+    broker.releaseChannel('retired');
+    token.resolve('late-token');
+    await rejected;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(upstreamCalls, during === 'token' ? 0 : 1);
+    if (upstreamSignal) assert.equal(upstreamSignal.aborted, true);
+  });
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}

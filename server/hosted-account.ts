@@ -32,6 +32,8 @@ interface SupabaseUser {
   identities?: Array<{ provider?: string; identity_data?: Record<string, unknown> }>;
 }
 interface SupabaseTokenResponse {
+  code?: string;
+  error_code?: string;
   access_token?: string;
   refresh_token?: string;
   expires_at?: number;
@@ -56,7 +58,7 @@ interface PendingOAuthFlow {
   verifier: string;
   windowId?: string;
   createdAt: number;
-  state: 'pending' | 'exchanged' | 'complete' | 'error';
+  state: 'pending' | 'exchanging' | 'exchanged' | 'complete' | 'error';
   error?: string;
   returnRequestedAt?: number;
   appReturnedAt?: number;
@@ -73,6 +75,16 @@ const AVATAR_TIMEOUT_MS = 5_000;
 const AVATAR_MAX_REDIRECTS = 2;
 const AVATAR_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
 let avatarCache: { key: string; contentType: string; bytes: Uint8Array } | null = null;
+
+// Supabase's structured session errors, not message text or any generic 4xx:
+// https://supabase.com/docs/guides/auth/debugging/error-codes
+const INVALID_SESSION_CODES = new Set([
+  'refresh_token_not_found', 'refresh_token_already_used', 'session_not_found',
+  'session_expired', 'user_not_found', 'user_banned',
+]);
+class HostedAuthError extends Error {
+  constructor(message: string, readonly invalidSession: boolean) { super(message); }
+}
 
 function messageOf(value: ErrorPayload | null, fallback: string): string {
   return value?.message ?? value?.error_description ?? value?.msg ?? value?.error ?? fallback;
@@ -121,9 +133,14 @@ async function supabaseAuth(path: string, body: Record<string, unknown>, accessT
       ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
   });
   const payload = await jsonBody<SupabaseTokenResponse>(response);
-  if (!response.ok) throw new Error(messageOf(payload ?? null, `Supabase authentication failed (HTTP ${response.status}).`));
+  if (!response.ok) throw new HostedAuthError(
+    messageOf(payload ?? null, `Supabase authentication failed (HTTP ${response.status}).`),
+    response.status >= 400 && response.status < 500 && response.status !== 429
+      && INVALID_SESSION_CODES.has(payload?.error_code ?? payload?.code ?? ''),
+  );
   return payload ?? {};
 }
 
@@ -161,6 +178,12 @@ function assertLoopbackCallbackOrigin(callbackOrigin: string): URL {
   return parsed;
 }
 
+function retireOAuthFlows(message: string): void {
+  for (const [id, flow] of pendingOAuthFlows) {
+    if (flow.state !== 'complete' && flow.state !== 'error') failHostedOAuth(id, message);
+  }
+}
+
 export function beginHostedOAuth(
   provider: HostedOAuthProvider,
   callbackOrigin: string,
@@ -169,6 +192,7 @@ export function beginHostedOAuth(
 ): HostedOAuthStart {
   pruneOAuthFlows();
   const origin = assertLoopbackCallbackOrigin(callbackOrigin);
+  retireOAuthFlows('A newer sign-in request was started. Continue in the latest browser tab.');
   const flowId = base64Url(crypto.randomBytes(24));
   const verifier = base64Url(crypto.randomBytes(48));
   const challenge = base64Url(crypto.createHash('sha256').update(verifier).digest());
@@ -200,13 +224,18 @@ export function hostedOAuthPurpose(flowId: string): HostedOAuthPurpose | null {
 export async function exchangeHostedOAuthCode(flowId: string, authCode: string): Promise<HostedAccountSession> {
   pruneOAuthFlows();
   const flow = pendingOAuthFlows.get(flowId);
-  if (!flow || flow.state !== 'pending') throw new Error('This sign-in request expired. Start again from StashBase.');
+  if (!flow || flow.state !== 'pending') throw new Error(flow?.error ?? 'This sign-in request expired. Start again from StashBase.');
   if (!authCode.trim()) throw new Error('Supabase did not return an authorization code.');
+  flow.state = 'exchanging';
   try {
     const payload = await supabaseAuth('/token?grant_type=pkce', {
       auth_code: authCode,
       code_verifier: flow.verifier,
     });
+    pruneOAuthFlows();
+    if (pendingOAuthFlows.get(flowId) !== flow || flow.state !== 'exchanging') {
+      throw new Error(flow.error ?? 'This sign-in request expired. Start again from StashBase.');
+    }
     const session = sessionFrom(payload);
     setHostedAccountSession(session);
     flow.state = 'exchanged';
@@ -277,8 +306,8 @@ export function noteHostedOAuthAppReturn(now = Date.now()): {
 
 export function failHostedOAuth(flowId: string, message: string): void {
   const flow = pendingOAuthFlows.get(flowId);
-  if (!flow) return;
-  if (flow.state !== 'error' && flow.state !== 'complete') {
+  if (!flow || flow.state === 'complete') return;
+  if (flow.state !== 'error') {
     telemetry.capture({ event: 'agent_setup_result', runtime: 'stashbase', stage: 'login', outcome: 'failed' });
   }
   flow.state = 'error';
@@ -303,7 +332,7 @@ export function hostedOAuthStatus(flowId: string): HostedOAuthStatus {
 
 export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}): Promise<string> {
   const session = getHostedAccountSession();
-  if (!session) throw new Error('Sign in to StashBase to use OpenQuill and its free credits.');
+  if (!session) throw new Error('Sign in to StashBase to use the Default Agent and its free credits.');
   if (!options.forceRefresh && session.expiresAt > Math.floor(Date.now() / 1000) + 60) return session.accessToken;
   const sessionKey = `${session.userId}\0${session.refreshToken}\0${session.accessToken}`;
   if (tokenRefresh?.sessionKey === sessionKey) return tokenRefresh.promise;
@@ -313,7 +342,6 @@ export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}
       const payload = await supabaseAuth('/token?grant_type=refresh_token', { refresh_token: session.refreshToken });
       const current = getHostedAccountSession();
       if (!current || `${current.userId}\0${current.refreshToken}\0${current.accessToken}` !== sessionKey) {
-        if (current) return current.accessToken;
         throw new Error('The hosted account changed while its token was refreshing.');
       }
       const refreshed = sessionFrom(payload, session);
@@ -321,7 +349,8 @@ export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}
       return refreshed.accessToken;
     } catch (error) {
       const current = getHostedAccountSession();
-      if (current && `${current.userId}\0${current.refreshToken}\0${current.accessToken}` === sessionKey) {
+      if (error instanceof HostedAuthError && error.invalidSession
+        && current && `${current.userId}\0${current.refreshToken}\0${current.accessToken}` === sessionKey) {
         setHostedAccountSession(undefined);
       }
       throw error;
@@ -338,6 +367,7 @@ export async function hostedAccessToken(options: { forceRefresh?: boolean } = {}
 export async function signOutHostedAccount(): Promise<void> {
   const session = getHostedAccountSession();
   setHostedAccountSession(undefined);
+  retireOAuthFlows('You signed out. Start a new sign-in from StashBase.');
   avatarCache = null;
   profileHydration = null;
   if (!session) return;
@@ -441,7 +471,7 @@ export async function fetchHostedAgentAllowance(
   if (response.status === 401 && !options.forceRefreshToken) {
     return fetchHostedAgentAllowance({ forceRefreshToken: true });
   }
-  if (!response.ok) throw new Error(messageOf(payload, `OpenQuill usage service failed (HTTP ${response.status}).`));
+  if (!response.ok) throw new Error(messageOf(payload, `The Agent credits service failed (HTTP ${response.status}).`));
   return payload as HostedAgentAllowance;
 }
 

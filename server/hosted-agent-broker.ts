@@ -70,6 +70,7 @@ export class HostedAgentBroker {
   private readonly channels = new Map<string, {
     agentSessionId: string;
     turnId: string | null;
+    turnAbort: AbortController;
     profile: string;
   }>();
   private readonly channelBySession = new Map<string, string>();
@@ -133,6 +134,7 @@ export class HostedAgentBroker {
       this.channels.set(apiKey, {
         agentSessionId,
         turnId: null,
+        turnAbort: new AbortController(),
         profile: 'stashbase-agent-default',
       });
     }
@@ -150,6 +152,8 @@ export class HostedAgentBroker {
     if (!UUID_PATTERN.test(turnId)) {
       throw new Error('The hosted Agent turn id must be a valid UUID.');
     }
+    channel.turnAbort.abort();
+    channel.turnAbort = new AbortController();
     channel.turnId = turnId;
     channel.profile = profile;
   }
@@ -157,12 +161,16 @@ export class HostedAgentBroker {
   endTurn(agentSessionId: string): void {
     const apiKey = this.channelBySession.get(agentSessionId);
     const channel = apiKey ? this.channels.get(apiKey) : undefined;
-    if (channel) channel.turnId = null;
+    if (channel) {
+      channel.turnId = null;
+      channel.turnAbort.abort();
+    }
   }
 
   releaseChannel(agentSessionId: string): void {
     const apiKey = this.channelBySession.get(agentSessionId);
     if (!apiKey) return;
+    this.endTurn(agentSessionId);
     this.channelBySession.delete(agentSessionId);
     this.channels.delete(apiKey);
   }
@@ -175,6 +183,7 @@ export class HostedAgentBroker {
     const server = this.server;
     this.server = null;
     this.port = 0;
+    for (const channel of this.channels.values()) channel.turnAbort.abort();
     this.channels.clear();
     this.channelBySession.clear();
     if (!server) return;
@@ -206,66 +215,76 @@ export class HostedAgentBroker {
     const turnId = channel.turnId;
     const profile = channel.profile;
 
-    const body = await readBody(request);
     const abort = new AbortController();
+    const signal = AbortSignal.any([abort.signal, channel.turnAbort.signal]);
+    const retire = () => response.destroy();
+    signal.addEventListener('abort', retire, { once: true });
     request.once('aborted', () => abort.abort());
     response.once('close', () => {
       if (!response.writableEnded) abort.abort();
     });
-    const idempotencyKey = crypto.randomUUID();
+    try {
+      const body = await readBody(request);
+      signal.throwIfAborted();
+      const idempotencyKey = crypto.randomUUID();
 
-    const call = async (forceRefresh: boolean) => {
-      const token = await this.dependencies.accessToken({ forceRefresh });
-      return this.dependencies.fetch(this.dependencies.upstreamUrl, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${token}`,
-          'content-type': 'application/json',
-          accept: request.headers.accept ?? 'text/event-stream, application/json',
-          'idempotency-key': idempotencyKey,
-          'x-stashbase-agent-turn-id': turnId,
-          'x-stashbase-agent-profile': profile,
-          'x-stashbase-client-version': this.dependencies.clientVersion(),
-        },
-        body,
-        signal: abort.signal,
+      const call = async (forceRefresh: boolean) => {
+        signal.throwIfAborted();
+        const token = await this.dependencies.accessToken({ forceRefresh });
+        signal.throwIfAborted();
+        return this.dependencies.fetch(this.dependencies.upstreamUrl, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'content-type': 'application/json',
+            accept: request.headers.accept ?? 'text/event-stream, application/json',
+            'idempotency-key': idempotencyKey,
+            'x-stashbase-agent-turn-id': turnId,
+            'x-stashbase-agent-profile': profile,
+            'x-stashbase-client-version': this.dependencies.clientVersion(),
+          },
+          body,
+          signal,
+        });
+      };
+
+      let upstream = await call(false);
+      if (upstream.status === 401) {
+        await upstream.body?.cancel();
+        upstream = await call(true);
+      }
+      if (!upstream.ok) {
+        const payload = await upstream.json().catch(() => null) as GatewayError | null;
+        const nested = payload?.error;
+        const upstreamMessage = nested?.message ?? payload?.message ?? `The Agent gateway failed (HTTP ${upstream.status}).`;
+        const upstreamCode = nested?.code ?? payload?.code;
+        const allowanceMessage = upstreamCode === 'agent_turn_budget_exhausted'
+          ? `This Agent turn reached its spending limit. ${upstreamMessage}`
+          : `Free Agent credits are exhausted. ${upstreamMessage}`;
+        writeJson(response, upstream.status, {
+          error: {
+            message: upstream.status === 402
+              ? allowanceMessage
+              : upstreamMessage,
+            type: 'stashbase_hosted_error',
+            code: upstreamCode ?? (upstream.status === 402 ? 'agent_allowance_exhausted' : 'hosted_error'),
+          },
+        });
+        return;
+      }
+
+      response.writeHead(upstream.status, {
+        'content-type': upstream.headers.get('content-type') ?? 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
       });
-    };
-
-    let upstream = await call(false);
-    if (upstream.status === 401) {
-      await upstream.body?.cancel();
-      upstream = await call(true);
+      if (!upstream.body) {
+        response.end();
+        return;
+      }
+      await pipeline(Readable.fromWeb(upstream.body), response, { signal });
+    } finally {
+      signal.removeEventListener('abort', retire);
     }
-    if (!upstream.ok) {
-      const payload = await upstream.json().catch(() => null) as GatewayError | null;
-      const nested = payload?.error;
-      const upstreamMessage = nested?.message ?? payload?.message ?? `OpenQuill gateway failed (HTTP ${upstream.status}).`;
-      const upstreamCode = nested?.code ?? payload?.code;
-      const allowanceMessage = upstreamCode === 'agent_turn_budget_exhausted'
-        ? `This Agent turn reached its spending limit. ${upstreamMessage}`
-        : `OpenQuill free credits are exhausted. ${upstreamMessage}`;
-      writeJson(response, upstream.status, {
-        error: {
-          message: upstream.status === 402
-            ? allowanceMessage
-            : upstreamMessage,
-          type: 'stashbase_hosted_error',
-          code: upstreamCode ?? (upstream.status === 402 ? 'agent_allowance_exhausted' : 'hosted_error'),
-        },
-      });
-      return;
-    }
-
-    response.writeHead(upstream.status, {
-      'content-type': upstream.headers.get('content-type') ?? 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
-    });
-    if (!upstream.body) {
-      response.end();
-      return;
-    }
-    await pipeline(Readable.fromWeb(upstream.body), response);
   }
 }
 
