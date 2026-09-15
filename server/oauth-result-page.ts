@@ -26,9 +26,12 @@ export function oauthResultPage({
   const returnStatusJson = JSON.stringify(returnStatusUrl ?? '').replace(/</g, '\\u003c');
   const returnIntentJson = JSON.stringify(returnIntentUrl ?? '').replace(/</g, '\\u003c');
   const isSuccess = kind === 'success';
+  // Lucide geometry at the renderer's own stroke weight, so the glyph is the
+  // same drawing the app would make: `check` for the result, `circle-alert`
+  // for the failure.
   const icon = isSuccess
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.4 12.1 3 3L16.8 8.7"/></svg>'
-    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7.5v5M12 16.5h.01"/></svg>';
+    ? '<svg class="result-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>'
+    : '<svg class="result-mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>';
 
   return `<!doctype html>
 <html lang="en">
@@ -39,28 +42,98 @@ export function oauthResultPage({
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
   <title>${safeTitle}</title>
   <style>
-    /* Standalone HTML cannot consume the renderer's CSS token layer, so
-     * every value below RESTATES the desktop light appearance by hand:
-     * monochrome ink on paper, with color only on the success/error icon. */
-    :root { color-scheme: light; font-family: -apple-system, system-ui, "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif; }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-width: 280px; min-height: 100vh; color: #202427; background: #f3f5f7; }
+    /* This page is served by the local server and opened in the user's own
+     * browser, so it cannot consume the renderer's CSS token layer. Every
+     * value below is a hand copy of renderer/src/globals.css: the surface and
+     * ink ladders, the 12% hairline, the shadow recipe for a level-3 floating
+     * surface, the 12/13/16px type roles, the 36px control with its 16px
+     * corner, the 80ms colour step, and the focus ring. Light values are
+     * declared first and the dark scheme overrides them, rather than the
+     * app's light-dark(), because the hosting browser is not Electron's
+     * Chromium. Keep this block equal to the token layer when it moves.
+     *
+     * Colour carries meaning only: the failure mark is destructive red, and
+     * nothing else on the page leaves the monochrome ramp except the mark's
+     * own fixed frame grey and the focus ring. */
+    :root {
+      color-scheme: light;
+      --background: #fafafa;
+      --surface: #ffffff;
+      --foreground: #171717;
+      --muted-foreground: #737373;
+      /* Mixed from the ink, so it re-resolves on its own under the dark
+         scheme below. */
+      --border: color-mix(in oklab, var(--foreground) 12%, transparent);
+      --destructive: #ef4444;
+      --focus-ring: #6b97ff;
+      --brand-frame: #a3a3a3;
+      --hairline: 1px;
+      --motion-fast: 80ms;
+      --shadow-color: rgb(0 0 0 / 0.06);
+      --surface-shadow:
+        0 0 0 var(--hairline) var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+        0 3px 3px -1.5px var(--shadow-color);
+      font-family: 'Inter Variable', Inter, system-ui, -apple-system, 'PingFang SC',
+        'Hiragino Sans', 'Microsoft YaHei UI', 'Noto Sans CJK SC', sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --background: #171717;
+        --surface: #252525;
+        --foreground: #f5f5f5;
+        --muted-foreground: #a3a3a3;
+        --destructive: #f87171;
+        --surface-shadow:
+          inset 0 1px 0 0 rgba(255, 255, 255, 0.02),
+          inset 0 0 0 var(--hairline) rgba(255, 255, 255, 0.02),
+          0 0 0 var(--hairline) rgba(0, 0, 0, 0.12), 0 1px 1px -0.5px rgba(0, 0, 0, 0.18),
+          0 3px 3px -1.5px rgba(0, 0, 0, 0.18);
+      }
+    }
+
+    /* One device pixel on hi-DPI panels, as in the token layer. */
+    @media (min-resolution: 1.5dppx) {
+      :root { --hairline: 0.5px; }
+    }
+
+    * { box-sizing: border-box; corner-shape: squircle; }
+    body {
+      margin: 0; min-width: 280px; min-height: 100vh;
+      color: var(--foreground); background: var(--background);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
     .shell { min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; }
-    .stack { width: min(100%, 420px); text-align: center; }
-    .brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px; color: #202427; font-size: 14px; font-weight: 600; }
-    .brand-mark { display: grid; place-items: center; width: 22px; height: 22px; }
-    .brand-mark svg { width: 22px; height: 22px; }
-    .card { padding: 34px 32px 30px; border: 1px solid #d9e0e3; border-radius: 20px; background: #ffffff; box-shadow: 0 8px 24px rgba(32, 36, 39, .10), 0 2px 8px rgba(32, 36, 39, .05); }
-    .result-icon { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 20px; border-radius: 10px; color: ${isSuccess ? '#047857' : '#b91c1c'}; background: ${isSuccess ? 'rgba(4, 120, 87, .09)' : 'rgba(185, 28, 28, .08)'}; }
-    .result-icon svg { width: 27px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-    h1 { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 600; letter-spacing: -.01em; }
-    .message { margin: 10px auto 0; max-width: 320px; color: #68737a; font-size: 14px; line-height: 1.6; }
-    .return-area { margin-top: 25px; padding-top: 22px; border-top: 1px solid rgba(217, 224, 227, .8); }
-    .status { min-height: 20px; margin: 0 0 13px; color: #68737a; font-size: 12px; line-height: 1.5; }
-    .button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 0 18px; border-radius: 10px; color: #ffffff; background: #202427; font-size: 14px; font-weight: 600; text-decoration: none; transition: background .15s ease; }
-    .button:hover { background: #3a4147; }
-    .button:focus-visible { outline: 3px solid rgba(32, 36, 39, .3); outline-offset: 3px; }
-    .button svg { width: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .stack { width: min(100%, 400px); text-align: center; }
+    .brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 13px; font-weight: 600; font-variation-settings: 'wght' 600; }
+    .brand-mark { display: grid; place-items: center; width: 20px; height: 20px; }
+    .brand-mark svg { width: 20px; height: 20px; }
+    /* A card is a level-3 surface: the shadow's first layer is the hairline
+       edge, so the card draws no border of its own. */
+    .card { padding: 24px; border-radius: 32px; background: var(--surface); box-shadow: var(--surface-shadow); }
+    .result-mark { display: block; width: 20px; height: 20px; margin: 0 auto 12px; fill: none; stroke: ${isSuccess ? 'currentColor' : 'var(--destructive)'}; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    h1 { margin: 0; font-size: 16px; line-height: 1.25; font-weight: 700; font-variation-settings: 'wght' 700; }
+    .message { margin: 6px 0 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.5; }
+    .return-area { margin-top: 20px; padding-top: 20px; border-top: var(--hairline) solid var(--border); }
+    /* The live region holds its line once it has something to say, so later
+       status changes do not move the button. Before the first one it
+       collapses, so the failure card is not a gap under its own rule. */
+    .status { min-height: 18px; margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
+    .status:empty { min-height: 0; }
+    /* The 36px control: 16px corner, 16px lead padding, 10px beside a
+       trailing glyph, 13px label at the body weight. */
+    .button {
+      display: inline-flex; height: 36px; align-items: center; justify-content: center; gap: 6px;
+      margin-top: 10px; padding: 0 10px 0 16px; border-radius: 16px;
+      color: var(--background); background: var(--foreground);
+      font-size: 13px; text-decoration: none;
+      transition: background-color var(--motion-fast) ease;
+    }
+    .button:hover { background: color-mix(in oklab, var(--foreground) 84%, var(--background)); }
+    .button:active { background: color-mix(in oklab, var(--foreground) 78%, var(--background)); }
+    .button:focus-visible { outline: 1px solid var(--focus-ring); outline-offset: 1px; }
+    .button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
     [hidden] { display: none !important; }
     @media (prefers-reduced-motion: reduce) { .button { transition: none; } }
   </style>
@@ -68,18 +141,18 @@ export function oauthResultPage({
 <body>
   <main class="shell">
     <div class="stack">
-      <!-- The real product mark with the light tokens baked in: ink front
-           edges, gray back edges. -->
-      <div class="brand"><span class="brand-mark"><svg viewBox="0 0 512 512" fill="none" aria-hidden="true"><g stroke="#a3a3a3" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><path d="M104 210 L104 321.1 A24 24 0 0 0 116.1 342 L216.9 399.7"/></g><g stroke="#202427" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"><path d="M338 111 L267.9 70.84 A24 24 0 0 0 244.1 70.84 L128.3 137.2 A24 24 0 0 0 128.3 178.8 L244.1 245.2 A24 24 0 0 0 267.9 245.2 L384.1 178.6 A24 24 0 0 1 420 199.4 L420 328.1 A24 24 0 0 1 407.9 348.9 L291.9 415.4 A24 24 0 0 1 256 394.6 L256 344"/></g></svg></span>StashBase</div>
+      <!-- The product mark: a fixed grey frame behind an ink S, the ink side
+           following the page's own scheme. -->
+      <div class="brand"><span class="brand-mark"><svg viewBox="0 0 512 512" fill="none" aria-hidden="true"><g stroke="var(--brand-frame)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><path d="M104 210 L104 321.1 A24 24 0 0 0 116.1 342 L216.9 399.7"/></g><g stroke="currentColor" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"><path d="M338 111 L267.9 70.84 A24 24 0 0 0 244.1 70.84 L128.3 137.2 A24 24 0 0 0 128.3 178.8 L244.1 245.2 A24 24 0 0 0 267.9 245.2 L384.1 178.6 A24 24 0 0 1 420 199.4 L420 328.1 A24 24 0 0 1 407.9 348.9 L291.9 415.4 A24 24 0 0 1 256 394.6 L256 344"/></g></svg></span>StashBase</div>
       <section class="card" data-auto-return="${autoReturn ? 'true' : 'false'}" aria-labelledby="result-title">
-        <div class="result-icon">${icon}</div>
+        ${icon}
         <h1 id="result-title">${safeTitle}</h1>
         <p class="message">${safeMessage}</p>
         <div class="return-area">
-          <p class="status" id="return-status" aria-live="polite">${autoReturn ? 'Returning you to the app…' : 'Return to StashBase to try again.'}</p>
+          <p class="status" id="return-status" aria-live="polite">${autoReturn ? 'Returning you to the app…' : ''}</p>
           <a class="button" id="return-button" href="${APP_RETURN_URL}"${autoReturn ? ' hidden' : ''}>
             Open StashBase
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 7l5 5-5 5"/></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </a>
         </div>
       </section>
